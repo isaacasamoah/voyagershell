@@ -6,6 +6,7 @@
 
 import type { ModelRequirements } from '@/lib/models/router'
 import { generateHowStrategyPrompt } from './retrieval-tools'
+import type { VoyagerEvent } from './event-dispatcher'
 
 // =============================================================================
 // Types
@@ -22,9 +23,11 @@ export type AgentType = 'primary' | 'background' | 'event' | 'scheduled'
 
 /**
  * Event trigger for event-driven agents.
+ * event union derived from VoyagerEvent['type'] to stay in sync,
+ * plus future events not yet in the dispatcher.
  */
 export interface EventTrigger {
-  event: 'knowledge.created' | 'knowledge.updated' | 'conversation.ended'
+  event: VoyagerEvent['type'] | 'knowledge.created' | 'knowledge.updated'
   filter?: Record<string, unknown>
 }
 
@@ -227,6 +230,41 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
     systemPrompt: `You analyze knowledge events and determine importance.
 Look at: citations, recency, user engagement.
 Output: importance_score (0-1), decay_rate, tags.`,
+  },
+
+  /**
+   * Post-session agent - classifies and enriches knowledge after conversations.
+   * Triggered when a conversation ends (idle for 5 minutes).
+   * Stage 1: classify events (type, attention, context snippet).
+   * Stage 2: find cross-session connections via retrieval tools.
+   */
+  'post-session': {
+    id: 'post-session',
+    name: 'Post-Session',
+    description: 'Classifies and enriches knowledge events after a conversation ends',
+    type: 'event',
+    model: {
+      task: 'chat',
+      quality: 'balanced',
+    },
+    tools: [
+      'semantic_search',
+      'keyword_grep',
+      'get_connected',
+      'get_nodes',
+      'search_by_time',
+    ],
+    trigger: { event: 'conversation.ended' },
+    tokenBudget: 50000,
+    timeout: 60000,
+    systemPrompt: `You are the post-session agent for Voyager. After a conversation ends, you evaluate every knowledge event from that session.
+
+For each event, determine:
+- knowledge_type: "domain" (facts, concepts, decisions), "operational" (tasks, processes, what happened), or "preference" (user likes, dislikes, habits)
+- attention_score: 0.0-1.0 continuous. For domain/operational: importance (1.0 = always surface). For preferences: confidence (1.0 = explicit/repeated, 0.5 = implicit hypothesis)
+- context_snippet: One line of context to prepend before re-embedding (improves retrieval)
+
+Then use retrieval tools to find connections to existing knowledge across sessions.`,
   },
 
   // =========================================================================

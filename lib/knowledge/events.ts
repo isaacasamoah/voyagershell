@@ -472,6 +472,57 @@ export const activateKnowledge = async (
 }
 
 // =============================================================================
+// Knowledge Enrichment (Post-Session Agent Updates)
+// =============================================================================
+
+export type KnowledgeType = 'domain' | 'operational' | 'preference'
+
+interface KnowledgeEnrichmentParams {
+  knowledgeType: KnowledgeType
+  attentionScore: number
+  contextSnippet?: string
+}
+
+/**
+ * Update knowledge_current row with enrichment from post-session agent.
+ * Sets knowledge_type, attention_score, and optionally context_snippet.
+ */
+export const updateKnowledgeEnrichment = async (
+  eventId: string,
+  params: KnowledgeEnrichmentParams
+): Promise<boolean> => {
+  try {
+    const supabase = getAdminSupabase()
+
+    const update: Record<string, unknown> = {
+      knowledge_type: params.knowledgeType,
+      attention_score: params.attentionScore,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (params.contextSnippet) {
+      update.context_snippet = params.contextSnippet
+    }
+
+    const { error } = await (supabase as any)
+      .from('knowledge_current')
+      .update(update)
+      .eq('event_id', eventId)
+
+    if (error) {
+      console.error('[Knowledge] Failed to update enrichment:', error)
+      return false
+    }
+
+    console.log(`[Knowledge] Enrichment updated for ${eventId}: type=${params.knowledgeType}, attention=${params.attentionScore}`)
+    return true
+  } catch (error) {
+    console.error('[Knowledge] Error updating enrichment:', error)
+    return false
+  }
+}
+
+// =============================================================================
 // Fire-and-Forget Wrapper
 // =============================================================================
 

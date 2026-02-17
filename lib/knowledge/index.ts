@@ -6,7 +6,7 @@
 // - Classifications are metadata on source events
 // - Quiet the noise, pin the signal
 
-// Event creation (source events, attention events)
+// Event creation (source events, attention events, enrichment)
 export {
   emitMessageEvent,
   createMessageEvent,
@@ -14,11 +14,13 @@ export {
   quietKnowledge,
   pinKnowledge,
   activateKnowledge,
+  updateKnowledgeEnrichment,
 } from './events'
 
 export type {
   SourceEventType,
   AttentionEventType,
+  KnowledgeType,
   Classification,
   ActorType,
   SourceType,

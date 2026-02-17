@@ -18,6 +18,7 @@ import { callGeminiJSON } from '@/lib/gemini/client';
 import { emitMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools } from '@/lib/retrieval';
 import { getAuthenticatedUserId } from '@/lib/auth';
+import { dispatcher } from '@/lib/agents/event-dispatcher';
 import { classifySearchDepth } from '@/lib/agents/depth-classifier';
 import { getCompletedTasksForConversation, type AgentTask } from '@/lib/agents/queue';
 import { modelRouter, creditTracker } from '@/lib/models';
@@ -406,6 +407,13 @@ export const POST = async (req: Request) => {
 
             // Check if title generation is needed (async, don't wait)
             maybeGenerateTitle(conversationId);
+
+            // Emit conversation.ended — post-session agent checks debounce
+            dispatcher.emit('conversation.ended', {
+              conversationId,
+              userId,
+              voyageSlug,
+            });
           } catch (error) {
             console.error('[Chat] Failed to save assistant message:', error);
           }
