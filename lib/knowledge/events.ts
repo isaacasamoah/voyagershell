@@ -35,21 +35,7 @@ export type SourceEventType =
   | 'jira_update'    // Jira ticket/comment
   | 'explicit'       // User explicitly adds knowledge
 
-// Attention event types — curation by subtraction
-export type AttentionEventType =
-  | 'quieted'           // Mark as noise (is_active = false)
-  | 'activated'         // Restore from quiet
-  | 'pinned'            // Elevate importance
-  | 'unpinned'          // Remove elevation
-  | 'importance_changed' // Adjust weight
-
-// Understanding event types — enrich, don't replace
-export type UnderstandingEventType =
-  | 'summary'     // Summary referencing source events
-  | 'connection'  // Link between events
-  | 'superseded'  // Mark old understanding as stale
-
-export type EventType = SourceEventType | AttentionEventType | UnderstandingEventType
+export type EventType = SourceEventType
 
 // Classification types — METADATA on source events, not extraction
 export type Classification =
@@ -73,14 +59,6 @@ export interface SourceEventMetadata {
   topics?: string[]
   session_id?: string
   message_id?: string
-}
-
-// Metadata for attention events
-export interface AttentionEventMetadata {
-  target_id: string  // UUID of the knowledge event to affect
-  reason?: string
-  previous_value?: boolean | number
-  new_importance?: number  // For importance_changed
 }
 
 // =============================================================================
@@ -342,133 +320,6 @@ export const createExplicitEvent = async (
     sourceType: 'explicit',
     actorType: 'user',
   })
-}
-
-// =============================================================================
-// Attention Event Creation (Curation by Subtraction)
-// =============================================================================
-
-/**
- * Quiet a knowledge event — mark as noise.
- * The content is still there, just not surfaced by default.
- */
-export const quietKnowledge = async (
-  targetId: string,
-  options?: {
-    userId?: string
-    voyageSlug?: string
-    reason?: string
-  }
-): Promise<boolean> => {
-  try {
-    const supabase = getAdminSupabase()
-
-    
-    const { error } = await (supabase as any)
-      .from('knowledge_events')
-      .insert({
-        event_type: 'quieted',
-        user_id: options?.userId,
-        voyage_slug: options?.voyageSlug,
-        metadata: {
-          target_id: targetId,
-          reason: options?.reason,
-        },
-        actor_type: 'user',
-      })
-
-    if (error) {
-      console.error('[Knowledge] Failed to quiet knowledge:', error)
-      return false
-    }
-
-    console.log('[Knowledge] Quieted:', targetId)
-    return true
-  } catch (error) {
-    console.error('[Knowledge] Error quieting knowledge:', error)
-    return false
-  }
-}
-
-/**
- * Pin a knowledge event — elevate importance.
- * Pinned items are always surfaced.
- */
-export const pinKnowledge = async (
-  targetId: string,
-  options?: {
-    userId?: string
-    voyageSlug?: string
-    reason?: string
-  }
-): Promise<boolean> => {
-  try {
-    const supabase = getAdminSupabase()
-
-    
-    const { error } = await (supabase as any)
-      .from('knowledge_events')
-      .insert({
-        event_type: 'pinned',
-        user_id: options?.userId,
-        voyage_slug: options?.voyageSlug,
-        metadata: {
-          target_id: targetId,
-          reason: options?.reason,
-        },
-        actor_type: 'user',
-      })
-
-    if (error) {
-      console.error('[Knowledge] Failed to pin knowledge:', error)
-      return false
-    }
-
-    console.log('[Knowledge] Pinned:', targetId)
-    return true
-  } catch (error) {
-    console.error('[Knowledge] Error pinning knowledge:', error)
-    return false
-  }
-}
-
-/**
- * Activate a quieted knowledge event — restore to active.
- */
-export const activateKnowledge = async (
-  targetId: string,
-  options?: {
-    userId?: string
-    voyageSlug?: string
-  }
-): Promise<boolean> => {
-  try {
-    const supabase = getAdminSupabase()
-
-    
-    const { error } = await (supabase as any)
-      .from('knowledge_events')
-      .insert({
-        event_type: 'activated',
-        user_id: options?.userId,
-        voyage_slug: options?.voyageSlug,
-        metadata: {
-          target_id: targetId,
-        },
-        actor_type: 'user',
-      })
-
-    if (error) {
-      console.error('[Knowledge] Failed to activate knowledge:', error)
-      return false
-    }
-
-    console.log('[Knowledge] Activated:', targetId)
-    return true
-  } catch (error) {
-    console.error('[Knowledge] Error activating knowledge:', error)
-    return false
-  }
 }
 
 // =============================================================================

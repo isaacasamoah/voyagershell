@@ -11,15 +11,11 @@ export {
   emitMessageEvent,
   createMessageEvent,
   createExplicitEvent,
-  quietKnowledge,
-  pinKnowledge,
-  activateKnowledge,
   updateKnowledgeEnrichment,
 } from './events'
 
 export type {
   SourceEventType,
-  AttentionEventType,
   KnowledgeType,
   Classification,
   ActorType,
