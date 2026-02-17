@@ -1,5 +1,5 @@
 // Agent Task Queue
-// Manages background retrieval tasks for the "Claude as Query Compiler" pattern
+// Manages background retrieval tasks
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getClientForContext } from '@/lib/supabase/authenticated'
@@ -28,7 +28,6 @@ export interface RetrievalResult {
     eventId: string
     content: string
     similarity?: number
-    isPinned?: boolean
     connectedTo?: string[]
   }>
   confidence: number
@@ -78,96 +77,6 @@ export async function enqueueAgentTask(params: EnqueueParams): Promise<string> {
 
   console.log(`[AgentQueue] Task enqueued: ${(data as { id: string }).id}`)
   return (data as { id: string }).id
-}
-
-/**
- * Claim the next pending task (atomic operation).
- * Called by the background worker.
- */
-export async function claimNextTask(): Promise<AgentTask | null> {
-  const supabase = getAdminClient()
-
-  // Atomic claim: update status to 'running' and return the row
-  // Using raw SQL to ensure atomicity with FOR UPDATE SKIP LOCKED
-  // Note: Using type assertion until we regenerate Supabase types
-  const { data, error } = await (supabase as any).rpc('claim_agent_task')
-
-  if (error) {
-    // No task available is not an error
-    if (error.message.includes('No pending tasks')) {
-      return null
-    }
-    console.error('[AgentQueue] Failed to claim task:', error)
-    throw new Error(`Failed to claim task: ${error.message}`)
-  }
-
-  if (!data) {
-    return null
-  }
-
-  return {
-    id: data.id as string,
-    task: data.task as string,
-    code: data.code as string,
-    priority: data.priority as 'low' | 'normal' | 'high',
-    userId: data.user_id as string,
-    voyageSlug: data.voyage_slug as string | undefined,
-    conversationId: data.conversation_id as string,
-    status: data.status as AgentTask['status'],
-    createdAt: new Date(data.created_at as string),
-  }
-}
-
-/**
- * Simple claim without RPC (fallback).
- * Less atomic but works without custom function.
- */
-export async function claimNextTaskSimple(): Promise<AgentTask | null> {
-  const supabase = getAdminClient()
-
-  // First, find a pending task
-  // Note: Using type assertion until we regenerate Supabase types
-  const { data: pending, error: findError } = await (supabase as any)
-    .from('agent_tasks')
-    .select('*')
-    .eq('status', 'pending')
-    .order('priority', { ascending: false }) // high > normal > low
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .single()
-
-  if (findError || !pending) {
-    return null
-  }
-
-  // Update it to running
-  const { data, error } = await (supabase as any)
-    .from('agent_tasks')
-    .update({
-      status: 'running',
-      started_at: new Date().toISOString(),
-    })
-    .eq('id', pending.id)
-    .eq('status', 'pending') // Ensure still pending (optimistic locking)
-    .select('*')
-    .single()
-
-  if (error || !data) {
-    // Another worker claimed it, try again
-    return null
-  }
-
-  return {
-    id: data.id as string,
-    task: data.task as string,
-    code: data.code as string,
-    priority: data.priority as 'low' | 'normal' | 'high',
-    userId: data.user_id as string,
-    voyageSlug: data.voyage_slug as string | undefined,
-    conversationId: data.conversation_id as string,
-    status: data.status as AgentTask['status'],
-    createdAt: new Date(data.created_at as string),
-  }
 }
 
 /**
@@ -268,69 +177,6 @@ export async function failTask(taskId: string, errorMessage: string): Promise<vo
   }
 
   console.log(`[AgentQueue] Task failed: ${taskId} - ${errorMessage}`)
-}
-
-/**
- * Get completed tasks for a conversation (for context injection).
- * Returns tasks completed in the current session that Voyager should know about.
- */
-export async function getCompletedTasksForConversation(
-  conversationId: string,
-  options?: { since?: Date; limit?: number }
-): Promise<AgentTask[]> {
-  const supabase = getAdminClient()
-
-  // Default to last hour (session-scoped)
-  const since = options?.since ?? new Date(Date.now() - 60 * 60 * 1000)
-  const limit = options?.limit ?? 5
-
-  const { data, error } = await (supabase as any)
-    .from('agent_tasks')
-    .select('*')
-    .eq('conversation_id', conversationId)
-    .eq('status', 'complete')
-    .gte('completed_at', since.toISOString())
-    .order('completed_at', { ascending: false })
-    .limit(limit)
-
-  if (error) {
-    console.error('[AgentQueue] Failed to get completed tasks:', error)
-    return []
-  }
-
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    task: row.task as string,
-    code: row.code as string,
-    priority: row.priority as 'low' | 'normal' | 'high',
-    userId: row.user_id as string,
-    voyageSlug: row.voyage_slug as string | undefined,
-    conversationId: row.conversation_id as string,
-    status: row.status as AgentTask['status'],
-    result: row.result as RetrievalResult | undefined,
-    durationMs: row.duration_ms as number | undefined,
-    createdAt: new Date(row.created_at as string),
-  }))
-}
-
-/**
- * Get pending task count (for monitoring).
- */
-export async function getPendingCount(): Promise<number> {
-  const supabase = getAdminClient()
-
-  // Note: Using type assertion until we regenerate Supabase types
-  const { count, error } = await (supabase as any)
-    .from('agent_tasks')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'pending')
-
-  if (error) {
-    console.error('[AgentQueue] Failed to get pending count:', error)
-    return 0
-  }
-
-  return count ?? 0
 }
 
 /**
