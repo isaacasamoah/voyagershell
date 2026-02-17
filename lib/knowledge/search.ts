@@ -1,10 +1,10 @@
-// Knowledge Search service for Slice 2 Phase 1
+// Knowledge Search service
 // Semantic search over the event-sourced knowledge system
 //
 // Philosophy: "Curation is subtraction, not extraction"
 // - Searches knowledge_current (computed state from source events)
-// - Respects attention state (quiet vs active)
-// - Pinned items are always surfaced first
+// - attention_score is the SINGLE canonical attention field
+// - High attention (>= 0.9) = pinned / always surfaced
 
 import OpenAI from 'openai'
 import { getClientForContext } from '@/lib/supabase/authenticated'
@@ -40,15 +40,11 @@ export interface KnowledgeNode {
   classifications: string[]   // Metadata: fact, decision, preference, etc.
   entities: string[]          // Metadata: people, systems, projects
   topics: string[]            // Metadata: domain topics
-  isActive: boolean           // Attention: false = quieted (noise)
-  isPinned: boolean           // Attention: true = elevated importance
-  importance: number          // Attention: 0.0-1.0 weight
   connectedTo: string[]       // Graph: related event IDs
   createdAt: Date             // When the source event was created
   similarity?: number         // Search relevance score
-  // Mach 2: enrichment fields (from migration 019)
   knowledgeType: string | null   // domain | operational | preference (NULL = treat as operational)
-  attentionScore: number         // 0.0-1.0 continuous (replaces is_active/is_pinned/importance)
+  attentionScore: number         // 0.0-1.0 continuous (single canonical attention field)
   contextSnippet: string | null  // One-line contextualisation for re-embedding
 }
 
@@ -63,8 +59,6 @@ export interface SearchOptions {
   voyageSlug?: string
   /** Include quiet (inactive) content. Default: false */
   includeQuiet?: boolean
-  /** Minimum importance. Default: 0.0 */
-  minImportance?: number
   /** Filter by knowledge type: domain | operational | preference */
   knowledgeType?: string
   /** Minimum attention score (0-1). Default: 0.0 */
@@ -72,19 +66,17 @@ export interface SearchOptions {
 }
 
 // RPC result type (matching search_knowledge function in schema)
+// NOTE: RPC still returns is_active, is_pinned, importance columns (data preservation)
+// but we no longer read them — attention_score is the single canonical field.
 interface SearchKnowledgeResult {
   event_id: string
   content: string
   classifications: string[]
   entities: string[]
   topics: string[]
-  is_active: boolean
-  is_pinned: boolean
-  importance: number
   connected_to: string[]
   source_created_at: string
   similarity: number
-  // Mach 2: enrichment fields (from migration 019 RPC update)
   knowledge_type: string | null
   attention_score: number
   context_snippet: string | null
@@ -117,9 +109,6 @@ const transformKnowledgeNode = (row: SearchKnowledgeResult): KnowledgeNode => ({
   classifications: row.classifications ?? [],
   entities: row.entities ?? [],
   topics: row.topics ?? [],
-  isActive: row.is_active,
-  isPinned: row.is_pinned,
-  importance: row.importance,
   connectedTo: row.connected_to ?? [],
   createdAt: new Date(row.source_created_at),
   similarity: row.similarity,
@@ -152,7 +141,6 @@ export const searchKnowledge = async (
     classifications,
     voyageSlug,
     includeQuiet = false,
-    minImportance = 0.0,
     knowledgeType,
     minAttention = 0.0,
   } = options
@@ -182,7 +170,6 @@ export const searchKnowledge = async (
       p_voyage_slug: voyageSlug ?? null,
       p_include_quiet: includeQuiet,
       p_classifications: classifications ?? null,
-      p_min_importance: minImportance,
       p_match_threshold: threshold,
       p_match_count: limit,
       p_knowledge_type: rpcKnowledgeType,
@@ -208,7 +195,7 @@ export const searchKnowledge = async (
     if (results.length > 0 && results.length <= 5) {
       results.forEach((r) =>
         console.log(
-          `  - ${r.content.slice(0, 50)}... (sim: ${r.similarity.toFixed(3)}, pinned: ${r.is_pinned})`
+          `  - ${r.content.slice(0, 50)}... (sim: ${r.similarity.toFixed(3)}, attention: ${r.attention_score})`
         )
       )
     }
@@ -335,11 +322,10 @@ export const getPinnedKnowledge = async (
   try {
     const supabase = getClientForUser(userId)
 
-    
     let query = (supabase as any)
       .from('knowledge_current')
       .select('*')
-      .eq('is_pinned', true)
+      .gte('attention_score', 0.9)
 
     if (voyageSlug) {
       query = query.eq('voyage_slug', voyageSlug)
@@ -347,7 +333,7 @@ export const getPinnedKnowledge = async (
       query = query.eq('user_id', userId).is('voyage_slug', null)
     }
 
-    const { data, error } = await query.order('importance', { ascending: false })
+    const { data, error } = await query.order('attention_score', { ascending: false })
 
     if (error) {
       console.error('[Knowledge] getPinnedKnowledge error:', error)
@@ -398,10 +384,10 @@ export const formatKnowledgeForPrompt = (nodes: KnowledgeNode[]): string => {
     const label = key.charAt(0).toUpperCase() + key.slice(1) + 's'
     context += `### ${label}\n`
 
-    // Sort by importance within each group
-    const sorted = items.sort((a, b) => b.importance - a.importance)
+    // Sort by attention score within each group
+    const sorted = items.sort((a, b) => b.attentionScore - a.attentionScore)
     for (const item of sorted) {
-      const pin = item.isPinned ? ' [pinned]' : ''
+      const pin = item.attentionScore >= 0.9 ? ' [pinned]' : ''
       context += `- ${item.content}${pin}\n`
     }
     context += '\n'
@@ -493,7 +479,7 @@ export const keywordGrep = async (
     }
 
     const { data, error } = await query
-      .order('importance', { ascending: false })
+      .order('attention_score', { ascending: false })
       .order('source_created_at', { ascending: false })
       .limit(limit)
 
@@ -526,9 +512,6 @@ export const keywordGrep = async (
         classifications: row.classifications ?? [],
         entities: row.entities ?? [],
         topics: row.topics ?? [],
-        isActive: row.is_active,
-        isPinned: row.is_pinned,
-        importance: row.importance,
         connectedTo: row.connected_to ?? [],
         createdAt: new Date(row.source_created_at),
         knowledgeType: row.knowledge_type ?? null,

@@ -127,7 +127,7 @@ const autoLinkByEntities = async (
     .from('knowledge_current')
     .select('event_id, entities')
     .neq('event_id', newEventId)
-    .eq('is_active', true)
+    .gt('attention_score', 0)
     .overlaps('entities', entities)
     .limit(5)
 

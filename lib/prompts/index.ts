@@ -36,15 +36,14 @@ export {
   type ComposeFromDbInput,
 } from './compose';
 
-// Import for legacy compatibility
+// Imports for main prompt composition
 import { composePrompt } from './compose';
 import { CORE_PROMPT } from './core';
 import { mergeUserProfile } from './defaults';
 import type { KnowledgeItem, RetrievedContext } from './types';
 
 // ============================================================================
-// LEGACY COMPATIBILITY LAYER
-// These functions maintain backward compatibility with existing chat route
+// PROMPT COMPOSITION — Main entry point for chat routes
 // ============================================================================
 
 export interface UserProfile {
@@ -63,8 +62,8 @@ interface ComposeOptions {
 }
 
 /**
- * Legacy compose function for backward compatibility.
- * Uses the new modular system under the hood.
+ * Compose a full system prompt with context retrieval, preferences, and pinned knowledge.
+ * Primary entry point used by chat routes.
  */
 export const composeSystemPrompt = async (
   userId: string,
@@ -101,7 +100,7 @@ export const composeSystemPrompt = async (
     id: k.eventId,
     content: k.content,
     source: 'personal' as const,
-    relevance: k.importance || 0.5,
+    relevance: k.attentionScore ?? 0.5,
   }));
 
   // Add continuity context as high-priority item if present
@@ -169,7 +168,8 @@ export const composeSystemPrompt = async (
 };
 
 /**
- * Legacy base prompt function for backward compatibility.
+ * Returns the core identity prompt (no context/preferences).
+ * Used as fallback when full composition fails.
  */
 export const getBasePrompt = (): string => {
   return CORE_PROMPT;

@@ -1,10 +1,10 @@
-// Retrieval service for Slice 2 Phase 1
+// Retrieval service
 // Uses event-sourced knowledge system
 //
 // Philosophy: "Curation is subtraction, not extraction"
 // - Messages ARE the knowledge (preserved exactly)
-// - Pinned items surface first
-// - Quieted items hidden by default
+// - attention_score is the single canonical attention field
+// - High attention (>= 0.9) items surface first
 
 import {
   searchKnowledge,
@@ -134,7 +134,7 @@ export const retrieveContext = async (
     if (combined.length > 0 && combined.length <= 5) {
       combined.forEach((k) =>
         console.log(
-          `  - [${k.classifications[0] ?? 'message'}] ${k.content.slice(0, 50)}... (pinned: ${k.isPinned})`
+          `  - [${k.classifications[0] ?? 'message'}] ${k.content.slice(0, 50)}... (attention: ${k.attentionScore})`
         )
       );
     }
@@ -143,13 +143,9 @@ export const retrieveContext = async (
     let context = formatKnowledgeForPrompt(combined);
     let tokenEstimate = estimateTokens(context);
 
-    // Trim if over token budget (remove lowest importance, keep pinned)
+    // Trim if over token budget (remove lowest attention, keep high-attention)
     const trimmed = [...combined].sort((a, b) => {
-      // Pinned always stay
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      // Then by importance
-      return b.importance - a.importance;
+      return b.attentionScore - a.attentionScore;
     });
 
     while (tokenEstimate > maxTokens && trimmed.length > pinned.length) {

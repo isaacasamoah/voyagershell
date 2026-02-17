@@ -3,20 +3,20 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import { Terminal, Activity, Ship, Users, Link2 } from 'lucide-react';
+import { Terminal, Activity, Ship, Link2 } from 'lucide-react';
 import { UserMessage, AssistantMessage, AstronautState, TaskCard, type TaskProgress } from '@/components/chat';
 import { useAuth } from '@/lib/auth/context';
-import { createClient } from '@/lib/supabase/client';
-import { detectIntent, type UIIntent } from '@/lib/ui/intent';
+import { detectIntent } from '@/lib/ui/intent';
 import { log } from '@/lib/debug';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
 import {
   createUIMessage,
   createComponent,
-  resolveComponent,
   type UIComponentMessage,
-  type MessagePart,
 } from '@/lib/ui/components';
+import { useRealtimeSubscription } from './hooks/useRealtimeSubscription';
+import { useMessageState } from './hooks/useMessageState';
+import { InputArea } from './InputArea';
 
 // Voyage types
 interface VoyageMembership {
@@ -97,7 +97,6 @@ const apiMessageToUIMessage = (msg: MessageData): UIMessage => ({
 
 export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [inputValue, setInputValue] = useState('');
 
   // Auth state
@@ -139,10 +138,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
   // Success celebration state (shows triumph astronaut briefly after response)
   const [showSuccess, setShowSuccess] = useState(false);
-
-  // Followup state (for background agent → Voyager push-based communication)
-  const [followupInProgress, setFollowupInProgress] = useState(false);
-  const triggerFollowupRef = useRef<(taskId: string) => void>(() => {});
 
   // UI component messages (ephemeral, in-stream)
   const [uiMessages, setUiMessages] = useState<UIComponentMessage[]>([]);
@@ -274,85 +269,41 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     fetchVoyages();
   }, [isAuthenticated, isAuthLoading]);
 
-  // Subscribe to background agent tasks (running + completed)
-  useEffect(() => {
-    if (!conversationId || !isAuthenticated) return;
+  // Followup state (extracted hook)
+  const { followupInProgress, triggerFollowup, triggerFollowupRef } = useMessageState({
+    conversationId,
+    status,
+    setMessages: (fn) => setMessages(fn as any),
+    setShowSuccess,
+  });
 
-    const supabase = createClient();
+  // Realtime subscription for background agent tasks
+  const realtimeCallbacks = useMemo(() => ({
+    onTaskInsert: (task: { id: string; task: string; progress?: TaskProgress }) => {
+      setRunningTasks((prev) => [...prev, task]);
+    },
+    onTaskUpdate: (taskId: string, taskStatus: string, data: Record<string, unknown>) => {
+      if (taskStatus === 'running') {
+        setRunningTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId
+              ? { ...t, progress: data.progress as TaskProgress | undefined }
+              : t
+          )
+        );
+      } else if (taskStatus === 'failed') {
+        setRunningTasks((prev) => prev.filter((t) => t.id !== taskId));
+      }
+    },
+    onTaskComplete: (taskId: string, data: Record<string, unknown>) => {
+      setRunningTasks((prev) => prev.filter((t) => t.id !== taskId));
+      if (data.result) {
+        triggerFollowupRef.current(taskId);
+      }
+    },
+  }), [triggerFollowupRef]);
 
-    const channel = supabase
-      .channel(`agents:${conversationId}`)
-      // New tasks (running)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'agent_tasks',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          const newData = payload.new as Record<string, unknown>;
-          const status = newData.status as string;
-
-          if (status === 'pending' || status === 'running') {
-            log.agent('Background task started', { taskId: newData.id });
-            setRunningTasks((prev) => [
-              ...prev,
-              {
-                id: newData.id as string,
-                task: newData.task as string,
-                progress: newData.progress as TaskProgress | undefined,
-              },
-            ]);
-          }
-        }
-      )
-      // Progress updates
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'agent_tasks',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          const newData = payload.new as Record<string, unknown>;
-          const taskId = newData.id as string;
-          const status = newData.status as string;
-
-          if (status === 'running') {
-            // Update progress
-            setRunningTasks((prev) =>
-              prev.map((t) =>
-                t.id === taskId
-                  ? { ...t, progress: newData.progress as TaskProgress | undefined }
-                  : t
-              )
-            );
-          } else if (status === 'complete') {
-            // Move from running to completed
-            setRunningTasks((prev) => prev.filter((t) => t.id !== taskId));
-            if (newData.result) {
-              log.agent('Background task completed', { taskId });
-
-              // Trigger Voyager followup (push-based communication)
-              triggerFollowupRef.current(taskId);
-            }
-          } else if (status === 'failed') {
-            // Remove from running
-            setRunningTasks((prev) => prev.filter((t) => t.id !== taskId));
-            log.agent('Background task failed', { taskId, error: newData.error });
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [conversationId, isAuthenticated]);
+  useRealtimeSubscription(conversationId, isAuthenticated, realtimeCallbacks);
 
   // Clear agent state when conversation changes
   useEffect(() => {
@@ -397,36 +348,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messageCount]);
-
-  // Keep input always focused - ready to type from anywhere
-  useEffect(() => {
-    const focusInput = () => {
-      if (inputRef.current && !isLoading) {
-        inputRef.current.focus();
-      }
-    };
-
-    // Focus on mount and after messages change
-    focusInput();
-
-    // Re-focus when clicking anywhere in the document (except other inputs)
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-
-      // Don't steal focus if user has selected text (they might want to copy)
-      const selection = window.getSelection();
-      if (selection && selection.toString().length > 0) {
-        return;
-      }
-
-      if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && target.tagName !== 'BUTTON') {
-        focusInput();
-      }
-    };
-
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [messages, isLoading, status]);
 
   // State for command feedback
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -970,22 +891,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     setInputValue('');
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      // Trigger form submit to go through handleSubmit (which handles commands)
-      const form = e.currentTarget.closest('form');
-      if (form) {
-        form.requestSubmit();
-      }
-    }
-    // Shift+Enter allows newline (default textarea behavior)
-  };
-
   const handleSuggestionClick = (action: string) => {
     setInputValue(action);
-    // Focus input after setting suggestion
-    inputRef.current?.focus();
   };
 
   // Helper to extract text content from UIMessage
@@ -1042,102 +949,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     // Add more action handlers as needed
   }, [handleVoyagePickerSelect]);
 
-  // Stream followup response into messages
-  const streamFollowupIntoMessages = useCallback(async (stream: ReadableStream) => {
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let fullText = '';
-
-    // Create placeholder message
-    const messageId = `followup-${Date.now()}`;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: messageId,
-        role: 'assistant' as const,
-        parts: [{ type: 'text' as const, text: '' }],
-      },
-    ]);
-
-    // Stream content
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        // Parse AI SDK SSE format: lines starting with "0:" contain text
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          const textMatch = line.match(/^0:"(.*)"/);
-          if (textMatch) {
-            // Unescape the JSON string content
-            const content = textMatch[1]
-              .replace(/\\n/g, '\n')
-              .replace(/\\"/g, '"')
-              .replace(/\\\\/g, '\\');
-            fullText += content;
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === messageId
-                  ? { ...m, parts: [{ type: 'text' as const, text: fullText }] }
-                  : m
-              )
-            );
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
-
-    // Trigger success state
-    if (fullText.length > 0) {
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 2500);
-    }
-  }, [setMessages]);
-
-  // Trigger Voyager followup when background task completes
-  const triggerFollowup = useCallback(
-    async (taskId: string) => {
-      // Guard: don't interrupt active chat or another followup
-      if (status === 'streaming' || status === 'submitted' || followupInProgress) {
-        log.agent('Followup deferred - chat busy', { taskId, status, followupInProgress });
-        return;
-      }
-
-      if (!conversationId) {
-        log.agent('Followup skipped - no conversationId', { taskId });
-        return;
-      }
-
-      setFollowupInProgress(true);
-      log.agent('Triggering followup', { taskId, conversationId });
-
-      try {
-        const response = await fetch('/api/chat/followup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ conversationId, taskId }),
-        });
-
-        if (!response.ok || !response.body) {
-          throw new Error(`Followup request failed: ${response.status}`);
-        }
-
-        // Stream response into messages
-        await streamFollowupIntoMessages(response.body);
-      } catch (error) {
-        log.agent('Followup failed', { error: String(error) }, 'error');
-      } finally {
-        setFollowupInProgress(false);
-      }
-    },
-    [conversationId, status, followupInProgress, streamFollowupIntoMessages]
-  );
-
-  // Keep ref updated so realtime handler always has latest function
+  // Keep triggerFollowup ref updated so realtime handler always has latest function
   useEffect(() => {
     triggerFollowupRef.current = triggerFollowup;
   }, [triggerFollowup]);
@@ -1648,40 +1460,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex items-start gap-3 group">
-            <span className={`font-bold mt-1 ${isLoading ? 'text-amber-500' : 'text-green-500 animate-pulse'}`}>&#10132;</span>
-            <span className="text-indigo-400 text-xs font-bold mt-1">~/voyager</span>
-            <div className="flex-1 relative">
-              <textarea
-                ref={inputRef}
-                className="w-full bg-transparent border-none outline-none text-slate-200 placeholder-slate-700 font-mono text-sm resize-none min-h-[24px] max-h-32 overflow-y-auto"
-                placeholder={isLoading ? "Type to queue message..." : "Just talk to me..."}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={1}
-                style={{ height: 'auto' }}
-                onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement;
-                  target.style.height = 'auto';
-                  target.style.height = Math.min(target.scrollHeight, 128) + 'px';
-                }}
-              />
-            </div>
-            {/* Queue indicator */}
-            {messageQueue.length > 0 && (
-              <span className="text-amber-400 text-xs font-bold mt-1 animate-pulse">
-                {messageQueue.length} queued
-              </span>
-            )}
-            {inputValue.trim() && (
-              <button
-                type="submit"
-                className={`text-xs font-bold transition mt-1 ${isLoading ? 'text-amber-400 hover:text-amber-300' : 'text-indigo-400 hover:text-indigo-300'}`}
-              >
-                {isLoading ? 'QUEUE' : 'SEND'}
-              </button>
-            )}
+          <form onSubmit={handleSubmit}>
+            <InputArea
+              value={inputValue}
+              onChange={setInputValue}
+              onSubmit={() => {
+                const form = document.querySelector('form');
+                if (form) form.requestSubmit();
+              }}
+              isLoading={isLoading}
+              queueCount={messageQueue.length}
+            />
           </form>
         </div>
       </div>

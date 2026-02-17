@@ -64,7 +64,7 @@ const formatKnowledgeResult = (nodes: KnowledgeNode[]): string => {
   return nodes
     .map((node, i) => {
       const shortId = node.eventId.slice(0, 8) // Short ID for readability
-      const pinned = node.isPinned ? ' [PINNED]' : ''
+      const pinned = node.attentionScore >= 0.9 ? ' [PINNED]' : ''
       const similarity = node.similarity ? ` (${(node.similarity * 100).toFixed(0)}%)` : ''
       const connected = node.connectedTo?.length ? ` [${node.connectedTo.length} connections]` : ''
       return `[${i + 1}] id:${shortId}${pinned}${similarity}${connected}\n${node.content}`
@@ -80,7 +80,7 @@ const formatGrepResult = (results: GrepResult[]): string => {
   return results
     .map((r, i) => {
       const shortId = r.eventId.slice(0, 8)
-      const pinned = r.isPinned ? ' [PINNED]' : ''
+      const pinned = r.attentionScore >= 0.9 ? ' [PINNED]' : ''
       const connected = r.connectedTo?.length ? ` [${r.connectedTo.length} connections]` : ''
       return `[${i + 1}] id:${shortId}${pinned}${connected}\n...${r.highlight}...`
     })
@@ -301,9 +301,6 @@ Returns knowledge from time period, newest first. Supports ISO dates (2024-01-15
         classifications: (row.classifications as string[]) ?? [],
         entities: (row.entities as string[]) ?? [],
         topics: (row.topics as string[]) ?? [],
-        isActive: row.is_active as boolean,
-        isPinned: row.is_pinned as boolean,
-        importance: row.importance as number,
         connectedTo: (row.connected_to as string[]) ?? [],
         createdAt: new Date(row.source_created_at as string),
         knowledgeType: (row.knowledge_type as string | null) ?? null,

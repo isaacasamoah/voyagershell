@@ -568,39 +568,6 @@ export const getConversation = async (
 }
 
 /**
- * Mark a conversation as having had its memories extracted.
- * Called after memory extraction process completes.
- */
-export const markConversationExtracted = async (
-  conversationId: string
-): Promise<boolean> => {
-  const supabase = getAdminSupabase()
-  console.log('[Conversation] Marking conversation as extracted:', conversationId)
-
-  try {
-    
-    const { error } = await (supabase as any)
-      .from('sessions')
-      .update({
-        extracted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', conversationId)
-
-    if (error) {
-      console.error('[Conversation] markConversationExtracted error:', error)
-      return false
-    }
-
-    console.log('[Conversation] Conversation marked as extracted')
-    return true
-  } catch (error) {
-    console.error('[Conversation] markConversationExtracted error:', error)
-    return false
-  }
-}
-
-/**
  * Check if a conversation needs a title (has enough messages but no title).
  */
 export const needsTitle = async (conversationId: string): Promise<boolean> => {
@@ -625,39 +592,3 @@ export const needsTitle = async (conversationId: string): Promise<boolean> => {
   }
 }
 
-/**
- * Get conversations that need memory extraction.
- * Returns historical conversations that haven't been extracted yet.
- */
-export const getConversationsNeedingExtraction = async (
-  userId: string,
-  limit = 10
-): Promise<Conversation[]> => {
-  const supabase = getClientForUser(userId)
-  console.log('[Conversation] Getting conversations needing extraction for user:', userId)
-
-  try {
-    
-    const { data, error } = await (supabase as any)
-      .from('sessions')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'historical')
-      .is('extracted_at', null)
-      .order('last_message_at', { ascending: false })
-      .limit(limit)
-
-    if (error) {
-      console.error('[Conversation] getConversationsNeedingExtraction error:', error)
-      return []
-    }
-
-    const conversations = (data as ExtendedSession[]).map(transformSession)
-    console.log('[Conversation] Found', conversations.length, 'conversations needing extraction')
-
-    return conversations
-  } catch (error) {
-    console.error('[Conversation] getConversationsNeedingExtraction error:', error)
-    return []
-  }
-}
