@@ -3,16 +3,13 @@
 // DSPy-compatible: pure functions, structured data
 
 import { retrieveContext, type RetrievalResult } from '@/lib/retrieval';
-import { getPinnedKnowledge, type KnowledgeNode } from '@/lib/knowledge';
+import { getPinnedKnowledge, loadPreferences, type KnowledgeNode } from '@/lib/knowledge';
 
 // Re-export types
 export * from './types';
 
 // Re-export core prompt
 export { CORE_PROMPT, CORE_PROMPT_TOKENS } from './core';
-
-// Re-export followup prompts
-export { composeFollowupPrompt, formatCompletedTaskForFollowup } from './followup';
 
 // Re-export defaults
 export {
@@ -76,8 +73,14 @@ export const composeSystemPrompt = async (
 ): Promise<{ systemPrompt: string; retrieval: RetrievalResult }> => {
   const { profile, voyageSlug, continuityContext } = options ?? {};
 
-  // Retrieve relevant context using existing retrieval system
-  const retrieval = await retrieveContext(userId, query, { voyageSlug });
+  // Load preferences and retrieval in parallel
+  const [preferences, retrieval] = await Promise.all([
+    loadPreferences(userId, voyageSlug).catch((error) => {
+      console.warn('[Prompts] Failed to load preferences:', error);
+      return [] as KnowledgeNode[];
+    }),
+    retrieveContext(userId, query, { voyageSlug }),
+  ]);
 
   // Get pinned knowledge
   let pinnedKnowledge: KnowledgeItem[] = [];
@@ -147,8 +150,20 @@ export const composeSystemPrompt = async (
     retrievedContext,
   });
 
+  // Build preference section (injected BEFORE retrieved knowledge)
+  let preferencesSection = '';
+  if (preferences.length > 0) {
+    const prefLines = preferences.map((p) => `- ${p.content}`).join('\n');
+    preferencesSection = `\n\n---\n\n# Who You Are To Me (Preferences)\n${prefLines}`;
+  }
+
+  // Inject preferences before the context layer in the system prompt
+  const systemPrompt = preferencesSection
+    ? composed.systemPrompt + preferencesSection
+    : composed.systemPrompt;
+
   return {
-    systemPrompt: composed.systemPrompt,
+    systemPrompt,
     retrieval,
   };
 };

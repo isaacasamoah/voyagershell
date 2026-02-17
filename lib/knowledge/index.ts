@@ -35,6 +35,7 @@ export {
   getPinnedKnowledge,
   formatKnowledgeForPrompt,
   keywordGrep,
+  loadPreferences,
 } from './search'
 
 export type { KnowledgeNode, SearchOptions, GrepOptions, GrepResult } from './search'

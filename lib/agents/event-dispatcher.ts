@@ -93,3 +93,7 @@ export const dispatcher = createEventDispatcher()
 import { runPostSessionAgent } from './post-session'
 
 dispatcher.on('conversation.ended', runPostSessionAgent)
+
+dispatcher.on('background.completed', (payload) => {
+  log.agent('Background task completed', payload as Record<string, unknown>)
+})

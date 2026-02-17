@@ -11,7 +11,7 @@ import { getClientForContext } from '@/lib/supabase/authenticated'
 export interface AgentTask {
   id: string
   task: string
-  code: string
+  code?: string | null
   priority: 'low' | 'normal' | 'high'
   userId: string
   voyageSlug?: string
@@ -37,7 +37,7 @@ export interface RetrievalResult {
 
 export interface EnqueueParams {
   task: string
-  code: string
+  code?: string | null
   priority?: 'low' | 'normal' | 'high'
   userId: string
   voyageSlug?: string
@@ -174,7 +174,7 @@ export async function claimNextTaskSimple(): Promise<AgentTask | null> {
  * Task progress shape for realtime updates.
  */
 export interface TaskProgress {
-  stage: 'searching' | 'analyzing' | 'clustering' | 'synthesizing'
+  stage: 'searching' | 'analyzing' | 'reasoning'
   found?: number
   processed?: number
   percent?: number
@@ -207,11 +207,13 @@ export async function updateTaskProgress(
 
 /**
  * Mark a task as complete with results.
+ * Emits background.completed event for downstream processing.
  */
 export async function completeTask(
   taskId: string,
   result: RetrievalResult,
-  durationMs: number
+  durationMs: number,
+  meta?: { conversationId?: string; userId?: string }
 ): Promise<void> {
   const supabase = getAdminClient()
 
@@ -232,6 +234,16 @@ export async function completeTask(
   }
 
   console.log(`[AgentQueue] Task completed: ${taskId} (${durationMs}ms)`)
+
+  // Emit event for downstream processing (followup, etc.)
+  if (meta?.conversationId && meta?.userId) {
+    const { dispatcher } = await import('./event-dispatcher')
+    dispatcher.emit('background.completed', {
+      taskId,
+      conversationId: meta.conversationId,
+      userId: meta.userId,
+    })
+  }
 }
 
 /**

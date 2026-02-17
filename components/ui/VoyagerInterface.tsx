@@ -4,7 +4,7 @@ import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Terminal, Activity, Ship, Users, Link2 } from 'lucide-react';
-import { UserMessage, AssistantMessage, AstronautState, AgentResultCard, TaskCard, type TaskProgress } from '@/components/chat';
+import { UserMessage, AssistantMessage, AstronautState, TaskCard, type TaskProgress } from '@/components/chat';
 import { useAuth } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/client';
 import { detectIntent, type UIIntent } from '@/lib/ui/intent';
@@ -88,45 +88,6 @@ interface RunningTask {
   progress?: TaskProgress;
 }
 
-// Agent result from background worker (supports clustered and legacy flat findings)
-interface AgentResult {
-  id: string;
-  task: string;
-  result: {
-    // Legacy flat findings (backwards compatible)
-    findings?: Array<{
-      eventId: string;
-      content: string;
-      similarity?: number;
-      isPinned?: boolean;
-    }>;
-    // New clustered structure
-    clusters?: Array<{
-      id: string;
-      theme: string;
-      summary: string;
-      confidence: number;
-      findings: Array<{
-        eventId: string;
-        content: string;
-        similarity?: number;
-        isPinned?: boolean;
-      }>;
-      representativeId: string;
-    }>;
-    unclustered?: Array<{
-      eventId: string;
-      content: string;
-      similarity?: number;
-      isPinned?: boolean;
-    }>;
-    totalFindings?: number;
-    confidence: number;
-    summary?: string;
-    type?: string;
-  };
-}
-
 // Convert API message to UIMessage format for useChat
 const apiMessageToUIMessage = (msg: MessageData): UIMessage => ({
   id: msg.id,
@@ -173,9 +134,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [isCreatingVoyage, setIsCreatingVoyage] = useState(false);
   const [voyageInvite, setVoyageInvite] = useState<{ code: string; url: string } | null>(null);
 
-  // Background agent state (running + completed)
+  // Background agent state (running tasks)
   const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
-  const [agentResults, setAgentResults] = useState<AgentResult[]>([]);
 
   // Success celebration state (shows triumph astronaut briefly after response)
   const [showSuccess, setShowSuccess] = useState(false);
@@ -345,16 +305,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                 progress: newData.progress as TaskProgress | undefined,
               },
             ]);
-          } else if (status === 'complete' && newData.result) {
-            log.agent('Background task completed', { taskId: newData.id });
-            setAgentResults((prev) => [
-              ...prev,
-              {
-                id: newData.id as string,
-                task: newData.task as string,
-                result: newData.result as AgentResult['result'],
-              },
-            ]);
           }
         }
       )
@@ -386,14 +336,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             setRunningTasks((prev) => prev.filter((t) => t.id !== taskId));
             if (newData.result) {
               log.agent('Background task completed', { taskId });
-              setAgentResults((prev) => [
-                ...prev,
-                {
-                  id: taskId,
-                  task: newData.task as string,
-                  result: newData.result as AgentResult['result'],
-                },
-              ]);
 
               // Trigger Voyager followup (push-based communication)
               triggerFollowupRef.current(taskId);
@@ -415,7 +357,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   // Clear agent state when conversation changes
   useEffect(() => {
     setRunningTasks([]);
-    setAgentResults([]);
   }, [conversationId]);
 
   // Derived state for loading
@@ -1672,21 +1613,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                 id={task.id}
                 objective={task.task}
                 progress={task.progress}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Agent Results - Completed background findings */}
-        {agentResults.length > 0 && (
-          <div className="space-y-3 max-w-2xl mx-auto py-4">
-            {agentResults.map((result) => (
-              <AgentResultCard
-                key={result.id}
-                result={result}
-                onDismiss={() => {
-                  setAgentResults((prev) => prev.filter((r) => r.id !== result.id));
-                }}
               />
             ))}
           </div>

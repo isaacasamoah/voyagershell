@@ -1,11 +1,12 @@
 // Followup API endpoint
 // Generates Voyager's follow-up message when background task completes.
+// Uses the SAME prompt, model, and voice as the primary chat route.
 // Called by UI when realtime subscription fires task completion.
 
 import { streamText } from 'ai'
 import { getTaskById } from '@/lib/agents/queue'
 import { loadConversationMessages, saveMessage } from '@/lib/conversation'
-import { composeFollowupPrompt, formatCompletedTaskForFollowup } from '@/lib/prompts/followup'
+import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
 import { emitMessageEvent } from '@/lib/knowledge'
 import { modelRouter } from '@/lib/models'
 import { log } from '@/lib/debug'
@@ -20,14 +21,8 @@ export const POST = async (req: Request) => {
 
     if (!conversationId || !taskId) {
       return new Response(
-        JSON.stringify({
-          error: 'Invalid request',
-          message: 'conversationId and taskId are required',
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        JSON.stringify({ error: 'Invalid request', message: 'conversationId and taskId are required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
@@ -36,84 +31,75 @@ export const POST = async (req: Request) => {
     if (!task) {
       log.api('Followup failed - task not found', { taskId }, 'error')
       return new Response(
-        JSON.stringify({
-          error: 'Task not found',
-          message: `No task found with ID: ${taskId}`,
-        }),
-        {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        JSON.stringify({ error: 'Task not found', message: `No task found with ID: ${taskId}` }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    // Verify task is complete
     if (task.status !== 'complete') {
-      log.api('Followup failed - task not complete', { taskId, status: task.status }, 'warn')
       return new Response(
-        JSON.stringify({
-          error: 'Task not complete',
-          message: `Task status is ${task.status}, expected complete`,
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        JSON.stringify({ error: 'Task not complete', message: `Task status is ${task.status}, expected complete` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    // Verify task belongs to this conversation
     if (task.conversationId !== conversationId) {
-      log.api('Followup failed - task/conversation mismatch', { taskId, conversationId }, 'warn')
       return new Response(
-        JSON.stringify({
-          error: 'Invalid request',
-          message: 'Task does not belong to this conversation',
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        JSON.stringify({ error: 'Invalid request', message: 'Task does not belong to this conversation' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
-    // 2. Format task result as context
-    const taskContext = formatCompletedTaskForFollowup(task)
+    // 2. Format findings as context for the system prompt
+    const findings = task.result?.findings ?? []
+    const findingsContext = findings.length > 0
+      ? [
+          '\n\n[Background Research Findings]',
+          `Your background search for "${task.task}" found ${findings.length} relevant items:`,
+          ...findings.slice(0, 10).map((f, i) => `${i + 1}. ${f.content.slice(0, 300)}`),
+          task.result?.summary ? `\nSummary: ${task.result.summary}` : '',
+          '\nShare these findings naturally. Don\'t say "background search" — just share what you found, as if you were thinking about it.',
+        ].join('\n')
+      : ''
 
-    // 3. Load recent messages for continuity
-    const recentMessages = await loadConversationMessages(conversationId, 10)
-    const simpleMessages = recentMessages.map((m) => ({
-      role: m.role,
+    // 3. Compose system prompt (same as primary Voyager)
+    let systemPrompt: string
+    try {
+      const { systemPrompt: composed } = await composeSystemPrompt(
+        task.userId,
+        task.task, // Use the objective as query for context retrieval
+        { voyageSlug: task.voyageSlug }
+      )
+      systemPrompt = composed + findingsContext
+    } catch {
+      systemPrompt = getBasePrompt() + findingsContext
+    }
+
+    // 4. Load real conversation history
+    const conversationMessages = await loadConversationMessages(conversationId, 50)
+    const messages = conversationMessages.map((m) => ({
+      role: m.role as 'user' | 'assistant',
       content: m.content,
     }))
-
-    // 4. Compose followup-specific prompt
-    const systemPrompt = composeFollowupPrompt(taskContext, simpleMessages)
 
     log.agent('Generating followup', {
       taskId,
       conversationId,
-      findingsCount: task.result?.findings?.length ?? 0,
-      confidence: task.result?.confidence ?? 0,
+      findingsCount: findings.length,
+      messageCount: messages.length,
     })
 
-    // 5. Stream response (NO tools - pure synthesis)
+    // 5. Stream response using primary Voyager's model (same voice)
     const result = streamText({
-      model: modelRouter.select({
-        task: 'synthesis',
-        quality: 'balanced',
-        streaming: true,
-      }),
+      model: modelRouter.select({ task: 'chat', quality: 'balanced', streaming: true }),
       system: systemPrompt,
-      messages: [], // Context already in system prompt
+      messages,
+      maxOutputTokens: 2048,
       onFinish: async ({ text }) => {
         log.agent('Followup complete', { textLength: text?.length ?? 0 })
 
-        // Save the followup message to the conversation
         if (text) {
           await saveMessage(conversationId, 'assistant', text)
-
-          // Emit knowledge event
           emitMessageEvent(conversationId, 'assistant', text, {
             userId: task.userId,
             voyageSlug: task.voyageSlug,
@@ -126,29 +112,16 @@ export const POST = async (req: Request) => {
   } catch (error) {
     log.api('Followup API error', { error: String(error) }, 'error')
 
-    // Handle JSON parse errors
     if (error instanceof SyntaxError) {
       return new Response(
-        JSON.stringify({
-          error: 'Invalid request',
-          message: 'Invalid JSON in request body',
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }
+        JSON.stringify({ error: 'Invalid request', message: 'Invalid JSON in request body' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
     return new Response(
-      JSON.stringify({
-        error: 'Internal error',
-        message: 'An unexpected error occurred',
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ error: 'Internal error', message: 'An unexpected error occurred' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }
 }

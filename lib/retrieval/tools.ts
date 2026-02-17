@@ -19,7 +19,6 @@ import {
 } from '@/lib/knowledge'
 import { getClientForContext } from '@/lib/supabase/authenticated'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
-import { executeRetrievalCode } from '@/lib/agents/executor'
 
 // Resolve short ID (8 chars) to full UUID
 const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<string | null> => {
@@ -272,7 +271,7 @@ Returns knowledge from time period, newest first. Supports ISO dates (2024-01-15
       let dbQuery = (supabase as any)
         .from('knowledge_current')
         .select('*')
-        .eq('is_active', true)
+        .gte('attention_score', 0)
         .gte('source_created_at', sinceDate.toISOString())
         .lte('source_created_at', untilDate.toISOString())
         .order('source_created_at', { ascending: false })
@@ -307,6 +306,9 @@ Returns knowledge from time period, newest first. Supports ISO dates (2024-01-15
         importance: row.importance as number,
         connectedTo: (row.connected_to as string[]) ?? [],
         createdAt: new Date(row.source_created_at as string),
+        knowledgeType: (row.knowledge_type as string | null) ?? null,
+        attentionScore: (row.attention_score as number) ?? 0.5,
+        contextSnippet: (row.context_snippet as string | null) ?? null,
       }))
 
       // If query provided, could filter semantically here (future enhancement)
@@ -364,7 +366,10 @@ You should respond immediately with what you know, then the agent's findings wil
                 voyageSlug: ctx.voyageSlug,
                 conversationId: ctx.conversationId!,
               })
-              await completeTask(taskId, result, Date.now() - startTime)
+              await completeTask(taskId, result, Date.now() - startTime, {
+                conversationId: ctx.conversationId,
+                userId: ctx.userId,
+              })
               console.log(`[spawn_background_agent] Task ${taskId.slice(0, 8)} completed: ${result.findings.length} findings`)
             } catch (error) {
               await failTask(taskId, error instanceof Error ? error.message : 'Unknown error')
@@ -419,12 +424,19 @@ Returns formatted search results. You synthesize into your response.`,
 
 /**
  * Creates tools for the primary Voyager agent.
- * Only spawn_background_agent and web_search - minimal toolset.
+ * Inline retrieval (semantic_search, keyword_grep) for light searches.
+ * spawn_background_agent for heavy multi-step retrieval.
+ * web_search for external information.
  */
-export const createVoyagerTools = (ctx: ToolContext) => ({
-  spawn_background_agent: createRetrievalTools(ctx).spawn_background_agent,
-  web_search: createRetrievalTools(ctx).web_search,
-})
+export const createVoyagerTools = (ctx: ToolContext) => {
+  const retrieval = createRetrievalTools(ctx)
+  return {
+    semantic_search: retrieval.semantic_search,
+    keyword_grep: retrieval.keyword_grep,
+    spawn_background_agent: retrieval.spawn_background_agent,
+    web_search: retrieval.web_search,
+  }
+}
 
 // =============================================================================
 // Tool Types (for use in chat route)

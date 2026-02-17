@@ -46,6 +46,10 @@ export interface KnowledgeNode {
   connectedTo: string[]       // Graph: related event IDs
   createdAt: Date             // When the source event was created
   similarity?: number         // Search relevance score
+  // Mach 2: enrichment fields (from migration 019)
+  knowledgeType: string | null   // domain | operational | preference (NULL = treat as operational)
+  attentionScore: number         // 0.0-1.0 continuous (replaces is_active/is_pinned/importance)
+  contextSnippet: string | null  // One-line contextualisation for re-embedding
 }
 
 export interface SearchOptions {
@@ -61,6 +65,10 @@ export interface SearchOptions {
   includeQuiet?: boolean
   /** Minimum importance. Default: 0.0 */
   minImportance?: number
+  /** Filter by knowledge type: domain | operational | preference */
+  knowledgeType?: string
+  /** Minimum attention score (0-1). Default: 0.0 */
+  minAttention?: number
 }
 
 // RPC result type (matching search_knowledge function in schema)
@@ -76,6 +84,10 @@ interface SearchKnowledgeResult {
   connected_to: string[]
   source_created_at: string
   similarity: number
+  // Mach 2: enrichment fields (from migration 019 RPC update)
+  knowledge_type: string | null
+  attention_score: number
+  context_snippet: string | null
 }
 
 // =============================================================================
@@ -111,6 +123,9 @@ const transformKnowledgeNode = (row: SearchKnowledgeResult): KnowledgeNode => ({
   connectedTo: row.connected_to ?? [],
   createdAt: new Date(row.source_created_at),
   similarity: row.similarity,
+  knowledgeType: row.knowledge_type ?? null,
+  attentionScore: row.attention_score ?? 0.5,
+  contextSnippet: row.context_snippet ?? null,
 })
 
 // =============================================================================
@@ -138,11 +153,13 @@ export const searchKnowledge = async (
     voyageSlug,
     includeQuiet = false,
     minImportance = 0.0,
+    knowledgeType,
+    minAttention = 0.0,
   } = options
 
   try {
     console.log(
-      `[Knowledge] Search: "${query.slice(0, 50)}..." threshold: ${threshold}, limit: ${limit}`
+      `[Knowledge] Search: "${query.slice(0, 50)}..." threshold: ${threshold}, limit: ${limit}, type: ${knowledgeType ?? 'all'}, minAttention: ${minAttention}`
     )
 
     const supabase = getClientForUser(userId)
@@ -150,8 +167,15 @@ export const searchKnowledge = async (
     // Generate embedding for the query
     const embedding = await generateEmbedding(query)
 
+    // Handle NULL knowledge_type: when filtering for 'operational', include NULL rows
+    // by not passing the filter (RPC treats NULL p_knowledge_type as "no filter").
+    // The RPC WHERE clause uses: (p_knowledge_type IS NULL OR kc.knowledge_type = p_knowledge_type)
+    // So for 'operational' we need special handling — pass NULL to include unclassified rows,
+    // then filter client-side. For other types, pass directly.
+    const rpcKnowledgeType = knowledgeType === 'operational' ? null : (knowledgeType ?? null)
+
     // Call the RPC function for semantic search
-    
+
     const { data, error } = await (supabase as any).rpc('search_knowledge', {
       query_embedding: toVectorString(embedding),
       p_user_id: userId,
@@ -161,6 +185,8 @@ export const searchKnowledge = async (
       p_min_importance: minImportance,
       p_match_threshold: threshold,
       p_match_count: limit,
+      p_knowledge_type: rpcKnowledgeType,
+      p_min_attention: minAttention,
     })
 
     if (error) {
@@ -168,7 +194,15 @@ export const searchKnowledge = async (
       return []
     }
 
-    const results = (data as SearchKnowledgeResult[] | null) ?? []
+    let results = (data as SearchKnowledgeResult[] | null) ?? []
+
+    // Client-side filter for 'operational': include NULL and 'operational' types,
+    // exclude 'domain' and 'preference' that slipped through (RPC had no type filter)
+    if (knowledgeType === 'operational') {
+      results = results.filter(
+        (r) => r.knowledge_type === null || r.knowledge_type === 'operational'
+      )
+    }
 
     console.log(`[Knowledge] Found ${results.length} results`)
     if (results.length > 0 && results.length <= 5) {
@@ -258,17 +292,18 @@ export const getConnectedKnowledge = async (eventId: string): Promise<KnowledgeN
  */
 export const getRecentKnowledge = async (
   userId: string,
-  limit = 20
+  limit = 20,
+  minAttention = 0.3
 ): Promise<KnowledgeNode[]> => {
   try {
     const supabase = getClientForUser(userId)
 
-    
+
     const { data, error } = await (supabase as any)
       .from('knowledge_current')
       .select('*')
       .eq('user_id', userId)
-      .eq('is_active', true)
+      .gte('attention_score', minAttention)
       .order('source_created_at', { ascending: false })
       .limit(limit)
 
@@ -388,6 +423,8 @@ export interface GrepOptions {
   limit?: number
   /** Filter by voyage slug */
   voyageSlug?: string
+  /** Minimum attention score threshold. Default: 0.3 */
+  minAttention?: number
 }
 
 export interface GrepResult extends Omit<KnowledgeNode, 'similarity'> {
@@ -417,6 +454,7 @@ export const keywordGrep = async (
     caseSensitive = false,
     limit = 20,
     voyageSlug,
+    minAttention = 0.3,
   } = options
 
   if (!pattern.trim()) {
@@ -425,7 +463,7 @@ export const keywordGrep = async (
 
   try {
     console.log(
-      `[Knowledge] Grep: "${pattern}" scope: ${scope}, case: ${caseSensitive}, limit: ${limit}`
+      `[Knowledge] Grep: "${pattern}" scope: ${scope}, case: ${caseSensitive}, limit: ${limit}, minAttention: ${minAttention}`
     )
 
     const supabase = getClientForUser(userId)
@@ -434,12 +472,12 @@ export const keywordGrep = async (
     const operator = caseSensitive ? 'like' : 'ilike'
     const searchPattern = `%${pattern}%`
 
-    
+
     let query = (supabase as any)
       .from('knowledge_current')
       .select('*')
       .filter('content', operator, searchPattern)
-      .eq('is_active', true)
+      .gte('attention_score', minAttention)
 
     // Apply scope filters
     if (scope === 'personal') {
@@ -493,12 +531,67 @@ export const keywordGrep = async (
         importance: row.importance,
         connectedTo: row.connected_to ?? [],
         createdAt: new Date(row.source_created_at),
+        knowledgeType: row.knowledge_type ?? null,
+        attentionScore: row.attention_score ?? 0.5,
+        contextSnippet: row.context_snippet ?? null,
         highlight,
         matchStart,
       }
     })
   } catch (error) {
     console.error('[Knowledge] keywordGrep error:', error)
+    return []
+  }
+}
+
+// =============================================================================
+// Preference Loading (for system prompt injection)
+// =============================================================================
+
+/**
+ * Load preference-type knowledge for system prompt injection.
+ * Preferences are always loaded into every session — they're part of
+ * who Voyager is to this person.
+ *
+ * @param userId - The user's ID
+ * @param voyageSlug - Optional voyage scope
+ * @returns Preference knowledge nodes sorted by attention score
+ */
+export const loadPreferences = async (
+  userId: string,
+  voyageSlug?: string
+): Promise<KnowledgeNode[]> => {
+  try {
+    const supabase = getAdminSupabase()
+
+    let query = (supabase as any)
+      .from('knowledge_current')
+      .select('*')
+      .eq('knowledge_type', 'preference')
+      .gte('attention_score', 0.5)
+
+    if (voyageSlug) {
+      query = query.or(`user_id.eq.${userId},voyage_slug.eq.${voyageSlug}`)
+    } else {
+      query = query.eq('user_id', userId)
+    }
+
+    const { data, error } = await query
+      .order('attention_score', { ascending: false })
+
+    if (error) {
+      console.error('[Knowledge] loadPreferences error:', error)
+      return []
+    }
+
+    return (data ?? []).map((row: SearchKnowledgeResult) =>
+      transformKnowledgeNode({
+        ...row,
+        similarity: 1.0,
+      })
+    )
+  } catch (error) {
+    console.error('[Knowledge] loadPreferences error:', error)
     return []
   }
 }

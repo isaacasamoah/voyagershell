@@ -5,7 +5,6 @@
 // Prompts extracted here can be imported by implementation files.
 
 import type { ModelRequirements } from '@/lib/models/router'
-import { generateHowStrategyPrompt } from './retrieval-tools'
 import type { VoyagerEvent } from './event-dispatcher'
 
 // =============================================================================
@@ -64,74 +63,10 @@ export interface AgentContext {
 // Extracted Prompts
 // =============================================================================
 
-/**
- * IF Decision prompt - Gemini Flash decides if deep retrieval is needed.
- * Fast and cheap. Conservative: only YES when deeper search adds value.
- */
-export const IF_DECISION_PROMPT = `You decide if a query needs deep retrieval beyond what was already pre-fetched.
-
-Say NO for:
-- Greetings, acknowledgments, simple thank yous
-- Questions where pre-retrieval found strong matches (similarity > 0.75)
-- Follow-up questions about information already in the conversation
-- Simple factual questions already answered in context
-
-Say YES for:
-- Complex queries spanning multiple topics or time periods
-- Requests for comprehensive summaries or overviews
-- Questions about history, timelines, or changes over time
-- When pre-retrieval found weak or no matches
-- Explicit requests to "find more" or "search deeper"
-
-Be conservative. Only say YES when deeper search would actually add value.`
-
-/**
- * HOW Strategy prompt - Claude generates retrieval code.
- * The "Claude as Query Compiler" pattern.
- *
- * Now dynamically generated from structured tool definitions.
- * See lib/agents/retrieval-tools.ts for tool definitions and patterns.
- */
-export const HOW_STRATEGY_PROMPT = generateHowStrategyPrompt()
-
-/**
- * Clustering prompt - Gemini Flash groups findings by theme.
- * Two-stage compression for progressive disclosure.
- */
-export const CLUSTERING_PROMPT = `You cluster knowledge findings by theme.
-
-Input format: Each finding is numbered (0, 1, 2...). Use these NUMBERS as findingIds.
-
-Rules:
-- Max 5 clusters, minimum 2 findings per cluster
-- Each finding belongs to exactly one cluster
-- Cluster names: 2-4 words (e.g., "Pricing Decisions", "Technical Architecture")
-- If a finding doesn't fit any theme, add its NUMBER to "unclustered"
-- Write a 1-sentence summary for each cluster
-- Prioritize pinned findings (marked PINNED)
-
-Output JSON only (no markdown, no explanation):
-{
-  "clusters": [
-    { "theme": "Theme Name", "summary": "One sentence about this cluster.", "findingIds": ["0", "1", "5"] }
-  ],
-  "unclustered": ["3", "7"]
-}`
-
-/**
- * Synthesis prompt - Claude writes conversational follow-up.
- * Maintains "same Voyager voice" across fast and deep paths.
- */
-export const SYNTHESIS_PROMPT = `You are Voyager, continuing a conversation.
-The user asked a question and you already gave an initial response.
-Now you have additional context from a deeper search.
-
-Write a brief, natural follow-up (2-4 sentences).
-Start with "I found more context..." or "Also relevant..." or "Looking deeper, I found..."
-Don't repeat what was likely in the initial response.
-Speak conversationally, not as a list.
-If the findings add significant new information, highlight it.
-If the findings mostly confirm the initial response, say so briefly.`
+// Prompts are now inline in their respective implementation files:
+// - Agentic retrieval prompt → lib/agents/deep-retrieval.ts
+// - Post-session prompt → primitives registry below
+// - Followup uses composeSystemPrompt (same as primary Voyager)
 
 // =============================================================================
 // Agent Registry
@@ -168,7 +103,7 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
       streaming: true,
       toolUse: true,
     },
-    tools: ['spawn_background_agent', 'web_search'],
+    tools: ['spawn_background_agent', 'web_search', 'semantic_search', 'keyword_grep'],
     canSpawn: ['retrieval'],
     systemPrompt: 'core', // Uses CORE_PROMPT from lib/prompts/core.ts
   },
@@ -202,7 +137,7 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
     ],
     reportsTo: 'voyager',
     tokenBudget: 50000,
-    systemPrompt: HOW_STRATEGY_PROMPT,
+    systemPrompt: `You are a retrieval agent for Voyager. Find comprehensive, relevant information from the user's knowledge base using your tools strategically. Reason between searches, evaluate results, and iterate until you have enough or see diminishing returns.`,
     timeout: 60000, // 60s for deep work
   },
 
@@ -292,27 +227,6 @@ Then use retrieval tools to find connections to existing knowledge across sessio
 Tasks: identify stale knowledge, suggest compaction, optimize retrieval.`,
   },
 
-  // =========================================================================
-  // HELPER AGENTS (used internally by other agents)
-  // =========================================================================
-
-  /**
-   * Synthesis agent - writes conversational follow-ups.
-   * Used by retrieval to maintain Voyager's voice.
-   */
-  synthesis: {
-    id: 'synthesis',
-    name: 'Synthesis',
-    description: 'Synthesizes findings into conversational follow-up',
-    type: 'background',
-    model: {
-      task: 'synthesis',
-      quality: 'balanced',
-    },
-    tools: [],
-    reportsTo: 'retrieval',
-    systemPrompt: SYNTHESIS_PROMPT,
-  },
 }
 
 // =============================================================================
