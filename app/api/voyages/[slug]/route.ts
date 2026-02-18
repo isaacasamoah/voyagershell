@@ -50,8 +50,8 @@ export const GET = async (_req: Request, { params }: RouteParams) => {
       );
     }
 
-    // Return voyage details (include invite code only for captain/navigator)
-    const canSeeInvite = role === 'captain' || role === 'navigator';
+    // Return voyage details (include invite code only for captain)
+    const canSeeInvite = role === 'captain';
 
     return NextResponse.json({
       voyage: {
@@ -88,7 +88,7 @@ interface UpdateVoyageRequest {
 
 /**
  * PUT /api/voyages/[slug]
- * Update voyage settings (captain/navigator only).
+ * Update voyage settings (captain only).
  */
 export const PUT = async (req: Request, { params }: RouteParams) => {
   const { slug } = await params;
@@ -108,12 +108,12 @@ export const PUT = async (req: Request, { params }: RouteParams) => {
       );
     }
 
-    // Check permissions (captain or navigator can update)
+    // Check permissions (captain only can update)
     const role = await getUserRole(slug, userId);
 
-    if (role !== 'captain' && role !== 'navigator') {
+    if (role !== 'captain') {
       return NextResponse.json(
-        { error: 'Only captains and navigators can update voyage settings' },
+        { error: 'Only captains can update voyage settings' },
         { status: 403 }
       );
     }

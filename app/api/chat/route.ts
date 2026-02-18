@@ -18,6 +18,7 @@ import { callGeminiJSON } from '@/lib/gemini/client';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools } from '@/lib/retrieval';
 import { getAuthenticatedUserId } from '@/lib/auth';
+import { getPersonalVoyage } from '@/lib/voyage';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
 import { log } from '@/lib/debug';
@@ -149,7 +150,17 @@ export const POST = async (req: Request) => {
     // Get authenticated user ID, fall back to dev user if not authenticated
     const userId = await getAuthenticatedUserId() ?? DEV_USER_ID;
 
-    const { messages, conversationId, voyageSlug } = await req.json();
+    const { messages, conversationId, voyageSlug: requestedVoyageSlug, authState } = await req.json();
+
+    // Default to personal voyage when no voyage context is provided
+    let voyageSlug: string | undefined = requestedVoyageSlug;
+    if (!voyageSlug && userId !== DEV_USER_ID) {
+      const personalVoyage = await getPersonalVoyage(userId);
+      if (personalVoyage) {
+        voyageSlug = personalVoyage.slug;
+        log.voyage('Defaulting to personal voyage', { slug: voyageSlug });
+      }
+    }
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(
@@ -261,7 +272,7 @@ export const POST = async (req: Request) => {
       const { systemPrompt: composedPrompt, retrieval } = await composeSystemPrompt(
         userId,
         queryText,
-        { voyageSlug, continuityContext }
+        { voyageSlug, continuityContext, authState }
       );
       systemPrompt = composedPrompt;
       retrievedKnowledge = retrieval.knowledge;

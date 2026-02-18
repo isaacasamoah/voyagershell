@@ -22,7 +22,8 @@ export type ComponentType =
   | 'confirmation'        // Yes/No action confirmation
   | 'action_buttons'      // Contextual action buttons
   | 'progress'            // Loading/progress indicator
-  | 'auth_prompt'         // Email input for auth
+  | 'auth_prompt'         // Email input for auth (legacy)
+  | 'email_input'         // Email input via ask_captain tool
 
 export interface InlineComponent {
   id: string
@@ -80,6 +81,11 @@ export const COMPONENT_SPECS: Record<
   auth_prompt: {
     description: 'Email input for authentication',
     requiredProps: ['mode'], // 'sign-up' or 'login'
+    ephemeral: true,
+  },
+  email_input: {
+    description: 'Email input via ask_captain tool',
+    requiredProps: [],
     ephemeral: true,
   },
 }

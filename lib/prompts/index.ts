@@ -55,10 +55,13 @@ export interface UserProfile {
   };
 }
 
+export type AuthState = 'unauthenticated' | 'authenticated' | 'just-authenticated';
+
 interface ComposeOptions {
   profile?: UserProfile;
   voyageSlug?: string;
   continuityContext?: string | null;  // Retrieved context from conversation history
+  authState?: AuthState;
 }
 
 /**
@@ -70,7 +73,7 @@ export const composeSystemPrompt = async (
   query: string,
   options?: ComposeOptions
 ): Promise<{ systemPrompt: string; retrieval: RetrievalResult }> => {
-  const { profile, voyageSlug, continuityContext } = options ?? {};
+  const { profile, voyageSlug, continuityContext, authState } = options ?? {};
 
   // Load preferences and retrieval in parallel
   const [preferences, retrieval] = await Promise.all([
@@ -156,10 +159,16 @@ export const composeSystemPrompt = async (
     preferencesSection = `\n\n---\n\n# Who You Are To Me (Preferences)\n${prefLines}`;
   }
 
-  // Inject preferences before the context layer in the system prompt
-  const systemPrompt = preferencesSection
-    ? composed.systemPrompt + preferencesSection
-    : composed.systemPrompt;
+  // Build auth state directive
+  let authSection = '';
+  if (authState === 'unauthenticated') {
+    authSection = `\n\n---\n\n# Auth State: Unauthenticated\nThe user is not authenticated. Your first message should welcome them warmly and use the ask_captain tool to render an email_input component so they can sign in. Keep it short and natural — one or two sentences, then the tool call.`;
+  } else if (authState === 'just-authenticated') {
+    authSection = `\n\n---\n\n# Auth State: Just Authenticated\nThe user just authenticated successfully. Welcome them briefly — they're ready to go. One sentence is enough.`;
+  }
+
+  // Inject preferences and auth state into the system prompt
+  const systemPrompt = composed.systemPrompt + preferencesSection + authSection;
 
   return {
     systemPrompt,

@@ -103,7 +103,7 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
       streaming: true,
       toolUse: true,
     },
-    tools: ['spawn_background_agent', 'web_search', 'semantic_search', 'keyword_grep'],
+    tools: ['spawn_background_agent', 'web_search', 'semantic_search', 'keyword_grep', 'ask_captain'],
     canSpawn: ['retrieval'],
     systemPrompt: 'core', // Uses CORE_PROMPT from lib/prompts/core.ts
   },

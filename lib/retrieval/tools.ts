@@ -19,6 +19,7 @@ import {
 } from '@/lib/knowledge'
 import { getClientForContext } from '@/lib/supabase/authenticated'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
+import { createCaptainTools } from '@/lib/tools/captain'
 
 // Resolve short ID (8 chars) to full UUID
 const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<string | null> => {
@@ -424,14 +425,17 @@ Returns formatted search results. You synthesize into your response.`,
  * Inline retrieval (semantic_search, keyword_grep) for light searches.
  * spawn_background_agent for heavy multi-step retrieval.
  * web_search for external information.
+ * ask_captain for interactive UI (auth, pickers, confirmations).
  */
 export const createVoyagerTools = (ctx: ToolContext) => {
   const retrieval = createRetrievalTools(ctx)
+  const captain = createCaptainTools(ctx)
   return {
     semantic_search: retrieval.semantic_search,
     keyword_grep: retrieval.keyword_grep,
     spawn_background_agent: retrieval.spawn_background_agent,
     web_search: retrieval.web_search,
+    ask_captain: captain.ask_captain,
   }
 }
 

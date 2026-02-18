@@ -2,15 +2,15 @@
 
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { AstronautState } from './AstronautState';
 import { ComponentRenderer } from '@/components/ui/composition';
 import type { InlineComponent } from '@/lib/ui/components';
 
-// Message parts - text or component
+// Message parts - text, component, or custom React element
 export interface MessagePart {
-  type: 'text' | 'component'
+  type: 'text' | 'component' | 'react'
   text?: string
   component?: InlineComponent
+  element?: React.ReactNode
 }
 
 interface AssistantMessageProps {
@@ -40,32 +40,12 @@ export const AssistantMessage = ({
       </div>
       <div className="flex-1 space-y-4">
         <div className="relative pl-2">
-          <div className="flex items-center gap-4 mb-4">
-            <AstronautState
-              state={isStreaming ? 'searching' : 'success'}
-              size="md"
-            />
-            <div className="flex flex-col">
-              {isStreaming ? (
-                <>
-                  <span className="text-indigo-400 text-xs font-bold animate-pulse">
-                    PROCESSING...
-                  </span>
-                  <span className="text-slate-600 text-[10px]">
-                    Generating response
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="text-green-400 text-xs font-bold">
-                    VOYAGER
-                  </span>
-                  <span className="text-slate-600 text-[10px]">
-                    Response complete
-                  </span>
-                </>
-              )}
-            </div>
+          {/* Label — no astronaut in messages (AC2) */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-green-400 text-xs font-bold">VOYAGER</span>
+            {isStreaming && (
+              <span className="text-indigo-400 text-[10px] animate-pulse">streaming...</span>
+            )}
           </div>
 
           {/* Response Content */}
@@ -80,6 +60,10 @@ export const AssistantMessage = ({
                       component={part.component}
                       onAction={onAction}
                     />
+                  </div>
+                ) : part.type === 'react' && part.element ? (
+                  <div key={i} className="not-prose my-3">
+                    {part.element}
                   </div>
                 ) : null
               )}
