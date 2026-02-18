@@ -1,6 +1,9 @@
-// Post-Session Agent
-// Fires after a conversation goes idle (5 min debounce).
-// Stage 1: Classify every knowledge event from the session (pure reasoning).
+// Cartographer
+// Maps the territory as you explore it — enriches knowledge continuously
+// during conversation, not post-mortem.
+//
+// Trigger: count-based (>= ENRICHMENT_THRESHOLD unenriched events per session)
+// Stage 1: Classify unenriched events (pure reasoning, no tools).
 // Stage 2: Find cross-session connections via retrieval tools.
 // Then: enrich knowledge_current rows + re-embed with context snippets.
 //
@@ -11,6 +14,7 @@ import OpenAI from 'openai'
 import { modelRouter } from '@/lib/models/router'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { loadConversationMessages } from '@/lib/conversation'
+import { estimateTokens } from '@/lib/conversation/window'
 import { updateKnowledgeEnrichment, type KnowledgeType } from '@/lib/knowledge/events'
 import { createRetrievalTools, type ToolContext } from '@/lib/retrieval/tools'
 import { log } from '@/lib/debug/logger'
@@ -19,8 +23,8 @@ import { log } from '@/lib/debug/logger'
 // Types
 // =============================================================================
 
-interface PostSessionPayload {
-  conversationId: string
+interface CartographerPayload {
+  sessionId: string
   userId: string
   voyageSlug?: string
 }
@@ -37,6 +41,25 @@ interface Stage2Connection {
   toEventId: string
 }
 
+interface KnowledgeEventRow {
+  event_id: string
+  content: string
+  source_created_at: string
+}
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Minimum unenriched events before Cartographer fires */
+export const ENRICHMENT_THRESHOLD = 10
+
+/** Messages of context before the oldest unenriched event */
+const CONTEXT_MESSAGES_BEFORE = 5
+
+/** Token budget for the transcript window */
+const TRANSCRIPT_TOKEN_BUDGET = 12_000
+
 // Lazy OpenAI for embeddings
 let _openai: OpenAI | null = null
 const getOpenAI = (): OpenAI => {
@@ -47,62 +70,55 @@ const getOpenAI = (): OpenAI => {
 const toVectorString = (embedding: number[]): string => `[${embedding.join(',')}]`
 
 // =============================================================================
-// Debounce Check
+// Concurrency Guard (in-memory, serverless-safe best-effort)
 // =============================================================================
 
-const IDLE_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutes
+const _runningSessions = new Set<string>()
 
-const isConversationIdle = async (conversationId: string): Promise<boolean> => {
+// =============================================================================
+// Enrichment Trigger: Count-Based
+// =============================================================================
+
+/**
+ * Check whether enrichment should run for this session.
+ * Returns true when unenriched event count >= ENRICHMENT_THRESHOLD.
+ */
+export const shouldRunEnrichment = async (sessionId: string): Promise<boolean> => {
   const supabase = getAdminClient()
 
-  const { data, error } = await (supabase as any)
-    .from('sessions')
-    .select('last_message_at')
-    .eq('id', conversationId)
-    .single()
-
-  if (error || !data) {
-    log.agent('Debounce check failed — skipping', { conversationId, error: error?.message }, 'warn')
-    return false
-  }
-
-  const lastMessageAt = new Date(data.last_message_at as string)
-  const elapsed = Date.now() - lastMessageAt.getTime()
-
-  if (elapsed < IDLE_THRESHOLD_MS) {
-    log.agent('Conversation still active, skipping post-session', {
-      conversationId,
-      elapsedMs: elapsed,
-      thresholdMs: IDLE_THRESHOLD_MS,
-    }, 'debug')
-    return false
-  }
-
-  return true
-}
-
-// =============================================================================
-// Load Session Knowledge Events
-// =============================================================================
-
-interface KnowledgeEventRow {
-  id: string
-  content: string
-  event_type: string
-  metadata: Record<string, unknown>
-}
-
-const loadSessionEvents = async (conversationId: string): Promise<KnowledgeEventRow[]> => {
-  const supabase = getAdminClient()
-
-  const { data, error } = await (supabase as any)
-    .from('knowledge_events')
-    .select('id, content, event_type, metadata')
-    .eq('metadata->>session_id', conversationId)
-    .order('created_at', { ascending: true })
+  const { count, error } = await (supabase as any)
+    .from('knowledge_current')
+    .select('*', { count: 'exact', head: true })
+    .eq('session_id', sessionId)
+    .is('knowledge_type', null)
 
   if (error) {
-    log.agent('Failed to load session events', { conversationId, error: error.message }, 'error')
+    log.agent('Enrichment count check failed', { sessionId, error: error.message }, 'warn')
+    return false
+  }
+
+  const unenriched = count ?? 0
+  log.agent('Enrichment count check', { sessionId, unenriched, threshold: ENRICHMENT_THRESHOLD }, 'debug')
+
+  return unenriched >= ENRICHMENT_THRESHOLD
+}
+
+// =============================================================================
+// Load Unenriched Events from knowledge_current
+// =============================================================================
+
+const loadUnenrichedEvents = async (sessionId: string): Promise<KnowledgeEventRow[]> => {
+  const supabase = getAdminClient()
+
+  const { data, error } = await (supabase as any)
+    .from('knowledge_current')
+    .select('event_id, content, source_created_at')
+    .eq('session_id', sessionId)
+    .is('knowledge_type', null)
+    .order('source_created_at', { ascending: true })
+
+  if (error) {
+    log.agent('Failed to load unenriched events', { sessionId, error: error.message }, 'error')
     return []
   }
 
@@ -110,10 +126,66 @@ const loadSessionEvents = async (conversationId: string): Promise<KnowledgeEvent
 }
 
 // =============================================================================
+// Purpose-Built Enrichment Window
+// =============================================================================
+
+/**
+ * Build a token-budgeted transcript anchored to the oldest unenriched event.
+ * Includes CONTEXT_MESSAGES_BEFORE messages before the anchor for context,
+ * plus all messages from anchor through latest.
+ *
+ * Truncates from the context-before portion if over budget (preserving
+ * messages around unenriched events).
+ */
+const buildEnrichmentWindow = async (
+  sessionId: string,
+  oldestUnenrichedTime: string
+): Promise<string> => {
+  // Load all session messages
+  const allMessages = await loadConversationMessages(sessionId, 500)
+  if (allMessages.length === 0) return ''
+
+  // Find the index of the first message at or after oldest unenriched event
+  const anchorTime = new Date(oldestUnenrichedTime).getTime()
+  let anchorIndex = allMessages.findIndex(
+    (m) => m.createdAt.getTime() >= anchorTime
+  )
+  if (anchorIndex === -1) anchorIndex = 0
+
+  // Context window: N messages before anchor through end
+  const contextStart = Math.max(0, anchorIndex - CONTEXT_MESSAGES_BEFORE)
+  const windowMessages = allMessages.slice(contextStart)
+
+  // Format messages
+  const formatted = windowMessages.map((m) => `${m.role}: ${m.content}`)
+
+  // Token budget enforcement — truncate from context-before portion
+  let totalTokens = 0
+  const budgeted: string[] = []
+
+  // First pass: add all messages from anchor onward (these are sacred)
+  const anchorOffset = anchorIndex - contextStart
+  for (let i = anchorOffset; i < formatted.length; i++) {
+    totalTokens += estimateTokens(formatted[i])
+    budgeted.push(formatted[i])
+  }
+
+  // Second pass: add context-before messages if budget allows (newest first)
+  for (let i = anchorOffset - 1; i >= 0; i--) {
+    const msgTokens = estimateTokens(formatted[i])
+    if (totalTokens + msgTokens > TRANSCRIPT_TOKEN_BUDGET) break
+    totalTokens += msgTokens
+    budgeted.unshift(formatted[i])
+  }
+
+  return budgeted.join('\n\n')
+}
+
+// =============================================================================
 // Stage 1: Per-Event Assessment (pure reasoning, no tools)
 // =============================================================================
 
-const STAGE1_PROMPT = `You are the post-session agent for Voyager. You evaluate knowledge events from a completed conversation.
+const STAGE1_PROMPT = `You are the Cartographer for Voyager. You classify knowledge events from an ongoing conversation.
 
 For EACH event, determine:
 
@@ -142,7 +214,7 @@ const runStage1 = async (
   if (events.length === 0) return []
 
   const eventList = events
-    .map((e) => `[${e.id}] (${e.event_type}): ${e.content.slice(0, 500)}`)
+    .map((e) => `[${e.event_id}]: ${e.content.slice(0, 500)}`)
     .join('\n\n')
 
   const userPrompt = `## Conversation Transcript
@@ -197,7 +269,7 @@ Respond with a JSON array of objects: { "eventId": string, "knowledgeType": "dom
 // Stage 2: Relationship Mapping (agentic, uses retrieval tools)
 // =============================================================================
 
-const STAGE2_PROMPT = `You are the post-session agent for Voyager (Stage 2: Relationship Mapping).
+const STAGE2_PROMPT = `You are the Cartographer for Voyager (Stage 2: Relationship Mapping).
 
 You have the assessments from Stage 1. Your job is to find connections between these events and existing knowledge from previous sessions.
 
@@ -277,7 +349,7 @@ const applyEnrichments = async (
   const openai = getOpenAI()
 
   // Build a content map for re-embedding
-  const contentMap = new Map(events.map((e) => [e.id, e.content]))
+  const contentMap = new Map(events.map((e) => [e.event_id, e.content]))
 
   // Apply Stage 1 enrichments
   for (const assessment of assessments) {
@@ -351,32 +423,32 @@ const applyEnrichments = async (
 // Main Entry Point
 // =============================================================================
 
-export const runPostSessionAgent = async (payload: PostSessionPayload): Promise<void> => {
-  const { conversationId, userId, voyageSlug } = payload
+export const runCartographer = async (payload: CartographerPayload): Promise<void> => {
+  const { sessionId, userId, voyageSlug } = payload
   const startTime = Date.now()
 
-  log.agent('Post-session agent triggered', { conversationId, userId })
+  // Best-effort concurrency guard
+  if (_runningSessions.has(sessionId)) {
+    log.agent('Cartographer already running for session, skipping', { sessionId }, 'debug')
+    return
+  }
+  _runningSessions.add(sessionId)
+
+  log.agent('Cartographer triggered', { sessionId, userId })
 
   try {
-    // Debounce: check if conversation is actually idle
-    const idle = await isConversationIdle(conversationId)
-    if (!idle) return
-
-    // Load transcript
-    const messages = await loadConversationMessages(conversationId)
-    if (messages.length === 0) {
-      log.agent('No messages found, skipping', { conversationId })
+    // Load unenriched knowledge events from knowledge_current
+    const events = await loadUnenrichedEvents(sessionId)
+    if (events.length === 0) {
+      log.agent('No unenriched events found, skipping', { sessionId })
       return
     }
 
-    const transcript = messages
-      .map((m) => `${m.role}: ${m.content}`)
-      .join('\n\n')
-
-    // Load knowledge events from this session
-    const events = await loadSessionEvents(conversationId)
-    if (events.length === 0) {
-      log.agent('No knowledge events found, skipping', { conversationId })
+    // Build purpose-built enrichment window
+    const oldestUnenrichedTime = events[0].source_created_at
+    const transcript = await buildEnrichmentWindow(sessionId, oldestUnenrichedTime)
+    if (!transcript) {
+      log.agent('No transcript available, skipping', { sessionId })
       return
     }
 
@@ -387,7 +459,7 @@ export const runPostSessionAgent = async (payload: PostSessionPayload): Promise<
     log.agent('Stage 1 complete', { assessmentCount: assessments.length })
 
     // Stage 2: Relationship mapping (agentic with tools)
-    const toolCtx: ToolContext = { userId, voyageSlug, conversationId }
+    const toolCtx: ToolContext = { userId, voyageSlug, conversationId: sessionId }
     log.agent('Running Stage 2', { assessmentCount: assessments.length })
 
     const connections = await runStage2(assessments, toolCtx)
@@ -397,19 +469,21 @@ export const runPostSessionAgent = async (payload: PostSessionPayload): Promise<
     await applyEnrichments(assessments, connections, events)
 
     const durationMs = Date.now() - startTime
-    log.agent('Post-session agent complete', {
-      conversationId,
+    log.agent('Cartographer complete', {
+      sessionId,
       events: events.length,
       assessments: assessments.length,
       connections: connections.length,
       durationMs,
     })
   } catch (err) {
-    log.agent('Post-session agent failed', {
-      conversationId,
+    log.agent('Cartographer failed', {
+      sessionId,
       error: err instanceof Error ? err.message : String(err),
       durationMs: Date.now() - startTime,
     }, 'error')
     // Fire-and-forget: never throw
+  } finally {
+    _runningSessions.delete(sessionId)
   }
 }

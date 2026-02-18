@@ -323,7 +323,7 @@ export const createExplicitEvent = async (
 }
 
 // =============================================================================
-// Knowledge Enrichment (Post-Session Agent Updates)
+// Knowledge Enrichment (Cartographer Updates)
 // =============================================================================
 
 export type KnowledgeType = 'domain' | 'operational' | 'preference'
@@ -335,7 +335,7 @@ interface KnowledgeEnrichmentParams {
 }
 
 /**
- * Update knowledge_current row with enrichment from post-session agent.
+ * Update knowledge_current row with enrichment from the Cartographer.
  * Sets knowledge_type, attention_score, and optionally context_snippet.
  */
 export const updateKnowledgeEnrichment = async (

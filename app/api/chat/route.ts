@@ -15,10 +15,10 @@ import {
 } from '@/lib/conversation/continuity';
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { callGeminiJSON } from '@/lib/gemini/client';
-import { emitMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
+import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools } from '@/lib/retrieval';
 import { getAuthenticatedUserId } from '@/lib/auth';
-import { dispatcher } from '@/lib/agents/event-dispatcher';
+import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
 import { log } from '@/lib/debug';
 
@@ -335,9 +335,8 @@ export const POST = async (req: Request) => {
           try {
             await saveMessage(conversationId, 'assistant', text);
 
-            // Emit knowledge event (fire-and-forget)
-            // Messages ARE the knowledge — preserved exactly as source events
-            emitMessageEvent(conversationId, 'assistant', text, {
+            // Await knowledge event creation (must complete before count check)
+            await createMessageEvent(conversationId, 'assistant', text, {
               userId: userId,
               voyageSlug: voyageSlug,
             });
@@ -349,12 +348,17 @@ export const POST = async (req: Request) => {
             // Check if title generation is needed (async, don't wait)
             maybeGenerateTitle(conversationId);
 
-            // Emit conversation.ended — post-session agent checks debounce
-            dispatcher.emit('conversation.ended', {
-              conversationId,
-              userId,
-              voyageSlug,
-            });
+            // Count-based enrichment trigger: check unenriched events for this session
+            const shouldEnrich = await shouldRunEnrichment(conversationId);
+            if (shouldEnrich) {
+              waitUntil(
+                runCartographer({
+                  sessionId: conversationId,
+                  userId,
+                  voyageSlug,
+                })
+              );
+            }
           } catch (error) {
             console.error('[Chat] Failed to save assistant message:', error);
           }

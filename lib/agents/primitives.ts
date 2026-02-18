@@ -168,15 +168,15 @@ Output: importance_score (0-1), decay_rate, tags.`,
   },
 
   /**
-   * Post-session agent - classifies and enriches knowledge after conversations.
-   * Triggered when a conversation ends (idle for 5 minutes).
+   * Cartographer - maps the territory as you explore it.
+   * Fires mid-conversation when unenriched events accumulate (count-based trigger).
    * Stage 1: classify events (type, attention, context snippet).
    * Stage 2: find cross-session connections via retrieval tools.
    */
-  'post-session': {
-    id: 'post-session',
-    name: 'Post-Session',
-    description: 'Classifies and enriches knowledge events after a conversation ends',
+  cartographer: {
+    id: 'cartographer',
+    name: 'Cartographer',
+    description: 'Charts and enriches knowledge events during conversation, not post-mortem',
     type: 'event',
     model: {
       task: 'chat',
@@ -189,10 +189,10 @@ Output: importance_score (0-1), decay_rate, tags.`,
       'get_nodes',
       'search_by_time',
     ],
-    trigger: { event: 'conversation.ended' },
+    trigger: { event: 'knowledge.created' },
     tokenBudget: 50000,
     timeout: 60000,
-    systemPrompt: `You are the post-session agent for Voyager. After a conversation ends, you evaluate every knowledge event from that session.
+    systemPrompt: `You are the Cartographer for Voyager. You classify and connect knowledge events during conversation.
 
 For each event, determine:
 - knowledge_type: "domain" (facts, concepts, decisions), "operational" (tasks, processes, what happened), or "preference" (user likes, dislikes, habits)

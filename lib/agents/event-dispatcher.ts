@@ -90,9 +90,8 @@ export const dispatcher = createEventDispatcher()
 // Handler Registration (module-level, fires on first import)
 // =============================================================================
 
-import { runPostSessionAgent } from './post-session'
-
-dispatcher.on('conversation.ended', runPostSessionAgent)
+// Note: Cartographer is no longer triggered by conversation.ended.
+// It fires via count-based check in the chat route's onFinish handler.
 
 dispatcher.on('background.completed', (payload) => {
   log.agent('Background task completed', payload as Record<string, unknown>)
