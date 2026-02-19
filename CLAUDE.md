@@ -92,6 +92,22 @@ npm run dev      # localhost:3000
 npm run build    # production build
 ```
 
+### Supabase Migrations
+
+Run migrations via the Management API (no CLI needed):
+
+```bash
+ACCESS_TOKEN=$(cat ~/.supabase/access-token)
+PROJECT_REF="iesprdzzgjypnksoljym"
+SQL=$(cat supabase/migrations/NNN_name.sql)
+curl -s -X POST "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"query\": $(echo "$SQL" | jq -Rs .)}"
+```
+
+Empty `[]` response = success. Verify with a `SELECT` query if needed.
+
 ## Code Standards
 
 - TypeScript strict
