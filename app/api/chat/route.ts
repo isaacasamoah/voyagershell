@@ -1,4 +1,4 @@
-import { streamText, stepCountIs, APICallError } from 'ai';
+import { streamText, stepCountIs, hasToolCall, APICallError } from 'ai';
 import { waitUntil } from '@vercel/functions';
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts';
 import {
@@ -16,7 +16,7 @@ import {
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { callGeminiJSON } from '@/lib/gemini/client';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
-import { logRetrievalEvent, logCitations, createVoyagerTools } from '@/lib/retrieval';
+import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { getPersonalVoyage } from '@/lib/voyage';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
@@ -261,20 +261,34 @@ export const POST = async (req: Request) => {
       });
     }
 
-    // Compose system prompt with context retrieval
-    // Uses placeholder user ID until auth is wired up
-    // Falls back to base prompt if retrieval fails
-    let systemPrompt: string;
+    // Create Voyager tools (all 8: 6 retrieval + spawn_background_agent + ask_captain)
+    const { tools: voyagerTools, registrations } = createVoyagerTools({
+      userId,
+      voyageSlug,
+      conversationId,
+      waitUntil,
+      messages: windowedSimpleMessages,
+    });
+
+    // Compose tool strategy section for system prompt
+    const toolStrategy = composeToolStrategy(registrations);
+
+    // Compose system prompt with preferences and pinned knowledge
+    // Falls back to base prompt if composition fails
+    let staticPrefix: string;
+    let dynamicSuffix: string = '';
     let retrievedKnowledge: KnowledgeNode[] = [];
     let retrievalEventId: string | null = null;
 
     try {
-      const { systemPrompt: composedPrompt, retrieval } = await composeSystemPrompt(
+      const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(
         userId,
-        queryText,
         { voyageSlug, continuityContext, authState }
       );
-      systemPrompt = composedPrompt;
+      // Static prefix: core identity + preferences + pinned + tool strategy (cacheable)
+      staticPrefix = staticPrompt + '\n\n' + toolStrategy;
+      // Dynamic suffix: auth state, continuity context (per-turn, not cached)
+      dynamicSuffix = dynamicPrompt;
       retrievedKnowledge = retrieval.knowledge;
 
       // Log retrieval event (fire-and-forget)
@@ -293,20 +307,34 @@ export const POST = async (req: Request) => {
       });
     } catch (error) {
       log.api('Prompt composition failed, using base prompt', { error: String(error) }, 'warn');
-      systemPrompt = getBasePrompt();
+      staticPrefix = getBasePrompt() + '\n\n' + toolStrategy;
     }
 
-    // Create Voyager tools (spawn_background_agent, web_search, semantic_search, keyword_grep)
-    const voyagerTools = createVoyagerTools({
-      userId,
-      voyageSlug,
-      conversationId,
-      waitUntil,
-    });
+    // Build messages array with cache control for prompt caching
+    const cacheControl = { anthropic: { cacheControl: { type: 'ephemeral' as const } } };
+
+    const systemMessages = [
+      {
+        role: 'system' as const,
+        content: staticPrefix,
+        providerOptions: cacheControl,
+      },
+      // Dynamic suffix as separate system message if present (not cached)
+      ...(dynamicSuffix
+        ? [{ role: 'system' as const, content: dynamicSuffix }]
+        : []),
+    ];
+
+    // Add cache control to last user message (caches conversation prefix)
+    const messagesWithCache = windowedSimpleMessages.map((m, i) => ({
+      ...m,
+      ...(i === windowedSimpleMessages.length - 1
+        ? { providerOptions: cacheControl }
+        : {}),
+    }));
 
     // Primary Voyager with tools
-    // Voyager decides when to spawn background agents for deep work
-    // Uses pre-fetched context for fast responses
+    // Voyager decides when to use tools and self-terminates when done
     const result = streamText({
       model: modelRouter.select({
         task: 'chat',
@@ -314,19 +342,28 @@ export const POST = async (req: Request) => {
         streaming: true,
         toolUse: true,
       }),
-      system: systemPrompt,
-      messages: windowedSimpleMessages,
+      messages: [...systemMessages, ...messagesWithCache],
       tools: voyagerTools,
-      stopWhen: stepCountIs(3), // Allow tool call → result → final response
-      onFinish: async ({ text, finishReason, usage }) => {
+      maxOutputTokens: 4096,
+      stopWhen: [
+        stepCountIs(15),                        // hard cost cap
+        hasToolCall('spawn_background_agent'),   // offloaded to background
+      ],
+      onFinish: async ({ text, finishReason, usage, providerMetadata }) => {
+        // Extract cache metrics from Anthropic provider
+        const cacheCreationTokens = (providerMetadata?.anthropic?.cacheCreationInputTokens as number) ?? 0;
+        const cacheReadTokens = (providerMetadata?.anthropic?.cacheReadInputTokens as number) ?? 0;
+
         log.message('Stream complete', {
           textLength: text?.length ?? 0,
           finishReason,
           inputTokens: usage?.inputTokens,
           outputTokens: usage?.outputTokens,
+          cacheCreationTokens,
+          cacheReadTokens,
         });
 
-        // Track credits (fire-and-forget for now, logs to console)
+        // Track credits with cache metrics
         if (usage) {
           const inputTokens = usage.inputTokens ?? 0;
           const outputTokens = usage.outputTokens ?? 0;
@@ -335,6 +372,8 @@ export const POST = async (req: Request) => {
             model: 'claude-sonnet',
             inputTokens,
             outputTokens,
+            cacheCreationTokens,
+            cacheReadTokens,
             cost: modelRouter.estimateCost('claude-sonnet', inputTokens, outputTokens),
             task: 'chat',
             conversationId,

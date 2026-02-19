@@ -51,6 +51,8 @@ export interface ToolContext {
   conversationId?: string
   /** Vercel waitUntil for background execution without blocking response */
   waitUntil?: (promise: Promise<unknown>) => void
+  /** Conversation messages for context capture (used by spawn_background_agent) */
+  messages?: Array<{ role: string; content: string }>
 }
 
 // =============================================================================
@@ -59,7 +61,7 @@ export interface ToolContext {
 
 const formatKnowledgeResult = (nodes: KnowledgeNode[]): string => {
   if (nodes.length === 0) {
-    return 'No results found. NOW RESPOND TO THE USER - tell them what you searched for and that you found nothing relevant. Do not call more tools without responding first.'
+    return 'No results found.'
   }
 
   return nodes
@@ -75,7 +77,7 @@ const formatKnowledgeResult = (nodes: KnowledgeNode[]): string => {
 
 const formatGrepResult = (results: GrepResult[]): string => {
   if (results.length === 0) {
-    return 'No exact matches found. NOW RESPOND TO THE USER with what you have so far.'
+    return 'No exact matches found.'
   }
 
   return results
@@ -173,15 +175,8 @@ const parseRelativeDate = (input: string): Date => {
  * Call this in the chat route to get executable tools for the request.
  */
 export const createRetrievalTools = (ctx: ToolContext) => ({
-  /**
-   * Semantic search across knowledge.
-   * Use for conceptual queries when you don't know exact terms.
-   * Returns results ranked by relevance.
-   */
   semantic_search: tool({
-    description: `Search by concept/meaning. Use when: exploring topics, finding related content, natural language queries, user asks about ideas or themes.
-Returns results ranked by relevance with similarity scores.
-After search, respond to user immediately. For deeper search, include spawn_background_agent in SAME response.`,
+    description: `Semantic search across the knowledge base. Finds content by conceptual similarity to the query. Returns results ranked by relevance with similarity scores. Example queries: "pricing discussions", "onboarding decisions", "what we know about React performance".`,
     inputSchema: semanticSearchSchema,
     execute: async (input) => {
       const { query, limit, threshold } = input
@@ -191,18 +186,12 @@ After search, respond to user immediately. For deeper search, include spawn_back
         voyageSlug: ctx.voyageSlug,
       })
       const formatted = formatKnowledgeResult(results)
-      return `${formatted}\n\n---\nYou have search results. NOW RESPOND TO THE USER with a summary. If you want deeper search, output your text response AND spawn_background_agent together.`
+      return formatted
     },
   }),
 
-  /**
-   * Exact keyword/phrase search.
-   * Use for pinpoint accuracy when you know the exact terms.
-   * Returns matches with highlighted context.
-   */
   keyword_grep: tool({
-    description: `Exact phrase match. Use when: specific term, literal string, quoted text, proper names, exact wording like "exactly this phrase".
-Returns matches with highlighted context. Good for finding specific quotes or terminology after semantic_search.`,
+    description: `Exact keyword or phrase search across the knowledge base. Returns matches with highlighted context around the match. Example patterns: "React 19", "pricing tier", a person's name, a specific term or quote.`,
     inputSchema: keywordGrepSchema,
     execute: async (input) => {
       const { pattern, caseSensitive, limit } = input
@@ -215,14 +204,8 @@ Returns matches with highlighted context. Good for finding specific quotes or te
     },
   }),
 
-  /**
-   * Follow knowledge graph edges.
-   * Use to explore connected knowledge from a starting point.
-   * Returns nodes connected to the given node.
-   */
   get_connected: tool({
-    description: `Follow graph edges. Use when: finding context around a node, exploring related content, understanding connections between topics.
-Returns nodes linked via edges (supports, contradicts, supersedes). Use short ID from search results (e.g. "abc12345").`,
+    description: `Retrieve knowledge nodes connected to a given node via graph edges (supports, contradicts, supersedes). Takes a node ID from search results (e.g. "abc12345"). Returns all directly connected nodes.`,
     inputSchema: getConnectedSchema,
     execute: async (input) => {
       const { nodeId } = input
@@ -238,14 +221,8 @@ Returns nodes linked via edges (supports, contradicts, supersedes). Use short ID
     },
   }),
 
-  /**
-   * Get specific knowledge by IDs.
-   * Use when you have node IDs from previous searches.
-   */
   get_nodes: tool({
-    description: `Retrieve specific knowledge nodes by their IDs.
-Use when: You have event IDs from a previous result and need full content.
-Returns: Full node details for the requested IDs.`,
+    description: `Retrieve specific knowledge nodes by their event IDs. Returns full node content and metadata for each requested ID.`,
     inputSchema: getNodesSchema,
     execute: async (input) => {
       const { nodeIds } = input
@@ -254,13 +231,8 @@ Returns: Full node details for the requested IDs.`,
     },
   }),
 
-  /**
-   * Search by time range.
-   * Use for temporal queries like "what did we discuss last week?"
-   */
   search_by_time: tool({
-    description: `Temporal queries. Use when: "last week", "recently", "when did we", timeline questions, date-specific searches.
-Returns knowledge from time period, newest first. Supports ISO dates (2024-01-15) or relative (yesterday, last week, 3 days ago).`,
+    description: `Search knowledge by time range. Returns items from the specified period, newest first. Supports ISO dates (2024-01-15) and relative dates (yesterday, last week, 3 days ago). Optional semantic query to filter within the time range.`,
     inputSchema: searchByTimeSchema,
     execute: async (input) => {
       const { since, until, query, limit } = input
@@ -315,19 +287,8 @@ Returns knowledge from time period, newest first. Supports ISO dates (2024-01-15
     },
   }),
 
-  /**
-   * Spawn a background agent for deep retrieval.
-   * Use for comprehensive searches when the user wants everything on a topic.
-   * Results surface via realtime as the agent works.
-   */
   spawn_background_agent: tool({
-    description: `Spawn a background agent for deep work. Use for:
-- Comprehensive searches ("everything about pricing")
-- Multi-topic research spanning time periods
-- When you found something but suspect there's more
-
-The agent works in the background. Results appear via realtime when ready.
-You should respond immediately with what you know, then the agent's findings will augment your response.`,
+    description: `Spawn a background agent for deep asynchronous research. The agent has full access to retrieval tools and works independently. Results surface via realtime when complete. Suitable for comprehensive multi-topic searches or research spanning long time periods.`,
     inputSchema: spawnBackgroundAgentSchema,
     execute: async (input) => {
       const { objective, context, priority } = input
@@ -338,6 +299,12 @@ You should respond immediately with what you know, then the agent's findings wil
       }
 
       try {
+        // Capture original query (last user message) and conversation snapshot
+        const lastUserMessage = ctx.messages
+          ?.filter((m) => m.role === 'user')
+          .pop()?.content
+        const conversationSnapshot = ctx.messages?.slice(-20) // Cap at 20 messages
+
         // Enqueue task (for audit trail + UI tracking)
         const taskId = await enqueueAgentTask({
           task: objective,
@@ -346,6 +313,8 @@ You should respond immediately with what you know, then the agent's findings wil
           userId: ctx.userId,
           voyageSlug: ctx.voyageSlug,
           conversationId: ctx.conversationId,
+          originalQuery: lastUserMessage,
+          conversationSnapshot,
         })
 
         // Execute immediately via waitUntil (non-blocking)
@@ -377,7 +346,7 @@ You should respond immediately with what you know, then the agent's findings wil
           ctx.waitUntil(executeTask())
         }
 
-        return `Background search started for "${objective.slice(0, 50)}...". Respond to the user now - findings will appear when ready.`
+        return `Background search started for "${objective.slice(0, 50)}...". Findings will surface when ready.`
       } catch (error) {
         console.error('[spawn_background_agent] Failed to enqueue:', error)
         return `Failed to spawn background agent: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -385,18 +354,8 @@ You should respond immediately with what you know, then the agent's findings wil
     },
   }),
 
-  /**
-   * Search the web for current information.
-   * Use for fact-checking, current events, external validation.
-   */
   web_search: tool({
-    description: `Search the web for current information. Use for:
-- Fact-checking claims ("Is React 19 out?")
-- Current events ("What's the latest on...")
-- External validation ("What do experts say about...")
-- Competitor research, market info
-
-Returns formatted search results. You synthesize into your response.`,
+    description: `Search the web for external information. Returns formatted search results with titles, snippets, and URLs. Supports recency filtering. Example queries: "React 19 release date", "latest Next.js features", "Anthropic pricing".`,
     inputSchema: webSearchSchema,
     execute: async (input) => {
       const { query, recency } = input
@@ -417,26 +376,81 @@ Returns formatted search results. You synthesize into your response.`,
 })
 
 // =============================================================================
+// Tool Registration (for composable strategy)
+// =============================================================================
+
+export interface ToolRegistration {
+  name: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tool: any
+  strategyHint: string
+}
+
+// =============================================================================
 // Voyager Tools (Primary Agent)
 // =============================================================================
 
 /**
  * Creates tools for the primary Voyager agent.
- * Inline retrieval (semantic_search, keyword_grep) for light searches.
- * spawn_background_agent for heavy multi-step retrieval.
- * web_search for external information.
- * ask_captain for interactive UI (auth, pickers, confirmations).
+ * All 8 tools: 6 retrieval + spawn_background_agent + ask_captain.
+ * Returns both the tools object (for AI SDK) and registrations (for strategy composition).
  */
-export const createVoyagerTools = (ctx: ToolContext) => {
+export const createVoyagerTools = (ctx: ToolContext): {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tools: Record<string, any>
+  registrations: ToolRegistration[]
+} => {
   const retrieval = createRetrievalTools(ctx)
   const captain = createCaptainTools(ctx)
-  return {
-    semantic_search: retrieval.semantic_search,
-    keyword_grep: retrieval.keyword_grep,
-    spawn_background_agent: retrieval.spawn_background_agent,
-    web_search: retrieval.web_search,
-    ask_captain: captain.ask_captain,
-  }
+
+  const registrations: ToolRegistration[] = [
+    {
+      name: 'semantic_search',
+      tool: retrieval.semantic_search,
+      strategyHint: 'First tool for exploration. Finds the neighbourhood around a topic by meaning.',
+    },
+    {
+      name: 'keyword_grep',
+      tool: retrieval.keyword_grep,
+      strategyHint: 'Confirm specifics after semantic search. Exact phrases, names, quotes.',
+    },
+    {
+      name: 'get_connected',
+      tool: retrieval.get_connected,
+      strategyHint: 'Expand from a found node. Follow graph edges to related knowledge.',
+    },
+    {
+      name: 'get_nodes',
+      tool: retrieval.get_nodes,
+      strategyHint: 'Fetch full content for known node IDs from previous results.',
+    },
+    {
+      name: 'search_by_time',
+      tool: retrieval.search_by_time,
+      strategyHint: 'Temporal queries. "Last week", "recently", "what changed since Tuesday".',
+    },
+    {
+      name: 'web_search',
+      tool: retrieval.web_search,
+      strategyHint: 'External information. Fact-checking, current events, things not in the knowledge base.',
+    },
+    {
+      name: 'spawn_background_agent',
+      tool: retrieval.spawn_background_agent,
+      strategyHint: 'Deep async research. Results surface later. Use for comprehensive multi-topic searches.',
+    },
+    {
+      name: 'ask_captain',
+      tool: captain.ask_captain,
+      strategyHint: 'Render interactive UI inline. Use for auth, pickers, confirmations.',
+    },
+  ]
+
+  const tools = Object.fromEntries(
+    registrations.map((r) => [r.name, r.tool])
+  )
+
+  return { tools, registrations }
 }
 
 // =============================================================================

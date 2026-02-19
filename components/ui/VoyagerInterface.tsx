@@ -352,14 +352,57 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Compute singleton astronaut state (AC8)
+  // Compute step depth and tool info from current streaming message for astronaut states
+  const { stepDepth, lastToolName, hasBackgroundSpawn } = useMemo(() => {
+    if (!isStreaming || messages.length === 0) return { stepDepth: 0, lastToolName: null as string | null, hasBackgroundSpawn: false };
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role !== 'assistant' || !Array.isArray(lastMessage.parts)) {
+      return { stepDepth: 0, lastToolName: null as string | null, hasBackgroundSpawn: false };
+    }
+    let depth = 0;
+    let toolName: string | null = null;
+    let bgSpawn = false;
+    for (const part of lastMessage.parts) {
+      const p = part as Record<string, unknown>;
+      if (p.type === 'step-start') depth++;
+      if (p.type === 'tool-invocation' || p.type === 'dynamic-tool') {
+        toolName = (p.toolName as string) ?? null;
+        if (toolName === 'spawn_background_agent') bgSpawn = true;
+      }
+    }
+    return { stepDepth: depth, lastToolName: toolName, hasBackgroundSpawn: bgSpawn };
+  }, [isStreaming, messages]);
+
+  // Map tool names to human-readable progress labels
+  const progressLabel = useMemo((): string | null => {
+    if (!isStreaming || !lastToolName) return null;
+    const labels: Record<string, string> = {
+      semantic_search: 'Searching memory...',
+      keyword_grep: 'Looking for exact matches...',
+      get_connected: 'Following connections...',
+      get_nodes: 'Fetching details...',
+      search_by_time: 'Checking the timeline...',
+      web_search: 'Checking the web...',
+      spawn_background_agent: 'Searching in the background...',
+      ask_captain: 'Preparing something for you...',
+    };
+    return labels[lastToolName] ?? null;
+  }, [isStreaming, lastToolName]);
+
+  // Compute singleton astronaut state with step-aware depth
   const astronautState = useMemo((): 'idle' | 'searching' | 'celebrating' | 'error' | 'listening' => {
     if (error) return 'error';
     if (showSuccess) return 'celebrating';
-    if (isLoading) return 'searching';
+    if (isLoading) {
+      // Step-depth-aware states during streaming
+      if (hasBackgroundSpawn) return 'listening';    // handed off to background
+      if (stepDepth >= 5) return 'listening';         // deep exploration
+      if (stepDepth >= 3) return 'listening';         // multi-step retrieval
+      return 'searching';                             // initial steps
+    }
     if (isAuthLoading || isLoadingConversation) return 'searching';
     return 'idle';
-  }, [error, showSuccess, isLoading, isAuthLoading, isLoadingConversation]);
+  }, [error, showSuccess, isLoading, isAuthLoading, isLoadingConversation, stepDepth, hasBackgroundSpawn]);
 
   // Astronaut size: lg when no messages, sm when messages exist (AC4)
   const astronautSize = messages.length === 0 ? 'lg' : 'sm';
@@ -557,6 +600,11 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       >
         <div className={`transition-all duration-500 ease-in-out ${astronautSize === 'lg' ? 'py-8' : 'py-2'}`}>
           <AstronautState state={astronautState} size={astronautSize} />
+          {progressLabel && isStreaming && (
+            <div className="text-center text-xs text-slate-500 mt-1 animate-pulse">
+              {progressLabel}
+            </div>
+          )}
         </div>
 
         {/* Welcome text — only for authenticated users with no messages */}

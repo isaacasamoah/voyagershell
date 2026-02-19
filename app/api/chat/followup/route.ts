@@ -63,14 +63,14 @@ export const POST = async (req: Request) => {
       : ''
 
     // 3. Compose system prompt (same as primary Voyager)
+    // Followup doesn't need dynamic prompt (no auth state or continuity per-turn)
     let systemPrompt: string
     try {
-      const { systemPrompt: composed } = await composeSystemPrompt(
+      const { staticPrompt } = await composeSystemPrompt(
         task.userId,
-        task.task, // Use the objective as query for context retrieval
         { voyageSlug: task.voyageSlug }
       )
-      systemPrompt = composed + findingsContext
+      systemPrompt = staticPrompt + findingsContext
     } catch {
       systemPrompt = getBasePrompt() + findingsContext
     }

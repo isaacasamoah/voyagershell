@@ -2,7 +2,7 @@
 // Layered system: Core → Voyage → User → Tools → Context
 // DSPy-compatible: pure functions, structured data
 
-import { retrieveContext, type RetrievalResult } from '@/lib/retrieval';
+import type { RetrievalResult } from '@/lib/retrieval';
 import { getPinnedKnowledge, loadPreferences, type KnowledgeNode } from '@/lib/knowledge';
 
 // Re-export types
@@ -65,61 +65,54 @@ interface ComposeOptions {
 }
 
 /**
- * Compose a full system prompt with context retrieval, preferences, and pinned knowledge.
+ * Stub: Load pending context from completed background tasks.
+ * Returns empty array until Feature 2 (Pending Context) is implemented.
+ */
+export const loadPendingContext = async (
+  _conversationId?: string
+): Promise<string[]> => {
+  return [];
+};
+
+/**
+ * Compose a full system prompt with preferences and pinned knowledge.
  * Primary entry point used by chat routes.
+ *
+ * Returns staticPrompt (cacheable: identity + preferences + pinned)
+ * and dynamicPrompt (per-turn: auth state, continuity context).
+ * The chat route places these in separate system messages for prompt caching.
  */
 export const composeSystemPrompt = async (
   userId: string,
-  query: string,
   options?: ComposeOptions
-): Promise<{ systemPrompt: string; retrieval: RetrievalResult }> => {
+): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult }> => {
   const { profile, voyageSlug, continuityContext, authState } = options ?? {};
+  const startTime = Date.now();
 
-  // Load preferences and retrieval in parallel
-  const [preferences, retrieval] = await Promise.all([
+  // Load preferences and pinned knowledge in parallel
+  const [preferences, pinned] = await Promise.all([
     loadPreferences(userId, voyageSlug).catch((error) => {
       console.warn('[Prompts] Failed to load preferences:', error);
       return [] as KnowledgeNode[];
     }),
-    retrieveContext(userId, query, { voyageSlug }),
+    getPinnedKnowledge(userId, voyageSlug).catch((error) => {
+      console.warn('[Prompts] Failed to get pinned knowledge:', error);
+      return [] as KnowledgeNode[];
+    }),
   ]);
 
-  // Get pinned knowledge
-  let pinnedKnowledge: KnowledgeItem[] = [];
-  try {
-    const pinned = await getPinnedKnowledge(userId, voyageSlug);
-    pinnedKnowledge = pinned.map((k: KnowledgeNode) => ({
-      id: k.eventId,
-      content: k.content,
-      source: 'pinned' as const,
-      relevance: 1.0,
-    }));
-  } catch (error) {
-    console.warn('[Prompts] Failed to get pinned knowledge:', error);
-  }
-
-  // Convert retrieval to new format
-  const contextItems: KnowledgeItem[] = retrieval.knowledge.map((k) => ({
+  const pinnedKnowledge: KnowledgeItem[] = pinned.map((k: KnowledgeNode) => ({
     id: k.eventId,
     content: k.content,
-    source: 'personal' as const,
-    relevance: k.attentionScore ?? 0.5,
+    source: 'pinned' as const,
+    relevance: 1.0,
   }));
 
-  // Add continuity context as high-priority item if present
-  // This is context retrieved from earlier in the conversation (beyond the window)
-  if (continuityContext) {
-    contextItems.unshift({
-      id: 'continuity-context',
-      content: continuityContext,
-      source: 'personal' as const, // Treat as personal context
-      relevance: 1.0, // High priority - user explicitly referenced this
-    });
-  }
+  // Build context items from pinned knowledge only (no pre-retrieval)
+  const contextItems: KnowledgeItem[] = [...pinnedKnowledge];
 
   const retrievedContext: RetrievedContext = {
     items: contextItems,
-    query,
   };
 
   // Build user profile in new format
@@ -152,26 +145,53 @@ export const composeSystemPrompt = async (
     retrievedContext,
   });
 
-  // Build preference section (injected BEFORE retrieved knowledge)
+  // Build preference section (stable across turns — cacheable)
   let preferencesSection = '';
   if (preferences.length > 0) {
     const prefLines = preferences.map((p) => `- ${p.content}`).join('\n');
     preferencesSection = `\n\n---\n\n# Who You Are To Me (Preferences)\n${prefLines}`;
   }
 
-  // Build auth state directive
-  let authSection = '';
+  // Static prompt: identity + preferences + pinned knowledge (cacheable)
+  const staticPrompt = composed.systemPrompt + preferencesSection;
+
+  // Dynamic prompt: per-turn data that changes every request (not cached)
+  const dynamicParts: string[] = [];
+
+  // Auth state directive (changes on login/logout)
   if (authState === 'unauthenticated') {
-    authSection = `\n\n---\n\n# Auth State: Unauthenticated\nThe user is not authenticated. Your first message should welcome them warmly and use the ask_captain tool to render an email_input component so they can sign in. Keep it short and natural — one or two sentences, then the tool call.`;
+    dynamicParts.push(`# Auth State: Unauthenticated\nThe user is not authenticated. Your first message should welcome them warmly and use the ask_captain tool to render an email_input component so they can sign in. Keep it short and natural — one or two sentences, then the tool call.`);
   } else if (authState === 'just-authenticated') {
-    authSection = `\n\n---\n\n# Auth State: Just Authenticated\nThe user just authenticated successfully. Welcome them briefly — they're ready to go. One sentence is enough.`;
+    dynamicParts.push(`# Auth State: Just Authenticated\nThe user just authenticated successfully. Welcome them briefly — they're ready to go. One sentence is enough.`);
   }
 
-  // Inject preferences and auth state into the system prompt
-  const systemPrompt = composed.systemPrompt + preferencesSection + authSection;
+  // Continuity context (changes per turn based on reference signals)
+  if (continuityContext) {
+    dynamicParts.push(`# Conversation Context (from earlier)\n${continuityContext}`);
+  }
+
+  const dynamicPrompt = dynamicParts.length > 0
+    ? dynamicParts.join('\n\n---\n\n')
+    : '';
+
+  const latencyMs = Date.now() - startTime;
+
+  // Return metadata for logging (derived from pinned + preferences only)
+  const retrieval: RetrievalResult = {
+    knowledge: pinned,
+    context: '',
+    tokenEstimate: 0,
+    metadata: {
+      threshold: 0,
+      pinnedCount: pinned.length,
+      searchCount: 0,
+      latencyMs,
+    },
+  };
 
   return {
-    systemPrompt,
+    staticPrompt,
+    dynamicPrompt,
     retrieval,
   };
 };

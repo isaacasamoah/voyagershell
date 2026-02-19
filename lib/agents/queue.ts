@@ -41,6 +41,8 @@ export interface EnqueueParams {
   userId: string
   voyageSlug?: string
   conversationId: string
+  originalQuery?: string
+  conversationSnapshot?: object[]
 }
 
 // =============================================================================
@@ -65,6 +67,8 @@ export async function enqueueAgentTask(params: EnqueueParams): Promise<string> {
       user_id: params.userId,
       voyage_slug: params.voyageSlug,
       conversation_id: params.conversationId,
+      original_query: params.originalQuery ?? null,
+      conversation_snapshot: params.conversationSnapshot ?? null,
       status: 'pending',
     })
     .select('id')

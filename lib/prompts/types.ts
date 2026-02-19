@@ -121,7 +121,7 @@ export interface KnowledgeItem {
 
 export interface RetrievedContext {
   items: KnowledgeItem[];
-  query: string;
+  query?: string;
   voyageSlug?: string;
 }
 

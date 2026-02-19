@@ -34,39 +34,46 @@ Voyager IS the community platform. Symbol grammar (`@tom #channel !voyage`) is n
 | System | Status | Key Files |
 |--------|--------|-----------|
 | Chat + Streaming | Working | `app/api/chat/route.ts` |
-| Parallel Paths (fast+deep) | Working | `lib/agents/deep-retrieval.ts` |
-| Retrieval (6 tools) | Working | `lib/retrieval/tools.ts` |
-| Background Agents | Working | `lib/agents/executor.ts` |
+| Agentic Retrieval (8 tools) | Working | `lib/retrieval/tools.ts` |
+| Background Agents | Working | `lib/agents/deep-retrieval.ts` |
 | Knowledge (event-sourced) | Working | `lib/knowledge/` |
 | Auth (magic link) | Working | `lib/auth/` |
 | Voyages (teams) | Working | `lib/voyage/` |
 
-## Parallel Paths Architecture
+## Agent Architecture
 
 ```
-User message → Fast Path (sync)     + Deep Path (async)
-                   │                      │
-                   ▼                      ▼
-              Pre-retrieval         IF needed? (Gemini)
-              Inject context        HOW? (Claude)
-                   │                Execute → Synthesize
-                   ▼                      │
-              Voyager (no tools)          ▼
-              Uses context           Realtime: "I found more..."
-              Responds fast
+User message → Primary Voyager (streaming, has tools)
+                   │
+                   ├─ Simple query? → Respond directly (no tool calls)
+                   ├─ Needs context? → semantic_search / keyword_grep / etc.
+                   ├─ Needs deep work? → spawn_background_agent (async)
+                   │                          │
+                   │                          ▼
+                   │                     Background Agent (Claude, full tools)
+                   │                     Reason → search → evaluate → iterate
+                   │                          │
+                   │                          ▼ completeTask() → Realtime
+                   │                     Surfacing: followup route or pending context
+                   │
+                   └─ Respond with what it has
+
+Pre-loaded (every turn): Pinned knowledge (attn ≥ 0.9) + preferences (attn ≥ 0.5)
+Tool decisions: Claude decides if/when/what to search. One brain, one decision.
 ```
 
-Primary Voyager has NO retrieval tools (forces use of pre-fetched context).
+**UX principle:** Trust Claude's intelligence, show the work. No hard step limits for intelligence — generous safety cap only. Astronaut states + progress labels keep the user engaged during multi-step reasoning. Using a model turn to update the user on what's happening is encouraged for longer loops.
 
 ## Key Directories
 
 ```
-app/api/chat/route.ts         # Main chat, waitUntil deep path
-lib/agents/deep-retrieval.ts  # Deep path orchestration
-lib/agents/executor.ts        # Background code sandbox
+app/api/chat/route.ts         # Main chat route (streaming + tools)
+lib/agents/deep-retrieval.ts  # Background agent (agentic retrieval)
+lib/agents/cartographer.ts    # Tidal enrichment (knowledge quality)
 lib/prompts/core.ts           # Voyager personality
-lib/knowledge/                # Event-sourced system
-lib/retrieval/tools.ts        # 6 retrieval tools
+lib/knowledge/                # Event-sourced knowledge system
+lib/retrieval/tools.ts        # 8 retrieval + UI tools
+lib/tools/captain.ts          # ask_captain presentation tool
 components/ui/VoyagerInterface.tsx  # Terminal UI
 ```
 
@@ -100,14 +107,14 @@ npm run build    # production build
 |---------|----------|---------|
 | Agent Primitives | `lib/agents/primitives.ts` | Declarative agent definitions |
 | Tool Definitions | `lib/prompts/types.ts` | Standard tool interface |
-| Executor Tools | `lib/agents/retrieval-tools.ts` | Code sandbox tool definitions |
+| Captain Tools | `lib/tools/captain.ts` | ask_captain presentation tool |
 | Debug Logging | `lib/debug/logger.ts` | Toggleable structured logging |
 | Model Router | `lib/models/router.ts` | Model selection by task/quality |
 
 **Three Agent Classes:**
-- **Primary (conversational)** — NO tools, uses pre-fetched context, responds fast
-- **Event-driven (decision)** — Quick decisions, <500ms, Gemini Flash
-- **Async background** — Full tool access, heavy lifting via waitUntil
+- **Primary (conversational)** — Full tool access, streaming, generous step budget. Decides what to search.
+- **Event-driven (enrichment)** — Cartographer. Tidal enrichment triggered by unenriched event count.
+- **Async background** — Deep retrieval. Spawned by primary via `spawn_background_agent`. Results surface via Realtime.
 
 ## Specs
 
@@ -121,5 +128,8 @@ npm run build    # production build
 - `slices.md` — Old roadmap (superseded)
 - `cost-breakdown.md` — Old pricing (superseded)
 
-**Diary:** `~/.claude/diary/branches/voyager-zero/main.md`
+**Active spec:** `~/.claude/specs/voyager/deep-retrieval-tools.md`
+- Deep retrieval & tool architecture (ready to build, pending spec update for step/UX changes)
+
+**Diary:** `~/.claude/diary/branches/voyager/ship-plan.md`
 - Session memory, decisions, discoveries

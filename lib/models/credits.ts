@@ -7,6 +7,8 @@ export interface CreditUsage {
   model: string
   inputTokens: number
   outputTokens: number
+  cacheCreationTokens?: number
+  cacheReadTokens?: number
   cost: number
   task: string
   conversationId?: string

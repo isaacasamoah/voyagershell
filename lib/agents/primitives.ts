@@ -15,8 +15,8 @@ import type { VoyagerEvent } from './event-dispatcher'
  * Agent type taxonomy:
  * - primary: Owns conversation, talks to user (Voyager)
  * - background: Heavy lifting, reports to primary via realtime (Retrieval)
- * - event: Triggered by system events, no user interaction (Curator)
- * - scheduled: Runs on cron, no user interaction (Quartermaster)
+ * - event: Triggered by system events, no user interaction (Cartographer)
+ * - scheduled: Runs on cron, no user interaction (future)
  */
 export type AgentType = 'primary' | 'background' | 'event' | 'scheduled'
 
@@ -79,8 +79,8 @@ export interface AgentContext {
  * Agent Type Taxonomy:
  * - primary: Owns conversation (Voyager)
  * - background: Heavy lifting, reports to primary (Retrieval)
- * - event: System-triggered (Curator)
- * - scheduled: Cron-triggered (Quartermaster)
+ * - event: System-triggered (Cartographer)
+ * - scheduled: Cron-triggered (future)
  */
 export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
   // =========================================================================
@@ -89,8 +89,8 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
 
   /**
    * Voyager - the primary conversational agent.
-   * Has two tools: spawn_background_agent and web_search.
-   * Uses pre-fetched context for quick responses.
+   * All 8 tools: 5 retrieval + web_search + spawn_background_agent + ask_captain.
+   * Uses tools to find context as needed (no pre-fetched retrieval).
    */
   voyager: {
     id: 'voyager',
@@ -103,7 +103,10 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
       streaming: true,
       toolUse: true,
     },
-    tools: ['spawn_background_agent', 'web_search', 'semantic_search', 'keyword_grep', 'ask_captain'],
+    tools: [
+      'semantic_search', 'keyword_grep', 'get_connected', 'get_nodes',
+      'search_by_time', 'web_search', 'spawn_background_agent', 'ask_captain',
+    ],
     canSpawn: ['retrieval'],
     systemPrompt: 'core', // Uses CORE_PROMPT from lib/prompts/core.ts
   },
@@ -146,28 +149,6 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
   // =========================================================================
 
   /**
-   * Curator - learns importance from usage.
-   * Triggered when knowledge is created.
-   * Adjusts importance scores based on citations.
-   */
-  curator: {
-    id: 'curator',
-    name: 'Curator',
-    description: 'Learns importance from citations and usage patterns',
-    type: 'event',
-    model: {
-      task: 'decision',
-      quality: 'fast',
-    },
-    tools: [],
-    trigger: { event: 'knowledge.created' },
-    tokenBudget: 5000,
-    systemPrompt: `You analyze knowledge events and determine importance.
-Look at: citations, recency, user engagement.
-Output: importance_score (0-1), decay_rate, tags.`,
-  },
-
-  /**
    * Cartographer - maps the territory as you explore it.
    * Fires mid-conversation when unenriched events accumulate (count-based trigger).
    * Stage 1: classify events (type, attention, context snippet).
@@ -200,31 +181,6 @@ For each event, determine:
 - context_snippet: One line of context to prepend before re-embedding (improves retrieval)
 
 Then use retrieval tools to find connections to existing knowledge across sessions.`,
-  },
-
-  // =========================================================================
-  // SCHEDULED AGENTS (cron-triggered)
-  // =========================================================================
-
-  /**
-   * Quartermaster - nightly maintenance.
-   * Runs at 3am daily.
-   * Compaction, optimization, cleanup.
-   */
-  quartermaster: {
-    id: 'quartermaster',
-    name: 'Quartermaster',
-    description: 'Nightly maintenance: compaction, optimization, cleanup',
-    type: 'scheduled',
-    model: {
-      task: 'synthesis',
-      quality: 'balanced',
-    },
-    tools: [],
-    schedule: '0 3 * * *', // 3am daily
-    tokenBudget: 100000,
-    systemPrompt: `You perform nightly maintenance on the knowledge graph.
-Tasks: identify stale knowledge, suggest compaction, optimize retrieval.`,
   },
 
 }

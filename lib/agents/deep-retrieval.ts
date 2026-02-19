@@ -74,7 +74,7 @@ export async function runBackgroundRetrieval(
     system: AGENTIC_RETRIEVAL_PROMPT,
     prompt,
     tools,
-    stopWhen: stepCountIs(6),
+    stopWhen: stepCountIs(20),
     maxOutputTokens: 4096,
   })
 
