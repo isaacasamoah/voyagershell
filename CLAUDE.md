@@ -92,6 +92,8 @@ npm run dev      # localhost:3000
 npm run build    # production build
 ```
 
+**Production:** https://voyager-zero.vercel.app
+
 ### Supabase Migrations
 
 Run migrations via the Management API (no CLI needed):
