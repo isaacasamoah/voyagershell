@@ -13,45 +13,32 @@ import type { ToolContext } from '@/lib/retrieval/tools'
 // Schemas — Discriminated union on `type`
 // =============================================================================
 
-const emailInputSchema = z.object({
-  type: z.literal('email_input'),
-  message: z.string().optional().describe('Message to show above the email field'),
-})
-
-const conversationPickerSchema = z.object({
-  type: z.literal('conversation_picker'),
+// Flat object schema — Anthropic API requires root `type: "object"` in input_schema.
+// z.discriminatedUnion produces `{ oneOf: [...] }` without a root type, which fails validation.
+// Flat schema with enum discriminator achieves the same LLM behavior.
+const askCaptainSchema = z.object({
+  type: z.enum(['email_input', 'conversation_picker', 'voyage_picker', 'confirmation'])
+    .describe('Which UI component to render'),
+  message: z.string().optional()
+    .describe('Message to show (used by email_input and confirmation)'),
+  confirmLabel: z.string().optional()
+    .describe('Label for confirm button (confirmation only, default: Yes)'),
+  cancelLabel: z.string().optional()
+    .describe('Label for cancel button (confirmation only, default: No)'),
   conversations: z.array(z.object({
     id: z.string(),
     title: z.string(),
     preview: z.string().optional(),
     messageCount: z.number().optional(),
     lastMessageAt: z.string().optional(),
-  })).describe('Conversations to show in picker'),
-})
-
-const voyagePickerSchema = z.object({
-  type: z.literal('voyage_picker'),
+  })).optional().describe('Conversations to show (conversation_picker only)'),
   voyages: z.array(z.object({
     slug: z.string(),
     name: z.string(),
     role: z.string().optional(),
     memberCount: z.number().optional(),
-  })).describe('Voyages to show in picker'),
+  })).optional().describe('Voyages to show (voyage_picker only)'),
 })
-
-const confirmationSchema = z.object({
-  type: z.literal('confirmation'),
-  message: z.string().describe('What to confirm with the user'),
-  confirmLabel: z.string().optional().describe('Label for confirm button (default: Yes)'),
-  cancelLabel: z.string().optional().describe('Label for cancel button (default: No)'),
-})
-
-const askCaptainSchema = z.discriminatedUnion('type', [
-  emailInputSchema,
-  conversationPickerSchema,
-  voyagePickerSchema,
-  confirmationSchema,
-])
 
 export type AskCaptainInput = z.infer<typeof askCaptainSchema>
 
@@ -79,9 +66,9 @@ Exception: email_input fires the magic link immediately on the client (no LLM ro
         case 'email_input':
           return 'Email input component rendered. Awaiting captain\'s email. The magic link will be sent automatically when they submit.'
         case 'conversation_picker':
-          return `Conversation picker rendered with ${input.conversations.length} option${input.conversations.length === 1 ? '' : 's'}. Awaiting captain's selection.`
+          return `Conversation picker rendered with ${input.conversations?.length ?? 0} option${input.conversations?.length === 1 ? '' : 's'}. Awaiting captain's selection.`
         case 'voyage_picker':
-          return `Voyage picker rendered with ${input.voyages.length} option${input.voyages.length === 1 ? '' : 's'}. Awaiting captain's selection.`
+          return `Voyage picker rendered with ${input.voyages?.length ?? 0} option${input.voyages?.length === 1 ? '' : 's'}. Awaiting captain's selection.`
         case 'confirmation':
           return `Confirmation dialog rendered: "${input.message}". Awaiting captain's response.`
       }
