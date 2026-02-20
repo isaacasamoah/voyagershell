@@ -593,36 +593,44 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         </div>
       </div>
 
-      {/* SINGLETON ASTRONAUT — Fixed region between header and chat (AC1/AC3) */}
-      <div
-        className="fixed top-[52px] left-0 right-0 z-40 flex flex-col items-center pointer-events-none transition-all duration-500 ease-in-out"
-        style={{ opacity: astronautOpacity }}
-      >
-        <div className={`transition-all duration-500 ease-in-out ${astronautSize === 'lg' ? 'py-8' : 'py-2'}`}>
-          <AstronautState state={astronautState} size={astronautSize} />
+      {/* THE STREAM — astronaut is in-flow, sticky-docked. No padding hacks. */}
+      <div className="max-w-2xl mx-auto px-4 pb-48 pt-[52px]">
+
+        {/* ASTRONAUT REGION — in-flow, sticky when scrolled.
+            Empty state: fills viewport to center astronaut (landing page feel).
+            Has messages: compact, sticks below header as companion. */}
+        <div
+          className={`sticky top-[52px] z-40 flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
+            messages.length === 0
+              ? 'min-h-[calc(100vh-52px-120px)] justify-center'
+              : 'py-3'
+          }`}
+          style={{ opacity: astronautOpacity }}
+        >
+          <div className="transition-all duration-700 ease-in-out">
+            <AstronautState state={astronautState} size={astronautSize} />
+          </div>
           {progressLabel && isStreaming && (
             <div className="text-center text-xs text-slate-500 mt-1 animate-pulse">
               {progressLabel}
             </div>
           )}
+
+          {/* Welcome text — only for authenticated users with no messages */}
+          {!isLoadingConversation && !isAuthLoading && isAuthenticated && messages.length === 0 && !isLoading && (
+            <div className="text-center px-4 mt-4">
+              <h2 className="text-lg text-slate-300 font-bold">
+                Welcome back{user?.email ? `, ${user.email.split('@')[0]}` : ''}
+              </h2>
+              <p className="text-slate-500 text-sm max-w-md mx-auto mt-2">
+                Your collaboration co-pilot is ready. I remember our past conversations
+                and can help you find anything we&apos;ve discussed.
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Welcome text — only for authenticated users with no messages */}
-        {!isLoadingConversation && !isAuthLoading && isAuthenticated && messages.length === 0 && !isLoading && (
-          <div className="text-center px-4 mt-2">
-            <h2 className="text-lg text-slate-300 font-bold">
-              Welcome back{user?.email ? `, ${user.email.split('@')[0]}` : ''}
-            </h2>
-            <p className="text-slate-500 text-sm max-w-md mx-auto mt-2">
-              Your collaboration co-pilot is ready. I remember our past conversations
-              and can help you find anything we&apos;ve discussed.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* THE STREAM — padding accounts for fixed header + astronaut region */}
-      <div className={`max-w-2xl mx-auto px-4 pb-48 space-y-12 ${messages.length === 0 ? 'pt-[340px]' : 'pt-[140px]'} transition-all duration-500`}>
+        <div className="space-y-12">
 
         {/* Messages - unified stream of chat + UI messages */}
         {mergedMessages.map((item, index) => {
@@ -775,6 +783,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} />
+        </div>{/* end space-y-12 messages wrapper */}
       </div>
 
       {/* INPUT DECK */}

@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const ASSETS = {
   success: "/images/astronaut/success.png",
@@ -19,54 +19,88 @@ interface AstronautStateProps {
   className?: string;
 }
 
+const stateConfig = {
+  idle: {
+    src: ASSETS.idle,
+    alt: 'Voyager at rest',
+    animation: 'animate-float-idle',
+  },
+  searching: {
+    src: ASSETS.searching,
+    alt: 'Voyager searching',
+    animation: 'animate-float-searching',
+  },
+  success: {
+    src: ASSETS.success,
+    alt: 'Voyager success',
+    animation: 'animate-float-celebrating',
+  },
+  error: {
+    src: ASSETS.error,
+    alt: 'Voyager encountered an error',
+    animation: 'animate-float-error',
+  },
+  listening: {
+    src: ASSETS.listening,
+    alt: 'Voyager listening',
+    animation: 'animate-float-listening',
+  },
+  celebrating: {
+    src: ASSETS.celebrating,
+    alt: 'Voyager celebrating',
+    animation: 'animate-float-celebrating',
+  },
+};
+
+const sizeClasses = {
+  sm: 'w-20 h-20',   // 80px
+  md: 'w-32 h-32',   // 128px
+  lg: 'w-48 h-48',   // 192px
+};
+
+/**
+ * Crossfade between astronaut states for smooth animation transitions.
+ * Two overlapping <img> layers — outgoing fades out while incoming fades in.
+ * This prevents the jarring position snap when CSS animation classes swap.
+ */
 export const AstronautState = ({ state, size = 'md', className = '' }: AstronautStateProps) => {
-  const sizeClasses = {
-    sm: 'w-20 h-20',   // 80px - was 64px
-    md: 'w-32 h-32',   // 128px - was 96px
-    lg: 'w-48 h-48',   // 192px - was 128px
-  };
+  const [displayState, setDisplayState] = useState(state);
+  const [prevState, setPrevState] = useState<AstronautStateType | null>(null);
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const stateConfig = {
-    idle: {
-      src: ASSETS.idle,
-      alt: 'Voyager at rest',
-      animation: 'animate-float-slow',
-    },
-    searching: {
-      src: ASSETS.searching,
-      alt: 'Voyager searching',
-      animation: 'animate-float-drift',
-    },
-    success: {
-      src: ASSETS.success,
-      alt: 'Voyager success',
-      animation: 'animate-float',
-    },
-    error: {
-      src: ASSETS.error,
-      alt: 'Voyager encountered an error',
-      animation: 'animate-float',
-    },
-    listening: {
-      src: ASSETS.listening,
-      alt: 'Voyager listening',
-      animation: 'animate-float-slow',
-    },
-    celebrating: {
-      src: ASSETS.celebrating,
-      alt: 'Voyager celebrating',
-      animation: 'animate-float-drift',
-    },
-  };
+  useEffect(() => {
+    if (state !== displayState) {
+      // Start crossfade: show both layers, outgoing fades out
+      setPrevState(displayState);
+      setDisplayState(state);
 
-  const config = stateConfig[state];
+      // Clear outgoing layer after fade completes
+      clearTimeout(fadeTimerRef.current);
+      fadeTimerRef.current = setTimeout(() => setPrevState(null), 600);
+    }
+  }, [state, displayState]);
+
+  useEffect(() => {
+    return () => clearTimeout(fadeTimerRef.current);
+  }, []);
+
+  const current = stateConfig[displayState];
 
   return (
-    <div className={`relative ${sizeClasses[size]} ${className}`}>
+    <div className={`relative transition-all duration-700 ease-in-out ${sizeClasses[size]} ${className}`}>
+      {/* Outgoing layer — fades out over 600ms, preserves animation position */}
+      {prevState && (
+        <img
+          src={stateConfig[prevState].src}
+          alt={stateConfig[prevState].alt}
+          className={`absolute inset-0 w-full h-full object-contain ${stateConfig[prevState].animation} transition-opacity duration-500 ease-in-out opacity-0`}
+        />
+      )}
+      {/* Current layer — fades in */}
       <img
-        src={config.src}
-        alt={config.alt}
-        className={`w-full h-full object-contain ${config.animation}`}
+        src={current.src}
+        alt={current.alt}
+        className={`w-full h-full object-contain ${current.animation} transition-opacity duration-500 ease-in-out ${prevState ? 'opacity-100' : ''}`}
       />
     </div>
   );

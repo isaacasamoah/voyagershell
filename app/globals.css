@@ -43,51 +43,97 @@ body {
   animation: slide-down 0.3s ease-out;
 }
 
-/* Astronaut floating in space animations */
-@keyframes float-gentle {
+/* Astronaut floating in space — multi-property transforms for zero-gravity feel.
+   Every animation combines translateY + rotate + scale (breathing).
+   Each state has a distinct personality. */
+
+/* idle: gentle bob + slight rotation + breathing. Slow, meditative — "deep exhale" */
+@keyframes float-idle {
   0%, 100% {
-    transform: translateY(0) rotate(0deg);
+    transform: translateY(0) rotate(0deg) scale(1);
   }
   25% {
-    transform: translateY(-3px) rotate(0.5deg);
+    transform: translateY(-4px) rotate(0.8deg) scale(1.01);
   }
   50% {
-    transform: translateY(-5px) rotate(0deg);
+    transform: translateY(-7px) rotate(0deg) scale(1.025);
   }
   75% {
-    transform: translateY(-2px) rotate(-0.5deg);
+    transform: translateY(-3px) rotate(-0.6deg) scale(1.01);
   }
 }
 
-@keyframes float-drift {
+/* searching: wider multi-axis drift + rotation + breathing. Curious — "looking around" */
+@keyframes float-searching {
   0%, 100% {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg) scale(1);
   }
-  33% {
-    transform: translate(2px, -4px) rotate(1deg);
+  20% {
+    transform: translate(3px, -5px) rotate(1.2deg) scale(1.02);
   }
-  66% {
-    transform: translate(-1px, -6px) rotate(-0.5deg);
+  40% {
+    transform: translate(-2px, -8px) rotate(-0.5deg) scale(1.03);
+  }
+  60% {
+    transform: translate(1px, -6px) rotate(0.8deg) scale(1.01);
+  }
+  80% {
+    transform: translate(-3px, -3px) rotate(-1deg) scale(1.02);
   }
 }
 
-@keyframes float-slow {
+/* listening: minimal bob + breathing. Still, attentive — "holding position" */
+@keyframes float-listening {
   0%, 100% {
-    transform: translateY(0);
+    transform: translateY(0) rotate(0deg) scale(1);
   }
   50% {
-    transform: translateY(-4px);
+    transform: translateY(-3px) rotate(0.3deg) scale(1.02);
   }
 }
 
-.animate-float {
-  animation: float-gentle 6s ease-in-out infinite;
+/* celebrating: energetic drift + pronounced rotation + scale bounce. Joyful — "weightless celebration" */
+@keyframes float-celebrating {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translate(4px, -8px) rotate(2deg) scale(1.03);
+  }
+  50% {
+    transform: translate(-3px, -12px) rotate(-1.5deg) scale(0.97);
+  }
+  75% {
+    transform: translate(2px, -5px) rotate(1deg) scale(1.02);
+  }
 }
 
-.animate-float-drift {
-  animation: float-drift 8s ease-in-out infinite;
+/* error: subtle drift + no rotation + breathing. Subdued — "something's off" */
+@keyframes float-error {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) rotate(0deg) scale(0.98);
+  }
 }
 
-.animate-float-slow {
-  animation: float-slow 4s ease-in-out infinite;
+.animate-float-idle {
+  animation: float-idle 7s ease-in-out infinite;
+}
+
+.animate-float-searching {
+  animation: float-searching 8s ease-in-out infinite;
+}
+
+.animate-float-listening {
+  animation: float-listening 5s ease-in-out infinite;
+}
+
+.animate-float-celebrating {
+  animation: float-celebrating 4s ease-in-out infinite;
+}
+
+.animate-float-error {
+  animation: float-error 6s ease-in-out infinite;
 }
