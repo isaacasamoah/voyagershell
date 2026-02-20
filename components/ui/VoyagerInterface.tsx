@@ -88,6 +88,11 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   // Celebration state — drives singleton astronaut to 'celebrating' briefly
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // Hero → conversation mode: tracks whether the user has typed their first message.
+  // Voyager's auto-welcome keeps hero state. Only user engagement collapses it.
+  const [hasUserTyped, setHasUserTyped] = useState(false);
+  const autoSentCount = useRef(0);
+
   // Scroll position tracking for astronaut opacity (AC6/AC7)
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -163,9 +168,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     fetchActiveConversation();
   }, [setMessages, isAuthenticated, isAuthLoading, currentVoyage?.slug]);
 
-  // Detect when user just logged in (after magic link) — celebrate + trigger Voyager welcome
+  // Detect when user just logged in (after magic link) — celebrate + set auth state.
+  // Welcome prompt is handled by the unified hidden welcome effect below.
   const wasAuthenticatedRef = useRef(isAuthenticated);
-  const hasTriggeredWelcome = useRef(false);
   useEffect(() => {
     if (isAuthLoading) return;
 
@@ -174,16 +179,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       setAuthState('just-authenticated');
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 2000);
-
-      // Auto-send a message so Voyager responds with welcome (AC4)
-      if (!hasTriggeredWelcome.current) {
-        hasTriggeredWelcome.current = true;
-        setTimeout(() => {
-          sendMessage({ text: "I'm in" });
-          // Transition to normal authenticated after welcome sent
-          setTimeout(() => setAuthState('authenticated'), 3000);
-        }, 500);
-      }
+      setTimeout(() => setAuthState('authenticated'), 3000);
     } else if (isAuthenticated) {
       setAuthState('authenticated');
     } else {
@@ -191,24 +187,31 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     }
 
     wasAuthenticatedRef.current = isAuthenticated;
-  }, [isAuthenticated, isAuthLoading, sendMessage]);
+  }, [isAuthenticated, isAuthLoading]);
 
-  // Auto-trigger Voyager's first message for unauthenticated users (AC1)
-  // Sends a "hello" so Voyager responds with ask_captain email_input per system prompt
-  const hasTriggeredAuthFlow = useRef(false);
+  // Hidden welcome prompt — triggers Voyager's creative welcome without visible user message.
+  // Works for both unauth (sign-in flow) and authed users returning to empty conversations.
+  const hasTriggeredWelcomePrompt = useRef(false);
   useEffect(() => {
-    if (isAuthLoading) return;
-    if (isAuthenticated) return;
-    if (hasTriggeredAuthFlow.current) return;
-    if (messages.length > 0) return; // Already have messages (e.g. page reload)
+    if (isAuthLoading || isLoadingConversation) return;
+    if (hasTriggeredWelcomePrompt.current) return;
+    if (messages.length > 0) return;
 
-    hasTriggeredAuthFlow.current = true;
-    // Small delay to let the UI settle
+    hasTriggeredWelcomePrompt.current = true;
+    const hour = new Date().getHours();
+    const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+    const voyageContext = currentVoyage ? ` in ${currentVoyage.name}` : '';
+
     const timer = setTimeout(() => {
-      sendMessage({ text: 'hello' });
+      autoSentCount.current++;
+      if (!isAuthenticated) {
+        sendMessage({ text: `hello — ${timeOfDay}` });
+      } else {
+        sendMessage({ text: `good ${timeOfDay}${voyageContext}` });
+      }
     }, 300);
     return () => clearTimeout(timer);
-  }, [isAuthLoading, isAuthenticated, messages.length, sendMessage]);
+  }, [isAuthLoading, isLoadingConversation, isAuthenticated, messages.length, sendMessage, currentVoyage]);
 
   // Fetch voyages when authenticated (for context bar)
   useEffect(() => {
@@ -404,8 +407,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     return 'idle';
   }, [error, showSuccess, isLoading, isAuthLoading, isLoadingConversation, stepDepth, hasBackgroundSpawn]);
 
-  // Astronaut size: lg when no messages, sm when messages exist (AC4)
-  const astronautSize = messages.length === 0 ? 'lg' : 'sm';
+  // Astronaut size: xl hero when user hasn't engaged, md docked when they have
+  const astronautSize = hasUserTyped ? 'md' : 'xl';
 
   // Astronaut opacity: full at bottom, reduced when scrolled up (AC6/AC7)
   const astronautOpacity = isAtBottom ? 1 : 0.3;
@@ -417,6 +420,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     const trimmed = inputValue.trim();
     if (!trimmed) return;
 
+    setHasUserTyped(true);
     if (isLoading) {
       setMessageQueue(prev => [...prev, trimmed]);
     } else {
@@ -441,6 +445,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
   // Send a message as the user (used by ask_captain components)
   const sendUserMessage = useCallback((text: string) => {
+    setHasUserTyped(true);
     if (isLoading) {
       setMessageQueue(prev => [...prev, text]);
     } else {
@@ -597,13 +602,14 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       <div className="max-w-2xl mx-auto px-4 pb-48 pt-[52px]">
 
         {/* ASTRONAUT REGION — in-flow, sticky when scrolled.
-            Empty state: fills viewport to center astronaut (landing page feel).
-            Has messages: compact, sticks below header as companion. */}
+            Hero state: fills viewport to center astronaut (landing page feel).
+            Conversation mode: compact, sticks below header as companion.
+            Transition trigger: user's first typed message, not Voyager's welcome. */}
         <div
           className={`sticky top-[52px] z-40 flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
-            messages.length === 0
+            !hasUserTyped
               ? 'min-h-[calc(100vh-52px-120px)] justify-center'
-              : 'py-3'
+              : 'min-h-0 py-3'
           }`}
           style={{ opacity: astronautOpacity }}
         >
@@ -615,25 +621,22 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
               {progressLabel}
             </div>
           )}
-
-          {/* Welcome text — only for authenticated users with no messages */}
-          {!isLoadingConversation && !isAuthLoading && isAuthenticated && messages.length === 0 && !isLoading && (
-            <div className="text-center px-4 mt-4">
-              <h2 className="text-lg text-slate-300 font-bold">
-                Welcome back{user?.email ? `, ${user.email.split('@')[0]}` : ''}
-              </h2>
-              <p className="text-slate-500 text-sm max-w-md mx-auto mt-2">
-                Your collaboration co-pilot is ready. I remember our past conversations
-                and can help you find anything we&apos;ve discussed.
-              </p>
-            </div>
-          )}
         </div>
 
         <div className="space-y-12">
 
-        {/* Messages - unified stream of chat + UI messages */}
-        {mergedMessages.map((item, index) => {
+        {/* Messages - unified stream of chat + UI messages.
+            Auto-sent user messages (hidden prompts) are filtered from rendering. */}
+        {(() => {
+          let userMsgsSeen = 0;
+          return mergedMessages.filter((item) => {
+            if (item.source === 'chat' && item.message.role === 'user') {
+              userMsgsSeen++;
+              if (userMsgsSeen <= autoSentCount.current) return false;
+            }
+            return true;
+          });
+        })().map((item, index) => {
           const timestamp = new Date().toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',

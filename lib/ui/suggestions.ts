@@ -30,23 +30,9 @@ export const getSuggestions = (ctx: SuggestionContext): Suggestion[] => {
     return []
   }
 
-  // Not authenticated - focus on auth
+  // Not authenticated — Voyager's welcome handles auth flow, no chips needed
   if (!ctx.isAuthenticated) {
-    suggestions.push(
-      {
-        id: 'signup',
-        text: 'Get started',
-        action: 'I want to sign up',
-        priority: 90,
-      },
-      {
-        id: 'login',
-        text: 'I have an account',
-        action: 'I want to log in',
-        priority: 80,
-      }
-    )
-    return suggestions.slice(0, 2)
+    return []
   }
 
   // Empty state - new user with no voyages
@@ -121,12 +107,11 @@ export const getSuggestions = (ctx: SuggestionContext): Suggestion[] => {
  * More prominent than regular suggestions.
  */
 export const getWelcomeSuggestion = (ctx: SuggestionContext): string | null => {
-  if (!ctx.isAuthenticated) {
-    return "Welcome to Voyager. Say 'I want to sign up' to get started."
-  }
+  // Voyager's welcome message handles all first-contact. No static hints needed.
+  if (!ctx.isAuthenticated) return null
 
   if (!ctx.hasVoyages) {
-    return "Welcome back! Say 'help me set up a team' to create your first voyage."
+    return "Say 'help me set up a team' to create your first voyage."
   }
 
   if (ctx.conversationLength === 0 && ctx.hasRecentConversations) {

@@ -15,7 +15,7 @@ type AstronautStateType = 'idle' | 'searching' | 'success' | 'error' | 'listenin
 
 interface AstronautStateProps {
   state: AstronautStateType;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
 
@@ -56,6 +56,7 @@ const sizeClasses = {
   sm: 'w-20 h-20',   // 80px
   md: 'w-32 h-32',   // 128px
   lg: 'w-48 h-48',   // 192px
+  xl: 'w-64 h-64',   // 256px
 };
 
 /**

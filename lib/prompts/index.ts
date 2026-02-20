@@ -158,11 +158,11 @@ export const composeSystemPrompt = async (
   // Dynamic prompt: per-turn data that changes every request (not cached)
   const dynamicParts: string[] = [];
 
-  // Auth state directive (changes on login/logout)
+  // Auth state flag — identity handles the behavior (see First Contact in core.ts)
   if (authState === 'unauthenticated') {
-    dynamicParts.push(`# Auth State: Unauthenticated\nThe user is not authenticated. Your first message should welcome them warmly and use the ask_captain tool to render an email_input component so they can sign in. Keep it short and natural — one or two sentences, then the tool call.`);
+    dynamicParts.push('# Auth: Not signed in');
   } else if (authState === 'just-authenticated') {
-    dynamicParts.push(`# Auth State: Just Authenticated\nThe user just authenticated successfully. Welcome them briefly — they're ready to go. One sentence is enough.`);
+    dynamicParts.push('# Auth: Just signed in');
   }
 
   // Continuity context (changes per turn based on reference signals)
