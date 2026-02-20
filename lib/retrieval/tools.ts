@@ -381,7 +381,6 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
 
 export interface ToolRegistration {
   name: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tool: any
   strategyHint: string
 }
@@ -396,7 +395,6 @@ export interface ToolRegistration {
  * Returns both the tools object (for AI SDK) and registrations (for strategy composition).
  */
 export const createVoyagerTools = (ctx: ToolContext): {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tools: Record<string, any>
   registrations: ToolRegistration[]
 } => {
