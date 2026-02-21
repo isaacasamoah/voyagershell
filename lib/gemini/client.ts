@@ -1,7 +1,7 @@
 // Gemini Flash client for high-volume, low-cost operations
 // Used for: extraction, curation, summarization
 
-const GEMINI_MODEL = 'gemini-2.0-flash-exp'
+const GEMINI_MODEL = 'gemini-3-pro-preview'
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 
 // Retry configuration

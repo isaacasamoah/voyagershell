@@ -7,8 +7,8 @@
 import { requireEnv } from "./env";
 
 const GEMINI_MODELS = {
-  flash: "gemini-2.0-flash",
-  flashExp: "gemini-2.0-flash-exp",
+  flash: "gemini-3-pro-preview",
+  image: "gemini-3-pro-image-preview",
 } as const;
 
 type GeminiModel = keyof typeof GEMINI_MODELS;
@@ -98,7 +98,7 @@ export async function generateImage(
   options: ImageGenerationOptions = {}
 ): Promise<ImageResponse> {
   const apiKey = requireEnv("GOOGLE_GEMINI_API_KEY");
-  const model = GEMINI_MODELS.flashExp; // Image gen requires experimental model
+  const model = GEMINI_MODELS.image;
   const url = `${getApiUrl(model)}?key=${apiKey}`;
 
   // Build parts array - include reference image if provided
@@ -125,7 +125,7 @@ export async function generateImage(
       }],
       generationConfig: {
         responseModalities: ["image", "text"],
-        temperature: options.temperature ?? 1.0,
+        temperature: options.temperature ?? 0.3,
       }
     }),
   });
