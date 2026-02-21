@@ -3,7 +3,7 @@
 // Auth context provider
 // Provides auth state to client components
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -66,6 +66,9 @@ export const AuthProvider = ({ children, initialUser = null }: AuthProviderProps
     }
   }, [supabase]);
 
+  // Track whether this tab originated the sign-in (prevents broadcast loop)
+  const isRefreshing = useRef(false);
+
   // Initial auth check and subscription
   useEffect(() => {
     // Get initial session
@@ -89,8 +92,8 @@ export const AuthProvider = ({ children, initialUser = null }: AuthProviderProps
         setUser(toAuthUser(session?.user ?? null));
         setIsLoading(false);
 
-        // Broadcast to other tabs when signed in (magic link flow)
-        if (_event === 'SIGNED_IN' && typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        // Broadcast to other tabs — only on genuine sign-in, not refresh-triggered
+        if (_event === 'SIGNED_IN' && !isRefreshing.current && typeof window !== 'undefined' && 'BroadcastChannel' in window) {
           const channel = new BroadcastChannel('voyager-auth');
           channel.postMessage({ type: 'auth_complete' });
           channel.close();
@@ -109,10 +112,12 @@ export const AuthProvider = ({ children, initialUser = null }: AuthProviderProps
     if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
 
     const channel = new BroadcastChannel('voyager-auth');
-    channel.onmessage = (event) => {
+    channel.onmessage = async (event) => {
       if (event.data?.type === 'auth_complete') {
         console.log('[Auth] Received auth_complete from another tab');
-        refresh(); // Refresh auth state in this tab
+        isRefreshing.current = true;
+        await refresh();
+        isRefreshing.current = false;
       }
     };
 
