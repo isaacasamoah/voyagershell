@@ -11,8 +11,8 @@ type EmailState = 'active' | 'sending' | 'sent' | 'error'
 export const VoyagerLanding = () => {
   const { sendMagicLink } = useAuth()
 
-  // Welcome line — static default, LLM replaces when ready
-  const [welcomeLine, setWelcomeLine] = useState('prepare for takeoff.')
+  // Welcome line — hidden until LLM responds, fallback after timeout
+  const [welcomeLine, setWelcomeLine] = useState<string | null>(null)
   const welcomeFetched = useRef(false)
 
   // Email input
@@ -35,25 +35,29 @@ export const VoyagerLanding = () => {
     const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
 
     const controller = new AbortController()
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch('/api/chat/welcome', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ timeOfDay }),
-          signal: controller.signal,
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.line) setWelcomeLine(data.line)
+    const fallbackTimer = setTimeout(() => {
+      setWelcomeLine((prev) => prev ?? 'prepare for takeoff.')
+    }, 2000)
+
+    fetch('/api/chat/welcome', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timeOfDay }),
+      signal: controller.signal,
+    })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data?.line) {
+          clearTimeout(fallbackTimer)
+          setWelcomeLine(data.line)
         }
-      } catch {
-        // Static fallback stands
-      }
-    }, 100)
+      })
+      .catch(() => {
+        // Fallback timer will handle it
+      })
 
     return () => {
-      clearTimeout(timer)
+      clearTimeout(fallbackTimer)
       controller.abort()
     }
   }, [])
@@ -102,9 +106,11 @@ export const VoyagerLanding = () => {
           />
         </div>
 
-        {/* Welcome line */}
-        <p className="text-slate-400 text-sm mb-8 text-center max-w-md">
-          {welcomeLine}
+        {/* Welcome line — fades in when ready */}
+        <p className={`text-slate-400 text-sm mb-8 text-center max-w-md transition-opacity duration-700 ${
+          welcomeLine ? 'opacity-100' : 'opacity-0'
+        }`}>
+          {welcomeLine ?? '\u00A0'}
         </p>
       </div>
 
