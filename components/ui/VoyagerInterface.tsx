@@ -624,15 +624,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           )}
         </div>
 
-        {/* DETERMINISTIC AUTH UI — client-rendered, no LLM needed.
-            Renders for unauthenticated users regardless of message count.
-            LLM handles the creative welcome message separately. */}
-        {!isAuthenticated && !isAuthLoading && (
-          <div className="mb-8 max-w-sm mx-auto">
-            <EmailInputAdapter sendMagicLink={sendMagicLink} />
-          </div>
-        )}
-
         <div className="space-y-12">
 
         {/* Messages - unified stream of chat + UI messages.
@@ -802,41 +793,50 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       {/* INPUT DECK */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#050505]/95 backdrop-blur border-t border-white/10 p-4 pb-6">
         <div className="max-w-2xl mx-auto">
-          {/* Context-Aware Suggestions */}
-          {suggestions.length > 0 && (
-            <div className="flex gap-3 mb-3 overflow-x-auto pb-1 scrollbar-hide">
-              {suggestions.map(suggestion => (
-                <button
-                  key={suggestion.id}
-                  type="button"
-                  onClick={() => handleSuggestionClick(suggestion.action)}
-                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors whitespace-nowrap"
-                >
-                  {suggestion.text}
-                </button>
-              ))}
+          {!isAuthenticated && !isAuthLoading ? (
+            /* DETERMINISTIC AUTH UI — email input replaces chat input for unauthed users */
+            <div className="max-w-sm mx-auto">
+              <EmailInputAdapter sendMagicLink={sendMagicLink} />
             </div>
-          )}
+          ) : (
+            <>
+              {/* Context-Aware Suggestions */}
+              {suggestions.length > 0 && (
+                <div className="flex gap-3 mb-3 overflow-x-auto pb-1 scrollbar-hide">
+                  {suggestions.map(suggestion => (
+                    <button
+                      key={suggestion.id}
+                      type="button"
+                      onClick={() => handleSuggestionClick(suggestion.action)}
+                      className="text-xs text-slate-500 hover:text-slate-300 transition-colors whitespace-nowrap"
+                    >
+                      {suggestion.text}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-          {/* Welcome hint for empty states */}
-          {welcomeHint && messages.length === 0 && (
-            <div className="text-xs text-slate-600 mb-3 italic">
-              {welcomeHint}
-            </div>
-          )}
+              {/* Welcome hint for empty states */}
+              {welcomeHint && messages.length === 0 && (
+                <div className="text-xs text-slate-600 mb-3 italic">
+                  {welcomeHint}
+                </div>
+              )}
 
-          <form onSubmit={handleSubmit}>
-            <InputArea
-              value={inputValue}
-              onChange={setInputValue}
-              onSubmit={() => {
-                const form = document.querySelector('form');
-                if (form) form.requestSubmit();
-              }}
-              isLoading={isLoading}
-              queueCount={messageQueue.length}
-            />
-          </form>
+              <form onSubmit={handleSubmit}>
+                <InputArea
+                  value={inputValue}
+                  onChange={setInputValue}
+                  onSubmit={() => {
+                    const form = document.querySelector('form');
+                    if (form) form.requestSubmit();
+                  }}
+                  isLoading={isLoading}
+                  queueCount={messageQueue.length}
+                />
+              </form>
+            </>
+          )}
         </div>
       </div>
     </div>
