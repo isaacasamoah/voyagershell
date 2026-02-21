@@ -13,6 +13,7 @@ import { useRealtimeSubscription } from './hooks/useRealtimeSubscription';
 import { useMessageState } from './hooks/useMessageState';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
+import { EmailInputAdapter } from './composition/adapters/EmailInputAdapter';
 
 // Voyage types
 interface VoyageMembership {
@@ -205,7 +206,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     const timer = setTimeout(() => {
       autoSentCount.current++;
       if (!isAuthenticated) {
-        sendMessage({ text: `hello — ${timeOfDay}` });
+        sendMessage({ text: `new visitor, ${timeOfDay} — welcome them aboard. 2-3 sentences, creative. auth is handled separately.` });
       } else {
         sendMessage({ text: `good ${timeOfDay}${voyageContext}` });
       }
@@ -622,6 +623,15 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             </div>
           )}
         </div>
+
+        {/* DETERMINISTIC AUTH UI — client-rendered, no LLM needed.
+            Renders immediately for unauthenticated users on empty conversations.
+            LLM handles the creative welcome message separately. */}
+        {!isAuthenticated && !isAuthLoading && messages.length <= 1 && (
+          <div className="mb-8 max-w-sm mx-auto">
+            <EmailInputAdapter sendMagicLink={sendMagicLink} />
+          </div>
+        )}
 
         <div className="space-y-12">
 

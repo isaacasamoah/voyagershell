@@ -160,7 +160,7 @@ export const composeSystemPrompt = async (
 
   // Auth state flag — identity handles the behavior (see First Contact in core.ts)
   if (authState === 'unauthenticated') {
-    dynamicParts.push('# Auth: Not signed in');
+    dynamicParts.push('# Auth: Not signed in — sign-in UI is rendered by the client. Do not offer sign-in or mention email.');
   } else if (authState === 'just-authenticated') {
     dynamicParts.push('# Auth: Just signed in');
   }
