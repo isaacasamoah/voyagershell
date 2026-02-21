@@ -625,9 +625,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         </div>
 
         {/* DETERMINISTIC AUTH UI — client-rendered, no LLM needed.
-            Renders immediately for unauthenticated users on empty conversations.
+            Renders for unauthenticated users regardless of message count.
             LLM handles the creative welcome message separately. */}
-        {!isAuthenticated && !isAuthLoading && messages.length <= 1 && (
+        {!isAuthenticated && !isAuthLoading && (
           <div className="mb-8 max-w-sm mx-auto">
             <EmailInputAdapter sendMagicLink={sendMagicLink} />
           </div>
