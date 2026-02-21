@@ -329,11 +329,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
     const hasSignOut = lastMsg.parts.some((p) => {
       const part = p as Record<string, unknown>;
-      return part.type === 'dynamic-tool' && part.toolName === 'sign_out';
+      // AI SDK may use 'tool-invocation' or 'dynamic-tool' depending on version
+      const isToolPart = part.type === 'tool-invocation' || part.type === 'dynamic-tool';
+      const isSignOut = (part.toolName === 'sign_out') || (part.name === 'sign_out');
+      if (isToolPart) {
+        console.log('[SignOut] Tool part found:', part.type, part.toolName ?? part.name);
+      }
+      return isToolPart && isSignOut;
     });
 
     if (hasSignOut) {
-      // Delay so user reads the farewell
+      console.log('[SignOut] Detected — signing out in 1.5s');
       const timer = setTimeout(() => signOut(), 1500);
       return () => clearTimeout(timer);
     }
