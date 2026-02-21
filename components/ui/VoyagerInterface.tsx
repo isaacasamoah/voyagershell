@@ -13,7 +13,6 @@ import { useRealtimeSubscription } from './hooks/useRealtimeSubscription';
 import { useMessageState } from './hooks/useMessageState';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
-import { EmailInputAdapter } from './composition/adapters/EmailInputAdapter';
 
 // Voyage types
 interface VoyageMembership {
@@ -69,7 +68,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [inputValue, setInputValue] = useState('');
 
   // Auth state
-  const { user, isAuthenticated, isLoading: isAuthLoading, sendMagicLink } = useAuth();
+  const { user, isAuthenticated, isLoading: isAuthLoading, sendMagicLink, signOut } = useAuth();
 
   // Conversation state
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -205,11 +204,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
     const timer = setTimeout(() => {
       autoSentCount.current++;
-      if (!isAuthenticated) {
-        sendMessage({ text: `new visitor, ${timeOfDay} — welcome them aboard. 2-3 sentences, creative. auth is handled separately.` });
-      } else {
-        sendMessage({ text: `good ${timeOfDay}${voyageContext}` });
-      }
+      sendMessage({ text: `good ${timeOfDay}${voyageContext}` });
     }, 300);
     return () => clearTimeout(timer);
   }, [isAuthLoading, isLoadingConversation, isAuthenticated, messages.length, sendMessage, currentVoyage]);
@@ -325,6 +320,24 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
     prevStatusRef.current = status;
   }, [status, messages.length]);
+
+  // Detect sign_out tool call — fire signOut() after Voyager's farewell streams
+  useEffect(() => {
+    if (status !== 'ready' || messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role !== 'assistant' || !Array.isArray(lastMsg.parts)) return;
+
+    const hasSignOut = lastMsg.parts.some((p) => {
+      const part = p as Record<string, unknown>;
+      return part.type === 'dynamic-tool' && part.toolName === 'sign_out';
+    });
+
+    if (hasSignOut) {
+      // Delay so user reads the farewell
+      const timer = setTimeout(() => signOut(), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [status, messages, signOut]);
 
   // Process queued messages when Voyager finishes responding
   useEffect(() => {
@@ -793,50 +806,41 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       {/* INPUT DECK */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#050505]/95 backdrop-blur border-t border-white/10 p-4 pb-6">
         <div className="max-w-2xl mx-auto">
-          {!isAuthenticated && !isAuthLoading ? (
-            /* DETERMINISTIC AUTH UI — email input replaces chat input for unauthed users */
-            <div className="max-w-sm mx-auto">
-              <EmailInputAdapter sendMagicLink={sendMagicLink} />
+          {/* Context-Aware Suggestions */}
+          {suggestions.length > 0 && (
+            <div className="flex gap-3 mb-3 overflow-x-auto pb-1 scrollbar-hide">
+              {suggestions.map(suggestion => (
+                <button
+                  key={suggestion.id}
+                  type="button"
+                  onClick={() => handleSuggestionClick(suggestion.action)}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors whitespace-nowrap"
+                >
+                  {suggestion.text}
+                </button>
+              ))}
             </div>
-          ) : (
-            <>
-              {/* Context-Aware Suggestions */}
-              {suggestions.length > 0 && (
-                <div className="flex gap-3 mb-3 overflow-x-auto pb-1 scrollbar-hide">
-                  {suggestions.map(suggestion => (
-                    <button
-                      key={suggestion.id}
-                      type="button"
-                      onClick={() => handleSuggestionClick(suggestion.action)}
-                      className="text-xs text-slate-500 hover:text-slate-300 transition-colors whitespace-nowrap"
-                    >
-                      {suggestion.text}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Welcome hint for empty states */}
-              {welcomeHint && messages.length === 0 && (
-                <div className="text-xs text-slate-600 mb-3 italic">
-                  {welcomeHint}
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit}>
-                <InputArea
-                  value={inputValue}
-                  onChange={setInputValue}
-                  onSubmit={() => {
-                    const form = document.querySelector('form');
-                    if (form) form.requestSubmit();
-                  }}
-                  isLoading={isLoading}
-                  queueCount={messageQueue.length}
-                />
-              </form>
-            </>
           )}
+
+          {/* Welcome hint for empty states */}
+          {welcomeHint && messages.length === 0 && (
+            <div className="text-xs text-slate-600 mb-3 italic">
+              {welcomeHint}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <InputArea
+              value={inputValue}
+              onChange={setInputValue}
+              onSubmit={() => {
+                const form = document.querySelector('form');
+                if (form) form.requestSubmit();
+              }}
+              isLoading={isLoading}
+              queueCount={messageQueue.length}
+            />
+          </form>
         </div>
       </div>
     </div>

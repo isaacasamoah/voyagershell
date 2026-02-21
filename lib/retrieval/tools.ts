@@ -401,6 +401,16 @@ export const createVoyagerTools = (ctx: ToolContext): {
   const retrieval = createRetrievalTools(ctx)
   const captain = createCaptainTools(ctx)
 
+  // sign_out — LLM calls this when user wants to leave.
+  // Server-side no-op; client detects the tool call and fires signOut().
+  const sign_out = tool({
+    description: `Sign the user out of Voyager. Call this when the user wants to leave, log out, sign out, or says goodbye (e.g. "seeya", "exit", "logout", "sign out", "bye"). Say a brief farewell BEFORE calling this tool. The client handles the actual sign-out after your message streams.`,
+    inputSchema: z.object({
+      farewell: z.string().describe('Your brief farewell message to the user'),
+    }),
+    execute: async (_input) => ({ status: 'signing_out' }),
+  })
+
   const registrations: ToolRegistration[] = [
     {
       name: 'semantic_search',
@@ -441,6 +451,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'ask_captain',
       tool: captain.ask_captain,
       strategyHint: 'Render interactive UI inline. Use for auth, pickers, confirmations.',
+    },
+    {
+      name: 'sign_out',
+      tool: sign_out,
+      strategyHint: 'Sign the user out. Call after saying goodbye.',
     },
   ]
 
