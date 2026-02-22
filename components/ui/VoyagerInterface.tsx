@@ -149,6 +149,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         if (data.messages.length > 0) {
           const uiMessages = data.messages.map(apiMessageToUIMessage);
           setMessages(uiMessages);
+          setHasUserTyped(true);
         } else {
           setMessages([]);
         }
