@@ -612,7 +612,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           className={`z-40 flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
             !hasUserTyped
               ? 'sticky top-[52px] min-h-[calc(100vh-52px-120px)] justify-center'
-              : 'fixed top-[52px] left-0 right-0 h-[280px] justify-center'
+              : 'fixed top-[52px] left-0 right-0 h-[280px] justify-center bg-[#050505]'
           }`}
         >
           <div className="transition-all duration-700 ease-in-out">
