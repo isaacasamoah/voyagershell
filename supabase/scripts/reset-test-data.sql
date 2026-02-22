@@ -48,16 +48,18 @@ BEGIN
        OR user_id != test_user_id
        OR test_user_id IS NULL;
 
-  -- Profiles cascade handles: sessions → messages, user_memory, agent_tasks, voyage_members
-  DELETE FROM profiles WHERE id != test_user_id OR test_user_id IS NULL;
-
   -- ==========================================================================
-  -- Step 2: Clean orphan voyages
+  -- Step 2: Clean voyages BEFORE profiles (created_by FK has NO CASCADE)
   -- ==========================================================================
-  -- voyages.created_by has NO CASCADE — orphans survive profile deletion
+  -- First remove non-test voyage members so voyages become deletable
+  DELETE FROM voyage_members WHERE user_id != test_user_id OR test_user_id IS NULL;
+  -- Delete voyages created by non-test users (now safe — no members reference them)
   DELETE FROM voyages
     WHERE (created_by != test_user_id OR test_user_id IS NULL)
       AND id NOT IN (SELECT voyage_id FROM voyage_members);
+
+  -- Profiles cascade handles: sessions → messages, user_memory, agent_tasks
+  DELETE FROM profiles WHERE id != test_user_id OR test_user_id IS NULL;
 
   -- ==========================================================================
   -- Step 3: Delete test user's CONVERSATION data (preserve profile + voyage)
