@@ -8,29 +8,31 @@ import { useAuth } from '@/lib/auth/context'
 // Email input states
 type EmailState = 'active' | 'sending' | 'sent' | 'error'
 
-// Stretch animation frames — idle → uncross → stretch → arms up → settle → re-cross
+// Stretch animation frames — idle → anticipation → extension → peak → idle
+// Arms-only movement, legs stay planted throughout
 const STRETCH_FRAMES = [
   '/images/astronaut/idle.png',
   '/images/astronaut/stretch-frames/frame-1-uncrossing.png',
   '/images/astronaut/stretch-frames/frame-2-stretched.png',
   '/images/astronaut/stretch-frames/frame-3-peak-stretch.png',
-  '/images/astronaut/stretch-frames/frame-3b-arms-up.png',
-  '/images/astronaut/stretch-frames/frame-4b-settling.png',
-  '/images/astronaut/stretch-frames/frame-5-recrossed.png',
 ]
 
-// Per-frame hold times (ms) — how long to hold each frame before crossfading to next
+// Per-frame hold times (ms) — fast into stretch, hold the peak, ease back
 const FRAME_TIMINGS = [
-  0,    // idle — n/a (starting frame)
-  150,  // uncrossing — quick transition
-  200,  // stretched — settling in
-  250,  // peak stretch — building
-  800,  // arms up — HOLD (the zero-g moment)
-  250,  // settling — unwinding
-  200,  // recrossed — quick return
+  0,     // idle — n/a (starting frame)
+  50,    // anticipation — zip through
+  80,    // extension — zip through
+  1200,  // peak — BIG hold, the satisfying stretch moment
 ]
 
-const CROSSFADE_MS = 300  // opacity transition duration
+// Crossfade durations per transition
+const CROSSFADE_TIMINGS = [
+  0,    // idle — n/a
+  120,  // into anticipation — quick
+  120,  // into extension — quick
+  200,  // into peak — slightly slower arrival
+]
+const CROSSFADE_RETURN = 500  // back to idle — slow ease back, like releasing a stretch
 
 // Randomized idle interval — 20 to 40 seconds between stretches
 const randomIdleMs = () => 20000 + Math.random() * 20000
@@ -41,10 +43,11 @@ export const VoyagerLanding = () => {
   // Welcome line — hidden until LLM responds, fallback after timeout
   const [welcomeLine, setWelcomeLine] = useState<string | null>(null)
 
-  // Astronaut stretch animation — dual-layer crossfade
+  // Astronaut stretch animation — dual-layer crossfade with variable timing
   const [backSrc, setBackSrc] = useState(STRETCH_FRAMES[0])
   const [frontSrc, setFrontSrc] = useState<string | null>(null)
   const [frontOpacity, setFrontOpacity] = useState(0)
+  const [crossfadeDuration, setCrossfadeDuration] = useState(350)
 
   // Email input
   const [email, setEmail] = useState('')
@@ -68,9 +71,10 @@ export const VoyagerLanding = () => {
     let timer: ReturnType<typeof setTimeout>
     let raf: number
 
-    const crossfadeTo = (nextSrc: string, onComplete: () => void) => {
+    const crossfadeTo = (nextSrc: string, durationMs: number, onComplete: () => void) => {
+      setCrossfadeDuration(durationMs)
       setFrontSrc(nextSrc)
-      // Frame delay so browser registers src change before opacity transition
+      // Frame delay so browser registers src + duration change before opacity transition
       raf = requestAnimationFrame(() => {
         setFrontOpacity(1)
       })
@@ -80,7 +84,7 @@ export const VoyagerLanding = () => {
         setFrontSrc(null)
         setFrontOpacity(0)
         onComplete()
-      }, CROSSFADE_MS)
+      }, durationMs)
     }
 
     const runStretchCycle = () => {
@@ -90,13 +94,13 @@ export const VoyagerLanding = () => {
         const nextFrame = frameIndex + 1
 
         if (nextFrame < STRETCH_FRAMES.length) {
-          crossfadeTo(STRETCH_FRAMES[nextFrame], () => {
+          crossfadeTo(STRETCH_FRAMES[nextFrame], CROSSFADE_TIMINGS[nextFrame], () => {
             frameIndex = nextFrame
             timer = setTimeout(advance, FRAME_TIMINGS[nextFrame])
           })
         } else {
           // Return to idle, then wait random interval
-          crossfadeTo(STRETCH_FRAMES[0], () => {
+          crossfadeTo(STRETCH_FRAMES[0], CROSSFADE_RETURN, () => {
             frameIndex = 0
             timer = setTimeout(runStretchCycle, randomIdleMs())
           })
@@ -199,7 +203,7 @@ export const VoyagerLanding = () => {
               className="absolute inset-0 w-full h-full object-contain"
               style={{
                 opacity: frontOpacity,
-                transition: `opacity ${CROSSFADE_MS}ms ease-in-out`,
+                transition: `opacity ${crossfadeDuration}ms ease-in-out`,
               }}
             />
           )}
