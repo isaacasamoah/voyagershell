@@ -329,17 +329,13 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
     const hasSignOut = lastMsg.parts.some((p) => {
       const part = p as Record<string, unknown>;
-      // AI SDK may use 'tool-invocation' or 'dynamic-tool' depending on version
-      const isToolPart = part.type === 'tool-invocation' || part.type === 'dynamic-tool';
-      const isSignOut = (part.toolName === 'sign_out') || (part.name === 'sign_out');
-      if (isToolPart) {
-        console.log('[SignOut] Tool part found:', part.type, part.toolName ?? part.name);
-      }
-      return isToolPart && isSignOut;
+      // AI SDK v6: static tools → part.type === "tool-{name}", dynamic → "dynamic-tool" + toolName
+      if (part.type === 'tool-sign_out') return true;
+      if (part.type === 'dynamic-tool' && part.toolName === 'sign_out') return true;
+      return false;
     });
 
     if (hasSignOut) {
-      console.log('[SignOut] Detected — signing out in 1.5s');
       const timer = setTimeout(() => signOut(), 1500);
       return () => clearTimeout(timer);
     }
@@ -388,7 +384,11 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     for (const part of lastMessage.parts) {
       const p = part as Record<string, unknown>;
       if (p.type === 'step-start') depth++;
-      if (p.type === 'tool-invocation' || p.type === 'dynamic-tool') {
+      // AI SDK v6: static tools → "tool-{name}", dynamic → "dynamic-tool" + toolName
+      if (typeof p.type === 'string' && p.type.startsWith('tool-')) {
+        toolName = (p.type as string).slice(5);
+        if (toolName === 'spawn_background_agent') bgSpawn = true;
+      } else if (p.type === 'dynamic-tool') {
         toolName = (p.toolName as string) ?? null;
         if (toolName === 'spawn_background_agent') bgSpawn = true;
       }
@@ -485,7 +485,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   };
 
   // Helper to extract ask_captain tool call parts from a UIMessage
-  // AI SDK v6 streams tool calls as DynamicToolUIPart with type: 'dynamic-tool'
+  // AI SDK v6: static → "tool-ask_captain", dynamic → "dynamic-tool" + toolName
   const getAskCaptainParts = (message: UIMessage): Array<{
     toolCallId: string
     state: string
@@ -495,7 +495,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     const results: Array<{ toolCallId: string; state: string; input: unknown }> = [];
     for (const part of message.parts) {
       const p = part as Record<string, unknown>;
-      if (p.type === 'dynamic-tool' && p.toolName === 'ask_captain') {
+      const isAskCaptain = p.type === 'tool-ask_captain' ||
+        (p.type === 'dynamic-tool' && p.toolName === 'ask_captain');
+      if (isAskCaptain) {
         results.push({
           toolCallId: p.toolCallId as string,
           state: p.state as string,

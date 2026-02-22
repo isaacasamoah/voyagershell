@@ -92,8 +92,11 @@ export const AuthProvider = ({ children, initialUser = null }: AuthProviderProps
         setUser(toAuthUser(session?.user ?? null));
         setIsLoading(false);
 
-        // Broadcast to other tabs — only on genuine sign-in, not refresh-triggered
-        if (_event === 'SIGNED_IN' && !isRefreshing.current && typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        // Universal guard: if this event was triggered by a BroadcastChannel refresh, skip all broadcast logic
+        if (isRefreshing.current) return;
+
+        // Only broadcast on SIGNED_IN — sign-out is handled locally by each tab via onAuthStateChange
+        if (_event === 'SIGNED_IN' && typeof window !== 'undefined' && 'BroadcastChannel' in window) {
           const channel = new BroadcastChannel('voyager-auth');
           channel.postMessage({ type: 'auth_complete' });
           channel.close();
