@@ -93,10 +93,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [hasUserTyped, setHasUserTyped] = useState(false);
   const autoSentCount = useRef(0);
 
-  // Scroll position tracking for astronaut opacity (AC6/AC7)
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const [isAtBottom, setIsAtBottom] = useState(true);
-
   // UI component messages (ephemeral, in-stream)
   const [uiMessages, setUiMessages] = useState<UIComponentMessage[]>([]);
 
@@ -358,19 +354,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messageCount]);
 
-  // Track scroll position for astronaut opacity (AC6/AC7)
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollTop = window.scrollY;
-      const scrollHeight = document.documentElement.scrollHeight;
-      const clientHeight = window.innerHeight;
-      // Consider "at bottom" if within 100px of the bottom
-      setIsAtBottom(scrollTop + clientHeight >= scrollHeight - 100);
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
   // Compute step depth and tool info from current streaming message for astronaut states
   const { stepDepth, lastToolName, hasBackgroundSpawn } = useMemo(() => {
     if (!isStreaming || messages.length === 0) return { stepDepth: 0, lastToolName: null as string | null, hasBackgroundSpawn: false };
@@ -427,11 +410,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     return 'idle';
   }, [error, showSuccess, isLoading, isAuthLoading, isLoadingConversation, stepDepth, hasBackgroundSpawn]);
 
-  // Astronaut size: xl hero when user hasn't engaged, md docked when they have
-  const astronautSize = hasUserTyped ? 'md' : 'xl';
-
-  // Astronaut opacity: full at bottom, reduced when scrolled up (AC6/AC7)
-  const astronautOpacity = isAtBottom ? 1 : 0.3;
+  // Astronaut size: xl hero when user hasn't engaged, lg docked when they have
+  const astronautSize = hasUserTyped ? 'lg' : 'xl';
 
   // All messages go to Voyager — no intent detection, no slash commands, no auth gate
   // Unauth users can type: the chat route handles null conversationId server-side
@@ -620,20 +600,19 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         </div>
       </div>
 
-      {/* THE STREAM — astronaut is in-flow, sticky-docked. No padding hacks. */}
-      <div className="max-w-2xl mx-auto px-4 pb-48 pt-[52px]">
+      {/* THE STREAM — astronaut band + scrollable messages */}
+      <div className={`max-w-2xl mx-auto px-4 pb-48 ${hasUserTyped ? 'pt-[332px]' : 'pt-[52px]'}`}>
 
-        {/* ASTRONAUT REGION — in-flow, sticky when scrolled.
+        {/* ASTRONAUT BAND — fixed below header in conversation mode.
             Hero state: fills viewport to center astronaut (landing page feel).
-            Conversation mode: compact, sticks below header as companion.
+            Conversation mode: fixed 280px band, always visible, full opacity.
             Transition trigger: user's first typed message, not Voyager's welcome. */}
         <div
-          className={`sticky top-[52px] z-40 flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
+          className={`z-40 flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
             !hasUserTyped
-              ? 'min-h-[calc(100vh-52px-120px)] justify-center'
-              : 'min-h-0 py-3'
+              ? 'sticky top-[52px] min-h-[calc(100vh-52px-120px)] justify-center'
+              : 'fixed top-[52px] left-0 right-0 h-[280px] justify-center'
           }`}
-          style={{ opacity: astronautOpacity }}
         >
           <div className="transition-all duration-700 ease-in-out">
             <AstronautState state={astronautState} size={astronautSize} />
@@ -642,6 +621,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             <div className="text-center text-xs text-slate-500 mt-1 animate-pulse">
               {progressLabel}
             </div>
+          )}
+          {/* Bottom gradient boundary — Voyager's territory fades into message space */}
+          {hasUserTyped && (
+            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-[#050505] pointer-events-none" />
           )}
         </div>
 
