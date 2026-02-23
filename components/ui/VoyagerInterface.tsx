@@ -1,199 +1,82 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, type UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 import { Terminal, Activity, Ship } from 'lucide-react';
 import { UserMessage, AssistantMessage, AstronautState, TaskCard, type TaskProgress } from '@/components/chat';
 import { useAuth } from '@/lib/auth/context';
-import { log } from '@/lib/debug';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
-import { type UIComponentMessage } from '@/lib/ui/components';
 import { useRealtimeSubscription } from './hooks/useRealtimeSubscription';
 import { useMessageState } from './hooks/useMessageState';
+import { useConversation } from './hooks/useConversation';
+import { useVoyageContext } from './hooks/useVoyageContext';
+import { useAstronautState } from './hooks/useAstronautState';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
 
-// Voyage types
-interface VoyageMembership {
-  id: string;
-  slug: string;
-  name: string;
-  role: 'captain' | 'crew';
-  joinedAt: string;
-}
-
-interface VoyagerInterfaceProps {
-  className?: string;
-}
-
-// API response types
-interface ConversationData {
-  id: string;
-  title: string | null;
-  status: string;
-  messageCount: number;
-  lastMessageAt: string;
-  createdAt: string;
-}
-
-interface MessageData {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  createdAt: string;
-}
-
-interface ConversationResponse {
-  conversation: ConversationData;
-  messages: MessageData[];
-}
-
-// Running task from background worker (in-progress)
+// Running task from background worker (in-progress) — stays here, imports TaskProgress from same barrel
 interface RunningTask {
   id: string;
   task: string;
   progress?: TaskProgress;
 }
 
-// Convert API message to UIMessage format for useChat
-const apiMessageToUIMessage = (msg: MessageData): UIMessage => ({
-  id: msg.id,
-  role: msg.role,
-  parts: [{ type: 'text' as const, text: msg.content }],
-});
+interface VoyagerInterfaceProps {
+  className?: string;
+}
 
 export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState('');
 
   // Auth state
-  const { user, isAuthenticated, isLoading: isAuthLoading, sendMagicLink, signOut } = useAuth();
-
-  // Conversation state
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [conversationTitle, setConversationTitle] = useState<string | null>(null);
-  const [isLoadingConversation, setIsLoadingConversation] = useState(true);
-
-  // Message queue - type while Voyager is thinking
-  const [messageQueue, setMessageQueue] = useState<string[]>([]);
-
-  // Voyage state (for context bar display)
-  const [currentVoyage, setCurrentVoyage] = useState<VoyageMembership | null>(null);
-  const [voyages, setVoyages] = useState<VoyageMembership[]>([]);
-
-  // Background agent state (running tasks)
-  const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
-
-  // Celebration state — drives singleton astronaut to 'celebrating' briefly
-  const [showSuccess, setShowSuccess] = useState(false);
-
-  // Hero → conversation mode: tracks whether the user has typed their first message.
-  // Voyager's auto-welcome keeps hero state. Only user engagement collapses it.
-  const [hasUserTyped, setHasUserTyped] = useState(false);
-  const autoSentCount = useRef(0);
-  // Side-channel for message timestamps (UIMessage type doesn't include createdAt)
-  const messageTimestamps = useRef<Map<string, Date>>(new Map());
-
-  // UI component messages (ephemeral, in-stream)
-  const [uiMessages, setUiMessages] = useState<UIComponentMessage[]>([]);
-
-  // State for system feedback
-  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const { isAuthenticated, isLoading: isAuthLoading, sendMagicLink, signOut } = useAuth();
 
   // Auth state tracking for system prompt injection
   const [authState, setAuthState] = useState<'unauthenticated' | 'authenticated' | 'just-authenticated'>('unauthenticated');
 
-  // Refs to track current state for the transport
-  const conversationIdRef = useRef<string | null>(null);
-  conversationIdRef.current = conversationId;
-  const voyageSlugRef = useRef<string | null>(null);
-  voyageSlugRef.current = currentVoyage?.slug ?? null;
-  const authStateRef = useRef(authState);
-  authStateRef.current = authState;
-
-  // Create transport with dynamic body that reads current conversationId and voyage
-  const transport = useMemo(() => new DefaultChatTransport({
-    api: '/api/chat',
-    body: () => ({
-      conversationId: conversationIdRef.current,
-      voyageSlug: voyageSlugRef.current,
-      authState: authStateRef.current,
-    }),
-  }), []);
-
-  // useChat with transport
-  const { messages, sendMessage, setMessages, status, error } = useChat({
-    transport,
+  // Voyage context (fetch voyages, pending invites, URL params)
+  const { currentVoyage, setCurrentVoyage, voyages, feedbackMessage } = useVoyageContext({
+    isAuthenticated,
+    isAuthLoading,
   });
 
-  // Auto-continue: fetch active conversation on mount and when voyage changes
-  useEffect(() => {
-    if (isAuthLoading) return;
-    if (!isAuthenticated) {
-      setIsLoadingConversation(false);
-      return;
-    }
+  // Conversation (transport, useChat, fetch, welcome, title sync, message queue)
+  const {
+    conversationId, conversationTitle, isLoadingConversation,
+    messages, sendMessage, setMessages, status, error,
+    hasUserTyped, setHasUserTyped, autoSentCount,
+    messageTimestamps, messageQueue, setMessageQueue,
+    isLoading, isStreaming,
+    showSuccess, setShowSuccess,
+  } = useConversation({
+    currentVoyage,
+    authState,
+    isAuthenticated,
+    isAuthLoading,
+  });
 
-    const fetchActiveConversation = async () => {
-      try {
-        const voyageSlug = currentVoyage?.slug;
-        const url = voyageSlug
-          ? `/api/conversation?voyageSlug=${encodeURIComponent(voyageSlug)}`
-          : '/api/conversation';
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Failed to fetch conversation');
+  // Astronaut state machine (pure derivation from conversation + auth state)
+  const { astronautState, astronautSize, progressLabel } = useAstronautState({
+    messages,
+    status,
+    error,
+    showSuccess,
+    isLoading,
+    isAuthLoading,
+    isLoadingConversation,
+    hasUserTyped,
+  });
 
-        const data: ConversationResponse = await res.json();
-        setConversationId(data.conversation.id);
-        setConversationTitle(data.conversation.title);
+  // Background agent state (running tasks)
+  const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
 
-        if (data.messages.length > 0) {
-          const uiMessages = data.messages.map(apiMessageToUIMessage);
-          // Store timestamps from DB for accurate display
-          for (const msg of data.messages) {
-            if (msg.createdAt) {
-              messageTimestamps.current.set(msg.id, new Date(msg.createdAt));
-            }
-          }
-          setMessages(uiMessages);
-          setHasUserTyped(true);
-
-          // Detect auto-sent welcome prompt to maintain correct message filtering
-          const firstUserMsg = uiMessages.find((m: { role: string }) => m.role === 'user');
-          if (firstUserMsg) {
-            // Extract text from parts (UIMessage format) or content string
-            const text = firstUserMsg.parts
-              ?.filter((p: { type: string }) => p.type === 'text')
-              .map((p: { type: string; text?: string }) => p.text ?? '')
-              .join('') ?? '';
-            if (/^good (morning|afternoon|evening)/i.test(text)) {
-              autoSentCount.current = 1;
-            }
-          }
-        } else {
-          setMessages([]);
-        }
-
-        log.voyage('Loaded conversation', { conversationId: data.conversation.id, voyageSlug: voyageSlug ?? 'personal' });
-      } catch (error) {
-        console.error('[Voyager] Failed to fetch conversation:', error);
-      } finally {
-        setIsLoadingConversation(false);
-      }
-    };
-
-    fetchActiveConversation();
-  }, [setMessages, isAuthenticated, isAuthLoading, currentVoyage?.slug]);
-
-  // Detect when user just logged in (after magic link) — celebrate + set auth state.
-  // Welcome prompt is handled by the unified hidden welcome effect below.
+  // Detect when user just logged in (after magic link) — celebrate + set auth state
   const wasAuthenticatedRef = useRef(isAuthenticated);
   useEffect(() => {
     if (isAuthLoading) return;
 
     if (isAuthenticated && !wasAuthenticatedRef.current) {
-      // Fresh login — celebrate and mark as just-authenticated
       setAuthState('just-authenticated');
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 2000);
@@ -205,79 +88,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     }
 
     wasAuthenticatedRef.current = isAuthenticated;
-  }, [isAuthenticated, isAuthLoading]);
-
-  // Hidden welcome prompt — triggers Voyager's creative welcome without visible user message.
-  // Works for both unauth (sign-in flow) and authed users returning to empty conversations.
-  const hasTriggeredWelcomePrompt = useRef(false);
-  useEffect(() => {
-    if (isAuthLoading || isLoadingConversation) return;
-    if (hasTriggeredWelcomePrompt.current) return;
-    if (messages.length > 0) return;
-
-    hasTriggeredWelcomePrompt.current = true;
-    const hour = new Date().getHours();
-    const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
-    const voyageContext = currentVoyage ? ` in ${currentVoyage.name}` : '';
-
-    const timer = setTimeout(() => {
-      autoSentCount.current++;
-      sendMessage({ text: `good ${timeOfDay}${voyageContext}` });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [isAuthLoading, isLoadingConversation, isAuthenticated, messages.length, sendMessage, currentVoyage]);
-
-  // Fetch voyages when authenticated (for context bar)
-  useEffect(() => {
-    if (!isAuthenticated || isAuthLoading) return;
-
-    const fetchVoyages = async () => {
-      try {
-        const res = await fetch('/api/voyages');
-        if (!res.ok) return;
-
-        const data = await res.json();
-        setVoyages(data.voyages || []);
-
-        // Check for pending invite from join page
-        const pendingInvite = localStorage.getItem('pendingInvite');
-        if (pendingInvite) {
-          localStorage.removeItem('pendingInvite');
-          const joinRes = await fetch(`/api/voyages/join/${pendingInvite}`, { method: 'POST' });
-          if (joinRes.ok) {
-            const joinData = await joinRes.json();
-            const refreshRes = await fetch('/api/voyages');
-            if (refreshRes.ok) {
-              const refreshData = await refreshRes.json();
-              setVoyages(refreshData.voyages || []);
-              const joined = refreshData.voyages?.find((v: VoyageMembership) => v.slug === joinData.voyage.slug);
-              if (joined) {
-                setCurrentVoyage(joined);
-                setFeedbackMessage(joinData.alreadyMember
-                  ? `You're already a member of ${joinData.voyage.name}!`
-                  : `Welcome to ${joinData.voyage.name}!`);
-                setTimeout(() => setFeedbackMessage(null), 3000);
-              }
-            }
-          }
-        }
-
-        // Check URL for voyage param
-        const urlParams = new URLSearchParams(window.location.search);
-        const voyageSlug = urlParams.get('voyage');
-        if (voyageSlug && data.voyages) {
-          const voyage = data.voyages.find((v: VoyageMembership) => v.slug === voyageSlug);
-          if (voyage) {
-            setCurrentVoyage(voyage);
-          }
-        }
-      } catch (error) {
-        log.voyage('Failed to fetch voyages', { error: String(error) }, 'error');
-      }
-    };
-
-    fetchVoyages();
-  }, [isAuthenticated, isAuthLoading]);
+  }, [isAuthenticated, isAuthLoading, setShowSuccess]);
 
   // Followup state (extracted hook)
   const { triggerFollowup, triggerFollowupRef } = useMessageState({
@@ -320,25 +131,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     setRunningTasks([]);
   }, [conversationId]);
 
-  // Derived state for loading
-  const isLoading = status === 'submitted' || status === 'streaming';
-  const isStreaming = status === 'streaming';
-  const prevStatusRef = useRef(status);
-
-  // Show success astronaut briefly when response completes
-  useEffect(() => {
-    const wasStreaming = prevStatusRef.current === 'streaming';
-    const nowReady = status === 'ready';
-
-    if (wasStreaming && nowReady && messages.length > 0) {
-      setShowSuccess(true);
-      const timer = setTimeout(() => setShowSuccess(false), 2500);
-      return () => clearTimeout(timer);
-    }
-
-    prevStatusRef.current = status;
-  }, [status, messages.length]);
-
   // Detect sign_out tool call — fire signOut() after Voyager's farewell streams
   useEffect(() => {
     if (status !== 'ready' || messages.length === 0) return;
@@ -347,7 +139,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
     const hasSignOut = lastMsg.parts.some((p) => {
       const part = p as Record<string, unknown>;
-      // AI SDK v6: static tools → part.type === "tool-{name}", dynamic → "dynamic-tool" + toolName
       if (part.type === 'tool-sign_out') return true;
       if (part.type === 'dynamic-tool' && part.toolName === 'sign_out') return true;
       return false;
@@ -359,83 +150,13 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     }
   }, [status, messages, signOut]);
 
-  // Process queued messages when Voyager finishes responding
-  useEffect(() => {
-    if (!isLoading && messageQueue.length > 0 && conversationId) {
-      const nextMessage = messageQueue[0];
-      setMessageQueue(prev => prev.slice(1));
-      setTimeout(() => {
-        sendMessage({ text: nextMessage });
-      }, 100);
-    }
-  }, [isLoading, messageQueue, conversationId, sendMessage]);
-
   // Auto-scroll to bottom when new messages arrive
   const messageCount = messages.length;
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messageCount]);
 
-  // Compute step depth and tool info from current streaming message for astronaut states
-  const { stepDepth, lastToolName, hasBackgroundSpawn } = useMemo(() => {
-    if (!isStreaming || messages.length === 0) return { stepDepth: 0, lastToolName: null as string | null, hasBackgroundSpawn: false };
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage.role !== 'assistant' || !Array.isArray(lastMessage.parts)) {
-      return { stepDepth: 0, lastToolName: null as string | null, hasBackgroundSpawn: false };
-    }
-    let depth = 0;
-    let toolName: string | null = null;
-    let bgSpawn = false;
-    for (const part of lastMessage.parts) {
-      const p = part as Record<string, unknown>;
-      if (p.type === 'step-start') depth++;
-      // AI SDK v6: static tools → "tool-{name}", dynamic → "dynamic-tool" + toolName
-      if (typeof p.type === 'string' && p.type.startsWith('tool-')) {
-        toolName = (p.type as string).slice(5);
-        if (toolName === 'spawn_background_agent') bgSpawn = true;
-      } else if (p.type === 'dynamic-tool') {
-        toolName = (p.toolName as string) ?? null;
-        if (toolName === 'spawn_background_agent') bgSpawn = true;
-      }
-    }
-    return { stepDepth: depth, lastToolName: toolName, hasBackgroundSpawn: bgSpawn };
-  }, [isStreaming, messages]);
-
-  // Map tool names to human-readable progress labels
-  const progressLabel = useMemo((): string | null => {
-    if (!isStreaming || !lastToolName) return null;
-    const labels: Record<string, string> = {
-      semantic_search: 'Searching memory...',
-      keyword_grep: 'Looking for exact matches...',
-      get_connected: 'Following connections...',
-      get_nodes: 'Fetching details...',
-      search_by_time: 'Checking the timeline...',
-      web_search: 'Checking the web...',
-      spawn_background_agent: 'Searching in the background...',
-      ask_captain: 'Preparing something for you...',
-    };
-    return labels[lastToolName] ?? null;
-  }, [isStreaming, lastToolName]);
-
-  // Compute singleton astronaut state with step-aware depth
-  const astronautState = useMemo((): 'idle' | 'searching' | 'celebrating' | 'error' | 'listening' => {
-    if (error) return 'error';
-    if (showSuccess) return 'celebrating';
-    if (isLoading) {
-      // Step-depth-aware states during streaming
-      if (hasBackgroundSpawn) return 'listening';    // handed off to background
-      if (stepDepth >= 3) return 'listening';         // multi-step retrieval / deep exploration
-      return 'searching';                             // initial steps
-    }
-    if (isAuthLoading || isLoadingConversation) return 'searching';
-    return 'idle';
-  }, [error, showSuccess, isLoading, isAuthLoading, isLoadingConversation, stepDepth, hasBackgroundSpawn]);
-
-  // Astronaut size: xl hero when user hasn't engaged, lg docked when they have
-  const astronautSize = hasUserTyped ? 'lg' : 'xl';
-
   // All messages go to Voyager — no intent detection, no slash commands, no auth gate
-  // Unauth users can type: the chat route handles null conversationId server-side
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = inputValue.trim();
@@ -454,7 +175,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     setInputValue(action);
   };
 
-  // Context chip click sends a message to Voyager instead of calling a handler
+  // Context chip click sends a message to Voyager
   const handleVoyageChipClick = useCallback(() => {
     if (!conversationId) return;
     if (isLoading) {
@@ -462,7 +183,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     } else {
       sendMessage({ text: 'show my voyages' });
     }
-  }, [conversationId, isLoading, sendMessage]);
+  }, [conversationId, isLoading, sendMessage, setMessageQueue]);
 
   // Send a message as the user (used by ask_captain components)
   const sendUserMessage = useCallback((text: string) => {
@@ -472,7 +193,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     } else {
       sendMessage({ text });
     }
-  }, [isLoading, sendMessage]);
+  }, [isLoading, sendMessage, setHasUserTyped, setMessageQueue]);
 
   // Helper to extract text content from UIMessage
   const getMessageText = (message: UIMessage): string => {
@@ -486,7 +207,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   };
 
   // Helper to extract ask_captain tool call parts from a UIMessage
-  // AI SDK v6: static → "tool-ask_captain", dynamic → "dynamic-tool" + toolName
   const getAskCaptainParts = (message: UIMessage): Array<{
     toolCallId: string
     state: string
@@ -523,26 +243,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const suggestions = useMemo(() => getSuggestions(suggestionContext), [suggestionContext]);
   const welcomeHint = useMemo(() => getWelcomeSuggestion(suggestionContext), [suggestionContext]);
 
-  // Merge chat messages with UI component messages for unified stream
-  type MergedMessage =
-    | { source: 'chat'; message: UIMessage }
-    | { source: 'ui'; message: UIComponentMessage };
-
-  const mergedMessages = useMemo((): MergedMessage[] => {
-    const chatMsgs: MergedMessage[] = messages.map(m => ({
-      source: 'chat' as const,
-      message: m,
-    }));
-    const uiMsgs: MergedMessage[] = uiMessages.map(m => ({
-      source: 'ui' as const,
-      message: m,
-    }));
-    return [...chatMsgs, ...uiMsgs];
-  }, [messages, uiMessages]);
-
-  // Handler for component actions in the stream (will be wired to ask_captain in MVP 2)
+  // Handler for component actions in the stream
   const handleComponentAction = useCallback((action: string, data?: unknown) => {
-    // Component selections send a message to Voyager
     if (action === 'voyage_select' && typeof data === 'string') {
       if (conversationId && !isLoading) {
         sendMessage({ text: `switch to ${data}` });
@@ -555,21 +257,20 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     triggerFollowupRef.current = triggerFollowup;
   }, [triggerFollowup]);
 
+  // Filter auto-sent messages for rendering
+  const visibleMessages = useMemo(() => {
+    let userMsgsSeen = 0;
+    return messages.filter((msg) => {
+      if (msg.role === 'user') {
+        userMsgsSeen++;
+        if (userMsgsSeen <= autoSentCount.current) return false;
+      }
+      return true;
+    });
+  }, [messages, autoSentCount]);
+
   return (
     <div className={`min-h-screen bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden relative ${className || ''}`}>
-
-      {/* SVG FILTERS (The "Terminal Look" Engine) */}
-      <svg className="absolute w-0 h-0">
-        <defs>
-          <filter id="terminal-dither">
-            <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 1 0" />
-            <feTurbulence type="fractalNoise" baseFrequency="0.80" numOctaves="3" stitchTiles="stitch" result="noise" />
-            <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.2 0" in="noise" result="coloredNoise" />
-            <feComposite operator="in" in="coloredNoise" in2="SourceGraphic" result="composite" />
-            <feBlend mode="multiply" in="composite" in2="SourceGraphic" />
-          </filter>
-        </defs>
-      </svg>
 
       {/* CONTEXT BAR - Fixed header */}
       <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] backdrop-blur-md px-4 py-3 flex items-center justify-between shadow-2xl">
@@ -627,10 +328,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           Padding: header (52px) + astronaut band (280px) = 332px in conversation mode */}
       <div className="max-w-2xl mx-auto px-4 pb-48" style={{ paddingTop: hasUserTyped ? '332px' : '52px' }}>
 
-        {/* ASTRONAUT BAND — fixed below header in conversation mode.
-            Hero state: fills viewport to center astronaut (landing page feel).
-            Conversation mode: fixed 280px band, always visible, full opacity.
-            Transition trigger: user's first typed message, not Voyager's welcome. */}
+        {/* ASTRONAUT BAND — fixed below header in conversation mode */}
         <div
           className={`z-40 flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
             !hasUserTyped
@@ -654,57 +352,15 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
         <div className="space-y-12">
 
-        {/* Messages - unified stream of chat + UI messages.
-            Auto-sent user messages (hidden prompts) are filtered from rendering. */}
-        {(() => {
-          let userMsgsSeen = 0;
-          return mergedMessages.filter((item) => {
-            if (item.source === 'chat' && item.message.role === 'user') {
-              userMsgsSeen++;
-              if (userMsgsSeen <= autoSentCount.current) return false;
-            }
-            return true;
-          });
-        })().map((item, index) => {
-          // Use stored timestamp from DB, or fall back to current time for new messages
-          const msgDate = messageTimestamps.current.get(item.message.id) ?? new Date();
+        {/* Messages — auto-sent user messages (hidden prompts) are filtered from rendering */}
+        {visibleMessages.map((message, index) => {
+          const msgDate = messageTimestamps.current.get(message.id) ?? new Date();
           const timestamp = msgDate.toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
           });
 
-          // UI Component Message
-          if (item.source === 'ui') {
-            const uiMsg = item.message;
-            const parts = uiMsg.parts.map(part => {
-              if (part.type === 'text') {
-                return { type: 'text' as const, text: part.text };
-              }
-              const componentWithHandler = {
-                ...part.component,
-                props: {
-                  ...part.component.props,
-                  onSelect: part.component.type === 'voyage_picker'
-                    ? (slug: string) => handleComponentAction('voyage_select', slug)
-                    : undefined,
-                },
-              };
-              return { type: 'component' as const, component: componentWithHandler };
-            });
-
-            return (
-              <AssistantMessage
-                key={uiMsg.id}
-                parts={parts}
-                timestamp={timestamp}
-                onAction={handleComponentAction}
-              />
-            );
-          }
-
-          // Regular Chat Message
-          const message = item.message;
           const content = getMessageText(message);
 
           if (message.role === 'user') {
@@ -719,19 +375,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           }
 
           if (message.role === 'assistant') {
-            const isCurrentlyStreaming = isStreaming && index === mergedMessages.length - 1 && item.source === 'chat';
+            const isCurrentlyStreaming = isStreaming && index === visibleMessages.length - 1;
             const captainParts = getAskCaptainParts(message);
 
             // If this message has ask_captain tool calls, render them inline
             if (captainParts.length > 0) {
               const messageParts: import('@/components/chat/AssistantMessage').MessagePart[] = [];
 
-              // Add text content if present
               if (content) {
                 messageParts.push({ type: 'text', text: content });
               }
 
-              // Add ask_captain components as react element parts
               for (const captainPart of captainParts) {
                 messageParts.push({
                   type: 'react',
@@ -771,8 +425,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
           return null;
         })}
-
-        {/* No inline loading/success indicators — astronaut singleton is the sole status indicator (AC9) */}
 
         {/* Error state */}
         {error && (
