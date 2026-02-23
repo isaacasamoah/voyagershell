@@ -92,6 +92,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   // Voyager's auto-welcome keeps hero state. Only user engagement collapses it.
   const [hasUserTyped, setHasUserTyped] = useState(false);
   const autoSentCount = useRef(0);
+  // Side-channel for message timestamps (UIMessage type doesn't include createdAt)
+  const messageTimestamps = useRef<Map<string, Date>>(new Map());
 
   // UI component messages (ephemeral, in-stream)
   const [uiMessages, setUiMessages] = useState<UIComponentMessage[]>([]);
@@ -148,8 +150,27 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
         if (data.messages.length > 0) {
           const uiMessages = data.messages.map(apiMessageToUIMessage);
+          // Store timestamps from DB for accurate display
+          for (const msg of data.messages) {
+            if (msg.createdAt) {
+              messageTimestamps.current.set(msg.id, new Date(msg.createdAt));
+            }
+          }
           setMessages(uiMessages);
           setHasUserTyped(true);
+
+          // Detect auto-sent welcome prompt to maintain correct message filtering
+          const firstUserMsg = uiMessages.find((m: { role: string }) => m.role === 'user');
+          if (firstUserMsg) {
+            // Extract text from parts (UIMessage format) or content string
+            const text = firstUserMsg.parts
+              ?.filter((p: { type: string }) => p.type === 'text')
+              .map((p: { type: string; text?: string }) => p.text ?? '')
+              .join('') ?? '';
+            if (/^good (morning|afternoon|evening)/i.test(text)) {
+              autoSentCount.current = 1;
+            }
+          }
         } else {
           setMessages([]);
         }
@@ -403,8 +424,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     if (isLoading) {
       // Step-depth-aware states during streaming
       if (hasBackgroundSpawn) return 'listening';    // handed off to background
-      if (stepDepth >= 5) return 'listening';         // deep exploration
-      if (stepDepth >= 3) return 'listening';         // multi-step retrieval
+      if (stepDepth >= 3) return 'listening';         // multi-step retrieval / deep exploration
       return 'searching';                             // initial steps
     }
     if (isAuthLoading || isLoadingConversation) return 'searching';
@@ -552,7 +572,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       </svg>
 
       {/* CONTEXT BAR - Fixed header */}
-      <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between shadow-2xl">
+      <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] backdrop-blur-md px-4 py-3 flex items-center justify-between shadow-2xl">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-indigo-400 group cursor-pointer">
             <Terminal size={16} className="group-hover:text-indigo-300 transition-colors" />
@@ -564,31 +584,33 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             <>
               <div className="h-4 w-[1px] bg-white/10 mx-1"></div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 overflow-hidden min-w-0">
                 {/* Voyage context chip — click sends message to Voyager */}
                 {currentVoyage ? (
                   <button
                     type="button"
                     onClick={handleVoyageChipClick}
-                    className="px-2 py-1 rounded-sm border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs flex items-center gap-2 cursor-pointer hover:bg-purple-500/20 transition shadow-[0_0_10px_rgba(168,85,247,0.1)]"
+                    className="px-2 py-1 rounded-sm border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs flex items-center gap-2 cursor-pointer hover:bg-purple-500/20 transition shadow-[0_0_10px_rgba(168,85,247,0.1)] min-w-0 shrink-0"
                   >
-                    <Ship size={10} />
-                    <span className="opacity-30 font-semibold">$VOY:</span> {currentVoyage.name.toUpperCase().replace(/\s+/g, '_')}
-                    <span className="opacity-50 text-[10px]">({currentVoyage.role})</span>
+                    <Ship size={10} className="shrink-0" />
+                    <span className="opacity-30 font-semibold shrink-0">$VOY:</span>
+                    <span className="truncate max-w-[120px]">{currentVoyage.name.toUpperCase().replace(/\s+/g, '_')}</span>
+                    <span className="opacity-50 text-[10px] shrink-0">({currentVoyage.role})</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={handleVoyageChipClick}
-                    className="px-2 py-1 rounded-sm border border-slate-700 bg-slate-800/50 text-slate-400 text-xs flex items-center gap-2 cursor-pointer hover:bg-slate-700/50 transition"
+                    className="px-2 py-1 rounded-sm border border-slate-700 bg-slate-800/50 text-slate-400 text-xs flex items-center gap-2 cursor-pointer hover:bg-slate-700/50 transition shrink-0"
                   >
-                    <Ship size={10} />
+                    <Ship size={10} className="shrink-0" />
                     <span className="opacity-30 font-semibold">$VOY:</span> PERSONAL
                   </button>
                 )}
                 {/* Conversation context chip */}
-                <div className="px-2 py-1 rounded-sm border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs flex items-center gap-2 cursor-pointer hover:bg-indigo-500/20 transition shadow-[0_0_10px_rgba(99,102,241,0.1)]">
-                  <span className="opacity-30 font-semibold">$CTX:</span> {conversationTitle || 'NEW_SESSION'}
+                <div className="px-2 py-1 rounded-sm border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs flex items-center gap-2 cursor-pointer hover:bg-indigo-500/20 transition shadow-[0_0_10px_rgba(99,102,241,0.1)] min-w-0">
+                  <span className="opacity-30 font-semibold shrink-0">$CTX:</span>
+                  <span className="truncate">{conversationTitle || 'NEW_SESSION'}</span>
                 </div>
               </div>
             </>
@@ -601,8 +623,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         </div>
       </div>
 
-      {/* THE STREAM — astronaut band + scrollable messages */}
-      <div className={`max-w-2xl mx-auto px-4 pb-48 ${hasUserTyped ? 'pt-[332px]' : 'pt-[52px]'}`}>
+      {/* THE STREAM — astronaut band + scrollable messages
+          Padding: header (52px) + astronaut band (280px) = 332px in conversation mode */}
+      <div className="max-w-2xl mx-auto px-4 pb-48" style={{ paddingTop: hasUserTyped ? '332px' : '52px' }}>
 
         {/* ASTRONAUT BAND — fixed below header in conversation mode.
             Hero state: fills viewport to center astronaut (landing page feel).
@@ -612,7 +635,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           className={`z-40 flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
             !hasUserTyped
               ? 'sticky top-[52px] min-h-[calc(100vh-52px-120px)] justify-center'
-              : 'fixed top-[52px] left-0 right-0 h-[280px] justify-center bg-[#050505]'
+              : 'fixed top-[52px] left-0 right-0 h-[280px] justify-center bg-[#050505] overflow-hidden'
           }`}
         >
           <div className="transition-all duration-700 ease-in-out">
@@ -643,7 +666,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             return true;
           });
         })().map((item, index) => {
-          const timestamp = new Date().toLocaleTimeString('en-US', {
+          // Use stored timestamp from DB, or fall back to current time for new messages
+          const msgDate = messageTimestamps.current.get(item.message.id) ?? new Date();
+          const timestamp = msgDate.toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
@@ -796,7 +821,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       </div>
 
       {/* INPUT DECK */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#050505]/95 backdrop-blur border-t border-white/10 p-4 pb-6">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur border-t border-white/10 p-4 pb-6">
         <div className="max-w-2xl mx-auto">
           {/* Context-Aware Suggestions */}
           {suggestions.length > 0 && (

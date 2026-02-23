@@ -74,8 +74,8 @@ export const AuthProvider = ({ children, initialUser = null }: AuthProviderProps
     // Get initial session
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setUser(toAuthUser(session?.user ?? null));
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(toAuthUser(user));
       } catch (error) {
         console.error('[Auth] Init error:', error);
       } finally {
@@ -142,7 +142,7 @@ export const AuthProvider = ({ children, initialUser = null }: AuthProviderProps
         return { success: false, error: error.message };
       }
 
-      console.log('[Auth] Magic link sent to:', email);
+      console.log('[Auth] Magic link sent');
       return { success: true };
     } catch (error) {
       console.error('[Auth] sendMagicLink error:', error);

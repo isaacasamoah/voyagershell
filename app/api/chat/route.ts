@@ -17,7 +17,7 @@ import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { callGeminiJSON } from '@/lib/gemini/client';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
-import { getAuthenticatedUserId } from '@/lib/auth';
+import { requireAuthResponse } from '@/lib/auth';
 import { getPersonalVoyage } from '@/lib/voyage';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
@@ -25,8 +25,6 @@ import { log } from '@/lib/debug';
 
 export const maxDuration = 30;
 
-// Fallback for development (will be removed once auth is fully tested)
-const DEV_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 // =============================================================================
 // Title Generation
@@ -147,14 +145,16 @@ export const POST = async (req: Request) => {
   }
 
   try {
-    // Get authenticated user ID, fall back to dev user if not authenticated
-    const userId = await getAuthenticatedUserId() ?? DEV_USER_ID;
+    // Require authentication
+    const authResult = await requireAuthResponse();
+    if (authResult instanceof Response) return authResult;
+    const userId = authResult;
 
     const { messages, conversationId, voyageSlug: requestedVoyageSlug, authState } = await req.json();
 
     // Default to personal voyage when no voyage context is provided
     let voyageSlug: string | undefined = requestedVoyageSlug;
-    if (!voyageSlug && userId !== DEV_USER_ID) {
+    if (!voyageSlug) {
       const personalVoyage = await getPersonalVoyage(userId);
       if (personalVoyage) {
         voyageSlug = personalVoyage.slug;

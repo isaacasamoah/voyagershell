@@ -43,7 +43,7 @@ export const sendMagicLink = async (email: string): Promise<AuthResult> => {
       return { success: false, error: error.message };
     }
 
-    console.log('[Auth] Magic link sent to:', email);
+    console.log('[Auth] Magic link sent');
     return { success: true };
   } catch (error) {
     console.error('[Auth] sendMagicLink error:', error);
@@ -136,6 +136,22 @@ export const requireAuth = async (): Promise<string> => {
   const userId = await getAuthenticatedUserId();
   if (!userId) {
     throw new Error('Unauthorized');
+  }
+  return userId;
+};
+
+/**
+ * Require authentication, returning a 401 Response on failure.
+ * Use in route handlers to avoid try/catch boilerplate around requireAuth.
+ * Returns userId string on success, Response on failure.
+ */
+export const requireAuthResponse = async (): Promise<string | Response> => {
+  const userId = await getAuthenticatedUserId();
+  if (!userId) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
+    );
   }
   return userId;
 };

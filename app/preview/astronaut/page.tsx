@@ -2,7 +2,7 @@ import { AstronautState } from '@/components/chat/AstronautState';
 
 export const dynamic = 'force-dynamic'
 
-const states = ['success', 'searching', 'idle', 'error', 'listening', 'celebrating'] as const;
+const states = ['searching', 'idle', 'error', 'listening', 'celebrating'] as const;
 
 export default function AstronautPreviewPage() {
   return (

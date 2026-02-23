@@ -2,15 +2,12 @@
 // GET - List voyage members
 
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUserId } from '@/lib/auth';
+import { requireAuthResponse } from '@/lib/auth';
 import {
   getVoyageBySlug,
   getUserRole,
   getVoyageMembers,
 } from '@/lib/voyage';
-
-// Fallback for development (will be removed once auth is fully tested)
-const DEV_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
@@ -25,8 +22,10 @@ export const GET = async (_req: Request, { params }: RouteParams) => {
   console.log('[Voyage Members API] GET - Listing members for:', slug);
 
   try {
-    // Get authenticated user ID, fall back to dev user if not authenticated
-    const userId = await getAuthenticatedUserId() ?? DEV_USER_ID;
+    // Require authentication
+    const authResult = await requireAuthResponse();
+    if (authResult instanceof Response) return authResult;
+    const userId = authResult;
 
     // Get voyage
     const voyage = await getVoyageBySlug(slug);

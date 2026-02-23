@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Terminal, Activity } from 'lucide-react'
 import { AstronautState } from '@/components/chat'
 import { useAuth } from '@/lib/auth/context'
@@ -39,6 +40,10 @@ const randomIdleMs = () => 20000 + Math.random() * 20000
 
 export const VoyagerLanding = () => {
   const { sendMagicLink } = useAuth()
+  const searchParams = useSearchParams()
+
+  // Auth error from callback (e.g. expired magic link)
+  const authError = searchParams.get('auth_error')
 
   // Welcome line — hidden until LLM responds, fallback after timeout
   const [welcomeLine, setWelcomeLine] = useState<string | null>(null)
@@ -174,7 +179,7 @@ export const VoyagerLanding = () => {
     <div className="min-h-screen bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden relative flex flex-col">
 
       {/* HEADER */}
-      <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505]/95 backdrop-blur-md px-4 py-3 flex items-center justify-between shadow-2xl">
+      <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] backdrop-blur-md px-4 py-3 flex items-center justify-between shadow-2xl">
         <div className="flex items-center gap-2 text-indigo-400">
           <Terminal size={16} />
           <span className="font-bold tracking-wider">VOYAGER_SHELL</span>
@@ -218,15 +223,24 @@ export const VoyagerLanding = () => {
       </div>
 
       {/* INPUT DECK — fixed bottom */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#050505]/95 backdrop-blur border-t border-white/10 p-4 pb-6">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur border-t border-white/10 p-4 pb-6">
         <div className="max-w-2xl mx-auto">
+          {/* Auth error from callback (expired link, exchange failure) */}
+          {authError && emailState !== 'sent' && !email.trim() && (
+            <p className="text-amber-400 text-xs mb-2">
+              {authError === 'expired_link'
+                ? 'Your magic link has expired. Enter your email to get a new one.'
+                : 'Authentication failed. Please try again.'}
+            </p>
+          )}
+
           {emailState === 'sent' ? (
             /* Sent — single line confirmation */
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-green-500">✓</span>
+              <span className="text-green-500">&#10003;</span>
               <span className="text-slate-300">link sent to</span>
               <span className="text-indigo-400">{email}</span>
-              <span className="text-slate-500">— check your inbox</span>
+              <span className="text-slate-500">-- check your inbox</span>
             </div>
           ) : (
             /* Active / Sending / Error — terminal email input */

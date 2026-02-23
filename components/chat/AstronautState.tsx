@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 const ASSETS = {
-  success: "/images/astronaut/success.png",
   searching: "/images/astronaut/searching.png",
   idle: "/images/astronaut/idle.png",
   error: "/images/astronaut/error.png",
@@ -11,7 +10,7 @@ const ASSETS = {
   celebrating: "/images/astronaut/celebrating.png",
 };
 
-type AstronautStateType = 'idle' | 'searching' | 'success' | 'error' | 'listening' | 'celebrating';
+type AstronautStateType = 'idle' | 'searching' | 'error' | 'listening' | 'celebrating';
 
 interface AstronautStateProps {
   state: AstronautStateType;
@@ -29,11 +28,6 @@ const stateConfig = {
     src: ASSETS.searching,
     alt: 'Voyager searching',
     animation: 'animate-float-searching',
-  },
-  success: {
-    src: ASSETS.success,
-    alt: 'Voyager success',
-    animation: 'animate-float-celebrating',
   },
   error: {
     src: ASSETS.error,

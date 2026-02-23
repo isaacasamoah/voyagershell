@@ -17,9 +17,10 @@ import {
   type KnowledgeNode,
   type GrepResult,
 } from '@/lib/knowledge'
-import { getClientForContext } from '@/lib/supabase/authenticated'
+import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
+import { createVoyage, generateSlug, isSlugAvailable, type Voyage } from '@/lib/voyage'
 
 // Resolve short ID (8 chars) to full UUID
 const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<string | null> => {
@@ -28,8 +29,8 @@ const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<s
     return shortOrFullId
   }
 
-  // Otherwise, look up by prefix (scoped to user via RLS)
-  const supabase = getClientForContext({ userId: ctx.userId })
+  // Otherwise, look up by prefix
+  const supabase = getAdminClient()
 
   const { data } = await (supabase as any)
     .from('knowledge_current')
@@ -239,12 +240,12 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
       const sinceDate = parseRelativeDate(since)
       const untilDate = until ? parseRelativeDate(until) : new Date()
 
-      const supabase = getClientForContext({ userId: ctx.userId })
+      const supabase = getAdminClient()
 
       let dbQuery = (supabase as any)
         .from('knowledge_current')
         .select('*')
-        .gte('attention_score', 0)
+        .gte('attention_score', 0.1)
         .gte('source_created_at', sinceDate.toISOString())
         .lte('source_created_at', untilDate.toISOString())
         .order('source_created_at', { ascending: false })
@@ -281,9 +282,21 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
         contextSnippet: (row.context_snippet as string | null) ?? null,
       }))
 
-      // If query provided, could filter semantically here (future enhancement)
-      const header = `Found ${results.length} items from ${sinceDate.toLocaleDateString()} to ${untilDate.toLocaleDateString()}:\n\n`
-      return header + formatKnowledgeResult(results)
+      // Filter by query if provided (case-insensitive content match)
+      let filtered = results
+      if (query) {
+        const lowerQuery = query.toLowerCase()
+        filtered = results.filter((r) => r.content.toLowerCase().includes(lowerQuery))
+      }
+
+      if (filtered.length === 0) {
+        return query
+          ? `No knowledge matching "${query}" found between ${sinceDate.toLocaleDateString()} and ${untilDate.toLocaleDateString()}.`
+          : `No knowledge found between ${sinceDate.toLocaleDateString()} and ${untilDate.toLocaleDateString()}.`
+      }
+
+      const header = `Found ${filtered.length} items from ${sinceDate.toLocaleDateString()} to ${untilDate.toLocaleDateString()}:\n\n`
+      return header + formatKnowledgeResult(filtered)
     },
   }),
 
@@ -391,7 +404,7 @@ export interface ToolRegistration {
 
 /**
  * Creates tools for the primary Voyager agent.
- * All 8 tools: 6 retrieval + spawn_background_agent + ask_captain.
+ * 10 tools: 6 retrieval + spawn_background_agent + ask_captain + create_voyage + sign_out.
  * Returns both the tools object (for AI SDK) and registrations (for strategy composition).
  */
 export const createVoyagerTools = (ctx: ToolContext): {
@@ -400,6 +413,41 @@ export const createVoyagerTools = (ctx: ToolContext): {
 } => {
   const retrieval = createRetrievalTools(ctx)
   const captain = createCaptainTools(ctx)
+
+  // create_voyage — LLM calls this when user wants to create a new voyage
+  const create_voyage = tool({
+    description: `Create a new voyage (community space). The user becomes captain. Returns the voyage details and invite code for sharing. Use when the user says "create a voyage", "start a new voyage", "make a group called X", etc.`,
+    inputSchema: z.object({
+      name: z.string().min(1).max(100).describe('Name for the voyage'),
+      description: z.string().max(500).optional().describe('Optional description'),
+    }),
+    execute: async (input) => {
+      const { name, description } = input
+      const slug = generateSlug(name)
+
+      // Check slug availability
+      const available = await isSlugAvailable(slug)
+      if (!available) {
+        return `A voyage with a similar name already exists (slug: "${slug}"). Try a different name.`
+      }
+
+      const voyage = await createVoyage(
+        { name, slug, description },
+        ctx.userId
+      )
+
+      if (!voyage) {
+        return 'Failed to create voyage. Please try again.'
+      }
+
+      return JSON.stringify({
+        created: true,
+        name: voyage.name,
+        slug: voyage.slug,
+        inviteCode: voyage.inviteCode,
+      })
+    },
+  })
 
   // sign_out — LLM calls this when user wants to leave.
   // Server-side no-op; client detects the tool call and fires signOut().
@@ -451,6 +499,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'ask_captain',
       tool: captain.ask_captain,
       strategyHint: 'Render interactive UI inline. Use for auth, pickers, confirmations.',
+    },
+    {
+      name: 'create_voyage',
+      tool: create_voyage,
+      strategyHint: 'Create a new voyage when user asks. Returns name, slug, invite code.',
     },
     {
       name: 'sign_out',

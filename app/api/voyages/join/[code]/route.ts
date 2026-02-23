@@ -2,15 +2,12 @@
 // POST - Join a voyage using an invite code
 
 import { NextResponse } from 'next/server';
-import { getAuthenticatedUserId } from '@/lib/auth';
+import { requireAuthResponse } from '@/lib/auth';
 import {
   getVoyageByInviteCode,
   joinVoyageByCode,
   getUserRole,
 } from '@/lib/voyage';
-
-// Fallback for development (will be removed once auth is fully tested)
-const DEV_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 interface RouteParams {
   params: Promise<{ code: string }>;
@@ -61,8 +58,10 @@ export const POST = async (_req: Request, { params }: RouteParams) => {
   console.log('[Voyage Join API] POST - Joining with code:', code);
 
   try {
-    // Get authenticated user ID, fall back to dev user if not authenticated
-    const userId = await getAuthenticatedUserId() ?? DEV_USER_ID;
+    // Require authentication
+    const authResult = await requireAuthResponse();
+    if (authResult instanceof Response) return authResult;
+    const userId = authResult;
 
     // Check if voyage exists
     const voyagePreview = await getVoyageByInviteCode(code);

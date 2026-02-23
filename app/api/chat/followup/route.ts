@@ -8,6 +8,7 @@ import { getTaskById } from '@/lib/agents/queue'
 import { loadConversationMessages, saveMessage } from '@/lib/conversation'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
 import { emitMessageEvent } from '@/lib/knowledge'
+import { requireAuthResponse } from '@/lib/auth'
 import { modelRouter } from '@/lib/models'
 import { log } from '@/lib/debug'
 
@@ -17,6 +18,11 @@ export const POST = async (req: Request) => {
   log.api('Followup request received')
 
   try {
+    // Require authentication
+    const authResult = await requireAuthResponse()
+    if (authResult instanceof Response) return authResult
+    const userId = authResult
+
     const { conversationId, taskId } = await req.json()
 
     if (!conversationId || !taskId) {
@@ -40,6 +46,13 @@ export const POST = async (req: Request) => {
       return new Response(
         JSON.stringify({ error: 'Task not complete', message: `Task status is ${task.status}, expected complete` }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (task.userId !== userId) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden', message: 'Task does not belong to this user' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
       )
     }
 

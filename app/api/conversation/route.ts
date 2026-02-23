@@ -7,10 +7,7 @@ import {
   getOrCreateActiveConversation,
   archiveConversation,
 } from '@/lib/conversation'
-import { getAuthenticatedUserId } from '@/lib/auth'
-
-// Fallback for development (will be removed once auth is fully tested)
-const DEV_USER_ID = '00000000-0000-0000-0000-000000000001'
+import { requireAuthResponse } from '@/lib/auth'
 
 /**
  * GET /api/conversation
@@ -25,8 +22,10 @@ export const GET = async (req: Request) => {
   console.log('[Conversation API] GET - Fetching active conversation, voyage:', voyageSlug ?? 'personal')
 
   try {
-    // Get authenticated user ID, fall back to dev user if not authenticated
-    const userId = await getAuthenticatedUserId() ?? DEV_USER_ID
+    // Require authentication
+    const authResult = await requireAuthResponse()
+    if (authResult instanceof Response) return authResult
+    const userId = authResult
     console.log('[Conversation API] User ID:', userId)
 
     const conversation = await getOrCreateActiveConversation(userId, { voyageSlug })
@@ -83,8 +82,10 @@ export const POST = async (req: Request) => {
   console.log('[Conversation API] POST - Creating new conversation')
 
   try {
-    // Get authenticated user ID, fall back to dev user if not authenticated
-    const userId = await getAuthenticatedUserId() ?? DEV_USER_ID
+    // Require authentication
+    const authResult = await requireAuthResponse()
+    if (authResult instanceof Response) return authResult
+    const userId = authResult
 
     // Parse body for voyageSlug (optional)
     let voyageSlug: string | undefined

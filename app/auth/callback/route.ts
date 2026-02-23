@@ -9,7 +9,12 @@ import type { NextRequest } from 'next/server';
 export const GET = async (request: NextRequest) => {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
-  const next = requestUrl.searchParams.get('next') ?? '/auth/complete';
+
+  // Validate next param: must be a relative path, no open redirect
+  const rawNext = requestUrl.searchParams.get('next') ?? '/auth/complete';
+  const next = (rawNext.startsWith('/') && !rawNext.startsWith('//') && !rawNext.includes('://'))
+    ? rawNext
+    : '/auth/complete';
 
   if (code) {
     const supabase = await createClient();
@@ -19,19 +24,21 @@ export const GET = async (request: NextRequest) => {
 
     if (error) {
       console.error('[Auth Callback] Exchange error:', error);
-      // Redirect to home with error indicator
+      // Redirect to home with descriptive error
       return NextResponse.redirect(
-        new URL('/?auth_error=true', requestUrl.origin)
+        new URL('/?auth_error=expired_link', requestUrl.origin)
       );
     }
 
     console.log('[Auth Callback] Session established successfully');
 
-    // Ensure the user has a personal voyage (idempotent — safe for existing users too)
+    // Ensure the user has a personal voyage (awaited — user needs it on first load)
     if (data.user) {
-      ensurePersonalVoyage(data.user.id).catch((err) => {
+      try {
+        await ensurePersonalVoyage(data.user.id);
+      } catch (err) {
         console.error('[Auth Callback] Failed to ensure personal voyage:', err);
-      });
+      }
     }
   }
 

@@ -9,7 +9,8 @@
 //
 // Fire-and-forget — errors are logged, never thrown.
 
-import { generateText, stepCountIs } from 'ai'
+import { generateText, generateObject, stepCountIs } from 'ai'
+import { z } from 'zod'
 import OpenAI from 'openai'
 import { modelRouter } from '@/lib/models/router'
 import { getAdminClient } from '@/lib/supabase/admin'
@@ -68,12 +69,6 @@ const getOpenAI = (): OpenAI => {
 }
 
 const toVectorString = (embedding: number[]): string => `[${embedding.join(',')}]`
-
-// =============================================================================
-// Concurrency Guard (in-memory, serverless-safe best-effort)
-// =============================================================================
-
-const _runningSessions = new Set<string>()
 
 // =============================================================================
 // Enrichment Trigger: Count-Based
@@ -207,6 +202,16 @@ For EACH event, determine:
 
 Output a JSON array. One entry per event. Use the event IDs exactly as provided.`
 
+// Zod schema for structured Stage 1 output
+const stage1Schema = z.object({
+  assessments: z.array(z.object({
+    eventId: z.string(),
+    knowledgeType: z.enum(['domain', 'operational', 'preference']),
+    attentionScore: z.number().min(0).max(1),
+    contextSnippet: z.string(),
+  })),
+})
+
 const runStage1 = async (
   transcript: string,
   events: KnowledgeEventRow[]
@@ -223,44 +228,25 @@ ${transcript}
 ## Knowledge Events to Assess
 ${eventList}
 
-Respond with a JSON array of objects: { "eventId": string, "knowledgeType": "domain"|"operational"|"preference", "attentionScore": number, "contextSnippet": string }`
-
-  const result = await generateText({
-    model: modelRouter.select({ task: 'chat', quality: 'balanced' }),
-    system: STAGE1_PROMPT,
-    messages: [{ role: 'user', content: userPrompt }],
-    maxOutputTokens: 4096,
-  })
-
-  // Parse the JSON from the response
-  const text = result.text.trim()
-  const jsonMatch = text.match(/\[[\s\S]*\]/)
-  if (!jsonMatch) {
-    log.agent('Stage 1 produced no parseable JSON', { text: text.slice(0, 200) }, 'error')
-    return []
-  }
+Assess each event and return structured output.`
 
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as Array<{
-      eventId: string
-      knowledgeType: string
-      attentionScore: number
-      contextSnippet: string
-    }>
+    const { object } = await generateObject({
+      model: modelRouter.select({ task: 'chat', quality: 'balanced' }),
+      system: STAGE1_PROMPT,
+      messages: [{ role: 'user', content: userPrompt }],
+      schema: stage1Schema,
+      maxOutputTokens: 4096,
+    })
 
-    // Validate and clamp
-    return parsed
-      .filter((a) => a.eventId && a.knowledgeType && typeof a.attentionScore === 'number')
-      .map((a) => ({
-        eventId: a.eventId,
-        knowledgeType: (['domain', 'operational', 'preference'].includes(a.knowledgeType)
-          ? a.knowledgeType
-          : 'operational') as KnowledgeType,
-        attentionScore: Math.max(0, Math.min(1, a.attentionScore)),
-        contextSnippet: a.contextSnippet || '',
-      }))
+    return object.assessments.map((a) => ({
+      eventId: a.eventId,
+      knowledgeType: a.knowledgeType as KnowledgeType,
+      attentionScore: a.attentionScore,
+      contextSnippet: a.contextSnippet,
+    }))
   } catch (err) {
-    log.agent('Stage 1 JSON parse failed', { error: String(err) }, 'error')
+    log.agent('Stage 1 structured output failed', { error: String(err) }, 'error')
     return []
   }
 }
@@ -351,19 +337,16 @@ const applyEnrichments = async (
   // Build a content map for re-embedding
   const contentMap = new Map(events.map((e) => [e.event_id, e.content]))
 
-  // Apply Stage 1 enrichments
-  for (const assessment of assessments) {
-    // Update knowledge_type, attention_score, context_snippet
-    await updateKnowledgeEnrichment(assessment.eventId, {
-      knowledgeType: assessment.knowledgeType,
-      attentionScore: assessment.attentionScore,
-      contextSnippet: assessment.contextSnippet || undefined,
-    })
+  // Apply Stage 1 enrichments — atomic per event
+  // Re-embed FIRST (risky), then update metadata only on success
+  let successCount = 0
+  let failCount = 0
 
-    // Re-embed with context_snippet prepended
-    const originalContent = contentMap.get(assessment.eventId)
-    if (originalContent && assessment.contextSnippet) {
-      try {
+  for (const assessment of assessments) {
+    try {
+      // Re-embed with context_snippet prepended (the risky part)
+      const originalContent = contentMap.get(assessment.eventId)
+      if (originalContent && assessment.contextSnippet) {
         const textToEmbed = `${assessment.contextSnippet} ${originalContent}`
         const response = await openai.embeddings.create({
           model: 'text-embedding-3-small',
@@ -375,10 +358,26 @@ const applyEnrichments = async (
           p_event_id: assessment.eventId,
           p_embedding: toVectorString(embedding),
         })
-      } catch (err) {
-        log.agent('Re-embed failed', { eventId: assessment.eventId, error: String(err) }, 'warn')
       }
+
+      // Only update metadata after successful re-embed
+      await updateKnowledgeEnrichment(assessment.eventId, {
+        knowledgeType: assessment.knowledgeType,
+        attentionScore: assessment.attentionScore,
+        contextSnippet: assessment.contextSnippet || undefined,
+      })
+      successCount++
+    } catch (err) {
+      log.agent('Event enrichment failed, will retry next run', {
+        eventId: assessment.eventId,
+        error: String(err),
+      }, 'warn')
+      failCount++
     }
+  }
+
+  if (failCount > 0) {
+    log.agent('Enrichment summary', { successCount, failCount })
   }
 
   // Apply Stage 2 connections
@@ -426,13 +425,6 @@ const applyEnrichments = async (
 export const runCartographer = async (payload: CartographerPayload): Promise<void> => {
   const { sessionId, userId, voyageSlug } = payload
   const startTime = Date.now()
-
-  // Best-effort concurrency guard
-  if (_runningSessions.has(sessionId)) {
-    log.agent('Cartographer already running for session, skipping', { sessionId }, 'debug')
-    return
-  }
-  _runningSessions.add(sessionId)
 
   log.agent('Cartographer triggered', { sessionId, userId })
 
@@ -483,7 +475,5 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
       durationMs: Date.now() - startTime,
     }, 'error')
     // Fire-and-forget: never throw
-  } finally {
-    _runningSessions.delete(sessionId)
   }
 }

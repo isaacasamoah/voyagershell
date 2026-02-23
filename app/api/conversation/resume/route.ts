@@ -7,10 +7,7 @@ import {
   getResumableConversations,
   resumeConversation,
 } from '@/lib/conversation'
-import { getAuthenticatedUserId } from '@/lib/auth'
-
-// Fallback for development (will be removed once auth is fully tested)
-const DEV_USER_ID = '00000000-0000-0000-0000-000000000001'
+import { requireAuthResponse } from '@/lib/auth'
 
 /**
  * GET /api/conversation/resume
@@ -22,8 +19,10 @@ export const GET = async (req: Request) => {
   console.log('[Resume API] GET - Fetching resumable conversations')
 
   try {
-    // Get authenticated user ID, fall back to dev user if not authenticated
-    const userId = await getAuthenticatedUserId() ?? DEV_USER_ID
+    // Require authentication
+    const authResult = await requireAuthResponse()
+    if (authResult instanceof Response) return authResult
+    const userId = authResult
 
     // Parse query params
     const url = new URL(req.url)
@@ -90,8 +89,10 @@ export const POST = async (req: Request) => {
       )
     }
 
-    // Get authenticated user ID, fall back to dev user if not authenticated
-    const userId = await getAuthenticatedUserId() ?? DEV_USER_ID
+    // Require authentication
+    const authResult = await requireAuthResponse()
+    if (authResult instanceof Response) return authResult
+    const userId = authResult
 
     console.log('[Resume API] Resuming conversation:', body.conversationId)
 
