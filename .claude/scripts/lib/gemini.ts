@@ -7,7 +7,7 @@
 import { requireEnv } from "./env";
 
 const GEMINI_MODELS = {
-  flash: "gemini-3-pro-preview",
+  flash: "gemini-3-flash-preview",
   image: "gemini-3-pro-image-preview",
 } as const;
 

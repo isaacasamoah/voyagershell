@@ -52,7 +52,7 @@ const generateTitle = async (conversationId: string): Promise<string | null> => 
       systemPrompt: `You are a title generator. Create a brief, descriptive title (3-6 words) that captures the essence of this conversation. The title should be specific and meaningful, not generic.`,
       userPrompt: `Generate a title for this conversation:\n\n${transcript}`,
       temperature: 0.3,
-      maxTokens: 50,
+      maxTokens: 1024,
     });
 
     return result.title || null;

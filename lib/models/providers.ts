@@ -54,7 +54,7 @@ export const DEFAULT_PROVIDERS: ModelProvider[] = [
       {
         id: 'gemini-flash',
         provider: 'google',
-        modelId: 'gemini-3-pro-preview',
+        modelId: 'gemini-3-flash-preview',
         capabilities: { chat: true, toolUse: true, vision: true, streaming: true },
         costPerMillion: { input: 0.075, output: 0.30 },
         typicalLatencyMs: 300,

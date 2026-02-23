@@ -1,7 +1,7 @@
 // Gemini Flash client for high-volume, low-cost operations
 // Used for: extraction, curation, summarization
 
-const GEMINI_MODEL = 'gemini-3-pro-preview'
+const GEMINI_MODEL = 'gemini-3-flash-preview'
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 
 // Retry configuration
@@ -13,6 +13,7 @@ interface GeminiRequest {
   userPrompt: string
   temperature?: number
   maxTokens?: number
+  responseMimeType?: string
 }
 
 interface GeminiResponse {
@@ -56,6 +57,14 @@ export const callGemini = async (request: GeminiRequest): Promise<GeminiResponse
   }
   parts.push({ text: request.userPrompt })
 
+  const generationConfig: Record<string, unknown> = {
+    temperature: request.temperature ?? 0.3,
+    maxOutputTokens: request.maxTokens ?? 4096,
+  }
+  if (request.responseMimeType) {
+    generationConfig.responseMimeType = request.responseMimeType
+  }
+
   const body = JSON.stringify({
     contents: [
       {
@@ -63,10 +72,7 @@ export const callGemini = async (request: GeminiRequest): Promise<GeminiResponse
         parts,
       },
     ],
-    generationConfig: {
-      temperature: request.temperature ?? 0.3,
-      maxOutputTokens: request.maxTokens ?? 4096,
-    },
+    generationConfig,
   })
 
   let lastError: Error | null = null
@@ -76,6 +82,7 @@ export const callGemini = async (request: GeminiRequest): Promise<GeminiResponse
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
+      signal: AbortSignal.timeout(30000),
     })
 
     if (response.ok) {
@@ -120,27 +127,15 @@ export const callGemini = async (request: GeminiRequest): Promise<GeminiResponse
   throw lastError || new Error('Gemini API failed after retries')
 }
 
-// Convenience wrapper for JSON responses
+// Convenience wrapper for JSON responses — uses responseMimeType to force valid JSON
 export const callGeminiJSON = async <T>(request: GeminiRequest): Promise<T> => {
   const response = await callGemini({
     ...request,
-    userPrompt: `${request.userPrompt}\n\nRespond with valid JSON only. No markdown, no explanation.`,
+    responseMimeType: 'application/json',
   })
 
   try {
-    // Clean potential markdown code blocks
-    let cleaned = response.text.trim()
-    if (cleaned.startsWith('```json')) {
-      cleaned = cleaned.slice(7)
-    }
-    if (cleaned.startsWith('```')) {
-      cleaned = cleaned.slice(3)
-    }
-    if (cleaned.endsWith('```')) {
-      cleaned = cleaned.slice(0, -3)
-    }
-
-    return JSON.parse(cleaned.trim())
+    return JSON.parse(response.text.trim())
   } catch (error) {
     console.error('[Gemini] Failed to parse JSON:', response.text)
     throw new Error('Failed to parse Gemini JSON response')

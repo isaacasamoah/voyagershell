@@ -273,7 +273,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     <div className={`min-h-screen bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden relative ${className || ''}`}>
 
       {/* CONTEXT BAR - Fixed header */}
-      <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] backdrop-blur-md px-4 py-3 flex items-center justify-between shadow-2xl">
+      <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-indigo-400 group cursor-pointer">
             <Terminal size={16} className="group-hover:text-indigo-300 transition-colors" />
