@@ -498,43 +498,6 @@ export const resumeConversation = async (
   }
 }
 
-/**
- * Set a semantic title for a conversation.
- * Typically called after AI generates a title based on conversation content.
- */
-export const setConversationTitle = async (
-  conversationId: string,
-  title: string
-): Promise<boolean> => {
-  const supabase = getAdminSupabase()
-  console.log('[Conversation] Setting title for:', conversationId, 'title:', title)
-
-  try {
-    // Direct update - could use set_session_title RPC for validation
-    // Note: Auth is now wired, but direct update works for this use case
-    
-    const { error } = await (supabase as any)
-      .from('sessions')
-      .update({
-        title,
-        title_generated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', conversationId)
-
-    if (error) {
-      console.error('[Conversation] setConversationTitle error:', error)
-      return false
-    }
-
-    console.log('[Conversation] Title set successfully')
-    return true
-  } catch (error) {
-    console.error('[Conversation] setConversationTitle error:', error)
-    return false
-  }
-}
-
 // =============================================================================
 // Utility Functions
 // =============================================================================
@@ -567,28 +530,4 @@ export const getConversation = async (
   }
 }
 
-/**
- * Check if a conversation needs a title (has enough messages but no title).
- */
-export const needsTitle = async (conversationId: string): Promise<boolean> => {
-  const supabase = getAdminSupabase()
-
-  try {
-    
-    const { data, error } = await (supabase as any)
-      .from('sessions')
-      .select('title, message_count')
-      .eq('id', conversationId)
-      .single()
-
-    if (error || !data) {
-      return false
-    }
-
-    // Conversation needs title if it has 4+ messages and no title
-    return data.title === null && data.message_count >= 4
-  } catch {
-    return false
-  }
-}
 

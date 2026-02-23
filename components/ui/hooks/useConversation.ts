@@ -147,38 +147,41 @@ export const useConversation = ({
     return () => clearTimeout(timer)
   }, [isAuthLoading, isLoadingConversation, isAuthenticated, messages.length, sendMessage, currentVoyage])
 
-  // Show success astronaut briefly when response completes + title sync
+  // Derive title from first real user message (skip auto-sent welcome prompt)
+  const derivedTitle = useMemo(() => {
+    const userMessages = messages.filter((m) => m.role === 'user')
+    const firstReal = userMessages[autoSentCount.current]
+    if (!firstReal) return null
+
+    const text = firstReal.parts
+      ?.filter((p) => p.type === 'text')
+      .map((p) => ('text' in p ? p.text : ''))
+      .join('') ?? ''
+    if (!text) return null
+
+    const words = text.split(/\s+/).slice(0, 6)
+    const title = words.join(' ')
+    return title.length > 40 ? title.slice(0, 40) + '...' : title
+  }, [messages])
+
+  // Title: prefer DB title (loaded on mount), fall back to derived
+  const resolvedTitle = conversationTitle ?? derivedTitle
+
+  // Show success astronaut briefly when response completes
   useEffect(() => {
     const wasStreaming = prevStatusRef.current === 'streaming'
     const nowReady = status === 'ready'
 
     if (wasStreaming && nowReady && messages.length > 0) {
-      // Celebration
       setShowSuccess(true)
       const timer = setTimeout(() => setShowSuccess(false), 2500)
-
-      // Bug fix: $CTX title sync — fetch title after stream completes
-      if (conversationTitle === null && messages.length >= 4) {
-        const voyageSlug = currentVoyage?.slug
-        const url = voyageSlug
-          ? `/api/conversation?voyageSlug=${encodeURIComponent(voyageSlug)}`
-          : '/api/conversation'
-        fetch(url)
-          .then(res => res.ok ? res.json() : null)
-          .then((data: ConversationResponse | null) => {
-            if (data?.conversation.title) {
-              setConversationTitle(data.conversation.title)
-            }
-          })
-          .catch(() => {})  // Silent — title sync is best-effort
-      }
 
       prevStatusRef.current = status
       return () => clearTimeout(timer)
     }
 
     prevStatusRef.current = status
-  }, [status, messages.length, conversationTitle, currentVoyage?.slug])
+  }, [status, messages.length])
 
   // Process queued messages when Voyager finishes responding
   useEffect(() => {
@@ -204,7 +207,7 @@ export const useConversation = ({
 
   return {
     conversationId,
-    conversationTitle,
+    conversationTitle: resolvedTitle,
     isLoadingConversation,
     messages,
     sendMessage: gatedSendMessage,

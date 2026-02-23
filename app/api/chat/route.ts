@@ -3,9 +3,6 @@ import { waitUntil } from '@vercel/functions';
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts';
 import {
   saveMessage,
-  needsTitle,
-  setConversationTitle,
-  loadConversationMessages,
   type ConversationMessage,
 } from '@/lib/conversation';
 import { computeWindow, getTruncatedMessages } from '@/lib/conversation/window';
@@ -14,7 +11,6 @@ import {
   retrieveForContinuity,
 } from '@/lib/conversation/continuity';
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
-import { callGeminiJSON } from '@/lib/gemini/client';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
@@ -24,65 +20,6 @@ import { modelRouter, creditTracker } from '@/lib/models';
 import { log } from '@/lib/debug';
 
 export const maxDuration = 30;
-
-
-// =============================================================================
-// Title Generation
-// =============================================================================
-
-interface TitleResponse {
-  title: string;
-}
-
-/**
- * Generate a semantic title for a conversation using Gemini.
- * Called async after the conversation has enough messages.
- */
-const generateTitle = async (conversationId: string): Promise<string | null> => {
-  try {
-    // Load recent messages for context
-    const messages = await loadConversationMessages(conversationId, 10);
-    if (messages.length < 4) return null;
-
-    const transcript = messages
-      .map((m) => `${m.role}: ${m.content}`)
-      .join('\n\n');
-
-    const result = await callGeminiJSON<TitleResponse>({
-      systemPrompt: `You are a title generator. Create a brief, descriptive title (3-6 words) that captures the essence of this conversation. The title should be specific and meaningful, not generic.`,
-      userPrompt: `Generate a title for this conversation:\n\n${transcript}`,
-      temperature: 0.3,
-      maxTokens: 1024,
-    });
-
-    return result.title || null;
-  } catch (error) {
-    console.error('[Chat] Title generation failed:', error);
-    return null;
-  }
-};
-
-/**
- * Check if title is needed and generate one asynchronously.
- * Fire-and-forget - does not block the response.
- */
-const maybeGenerateTitle = (conversationId: string): void => {
-  // Fire-and-forget - don't await
-  needsTitle(conversationId)
-    .then(async (needs) => {
-      if (needs) {
-        console.log('[Chat] Generating title for conversation:', conversationId);
-        const title = await generateTitle(conversationId);
-        if (title) {
-          await setConversationTitle(conversationId, title);
-          console.log('[Chat] Title set:', title);
-        }
-      }
-    })
-    .catch((error) => {
-      console.error('[Chat] Title check failed:', error);
-    });
-};
 
 
 // Message types for AI SDK v6
@@ -394,9 +331,6 @@ export const POST = async (req: Request) => {
             // Log citations (fire-and-forget)
             // Detects which retrieved nodes were actually used in the response
             logCitations(retrievalEventId, text, retrievedKnowledge);
-
-            // Check if title generation is needed (async, don't wait)
-            maybeGenerateTitle(conversationId);
 
             // Count-based enrichment trigger: check unenriched events for this session
             const shouldEnrich = await shouldRunEnrichment(conversationId);
