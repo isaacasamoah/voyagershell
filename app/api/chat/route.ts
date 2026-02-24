@@ -14,7 +14,6 @@ import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
-import { getPersonalVoyage } from '@/lib/voyage';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
 import { log } from '@/lib/debug';
@@ -89,15 +88,8 @@ export const POST = async (req: Request) => {
 
     const { messages, conversationId, voyageSlug: requestedVoyageSlug, authState } = await req.json();
 
-    // Default to personal voyage when no voyage context is provided
-    let voyageSlug: string | undefined = requestedVoyageSlug;
-    if (!voyageSlug) {
-      const personalVoyage = await getPersonalVoyage(userId);
-      if (personalVoyage) {
-        voyageSlug = personalVoyage.slug;
-        log.voyage('Defaulting to personal voyage', { slug: voyageSlug });
-      }
-    }
+    // No voyage context = personal space (voyage_id NULL is valid)
+    const voyageSlug: string | undefined = requestedVoyageSlug || undefined;
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(

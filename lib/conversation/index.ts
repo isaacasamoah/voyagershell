@@ -135,9 +135,9 @@ export const getOrCreateActiveConversation = async (
       .eq('status', 'active')
 
     if (voyageId) {
-      query = query.eq('community_id', voyageId)
+      query = query.eq('voyage_id', voyageId)
     } else {
-      query = query.is('community_id', null)
+      query = query.is('voyage_id', null)
     }
 
     const { data: existingSession } = await query.single()
@@ -151,7 +151,7 @@ export const getOrCreateActiveConversation = async (
         .insert({
           user_id: userId,
           status: 'active',
-          community_id: voyageId,
+          voyage_id: voyageId,
         })
         .select('*')
         .single()
@@ -356,9 +356,9 @@ export const getResumableConversations = async (
       .limit(limit)
 
     if (voyageId) {
-      query = query.eq('community_id', voyageId)
+      query = query.eq('voyage_id', voyageId)
     } else {
-      query = query.is('community_id', null)
+      query = query.is('voyage_id', null)
     }
 
     const { data, error } = await query

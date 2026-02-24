@@ -18,7 +18,6 @@ export interface Voyage {
   name: string;
   description: string | null;
   isPublic: boolean;
-  isPersonal: boolean;
   inviteCode: string | null;
   config: VoyageConfig | null;
   createdBy: string | null;
@@ -43,7 +42,6 @@ export interface VoyageMembership {
   slug: string;
   name: string;
   role: VoyageRole;
-  isPersonal: boolean;
   joinedAt: Date;
 }
 
@@ -79,7 +77,6 @@ export interface VoyageRow {
   name: string;
   description: string | null;
   is_public: boolean;
-  is_personal: boolean;
   invite_code: string | null;
   settings: Record<string, unknown> | null;
   created_by: string | null;
@@ -102,6 +99,5 @@ export interface UserVoyageRow {
   slug: string;
   name: string;
   role: VoyageRole;
-  is_personal: boolean;
   joined_at: string;
 }

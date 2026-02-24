@@ -57,8 +57,6 @@ export interface SearchOptions {
   classifications?: Classification[]
   /** Filter by voyage slug */
   voyageSlug?: string
-  /** Include quiet (inactive) content. Default: false */
-  includeQuiet?: boolean
   /** Filter by knowledge type: domain | operational | preference */
   knowledgeType?: string
   /** Minimum attention score (0-1). Default: 0.0 */
@@ -74,8 +72,8 @@ interface KnowledgeNodeInput {
   entities?: string[] | null
   topics?: string[] | null
   connected_to?: string[] | null
+  participants?: string[] | null
   similarity?: number
-  importance?: number | null
   knowledge_type?: string | null
   attention_score?: number | null
   context_snippet?: string | null
@@ -112,7 +110,7 @@ const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
   createdAt: new Date(row.source_created_at),
   similarity: row.similarity,
   knowledgeType: row.knowledge_type ?? null,
-  attentionScore: row.attention_score ?? row.importance ?? 0.5,
+  attentionScore: row.attention_score ?? 0.5,
   contextSnippet: row.context_snippet ?? null,
 })
 
@@ -139,7 +137,6 @@ export const searchKnowledge = async (
     limit = 20,
     classifications,
     voyageSlug,
-    includeQuiet = false,
     knowledgeType,
     minAttention = 0.0,
   } = options
@@ -162,7 +159,6 @@ export const searchKnowledge = async (
       query_embedding: toVectorString(embedding),
       p_user_id: userId,
       p_voyage_slug: voyageSlug,
-      p_include_quiet: includeQuiet,
       p_classifications: classifications as string[] | undefined,
       p_match_threshold: threshold,
       p_match_count: limit,
@@ -188,7 +184,7 @@ export const searchKnowledge = async (
     if (results.length > 0 && results.length <= 5) {
       results.forEach((r) =>
         console.log(
-          `  - ${r.content.slice(0, 50)}... (sim: ${r.similarity?.toFixed(3) ?? '-'}, importance: ${r.importance ?? '-'})`
+          `  - ${r.content.slice(0, 50)}... (sim: ${r.similarity?.toFixed(3) ?? '-'}, attn: ${r.attention_score ?? '-'})`
         )
       )
     }
@@ -508,7 +504,7 @@ export const keywordGrep = async (
         connectedTo: row.connected_to ?? [],
         createdAt: new Date(row.source_created_at),
         knowledgeType: row.knowledge_type ?? null,
-        attentionScore: row.attention_score ?? row.importance ?? 0.5,
+        attentionScore: row.attention_score ?? 0.5,
         contextSnippet: row.context_snippet ?? null,
         highlight,
         matchStart,

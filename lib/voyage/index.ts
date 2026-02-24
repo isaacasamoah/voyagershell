@@ -33,7 +33,6 @@ const transformVoyage = (row: VoyageRow): Voyage => ({
   name: row.name,
   description: row.description,
   isPublic: row.is_public,
-  isPersonal: row.is_personal,
   inviteCode: row.invite_code,
   config: row.settings as VoyageConfig | null,
   createdBy: row.created_by,
@@ -57,7 +56,6 @@ const transformMembership = (row: UserVoyageRow): VoyageMembership => ({
   slug: row.slug,
   name: row.name,
   role: row.role,
-  isPersonal: row.is_personal,
   joinedAt: new Date(row.joined_at),
 });
 
@@ -241,84 +239,6 @@ export const getUserVoyages = async (userId: string): Promise<VoyageMembership[]
 };
 
 // =============================================================================
-// PERSONAL VOYAGE
-// =============================================================================
-
-/**
- * Get a user's personal voyage.
- */
-export const getPersonalVoyage = async (userId: string): Promise<Voyage | null> => {
-  const supabase = getAdminSupabase();
-
-  try {
-    const { data, error } = await supabase
-      .from('voyages')
-      .select('*')
-      .eq('is_personal', true)
-      .eq('created_by', userId)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') return null; // No rows
-      log.voyage('getPersonalVoyage error', { error: error.message, userId }, 'error');
-      return null;
-    }
-
-    return transformVoyage(data as VoyageRow);
-  } catch (error) {
-    log.voyage('getPersonalVoyage error', { error: String(error), userId }, 'error');
-    return null;
-  }
-};
-
-/**
- * Ensure a user has a personal voyage. Idempotent — returns existing or creates new.
- * Called on every auth callback to guarantee personal voyage exists.
- */
-export const ensurePersonalVoyage = async (userId: string): Promise<Voyage | null> => {
-  // Check if one already exists
-  const existing = await getPersonalVoyage(userId);
-  if (existing) return existing;
-
-  const supabase = getAdminSupabase();
-  log.voyage('Creating personal voyage', { userId });
-
-  try {
-    // Use a short prefix + first 8 chars of user ID for slug uniqueness
-    const slug = `personal-${userId.slice(0, 8)}`;
-
-    const { data: voyageId, error } = await supabase.rpc(
-      'create_voyage_with_captain',
-      {
-        p_name: 'Personal',
-        p_slug: slug,
-        p_description: '',
-        p_user_id: userId,
-      }
-    );
-
-    if (error) {
-      // Handle race condition: another request may have created it
-      if (error.message?.includes('duplicate') || error.code === '23505') {
-        return getPersonalVoyage(userId);
-      }
-      log.voyage('ensurePersonalVoyage error', { error: error.message, userId }, 'error');
-      return null;
-    }
-
-    if (!voyageId) {
-      log.voyage('No voyage ID returned from create_voyage_with_captain', undefined, 'error');
-      return null;
-    }
-
-    return getVoyageById(voyageId);
-  } catch (error) {
-    log.voyage('ensurePersonalVoyage error', { error: String(error), userId }, 'error');
-    return null;
-  }
-};
-
-// =============================================================================
 // ROLE QUERIES
 // =============================================================================
 
@@ -445,19 +365,12 @@ export const updateMemberRole = async (
 };
 
 /**
- * Delete a voyage. Refuses if the voyage is personal (AC3).
+ * Delete a voyage.
  */
 export const deleteVoyage = async (voyageId: string): Promise<boolean> => {
   const supabase = getAdminSupabase();
 
   try {
-    // Check if personal — personal voyages cannot be deleted
-    const voyage = await getVoyageById(voyageId);
-    if (voyage?.isPersonal) {
-      log.voyage('Cannot delete personal voyage', { voyageId }, 'warn');
-      return false;
-    }
-
     const { error } = await supabase
       .from('voyages')
       .delete()
@@ -476,19 +389,12 @@ export const deleteVoyage = async (voyageId: string): Promise<boolean> => {
 };
 
 /**
- * Leave a voyage (remove own membership). Refuses if the voyage is personal (AC4).
+ * Leave a voyage (remove own membership).
  */
 export const leaveVoyage = async (voyageId: string, userId: string): Promise<boolean> => {
   const supabase = getAdminSupabase();
 
   try {
-    // Check if personal — personal voyage membership cannot be left
-    const voyage = await getVoyageById(voyageId);
-    if (voyage?.isPersonal) {
-      log.voyage('Cannot leave personal voyage', { voyageId, userId }, 'warn');
-      return false;
-    }
-
     const { error } = await supabase
       .from('voyage_members')
       .delete()
