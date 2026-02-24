@@ -211,6 +211,8 @@ const createSourceEvent = async (params: CreateSourceEventParams): Promise<strin
           topics: metadata.topics ?? [],
           session_id: metadata.session_id,
           message_id: metadata.message_id,
+          ...(metadata.addressed_to && { addressed_to: metadata.addressed_to }),
+          ...(metadata.source && { source: metadata.source }),
         },
         source_type: sourceType,
         source_ref: sourceRef as Json | undefined,
@@ -278,6 +280,8 @@ export const createMessageEvent = async (
     voyageSlug?: string
     participants?: string[]
     classifications?: Classification[]
+    addressedTo?: string[]
+    source?: string
   }
 ): Promise<string | null> => {
   console.log('[Knowledge] Creating message event for conversation:', conversationId)
@@ -291,6 +295,8 @@ export const createMessageEvent = async (
     metadata: {
       classifications: options?.classifications ?? [],
       session_id: conversationId,
+      addressed_to: options?.addressedTo,
+      source: options?.source,
     },
     sourceType: 'conversation',
     sourceRef: {
@@ -396,6 +402,8 @@ export const emitMessageEvent = (
     voyageSlug?: string
     participants?: string[]
     classifications?: Classification[]
+    addressedTo?: string[]
+    source?: string
   }
 ): void => {
   // Fire and forget — don't await

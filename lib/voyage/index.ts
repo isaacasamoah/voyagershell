@@ -45,6 +45,7 @@ const transformMember = (row: VoyageMemberRow & { profiles?: { email?: string; d
   voyageId: row.voyage_id,
   userId: row.user_id,
   role: row.role,
+  nickname: row.nickname ?? undefined,
   notificationsEnabled: row.notifications_enabled,
   joinedAt: new Date(row.joined_at),
   email: row.profiles?.email,

@@ -30,6 +30,7 @@ export interface VoyageMember {
   voyageId: string;
   userId: string;
   role: VoyageRole;
+  nickname?: string;
   notificationsEnabled: boolean;
   joinedAt: Date;
   // Joined profile info
@@ -89,6 +90,7 @@ export interface VoyageMemberRow {
   voyage_id: string;
   user_id: string;
   role: VoyageRole;
+  nickname: string | null;
   notifications_enabled: boolean;
   settings: Record<string, unknown> | null;
   joined_at: string;

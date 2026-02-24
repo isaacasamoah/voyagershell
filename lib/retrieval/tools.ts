@@ -21,7 +21,8 @@ import {
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
-import { createVoyage, generateSlug, isSlugAvailable, type Voyage } from '@/lib/voyage'
+import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers } from '@/lib/voyage'
+import { createMessageEvent } from '@/lib/knowledge/events'
 
 // Resolve short ID (8 chars) to full UUID
 const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<string | null> => {
@@ -405,7 +406,7 @@ export interface ToolRegistration {
 
 /**
  * Creates tools for the primary Voyager agent.
- * 10 tools: 6 retrieval + spawn_background_agent + ask_captain + create_voyage + sign_out.
+ * 11 tools: 6 retrieval + spawn_background_agent + ask_captain + create_voyage + sign_out + resolve_mention.
  * Returns both the tools object (for AI SDK) and registrations (for strategy composition).
  */
 export const createVoyagerTools = (ctx: ToolContext): {
@@ -460,6 +461,114 @@ export const createVoyagerTools = (ctx: ToolContext): {
     execute: async (_input) => ({ status: 'signing_out' }),
   })
 
+  // resolve_mention — LLM calls this for @mentions or NL routing ("tell tom", "ask sarah")
+  const resolve_mention = tool({
+    description: `Resolve @mentions or natural language message routing within the current voyage. Looks up voyage members by name and creates a participant-scoped knowledge event delivering the message. Covers both @name syntax ("@tom fix is ready") and natural language ("tell tom the fix is ready", "ask sarah about the pricing deck", "message tom about X"). Call this whenever someone is addressed or a message needs routing to specific people.`,
+    inputSchema: z.object({
+      names: z.array(z.string()).min(1).describe('Names to resolve (from @mentions or natural language, e.g. ["tom"] or ["tom", "sarah"])'),
+      message: z.string().describe('The message content to deliver'),
+    }),
+    execute: async (input) => {
+      const { names, message } = input
+
+      // AC 7, 19: Requires voyage context
+      if (!ctx.voyageSlug) {
+        return 'Messaging requires a shared voyage. You\'re in personal space — to send messages, switch to a voyage first.'
+      }
+
+      // Look up voyage ID from slug
+      const voyage = await getVoyageBySlug(ctx.voyageSlug)
+      if (!voyage) {
+        return 'Could not find the current voyage.'
+      }
+
+      // Get all members with profiles
+      const members = await getVoyageMembers(voyage.id)
+
+      // Resolve each name
+      const resolved: Array<{ userId: string; displayName: string }> = []
+      const ambiguous: Array<{ name: string; matches: Array<{ userId: string; displayName: string; email?: string }> }> = []
+      const notFound: string[] = []
+
+      for (const name of names) {
+        const lower = name.toLowerCase()
+
+        // AC 3: Check display_name first (case-insensitive), then nickname
+        const matches = members.filter((m) => {
+          const dn = m.displayName?.toLowerCase() ?? ''
+          const nn = m.nickname?.toLowerCase() ?? ''
+          // display_name: exact, starts-with, or any name part matches
+          if (dn === lower || dn.startsWith(lower + ' ') || dn.split(' ').some(part => part === lower)) return true
+          // nickname: exact match fallback
+          if (nn && nn === lower) return true
+          return false
+        })
+
+        if (matches.length === 1) {
+          // AC 17: Self-mention check
+          if (matches[0].userId === ctx.userId) {
+            return `That's you! No need to send a message to yourself.`
+          }
+          resolved.push({ userId: matches[0].userId, displayName: matches[0].displayName ?? matches[0].email ?? 'unknown' })
+        } else if (matches.length > 1) {
+          // AC 5: Multiple matches → disambiguation
+          ambiguous.push({
+            name,
+            matches: matches.map((m) => ({
+              userId: m.userId,
+              displayName: m.displayName ?? 'unknown',
+              email: m.email,
+            })),
+          })
+        } else {
+          // AC 6, 18: No match
+          notFound.push(name)
+        }
+      }
+
+      // AC 5: Return ambiguous for ask_captain disambiguation
+      if (ambiguous.length > 0) {
+        const detail = ambiguous.map((a) =>
+          `"${a.name}" matches: ${a.matches.map((m) => `${m.displayName} (${m.email ?? 'no email'})`).join(', ')}`
+        ).join('; ')
+        return `Multiple people match: ${detail}. Which one did you mean?`
+      }
+
+      // AC 6, 18: Not found
+      if (notFound.length > 0) {
+        const names_str = notFound.length === 1
+          ? notFound[0]
+          : notFound.slice(0, -1).join(', ') + ' or ' + notFound[notFound.length - 1]
+        return `I don't see anyone called ${names_str} in this voyage.`
+      }
+
+      // AC 8, 9, 10: Create knowledge event with participants
+      const mentionedIds = resolved.map((r) => r.userId)
+      const allParticipants = [ctx.userId, ...mentionedIds]
+
+      await createMessageEvent(
+        ctx.conversationId ?? 'mention',
+        'user',
+        message,
+        {
+          userId: ctx.userId,
+          voyageSlug: ctx.voyageSlug,
+          participants: allParticipants,
+          addressedTo: mentionedIds,
+          source: 'mention',
+        }
+      )
+
+      // Return structured result for LLM to acknowledge naturally (AC 11)
+      const recipientNames = resolved.map((r) => r.displayName)
+      return JSON.stringify({
+        status: 'sent',
+        recipients: recipientNames,
+        message: message,
+      })
+    },
+  })
+
   const registrations: ToolRegistration[] = [
     {
       name: 'semantic_search',
@@ -510,6 +619,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'sign_out',
       tool: sign_out,
       strategyHint: 'Sign the user out. Call after saying goodbye.',
+    },
+    {
+      name: 'resolve_mention',
+      tool: resolve_mention,
+      strategyHint: 'Route messages to voyage members via @mention or natural language. Creates participant-scoped knowledge events.',
     },
   ]
 
