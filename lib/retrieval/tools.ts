@@ -32,7 +32,7 @@ const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<s
   // Otherwise, look up by prefix
   const supabase = getAdminClient()
 
-  const { data } = await (supabase as any)
+  const { data } = await supabase
     .from('knowledge_current')
     .select('event_id')
     .ilike('event_id', `${shortOrFullId}%`)
@@ -242,7 +242,7 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
 
       const supabase = getAdminClient()
 
-      let dbQuery = (supabase as any)
+      let dbQuery = supabase
         .from('knowledge_current')
         .select('*')
         .gte('attention_score', 0.1)

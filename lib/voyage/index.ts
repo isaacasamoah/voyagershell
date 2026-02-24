@@ -78,12 +78,12 @@ export const createVoyage = async (
   try {
     // Use the database function that creates voyage + adds captain
 
-    const { data: voyageId, error: createError } = await (supabase as any).rpc(
+    const { data: voyageId, error: createError } = await supabase.rpc(
       'create_voyage_with_captain',
       {
         p_name: input.name,
         p_slug: input.slug,
-        p_description: input.description || null,
+        p_description: input.description || '',
         p_user_id: userId,
       }
     );
@@ -114,7 +114,7 @@ export const getVoyageById = async (voyageId: string): Promise<Voyage | null> =>
 
   try {
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('voyages')
       .select('*')
       .eq('id', voyageId)
@@ -141,7 +141,7 @@ export const getVoyageBySlug = async (slug: string): Promise<Voyage | null> => {
 
   try {
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('voyages')
       .select('*')
       .eq('slug', slug)
@@ -188,7 +188,7 @@ export const updateVoyage = async (
     }
 
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('voyages')
       .update(updates)
       .eq('id', voyageId)
@@ -220,7 +220,7 @@ export const getUserVoyages = async (userId: string): Promise<VoyageMembership[]
 
   try {
 
-    const { data, error } = await (supabase as any).rpc('get_user_voyages', {
+    const { data, error } = await supabase.rpc('get_user_voyages', {
       p_user_id: userId,
     });
 
@@ -251,7 +251,7 @@ export const getPersonalVoyage = async (userId: string): Promise<Voyage | null> 
   const supabase = getAdminSupabase();
 
   try {
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('voyages')
       .select('*')
       .eq('is_personal', true)
@@ -287,11 +287,13 @@ export const ensurePersonalVoyage = async (userId: string): Promise<Voyage | nul
     // Use a short prefix + first 8 chars of user ID for slug uniqueness
     const slug = `personal-${userId.slice(0, 8)}`;
 
-    const { data: voyageId, error } = await (supabase as any).rpc(
-      'create_personal_voyage',
+    const { data: voyageId, error } = await supabase.rpc(
+      'create_voyage_with_captain',
       {
-        p_user_id: userId,
+        p_name: 'Personal',
         p_slug: slug,
+        p_description: '',
+        p_user_id: userId,
       }
     );
 
@@ -305,7 +307,7 @@ export const ensurePersonalVoyage = async (userId: string): Promise<Voyage | nul
     }
 
     if (!voyageId) {
-      log.voyage('No voyage ID returned from create_personal_voyage', undefined, 'error');
+      log.voyage('No voyage ID returned from create_voyage_with_captain', undefined, 'error');
       return null;
     }
 
@@ -331,7 +333,7 @@ export const getUserRole = async (
 
   try {
 
-    const { data, error } = await (supabase as any).rpc('get_voyage_role', {
+    const { data, error } = await supabase.rpc('get_voyage_role', {
       p_voyage_slug: voyageSlug,
       p_user_id: userId,
     });
@@ -356,7 +358,7 @@ export const isCaptain = async (voyageSlug: string, userId: string): Promise<boo
 
   try {
 
-    const { data, error } = await (supabase as any).rpc('is_voyage_captain', {
+    const { data, error } = await supabase.rpc('is_voyage_captain', {
       p_voyage_slug: voyageSlug,
       p_user_id: userId,
     });
@@ -386,7 +388,7 @@ export const getVoyageMembers = async (voyageId: string): Promise<VoyageMember[]
 
   try {
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('voyage_members')
       .select(`
         *,
@@ -424,7 +426,7 @@ export const updateMemberRole = async (
 
   try {
 
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('voyage_members')
       .update({ role: newRole })
       .eq('voyage_id', voyageId)
@@ -456,7 +458,7 @@ export const deleteVoyage = async (voyageId: string): Promise<boolean> => {
       return false;
     }
 
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('voyages')
       .delete()
       .eq('id', voyageId);
@@ -487,7 +489,7 @@ export const leaveVoyage = async (voyageId: string, userId: string): Promise<boo
       return false;
     }
 
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('voyage_members')
       .delete()
       .eq('voyage_id', voyageId)
@@ -522,7 +524,7 @@ export const joinVoyageByCode = async (
   try {
     // Use the database function
 
-    const { data: voyageId, error } = await (supabase as any).rpc('join_voyage_by_code', {
+    const { data: voyageId, error } = await supabase.rpc('join_voyage_by_code', {
       p_invite_code: inviteCode,
       p_user_id: userId,
     });
@@ -554,7 +556,7 @@ export const getVoyageByInviteCode = async (inviteCode: string): Promise<Voyage 
 
   try {
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('voyages')
       .select('*')
       .eq('invite_code', inviteCode)
@@ -587,7 +589,7 @@ export const regenerateInviteCode = async (
 
   try {
 
-    const { data, error } = await (supabase as any).rpc('regenerate_voyage_invite', {
+    const { data, error } = await supabase.rpc('regenerate_voyage_invite', {
       p_voyage_id: voyageId,
       p_user_id: userId,
     });

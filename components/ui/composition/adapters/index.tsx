@@ -34,7 +34,6 @@ export const adapters: Record<ComponentType, AnyAdapter> = {
   confirmation: ConfirmationAdapter as unknown as AnyAdapter,
   action_buttons: ActionButtonsAdapter as unknown as AnyAdapter,
   progress: ProgressAdapter as unknown as AnyAdapter,
-  auth_prompt: () => <NotImplementedAdapter type="auth_prompt" />,
   email_input: EmailInputAdapter as unknown as AnyAdapter,
 }
 

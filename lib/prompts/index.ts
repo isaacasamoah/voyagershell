@@ -46,7 +46,9 @@ import type { KnowledgeItem, RetrievedContext } from './types';
 // PROMPT COMPOSITION — Main entry point for chat routes
 // ============================================================================
 
-export interface UserProfile {
+// Chat route user profile — simplified shape from auth context.
+// Mapped to the canonical UserProfile from ./types in composeSystemPrompt().
+export interface ChatUserProfile {
   id: string;
   displayName?: string;
   personalization?: {
@@ -58,7 +60,7 @@ export interface UserProfile {
 export type AuthState = 'unauthenticated' | 'authenticated' | 'just-authenticated';
 
 interface ComposeOptions {
-  profile?: UserProfile;
+  profile?: ChatUserProfile;
   voyageSlug?: string;
   continuityContext?: string | null;  // Retrieved context from conversation history
   authState?: AuthState;

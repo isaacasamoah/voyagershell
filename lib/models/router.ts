@@ -1,9 +1,9 @@
 // Model Router
 // Abstracts model selection based on task requirements
 //
-// Note: Google models use custom client (lib/gemini/client.ts) not AI SDK.
+// Note: Google models use custom Gemini client, not AI SDK.
 // This router only returns AI SDK LanguageModel for Anthropic.
-// For Google, use selectConfig() + callGemini() directly.
+// For Google, use selectConfig() + the appropriate Gemini integration.
 
 import { anthropic } from '@ai-sdk/anthropic'
 import type { LanguageModel } from 'ai'

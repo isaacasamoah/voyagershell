@@ -65,21 +65,20 @@ export interface SearchOptions {
   minAttention?: number
 }
 
-// RPC result type (matching search_knowledge function in schema)
-// NOTE: RPC still returns is_active, is_pinned, importance columns (data preservation)
-// but we no longer read them — attention_score is the single canonical field.
-interface SearchKnowledgeResult {
+// Input type for transformKnowledgeNode — works with both RPC results and direct table rows.
+interface KnowledgeNodeInput {
   event_id: string
   content: string
-  classifications: string[]
-  entities: string[]
-  topics: string[]
-  connected_to: string[]
   source_created_at: string
-  similarity: number
-  knowledge_type: string | null
-  attention_score: number
-  context_snippet: string | null
+  classifications?: string[] | null
+  entities?: string[] | null
+  topics?: string[] | null
+  connected_to?: string[] | null
+  similarity?: number
+  importance?: number | null
+  knowledge_type?: string | null
+  attention_score?: number | null
+  context_snippet?: string | null
 }
 
 // =============================================================================
@@ -103,7 +102,7 @@ const toVectorString = (embedding: number[]): string => {
 // Transform Functions
 // =============================================================================
 
-const transformKnowledgeNode = (row: SearchKnowledgeResult): KnowledgeNode => ({
+const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
   eventId: row.event_id,
   content: row.content,
   classifications: row.classifications ?? [],
@@ -113,7 +112,7 @@ const transformKnowledgeNode = (row: SearchKnowledgeResult): KnowledgeNode => ({
   createdAt: new Date(row.source_created_at),
   similarity: row.similarity,
   knowledgeType: row.knowledge_type ?? null,
-  attentionScore: row.attention_score ?? 0.5,
+  attentionScore: row.attention_score ?? row.importance ?? 0.5,
   contextSnippet: row.context_snippet ?? null,
 })
 
@@ -155,21 +154,16 @@ export const searchKnowledge = async (
     // Generate embedding for the query
     const embedding = await generateEmbedding(query)
 
-    // Handle NULL knowledge_type: when filtering for 'operational', include NULL rows
-    // by not passing the filter (RPC treats NULL p_knowledge_type as "no filter").
-    // The RPC WHERE clause uses: (p_knowledge_type IS NULL OR kc.knowledge_type = p_knowledge_type)
-    // So for 'operational' we need special handling — pass NULL to include unclassified rows,
-    // then filter client-side. For other types, pass directly.
-    const rpcKnowledgeType = knowledgeType === 'operational' ? null : (knowledgeType ?? null)
-
     // Call the RPC function for semantic search
+    // 'operational' type filter is client-side (includes null knowledge_type rows)
+    const rpcKnowledgeType = (knowledgeType && knowledgeType !== 'operational') ? knowledgeType : undefined
 
-    const { data, error } = await (supabase as any).rpc('search_knowledge', {
+    const { data, error } = await supabase.rpc('search_knowledge', {
       query_embedding: toVectorString(embedding),
       p_user_id: userId,
-      p_voyage_slug: voyageSlug ?? null,
+      p_voyage_slug: voyageSlug,
       p_include_quiet: includeQuiet,
-      p_classifications: classifications ?? null,
+      p_classifications: classifications as string[] | undefined,
       p_match_threshold: threshold,
       p_match_count: limit,
       p_knowledge_type: rpcKnowledgeType,
@@ -181,10 +175,9 @@ export const searchKnowledge = async (
       return []
     }
 
-    let results = (data as SearchKnowledgeResult[] | null) ?? []
+    let results = ((data ?? []) as KnowledgeNodeInput[])
 
-    // Client-side filter for 'operational': include NULL and 'operational' types,
-    // exclude 'domain' and 'preference' that slipped through (RPC had no type filter)
+    // Client-side filter for 'operational' — includes unclassified (null) rows
     if (knowledgeType === 'operational') {
       results = results.filter(
         (r) => r.knowledge_type === null || r.knowledge_type === 'operational'
@@ -195,7 +188,7 @@ export const searchKnowledge = async (
     if (results.length > 0 && results.length <= 5) {
       results.forEach((r) =>
         console.log(
-          `  - ${r.content.slice(0, 50)}... (sim: ${r.similarity.toFixed(3)}, attention: ${r.attention_score})`
+          `  - ${r.content.slice(0, 50)}... (sim: ${r.similarity?.toFixed(3) ?? '-'}, importance: ${r.importance ?? '-'})`
         )
       )
     }
@@ -218,7 +211,7 @@ export const getKnowledgeByIds = async (eventIds: string[]): Promise<KnowledgeNo
     const supabase = getAdminSupabase()
 
     
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('knowledge_current')
       .select('*')
       .in('event_id', eventIds)
@@ -228,11 +221,11 @@ export const getKnowledgeByIds = async (eventIds: string[]): Promise<KnowledgeNo
       return []
     }
 
-    return (data ?? []).map((row: SearchKnowledgeResult) =>
+    return (data ?? []).map((row) =>
       transformKnowledgeNode({
         ...row,
-        similarity: 1.0, // Not from search, so similarity is 1
-      })
+        similarity: 1.0,
+      } as KnowledgeNodeInput)
     )
   } catch (error) {
     console.error('[Knowledge] getKnowledgeByIds error:', error)
@@ -250,7 +243,7 @@ export const getConnectedKnowledge = async (eventId: string): Promise<KnowledgeN
 
     // Get the node to find its connections
     
-    const { data: node, error: nodeError } = await (supabase as any)
+    const { data: node, error: nodeError } = await supabase
       .from('knowledge_current')
       .select('connected_to')
       .eq('event_id', eventId)
@@ -286,7 +279,7 @@ export const getRecentKnowledge = async (
     const supabase = getClientForUser(userId)
 
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('knowledge_current')
       .select('*')
       .eq('user_id', userId)
@@ -299,11 +292,11 @@ export const getRecentKnowledge = async (
       return []
     }
 
-    return (data ?? []).map((row: SearchKnowledgeResult) =>
+    return (data ?? []).map((row) =>
       transformKnowledgeNode({
         ...row,
         similarity: 1.0,
-      })
+      } as KnowledgeNodeInput)
     )
   } catch (error) {
     console.error('[Knowledge] getRecentKnowledge error:', error)
@@ -322,7 +315,7 @@ export const getPinnedKnowledge = async (
   try {
     const supabase = getClientForUser(userId)
 
-    let query = (supabase as any)
+    let query = supabase
       .from('knowledge_current')
       .select('*')
       .gte('attention_score', 0.9)
@@ -340,11 +333,11 @@ export const getPinnedKnowledge = async (
       return []
     }
 
-    return (data ?? []).map((row: SearchKnowledgeResult) =>
+    return (data ?? []).map((row) =>
       transformKnowledgeNode({
         ...row,
         similarity: 1.0,
-      })
+      } as KnowledgeNodeInput)
     )
   } catch (error) {
     console.error('[Knowledge] getPinnedKnowledge error:', error)
@@ -459,7 +452,7 @@ export const keywordGrep = async (
     const searchPattern = `%${pattern}%`
 
 
-    let query = (supabase as any)
+    let query = supabase
       .from('knowledge_current')
       .select('*')
       .filter('content', operator, searchPattern)
@@ -488,7 +481,7 @@ export const keywordGrep = async (
       return []
     }
 
-    const results = (data ?? []) as SearchKnowledgeResult[]
+    const results = (data ?? []) as KnowledgeNodeInput[]
 
     console.log(`[Knowledge] Grep found ${results.length} matches`)
 
@@ -515,7 +508,7 @@ export const keywordGrep = async (
         connectedTo: row.connected_to ?? [],
         createdAt: new Date(row.source_created_at),
         knowledgeType: row.knowledge_type ?? null,
-        attentionScore: row.attention_score ?? 0.5,
+        attentionScore: row.attention_score ?? row.importance ?? 0.5,
         contextSnippet: row.context_snippet ?? null,
         highlight,
         matchStart,
@@ -547,7 +540,7 @@ export const loadPreferences = async (
   try {
     const supabase = getAdminSupabase()
 
-    let query = (supabase as any)
+    let query = supabase
       .from('knowledge_current')
       .select('*')
       .eq('knowledge_type', 'preference')
@@ -567,11 +560,11 @@ export const loadPreferences = async (
       return []
     }
 
-    return (data ?? []).map((row: SearchKnowledgeResult) =>
+    return (data ?? []).map((row) =>
       transformKnowledgeNode({
         ...row,
         similarity: 1.0,
-      })
+      } as KnowledgeNodeInput)
     )
   } catch (error) {
     console.error('[Knowledge] loadPreferences error:', error)

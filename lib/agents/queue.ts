@@ -3,6 +3,7 @@
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getClientForContext } from '@/lib/supabase/authenticated'
+import type { Json } from '@/lib/supabase/types'
 
 // =============================================================================
 // Types
@@ -57,18 +58,17 @@ export async function enqueueAgentTask(params: EnqueueParams): Promise<string> {
   // Use authenticated client - user is creating their own task
   const supabase = getClientForContext({ userId: params.userId })
 
-  // Note: Using type assertion until we regenerate Supabase types
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('agent_tasks')
     .insert({
       task: params.task,
-      code: params.code,
+      code: params.code ?? '',
       priority: params.priority ?? 'normal',
       user_id: params.userId,
       voyage_slug: params.voyageSlug,
       conversation_id: params.conversationId,
       original_query: params.originalQuery ?? null,
-      conversation_snapshot: params.conversationSnapshot ?? null,
+      conversation_snapshot: (params.conversationSnapshot as Json) ?? null,
       status: 'pending',
     })
     .select('id')
@@ -103,11 +103,11 @@ export async function updateTaskProgress(
 ): Promise<void> {
   const supabase = getAdminClient()
 
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('agent_tasks')
     .update({
       status: 'running',
-      progress,
+      progress: progress as unknown as Json,
       updated_at: new Date().toISOString(),
     })
     .eq('id', taskId)
@@ -130,13 +130,12 @@ export async function completeTask(
 ): Promise<void> {
   const supabase = getAdminClient()
 
-  // Note: Using type assertion until we regenerate Supabase types
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('agent_tasks')
     .update({
       status: 'complete',
       completed_at: new Date().toISOString(),
-      result,
+      result: result as unknown as Json,
       duration_ms: durationMs,
     })
     .eq('id', taskId)
@@ -165,8 +164,7 @@ export async function completeTask(
 export async function failTask(taskId: string, errorMessage: string): Promise<void> {
   const supabase = getAdminClient()
 
-  // Note: Using type assertion until we regenerate Supabase types
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('agent_tasks')
     .update({
       status: 'failed',
@@ -190,7 +188,7 @@ export async function failTask(taskId: string, errorMessage: string): Promise<vo
 export async function getTaskById(taskId: string): Promise<AgentTask | null> {
   const supabase = getAdminClient()
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('agent_tasks')
     .select('*')
     .eq('id', taskId)
@@ -210,7 +208,7 @@ export async function getTaskById(taskId: string): Promise<AgentTask | null> {
     voyageSlug: data.voyage_slug as string | undefined,
     conversationId: data.conversation_id as string,
     status: data.status as AgentTask['status'],
-    result: data.result as RetrievalResult | undefined,
+    result: data.result as unknown as RetrievalResult | undefined,
     error: data.error as string | undefined,
     durationMs: data.duration_ms as number | undefined,
     createdAt: new Date(data.created_at as string),

@@ -90,7 +90,7 @@ export const logRetrievalEvent = async (
     const supabase = getAdminClient();
 
     
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('retrieval_events')
       .insert({
         user_id: input.userId,
@@ -132,7 +132,7 @@ export const updateRetrievalCitations = async (
     const supabase = getAdminClient();
 
     
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('retrieval_events')
       .update({
         nodes_cited: citedIds,

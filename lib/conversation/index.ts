@@ -72,18 +72,18 @@ const transformSession = (row: ExtendedSession): Conversation => ({
   userId: row.user_id,
   title: row.title,
   status: row.status,
-  messageCount: row.message_count,
-  lastMessageAt: new Date(row.last_message_at),
-  createdAt: new Date(row.created_at),
-  updatedAt: new Date(row.updated_at),
+  messageCount: row.message_count ?? 0,
+  lastMessageAt: new Date(row.last_message_at ?? row.created_at ?? Date.now()),
+  createdAt: new Date(row.created_at ?? Date.now()),
+  updatedAt: new Date(row.updated_at ?? Date.now()),
 })
 
 const transformMessage = (row: Message): ConversationMessage => ({
   id: row.id,
   conversationId: row.session_id ?? '',
-  role: row.role,
+  role: row.role as MessageRole,
   content: row.content,
-  createdAt: new Date(row.created_at),
+  createdAt: new Date(row.created_at ?? Date.now()),
 })
 
 const transformResumable = (row: ResumableSession): ResumableConversation => ({
@@ -128,7 +128,7 @@ export const getOrCreateActiveConversation = async (
     // Look for existing active session (scoped to voyage if specified)
     // Fetch full row directly to avoid redundant query
     
-    let query = (supabase as any)
+    let query = supabase
       .from('sessions')
       .select('*')
       .eq('user_id', userId)
@@ -146,7 +146,7 @@ export const getOrCreateActiveConversation = async (
     // Create new session if none exists
     if (!session) {
       
-      const { data: newSession, error: createError } = await (supabase as any)
+      const { data: newSession, error: createError } = await supabase
         .from('sessions')
         .insert({
           user_id: userId,
@@ -173,7 +173,7 @@ export const getOrCreateActiveConversation = async (
 
     // Fetch messages for this session
     
-    const { data: messages, error: messagesError } = await (supabase as any)
+    const { data: messages, error: messagesError } = await supabase
       .from('messages')
       .select('*')
       .eq('session_id', session.id)
@@ -216,7 +216,7 @@ export const loadConversationMessages = async (
 
   try {
     
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('messages')
       .select('*')
       .eq('session_id', conversationId)
@@ -252,7 +252,7 @@ export const saveMessage = async (
 
   try {
     
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('messages')
       .insert({
         session_id: conversationId,
@@ -292,7 +292,7 @@ export const archiveConversation = async (
     // Direct update - could use transition_session RPC for atomicity
     // Note: Auth is now wired, but direct update works for this use case
     
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('sessions')
       .update({
         status: 'historical' as SessionStatus,
@@ -338,7 +338,7 @@ export const getResumableConversations = async (
 
     // Query sessions directly with voyage filtering
     
-    let query = (supabase as any)
+    let query = supabase
       .from('sessions')
       .select(`
         id,
@@ -420,7 +420,7 @@ export const resumeConversation = async (
 
     // First, check the target conversation exists and belongs to user
     
-    const { data: targetSession, error: targetError } = await (supabase as any)
+    const { data: targetSession, error: targetError } = await supabase
       .from('sessions')
       .select('*')
       .eq('id', conversationId)
@@ -452,7 +452,7 @@ export const resumeConversation = async (
 
     // Archive current active session (if any)
     
-    await (supabase as any)
+    await supabase
       .from('sessions')
       .update({
         status: 'historical' as SessionStatus,
@@ -463,7 +463,7 @@ export const resumeConversation = async (
 
     // Make target session active
     
-    const { error: activateError } = await (supabase as any)
+    const { error: activateError } = await supabase
       .from('sessions')
       .update({
         status: 'active' as SessionStatus,
@@ -478,7 +478,7 @@ export const resumeConversation = async (
 
     // Fetch updated session and messages
     
-    const { data: updatedSession } = await (supabase as any)
+    const { data: updatedSession } = await supabase
       .from('sessions')
       .select('*')
       .eq('id', conversationId)
@@ -512,7 +512,7 @@ export const getConversation = async (
 
   try {
     
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('sessions')
       .select('*')
       .eq('id', conversationId)

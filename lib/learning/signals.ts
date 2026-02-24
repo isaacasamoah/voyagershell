@@ -90,7 +90,7 @@ export const recordSignal = async (signal: LearningSignal): Promise<void> => {
 
     // Note: learning_signals table created in migration 017
     // Type cast needed until Supabase types are regenerated
-    await (supabase as any).from('learning_signals').insert({
+    await supabase.from('learning_signals').insert({
       type: signal.type,
       conversation_id: signal.conversationId,
       message_id: signal.messageId,
@@ -145,7 +145,7 @@ export const getSignalStats = async (
 
   // Note: learning_signals table created in migration 017
   // Type cast needed until Supabase types are regenerated
-  let query = (supabase as any)
+  let query = supabase
     .from('learning_signals')
     .select('type')
     .gte('created_at', since.toISOString())

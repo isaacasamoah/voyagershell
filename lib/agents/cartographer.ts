@@ -81,7 +81,7 @@ const toVectorString = (embedding: number[]): string => `[${embedding.join(',')}
 export const shouldRunEnrichment = async (sessionId: string): Promise<boolean> => {
   const supabase = getAdminClient()
 
-  const { count, error } = await (supabase as any)
+  const { count, error } = await supabase
     .from('knowledge_current')
     .select('*', { count: 'exact', head: true })
     .eq('session_id', sessionId)
@@ -105,7 +105,7 @@ export const shouldRunEnrichment = async (sessionId: string): Promise<boolean> =
 const loadUnenrichedEvents = async (sessionId: string): Promise<KnowledgeEventRow[]> => {
   const supabase = getAdminClient()
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('knowledge_current')
     .select('event_id, content, source_created_at')
     .eq('session_id', sessionId)
@@ -354,7 +354,7 @@ const applyEnrichments = async (
         })
         const embedding = response.data[0].embedding
 
-        await (supabase as any).rpc('update_knowledge_embedding', {
+        await supabase.rpc('update_knowledge_embedding', {
           p_event_id: assessment.eventId,
           p_embedding: toVectorString(embedding),
         })
@@ -384,7 +384,7 @@ const applyEnrichments = async (
   for (const conn of connections) {
     try {
       // Get current connected_to for the source event
-      const { data: sourceRow } = await (supabase as any)
+      const { data: sourceRow } = await supabase
         .from('knowledge_current')
         .select('connected_to')
         .eq('event_id', conn.fromEventId)
@@ -392,14 +392,14 @@ const applyEnrichments = async (
 
       const currentConnections = (sourceRow?.connected_to as string[]) ?? []
       if (!currentConnections.includes(conn.toEventId)) {
-        await (supabase as any)
+        await supabase
           .from('knowledge_current')
           .update({ connected_to: [...currentConnections, conn.toEventId] })
           .eq('event_id', conn.fromEventId)
       }
 
       // Bidirectional: update the target too
-      const { data: targetRow } = await (supabase as any)
+      const { data: targetRow } = await supabase
         .from('knowledge_current')
         .select('connected_to')
         .eq('event_id', conn.toEventId)
@@ -407,7 +407,7 @@ const applyEnrichments = async (
 
       const targetConnections = (targetRow?.connected_to as string[]) ?? []
       if (!targetConnections.includes(conn.fromEventId)) {
-        await (supabase as any)
+        await supabase
           .from('knowledge_current')
           .update({ connected_to: [...targetConnections, conn.fromEventId] })
           .eq('event_id', conn.toEventId)

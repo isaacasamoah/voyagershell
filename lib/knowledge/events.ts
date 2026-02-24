@@ -8,7 +8,7 @@
 
 import OpenAI from 'openai'
 import { getAdminClient } from '@/lib/supabase/admin'
-import type { MessageRole } from '@/lib/supabase/types'
+import type { MessageRole, Json } from '@/lib/supabase/types'
 
 // Admin client for event creation (internal operations, often without user context)
 // User-scoped operations use authenticated client in search.ts
@@ -101,7 +101,7 @@ const autoLinkByEntities = async (
 
   // Find existing events with overlapping entities (not this event)
   
-  let query = (supabase as any)
+  let query = supabase
     .from('knowledge_current')
     .select('event_id, entities')
     .neq('event_id', newEventId)
@@ -127,7 +127,7 @@ const autoLinkByEntities = async (
 
   // Update the new event's connected_to
   
-  await (supabase as any)
+  await supabase
     .from('knowledge_current')
     .update({ connected_to: relatedIds })
     .eq('event_id', newEventId)
@@ -135,7 +135,7 @@ const autoLinkByEntities = async (
   // Update related events to include this new event (bidirectional)
   for (const relatedId of relatedIds) {
     
-    const { data: existing } = await (supabase as any)
+    const { data: existing } = await supabase
       .from('knowledge_current')
       .select('connected_to')
       .eq('event_id', relatedId)
@@ -144,7 +144,7 @@ const autoLinkByEntities = async (
     const currentConnections = (existing?.connected_to as string[]) ?? []
     if (!currentConnections.includes(newEventId)) {
       
-      await (supabase as any)
+      await supabase
         .from('knowledge_current')
         .update({ connected_to: [...currentConnections, newEventId] })
         .eq('event_id', relatedId)
@@ -194,7 +194,7 @@ const createSourceEvent = async (params: CreateSourceEventParams): Promise<strin
     // Insert the source event
     // The trigger creates knowledge_current row with the content
     
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('knowledge_events')
       .insert({
         event_type: eventType,
@@ -209,7 +209,7 @@ const createSourceEvent = async (params: CreateSourceEventParams): Promise<strin
           message_id: metadata.message_id,
         },
         source_type: sourceType,
-        source_ref: sourceRef,
+        source_ref: sourceRef as Json | undefined,
         actor_id: actorId,
         actor_type: actorType,
       })
@@ -230,7 +230,7 @@ const createSourceEvent = async (params: CreateSourceEventParams): Promise<strin
       const embedding = await generateEmbedding(content)
 
       
-      await (supabase as any).rpc('update_knowledge_embedding', {
+      await supabase.rpc('update_knowledge_embedding', {
         p_event_id: eventId,
         p_embedding: toVectorString(embedding),
       })
@@ -355,7 +355,7 @@ export const updateKnowledgeEnrichment = async (
       update.context_snippet = params.contextSnippet
     }
 
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from('knowledge_current')
       .update(update)
       .eq('event_id', eventId)

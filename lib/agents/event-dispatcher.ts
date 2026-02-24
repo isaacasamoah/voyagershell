@@ -16,10 +16,6 @@ import { log } from '@/lib/debug/logger'
 
 export type VoyagerEvent =
   | {
-      type: 'conversation.ended'
-      payload: { conversationId: string; userId: string; voyageSlug?: string }
-    }
-  | {
       type: 'background.completed'
       payload: { taskId: string; conversationId: string; userId: string }
     }
@@ -89,9 +85,6 @@ export const dispatcher = createEventDispatcher()
 // =============================================================================
 // Handler Registration (module-level, fires on first import)
 // =============================================================================
-
-// Note: Cartographer is no longer triggered by conversation.ended.
-// It fires via count-based check in the chat route's onFinish handler.
 
 dispatcher.on('background.completed', (payload) => {
   log.agent('Background task completed', payload as Record<string, unknown>)
