@@ -14,6 +14,7 @@ import {
   keywordGrep,
   getConnectedKnowledge,
   getKnowledgeByIds,
+  buildScopeFilter,
   type KnowledgeNode,
   type GrepResult,
 } from '@/lib/knowledge'
@@ -214,7 +215,7 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
       if (!fullId) {
         return `No node found matching ID "${nodeId}"`
       }
-      const results = await getConnectedKnowledge(fullId)
+      const results = await getConnectedKnowledge(fullId, ctx.userId)
       if (results.length === 0) {
         return `Node ${nodeId} has no connections yet.`
       }
@@ -227,7 +228,7 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
     inputSchema: getNodesSchema,
     execute: async (input) => {
       const { nodeIds } = input
-      const results = await getKnowledgeByIds(nodeIds)
+      const results = await getKnowledgeByIds(nodeIds, ctx.userId)
       return formatKnowledgeResult(results)
     },
   }),
@@ -251,11 +252,11 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
         .order('source_created_at', { ascending: false })
         .limit(Math.min(limit, 30))
 
-      // Scope to user/voyage
+      // Two-layer scope: personal (voyage_slug NULL) + voyage (participant-filtered)
       if (ctx.voyageSlug) {
-        dbQuery = dbQuery.or(`user_id.eq.${ctx.userId},voyage_slug.eq.${ctx.voyageSlug}`)
+        dbQuery = dbQuery.or(buildScopeFilter(ctx.userId, ctx.voyageSlug))
       } else {
-        dbQuery = dbQuery.eq('user_id', ctx.userId)
+        dbQuery = dbQuery.eq('user_id', ctx.userId).is('voyage_slug', null)
       }
 
       const { data, error } = await dbQuery

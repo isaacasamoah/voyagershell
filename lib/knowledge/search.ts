@@ -115,6 +115,20 @@ const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
 })
 
 // =============================================================================
+// Scope Filters (PostgREST two-layer pattern)
+// =============================================================================
+
+/**
+ * Build a PostgREST .or() filter for two-layer knowledge scoping:
+ *   Layer 1: Personal (user_id match, voyage_slug NULL)
+ *   Layer 2: Voyage (voyage_slug match, participant-filtered)
+ *
+ * Used by all direct-query functions to prevent cross-voyage bleed.
+ */
+export const buildScopeFilter = (userId: string, voyageSlug: string): string =>
+  `and(user_id.eq.${userId},voyage_slug.is.null),and(voyage_slug.eq.${voyageSlug},or(participants.is.null,participants.cs.{${userId}}))`
+
+// =============================================================================
 // Search Functions
 // =============================================================================
 
@@ -164,6 +178,7 @@ export const searchKnowledge = async (
       p_match_count: limit,
       p_knowledge_type: rpcKnowledgeType,
       p_min_attention: minAttention,
+      p_participants: [userId],
     })
 
     if (error) {
@@ -199,18 +214,25 @@ export const searchKnowledge = async (
 /**
  * Get knowledge by specific event IDs.
  * Useful for following graph edges or getting context for specific nodes.
+ * When userId is provided, filters out participant-scoped nodes the user can't access.
  */
-export const getKnowledgeByIds = async (eventIds: string[]): Promise<KnowledgeNode[]> => {
+export const getKnowledgeByIds = async (eventIds: string[], userId?: string): Promise<KnowledgeNode[]> => {
   if (eventIds.length === 0) return []
 
   try {
     const supabase = getAdminSupabase()
 
-    
-    const { data, error } = await supabase
+    let query = supabase
       .from('knowledge_current')
       .select('*')
       .in('event_id', eventIds)
+
+    // Participant filter: only return nodes the user can access
+    if (userId) {
+      query = query.or(`participants.is.null,participants.cs.{${userId}}`)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error('[Knowledge] getKnowledgeByIds error:', error)
@@ -232,13 +254,13 @@ export const getKnowledgeByIds = async (eventIds: string[]): Promise<KnowledgeNo
 /**
  * Get connected knowledge (follow graph edges).
  * Retrieves nodes connected to a given node.
+ * When userId is provided, filters out participant-scoped nodes the user can't access.
  */
-export const getConnectedKnowledge = async (eventId: string): Promise<KnowledgeNode[]> => {
+export const getConnectedKnowledge = async (eventId: string, userId?: string): Promise<KnowledgeNode[]> => {
   try {
     const supabase = getAdminSupabase()
 
     // Get the node to find its connections
-    
     const { data: node, error: nodeError } = await supabase
       .from('knowledge_current')
       .select('connected_to')
@@ -255,7 +277,7 @@ export const getConnectedKnowledge = async (eventId: string): Promise<KnowledgeN
       return []
     }
 
-    return getKnowledgeByIds(connectedIds)
+    return getKnowledgeByIds(connectedIds, userId)
   } catch (error) {
     console.error('[Knowledge] getConnectedKnowledge error:', error)
     return []
@@ -265,21 +287,29 @@ export const getConnectedKnowledge = async (eventId: string): Promise<KnowledgeN
 /**
  * Get recent knowledge for a user.
  * Returns recently created knowledge nodes.
+ * Two-layer: personal (voyage_slug NULL) + voyage (participant-filtered).
  */
 export const getRecentKnowledge = async (
   userId: string,
   limit = 20,
-  minAttention = 0.3
+  minAttention = 0.3,
+  voyageSlug?: string
 ): Promise<KnowledgeNode[]> => {
   try {
     const supabase = getClientForUser(userId)
 
-
-    const { data, error } = await supabase
+    let query = supabase
       .from('knowledge_current')
       .select('*')
-      .eq('user_id', userId)
       .gte('attention_score', minAttention)
+
+    if (voyageSlug) {
+      query = query.or(buildScopeFilter(userId, voyageSlug))
+    } else {
+      query = query.eq('user_id', userId).is('voyage_slug', null)
+    }
+
+    const { data, error } = await query
       .order('source_created_at', { ascending: false })
       .limit(limit)
 
@@ -303,6 +333,7 @@ export const getRecentKnowledge = async (
 /**
  * Get pinned knowledge for a user/voyage.
  * Pinned items are always surfaced.
+ * Two-layer: personal (voyage_slug NULL) + voyage (participant-filtered).
  */
 export const getPinnedKnowledge = async (
   userId: string,
@@ -317,7 +348,7 @@ export const getPinnedKnowledge = async (
       .gte('attention_score', 0.9)
 
     if (voyageSlug) {
-      query = query.eq('voyage_slug', voyageSlug)
+      query = query.or(buildScopeFilter(userId, voyageSlug))
     } else {
       query = query.eq('user_id', userId).is('voyage_slug', null)
     }
@@ -391,7 +422,7 @@ export const formatKnowledgeForPrompt = (nodes: KnowledgeNode[]): string => {
 
 export interface GrepOptions {
   /** Search scope. Default: 'all' */
-  scope?: 'personal' | 'community' | 'all'
+  scope?: 'personal' | 'voyage' | 'all'
   /** Case sensitive match. Default: false */
   caseSensitive?: boolean
   /** Maximum results. Default: 20 */
@@ -454,17 +485,17 @@ export const keywordGrep = async (
       .filter('content', operator, searchPattern)
       .gte('attention_score', minAttention)
 
-    // Apply scope filters
+    // Apply scope filters with participant filtering
     if (scope === 'personal') {
       query = query.eq('user_id', userId).is('voyage_slug', null)
-    } else if (scope === 'community' && voyageSlug) {
+    } else if (scope === 'voyage' && voyageSlug) {
+      // Voyage only — participant-filtered, no personal layer
       query = query.eq('voyage_slug', voyageSlug)
+        .or(`participants.is.null,participants.cs.{${userId}}`)
     } else if (voyageSlug) {
-      // 'all' with voyage context: include both personal and voyage
-      query = query.or(`user_id.eq.${userId},voyage_slug.eq.${voyageSlug}`)
+      query = query.or(buildScopeFilter(userId, voyageSlug))
     } else {
-      // 'all' without voyage: just personal
-      query = query.eq('user_id', userId)
+      query = query.eq('user_id', userId).is('voyage_slug', null)
     }
 
     const { data, error } = await query
@@ -543,9 +574,9 @@ export const loadPreferences = async (
       .gte('attention_score', 0.5)
 
     if (voyageSlug) {
-      query = query.or(`user_id.eq.${userId},voyage_slug.eq.${voyageSlug}`)
+      query = query.or(buildScopeFilter(userId, voyageSlug))
     } else {
-      query = query.eq('user_id', userId)
+      query = query.eq('user_id', userId).is('voyage_slug', null)
     }
 
     const { data, error } = await query

@@ -59,6 +59,8 @@ export interface SourceEventMetadata {
   topics?: string[]
   session_id?: string
   message_id?: string
+  addressed_to?: string[]  // V3 messaging: target user IDs
+  source?: string          // V3 messaging: originating channel/context
 }
 
 // =============================================================================
@@ -161,6 +163,7 @@ interface CreateSourceEventParams {
   content: string
   userId?: string
   voyageSlug?: string
+  participants?: string[]  // NULL = public within voyage, array = scoped to listed users
   metadata?: SourceEventMetadata
   sourceType?: SourceType
   sourceRef?: Record<string, unknown>
@@ -181,6 +184,7 @@ const createSourceEvent = async (params: CreateSourceEventParams): Promise<strin
     content,
     userId,
     voyageSlug,
+    participants,
     metadata = {},
     sourceType = 'conversation',
     sourceRef,
@@ -192,8 +196,7 @@ const createSourceEvent = async (params: CreateSourceEventParams): Promise<strin
     const supabase = getAdminSupabase()
 
     // Insert the source event
-    // The trigger creates knowledge_current row with the content
-    
+    // The trigger creates knowledge_current row with the content + propagates participants
     const { data, error } = await supabase
       .from('knowledge_events')
       .insert({
@@ -201,6 +204,7 @@ const createSourceEvent = async (params: CreateSourceEventParams): Promise<strin
         content: content,
         user_id: userId,
         voyage_slug: voyageSlug,
+        participants: participants ?? null,
         metadata: {
           classifications: metadata.classifications ?? [],
           entities: metadata.entities ?? [],
@@ -272,6 +276,7 @@ export const createMessageEvent = async (
   options?: {
     userId?: string
     voyageSlug?: string
+    participants?: string[]
     classifications?: Classification[]
   }
 ): Promise<string | null> => {
@@ -282,6 +287,7 @@ export const createMessageEvent = async (
     content: content,
     userId: options?.userId,
     voyageSlug: options?.voyageSlug,
+    participants: options?.participants,
     metadata: {
       classifications: options?.classifications ?? [],
       session_id: conversationId,
@@ -388,6 +394,7 @@ export const emitMessageEvent = (
   options?: {
     userId?: string
     voyageSlug?: string
+    participants?: string[]
     classifications?: Classification[]
   }
 ): void => {
