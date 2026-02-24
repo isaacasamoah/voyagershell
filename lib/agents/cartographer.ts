@@ -207,7 +207,7 @@ const stage1Schema = z.object({
   assessments: z.array(z.object({
     eventId: z.string(),
     knowledgeType: z.enum(['domain', 'operational', 'preference']),
-    attentionScore: z.number().min(0).max(1),
+    attentionScore: z.number().describe('0.0 to 1.0'),
     contextSnippet: z.string(),
   })),
 })
