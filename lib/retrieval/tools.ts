@@ -391,6 +391,27 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
 })
 
 // =============================================================================
+// Message Retrieval (V6: Structural Query)
+// =============================================================================
+
+const getMessagesSchema = z.object({
+  channel: z.string().optional().describe('Channel name to query (e.g. "design"). Omit for direct mentions.'),
+  since: z.string().optional().describe('ISO timestamp or relative date (e.g. "yesterday", "2 hours ago"). Default: last 24 hours.'),
+})
+
+// Relative time formatting for message display
+const formatTimeAgo = (date: Date): string => {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+// =============================================================================
 // Tool Registration (for composable strategy)
 // =============================================================================
 
@@ -406,7 +427,7 @@ export interface ToolRegistration {
 
 /**
  * Creates tools for the primary Voyager agent.
- * 11 tools: 6 retrieval + spawn_background_agent + ask_captain + create_voyage + sign_out + resolve_mention.
+ * 12 tools: 6 retrieval + spawn_background_agent + ask_captain + create_voyage + sign_out + resolve_mention + get_messages.
  * Returns both the tools object (for AI SDK) and registrations (for strategy composition).
  */
 export const createVoyagerTools = (ctx: ToolContext): {
@@ -459,6 +480,71 @@ export const createVoyagerTools = (ctx: ToolContext): {
       farewell: z.string().describe('Your brief farewell message to the user'),
     }),
     execute: async (_input) => ({ status: 'signing_out' }),
+  })
+
+  // get_messages — V6: structural retrieval for messages (D15)
+  const get_messages = tool({
+    description: `Check messages in the current voyage. Default: shows messages where you were specifically mentioned (@you). With channel param: shows activity in that channel. Covers: "do I have messages?", "what's been sent to me?", "check my messages", "anything I missed?", "what happened in #channel?"`,
+    inputSchema: getMessagesSchema,
+    execute: async (input) => {
+      const { channel, since } = input
+
+      // AC 28: Requires voyage context
+      if (!ctx.voyageSlug) {
+        return 'Messages live in voyages. You\'re in personal space — switch to a voyage to check messages.'
+      }
+
+      const sinceDate = since
+        ? parseRelativeDate(since)
+        : new Date(Date.now() - 24 * 60 * 60 * 1000) // Default: last 24 hours
+
+      const supabase = getAdminClient()
+
+      let query = supabase
+        .from('knowledge_current')
+        .select('event_id, content, source_created_at, sender_display_name, sender_user_id, addressed_to, participants')
+        .eq('event_type', 'message')                    // AC 23
+        .eq('voyage_slug', ctx.voyageSlug)
+        .gte('source_created_at', sinceDate.toISOString())
+        .order('source_created_at', { ascending: false })
+        .limit(20)                                       // AC 26
+
+      if (channel) {
+        // AC 21: Channel mode — filter by source metadata + visibility gate
+        // Channel support activates when V4 ships (resolve_channel writes source: 'channel:{name}')
+        query = query.or(`participants.is.null,participants.cs.{${ctx.userId}}`)
+      } else {
+        // AC 20: Default mode — direct mentions only (attention gate)
+        query = query.contains('addressed_to', [ctx.userId])
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        console.error('[get_messages] Query error:', error)
+        return 'Error checking messages.'
+      }
+
+      // AC 22: exclude own messages
+      const filtered = (data ?? []).filter((row) => row.sender_user_id !== ctx.userId)
+
+      if (filtered.length === 0) {
+        // AC 27: Empty state
+        return channel
+          ? `Nothing new in #${channel}.`
+          : 'No one has mentioned you recently.'
+      }
+
+      // AC 25: Format with sender attribution
+      const formatted = filtered.map((row) => {
+        const sender = row.sender_display_name ?? 'Someone'
+        const time = formatTimeAgo(new Date(row.source_created_at))
+        const preview = row.content.slice(0, 100)
+        return `${sender} (${time}): ${preview}`
+      })
+
+      return formatted.join('\n\n')
+    },
   })
 
   // resolve_mention — LLM calls this for @mentions or NL routing ("tell tom", "ask sarah")
@@ -546,6 +632,16 @@ export const createVoyagerTools = (ctx: ToolContext): {
       const mentionedIds = resolved.map((r) => r.userId)
       const allParticipants = [ctx.userId, ...mentionedIds]
 
+      // V6 AC 11: Sender attribution from already-loaded members array
+      const senderMember = members.find((m) => m.userId === ctx.userId)
+      const senderDisplayName = senderMember?.displayName ?? senderMember?.email ?? 'Unknown'
+      const recipientNames = resolved.map((r) => r.displayName)
+
+      // V6 AC 13: Rich context snippet for semantic search
+      const recipientStr = recipientNames.join(', ')
+      const contentPreview = message.slice(0, 60)
+      const contextSnippet = `${senderDisplayName} to ${recipientStr}: ${contentPreview}`
+
       await createMessageEvent(
         ctx.conversationId ?? 'mention',
         'user',
@@ -556,11 +652,13 @@ export const createVoyagerTools = (ctx: ToolContext): {
           participants: allParticipants,
           addressedTo: mentionedIds,
           source: 'mention',
+          // V6: sender attribution + inline classification
+          senderDisplayName,
+          senderUserId: ctx.userId,
+          attentionScore: 0.85,    // D17: direct mention = high attention
+          contextSnippet,
         }
       )
-
-      // Return structured result for LLM to acknowledge naturally (AC 11)
-      const recipientNames = resolved.map((r) => r.displayName)
       return JSON.stringify({
         status: 'sent',
         recipients: recipientNames,
@@ -624,6 +722,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'resolve_mention',
       tool: resolve_mention,
       strategyHint: 'Route messages to voyage members via @mention or natural language. Creates participant-scoped knowledge events.',
+    },
+    {
+      name: 'get_messages',
+      tool: get_messages,
+      strategyHint: 'Structural message retrieval. Default: direct mentions. With channel: channel activity. "Do I have messages?"',
     },
   ]
 

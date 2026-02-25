@@ -46,6 +46,10 @@ export interface KnowledgeNode {
   knowledgeType: string | null   // domain | operational | preference (NULL = treat as operational)
   attentionScore: number         // 0.0-1.0 continuous (single canonical attention field)
   contextSnippet: string | null  // One-line contextualisation for re-embedding
+  // V6: Message attribution + type (denormalized columns on knowledge_current)
+  senderDisplayName?: string     // Human-readable sender name
+  senderUserId?: string          // Sender UUID
+  eventType?: string             // Container: message | document | slack_message | etc.
 }
 
 export interface SearchOptions {
@@ -77,6 +81,10 @@ interface KnowledgeNodeInput {
   knowledge_type?: string | null
   attention_score?: number | null
   context_snippet?: string | null
+  // V6: denormalized columns
+  sender_display_name?: string | null
+  sender_user_id?: string | null
+  event_type?: string | null
 }
 
 // =============================================================================
@@ -112,6 +120,10 @@ const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
   knowledgeType: row.knowledge_type ?? null,
   attentionScore: row.attention_score ?? 0.5,
   contextSnippet: row.context_snippet ?? null,
+  // V6: message attribution from denormalized columns
+  senderDisplayName: row.sender_display_name ?? undefined,
+  senderUserId: row.sender_user_id ?? undefined,
+  eventType: row.event_type ?? undefined,
 })
 
 // =============================================================================

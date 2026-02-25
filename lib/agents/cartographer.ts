@@ -86,6 +86,7 @@ export const shouldRunEnrichment = async (sessionId: string): Promise<boolean> =
     .select('*', { count: 'exact', head: true })
     .eq('session_id', sessionId)
     .is('knowledge_type', null)
+    .neq('event_type', 'message')  // D23: messages skip Cartographer — classified at write time
 
   if (error) {
     log.agent('Enrichment count check failed', { sessionId, error: error.message }, 'warn')
@@ -110,6 +111,7 @@ const loadUnenrichedEvents = async (sessionId: string): Promise<KnowledgeEventRo
     .select('event_id, content, source_created_at')
     .eq('session_id', sessionId)
     .is('knowledge_type', null)
+    .neq('event_type', 'message')  // D23: messages skip Cartographer — classified at write time
     .order('source_created_at', { ascending: true })
 
   if (error) {

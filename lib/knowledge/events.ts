@@ -61,6 +61,8 @@ export interface SourceEventMetadata {
   message_id?: string
   addressed_to?: string[]  // V3 messaging: target user IDs
   source?: string          // V3 messaging: originating channel/context
+  sender_display_name?: string  // V6: human-readable sender name
+  sender_user_id?: string       // V6: sender UUID for attribution
 }
 
 // =============================================================================
@@ -206,13 +208,10 @@ const createSourceEvent = async (params: CreateSourceEventParams): Promise<strin
         voyage_slug: voyageSlug,
         participants: participants ?? null,
         metadata: {
-          classifications: metadata.classifications ?? [],
+          ...metadata,                                  // pass through all fields
+          classifications: metadata.classifications ?? [],  // override with defaults
           entities: metadata.entities ?? [],
           topics: metadata.topics ?? [],
-          session_id: metadata.session_id,
-          message_id: metadata.message_id,
-          ...(metadata.addressed_to && { addressed_to: metadata.addressed_to }),
-          ...(metadata.source && { source: metadata.source }),
         },
         source_type: sourceType,
         source_ref: sourceRef as Json | undefined,
@@ -282,11 +281,16 @@ export const createMessageEvent = async (
     classifications?: Classification[]
     addressedTo?: string[]
     source?: string
+    // V6: inline classification + sender attribution
+    senderDisplayName?: string
+    senderUserId?: string
+    attentionScore?: number
+    contextSnippet?: string
   }
 ): Promise<string | null> => {
   console.log('[Knowledge] Creating message event for conversation:', conversationId)
 
-  return createSourceEvent({
+  const eventId = await createSourceEvent({
     eventType: 'message',
     content: content,
     userId: options?.userId,
@@ -297,6 +301,8 @@ export const createMessageEvent = async (
       session_id: conversationId,
       addressed_to: options?.addressedTo,
       source: options?.source,
+      sender_display_name: options?.senderDisplayName,
+      sender_user_id: options?.senderUserId,
     },
     sourceType: 'conversation',
     sourceRef: {
@@ -305,6 +311,22 @@ export const createMessageEvent = async (
     },
     actorType: role === 'user' ? 'user' : 'voyager',
   })
+
+  // V6: Post-INSERT enrichment for attention_score + context_snippet
+  // Same dual-write pattern as embeddings: INSERT (trigger) then UPDATE (enrichment)
+  if (eventId && options?.attentionScore !== undefined) {
+    try {
+      await updateKnowledgeEnrichment(eventId, {
+        attentionScore: options.attentionScore,
+        contextSnippet: options.contextSnippet,
+        // knowledgeType intentionally omitted — messages leave it NULL (D23)
+      })
+    } catch (enrichError) {
+      console.error('[Knowledge] Message enrichment failed (non-blocking):', enrichError)
+    }
+  }
+
+  return eventId
 }
 
 /**
@@ -341,7 +363,7 @@ export const createExplicitEvent = async (
 export type KnowledgeType = 'domain' | 'operational' | 'preference'
 
 interface KnowledgeEnrichmentParams {
-  knowledgeType: KnowledgeType
+  knowledgeType?: KnowledgeType  // Optional: messages leave NULL (D23 — Cartographer skips via event_type filter)
   attentionScore: number
   contextSnippet?: string
 }
@@ -358,9 +380,13 @@ export const updateKnowledgeEnrichment = async (
     const supabase = getAdminSupabase()
 
     const update: Record<string, unknown> = {
-      knowledge_type: params.knowledgeType,
       attention_score: params.attentionScore,
       updated_at: new Date().toISOString(),
+    }
+
+    // Only set knowledge_type when provided (messages leave it NULL — D23)
+    if (params.knowledgeType) {
+      update.knowledge_type = params.knowledgeType
     }
 
     if (params.contextSnippet) {
@@ -404,6 +430,10 @@ export const emitMessageEvent = (
     classifications?: Classification[]
     addressedTo?: string[]
     source?: string
+    senderDisplayName?: string
+    senderUserId?: string
+    attentionScore?: number
+    contextSnippet?: string
   }
 ): void => {
   // Fire and forget — don't await

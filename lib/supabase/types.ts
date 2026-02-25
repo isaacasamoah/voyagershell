@@ -87,6 +87,7 @@ export type Database = {
       }
       knowledge_current: {
         Row: {
+          addressed_to: string[] | null
           attention_score: number | null
           classifications: string[] | null
           connected_to: string[] | null
@@ -95,8 +96,11 @@ export type Database = {
           embedding: string | null
           entities: string[] | null
           event_id: string
+          event_type: string | null
           knowledge_type: string | null
           participants: string[] | null
+          sender_display_name: string | null
+          sender_user_id: string | null
           session_id: string | null
           source_created_at: string
           topics: string[] | null
@@ -105,6 +109,7 @@ export type Database = {
           voyage_slug: string | null
         }
         Insert: {
+          addressed_to?: string[] | null
           attention_score?: number | null
           classifications?: string[] | null
           connected_to?: string[] | null
@@ -113,8 +118,11 @@ export type Database = {
           embedding?: string | null
           entities?: string[] | null
           event_id: string
+          event_type?: string | null
           knowledge_type?: string | null
           participants?: string[] | null
+          sender_display_name?: string | null
+          sender_user_id?: string | null
           session_id?: string | null
           source_created_at: string
           topics?: string[] | null
@@ -123,6 +131,7 @@ export type Database = {
           voyage_slug?: string | null
         }
         Update: {
+          addressed_to?: string[] | null
           attention_score?: number | null
           classifications?: string[] | null
           connected_to?: string[] | null
@@ -131,8 +140,11 @@ export type Database = {
           embedding?: string | null
           entities?: string[] | null
           event_id?: string
+          event_type?: string | null
           knowledge_type?: string | null
           participants?: string[] | null
+          sender_display_name?: string | null
+          sender_user_id?: string | null
           session_id?: string | null
           source_created_at?: string
           topics?: string[] | null
@@ -483,6 +495,7 @@ export type Database = {
         Row: {
           id: string
           joined_at: string
+          last_seen_at: string | null
           nickname: string | null
           notifications_enabled: boolean
           role: Database["public"]["Enums"]["voyage_role"]
@@ -493,6 +506,7 @@ export type Database = {
         Insert: {
           id?: string
           joined_at?: string
+          last_seen_at?: string | null
           nickname?: string | null
           notifications_enabled?: boolean
           role?: Database["public"]["Enums"]["voyage_role"]
@@ -503,6 +517,7 @@ export type Database = {
         Update: {
           id?: string
           joined_at?: string
+          last_seen_at?: string | null
           nickname?: string | null
           notifications_enabled?: boolean
           role?: Database["public"]["Enums"]["voyage_role"]
@@ -869,11 +884,11 @@ export const Constants = {
   },
 } as const
 
-// ---------------------------------------------------------------------------
-// Convenience types (derived from generated Database type)
-// ---------------------------------------------------------------------------
+// =============================================================================
+// Custom type exports (appended after generation)
+// =============================================================================
 
-// Knowledge event types
+// Enum-like types
 export type KnowledgeEventType =
   | 'message'
   | 'document'
