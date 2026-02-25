@@ -3,7 +3,7 @@
 // DSPy-compatible: pure functions, structured data
 
 import type { RetrievalResult } from '@/lib/retrieval';
-import { getPinnedKnowledge, loadPreferences, type KnowledgeNode } from '@/lib/knowledge';
+import { getPinnedKnowledge, loadPreferences, loadPendingMessages, type KnowledgeNode } from '@/lib/knowledge';
 
 // Re-export types
 export * from './types';
@@ -66,15 +66,6 @@ interface ComposeOptions {
   authState?: AuthState;
 }
 
-/**
- * Stub: Load pending context from completed background tasks.
- * Returns empty array until Feature 2 (Pending Context) is implemented.
- */
-export const loadPendingContext = async (
-  _conversationId?: string
-): Promise<string[]> => {
-  return [];
-};
 
 /**
  * Compose a full system prompt with preferences and pinned knowledge.
@@ -91,8 +82,8 @@ export const composeSystemPrompt = async (
   const { profile, voyageSlug, continuityContext, authState } = options ?? {};
   const startTime = Date.now();
 
-  // Load preferences and pinned knowledge in parallel
-  const [preferences, pinned] = await Promise.all([
+  // Load preferences, pinned knowledge, and pending messages in parallel
+  const [preferences, pinned, pendingMessages] = await Promise.all([
     loadPreferences(userId, voyageSlug).catch((error) => {
       console.warn('[Prompts] Failed to load preferences:', error);
       return [] as KnowledgeNode[];
@@ -100,6 +91,10 @@ export const composeSystemPrompt = async (
     getPinnedKnowledge(userId, voyageSlug).catch((error) => {
       console.warn('[Prompts] Failed to get pinned knowledge:', error);
       return [] as KnowledgeNode[];
+    }),
+    loadPendingMessages(userId, voyageSlug).catch((error) => {
+      console.warn('[Prompts] Failed to load pending messages:', error);
+      return [] as string[];
     }),
   ]);
 
@@ -170,6 +165,11 @@ export const composeSystemPrompt = async (
   // Continuity context (changes per turn based on reference signals)
   if (continuityContext) {
     dynamicParts.push(`# Conversation Context (from earlier)\n${continuityContext}`);
+  }
+
+  // Pending messages (direct @mentions since last_seen_at)
+  if (pendingMessages.length > 0) {
+    dynamicParts.push('# Pending Messages\n' + pendingMessages.map(m => `- ${m}`).join('\n'));
   }
 
   const dynamicPrompt = dynamicParts.length > 0

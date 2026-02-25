@@ -522,6 +522,41 @@ export const getInviteUrl = (inviteCode: string): string => {
 };
 
 // =============================================================================
+// LAST SEEN TRACKING
+// =============================================================================
+
+/**
+ * Update last_seen_at for a user in a voyage.
+ * Called in onFinish (after assistant response) — fire-and-forget via waitUntil.
+ * Messages surfaced THIS turn remain "pending" until Voyager has responded.
+ */
+export const updateLastSeen = async (userId: string, voyageSlug: string): Promise<void> => {
+  const supabase = getAdminSupabase();
+  try {
+    // Resolve voyage_id from slug
+    const { data: voyage, error: voyageError } = await supabase
+      .from('voyages')
+      .select('id')
+      .eq('slug', voyageSlug)
+      .single();
+
+    if (voyageError || !voyage) return;
+
+    const { error } = await supabase
+      .from('voyage_members')
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('voyage_id', voyage.id);
+
+    if (error) {
+      log.voyage('updateLastSeen error', { error: error.message, userId, voyageSlug }, 'error');
+    }
+  } catch (error) {
+    log.voyage('updateLastSeen error', { error: String(error), userId, voyageSlug }, 'error');
+  }
+};
+
+// =============================================================================
 // SLUG UTILITIES
 // =============================================================================
 

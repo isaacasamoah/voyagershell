@@ -32,6 +32,7 @@ export {
   formatKnowledgeForPrompt,
   keywordGrep,
   loadPreferences,
+  loadPendingMessages,
   buildScopeFilter,
 } from './search'
 

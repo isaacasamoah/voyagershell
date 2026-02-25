@@ -612,6 +612,97 @@ export const loadPreferences = async (
 }
 
 // =============================================================================
+// Pending Message Loading (for pre-turn surfacing)
+// =============================================================================
+
+/** Relative time formatting for pending message display */
+const formatTimeAgo = (date: Date): string => {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+/**
+ * Load pending messages for pre-turn surfacing in the system prompt.
+ * Queries knowledge_current for direct @mentions since last_seen_at.
+ *
+ * Returns formatted strings, not KnowledgeNodes — the prompt doesn't need
+ * full node metadata, just human-readable message lines.
+ *
+ * @param userId - The current user's ID
+ * @param voyageSlug - Optional voyage scope (returns [] in personal space)
+ * @returns Formatted message lines: "{sender} ({time_ago}): {preview_60}"
+ */
+export const loadPendingMessages = async (
+  userId: string,
+  voyageSlug?: string
+): Promise<string[]> => {
+  // No messages in personal space — no voyage membership to track
+  if (!voyageSlug) return []
+
+  try {
+    const supabase = getAdminSupabase()
+
+    // Resolve voyage_id from slug
+    const { data: voyage, error: voyageError } = await supabase
+      .from('voyages')
+      .select('id')
+      .eq('slug', voyageSlug)
+      .single()
+
+    if (voyageError || !voyage) return []
+
+    // Look up membership + last_seen_at
+    const { data: membership, error: memberError } = await supabase
+      .from('voyage_members')
+      .select('last_seen_at')
+      .eq('user_id', userId)
+      .eq('voyage_id', voyage.id)
+      .single()
+
+    if (memberError || !membership) return []
+
+    // Default to 24h ago if never seen (first session)
+    const lastSeen = membership.last_seen_at
+      ? new Date(membership.last_seen_at as string)
+      : new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+    // Query pending messages: direct mentions since last seen
+    const { data: messages, error } = await supabase
+      .from('knowledge_current')
+      .select('sender_display_name, source_created_at, content')
+      .eq('event_type', 'message')
+      .eq('voyage_slug', voyageSlug)
+      .contains('addressed_to', [userId])
+      .neq('sender_user_id', userId)
+      .gte('attention_score', 0.5)
+      .gt('source_created_at', lastSeen.toISOString())
+      .order('source_created_at', { ascending: false })
+      .limit(5)
+
+    if (error || !messages || messages.length === 0) return []
+
+    console.log(`[Knowledge] ${messages.length} pending message(s) for user`)
+
+    return messages.map(m => {
+      const sender = (m.sender_display_name as string) ?? 'Someone'
+      const time = formatTimeAgo(new Date(m.source_created_at as string))
+      const content = (m.content as string) ?? ''
+      const preview = content.length > 60 ? content.slice(0, 60) + '...' : content
+      return `${sender} (${time}): ${preview}`
+    })
+  } catch (error) {
+    console.error('[Knowledge] loadPendingMessages error:', error)
+    return []
+  }
+}
+
+// =============================================================================
 // Exports
 // =============================================================================
 

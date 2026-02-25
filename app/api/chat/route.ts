@@ -16,6 +16,7 @@ import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrateg
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
+import { updateLastSeen } from '@/lib/voyage';
 import { log } from '@/lib/debug';
 
 export const maxDuration = 30;
@@ -338,6 +339,11 @@ export const POST = async (req: Request) => {
           } catch (error) {
             console.error('[Chat] Failed to save assistant message:', error);
           }
+        }
+
+        // Update last_seen_at for message freshness tracking (fire-and-forget)
+        if (voyageSlug) {
+          waitUntil(updateLastSeen(userId, voyageSlug));
         }
       },
     });
