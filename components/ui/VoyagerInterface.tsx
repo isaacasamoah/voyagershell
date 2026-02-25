@@ -185,6 +185,12 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     }
   }, [conversationId, isLoading, sendMessage, setMessageQueue]);
 
+  // Switch voyage context from picker (client-side state change)
+  const handleVoyageSwitch = useCallback((slug: string) => {
+    const voyage = voyages.find(v => v.slug === slug)
+    if (voyage) setCurrentVoyage(voyage)
+  }, [voyages, setCurrentVoyage]);
+
   // Send a message as the user (used by ask_captain components)
   const sendUserMessage = useCallback((text: string) => {
     setHasUserTyped(true);
@@ -397,6 +403,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                       toolCallId={captainPart.toolCallId}
                       sendMagicLink={sendMagicLink}
                       onSendMessage={sendUserMessage}
+                      onVoyageSwitch={handleVoyageSwitch}
                     />
                   ),
                 });

@@ -30,6 +30,8 @@ interface AskCaptainRendererProps {
   sendMagicLink?: (email: string) => Promise<{ success: boolean; error?: string }>
   /** Send a message as the user (for component interactions) */
   onSendMessage: (text: string) => void
+  /** Switch voyage context on the client (voyage_picker side effect) */
+  onVoyageSwitch?: (slug: string) => void
 }
 
 export const AskCaptainRenderer = ({
@@ -38,6 +40,7 @@ export const AskCaptainRenderer = ({
   toolCallId,
   sendMagicLink,
   onSendMessage,
+  onVoyageSwitch,
 }: AskCaptainRendererProps) => {
   const [componentState, setComponentState] = useState<ComponentState>('active')
   const [resolution, setResolution] = useState<ComponentResolution | undefined>()
@@ -82,6 +85,8 @@ export const AskCaptainRenderer = ({
             value: data,
             label: voyage?.name ?? data,
           })
+          // Switch client state first, then notify Voyager
+          onVoyageSwitch?.(data)
           onSendMessage(`Switch to ${voyage?.name ?? data}`)
         }
         break
@@ -100,7 +105,7 @@ export const AskCaptainRenderer = ({
         break
       }
     }
-  }, [componentState, input, onSendMessage])
+  }, [componentState, input, onSendMessage, onVoyageSwitch])
 
   // If tool is still streaming input, show loading
   if (toolState === 'input-streaming') {
