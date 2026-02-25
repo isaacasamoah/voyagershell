@@ -90,8 +90,8 @@ Agentic Retrieval
 
 ```bash
 # Clone
-git clone https://github.com/isaacasamoah/voyager-shell.git
-cd voyager-shell
+git clone https://github.com/isaacasamoah/voyagershell.git
+cd voyagershell
 
 # Install
 npm install
@@ -162,7 +162,7 @@ Claude decides how to find what you need:
 ## Project Structure
 
 ```
-voyager-shell/
+voyagershell/
 ├── app/
 │   ├── api/
 │   │   ├── chat/route.ts        # Main chat endpoint
@@ -296,9 +296,9 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Links
 
-- **Repository**: [github.com/isaacasamoah/voyager-shell](https://github.com/isaacasamoah/voyager-shell)
+- **Repository**: [github.com/isaacasamoah/voyagershell](https://github.com/isaacasamoah/voyagershell)
 - **Design Docs**: See `.claude/research/voyager-v2/`
-- **Issue Tracker**: [GitHub Issues](https://github.com/isaacasamoah/voyager-shell/issues)
+- **Issue Tracker**: [GitHub Issues](https://github.com/isaacasamoah/voyagershell/issues)
 
 ---
 

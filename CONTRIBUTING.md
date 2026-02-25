@@ -15,8 +15,8 @@ Thank you for your interest in contributing to Voyager! This document provides g
 
 ```bash
 # Clone the repository
-git clone https://github.com/isaacasamoah/voyager-shell.git
-cd voyager-shell
+git clone https://github.com/isaacasamoah/voyagershell.git
+cd voyagershell
 
 # Install dependencies
 npm install

@@ -92,7 +92,7 @@ npm run dev      # localhost:3000
 npm run build    # production build
 ```
 
-**Production:** https://voyager-zero.vercel.app
+**Production:** https://voyagershell.vercel.app
 
 ### Supabase Migrations
 
