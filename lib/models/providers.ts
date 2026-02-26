@@ -30,7 +30,7 @@ export const DEFAULT_PROVIDERS: ModelProvider[] = [
       {
         id: 'claude-sonnet',
         provider: 'anthropic',
-        modelId: 'claude-sonnet-4-5-20250929',
+        modelId: 'claude-sonnet-4-20250514',
         capabilities: { chat: true, toolUse: true, vision: true, streaming: true },
         costPerMillion: { input: 3, output: 15 },
         typicalLatencyMs: 800,
@@ -39,7 +39,7 @@ export const DEFAULT_PROVIDERS: ModelProvider[] = [
       {
         id: 'claude-haiku',
         provider: 'anthropic',
-        modelId: 'claude-3-5-haiku-latest',
+        modelId: 'claude-haiku-4-5-20251001',
         capabilities: { chat: true, toolUse: true, vision: false, streaming: true },
         costPerMillion: { input: 0.25, output: 1.25 },
         typicalLatencyMs: 400,

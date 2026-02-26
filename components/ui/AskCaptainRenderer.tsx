@@ -19,11 +19,28 @@ import { Text } from '@/components/ui/primitives'
 import type { ComponentState, ComponentResolution } from '@/lib/ui/components'
 import type { AskCaptainInput } from '@/lib/tools/captain'
 
+// Parse voyage picker result from tool execution (server-side fetched)
+const parseVoyagePickerResult = (result: unknown): {
+  voyages: Array<{ slug: string; name: string; role?: string }>
+  currentSlug: string | null
+} | null => {
+  if (typeof result !== 'string') return null
+  try {
+    const parsed = JSON.parse(result)
+    if (parsed?.rendered && Array.isArray(parsed.voyages)) {
+      return { voyages: parsed.voyages, currentSlug: parsed.currentSlug ?? null }
+    }
+  } catch { /* not JSON — plain text message (e.g. "no voyages") */ }
+  return null
+}
+
 interface AskCaptainRendererProps {
   /** The tool call input from the AI SDK dynamic-tool part */
   input: AskCaptainInput
   /** The tool call state from AI SDK */
   toolState: string
+  /** The tool execution result (server-side data for voyage_picker) */
+  toolResult?: unknown
   /** Unique tool call ID */
   toolCallId: string
   /** Send magic link (from useAuth) */
@@ -37,6 +54,7 @@ interface AskCaptainRendererProps {
 export const AskCaptainRenderer = ({
   input,
   toolState,
+  toolResult,
   toolCallId,
   sendMagicLink,
   onSendMessage,
@@ -78,7 +96,8 @@ export const AskCaptainRenderer = ({
       }
       case 'voyage_picker': {
         if (typeof data === 'string') {
-          const voyage = input.voyages?.find(v => v.slug === data)
+          const pickerData = parseVoyagePickerResult(toolResult)
+          const voyage = pickerData?.voyages.find(v => v.slug === data)
           setComponentState('resolved')
           setResolution({
             action: 'selected',
@@ -141,19 +160,18 @@ export const AskCaptainRenderer = ({
         />
       )
 
-    case 'voyage_picker':
+    case 'voyage_picker': {
+      // Server-fetched voyages from tool result (D2)
+      const pickerData = parseVoyagePickerResult(toolResult)
       return (
         <VoyagePickerAdapter
-          voyages={(input.voyages ?? []).map(v => ({
-            slug: v.slug,
-            name: v.name,
-            role: v.role,
-          }))}
+          voyages={pickerData?.voyages ?? []}
           onSelect={(slug) => handleAction('voyage_select', slug)}
           __state={componentState}
           __resolution={resolution}
         />
       )
+    }
 
     case 'conversation_picker':
       // Basic list rendering — full adapter can be built later

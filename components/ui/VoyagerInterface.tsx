@@ -217,9 +217,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     toolCallId: string
     state: string
     input: unknown
+    result: unknown
   }> => {
     if (!Array.isArray(message.parts)) return [];
-    const results: Array<{ toolCallId: string; state: string; input: unknown }> = [];
+    const results: Array<{ toolCallId: string; state: string; input: unknown; result: unknown }> = [];
     for (const part of message.parts) {
       const p = part as Record<string, unknown>;
       const isAskCaptain = p.type === 'tool-ask_captain' ||
@@ -229,6 +230,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           toolCallId: p.toolCallId as string,
           state: p.state as string,
           input: p.input,
+          result: p.result,
         });
       }
     }
@@ -400,6 +402,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                       key={captainPart.toolCallId}
                       input={captainPart.input as Parameters<typeof AskCaptainRenderer>[0]['input']}
                       toolState={captainPart.state}
+                      toolResult={captainPart.result}
                       toolCallId={captainPart.toolCallId}
                       sendMagicLink={sendMagicLink}
                       onSendMessage={sendUserMessage}
