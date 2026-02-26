@@ -11,12 +11,12 @@ import {
   retrieveForContinuity,
 } from '@/lib/conversation/continuity';
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
-import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
+import { emitMessageEvent, createMessageEvent, type KnowledgeNode, type AwarenessItem } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
-import { updateLastSeen } from '@/lib/voyage';
+import { updateLastSeen, markDelivered } from '@/lib/voyage';
 import { log } from '@/lib/debug';
 
 export const maxDuration = 30;
@@ -209,12 +209,14 @@ export const POST = async (req: Request) => {
     let dynamicSuffix: string = '';
     let retrievedKnowledge: KnowledgeNode[] = [];
     let retrievalEventId: string | null = null;
+    let loadedAwarenessItems: AwarenessItem[] = [];
 
     try {
-      const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(
+      const { staticPrompt, dynamicPrompt, retrieval, awarenessItems } = await composeSystemPrompt(
         userId,
         { voyageSlug, continuityContext, authState }
       );
+      loadedAwarenessItems = awarenessItems;
       // Static prefix: core identity + preferences + pinned + tool strategy (cacheable)
       staticPrefix = staticPrompt + '\n\n' + toolStrategy;
       // Dynamic suffix: auth state, continuity context (per-turn, not cached)
@@ -341,9 +343,10 @@ export const POST = async (req: Request) => {
           }
         }
 
-        // Update last_seen_at for message freshness tracking (fire-and-forget)
+        // Mark awareness items as delivered + update last_seen_at (fire-and-forget)
         if (voyageSlug) {
-          waitUntil(updateLastSeen(userId, voyageSlug));
+          waitUntil(markDelivered(userId, voyageSlug, loadedAwarenessItems));
+          waitUntil(updateLastSeen(userId, voyageSlug)); // backward compat
         }
       },
     });

@@ -183,6 +183,28 @@ For each event, determine:
 Then use retrieval tools to find connections to existing knowledge across sessions.`,
   },
 
+  /**
+   * Sentinel - the nervous system.
+   * Evaluates signals (messages), classifies surfacing tier and delivery timing.
+   * Runs as isolated generateText per message — never shares conversation context (D25).
+   * Cartographer = WHAT, Sentinel = WHEN/HOW (D29).
+   */
+  sentinel: {
+    id: 'sentinel',
+    name: 'Sentinel',
+    description: 'Nervous system. Evaluates signals, classifies surfacing tier and delivery timing.',
+    type: 'event',
+    model: {
+      task: 'chat',
+      quality: 'fast',
+    },
+    tools: [],  // MVP: pure reasoning, no tools
+    trigger: { event: 'knowledge.created', filter: { event_type: 'message' } },
+    tokenBudget: 2000,
+    timeout: 10000,
+    systemPrompt: 'sentinel',  // References SENTINEL_PROMPT in lib/agents/sentinel.ts
+  },
+
 }
 
 // =============================================================================

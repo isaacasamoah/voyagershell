@@ -33,7 +33,8 @@ export {
   keywordGrep,
   loadPreferences,
   loadPendingMessages,
+  loadAwareness,
   buildScopeFilter,
 } from './search'
 
-export type { KnowledgeNode, SearchOptions, GrepOptions, GrepResult } from './search'
+export type { KnowledgeNode, SearchOptions, GrepOptions, GrepResult, AwarenessItem } from './search'

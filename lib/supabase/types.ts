@@ -93,6 +93,8 @@ export type Database = {
           connected_to: string[] | null
           content: string
           context_snippet: string | null
+          deliver_after: string | null
+          delivery_status: string
           embedding: string | null
           entities: string[] | null
           event_id: string
@@ -103,6 +105,7 @@ export type Database = {
           sender_user_id: string | null
           session_id: string | null
           source_created_at: string
+          surfacing_tier: string | null
           topics: string[] | null
           updated_at: string
           user_id: string | null
@@ -115,6 +118,8 @@ export type Database = {
           connected_to?: string[] | null
           content: string
           context_snippet?: string | null
+          deliver_after?: string | null
+          delivery_status?: string
           embedding?: string | null
           entities?: string[] | null
           event_id: string
@@ -125,6 +130,7 @@ export type Database = {
           sender_user_id?: string | null
           session_id?: string | null
           source_created_at: string
+          surfacing_tier?: string | null
           topics?: string[] | null
           updated_at?: string
           user_id?: string | null
@@ -137,6 +143,8 @@ export type Database = {
           connected_to?: string[] | null
           content?: string
           context_snippet?: string | null
+          deliver_after?: string | null
+          delivery_status?: string
           embedding?: string | null
           entities?: string[] | null
           event_id?: string
@@ -147,6 +155,7 @@ export type Database = {
           sender_user_id?: string | null
           session_id?: string | null
           source_created_at?: string
+          surfacing_tier?: string | null
           topics?: string[] | null
           updated_at?: string
           user_id?: string | null

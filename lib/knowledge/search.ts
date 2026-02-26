@@ -612,10 +612,10 @@ export const loadPreferences = async (
 }
 
 // =============================================================================
-// Pending Message Loading (for pre-turn surfacing)
+// Awareness Loading (Sentinel-powered, replaces loadPendingMessages)
 // =============================================================================
 
-/** Relative time formatting for pending message display */
+/** Relative time formatting for awareness item display */
 const formatTimeAgo = (date: Date): string => {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
   if (seconds < 60) return 'just now'
@@ -627,16 +627,88 @@ const formatTimeAgo = (date: Date): string => {
   return `${days}d ago`
 }
 
+export interface AwarenessItem {
+  type: 'message'
+  tier: 'interrupt' | 'weave'
+  content: string
+  eventId: string
+  senderName: string
+  timeAgo: string
+}
+
 /**
- * Load pending messages for pre-turn surfacing in the system prompt.
- * Queries knowledge_current for direct @mentions since last_seen_at.
+ * Load awareness items for pre-turn surfacing in the system prompt.
+ * Queries knowledge_current by delivery_status = 'pending' (D30).
  *
- * Returns formatted strings, not KnowledgeNodes — the prompt doesn't need
- * full node metadata, just human-readable message lines.
+ * Replaces loadPendingMessages — no last_seen_at lookup needed.
+ * Results ordered by surfacing tier (interrupt first) then recency.
+ * Suppress-tier excluded. NULL surfacing_tier treated as 'weave'.
  *
  * @param userId - The current user's ID
  * @param voyageSlug - Optional voyage scope (returns [] in personal space)
- * @returns Formatted message lines: "{sender} ({time_ago}): {preview_60}"
+ * @returns Structured AwarenessItem[] for prompt injection + delivery marking
+ */
+export const loadAwareness = async (
+  userId: string,
+  voyageSlug?: string
+): Promise<AwarenessItem[]> => {
+  if (!voyageSlug) return []
+
+  try {
+    const supabase = getAdminSupabase()
+
+    // Query pending messages: delivery_status = 'pending', temporal gate passed
+    const { data, error } = await supabase
+      .from('knowledge_current')
+      .select('event_id, content, sender_display_name, source_created_at, surfacing_tier')
+      .eq('event_type', 'message')
+      .eq('voyage_slug', voyageSlug)
+      .contains('addressed_to', [userId])
+      .neq('sender_user_id', userId)
+      .eq('delivery_status', 'pending')
+      .gte('attention_score', 0.5)
+      .or('deliver_after.is.null,deliver_after.lte.now()')
+      .order('source_created_at', { ascending: false })
+      .limit(10)
+
+    if (error || !data || data.length === 0) return []
+
+    console.log(`[Knowledge] ${data.length} awareness item(s) for user`)
+
+    // Map rows to AwarenessItem[], excluding suppress-tier
+    const items: AwarenessItem[] = data
+      .filter(row => (row.surfacing_tier as string) !== 'suppress')
+      .map(row => ({
+        type: 'message' as const,
+        tier: (row.surfacing_tier as string) === 'interrupt' ? 'interrupt' as const : 'weave' as const,
+        content: row.content as string,
+        eventId: row.event_id as string,
+        senderName: (row.sender_display_name as string) ?? 'Someone',
+        timeAgo: formatTimeAgo(new Date(row.source_created_at as string)),
+      }))
+
+    // Sort: interrupt first, then weave, then by recency (already DESC from query)
+    items.sort((a, b) => {
+      if (a.tier === 'interrupt' && b.tier !== 'interrupt') return -1
+      if (a.tier !== 'interrupt' && b.tier === 'interrupt') return 1
+      return 0  // Preserve recency order from query
+    })
+
+    return items
+  } catch (error) {
+    console.error('[Knowledge] loadAwareness error:', error)
+    return []
+  }
+}
+
+// =============================================================================
+// Pending Message Loading (DEPRECATED — use loadAwareness)
+// =============================================================================
+
+/**
+ * @deprecated Use loadAwareness() instead. This function uses last_seen_at
+ * which is replaced by per-message delivery_status (D30).
+ * Kept for backward compatibility during transition.
  */
 export const loadPendingMessages = async (
   userId: string,

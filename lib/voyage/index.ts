@@ -522,6 +522,39 @@ export const getInviteUrl = (inviteCode: string): string => {
 };
 
 // =============================================================================
+// DELIVERY MARKING (Sentinel)
+// =============================================================================
+
+/**
+ * Mark awareness items as delivered after they've been surfaced in a turn.
+ * Updates delivery_status from 'pending' to 'delivered' — these items
+ * will never re-appear in loadAwareness().
+ *
+ * Called in onFinish (after assistant response) — fire-and-forget via waitUntil.
+ * Only marks items that were loaded for this turn (not all pending).
+ */
+export const markDelivered = async (
+  userId: string,
+  voyageSlug: string,
+  awarenessItems: Array<{ eventId: string }>
+): Promise<void> => {
+  if (awarenessItems.length === 0) return
+
+  const supabase = getAdminSupabase()
+  const eventIds = awarenessItems.map(item => item.eventId)
+
+  const { error } = await supabase
+    .from('knowledge_current')
+    .update({ delivery_status: 'delivered' })
+    .in('event_id', eventIds)
+    .eq('delivery_status', 'pending')
+
+  if (error) {
+    log.voyage('markDelivered error', { error: error.message }, 'error')
+  }
+}
+
+// =============================================================================
 // LAST SEEN TRACKING
 // =============================================================================
 

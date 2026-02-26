@@ -8,6 +8,7 @@
 
 import OpenAI from 'openai'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { runSentinel } from '@/lib/agents/sentinel'
 import type { MessageRole, Json } from '@/lib/supabase/types'
 
 // Admin client for event creation (internal operations, often without user context)
@@ -323,6 +324,23 @@ export const createMessageEvent = async (
       })
     } catch (enrichError) {
       console.error('[Knowledge] Message enrichment failed (non-blocking):', enrichError)
+    }
+  }
+
+  // Sentinel: classify surfacing tier for direct @mentions (fire-and-forget)
+  // Only runs for messages with addressedTo — Sentinel evaluates per-recipient
+  if (eventId && options?.addressedTo && options.addressedTo.length > 0 && options?.voyageSlug) {
+    for (const recipientUserId of options.addressedTo) {
+      runSentinel({
+        eventId,
+        content,
+        senderName: options.senderDisplayName ?? 'Someone',
+        senderUserId: options.senderUserId ?? '',
+        recipientUserId,
+        voyageSlug: options.voyageSlug,
+      }).catch((err) => {
+        console.error('[Knowledge] Sentinel classification failed (non-blocking):', err)
+      })
     }
   }
 

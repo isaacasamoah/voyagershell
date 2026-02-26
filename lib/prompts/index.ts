@@ -3,7 +3,7 @@
 // DSPy-compatible: pure functions, structured data
 
 import type { RetrievalResult } from '@/lib/retrieval';
-import { getPinnedKnowledge, loadPreferences, loadPendingMessages, type KnowledgeNode } from '@/lib/knowledge';
+import { getPinnedKnowledge, loadPreferences, loadAwareness, type KnowledgeNode, type AwarenessItem } from '@/lib/knowledge';
 
 // Re-export types
 export * from './types';
@@ -71,19 +71,20 @@ interface ComposeOptions {
  * Compose a full system prompt with preferences and pinned knowledge.
  * Primary entry point used by chat routes.
  *
- * Returns staticPrompt (cacheable: identity + preferences + pinned)
- * and dynamicPrompt (per-turn: auth state, continuity context).
+ * Returns staticPrompt (cacheable: identity + preferences + pinned),
+ * dynamicPrompt (per-turn: auth state, continuity context, awareness),
+ * and awarenessItems (for delivery marking in onFinish).
  * The chat route places these in separate system messages for prompt caching.
  */
 export const composeSystemPrompt = async (
   userId: string,
   options?: ComposeOptions
-): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult }> => {
+): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult; awarenessItems: AwarenessItem[] }> => {
   const { profile, voyageSlug, continuityContext, authState } = options ?? {};
   const startTime = Date.now();
 
-  // Load preferences, pinned knowledge, and pending messages in parallel
-  const [preferences, pinned, pendingMessages] = await Promise.all([
+  // Load preferences, pinned knowledge, and awareness items in parallel
+  const [preferences, pinned, awarenessItems] = await Promise.all([
     loadPreferences(userId, voyageSlug).catch((error) => {
       console.warn('[Prompts] Failed to load preferences:', error);
       return [] as KnowledgeNode[];
@@ -92,9 +93,9 @@ export const composeSystemPrompt = async (
       console.warn('[Prompts] Failed to get pinned knowledge:', error);
       return [] as KnowledgeNode[];
     }),
-    loadPendingMessages(userId, voyageSlug).catch((error) => {
-      console.warn('[Prompts] Failed to load pending messages:', error);
-      return [] as string[];
+    loadAwareness(userId, voyageSlug).catch((error) => {
+      console.warn('[Prompts] Failed to load awareness:', error);
+      return [] as AwarenessItem[];
     }),
   ]);
 
@@ -167,9 +168,13 @@ export const composeSystemPrompt = async (
     dynamicParts.push(`# Conversation Context (from earlier)\n${continuityContext}`);
   }
 
-  // Pending messages (direct @mentions since last_seen_at)
-  if (pendingMessages.length > 0) {
-    dynamicParts.push('# Pending Messages\n' + pendingMessages.map(m => `- ${m}`).join('\n'));
+  // Awareness items (Sentinel-classified messages, delivery_status = 'pending')
+  if (awarenessItems.length > 0) {
+    const lines = awarenessItems.map(item => {
+      const prefix = item.tier === 'interrupt' ? 'URGENT:' : 'Also:'
+      return `${prefix} ${item.senderName} (${item.timeAgo}): ${item.content}`
+    })
+    dynamicParts.push('# Awareness\n' + lines.join('\n'))
   }
 
   const dynamicPrompt = dynamicParts.length > 0
@@ -195,6 +200,7 @@ export const composeSystemPrompt = async (
     staticPrompt,
     dynamicPrompt,
     retrieval,
+    awarenessItems,
   };
 };
 
