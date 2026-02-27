@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { Resend } from 'resend'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getBaseUrl } from '@/lib/auth'
-import { MagicLinkEmail, text } from '@/emails/magic-link'
+import { magicLinkHtml, magicLinkText } from '@/emails/magic-link'
 
 // =============================================================================
 // Rate Limiting
@@ -99,11 +99,11 @@ export const POST = async (request: NextRequest) => {
     // Production: send via Resend with React Email template
     const resend = new Resend(process.env.RESEND_API_KEY)
     const { error: sendError } = await resend.emails.send({
-      from: 'Voyager Shell <noreply@voyagershell.com>',
+      from: process.env.RESEND_FROM_EMAIL ?? 'Voyager Shell <onboarding@resend.dev>',
       to: email,
       subject: 'Your magic link is ready',
-      react: MagicLinkEmail({ url: callbackUrl, email }),
-      text: text({ url: callbackUrl, email }),
+      html: magicLinkHtml(callbackUrl),
+      text: magicLinkText(callbackUrl),
     })
 
     if (sendError) {

@@ -58,6 +58,9 @@ export const useVoyageContext = ({
           if (voyage) {
             setCurrentVoyage(voyage)
           }
+        } else if (data.voyages?.length === 1) {
+          // Auto-select when user has exactly one voyage
+          setCurrentVoyage(data.voyages[0])
         }
       } catch (error) {
         log.voyage('Failed to fetch voyages', { error: String(error) }, 'error')

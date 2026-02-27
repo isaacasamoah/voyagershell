@@ -1,117 +1,69 @@
-import {
-  Html,
-  Head,
-  Body,
-  Container,
-  Section,
-  Text,
-  Button,
-  Hr,
-  Link,
-  Preview,
-} from '@react-email/components'
-import { Tailwind } from '@react-email/tailwind'
-
-interface MagicLinkEmailProps {
-  url: string
-  email?: string
-}
+// Pure HTML string templates — no React Email dependency.
+// React Email's render() breaks in Next.js RSC webpack context.
 
 const MONO_STACK = "'SFMono-Regular', 'Consolas', 'Liberation Mono', 'Menlo', monospace"
 
-export const MagicLinkEmail = ({ url, email }: MagicLinkEmailProps) => (
-  <Html>
-    <Head />
-    <Preview>Your Voyager Shell magic link is ready</Preview>
-    <Tailwind>
-      <Body
-        className="m-0 p-0"
-        style={{ backgroundColor: '#050505', fontFamily: MONO_STACK }}
-      >
-        <Container
-          className="mx-auto py-12 px-6"
-          style={{ maxWidth: '600px' }}
-        >
-          {/* Header */}
-          <Section className="text-center mb-10">
-            <Text
-              className="text-xl font-bold m-0"
-              style={{
-                color: '#818cf8',
-                letterSpacing: '0.2em',
-                fontFamily: MONO_STACK,
-              }}
-            >
-              VOYAGER_SHELL
-            </Text>
-          </Section>
+export const magicLinkHtml = (url: string): string => `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width" /></head>
+<body style="margin:0;padding:0;background-color:#050505;font-family:${MONO_STACK};">
+  <div style="max-width:600px;margin:0 auto;padding:48px 24px;">
 
-          {/* Body */}
-          <Section className="text-center mb-8">
-            <Text
-              className="text-2xl m-0"
-              style={{ color: '#cbd5e1', fontFamily: MONO_STACK }}
-            >
-              Your magic link is ready.
-            </Text>
-          </Section>
+    <!-- Header -->
+    <div style="text-align:center;margin-bottom:24px;">
+      <p style="margin:0;font-size:20px;font-weight:bold;color:#818cf8;letter-spacing:0.2em;font-family:${MONO_STACK};">
+        VOYAGER
+      </p>
+    </div>
 
-          {/* CTA Button */}
-          <Section className="text-center mb-10">
-            <Button
-              href={url}
-              className="px-8 py-3 text-sm font-bold text-white rounded"
-              style={{
-                backgroundColor: '#6366f1',
-                fontFamily: MONO_STACK,
-                letterSpacing: '0.1em',
-              }}
-            >
-              ENTER THE SHELL &rarr;
-            </Button>
-          </Section>
+    <!-- Astronaut -->
+    <div style="text-align:center;margin-bottom:24px;">
+      <img src="https://voyagershell.vercel.app/images/astronaut/idle.png"
+           alt="Voyager astronaut"
+           width="120"
+           style="display:inline-block;width:120px;height:auto;" />
+    </div>
 
-          {/* Fallback URL */}
-          <Section className="text-center mb-10">
-            <Text
-              className="text-xs m-0 mb-2"
-              style={{ color: '#64748b', fontFamily: MONO_STACK }}
-            >
-              Or paste this URL:
-            </Text>
-            <Link
-              href={url}
-              className="text-xs"
-              style={{
-                color: '#64748b',
-                fontFamily: MONO_STACK,
-                wordBreak: 'break-all',
-              }}
-            >
-              {url}
-            </Link>
-          </Section>
+    <!-- Body -->
+    <div style="text-align:center;margin-bottom:32px;">
+      <p style="margin:0;font-size:24px;color:#cbd5e1;font-family:${MONO_STACK};">
+        Your magic link is ready.
+      </p>
+    </div>
 
-          {/* Divider */}
-          <Hr style={{ borderColor: '#1e293b', margin: '0 0 24px 0' }} />
+    <!-- CTA Button -->
+    <div style="text-align:center;margin-bottom:40px;">
+      <a href="${url}"
+         style="display:inline-block;padding:12px 32px;font-size:14px;font-weight:bold;color:#ffffff;background-color:#6366f1;border-radius:4px;text-decoration:none;letter-spacing:0.1em;font-family:${MONO_STACK};">
+        LAUNCH &rarr;
+      </a>
+    </div>
 
-          {/* Footer */}
-          <Section className="text-center">
-            <Text
-              className="text-xs m-0"
-              style={{ color: '#475569', fontFamily: MONO_STACK, lineHeight: '1.6' }}
-            >
-              This link expires in 1 hour.
-              <br />
-              If you didn&apos;t request this, ignore this email.
-            </Text>
-          </Section>
-        </Container>
-      </Body>
-    </Tailwind>
-  </Html>
-)
+    <!-- Fallback URL -->
+    <div style="text-align:center;margin-bottom:40px;">
+      <p style="margin:0 0 8px 0;font-size:12px;color:#64748b;font-family:${MONO_STACK};">
+        Or paste this URL:
+      </p>
+      <a href="${url}"
+         style="font-size:12px;color:#64748b;font-family:${MONO_STACK};word-break:break-all;">
+        ${url}
+      </a>
+    </div>
 
-// Plain-text fallback for email clients that don't render HTML
-export const text = ({ url }: MagicLinkEmailProps) =>
-  `VOYAGER_SHELL\n\nYour magic link is ready.\n\nEnter the shell: ${url}\n\nThis link expires in 1 hour.\nIf you didn't request this, ignore this email.`
+    <!-- Divider -->
+    <hr style="border:none;border-top:1px solid #1e293b;margin:0 0 24px 0;" />
+
+    <!-- Footer -->
+    <div style="text-align:center;">
+      <p style="margin:0;font-size:12px;color:#475569;font-family:${MONO_STACK};line-height:1.6;">
+        This link expires in 1 hour.<br />
+        If you didn&apos;t request this, ignore this email.
+      </p>
+    </div>
+
+  </div>
+</body>
+</html>`
+
+export const magicLinkText = (url: string): string =>
+  `VOYAGER\n\nYour magic link is ready.\n\nLaunch: ${url}\n\nThis link expires in 1 hour.\nIf you didn't request this, ignore this email.`
