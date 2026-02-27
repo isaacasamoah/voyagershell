@@ -24,6 +24,7 @@
     "@ai-sdk/react": "^3.0.3",
     "@anthropic-ai/sdk": "^0.67.0",
     "@codemirror/lang-markdown": "^6.5.0",
+    "@react-email/components": "^1.0.8",
     "@sentry/nextjs": "^10.20.0",
     "@stripe/stripe-js": "^8.0.0",
     "@supabase/ssr": "^0.8.0",

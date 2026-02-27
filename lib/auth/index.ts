@@ -18,39 +18,6 @@ export interface AuthResult {
   error?: string;
 }
 
-// =============================================================================
-// Magic Link Auth
-// =============================================================================
-
-/**
- * Send a magic link to the user's email.
- * Works for both sign-up and login (Supabase handles both cases).
- */
-export const sendMagicLink = async (email: string): Promise<AuthResult> => {
-  try {
-    const supabase = await createClient();
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        // Redirect back to our callback route after magic link click
-        emailRedirectTo: `${getBaseUrl()}/auth/callback`,
-      },
-    });
-
-    if (error) {
-      console.error('[Auth] Magic link error:', error);
-      return { success: false, error: error.message };
-    }
-
-    console.log('[Auth] Magic link sent');
-    return { success: true };
-  } catch (error) {
-    console.error('[Auth] sendMagicLink error:', error);
-    return { success: false, error: 'Failed to send magic link' };
-  }
-};
-
 /**
  * Get the current authenticated user.
  * Returns null if not authenticated.
@@ -164,7 +131,7 @@ export const requireAuthResponse = async (): Promise<string | Response> => {
  * Get the base URL for redirects.
  * Uses NEXT_PUBLIC_APP_URL or falls back to localhost.
  */
-const getBaseUrl = (): string => {
+export const getBaseUrl = (): string => {
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL;
   }

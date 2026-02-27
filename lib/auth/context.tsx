@@ -127,28 +127,29 @@ export const AuthProvider = ({ children, initialUser = null }: AuthProviderProps
     return () => channel.close();
   }, [refresh]);
 
-  // Send magic link
+  // Send magic link via server API route (Resend delivery)
   const sendMagicLink = useCallback(async (email: string) => {
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
+      const res = await fetch('/api/auth/magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
 
-      if (error) {
-        console.error('[Auth] Magic link error:', error);
-        return { success: false, error: error.message };
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        console.error('[Auth] Magic link error:', data.error)
+        return { success: false, error: data.error ?? 'Failed to send magic link' }
       }
 
-      console.log('[Auth] Magic link sent');
-      return { success: true };
+      console.log('[Auth] Magic link sent')
+      return { success: true }
     } catch (error) {
-      console.error('[Auth] sendMagicLink error:', error);
-      return { success: false, error: 'Failed to send magic link' };
+      console.error('[Auth] sendMagicLink error:', error)
+      return { success: false, error: 'Failed to send magic link' }
     }
-  }, [supabase]);
+  }, []);
 
   // Sign out
   const signOut = useCallback(async () => {
