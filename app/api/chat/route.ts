@@ -191,7 +191,17 @@ export const POST = async (req: Request) => {
       });
     }
 
-    // Create Voyager tools (all 8: 6 retrieval + spawn_background_agent + ask_captain)
+    // Fetch user profile for display name (prompt composition needs it)
+    const { getAdminClient: getAdmin } = await import('@/lib/supabase/admin');
+    const adminClient = getAdmin();
+    const { data: userProfile } = await adminClient
+      .from('profiles')
+      .select('display_name')
+      .eq('id', userId)
+      .maybeSingle();
+    const displayName = (userProfile as { display_name: string | null } | null)?.display_name ?? undefined;
+
+    // Create Voyager tools
     const { tools: voyagerTools, registrations } = createVoyagerTools({
       userId,
       voyageSlug,
@@ -214,7 +224,12 @@ export const POST = async (req: Request) => {
     try {
       const { staticPrompt, dynamicPrompt, retrieval, awarenessItems } = await composeSystemPrompt(
         userId,
-        { voyageSlug, continuityContext, authState }
+        {
+          profile: { id: userId, displayName },
+          voyageSlug,
+          continuityContext,
+          authState,
+        }
       );
       loadedAwarenessItems = awarenessItems;
       // Static prefix: core identity + preferences + pinned + tool strategy (cacheable)

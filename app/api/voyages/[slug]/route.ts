@@ -8,7 +8,6 @@ import {
   getVoyageBySlug,
   getUserRole,
   updateVoyage,
-  getInviteUrl,
 } from '@/lib/voyage';
 
 interface RouteParams {
@@ -61,9 +60,6 @@ export const GET = async (_req: Request, { params }: RouteParams) => {
         isPublic: voyage.isPublic,
         config: voyage.config,
         inviteCode: canSeeInvite ? voyage.inviteCode : undefined,
-        inviteUrl: canSeeInvite && voyage.inviteCode
-          ? getInviteUrl(voyage.inviteCode)
-          : undefined,
         createdAt: voyage.createdAt.toISOString(),
         updatedAt: voyage.updatedAt.toISOString(),
       },

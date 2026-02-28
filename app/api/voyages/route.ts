@@ -9,7 +9,6 @@ import {
   createVoyage,
   generateSlug,
   isSlugAvailable,
-  getInviteUrl,
 } from '@/lib/voyage';
 
 /**
@@ -121,7 +120,6 @@ export const POST = async (req: Request) => {
         name: voyage.name,
         description: voyage.description,
         inviteCode: voyage.inviteCode,
-        inviteUrl: voyage.inviteCode ? getInviteUrl(voyage.inviteCode) : null,
         createdAt: voyage.createdAt.toISOString(),
       },
     }, { status: 201 });

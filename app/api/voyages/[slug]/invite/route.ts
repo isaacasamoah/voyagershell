@@ -6,7 +6,6 @@ import { requireAuthResponse } from '@/lib/auth';
 import {
   getVoyageBySlug,
   regenerateInviteCode,
-  getInviteUrl,
 } from '@/lib/voyage';
 
 interface RouteParams {
@@ -51,7 +50,6 @@ export const POST = async (_req: Request, { params }: RouteParams) => {
 
     return NextResponse.json({
       inviteCode: newCode,
-      inviteUrl: getInviteUrl(newCode),
     });
   } catch (error) {
     console.error('[Voyage Invite API] POST error:', error);

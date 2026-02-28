@@ -163,6 +163,11 @@ export const composeSystemPrompt = async (
     dynamicParts.push('# Auth: Just signed in');
   }
 
+  // First-turn display name capture — only when user has no display name
+  if (profile && !profile.displayName) {
+    dynamicParts.push('# Display Name\nThis user has no display name yet. On your first response, naturally ask what you should call them. When they tell you, use the set_display_name tool. Keep it conversational — "What should I call you?" not a form.');
+  }
+
   // Continuity context (changes per turn based on reference signals)
   if (continuityContext) {
     dynamicParts.push(`# Conversation Context (from earlier)\n${continuityContext}`);

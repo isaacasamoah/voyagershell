@@ -27,29 +27,6 @@ export const useVoyageContext = ({
         const data = await res.json()
         setVoyages(data.voyages || [])
 
-        // Check for pending invite from join page
-        const pendingInvite = localStorage.getItem('pendingInvite')
-        if (pendingInvite) {
-          localStorage.removeItem('pendingInvite')
-          const joinRes = await fetch(`/api/voyages/join/${pendingInvite}`, { method: 'POST' })
-          if (joinRes.ok) {
-            const joinData = await joinRes.json()
-            const refreshRes = await fetch('/api/voyages')
-            if (refreshRes.ok) {
-              const refreshData = await refreshRes.json()
-              setVoyages(refreshData.voyages || [])
-              const joined = refreshData.voyages?.find((v: VoyageMembership) => v.slug === joinData.voyage.slug)
-              if (joined) {
-                setCurrentVoyage(joined)
-                setFeedbackMessage(joinData.alreadyMember
-                  ? `You're already a member of ${joinData.voyage.name}!`
-                  : `Welcome to ${joinData.voyage.name}!`)
-                setTimeout(() => setFeedbackMessage(null), 3000)
-              }
-            }
-          }
-        }
-
         // Check URL for voyage param
         const urlParams = new URLSearchParams(window.location.search)
         const voyageSlug = urlParams.get('voyage')

@@ -21,7 +21,7 @@ import {
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
-import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers } from '@/lib/voyage'
+import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages } from '@/lib/voyage'
 import { createMessageEvent } from '@/lib/knowledge/events'
 
 // Resolve short ID (8 chars) to full UUID
@@ -427,7 +427,7 @@ export interface ToolRegistration {
 
 /**
  * Creates tools for the primary Voyager agent.
- * 12 tools: 6 retrieval + spawn_background_agent + ask_captain + create_voyage + sign_out + resolve_mention + get_messages.
+ * 15 tools: 6 retrieval + spawn_background_agent + ask_captain + create_voyage + invite_to_voyage + sign_out + switch_voyage + set_display_name + resolve_mention + get_messages.
  * Returns both the tools object (for AI SDK) and registrations (for strategy composition).
  */
 export const createVoyagerTools = (ctx: ToolContext): {
@@ -472,6 +472,61 @@ export const createVoyagerTools = (ctx: ToolContext): {
     },
   })
 
+  // invite_to_voyage — Captain invites someone via magic link email
+  const invite_to_voyage = tool({
+    description: `Invite someone to the current voyage by email. Sends them a magic link that authenticates and joins them in one click. Captain-only — crew members cannot invite. Always confirm with the user before sending. Use when the captain says "invite X to Y", "add X to the voyage", "send X an invite", etc.`,
+    inputSchema: z.object({
+      email: z.string().describe('Email address to invite'),
+      voyage_name: z.string().optional().describe('Voyage name for disambiguation (uses current voyage if omitted)'),
+    }),
+    execute: async (input) => {
+      const { email } = input
+
+      // Requires voyage context
+      if (!ctx.voyageSlug) {
+        return 'You need to be in a voyage to send invites. Switch to a voyage first.'
+      }
+
+      // Captain-only
+      const captainCheck = await isCaptain(ctx.voyageSlug, ctx.userId)
+      if (!captainCheck) {
+        return 'Only the captain can send invites. Ask your captain to invite them.'
+      }
+
+      // Validate email format
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return 'That doesn\'t look like a valid email address.'
+      }
+
+      // Fetch captain's display name for the email
+      const adminClient = getAdminClient()
+      const { data: profile } = await adminClient
+        .from('profiles')
+        .select('display_name')
+        .eq('id', ctx.userId)
+        .maybeSingle()
+
+      const inviterName = (profile as { display_name: string | null } | null)?.display_name || 'Someone'
+
+      const result = await sendVoyageInvite({
+        email,
+        voyageSlug: ctx.voyageSlug,
+        invitedBy: ctx.userId,
+        inviterDisplayName: inviterName,
+      })
+
+      if (result.alreadyInvited) {
+        return `${email} already has a pending invite to this voyage.`
+      }
+
+      if (!result.success) {
+        return result.error || 'Failed to send invite.'
+      }
+
+      return `Invite sent to ${email}. They'll receive a magic link to join.`
+    },
+  })
+
   // sign_out — LLM calls this when user wants to leave.
   // Server-side no-op; client detects the tool call and fires signOut().
   const sign_out = tool({
@@ -480,6 +535,65 @@ export const createVoyagerTools = (ctx: ToolContext): {
       farewell: z.string().describe('Your brief farewell message to the user'),
     }),
     execute: async (_input) => ({ status: 'signing_out' }),
+  })
+
+  // switch_voyage — LLM calls this when user wants to change voyage context.
+  // Server resolves name to slug; client detects the tool call and fires setCurrentVoyage.
+  const switch_voyage = tool({
+    description: `Switch to a different voyage or to personal space. Use when the user says "switch to X", "go to X", "change to X voyage", "switch to personal", etc. Resolves the voyage name against the user's memberships.`,
+    inputSchema: z.object({
+      voyage_name: z.string().describe('Name of the voyage to switch to, or "personal" for personal space'),
+    }),
+    execute: async (input) => {
+      const { voyage_name } = input
+
+      // Handle "personal" explicitly
+      if (voyage_name.toLowerCase() === 'personal') {
+        return JSON.stringify({ switched: true, slug: null, name: 'Personal' })
+      }
+
+      // Look up the user's voyages
+      const memberships = await getUserVoyages(ctx.userId)
+
+      if (memberships.length === 0) {
+        return "You're not part of any voyages yet. Want to create one?"
+      }
+
+      // Case-insensitive match
+      const lower = voyage_name.toLowerCase()
+      const match = memberships.find(v =>
+        v.name.toLowerCase() === lower ||
+        v.slug.toLowerCase() === lower
+      )
+
+      if (!match) {
+        const names = memberships.map(v => v.name).join(', ')
+        return `No voyage called "${voyage_name}" found. Your voyages: ${names}`
+      }
+
+      return JSON.stringify({ switched: true, slug: match.slug, name: match.name })
+    },
+  })
+
+  // set_display_name — LLM calls this when user tells Voyager their name
+  const set_display_name = tool({
+    description: `Set the user's display name. Use when a new user tells you what to call them, or when any user wants to change their display name. Natural follow-up: confirm with their name ("Got it, {name}.").`,
+    inputSchema: z.object({
+      name: z.string().min(1).max(50).describe('The display name to set'),
+    }),
+    execute: async (input) => {
+      const { name } = input
+      const supabase = getAdminClient()
+      const { error } = await supabase
+        .from('profiles')
+        .update({ display_name: name })
+        .eq('id', ctx.userId)
+      if (error) {
+        console.error('[set_display_name] Error:', error)
+        return 'Failed to save your name. Try again?'
+      }
+      return JSON.stringify({ set: true, name })
+    },
   })
 
   // get_messages — V6: structural retrieval for messages (D15)
@@ -714,9 +828,24 @@ export const createVoyagerTools = (ctx: ToolContext): {
       strategyHint: 'Create a new voyage when user asks. Returns name, slug, invite code.',
     },
     {
+      name: 'invite_to_voyage',
+      tool: invite_to_voyage,
+      strategyHint: 'Captain invites someone by email. Sends magic link that authenticates + joins in one click.',
+    },
+    {
       name: 'sign_out',
       tool: sign_out,
       strategyHint: 'Sign the user out. Call after saying goodbye.',
+    },
+    {
+      name: 'switch_voyage',
+      tool: switch_voyage,
+      strategyHint: 'Switch voyage context. "switch to X", "go to personal". Client-side state change.',
+    },
+    {
+      name: 'set_display_name',
+      tool: set_display_name,
+      strategyHint: 'Set user display name. New users without a name, or name change requests.',
     },
     {
       name: 'resolve_mention',

@@ -513,13 +513,189 @@ export const regenerateInviteCode = async (
   }
 };
 
+// =============================================================================
+// VOYAGE INVITES (Invite-as-Magic-Link)
+// =============================================================================
+
+export interface SendVoyageInviteInput {
+  email: string
+  voyageSlug: string
+  invitedBy: string
+  inviterDisplayName: string
+}
+
+export interface SendVoyageInviteResult {
+  success: boolean
+  error?: string
+  alreadyInvited?: boolean
+}
+
 /**
- * Get the full invite URL for a voyage.
+ * Send a voyage invite: generate magic link, send branded email, create invite record.
+ * Tool does auth/validation, this function does execution.
  */
-export const getInviteUrl = (inviteCode: string): string => {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  return `${baseUrl}/join/${inviteCode}`;
-};
+export const sendVoyageInvite = async (input: SendVoyageInviteInput): Promise<SendVoyageInviteResult> => {
+  const { email, voyageSlug, invitedBy, inviterDisplayName } = input
+  const normalizedEmail = email.trim().toLowerCase()
+  const supabase = getAdminSupabase()
+
+  try {
+    // Resolve voyage
+    const voyage = await getVoyageBySlug(voyageSlug)
+    if (!voyage) {
+      return { success: false, error: 'Voyage not found' }
+    }
+
+    // Check for existing pending invite (idempotent)
+    // Cast: voyage_invites not in generated types until migration runs + types regen
+    const { data: existing } = await (supabase as any)
+      .from('voyage_invites')
+      .select('id')
+      .eq('voyage_id', voyage.id)
+      .eq('email', normalizedEmail)
+      .eq('status', 'pending')
+      .maybeSingle()
+
+    if (existing) {
+      return { success: true, alreadyInvited: true }
+    }
+
+    // Generate magic link token via Supabase admin API
+    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: 'magiclink',
+      email: normalizedEmail,
+    })
+
+    if (linkError || !linkData?.properties?.hashed_token) {
+      log.voyage('generateLink error for invite', { error: linkError?.message }, 'error')
+      return { success: false, error: 'Failed to generate magic link' }
+    }
+
+    // Build callback URL with voyage as direct query param
+    const { getBaseUrl } = await import('@/lib/auth')
+    const baseUrl = getBaseUrl()
+    const callbackUrl = `${baseUrl}/auth/callback?token_hash=${encodeURIComponent(linkData.properties.hashed_token)}&type=magiclink&voyage=${encodeURIComponent(voyageSlug)}`
+
+    // Send branded invite email via Resend
+    const { inviteEmailHtml, inviteEmailText } = await import('@/emails/magic-link')
+
+    if (!process.env.RESEND_API_KEY) {
+      log.voyage('Invite link (dev mode — no Resend key)', { callbackUrl })
+      // Still create the invite record in dev
+    } else {
+      const { Resend } = await import('resend')
+      const resend = new Resend(process.env.RESEND_API_KEY)
+      const { error: sendError } = await resend.emails.send({
+        from: process.env.RESEND_FROM_EMAIL ?? 'Voyager Shell <onboarding@resend.dev>',
+        to: normalizedEmail,
+        subject: `${inviterDisplayName} invited you to ${voyage.name}`,
+        html: inviteEmailHtml(callbackUrl, voyage.name, inviterDisplayName),
+        text: inviteEmailText(callbackUrl, voyage.name, inviterDisplayName),
+      })
+
+      if (sendError) {
+        log.voyage('Resend invite error', { error: String(sendError) }, 'error')
+        return { success: false, error: 'Failed to send invite email' }
+      }
+    }
+
+    // Create invite record
+    const { error: insertError } = await (supabase as any)
+      .from('voyage_invites')
+      .insert({
+        voyage_id: voyage.id,
+        email: normalizedEmail,
+        invited_by: invitedBy,
+        status: 'pending',
+      })
+
+    if (insertError) {
+      log.voyage('Insert invite error', { error: insertError.message }, 'error')
+      return { success: false, error: 'Failed to record invite' }
+    }
+
+    log.voyage('Voyage invite sent', { email: normalizedEmail, voyage: voyageSlug })
+    return { success: true }
+  } catch (error) {
+    log.voyage('sendVoyageInvite error', { error: String(error) }, 'error')
+    return { success: false, error: 'Failed to send invite' }
+  }
+}
+
+/**
+ * Accept a voyage invite: join the voyage and mark invite accepted.
+ * Called from auth callback when voyage param is present.
+ */
+export const acceptVoyageInvite = async (
+  userEmail: string,
+  userId: string,
+  voyageSlug: string
+): Promise<{ joined: boolean; alreadyMember: boolean }> => {
+  const normalizedEmail = userEmail.trim().toLowerCase()
+  const supabase = getAdminSupabase()
+
+  try {
+    // Resolve voyage
+    const voyage = await getVoyageBySlug(voyageSlug)
+    if (!voyage) {
+      log.voyage('acceptVoyageInvite: voyage not found', { voyageSlug })
+      return { joined: false, alreadyMember: false }
+    }
+
+    // Check if already a member
+    const { data: existingMember } = await supabase
+      .from('voyage_members')
+      .select('id')
+      .eq('voyage_id', voyage.id)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (existingMember) {
+      return { joined: false, alreadyMember: true }
+    }
+
+    // Look up pending invite
+    // Cast: voyage_invites not in generated types until migration runs + types regen
+    const { data: invite } = await (supabase as any)
+      .from('voyage_invites')
+      .select('id')
+      .eq('voyage_id', voyage.id)
+      .eq('email', normalizedEmail)
+      .eq('status', 'pending')
+      .maybeSingle()
+
+    if (!invite) {
+      log.voyage('acceptVoyageInvite: no pending invite found', { email: normalizedEmail, voyageSlug })
+      return { joined: false, alreadyMember: false }
+    }
+
+    // Join voyage as crew
+    const { error: joinError } = await supabase
+      .from('voyage_members')
+      .insert({
+        voyage_id: voyage.id,
+        user_id: userId,
+        role: 'crew',
+      })
+
+    if (joinError) {
+      log.voyage('acceptVoyageInvite: join error', { error: joinError.message }, 'error')
+      return { joined: false, alreadyMember: false }
+    }
+
+    // Mark invite accepted
+    await (supabase as any)
+      .from('voyage_invites')
+      .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+      .eq('id', invite.id)
+
+    log.voyage('Voyage invite accepted', { email: normalizedEmail, voyageSlug, userId })
+    return { joined: true, alreadyMember: false }
+  } catch (error) {
+    log.voyage('acceptVoyageInvite error', { error: String(error) }, 'error')
+    return { joined: false, alreadyMember: false }
+  }
+}
 
 // =============================================================================
 // DELIVERY MARKING (Sentinel)
