@@ -184,10 +184,12 @@ export const POST = async (req: Request) => {
       });
 
       // Emit knowledge event (fire-and-forget)
-      // Messages ARE the knowledge — preserved exactly as source events
+      // Conversation turns → eventType 'conversation' (Cartographer enriches these)
+      // Inter-user messages via resolve_mention → eventType 'message' (skip Cartographer)
       emitMessageEvent(conversationId, 'user', queryText, {
         userId: userId,
         voyageSlug: voyageSlug,
+        eventType: 'conversation',
       });
     }
 
@@ -336,6 +338,7 @@ export const POST = async (req: Request) => {
             await createMessageEvent(conversationId, 'assistant', text, {
               userId: userId,
               voyageSlug: voyageSlug,
+              eventType: 'conversation',
             });
 
             // Log citations (fire-and-forget)

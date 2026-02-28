@@ -30,7 +30,8 @@ const getOpenAI = (): OpenAI => {
 
 // Source event types — these contain THE ACTUAL KNOWLEDGE
 export type SourceEventType =
-  | 'message'        // Conversation message
+  | 'conversation'   // Chat turns (user + assistant) — Cartographer enriches these
+  | 'message'        // Inter-user messages via resolve_mention
   | 'document'       // Google Docs, Notion, etc.
   | 'slack_message'  // Slack message/thread
   | 'jira_update'    // Jira ticket/comment
@@ -287,12 +288,15 @@ export const createMessageEvent = async (
     senderUserId?: string
     attentionScore?: number
     contextSnippet?: string
+    /** Override event type. Default: 'message'. Use 'conversation' for chat turns. */
+    eventType?: SourceEventType
   }
 ): Promise<string | null> => {
-  console.log('[Knowledge] Creating message event for conversation:', conversationId)
+  const eventType = options?.eventType ?? 'message'
+  console.log(`[Knowledge] Creating ${eventType} event for conversation:`, conversationId)
 
   const eventId = await createSourceEvent({
-    eventType: 'message',
+    eventType,
     content: content,
     userId: options?.userId,
     voyageSlug: options?.voyageSlug,
@@ -452,6 +456,7 @@ export const emitMessageEvent = (
     senderUserId?: string
     attentionScore?: number
     contextSnippet?: string
+    eventType?: SourceEventType
   }
 ): void => {
   // Fire and forget — don't await
