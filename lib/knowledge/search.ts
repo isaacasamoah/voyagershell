@@ -673,8 +673,6 @@ export const loadAwareness = async (
 
     if (error || !data || data.length === 0) return []
 
-    console.log(`[Knowledge] ${data.length} awareness item(s) for user`)
-
     // Map rows to AwarenessItem[], excluding suppress-tier
     const items: AwarenessItem[] = data
       .filter(row => (row.surfacing_tier as string) !== 'suppress')
