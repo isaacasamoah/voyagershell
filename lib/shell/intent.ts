@@ -3,6 +3,7 @@
 // Pure function, zero dependencies, fully testable.
 
 import type { ActionIntent, CommandVerb } from './types'
+import { log } from '@/lib/debug'
 
 // Verb stems → command mapping
 // Each key is a bare verb stem that maps to one of the seven commands
@@ -48,9 +49,25 @@ const QUESTION_WORDS = new Set([
  * or null if the message is conversation.
  */
 export const detectActionIntent = (message: string): ActionIntent | null => {
+  const start = performance.now()
   const trimmed = message.trim()
   if (!trimmed) return null
 
+  const result = detectIntent(trimmed)
+  const ms = (performance.now() - start).toFixed(3)
+
+  if (result) {
+    const target = result.target ? `:${result.target}` : ''
+    log.shell(`detect | "${trimmed.slice(0, 40)}${trimmed.length > 40 ? '...' : ''}" → ${result.verb}${target} | ${ms}ms`)
+  } else {
+    log.shell(`detect | "${trimmed.slice(0, 40)}${trimmed.length > 40 ? '...' : ''}" → null | ${ms}ms`)
+  }
+
+  return result
+}
+
+/** Core detection logic — pure, no side effects */
+const detectIntent = (trimmed: string): ActionIntent | null => {
   // Check for @mention at start → tell intent
   const atMentionMatch = trimmed.match(/^@(\w+)\s*([\s\S]*)$/)
   if (atMentionMatch) {
@@ -93,7 +110,8 @@ export const detectActionIntent = (message: string): ActionIntent | null => {
 
   if (verb === 'tell') {
     // "tell tom the deadline moved" → target: tom, payload: the deadline moved
-    const target = rest[0]?.toLowerCase().replace(/[.,!?;:]+$/, '')
+    // "ask @tom about the API" → strip @ prefix from target
+    const target = rest[0]?.toLowerCase().replace(/[.,!?;:]+$/, '').replace(/^@/, '')
     const payload = rest.slice(1).length > 0
       ? trimmed.slice(trimmed.indexOf(rest[1] ?? '') || trimmed.length).trim()
       : undefined

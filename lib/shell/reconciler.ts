@@ -4,7 +4,7 @@
 // Catches confabulation, executes fallbacks for server-side commands.
 
 import type { ActionIntent, CommandVerb, ReconciliationOutcome, ReconciliationResult } from './types'
-import { createMessageEvent } from '@/lib/knowledge/events'
+import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
 import { searchKnowledge } from '@/lib/knowledge/search'
 import { getVoyageBySlug, getVoyageMembers } from '@/lib/voyage'
 import { log } from '@/lib/debug'
@@ -13,7 +13,7 @@ import { log } from '@/lib/debug'
 const VERB_TOOL_MAP: Record<CommandVerb, string[]> = {
   tell: ['resolve_mention'],
   find: ['semantic_search', 'keyword_grep', 'search_by_time', 'get_connected', 'get_nodes', 'web_search'],
-  remember: [],                    // Feature 2 adds 'remember_knowledge'
+  remember: ['remember_knowledge'],
   switch: ['switch_voyage'],       // log-only fallback (client-side action)
   show: ['get_messages'],
   do: ['create_voyage', 'invite_to_voyage', 'sign_out'],  // sign_out: log-only (client-side)
@@ -21,13 +21,14 @@ const VERB_TOOL_MAP: Record<CommandVerb, string[]> = {
 }
 
 // Verbs where the reconciler can execute a server-side fallback
-const FALLBACK_ENABLED = new Set<CommandVerb>(['tell', 'find'])
+const FALLBACK_ENABLED = new Set<CommandVerb>(['tell', 'find', 'remember'])
 
 // Claim detection — does the response text suggest the action happened?
 // Conservative patterns — high confidence only, expand based on logs.
 const CLAIM_PATTERNS: Partial<Record<CommandVerb, RegExp>> = {
   tell: /\b(I'll let .+ know|told|messaged|sent .+ (?:a |the )?message|notified|passed .+ along|forwarded|letting .+ know|I've (?:told|messaged|notified|sent))\b/i,
   find: /\b(found|here'?s? what|results|I (?:found|discovered|located)|let me share what)\b/i,
+  remember: /\b(remembered|saved|noted|I'll (?:remember|keep|note)|got it|stored|recorded)\b/i,
 }
 
 interface ReconcileContext {
@@ -134,6 +135,8 @@ const executeFallback = async (
       return executeTellFallback(intent, ctx)
     case 'find':
       return executeFindFallback(intent, ctx)
+    case 'remember':
+      return executeRememberFallback(intent, ctx)
     default:
       return null
   }
@@ -243,6 +246,39 @@ const executeFindFallback = async (
     return 'searchKnowledge'
   } catch (error) {
     log.shell(`find fallback error: ${String(error)}`, undefined, 'error')
+    return null
+  }
+}
+
+/**
+ * Remember fallback: persist the intent payload as explicit knowledge.
+ * Same as what remember_knowledge tool does.
+ */
+const executeRememberFallback = async (
+  intent: ActionIntent,
+  ctx: ReconcileContext,
+): Promise<string | null> => {
+  if (!intent.payload) {
+    log.shell('remember fallback skipped: no payload to save')
+    return null
+  }
+
+  try {
+    const eventId = await createExplicitEvent(intent.payload, {
+      userId: ctx.userId,
+      voyageSlug: ctx.voyageSlug,
+      classifications: ['preference'],
+    })
+
+    if (!eventId) {
+      log.shell('remember fallback: createExplicitEvent returned null', undefined, 'warn')
+      return null
+    }
+
+    log.shell(`remember fallback executed: saved "${intent.payload.slice(0, 40)}"`)
+    return 'createExplicitEvent'
+  } catch (error) {
+    log.shell(`remember fallback error: ${String(error)}`, undefined, 'error')
     return null
   }
 }

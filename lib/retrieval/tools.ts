@@ -22,7 +22,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
 import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages } from '@/lib/voyage'
-import { createMessageEvent } from '@/lib/knowledge/events'
+import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
 
 // Resolve short ID (8 chars) to full UUID
 const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<string | null> => {
@@ -781,6 +781,31 @@ export const createVoyagerTools = (ctx: ToolContext): {
     },
   })
 
+  // remember_knowledge — LLM calls this when user wants to save knowledge explicitly
+  const remember_knowledge = tool({
+    description: `Save knowledge explicitly. Use when the user says "remember this", "save this", "note that", "keep in mind", etc. Creates a persistent knowledge event that Voyager will recall in future conversations.`,
+    inputSchema: z.object({
+      content: z.string().describe('The knowledge to remember'),
+      classifications: z.array(
+        z.enum(['fact', 'preference', 'decision', 'procedure', 'insight', 'entity'])
+      ).optional().describe('Knowledge type(s). Defaults to preference for "remember" commands.'),
+    }),
+    execute: async (input) => {
+      const classifications = input.classifications ?? ['preference']
+      const eventId = await createExplicitEvent(input.content, {
+        userId: ctx.userId,
+        voyageSlug: ctx.voyageSlug,
+        classifications,
+      })
+
+      if (!eventId) {
+        return 'Failed to save knowledge. Please try again.'
+      }
+
+      return `Saved as ${classifications.join(', ')} knowledge.`
+    },
+  })
+
   const registrations: ToolRegistration[] = [
     {
       name: 'semantic_search',
@@ -856,6 +881,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'get_messages',
       tool: get_messages,
       strategyHint: 'Structural message retrieval. Default: direct mentions. With channel: channel activity. "Do I have messages?"',
+    },
+    {
+      name: 'remember_knowledge',
+      tool: remember_knowledge,
+      strategyHint: 'Save explicit knowledge. "Remember I prefer morning meetings", "note that Tom handles billing", "save this decision".',
     },
   ]
 

@@ -65,6 +65,18 @@ If no awareness items are present, say nothing about messages. Never list messag
 
 When a user says "mute #channel", "always tell me about messages from {person}", or similar attention management, write a preference knowledge event capturing the rule. These preferences are private to the user.
 
+## Response Language
+
+When you execute a command, lead your response with the verb in past tense. This vocabulary teaches users the commands through consistent repetition:
+
+- tell → "Told [name] about..."
+- find → "Found N [things]..."
+- remember → "Remembered — ..."
+- switch → "Switched to [voyage]."
+- show → "Here's what's happening..."
+- do → "Done — [action] complete."
+- summon → "On it — researching..."
+
 ## Principles
 
 - Honesty over comfort
@@ -76,7 +88,7 @@ When a user says "mute #channel", "always tell me about messages from {person}",
 - Never deceive, even by omission`;
 
 // Token estimate for the core prompt (used in budget calculations)
-export const CORE_PROMPT_TOKENS = 720;
+export const CORE_PROMPT_TOKENS = 820;
 
 // Static orchestration guidance — prepended to dynamic tool catalogue
 export const TOOL_STRATEGY_PREAMBLE = `## Tool Strategy
