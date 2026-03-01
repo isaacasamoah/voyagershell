@@ -22,6 +22,7 @@ const DOMAINS = {
   auth: '🔐',
   api: '📡',
   agent: '🤖',
+  shell: '🐚',
 } as const;
 
 export type LogDomain = keyof typeof DOMAINS;
@@ -77,4 +78,5 @@ export const log = {
   auth: (msg: string, data?: Record<string, unknown>, level?: LogLevel) => voyagerLog('auth', msg, data, level),
   api: (msg: string, data?: Record<string, unknown>, level?: LogLevel) => voyagerLog('api', msg, data, level),
   agent: (msg: string, data?: Record<string, unknown>, level?: LogLevel) => voyagerLog('agent', msg, data, level),
+  shell: (msg: string, data?: Record<string, unknown>, level?: LogLevel) => voyagerLog('shell', msg, data, level),
 };

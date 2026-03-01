@@ -18,6 +18,8 @@ import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer'
 import { modelRouter, creditTracker } from '@/lib/models';
 import { updateLastSeen, markDelivered } from '@/lib/voyage';
 import { log } from '@/lib/debug';
+import { detectActionIntent } from '@/lib/shell/intent';
+import { reconcileActions } from '@/lib/shell/reconciler';
 
 export const maxDuration = 30;
 
@@ -113,6 +115,9 @@ export const POST = async (req: Request) => {
       .filter((m) => m.role === 'user')
       .pop();
     const queryText = lastUserMessage?.content ?? '';
+
+    // Shell Contract: detect verb intent before LLM runs
+    const intent = detectActionIntent(queryText);
 
     log.message('Processing user message', {
       conversationId,
@@ -259,6 +264,12 @@ export const POST = async (req: Request) => {
       staticPrefix = getBasePrompt() + '\n\n' + toolStrategy;
     }
 
+    // Shell Contract: inject intent guidance into dynamic (uncached) prompt
+    if (intent) {
+      const target = intent.target ? ` ${intent.target}` : '';
+      dynamicSuffix += `\n[Shell: intent detected — ${intent.verb}${target}. Ensure the corresponding tool is called.]`;
+    }
+
     // Build messages array with cache control for prompt caching
     const cacheControl = { anthropic: { cacheControl: { type: 'ephemeral' as const } } };
 
@@ -298,7 +309,20 @@ export const POST = async (req: Request) => {
         stepCountIs(15),                        // hard cost cap
         hasToolCall('spawn_background_agent'),   // offloaded to background
       ],
-      onFinish: async ({ text, finishReason, usage, providerMetadata }) => {
+      onFinish: async ({ text, steps, finishReason, usage, providerMetadata }) => {
+        // Shell Contract: reconcile detected intent against actual tool calls
+        if (intent) {
+          const allToolCalls = steps.flatMap(step => step.toolCalls);
+          waitUntil(
+            reconcileActions(
+              intent,
+              allToolCalls.map(tc => ({ toolName: tc.toolName })),
+              text ?? '',
+              { userId, voyageSlug, conversationId },
+            ).catch(err => log.api('Shell reconciliation error', { error: String(err) }, 'error'))
+          );
+        }
+
         // Extract cache metrics from Anthropic provider
         const cacheCreationTokens = (providerMetadata?.anthropic?.cacheCreationInputTokens as number) ?? 0;
         const cacheReadTokens = (providerMetadata?.anthropic?.cacheReadInputTokens as number) ?? 0;
