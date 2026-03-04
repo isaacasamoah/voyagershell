@@ -796,6 +796,7 @@ export const createVoyagerTools = (ctx: ToolContext): {
         userId: ctx.userId,
         voyageSlug: ctx.voyageSlug,
         classifications,
+        sessionId: ctx.conversationId,
       })
 
       if (!eventId) {

@@ -361,6 +361,7 @@ export const createExplicitEvent = async (
     userId?: string
     voyageSlug?: string
     classifications?: Classification[]
+    sessionId?: string
   }
 ): Promise<string | null> => {
   console.log('[Knowledge] Creating explicit event')
@@ -372,6 +373,7 @@ export const createExplicitEvent = async (
     voyageSlug: options.voyageSlug,
     metadata: {
       classifications: options.classifications ?? [],
+      session_id: options.sessionId,
     },
     sourceType: 'explicit',
     actorType: 'user',

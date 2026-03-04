@@ -268,6 +268,7 @@ const executeRememberFallback = async (
       userId: ctx.userId,
       voyageSlug: ctx.voyageSlug,
       classifications: ['preference'],
+      sessionId: ctx.conversationId,
     })
 
     if (!eventId) {

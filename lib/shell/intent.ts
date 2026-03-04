@@ -111,7 +111,9 @@ const detectIntent = (trimmed: string): ActionIntent | null => {
   if (verb === 'tell') {
     // "tell tom the deadline moved" → target: tom, payload: the deadline moved
     // "ask @tom about the API" → strip @ prefix from target
+    // "tell me about X" → not a tell command, "me" is a stop word
     const target = rest[0]?.toLowerCase().replace(/[.,!?;:]+$/, '').replace(/^@/, '')
+    if (!target || target === 'me' || target === 'us') return null
     const payload = rest.slice(1).length > 0
       ? trimmed.slice(trimmed.indexOf(rest[1] ?? '') || trimmed.length).trim()
       : undefined
