@@ -7,6 +7,7 @@
 import { searchKnowledge, type SearchOptions, type KnowledgeNode } from './search'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { cohereRerank, type RerankResult } from './rerank'
+import { reformulateQuery } from './reformulate'
 
 // =============================================================================
 // Types
@@ -44,6 +45,7 @@ export interface HybridSearchOptions {
   voyageSlug?: string
   minAttention?: number
   knowledgeType?: string
+  reformulate?: boolean       // multi-query reformulation (default false — ships disabled)
 }
 
 interface KeywordResult {
@@ -220,11 +222,11 @@ export const hybridSearch = async (
     voyageSlug,
     minAttention = 0.0,
     knowledgeType,
+    reformulate = false,
   } = options
 
   const startTime = Date.now()
 
-  // Run semantic and keyword search in parallel
   const semanticOpts: SearchOptions = {
     threshold: semanticThreshold,
     limit,
@@ -240,54 +242,85 @@ export const hybridSearch = async (
     minAttention,
   }
 
-  const [semanticStart, keywordStart] = [Date.now(), Date.now()]
+  // Determine queries to search — original only, or original + reformulations
+  let queries = [query]
+  let reformulateMs = 0
 
-  const [semanticResults, keywordResults] = await Promise.all([
-    searchKnowledge(userId, query, semanticOpts),
-    keywordSearch(userId, query, keywordOpts),
-  ])
+  if (reformulate) {
+    const reformulateStart = Date.now()
+    const { reformulations } = await reformulateQuery(query)
+    reformulateMs = Date.now() - reformulateStart
+    if (reformulations.length > 0) {
+      queries = [query, ...reformulations]
+    }
+  }
 
-  const semanticMs = Date.now() - semanticStart
-  const keywordMs = Date.now() - keywordStart
+  // Run hybrid search for each query in parallel
+  const searchStart = Date.now()
 
-  // Transform to ranked format for RRF
-  const semanticRanked = semanticResults.map((node, index) => ({
-    eventId: node.eventId,
-    rank: index + 1, // 1-indexed rank
-    metadata: {
-      event_id: node.eventId,
-      content: node.content,
-      source_created_at: node.createdAt.toISOString(),
-      classifications: node.classifications,
-      entities: node.entities,
-      topics: node.topics,
-      connected_to: node.connectedTo,
-      knowledge_type: node.knowledgeType,
-      attention_score: node.attentionScore,
-      context_snippet: node.contextSnippet,
-      similarity: node.similarity,
-    } as RankedResult['metadata'],
-  }))
+  const allSearchResults = await Promise.all(
+    queries.map(async (q) => {
+      const [semanticResults, keywordResults] = await Promise.all([
+        searchKnowledge(userId, q, semanticOpts),
+        keywordSearch(userId, q, keywordOpts),
+      ])
+      return { query: q, semanticResults, keywordResults }
+    })
+  )
 
-  const keywordRanked = keywordResults.map((row, index) => ({
-    eventId: row.event_id,
-    rank: index + 1, // 1-indexed rank
-    metadata: {
-      event_id: row.event_id,
-      content: row.content,
-      source_created_at: row.source_created_at,
-      classifications: row.classifications,
-      entities: row.entities,
-      topics: row.topics,
-      connected_to: row.connected_to,
-      knowledge_type: row.knowledge_type,
-      attention_score: row.attention_score,
-      context_snippet: row.context_snippet,
-    } as RankedResult['metadata'],
-  }))
+  const searchMs = Date.now() - searchStart
 
-  // Fuse with RRF
-  const fused = rrfFuse(semanticRanked, keywordRanked, { k, semanticWeight, keywordWeight })
+  // Transform all results to ranked format and collect for RRF fusion
+  const allSemanticRanked: { eventId: string; rank: number; metadata: RankedResult['metadata'] }[] = []
+  const allKeywordRanked: { eventId: string; rank: number; metadata: RankedResult['metadata'] }[] = []
+
+  let totalSemantic = 0
+  let totalKeyword = 0
+
+  for (const { semanticResults, keywordResults } of allSearchResults) {
+    const semanticRanked = semanticResults.map((node, index) => ({
+      eventId: node.eventId,
+      rank: index + 1,
+      metadata: {
+        event_id: node.eventId,
+        content: node.content,
+        source_created_at: node.createdAt.toISOString(),
+        classifications: node.classifications,
+        entities: node.entities,
+        topics: node.topics,
+        connected_to: node.connectedTo,
+        knowledge_type: node.knowledgeType,
+        attention_score: node.attentionScore,
+        context_snippet: node.contextSnippet,
+        similarity: node.similarity,
+      } as RankedResult['metadata'],
+    }))
+
+    const keywordRanked = keywordResults.map((row, index) => ({
+      eventId: row.event_id,
+      rank: index + 1,
+      metadata: {
+        event_id: row.event_id,
+        content: row.content,
+        source_created_at: row.source_created_at,
+        classifications: row.classifications,
+        entities: row.entities,
+        topics: row.topics,
+        connected_to: row.connected_to,
+        knowledge_type: row.knowledge_type,
+        attention_score: row.attention_score,
+        context_snippet: row.context_snippet,
+      } as RankedResult['metadata'],
+    }))
+
+    allSemanticRanked.push(...semanticRanked)
+    allKeywordRanked.push(...keywordRanked)
+    totalSemantic += semanticResults.length
+    totalKeyword += keywordResults.length
+  }
+
+  // Fuse ALL result lists with RRF (deduplication is built into rrfFuse)
+  const fused = rrfFuse(allSemanticRanked, allKeywordRanked, { k, semanticWeight, keywordWeight })
 
   // Trim to limit
   const rrfResults = fused.slice(0, limit)
@@ -309,10 +342,12 @@ export const hybridSearch = async (
   }))
 
   const totalMs = Date.now() - startTime
+  const reformulateLog = reformulate ? `reformulate=${queries.length - 1}q (${reformulateMs}ms), ` : ''
   console.log(
     `[Knowledge] Hybrid search: "${query.slice(0, 50)}..." ` +
-    `semantic=${semanticResults.length} (${semanticMs}ms), ` +
-    `keyword=${keywordResults.length} (${keywordMs}ms), ` +
+    `${reformulateLog}` +
+    `semantic=${totalSemantic} (${searchMs}ms), ` +
+    `keyword=${totalKeyword}, ` +
     `rerank=${reranked.length} (${rerankMs}ms), ` +
     `fused=${results.length} (total: ${totalMs}ms)`
   )

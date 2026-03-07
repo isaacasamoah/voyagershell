@@ -55,7 +55,7 @@ export const useAstronautState = ({
     const labels: Record<string, string> = {
       semantic_search: 'Searching memory...',
       keyword_grep: 'Looking for exact matches...',
-      get_connected: 'Following connections...',
+      graph: 'Traversing the graph...',
       get_nodes: 'Fetching details...',
       search_by_time: 'Checking the timeline...',
       web_search: 'Checking the web...',

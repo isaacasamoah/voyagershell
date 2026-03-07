@@ -109,3 +109,93 @@ CREATE TABLE IF NOT EXISTS knowledge_edges (
 CREATE INDEX IF NOT EXISTS idx_edges_source ON knowledge_edges(source_id, edge_type);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON knowledge_edges(target_id, edge_type);
 CREATE INDEX IF NOT EXISTS idx_edges_type ON knowledge_edges(edge_type);
+
+-- Feature 4: Recursive graph traversal RPC
+CREATE OR REPLACE FUNCTION graph_traverse(
+  p_node_id UUID,
+  p_edge_type TEXT DEFAULT NULL,
+  p_direction TEXT DEFAULT 'both',
+  p_depth INT DEFAULT 1,
+  p_min_attention FLOAT DEFAULT 0.3,
+  p_max_nodes INT DEFAULT 50
+)
+RETURNS TABLE (
+  event_id UUID,
+  content TEXT,
+  source_created_at TIMESTAMPTZ,
+  knowledge_type TEXT,
+  attention_score FLOAT,
+  context_snippet TEXT,
+  edge_type TEXT,
+  edge_direction TEXT,
+  hop INT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH RECURSIVE traversal AS (
+    -- Base case: direct edges from/to the start node
+    SELECT
+      CASE
+        WHEN p_direction IN ('outgoing', 'both') AND e.source_id = p_node_id THEN e.target_id
+        WHEN p_direction IN ('incoming', 'both') AND e.target_id = p_node_id THEN e.source_id
+      END AS node_id,
+      e.edge_type AS e_type,
+      CASE
+        WHEN e.source_id = p_node_id THEN 'outgoing'
+        ELSE 'incoming'
+      END AS e_direction,
+      1 AS depth
+    FROM knowledge_edges e
+    WHERE (
+      (p_direction IN ('outgoing', 'both') AND e.source_id = p_node_id)
+      OR (p_direction IN ('incoming', 'both') AND e.target_id = p_node_id)
+    )
+    AND (p_edge_type IS NULL OR e.edge_type = p_edge_type)
+
+    UNION
+
+    -- Recursive case: follow edges from discovered nodes
+    SELECT
+      CASE
+        WHEN e.source_id = t.node_id THEN e.target_id
+        ELSE e.source_id
+      END AS node_id,
+      e.edge_type AS e_type,
+      CASE
+        WHEN e.source_id = t.node_id THEN 'outgoing'
+        ELSE 'incoming'
+      END AS e_direction,
+      t.depth + 1 AS depth
+    FROM knowledge_edges e
+    INNER JOIN traversal t ON (
+      (e.source_id = t.node_id AND p_direction IN ('outgoing', 'both'))
+      OR (e.target_id = t.node_id AND p_direction IN ('incoming', 'both'))
+    )
+    WHERE t.depth < p_depth
+      AND (p_edge_type IS NULL OR e.edge_type = p_edge_type)
+      -- Prevent cycles: don't revisit the start node
+      AND CASE
+        WHEN e.source_id = t.node_id THEN e.target_id
+        ELSE e.source_id
+      END != p_node_id
+  )
+  SELECT DISTINCT ON (kc.event_id)
+    kc.event_id,
+    kc.content,
+    kc.source_created_at,
+    kc.knowledge_type,
+    kc.attention_score,
+    kc.context_snippet,
+    t.e_type AS edge_type,
+    t.e_direction AS edge_direction,
+    t.depth AS hop
+  FROM traversal t
+  INNER JOIN knowledge_current kc ON kc.event_id = t.node_id
+  WHERE kc.attention_score >= p_min_attention
+    AND t.node_id IS NOT NULL
+  ORDER BY kc.event_id, t.depth ASC
+  LIMIT p_max_nodes;
+END;
+$$;

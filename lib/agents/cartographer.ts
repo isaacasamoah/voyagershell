@@ -17,6 +17,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { loadConversationMessages } from '@/lib/conversation'
 import { estimateTokens } from '@/lib/conversation/window'
 import { updateKnowledgeEnrichment, type KnowledgeType } from '@/lib/knowledge/events'
+import { createEdge, type EdgeType } from '@/lib/knowledge/edges'
 import { createRetrievalTools, type ToolContext } from '@/lib/retrieval/tools'
 import { log } from '@/lib/debug/logger'
 
@@ -40,6 +41,7 @@ interface Stage1Assessment {
 interface Stage2Connection {
   fromEventId: string
   toEventId: string
+  edgeType: EdgeType
 }
 
 interface KnowledgeEventRow {
@@ -263,10 +265,21 @@ You have the assessments from Stage 1. Your job is to find connections between t
 
 Use the retrieval tools to search for related knowledge. Use the context_snippets as search queries.
 
-After searching, output a JSON array of connections:
-{ "fromEventId": "<session event id>", "toEventId": "<existing knowledge event id>" }
+After searching, output a JSON array of typed edges:
+{ "fromEventId": "<source event id>", "toEventId": "<target event id>", "edgeType": "<type>" }
 
-Only create connections where there's genuine semantic relationship. Don't force connections.
+Edge types and their directional semantics:
+- supersedes: new -> old (replaces stale knowledge)
+- supports: evidence -> claim (evidence chain)
+- contradicts: claim -> claim (tension between ideas)
+- elaborates: detail -> summary (deepens understanding)
+- triggered_by: effect -> cause (causality)
+- relates_to: concept <-> concept (lateral connection — HIGH BAR, use sparingly)
+- decided_by: decision -> person (accountability)
+- raised_by: concern/idea -> person (attribution)
+
+Direction matters. The fromEventId is always the source of the arrow.
+Only create edges where there's genuine semantic relationship. Don't force connections.
 If no meaningful connections exist, return an empty array.
 
 Output ONLY the JSON array at the end, prefixed with "CONNECTIONS:" on its own line.`
@@ -287,7 +300,7 @@ const runStage2 = async (
 
   const tools = createRetrievalTools(ctx)
   // Stage 2 only uses search tools, not spawn_background_agent or web_search
-  const { semantic_search, keyword_grep, get_connected, get_nodes, search_by_time } = tools
+  const { semantic_search, keyword_grep, graph, get_nodes, search_by_time } = tools
 
   const result = await generateText({
     model: modelRouter.select({ task: 'chat', quality: 'balanced' }),
@@ -298,7 +311,7 @@ const runStage2 = async (
         content: `## Stage 1 Assessments\n${contextSummary}\n\nSearch for related existing knowledge using the retrieval tools. Then output connections.`,
       },
     ],
-    tools: { semantic_search, keyword_grep, get_connected, get_nodes, search_by_time },
+    tools: { semantic_search, keyword_grep, graph, get_nodes, search_by_time },
     stopWhen: stepCountIs(6),
     maxOutputTokens: 4096,
   })
@@ -382,40 +395,12 @@ const applyEnrichments = async (
     log.agent('Enrichment summary', { successCount, failCount })
   }
 
-  // Apply Stage 2 connections
+  // Apply Stage 2 connections as typed edges
   for (const conn of connections) {
     try {
-      // Get current connected_to for the source event
-      const { data: sourceRow } = await supabase
-        .from('knowledge_current')
-        .select('connected_to')
-        .eq('event_id', conn.fromEventId)
-        .single()
-
-      const currentConnections = (sourceRow?.connected_to as string[]) ?? []
-      if (!currentConnections.includes(conn.toEventId)) {
-        await supabase
-          .from('knowledge_current')
-          .update({ connected_to: [...currentConnections, conn.toEventId] })
-          .eq('event_id', conn.fromEventId)
-      }
-
-      // Bidirectional: update the target too
-      const { data: targetRow } = await supabase
-        .from('knowledge_current')
-        .select('connected_to')
-        .eq('event_id', conn.toEventId)
-        .single()
-
-      const targetConnections = (targetRow?.connected_to as string[]) ?? []
-      if (!targetConnections.includes(conn.fromEventId)) {
-        await supabase
-          .from('knowledge_current')
-          .update({ connected_to: [...targetConnections, conn.fromEventId] })
-          .eq('event_id', conn.toEventId)
-      }
+      await createEdge(conn.fromEventId, conn.toEventId, conn.edgeType, 'cartographer')
     } catch (err) {
-      log.agent('Connection update failed', { from: conn.fromEventId, to: conn.toEventId, error: String(err) }, 'warn')
+      log.agent('Edge creation failed', { from: conn.fromEventId, to: conn.toEventId, edgeType: conn.edgeType, error: String(err) }, 'warn')
     }
   }
 }

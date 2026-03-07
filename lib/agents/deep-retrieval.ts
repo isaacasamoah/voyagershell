@@ -37,7 +37,7 @@ You have tools for semantic search, keyword grep, graph traversal, time-based se
 1. START with a semantic search on the core topic
 2. EVALUATE results — are they sufficient? Do they suggest new search angles?
 3. If results reference specific terms or names, use keyword_grep for precision
-4. If results have connections, use get_connected to explore the graph
+4. If results have connections, use graph to explore the knowledge graph
 5. If the objective mentions time, use search_by_time
 6. STOP when you have enough information or you're seeing diminishing returns
 

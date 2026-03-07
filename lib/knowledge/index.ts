@@ -46,3 +46,10 @@ export type { RankedResult, HybridSearchOptions } from './hybrid'
 // Reranking (v2)
 export { cohereRerank } from './rerank'
 export type { RerankOptions, RerankResult } from './rerank'
+
+// Reformulation (v2)
+export { reformulateQuery } from './reformulate'
+
+// Typed directional edges (v2)
+export { createEdge, getEdgesFrom, getEdgesTo } from './edges'
+export type { EdgeType, KnowledgeEdge } from './edges'
