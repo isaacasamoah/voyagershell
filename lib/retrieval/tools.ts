@@ -2,7 +2,7 @@
 // Voyager decides how to retrieve - not a fixed pipeline, intelligence
 //
 // Philosophy: Chain strategies for pinpoint accuracy
-// semantic_search → found topic → get_connected → keyword_grep
+// semantic_search → found topic → graph → keyword_grep
 //
 // These tools are executed by Claude during response generation
 // using Vercel AI SDK's tool calling capability.
@@ -12,12 +12,12 @@ import { z } from 'zod'
 import {
   searchKnowledge,
   keywordGrep,
-  getConnectedKnowledge,
   getKnowledgeByIds,
   buildScopeFilter,
   type KnowledgeNode,
   type GrepResult,
 } from '@/lib/knowledge'
+import { hybridSearch, type RankedResult } from '@/lib/knowledge/hybrid'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
@@ -78,6 +78,23 @@ const formatKnowledgeResult = (nodes: KnowledgeNode[]): string => {
     .join('\n\n')
 }
 
+const formatHybridResult = (results: RankedResult[]): string => {
+  if (results.length === 0) {
+    return 'No results found.'
+  }
+
+  return results
+    .map((result, i) => {
+      const shortId = result.eventId.slice(0, 8)
+      const sources = result.sources.join('+')
+      const score = result.score.toFixed(4)
+      const attn = result.metadata.attention_score ?? 0.5
+      const pinned = attn >= 0.9 ? ' [PINNED]' : ''
+      return `[${i + 1}] id:${shortId}${pinned} (${sources}, rrf:${score})\n${result.content}`
+    })
+    .join('\n\n')
+}
+
 const formatGrepResult = (results: GrepResult[]): string => {
   if (results.length === 0) {
     return 'No exact matches found.'
@@ -99,7 +116,7 @@ const formatGrepResult = (results: GrepResult[]): string => {
 
 const semanticSearchSchema = z.object({
   query: z.string().describe('The semantic search query'),
-  limit: z.number().optional().default(10).describe('Max results (1-20)'),
+  limit: z.number().optional().default(10).describe('Max results to return (1-15)'),
   threshold: z.number().optional().default(0.6).describe('Min similarity (0-1)'),
 })
 
@@ -109,8 +126,11 @@ const keywordGrepSchema = z.object({
   limit: z.number().optional().default(10).describe('Max results'),
 })
 
-const getConnectedSchema = z.object({
+const graphSchema = z.object({
   nodeId: z.string().describe('The event ID (or first 8 chars) from search results, e.g. "abc12345"'),
+  edge_type: z.string().nullable().optional().describe('Filter by edge type: supersedes, supports, contradicts, elaborates, triggered_by, relates_to, decided_by, raised_by. Null returns all types.'),
+  direction: z.enum(['outgoing', 'incoming', 'both']).optional().default('both').describe('Edge direction to traverse'),
+  depth: z.number().min(1).max(3).optional().default(1).describe('Traversal depth (1-3 hops)'),
 })
 
 const getNodesSchema = z.object({
@@ -179,17 +199,17 @@ const parseRelativeDate = (input: string): Date => {
  */
 export const createRetrievalTools = (ctx: ToolContext) => ({
   semantic_search: tool({
-    description: `Semantic search across the knowledge base. Finds content by conceptual similarity to the query. Returns results ranked by relevance with similarity scores. Example queries: "pricing discussions", "onboarding decisions", "what we know about React performance".`,
+    description: `Semantic search across the knowledge base. Finds content by conceptual similarity to the query. Uses hybrid retrieval (semantic + keyword) with reciprocal rank fusion for higher quality results. Example queries: "pricing discussions", "onboarding decisions", "what we know about React performance".`,
     inputSchema: semanticSearchSchema,
     execute: async (input) => {
       const { query, limit, threshold } = input
-      const results = await searchKnowledge(ctx.userId, query, {
-        threshold,
-        limit: Math.min(limit, 20),
+      // hybridSearch runs full pipeline (50 candidates → RRF → rerank top 15)
+      // Tool limit only controls how many reranked results the agent sees
+      const results = await hybridSearch(ctx.userId, query, {
+        semanticThreshold: threshold,
         voyageSlug: ctx.voyageSlug,
       })
-      const formatted = formatKnowledgeResult(results)
-      return formatted
+      return formatHybridResult(results.slice(0, limit))
     },
   }),
 
@@ -207,20 +227,52 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
     },
   }),
 
-  get_connected: tool({
-    description: `Retrieve knowledge nodes connected to a given node via graph edges (supports, contradicts, supersedes). Takes a node ID from search results (e.g. "abc12345"). Returns all directly connected nodes.`,
-    inputSchema: getConnectedSchema,
+  graph: tool({
+    description: `Traverse the knowledge graph from a node. Follows typed directional edges (supersedes, supports, contradicts, elaborates, triggered_by, relates_to, decided_by, raised_by). Multi-hop traversal up to 3 levels deep. Three patterns: (1) "what supports this?" — incoming supports edges, (2) "what did this replace?" — outgoing supersedes edges, (3) "explore neighbourhood" — both directions, depth 2-3.`,
+    inputSchema: graphSchema,
     execute: async (input) => {
-      const { nodeId } = input
+      const { nodeId, edge_type, direction, depth } = input
       const fullId = await resolveNodeId(nodeId, ctx)
       if (!fullId) {
         return `No node found matching ID "${nodeId}"`
       }
-      const results = await getConnectedKnowledge(fullId, ctx.userId)
-      if (results.length === 0) {
-        return `Node ${nodeId} has no connections yet.`
+
+      const supabase = getAdminClient()
+      const { data, error } = await (supabase.rpc as Function)('graph_traverse', {
+        p_node_id: fullId,
+        p_edge_type: edge_type ?? null,
+        p_direction: direction,
+        p_depth: depth,
+        p_min_attention: 0.3,
+        p_max_nodes: 50,
+      })
+
+      if (error) {
+        return `Graph traversal error: ${error.message}`
       }
-      return formatKnowledgeResult(results)
+
+      if (!data || data.length === 0) {
+        return `Node ${nodeId} has no connections${edge_type ? ` of type "${edge_type}"` : ''}.`
+      }
+
+      // Format graph results with edge metadata (NOT through reranker — D4)
+      return (data as Array<{
+        event_id: string
+        content: string
+        edge_type: string
+        edge_direction: string
+        hop: number
+        knowledge_type: string | null
+        attention_score: number | null
+        context_snippet: string | null
+      }>)
+        .map((row, i) => {
+          const shortId = row.event_id.slice(0, 8)
+          const edgeLabel = `${row.edge_direction} ${row.edge_type}`
+          const hopLabel = row.hop > 1 ? ` (${row.hop} hops)` : ''
+          return `[${i + 1}] id:${shortId} [${edgeLabel}]${hopLabel}\n${row.content}`
+        })
+        .join('\n\n')
     },
   }),
 
@@ -819,9 +871,9 @@ export const createVoyagerTools = (ctx: ToolContext): {
       strategyHint: 'Confirm specifics after semantic search. Exact phrases, names, quotes.',
     },
     {
-      name: 'get_connected',
-      tool: retrieval.get_connected,
-      strategyHint: 'Expand from a found node. Follow graph edges to related knowledge.',
+      name: 'graph',
+      tool: retrieval.graph,
+      strategyHint: 'Traverse the knowledge graph from a node. Three patterns: (1) incoming supports edges for evidence, (2) outgoing supersedes for replaced knowledge, (3) both directions depth 2-3 for neighbourhood exploration.',
     },
     {
       name: 'get_nodes',

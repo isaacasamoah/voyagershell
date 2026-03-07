@@ -12,7 +12,7 @@ import { log } from '@/lib/debug'
 // Verb → expected tool name(s) mapping
 const VERB_TOOL_MAP: Record<CommandVerb, string[]> = {
   tell: ['resolve_mention'],
-  find: ['semantic_search', 'keyword_grep', 'search_by_time', 'get_connected', 'get_nodes', 'web_search'],
+  find: ['semantic_search', 'keyword_grep', 'search_by_time', 'graph', 'get_nodes', 'web_search'],
   remember: ['remember_knowledge'],
   switch: ['switch_voyage'],       // log-only fallback (client-side action)
   show: ['get_messages'],

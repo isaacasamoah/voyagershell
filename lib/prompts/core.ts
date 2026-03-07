@@ -95,6 +95,6 @@ export const TOOL_STRATEGY_PREAMBLE = `## Tool Strategy
 
 Use tools when the user asks about something not in your current context. Don't search for greetings, opinions, or follow-ups where conversation history is sufficient.
 
-Chain tools when needed — semantic search to explore a topic, then grep or get_connected to confirm specifics. Spawn a background agent for comprehensive multi-topic research that would take many steps.
+Chain tools when needed — semantic search to explore a topic, then grep or graph to traverse connections and confirm specifics. Spawn a background agent for comprehensive multi-topic research that would take many steps.
 
 For longer searches (5+ steps), briefly tell the user what you're finding before continuing. Show your work — they want to see you thinking.`;

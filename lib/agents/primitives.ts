@@ -104,7 +104,7 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
       toolUse: true,
     },
     tools: [
-      'semantic_search', 'keyword_grep', 'get_connected', 'get_nodes',
+      'semantic_search', 'keyword_grep', 'graph', 'get_nodes',
       'search_by_time', 'web_search', 'spawn_background_agent', 'ask_captain',
     ],
     canSpawn: ['retrieval'],
@@ -133,7 +133,7 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
     tools: [
       'semantic_search',
       'keyword_grep',
-      'get_connected',
+      'graph',
       'get_nodes',
       'search_by_time',
       'web_search',
@@ -166,7 +166,7 @@ export const AGENT_REGISTRY: Record<string, AgentDefinition> = {
     tools: [
       'semantic_search',
       'keyword_grep',
-      'get_connected',
+      'graph',
       'get_nodes',
       'search_by_time',
     ],
