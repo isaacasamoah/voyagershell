@@ -38,3 +38,11 @@ export {
 } from './search'
 
 export type { KnowledgeNode, SearchOptions, GrepOptions, GrepResult, AwarenessItem } from './search'
+
+// Hybrid search (v2)
+export { hybridSearch, keywordSearch, rrfFuse } from './hybrid'
+export type { RankedResult, HybridSearchOptions } from './hybrid'
+
+// Reranking (v2)
+export { cohereRerank } from './rerank'
+export type { RerankOptions, RerankResult } from './rerank'

@@ -18,6 +18,7 @@ import {
   type KnowledgeNode,
   type GrepResult,
 } from '@/lib/knowledge'
+import { hybridSearch, type RankedResult } from '@/lib/knowledge/hybrid'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
@@ -78,6 +79,23 @@ const formatKnowledgeResult = (nodes: KnowledgeNode[]): string => {
     .join('\n\n')
 }
 
+const formatHybridResult = (results: RankedResult[]): string => {
+  if (results.length === 0) {
+    return 'No results found.'
+  }
+
+  return results
+    .map((result, i) => {
+      const shortId = result.eventId.slice(0, 8)
+      const sources = result.sources.join('+')
+      const score = result.score.toFixed(4)
+      const attn = result.metadata.attention_score ?? 0.5
+      const pinned = attn >= 0.9 ? ' [PINNED]' : ''
+      return `[${i + 1}] id:${shortId}${pinned} (${sources}, rrf:${score})\n${result.content}`
+    })
+    .join('\n\n')
+}
+
 const formatGrepResult = (results: GrepResult[]): string => {
   if (results.length === 0) {
     return 'No exact matches found.'
@@ -99,7 +117,7 @@ const formatGrepResult = (results: GrepResult[]): string => {
 
 const semanticSearchSchema = z.object({
   query: z.string().describe('The semantic search query'),
-  limit: z.number().optional().default(10).describe('Max results (1-20)'),
+  limit: z.number().optional().default(10).describe('Max results to return (1-15)'),
   threshold: z.number().optional().default(0.6).describe('Min similarity (0-1)'),
 })
 
@@ -179,17 +197,17 @@ const parseRelativeDate = (input: string): Date => {
  */
 export const createRetrievalTools = (ctx: ToolContext) => ({
   semantic_search: tool({
-    description: `Semantic search across the knowledge base. Finds content by conceptual similarity to the query. Returns results ranked by relevance with similarity scores. Example queries: "pricing discussions", "onboarding decisions", "what we know about React performance".`,
+    description: `Semantic search across the knowledge base. Finds content by conceptual similarity to the query. Uses hybrid retrieval (semantic + keyword) with reciprocal rank fusion for higher quality results. Example queries: "pricing discussions", "onboarding decisions", "what we know about React performance".`,
     inputSchema: semanticSearchSchema,
     execute: async (input) => {
       const { query, limit, threshold } = input
-      const results = await searchKnowledge(ctx.userId, query, {
-        threshold,
-        limit: Math.min(limit, 20),
+      // hybridSearch runs full pipeline (50 candidates → RRF → rerank top 15)
+      // Tool limit only controls how many reranked results the agent sees
+      const results = await hybridSearch(ctx.userId, query, {
+        semanticThreshold: threshold,
         voyageSlug: ctx.voyageSlug,
       })
-      const formatted = formatKnowledgeResult(results)
-      return formatted
+      return formatHybridResult(results.slice(0, limit))
     },
   }),
 
