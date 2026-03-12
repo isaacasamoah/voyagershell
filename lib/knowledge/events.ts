@@ -366,7 +366,7 @@ export const createExplicitEvent = async (
 ): Promise<string | null> => {
   console.log('[Knowledge] Creating explicit event')
 
-  return createSourceEvent({
+  const eventId = await createSourceEvent({
     eventType: 'explicit',
     content: content,
     userId: options.userId,
@@ -378,6 +378,22 @@ export const createExplicitEvent = async (
     sourceType: 'explicit',
     actorType: 'user',
   })
+
+  // Explicit events (remember_knowledge) always get attention 1.0 + preference type
+  // Same dual-write pattern as createMessageEvent: INSERT (trigger) then UPDATE (enrichment)
+  if (eventId) {
+    try {
+      await updateKnowledgeEnrichment(eventId, {
+        knowledgeType: 'preference',
+        attentionScore: 1.0,
+        contextSnippet: `Explicit preference: ${content.slice(0, 100)}`,
+      })
+    } catch (enrichError) {
+      console.error('[Knowledge] Explicit event enrichment failed (non-blocking):', enrichError)
+    }
+  }
+
+  return eventId
 }
 
 // =============================================================================
@@ -405,6 +421,7 @@ export const updateKnowledgeEnrichment = async (
 
     const update: Record<string, unknown> = {
       attention_score: params.attentionScore,
+      base_attention: params.attentionScore, // F3: preserve original Stage 1 score for idempotent decay
       updated_at: new Date().toISOString(),
     }
 

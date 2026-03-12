@@ -90,9 +90,13 @@ export const POST = async (request: NextRequest) => {
     const { hashed_token } = data.properties
     const callbackUrl = `${getBaseUrl()}/auth/callback?token_hash=${encodeURIComponent(hashed_token)}&type=magiclink`
 
-    // Dev mode: log link to console when no Resend key
+    // Always log the magic link in dev for local testing
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Auth] Magic link (dev):', callbackUrl)
+    }
+
+    // No Resend key: dev-only path, skip email
     if (!process.env.RESEND_API_KEY) {
-      console.log('[Auth] Magic link (dev mode):', callbackUrl)
       return NextResponse.json({ success: true })
     }
 

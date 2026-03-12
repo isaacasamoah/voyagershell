@@ -3,7 +3,8 @@
 // DSPy-compatible: pure functions, structured data
 
 import type { RetrievalResult } from '@/lib/retrieval';
-import { getPinnedKnowledge, loadPreferences, loadAwareness, type KnowledgeNode, type AwarenessItem } from '@/lib/knowledge';
+import { getPinnedKnowledge, loadPreferences, loadAwareness, curatePromptWindow, type KnowledgeNode, type AwarenessItem } from '@/lib/knowledge';
+import { formatCuratedWindow } from './format/user';
 
 // Re-export types
 export * from './types';
@@ -62,6 +63,7 @@ export type AuthState = 'unauthenticated' | 'authenticated' | 'just-authenticate
 interface ComposeOptions {
   profile?: ChatUserProfile;
   voyageSlug?: string;
+  sessionId?: string;  // Current session ID for operational tier recency filtering
   continuityContext?: string | null;  // Retrieved context from conversation history
   authState?: AuthState;
 }
@@ -80,18 +82,14 @@ export const composeSystemPrompt = async (
   userId: string,
   options?: ComposeOptions
 ): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult; awarenessItems: AwarenessItem[] }> => {
-  const { profile, voyageSlug, continuityContext, authState } = options ?? {};
+  const { profile, voyageSlug, sessionId, continuityContext, authState } = options ?? {};
   const startTime = Date.now();
 
-  // Load preferences, pinned knowledge, and awareness items in parallel
-  const [preferences, pinned, awarenessItems] = await Promise.all([
-    loadPreferences(userId, voyageSlug).catch((error) => {
-      console.warn('[Prompts] Failed to load preferences:', error);
-      return [] as KnowledgeNode[];
-    }),
-    getPinnedKnowledge(userId, voyageSlug).catch((error) => {
-      console.warn('[Prompts] Failed to get pinned knowledge:', error);
-      return [] as KnowledgeNode[];
+  // Load curated knowledge window and awareness items in parallel
+  const [curatedWindow, awarenessItems] = await Promise.all([
+    curatePromptWindow(userId, voyageSlug, undefined, sessionId).catch((error) => {
+      console.warn('[Prompts] Failed to curate prompt window:', error);
+      return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 };
     }),
     loadAwareness(userId, voyageSlug).catch((error) => {
       console.warn('[Prompts] Failed to load awareness:', error);
@@ -99,6 +97,8 @@ export const composeSystemPrompt = async (
     }),
   ]);
 
+  // Build pinned knowledge from curated preferences (for backward compat with composePrompt)
+  const pinned = curatedWindow.preferences;
   const pinnedKnowledge: KnowledgeItem[] = pinned.map((k: KnowledgeNode) => ({
     id: k.eventId,
     content: k.content,
@@ -143,15 +143,13 @@ export const composeSystemPrompt = async (
     retrievedContext,
   });
 
-  // Build preference section (stable across turns — cacheable)
-  let preferencesSection = '';
-  if (preferences.length > 0) {
-    const prefLines = preferences.map((p) => `- ${p.content}`).join('\n');
-    preferencesSection = `\n\n---\n\n# Who You Are To Me (Preferences)\n${prefLines}`;
-  }
+  // Build curated knowledge section (stable across turns — cacheable)
+  // Three tiers: "What I Know About You", "What's Happening Now", "Domain Context"
+  const knowledgeSection = formatCuratedWindow(curatedWindow);
+  const knowledgeSuffix = knowledgeSection ? `\n\n---\n\n${knowledgeSection}` : '';
 
-  // Static prompt: identity + preferences + pinned knowledge (cacheable)
-  const staticPrompt = composed.systemPrompt + preferencesSection;
+  // Static prompt: identity + curated knowledge (cacheable)
+  const staticPrompt = composed.systemPrompt + knowledgeSuffix;
 
   // Dynamic prompt: per-turn data that changes every request (not cached)
   const dynamicParts: string[] = [];

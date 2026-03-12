@@ -3,6 +3,7 @@
 // DSPy-ready: could become an optimizable module
 
 import type { UserProfile, KnowledgeItem } from '../types';
+import type { CuratedWindow } from '@/lib/knowledge/curator';
 
 /**
  * Formats user profile into a prompt section.
@@ -139,4 +140,41 @@ export const estimateUserTokens = (
   const formatted = formatUser(profile, pinnedKnowledge);
   const words = formatted.split(/\s+/).length;
   return Math.ceil(words * 0.75);
+};
+
+// =============================================================================
+// Curated Window Formatter (F2: Knowledge Hierarchy)
+// =============================================================================
+
+/**
+ * Format a CuratedWindow into three labelled prompt sections.
+ * - "What I Know About You" — preferences (full content)
+ * - "What's Happening Now" — operational (full content)
+ * - "Domain Context" — domain headlines (context_snippet, not full content)
+ *
+ * Tier isolation is enforced by the curator — this just formats.
+ */
+export const formatCuratedWindow = (window: CuratedWindow): string => {
+  const sections: string[] = [];
+
+  if (window.preferences.length > 0) {
+    const lines = window.preferences.map(n => `- ${n.content.trim().replace(/\n+/g, ' ')}`);
+    sections.push(`# What I Know About You (Preferences)\n${lines.join('\n')}`);
+  }
+
+  if (window.operational.length > 0) {
+    const lines = window.operational.map(n => `- ${n.content.trim().replace(/\n+/g, ' ')}`);
+    sections.push(`# What's Happening Now (Recent)\n${lines.join('\n')}`);
+  }
+
+  if (window.domainHeadlines.length > 0) {
+    // Domain headlines use context_snippet (declarative summary), not full content
+    const lines = window.domainHeadlines.map(n => {
+      const text = n.contextSnippet ?? n.content.trim().replace(/\n+/g, ' ').slice(0, 100);
+      return `- ${text}`;
+    });
+    sections.push(`# Domain Context (Headlines)\n${lines.join('\n')}`);
+  }
+
+  return sections.join('\n\n---\n\n');
 };

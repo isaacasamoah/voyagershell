@@ -22,6 +22,10 @@ export type {
   SourceType,
 } from './events'
 
+// Curator (token-budgeted prompt window)
+export { curatePromptWindow, DEFAULT_WINDOW_CONFIG } from './curator'
+export type { PromptWindowConfig, CuratedWindow } from './curator'
+
 // Search and retrieval
 export {
   searchKnowledge,

@@ -195,14 +195,25 @@ For EACH event, determine:
 
 2. attention_score: 0.0 to 1.0 (continuous)
    - For domain/operational: importance (1.0 = always surface, 0.0 = deep search only)
-   - For preferences: confidence (1.0 = explicit/repeated, 0.5 = implicit hypothesis, 0.0 = degraded)
-   - Explicit preferences ("always call me Cap") → 1.0
-   - Trivial messages ("ok", "thanks", acknowledgments) → 0.1 or less
    - Substantive domain knowledge → 0.5-0.9 based on likely future relevance
+   - Trivial messages ("ok", "thanks", acknowledgments) → 0.1 or less
 
-3. context_snippet: One line of context to prepend before re-embedding. This DRAMATICALLY improves retrieval.
-   - Should capture the conversational context that makes this knowledge useful
-   - Example: "During architecture discussion about auth system:" or "User preference stated explicitly:"
+   PREFERENCE DETECTION RULES:
+   - Explicit preferences: user directly states a preference ("remember X", "always call me Y", "I prefer Z", "don't ever W"). These get attention 1.0.
+   - Implicit preferences: observed from patterns or inferred from behaviour (user consistently uses short messages → prefers brevity). These get attention 0.5.
+   - When unsure if explicit or implicit, default to implicit (0.5). Promotion is cheap, demotion loses trust.
+
+3. context_snippet: A declarative statement about the knowledge itself. This is prepended before re-embedding and DRAMATICALLY improves retrieval.
+
+   QUALITY RULES:
+   - GOOD: Declarative statements about the knowledge. "Isaac prefers direct communication." "The auth system uses JWT with 24h expiry." "Project deadline is March 15."
+   - BAD: Descriptions of the conversation. "User mentioned during onboarding." "Discussed in architecture meeting." "User said this while chatting."
+   - The snippet should stand alone as a useful fact, not describe when/how it was learned.
+
+   PREFIX RULES for preferences:
+   - Explicit preferences (attention 1.0): prefix with "Explicit preference: " — e.g. "Explicit preference: Isaac prefers morning standups at 9am"
+   - Implicit/observed preferences (attention < 1.0): prefix with "Observed preference: " — e.g. "Observed preference: tends to prefer concise code reviews"
+   - Non-preference types: no prefix required, just write the declarative statement.
 
 Output a JSON array. One entry per event. Use the event IDs exactly as provided.`
 
@@ -338,6 +349,407 @@ const runStage2 = async (
 }
 
 // =============================================================================
+// Session Index (F3: session distance computation)
+// =============================================================================
+
+/**
+ * Upsert the current session into session_index.
+ * Called on every Cartographer run to maintain session ordering.
+ */
+const upsertSessionIndex = async (
+  sessionId: string,
+  userId: string,
+  eventCount: number
+): Promise<void> => {
+  const supabase = getAdminClient()
+
+  // session_index table added by migration 031 — not yet in generated types
+  // Insert on first run, update only event_count on re-runs (preserve started_at)
+  const { error: insertError } = await (supabase as any)
+    .from('session_index')
+    .insert({
+      session_id: sessionId,
+      user_id: userId,
+      event_count: eventCount,
+      started_at: new Date().toISOString(),
+    })
+
+  if (insertError) {
+    // Conflict = session already exists — update event_count only
+    if (insertError.code === '23505') {
+      const { error: updateError } = await (supabase as any)
+        .from('session_index')
+        .update({ event_count: eventCount })
+        .eq('session_id', sessionId)
+
+      if (updateError) {
+        log.agent('Session index update failed', { sessionId, error: updateError.message }, 'warn')
+      }
+    } else {
+      log.agent('Session index insert failed', { sessionId, error: insertError.message }, 'warn')
+    }
+  }
+}
+
+/**
+ * Compute session distance for a given session_id relative to the current session.
+ * Returns a map of session_id → distance (0 = current, 1 = previous, etc.)
+ */
+const getSessionDistances = async (
+  userId: string,
+  currentSessionId: string
+): Promise<Map<string, number>> => {
+  const supabase = getAdminClient()
+
+  // session_index table added by migration 031 — not yet in generated types
+  const { data, error } = await (supabase as any)
+    .from('session_index')
+    .select('session_id')
+    .eq('user_id', userId)
+    .order('started_at', { ascending: false })
+    .limit(20) // enough history for decay computation
+
+  if (error || !data) return new Map([[currentSessionId, 0]])
+
+  const distances = new Map<string, number>()
+  const rows = data as Array<{ session_id: string }>
+  for (let i = 0; i < rows.length; i++) {
+    distances.set(rows[i].session_id, i)
+  }
+
+  // Ensure current session is distance 0 even if not yet in index
+  if (!distances.has(currentSessionId)) {
+    distances.set(currentSessionId, 0)
+  }
+
+  return distances
+}
+
+// =============================================================================
+// F3: Session Distance Decay
+// =============================================================================
+
+/** Decay curve: session distance → decay factor */
+const DECAY_CURVE: Record<number, number> = {
+  0: 1.0,
+  1: 0.9,
+  2: 0.75,
+  3: 0.5,
+  4: 0.4,
+  5: 0.3,
+}
+
+/** Get decay factor for a given session distance. Clamps at max defined distance. */
+const getDecayFactor = (distance: number): number => {
+  if (distance <= 0) return 1.0
+  if (distance >= 5) return DECAY_CURVE[5]
+  return DECAY_CURVE[distance] ?? DECAY_CURVE[5]
+}
+
+/**
+ * Apply session-distance decay to all enriched knowledge for this user.
+ * - Preferences: EXEMPT from decay (F3.2)
+ * - Domain: half-rate decay (F3.3)
+ * - Operational: full decay (F3.1)
+ *
+ * Updates attention_score in knowledge_current directly.
+ * Runs during Cartographer enrichment, not per-turn (F3.7).
+ */
+const applySessionDecay = async (
+  userId: string,
+  currentSessionId: string
+): Promise<{ decayed: number; skipped: number }> => {
+  const supabase = getAdminClient()
+  const sessionDistances = await getSessionDistances(userId, currentSessionId)
+
+  // Single query: base_attention + promotion_count (both from migration 031, not in generated types)
+  const { data, error } = await (supabase as any)
+    .from('knowledge_current')
+    .select('event_id, session_id, knowledge_type, attention_score, base_attention, promotion_count')
+    .eq('user_id', userId)
+    .not('knowledge_type', 'is', null)
+    .neq('knowledge_type', 'preference')
+    .gt('attention_score', 0)
+
+  if (error || !data) {
+    log.agent('Decay: failed to load events', { error: error?.message }, 'warn')
+    return { decayed: 0, skipped: 0 }
+  }
+
+  type DecayRow = {
+    event_id: string
+    session_id: string | null
+    knowledge_type: string
+    attention_score: number
+    base_attention: number | null
+    promotion_count: number | null
+  }
+
+  /** Cold-knowledge threshold: sessions without retrieval hits before extra decay */
+  const COLD_KNOWLEDGE_SESSIONS = 5
+  /** Extra decay per session beyond cold threshold for unretrieved domain knowledge */
+  const COLD_DECAY_PER_SESSION = 0.1
+
+  let decayed = 0
+  let skipped = 0
+
+  for (const row of data as DecayRow[]) {
+    if (!row.session_id) { skipped++; continue }
+
+    const distance = sessionDistances.get(row.session_id) ?? 6 // unknown sessions = max decay
+    if (distance === 0) { skipped++; continue } // current session, no decay
+
+    // Decay from ORIGINAL Stage 1 score, not previously-decayed value.
+    // Fallback to attention_score for pre-migration events without base_attention.
+    const originalAttention = row.base_attention ?? row.attention_score
+    const rawFactor = getDecayFactor(distance)
+
+    // Domain decays at half rate (F3.3): interpolate between 1.0 and rawFactor
+    const factor = row.knowledge_type === 'domain'
+      ? 1.0 - (1.0 - rawFactor) * 0.5
+      : rawFactor
+
+    let decayedAttention = Math.round(originalAttention * factor * 100) / 100
+
+    // F5.3: Cold-knowledge decay for domain items with no retrieval hits
+    if (row.knowledge_type === 'domain' && distance >= COLD_KNOWLEDGE_SESSIONS) {
+      if ((row.promotion_count ?? 0) === 0) {
+        const extraDecay = (distance - COLD_KNOWLEDGE_SESSIONS + 1) * COLD_DECAY_PER_SESSION
+        decayedAttention = Math.max(0, Math.round((decayedAttention - extraDecay) * 100) / 100)
+      }
+    }
+
+    // Only update if decay changed the score
+    if (decayedAttention !== row.attention_score) {
+      const { error: updateError } = await supabase
+        .from('knowledge_current')
+        .update({
+          attention_score: decayedAttention,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('event_id', row.event_id)
+
+      if (!updateError) decayed++
+      else skipped++
+    } else {
+      skipped++
+    }
+  }
+
+  return { decayed, skipped }
+}
+
+// =============================================================================
+// F3: Preference Superseding
+// =============================================================================
+
+/** Cosine similarity between two normalized vectors (text-embedding-3-small is L2-normalized) */
+const cosineSimilarity = (a: number[], b: number[]): number => {
+  let dot = 0
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i]
+  return dot
+}
+
+/**
+ * Check new preference assessments against existing preferences.
+ * If cosine similarity >= 0.85, supersede the old preference:
+ * - Old preference attention → 0.0
+ * - Old preference superseded_by → new event ID (F3.5)
+ */
+const checkPreferenceSuperseding = async (
+  assessments: Stage1Assessment[],
+  userId: string
+): Promise<number> => {
+  const supabase = getAdminClient()
+  const openai = getOpenAI()
+
+  const newPreferences = assessments.filter((a) => a.knowledgeType === 'preference')
+  if (newPreferences.length === 0) return 0
+
+  // Load existing preferences with their embeddings via search RPC
+  // We need the embeddings for cosine comparison, but they're stored as pgvector.
+  // Instead, generate embeddings for existing preference content and compare in TS.
+  const { data: existingPrefs, error } = await supabase
+    .from('knowledge_current')
+    .select('event_id, content, context_snippet')
+    .eq('user_id', userId)
+    .eq('knowledge_type', 'preference')
+    .gt('attention_score', 0)
+    .is('superseded_by', null)
+
+  if (error || !existingPrefs || existingPrefs.length === 0) return 0
+
+  // Batch-embed existing preference snippets for comparison
+  const existingTexts = existingPrefs.map((p) =>
+    (p.context_snippet as string) || (p.content as string).slice(0, 200)
+  )
+
+  let existingEmbeddings: number[][]
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: existingTexts,
+    })
+    existingEmbeddings = response.data.map((d) => d.embedding)
+  } catch {
+    log.agent('Failed to embed existing preferences for superseding check', {}, 'warn')
+    return 0
+  }
+
+  let supersededCount = 0
+
+  for (const newPref of newPreferences) {
+    // Generate embedding for the new preference's context snippet
+    const textToEmbed = newPref.contextSnippet || 'preference'
+    let newEmbedding: number[]
+    try {
+      const response = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: textToEmbed,
+      })
+      newEmbedding = response.data[0].embedding
+    } catch {
+      continue
+    }
+
+    // Compare against each existing preference
+    for (let i = 0; i < existingPrefs.length; i++) {
+      const existing = existingPrefs[i]
+      if (existing.event_id === newPref.eventId) continue
+
+      const similarity = cosineSimilarity(newEmbedding, existingEmbeddings[i])
+
+      if (similarity >= 0.85) {
+        // Supersede: drop old attention to 0.0, set superseded_by (F3.4, F3.5)
+        // superseded_by added by migration 031 — not yet in generated types
+        const { error: updateError } = await (supabase as any)
+          .from('knowledge_current')
+          .update({
+            attention_score: 0.0,
+            superseded_by: newPref.eventId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('event_id', existing.event_id)
+
+        if (!updateError) {
+          supersededCount++
+          log.agent('Preference superseded', {
+            old: existing.event_id,
+            new: newPref.eventId,
+            similarity: similarity.toFixed(3),
+          })
+        }
+      }
+    }
+  }
+
+  return supersededCount
+}
+
+// =============================================================================
+// F4: Retrieval Feedback Loop (batch promotion)
+// =============================================================================
+
+/**
+ * Process retrieval feedback from recently completed agent_tasks.
+ * For each completed task's result event_ids, check if they were in the
+ * prompt window during the dispatching session. If not → bump promotion_count.
+ *
+ * Runs during Cartographer enrichment cycle (F4.8).
+ */
+const processRetrievalFeedback = async (
+  userId: string,
+  currentSessionId: string
+): Promise<{ promoted: number }> => {
+  const supabase = getAdminClient()
+
+  // Find recently completed agent_tasks for this user (last 24h)
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { data: tasks, error: tasksError } = await supabase
+    .from('agent_tasks')
+    .select('id, result, conversation_id')
+    .eq('user_id', userId)
+    .eq('status', 'complete')
+    .gte('completed_at', cutoff)
+
+  if (tasksError || !tasks || tasks.length === 0) return { promoted: 0 }
+
+  // Collect all event_ids found by retrieval across completed tasks
+  const retrievedEventIds = new Set<string>()
+  const sessionIds = new Set<string>()
+
+  for (const task of tasks) {
+    const result = task.result as { findings?: Array<{ eventId?: string }> } | null
+    if (!result?.findings) continue
+
+    sessionIds.add(task.conversation_id as string)
+
+    for (const finding of result.findings) {
+      if (finding.eventId) {
+        retrievedEventIds.add(finding.eventId)
+      }
+    }
+  }
+
+  if (retrievedEventIds.size === 0) return { promoted: 0 }
+
+  // Load the prompt window event_ids that were active during those sessions.
+  // Prompt window = high-attention events (>= 0.5) that existed at task dispatch time.
+  // Approximation: events from the dispatching session's user with high attention.
+  const { data: windowEvents, error: windowError } = await supabase
+    .from('knowledge_current')
+    .select('event_id')
+    .eq('user_id', userId)
+    .gte('attention_score', 0.5)
+    .in('session_id', Array.from(sessionIds))
+
+  const windowEventIds = new Set(
+    (windowEvents ?? []).map((e) => e.event_id as string)
+  )
+
+  // Also include high-attention events that would have been pre-loaded
+  // (pinned + preferences — these are always in the window)
+  const { data: preloaded } = await supabase
+    .from('knowledge_current')
+    .select('event_id')
+    .eq('user_id', userId)
+    .or('attention_score.gte.0.9,knowledge_type.eq.preference')
+
+  for (const p of preloaded ?? []) {
+    windowEventIds.add(p.event_id as string)
+  }
+
+  // Promote events found by retrieval but NOT in the window (F4.9)
+  let promoted = 0
+  const retrievedArray = Array.from(retrievedEventIds)
+  for (const eventId of retrievedArray) {
+    if (windowEventIds.has(eventId)) continue
+
+    // Atomic increment via SQL RPC (F4.2)
+    // increment_promotion_count added by migration 031 — not yet in generated types
+    const { error: promoteError } = await (supabase as any).rpc('increment_promotion_count', {
+      p_event_id: eventId,
+    })
+
+    if (promoteError) {
+      log.agent('Promotion increment failed', { eventId, error: promoteError.message }, 'warn')
+      continue
+    }
+
+    promoted++
+  }
+
+  log.agent('Retrieval feedback processed', {
+    tasksChecked: tasks.length,
+    retrievedEvents: retrievedEventIds.size,
+    windowEvents: windowEventIds.size,
+    promoted,
+  }, 'debug')
+
+  return { promoted }
+}
+
+// =============================================================================
 // Post-Processing: Enrich + Re-embed + Connect
 // =============================================================================
 
@@ -447,12 +859,34 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
     // Apply enrichments + re-embed + connect
     await applyEnrichments(assessments, connections, events)
 
+    // F3: Upsert session index for decay computation
+    await upsertSessionIndex(sessionId, userId, events.length)
+
+    // F3: Apply session distance decay (operational + domain, preferences exempt)
+    const decayResult = await applySessionDecay(userId, sessionId)
+    log.agent('Decay applied', decayResult)
+
+    // F3: Check preference superseding (cosine >= 0.85)
+    const supersededCount = await checkPreferenceSuperseding(assessments, userId)
+    if (supersededCount > 0) {
+      log.agent('Preferences superseded', { count: supersededCount })
+    }
+
+    // F4: Process retrieval feedback (batch promotion from agent_tasks)
+    const feedbackResult = await processRetrievalFeedback(userId, sessionId)
+    if (feedbackResult.promoted > 0) {
+      log.agent('Retrieval promotions', feedbackResult)
+    }
+
     const durationMs = Date.now() - startTime
     log.agent('Cartographer complete', {
       sessionId,
       events: events.length,
       assessments: assessments.length,
       connections: connections.length,
+      decayed: decayResult.decayed,
+      superseded: supersededCount,
+      promoted: feedbackResult.promoted,
       durationMs,
     })
   } catch (err) {

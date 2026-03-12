@@ -234,6 +234,7 @@ export const POST = async (req: Request) => {
         {
           profile: { id: userId, displayName },
           voyageSlug,
+          sessionId: conversationId,
           continuityContext,
           authState,
         }
