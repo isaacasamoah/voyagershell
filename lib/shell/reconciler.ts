@@ -16,12 +16,12 @@ const VERB_TOOL_MAP: Record<CommandVerb, string[]> = {
   remember: ['remember_knowledge'],
   switch: ['switch_voyage'],       // log-only fallback (client-side action)
   show: ['get_messages'],
-  do: ['create_voyage', 'invite_to_voyage', 'sign_out'],  // sign_out: log-only (client-side)
+  do: ['create_voyage', 'invite_to_voyage', 'sign_out', 'set_display_name'],
   summon: ['spawn_background_agent'],
 }
 
 // Verbs where the reconciler can execute a server-side fallback
-const FALLBACK_ENABLED = new Set<CommandVerb>(['tell', 'find', 'remember'])
+const FALLBACK_ENABLED = new Set<CommandVerb>(['tell', 'find', 'remember', 'summon'])
 
 // Claim detection — does the response text suggest the action happened?
 // Conservative patterns — high confidence only, expand based on logs.
@@ -29,12 +29,17 @@ const CLAIM_PATTERNS: Partial<Record<CommandVerb, RegExp>> = {
   tell: /\b(I'll let .+ know|told|messaged|sent .+ (?:a |the )?message|notified|passed .+ along|forwarded|letting .+ know|I've (?:told|messaged|notified|sent))\b/i,
   find: /\b(found|here'?s? what|results|I (?:found|discovered|located)|let me share what)\b/i,
   remember: /\b(remembered|saved|noted|I'll (?:remember|keep|note)|got it|stored|recorded)\b/i,
+  switch: /\b(switched to|moved to|now in|changed to|you're now in)\b/i,
+  summon: /\b(researching|investigating|looking into|I'll dig into|on it|let me research|I'll look into|I'll investigate)\b/i,
+  do: /\b(done|created|invited|updated|I've (?:created|invited|updated)|all set)\b/i,
 }
 
 interface ReconcileContext {
   userId: string
   voyageSlug?: string
   conversationId?: string
+  waitUntil?: (p: Promise<unknown>) => void
+  messages?: Array<{ role: string; content: string }>
 }
 
 interface ToolCallInfo {
@@ -137,6 +142,8 @@ const executeFallback = async (
       return executeFindFallback(intent, ctx)
     case 'remember':
       return executeRememberFallback(intent, ctx)
+    case 'summon':
+      return executeSummonFallback(intent, ctx)
     default:
       return null
   }
@@ -280,6 +287,50 @@ const executeRememberFallback = async (
     return 'createExplicitEvent'
   } catch (error) {
     log.shell(`remember fallback error: ${String(error)}`, undefined, 'error')
+    return null
+  }
+}
+
+/**
+ * Summon fallback: enqueue background agent task + run retrieval.
+ * Same path as spawn_background_agent tool.
+ */
+const executeSummonFallback = async (
+  intent: ActionIntent,
+  ctx: ReconcileContext,
+): Promise<string | null> => {
+  if (!intent.payload || !ctx.waitUntil || !ctx.conversationId) {
+    log.shell('summon fallback skipped: missing payload, waitUntil, or conversationId')
+    return null
+  }
+
+  try {
+    const { enqueueAgentTask } = await import('@/lib/agents/queue')
+    const { runBackgroundRetrieval } = await import('@/lib/agents/deep-retrieval')
+
+    const taskId = await enqueueAgentTask({
+      task: intent.payload,
+      userId: ctx.userId,
+      voyageSlug: ctx.voyageSlug,
+      conversationId: ctx.conversationId,
+      originalQuery: intent.source,
+      conversationSnapshot: ctx.messages as object[] | undefined,
+    })
+
+    ctx.waitUntil(
+      runBackgroundRetrieval({
+        taskId,
+        objective: intent.payload,
+        userId: ctx.userId,
+        voyageSlug: ctx.voyageSlug,
+        conversationId: ctx.conversationId,
+      })
+    )
+
+    log.shell(`summon fallback executed: task ${taskId} enqueued for "${intent.payload.slice(0, 40)}"`)
+    return 'enqueueAgentTask'
+  } catch (error) {
+    log.shell(`summon fallback error: ${String(error)}`, undefined, 'error')
     return null
   }
 }

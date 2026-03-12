@@ -20,6 +20,7 @@ import { updateLastSeen, markDelivered } from '@/lib/voyage';
 import { log } from '@/lib/debug';
 import { detectActionIntent } from '@/lib/shell/intent';
 import { reconcileActions } from '@/lib/shell/reconciler';
+import { detectRetrievalSignals, dispatchRetrievalAgent } from '@/lib/shell/signals';
 
 export const maxDuration = 30;
 
@@ -118,6 +119,9 @@ export const POST = async (req: Request) => {
 
     // Shell Contract: detect verb intent before LLM runs
     const intent = detectActionIntent(queryText);
+
+    // Shell Contract: detect retrieval signals alongside verb detection
+    const retrievalSignals = detectRetrievalSignals(queryText);
 
     log.message('Processing user message', {
       conversationId,
@@ -267,8 +271,14 @@ export const POST = async (req: Request) => {
 
     // Shell Contract: inject intent guidance into dynamic (uncached) prompt
     if (intent) {
-      const target = intent.target ? ` ${intent.target}` : '';
-      dynamicSuffix += `\n[Shell: intent detected — ${intent.verb}${target}. Ensure the corresponding tool is called.]`;
+      if (intent.verb === 'switch' && !intent.target) {
+        dynamicSuffix += `\n[Shell: intent detected — switch. No target specified. Help the user choose a voyage.]`;
+      } else if (intent.verb === 'do' && intent.payload) {
+        dynamicSuffix += `\n[Shell: intent detected — do. Payload: "${intent.payload}". Determine which action tool applies.]`;
+      } else {
+        const target = intent.target ? ` ${intent.target}` : '';
+        dynamicSuffix += `\n[Shell: intent detected — ${intent.verb}${target}. Ensure the corresponding tool is called.]`;
+      }
     }
 
     // Build messages array with cache control for prompt caching
@@ -293,6 +303,19 @@ export const POST = async (req: Request) => {
         ? { providerOptions: cacheControl }
         : {}),
     }));
+
+    // Signal detection: dispatch retrieval agent in parallel with LLM response
+    if (retrievalSignals.length > 0 && intent?.verb !== 'find') {
+      waitUntil(
+        dispatchRetrievalAgent(retrievalSignals, queryText, {
+          userId,
+          voyageSlug,
+          conversationId,
+          waitUntil,
+          messages: windowedSimpleMessages,
+        })
+      );
+    }
 
     // Primary Voyager with tools
     // Voyager decides when to use tools and self-terminates when done
@@ -319,7 +342,7 @@ export const POST = async (req: Request) => {
               intent,
               allToolCalls.map(tc => ({ toolName: tc.toolName })),
               text ?? '',
-              { userId, voyageSlug, conversationId },
+              { userId, voyageSlug, conversationId, waitUntil, messages: windowedSimpleMessages },
             ).catch(err => log.api('Shell reconciliation error', { error: String(err) }, 'error'))
           );
         }
