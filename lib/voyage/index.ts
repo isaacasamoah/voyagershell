@@ -766,6 +766,134 @@ export const updateLastSeen = async (userId: string, voyageSlug: string): Promis
 };
 
 // =============================================================================
+// VOYAGE CONTEXT (for system prompt — F1: Membership Awareness)
+// =============================================================================
+
+export interface VoyageContextMember {
+  displayName: string
+  role: VoyageRole
+  isCurrentUser: boolean
+  lastActive: string // "2h ago", "new", etc.
+}
+
+export interface VoyageContext {
+  name: string
+  members: VoyageContextMember[]
+  totalMembers: number
+}
+
+/** Relative time formatting for activity pulse */
+const formatActivityAge = (date: Date | null): string => {
+  if (!date) return 'new'
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+/**
+ * Load voyage context for the system prompt.
+ * Fetches voyage metadata, members, and per-member activity pulse in parallel.
+ * Returns null if voyage not found.
+ *
+ * Activity pulse: MAX(created_at) on knowledge_events per member in the voyage.
+ * Token budget: <= 150 tokens for <= 10 members.
+ */
+export const loadVoyageContext = async (
+  voyageSlug: string,
+  currentUserId: string
+): Promise<VoyageContext | null> => {
+  const supabase = getAdminSupabase()
+
+  // Step 1: Get voyage by slug
+  const voyage = await getVoyageBySlug(voyageSlug)
+  if (!voyage) return null
+
+  // Step 2: Get members + activity pulse in parallel
+  // Activity pulse: fetch recent events (capped at 200 rows) and dedup client-side.
+  // With DESC order, the first row per user_id is their most recent activity.
+  const [members, activityData] = await Promise.all([
+    getVoyageMembers(voyage.id),
+    supabase
+      .from('knowledge_events')
+      .select('user_id, created_at')
+      .eq('voyage_slug', voyageSlug)
+      .order('created_at', { ascending: false })
+      .limit(200),
+  ])
+
+  // Build activity map: user_id → most recent created_at
+  const activityMap = new Map<string, Date>()
+  if (activityData.data) {
+    for (const row of activityData.data) {
+      const uid = row.user_id as string
+      if (!activityMap.has(uid)) {
+        activityMap.set(uid, new Date(row.created_at as string))
+      }
+    }
+  }
+
+  // Sort members: by role (captain first), then join date
+  const sorted = [...members].sort((a, b) => {
+    if (a.role === 'captain' && b.role !== 'captain') return -1
+    if (a.role !== 'captain' && b.role === 'captain') return 1
+    return a.joinedAt.getTime() - b.joinedAt.getTime()
+  })
+
+  // Truncate to 10 members for token budget
+  const displayed = sorted.slice(0, 10)
+  const totalMembers = members.length
+
+  const contextMembers: VoyageContextMember[] = displayed.map(m => {
+    // Display name fallback: display_name → email prefix → "Unknown"
+    let displayName = m.displayName ?? ''
+    if (!displayName && m.email) {
+      displayName = m.email.split('@')[0]
+    }
+    if (!displayName) {
+      displayName = 'Unknown'
+    }
+
+    return {
+      displayName,
+      role: m.role,
+      isCurrentUser: m.userId === currentUserId,
+      lastActive: formatActivityAge(activityMap.get(m.userId) ?? null),
+    }
+  })
+
+  return {
+    name: voyage.name,
+    members: contextMembers,
+    totalMembers,
+  }
+}
+
+/**
+ * Format VoyageContext into a compact prompt section.
+ * Target: <= 150 tokens for <= 10 members.
+ */
+export const formatVoyageContextSection = (ctx: VoyageContext): string => {
+  const lines = [`# Current Voyage`, `**${ctx.name}**`, '']
+
+  for (const m of ctx.members) {
+    const youMarker = m.isCurrentUser ? ' (you)' : ''
+    lines.push(`- ${m.displayName} (${m.role})${youMarker} — ${m.lastActive}`)
+  }
+
+  if (ctx.totalMembers > ctx.members.length) {
+    const remaining = ctx.totalMembers - ctx.members.length
+    lines.push(`- +${remaining} others`)
+  }
+
+  return lines.join('\n')
+}
+
+// =============================================================================
 // SLUG UTILITIES
 // =============================================================================
 

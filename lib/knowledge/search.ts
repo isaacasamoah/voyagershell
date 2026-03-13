@@ -131,14 +131,31 @@ const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
 // =============================================================================
 
 /**
- * Build a PostgREST .or() filter for two-layer knowledge scoping:
- *   Layer 1: Personal (user_id match, voyage_slug NULL)
- *   Layer 2: Voyage (voyage_slug match, participant-filtered)
+ * Build a PostgREST .or() filter for 4-layer privacy-scoped knowledge retrieval:
+ *   Layer 1: Personal space — user_id = me AND voyage_slug IS NULL
+ *   Layer 2: My voyage content — voyage_slug = X AND user_id = me
+ *   Layer 3: Shared explicit — voyage_slug = X AND event_type = 'explicit' AND knowledge_type IN ('domain', 'operational')
+ *   Layer 4: My messages — voyage_slug = X AND event_type = 'message' AND participants contains me
  *
- * Used by all direct-query functions to prevent cross-voyage bleed.
+ * Privacy invariant: event_type is the stable privacy dimension.
+ * - conversation events are ALWAYS author-only (covered by Layer 2)
+ * - explicit events with knowledge_type domain/operational are voyage-wide (Layer 3)
+ * - explicit events with knowledge_type preference or NULL are author-only (Layer 2)
+ * - message events are participant-scoped (Layer 4)
+ *
+ * Used by all direct-query functions. Same signature, privacy-aware internals.
  */
 export const buildScopeFilter = (userId: string, voyageSlug: string): string =>
-  `and(user_id.eq.${userId},voyage_slug.is.null),and(voyage_slug.eq.${voyageSlug},or(participants.is.null,participants.cs.{${userId}}))`
+  [
+    // Layer 1: Personal space (no voyage)
+    `and(user_id.eq.${userId},voyage_slug.is.null)`,
+    // Layer 2: My own content in this voyage (conversations, preferences, unenriched)
+    `and(voyage_slug.eq.${voyageSlug},user_id.eq.${userId})`,
+    // Layer 3: Shared explicit domain/operational from any member
+    `and(voyage_slug.eq.${voyageSlug},event_type.eq.explicit,knowledge_type.in.(domain,operational))`,
+    // Layer 4: Messages where I'm a participant
+    `and(voyage_slug.eq.${voyageSlug},event_type.eq.message,or(participants.is.null,participants.cs.{${userId}}))`,
+  ].join(',')
 
 // =============================================================================
 // Search Functions
@@ -497,13 +514,13 @@ export const keywordGrep = async (
       .filter('content', operator, searchPattern)
       .gte('attention_score', minAttention)
 
-    // Apply scope filters with participant filtering
+    // Apply scope filters — all voyage paths use buildScopeFilter for privacy
     if (scope === 'personal') {
       query = query.eq('user_id', userId).is('voyage_slug', null)
     } else if (scope === 'voyage' && voyageSlug) {
-      // Voyage only — participant-filtered, no personal layer
-      query = query.eq('voyage_slug', voyageSlug)
-        .or(`participants.is.null,participants.cs.{${userId}}`)
+      // Voyage only — privacy-scoped, exclude personal layer
+      query = query.or(buildScopeFilter(userId, voyageSlug))
+        .not('voyage_slug', 'is', null)
     } else if (voyageSlug) {
       query = query.or(buildScopeFilter(userId, voyageSlug))
     } else {

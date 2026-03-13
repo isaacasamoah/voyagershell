@@ -4,6 +4,7 @@
 
 import type { RetrievalResult } from '@/lib/retrieval';
 import { getPinnedKnowledge, loadPreferences, loadAwareness, curatePromptWindow, type KnowledgeNode, type AwarenessItem } from '@/lib/knowledge';
+import { loadVoyageContext, formatVoyageContextSection } from '@/lib/voyage';
 import { formatCuratedWindow } from './format/user';
 
 // Re-export types
@@ -85,8 +86,8 @@ export const composeSystemPrompt = async (
   const { profile, voyageSlug, sessionId, continuityContext, authState } = options ?? {};
   const startTime = Date.now();
 
-  // Load curated knowledge window and awareness items in parallel
-  const [curatedWindow, awarenessItems] = await Promise.all([
+  // Load curated knowledge window, awareness items, and voyage context in parallel
+  const [curatedWindow, awarenessItems, voyageContext] = await Promise.all([
     curatePromptWindow(userId, voyageSlug, undefined, sessionId).catch((error) => {
       console.warn('[Prompts] Failed to curate prompt window:', error);
       return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 };
@@ -95,6 +96,12 @@ export const composeSystemPrompt = async (
       console.warn('[Prompts] Failed to load awareness:', error);
       return [] as AwarenessItem[];
     }),
+    voyageSlug
+      ? loadVoyageContext(voyageSlug, userId).catch((error) => {
+          console.warn('[Prompts] Failed to load voyage context:', error);
+          return null;
+        })
+      : Promise.resolve(null),
   ]);
 
   // Build pinned knowledge from curated preferences (for backward compat with composePrompt)
@@ -164,6 +171,11 @@ export const composeSystemPrompt = async (
   // First-turn display name capture — only when user has no display name
   if (profile && !profile.displayName) {
     dynamicParts.push('# Display Name\nThis user has no display name yet. On your first response, naturally ask what you should call them. When they tell you, use the set_display_name tool. Keep it conversational — "What should I call you?" not a form.');
+  }
+
+  // Voyage context (membership, roles, activity pulse)
+  if (voyageContext) {
+    dynamicParts.push(formatVoyageContextSection(voyageContext));
   }
 
   // Continuity context (changes per turn based on reference signals)
