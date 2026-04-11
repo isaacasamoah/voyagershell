@@ -13,6 +13,8 @@ import {
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode, type AwarenessItem } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
+import { CORE_TOOL_NAMES } from '@/lib/retrieval/tools';
+import { loadModuleTools } from '@/lib/modules';
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
@@ -214,17 +216,36 @@ export const POST = async (req: Request) => {
       .maybeSingle();
     const displayName = (userProfile as { display_name: string | null } | null)?.display_name ?? undefined;
 
-    // Create Voyager tools
-    const { tools: voyagerTools, registrations } = createVoyagerTools({
+    // Load installed module tools (Slice 2). No-op when user has nothing
+    // installed. Happens AFTER the BYO key check so keys gate first.
+    const moduleBundle = await loadModuleTools({
       userId,
       voyageSlug,
       conversationId,
-      waitUntil,
-      messages: windowedSimpleMessages,
+      reservedToolNames: CORE_TOOL_NAMES,
     });
 
-    // Compose tool strategy section for system prompt
-    const toolStrategy = composeToolStrategy(registrations);
+    // Create Voyager tools (core + modules)
+    const { tools: voyagerTools, registrations } = createVoyagerTools(
+      {
+        userId,
+        voyageSlug,
+        conversationId,
+        waitUntil,
+        messages: windowedSimpleMessages,
+      },
+      {
+        tools: moduleBundle.tools,
+        registrations: moduleBundle.registrations,
+      }
+    );
+
+    // Compose tool strategy section for system prompt -- includes module
+    // skill prompts so the model sees per-module guidance alongside tools.
+    const toolStrategy = composeToolStrategy(
+      registrations,
+      moduleBundle.skillPrompts
+    );
 
     // Compose system prompt with preferences and pinned knowledge
     // Falls back to base prompt if composition fails

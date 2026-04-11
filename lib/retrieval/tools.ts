@@ -478,11 +478,32 @@ export interface ToolRegistration {
 // =============================================================================
 
 /**
- * Creates tools for the primary Voyager agent.
- * 15 tools: 6 retrieval + spawn_background_agent + ask_captain + create_voyage + invite_to_voyage + sign_out + switch_voyage + set_display_name + resolve_mention + get_messages.
- * Returns both the tools object (for AI SDK) and registrations (for strategy composition).
+ * Optional module-provided tools + registrations to merge with the core set.
+ * Produced by `loadModuleTools()` in lib/modules/loader.ts. Route code owns
+ * the module load so keys / prompts / strategy all see the same set.
+ *
+ * Intentionally additive: when omitted (or empty), createVoyagerTools
+ * behaves exactly as it did before Slice 2. Any module-declared tool whose
+ * name collides with a core tool is dropped BEFORE it reaches this function
+ * by the loader (core wins).
  */
-export const createVoyagerTools = (ctx: ToolContext): {
+export interface ModuleToolBundle {
+  tools: Record<string, any>
+  registrations: ToolRegistration[]
+}
+
+/**
+ * Creates tools for the primary Voyager agent.
+ * 16 core tools: 6 retrieval + spawn_background_agent + ask_captain + create_voyage + invite_to_voyage + sign_out + switch_voyage + set_display_name + resolve_mention + get_messages + remember_knowledge.
+ * Optionally merges module-provided tools (Slice 2). Returns both the tools
+ * object (for AI SDK) and registrations (for strategy composition).
+ *
+ * Note: NO `tier` parameter. Single-tier phase; tier gating is cut.
+ */
+export const createVoyagerTools = (
+  ctx: ToolContext,
+  moduleBundle?: ModuleToolBundle
+): {
   tools: Record<string, any>
   registrations: ToolRegistration[]
 } => {
@@ -942,12 +963,45 @@ export const createVoyagerTools = (ctx: ToolContext): {
     },
   ]
 
+  // Merge module tools on top of core. The loader already stripped any
+  // module-declared tool whose name collides with a core tool, so this is
+  // purely additive. Module skillPrompts flow separately via composeToolStrategy.
+  if (moduleBundle && moduleBundle.registrations.length > 0) {
+    for (const reg of moduleBundle.registrations) {
+      registrations.push(reg)
+    }
+  }
+
   const tools = Object.fromEntries(
     registrations.map((r) => [r.name, r.tool])
   )
 
   return { tools, registrations }
 }
+
+/**
+ * Set of core tool names exposed by createVoyagerTools. Used by the module
+ * loader to reject module-declared tools that collide with a core tool name
+ * (core wins -- pins existing functionality).
+ */
+export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'semantic_search',
+  'keyword_grep',
+  'graph',
+  'get_nodes',
+  'search_by_time',
+  'web_search',
+  'spawn_background_agent',
+  'ask_captain',
+  'create_voyage',
+  'invite_to_voyage',
+  'sign_out',
+  'switch_voyage',
+  'set_display_name',
+  'resolve_mention',
+  'get_messages',
+  'remember_knowledge',
+])
 
 // =============================================================================
 // Tool Types (for use in chat route)
