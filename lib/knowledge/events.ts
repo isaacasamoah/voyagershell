@@ -54,9 +54,16 @@ export type ActorType = 'user' | 'voyager' | 'system' | 'pipeline'
 // Source types for provenance
 export type SourceType = 'conversation' | 'slack' | 'jira' | 'document' | 'explicit'
 
+// Slice 3C: input classifications — metadata hints for retrieval
+// "experiential" = first-hand lived experience (floor attention at 0.8)
+// "out_of_training_window" = post-training-cutoff knowledge (retrieval prefers these)
+export type InputClassification = 'experiential' | 'out_of_training_window'
+
 // Metadata for source events
 export interface SourceEventMetadata {
   classifications?: Classification[]
+  /** Slice 3C: input classifications (experiential / out_of_training_window) */
+  input_classifications?: InputClassification[]
   entities?: string[]
   topics?: string[]
   session_id?: string
@@ -65,6 +72,11 @@ export interface SourceEventMetadata {
   source?: string          // V3 messaging: originating channel/context
   sender_display_name?: string  // V6: human-readable sender name
   sender_user_id?: string       // V6: sender UUID for attribution
+  // Slice 3: document ingest metadata
+  file_name?: string
+  mime_type?: string
+  document_id?: string          // links extracted nodes back to the parent document event
+  processing_error?: string     // surfaces processDocument failures on the source event
 }
 
 // =============================================================================
@@ -182,7 +194,7 @@ interface CreateSourceEventParams {
  * For Phase 1, embeddings are generated inline and updated after creation.
  * Phase 2 will move this to an async pipeline.
  */
-const createSourceEvent = async (params: CreateSourceEventParams): Promise<string | null> => {
+export const createSourceEvent = async (params: CreateSourceEventParams): Promise<string | null> => {
   const {
     eventType,
     content,
@@ -401,6 +413,41 @@ export const createExplicitEvent = async (
 // =============================================================================
 
 export type KnowledgeType = 'domain' | 'operational' | 'preference'
+
+export type { CreateSourceEventParams }
+
+/**
+ * Merge fields into an existing source event's metadata JSONB.
+ * Used by processDocument() to record processing_error on the parent
+ * document event after the route has already returned.
+ */
+export const patchSourceEventMetadata = async (
+  eventId: string,
+  patch: Partial<SourceEventMetadata>
+): Promise<boolean> => {
+  try {
+    const supabase = getAdminSupabase()
+    const { data: existing, error: readErr } = await supabase
+      .from('knowledge_events')
+      .select('metadata')
+      .eq('id', eventId)
+      .single()
+    if (readErr || !existing) return false
+    const merged = { ...((existing.metadata as Record<string, unknown>) ?? {}), ...patch }
+    const { error: writeErr } = await supabase
+      .from('knowledge_events')
+      .update({ metadata: merged as Json })
+      .eq('id', eventId)
+    if (writeErr) {
+      console.error('[Knowledge] patchSourceEventMetadata failed:', writeErr)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('[Knowledge] patchSourceEventMetadata error:', err)
+    return false
+  }
+}
 
 interface KnowledgeEnrichmentParams {
   knowledgeType?: KnowledgeType  // Optional: messages leave NULL (D23 — Cartographer skips via event_type filter)

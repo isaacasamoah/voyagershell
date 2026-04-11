@@ -25,6 +25,14 @@ interface VoyagerInterfaceProps {
   className?: string;
 }
 
+// TODO(opal): Slice 3A document ingestion UI.
+// Endpoint: POST /api/knowledge/ingest — multipart/form-data with a `file` field
+// (optional `voyageSlug` field for voyage-scoped uploads, captain-only).
+// Supported: application/pdf, text/markdown, text/plain. Max 10MB.
+// Response: { ok: true, documentId, eventId } — surface a toast on success or
+// the error message on failure. Drag-and-drop onto the conversation surface is
+// the intended interaction. Comprehension happens async via Cartographer; the
+// extracted knowledge nodes appear in search/graph after processDocument runs.
 export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState('');

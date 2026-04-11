@@ -16,7 +16,13 @@ import { modelRouter } from '@/lib/models/router'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { loadConversationMessages } from '@/lib/conversation'
 import { estimateTokens } from '@/lib/conversation/window'
-import { updateKnowledgeEnrichment, type KnowledgeType } from '@/lib/knowledge/events'
+import {
+  updateKnowledgeEnrichment,
+  createSourceEvent,
+  patchSourceEventMetadata,
+  type KnowledgeType,
+  type InputClassification,
+} from '@/lib/knowledge/events'
 import { createEdge, type EdgeType } from '@/lib/knowledge/edges'
 import { createRetrievalTools, type ToolContext } from '@/lib/retrieval/tools'
 import { resolveApiKey } from '@/lib/keys'
@@ -38,6 +44,7 @@ interface Stage1Assessment {
   knowledgeType: KnowledgeType
   attentionScore: number
   contextSnippet: string
+  classifications?: InputClassification[]
 }
 
 interface Stage2Connection {
@@ -205,7 +212,12 @@ For EACH event, determine:
    - Implicit preferences: observed from patterns or inferred from behaviour (user consistently uses short messages → prefers brevity). These get attention 0.5.
    - When unsure if explicit or implicit, default to implicit (0.5). Promotion is cheap, demotion loses trust.
 
-3. context_snippet: A declarative statement about the knowledge itself. This is prepended before re-embedding and DRAMATICALLY improves retrieval.
+3. classifications (optional): zero or more of:
+   - "experiential": first-hand lived experience of Isaac or voyage members -- something the user (or a voyage member) actually DID, SAW, FELT, BUILT, or DECIDED. NOT reference knowledge, NOT facts they read somewhere. This is their own life. Items tagged experiential get an attention floor of 0.8 because lived experience is uniquely valuable and cannot be re-derived from training data.
+   - "out_of_training_window": knowledge about events, facts, releases, or people that post-date the model's training cutoff -- things you as the model cannot know from pretraining. Tag these so retrieval can prioritise them over stale internal knowledge.
+   Tag liberally when the signal is clear; leave empty when unsure. A single item can have both tags.
+
+4. context_snippet: A declarative statement about the knowledge itself. This is prepended before re-embedding and DRAMATICALLY improves retrieval.
 
    QUALITY RULES:
    - GOOD: Declarative statements about the knowledge. "Isaac prefers direct communication." "The auth system uses JWT with 24h expiry." "Project deadline is March 15."
@@ -226,8 +238,29 @@ const stage1Schema = z.object({
     knowledgeType: z.enum(['domain', 'operational', 'preference']),
     attentionScore: z.number().describe('0.0 to 1.0'),
     contextSnippet: z.string(),
+    classifications: z
+      .array(z.enum(['experiential', 'out_of_training_window']))
+      .optional()
+      .describe('Slice 3C: input classifications for retrieval tuning'),
   })),
 })
+
+/**
+ * Apply Slice 3C classification side-effects to a model-assigned attention score.
+ * experiential → floor at 0.8. out_of_training_window is metadata-only here
+ * (retrieval prioritises it separately).
+ */
+const applyClassificationFloor = (
+  score: number,
+  classifications: InputClassification[] | undefined
+): number => {
+  if (!classifications || classifications.length === 0) return score
+  let adjusted = score
+  if (classifications.includes('experiential')) {
+    adjusted = Math.max(0.8, adjusted)
+  }
+  return Math.max(0, Math.min(1, adjusted))
+}
 
 const runStage1 = async (
   transcript: string,
@@ -260,8 +293,9 @@ Assess each event and return structured output.`
     return object.assessments.map((a) => ({
       eventId: a.eventId,
       knowledgeType: a.knowledgeType as KnowledgeType,
-      attentionScore: a.attentionScore,
+      attentionScore: applyClassificationFloor(a.attentionScore, a.classifications),
       contextSnippet: a.contextSnippet,
+      classifications: a.classifications,
     }))
   } catch (err) {
     log.agent('Stage 1 structured output failed', { error: String(err) }, 'error')
@@ -913,5 +947,244 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
       durationMs: Date.now() - startTime,
     }, 'error')
     // Fire-and-forget: never throw
+  }
+}
+
+// =============================================================================
+// Slice 3B: Document Comprehension (processDocument)
+// =============================================================================
+
+/**
+ * Safe budget for a single-pass comprehension: Claude Sonnet's 200k window
+ * minus system prompt overhead, output tokens, and a safety margin.
+ * If a document exceeds this we surface an error on the parent event and
+ * bail -- chunk-comprehend is a v2 concern.
+ */
+const DOCUMENT_MAX_INPUT_TOKENS = 120_000
+
+export interface DocumentIngestPayload {
+  documentId: string
+  documentText: string
+  sourceRef: Record<string, unknown>
+  /** Parent `document` event created by the ingest route. Used for error surfacing. */
+  parentEventId?: string
+  userId: string
+  voyageSlug?: string
+  fileName: string
+  mimeType: string
+  /** Optional upstream classifications -- merged into each extracted node's metadata. */
+  classifications?: InputClassification[]
+}
+
+const DOCUMENT_PROMPT = `You are the Cartographer for Voyager, running a document comprehension pass.
+
+You are reading a single document from end to end. Your job is NOT mechanical chunking. Your job is to COMPREHEND the document and extract the 3-8 highest-quality knowledge nodes a future retriever should surface.
+
+For each node, produce:
+
+1. content: a self-contained, declarative statement of the knowledge. It must stand alone when retrieved out of context -- not a fragment, not a quote, not "the document says X". Write it as a fact.
+
+2. knowledge_type: one of "domain", "operational", or "preference"
+   - "domain": facts, concepts, decisions, insights, technical knowledge
+   - "operational": tasks, processes, what happened, project updates, meeting notes
+   - "preference": user likes, dislikes, habits (rarely applies to a document)
+
+3. attention_score: 0.0 to 1.0 -- how important is this node for future retrieval?
+   - 0.9-1.0: load-bearing insight a future query would fail without
+   - 0.6-0.8: substantive, reusable knowledge
+   - 0.3-0.5: useful context, not load-bearing
+   - below 0.3: skip it, don't emit
+
+4. context_snippet: a short declarative lead-in prepended before embedding. Improves retrieval. Example: "The auth system uses JWT with 24h expiry." NOT "the document explains that..."
+
+5. entities (optional): key people, systems, projects, concepts named in the node. Used for graph auto-linking.
+
+6. classifications (optional): zero or more of:
+   - "experiential": first-hand lived experience of Isaac or a voyage member. Floors attention at 0.8.
+   - "out_of_training_window": knowledge about events or facts after the model's training cutoff.
+
+Output 3-8 nodes. Fewer if the document is thin; never more than 8. Prefer depth over breadth.`
+
+const documentNodeSchema = z.object({
+  nodes: z.array(z.object({
+    content: z.string(),
+    knowledgeType: z.enum(['domain', 'operational', 'preference']),
+    attentionScore: z.number().describe('0.0 to 1.0'),
+    contextSnippet: z.string(),
+    entities: z.array(z.string()).optional(),
+    classifications: z
+      .array(z.enum(['experiential', 'out_of_training_window']))
+      .optional(),
+  })).min(1).max(8),
+})
+
+export const processDocument = async (payload: DocumentIngestPayload): Promise<void> => {
+  const {
+    documentId,
+    documentText,
+    sourceRef,
+    parentEventId,
+    userId,
+    voyageSlug,
+    fileName,
+    mimeType,
+    classifications: upstreamClassifications,
+  } = payload
+
+  const startTime = Date.now()
+  log.agent('processDocument triggered', { documentId, fileName, userId })
+
+  // ---- 1. Resolve the user's reasoning key -----------------------------------
+  let resolvedKey: ResolvedApiKey | null
+  try {
+    resolvedKey = await resolveApiKey(userId, 'reasoning', { voyageSlug })
+  } catch (err) {
+    log.agent(
+      'processDocument: key resolution threw',
+      { documentId, error: String(err) },
+      'error'
+    )
+    return
+  }
+  if (!resolvedKey) {
+    log.agent(
+      'processDocument skipped: no reasoning key configured',
+      { documentId, userId },
+      'warn'
+    )
+    if (parentEventId) {
+      await patchSourceEventMetadata(parentEventId, {
+        processing_error: 'No reasoning API key configured. Add one at /settings/keys to enable document comprehension.',
+      })
+    }
+    return
+  }
+
+  // ---- 2. Token budget check -------------------------------------------------
+  const approxTokens = estimateTokens(documentText)
+  if (approxTokens > DOCUMENT_MAX_INPUT_TOKENS) {
+    const msg = `Document too large for single-pass comprehension (${approxTokens} tokens, max ${DOCUMENT_MAX_INPUT_TOKENS}). Chunk-comprehend is a v2 feature.`
+    log.agent('processDocument: oversized, refusing', { documentId, approxTokens }, 'warn')
+    if (parentEventId) {
+      await patchSourceEventMetadata(parentEventId, { processing_error: msg })
+    }
+    return
+  }
+
+  // ---- 3. Run comprehension pass --------------------------------------------
+  let nodes: z.infer<typeof documentNodeSchema>['nodes']
+  try {
+    const { object } = await generateObject({
+      model: modelRouter.select({ task: 'chat', quality: 'best', resolvedKey }),
+      system: DOCUMENT_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `## Document Metadata
+file_name: ${fileName}
+mime_type: ${mimeType}
+document_id: ${documentId}
+
+## Document Content
+${documentText}
+
+Read the entire document and return 3-8 high-quality knowledge nodes per the instructions.`,
+        },
+      ],
+      schema: documentNodeSchema,
+      maxOutputTokens: 4096,
+    })
+    nodes = object.nodes
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    log.agent('processDocument: comprehension failed', { documentId, error: errMsg }, 'error')
+    if (parentEventId) {
+      await patchSourceEventMetadata(parentEventId, {
+        processing_error: `Comprehension failed: ${errMsg}`,
+      })
+    }
+    return
+  }
+
+  log.agent('processDocument: comprehension complete', {
+    documentId,
+    nodeCount: nodes.length,
+  })
+
+  // ---- 4. Persist each node as an explicit event + enrichment ---------------
+  // Mirror the existing write path: createSourceEvent (trigger writes
+  // knowledge_current) -> updateKnowledgeEnrichment (attention + type +
+  // context_snippet). Embeddings are handled inside createSourceEvent.
+  let writeCount = 0
+  let failCount = 0
+
+  for (const node of nodes) {
+    // Clamp score into [0,1] and apply experiential floor (Slice 3C).
+    const rawScore = Math.max(0, Math.min(1, node.attentionScore))
+    const mergedClassifications: InputClassification[] = Array.from(new Set([
+      ...(upstreamClassifications ?? []),
+      ...((node.classifications as InputClassification[] | undefined) ?? []),
+    ]))
+    const attentionScore = applyClassificationFloor(rawScore, mergedClassifications)
+
+    // Prepend the context snippet on content so it's embedded with the node
+    // (matches the tidal enrichment re-embed pattern in applyEnrichments).
+    const contextSnippet = node.contextSnippet?.trim() || ''
+    const embedBody = contextSnippet
+      ? `${contextSnippet} ${node.content}`
+      : node.content
+
+    try {
+      const eventId = await createSourceEvent({
+        eventType: 'explicit',
+        content: embedBody,
+        userId,
+        voyageSlug,
+        metadata: {
+          entities: node.entities ?? [],
+          input_classifications: mergedClassifications.length > 0 ? mergedClassifications : undefined,
+          document_id: documentId,
+          file_name: fileName,
+          mime_type: mimeType,
+        },
+        sourceType: 'document',
+        sourceRef,
+        actorType: 'pipeline',
+      })
+      if (!eventId) {
+        failCount++
+        continue
+      }
+      // Write knowledge_type + attention + context_snippet so the row isn't
+      // re-picked by the next tidal enrichment run (knowledge_type filter).
+      await updateKnowledgeEnrichment(eventId, {
+        knowledgeType: node.knowledgeType as KnowledgeType,
+        attentionScore,
+        contextSnippet: contextSnippet || undefined,
+      })
+      writeCount++
+    } catch (err) {
+      log.agent(
+        'processDocument: node persist failed',
+        { documentId, error: String(err) },
+        'warn'
+      )
+      failCount++
+    }
+  }
+
+  const durationMs = Date.now() - startTime
+  log.agent('processDocument complete', {
+    documentId,
+    nodes: nodes.length,
+    wrote: writeCount,
+    failed: failCount,
+    durationMs,
+  })
+
+  if (failCount > 0 && parentEventId) {
+    await patchSourceEventMetadata(parentEventId, {
+      processing_error: `Persisted ${writeCount}/${nodes.length} nodes (${failCount} failed).`,
+    })
   }
 }
