@@ -54,6 +54,21 @@ export type { RerankOptions, RerankResult } from './rerank'
 // Reformulation (v2)
 export { reformulateQuery } from './reformulate'
 
-// Typed directional edges (v2)
-export { createEdge, getEdgesFrom, getEdgesTo } from './edges'
+// Typed directional edges (v2) + Slice 4B manual edges
+export { createEdge, createManualEdge, getEdgesFrom, getEdgesTo } from './edges'
 export type { EdgeType, KnowledgeEdge } from './edges'
+
+// Graph data contract (Slice 4A)
+export { getGraphData, encodeCursor, decodeCursor } from './graph'
+export type {
+  GraphNode,
+  GraphEdge,
+  GraphCursor,
+  GraphPayload,
+  GraphQueryParams,
+  GraphScope,
+} from './graph'
+
+// Captain overrides on the knowledge graph (Slice 4B)
+export { manualAdjust, softDeleteNode } from './curator'
+export type { ManualAdjustInput, SoftDeleteInput } from './curator'

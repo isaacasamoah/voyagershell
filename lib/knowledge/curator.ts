@@ -12,6 +12,7 @@
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { estimateTokens } from '@/lib/conversation/window'
+import { isCaptain } from '@/lib/voyage'
 import { buildScopeFilter, type KnowledgeNode } from './search'
 
 // =============================================================================
@@ -237,4 +238,157 @@ export const curatePromptWindow = async (
     totalTokens: prefs.tokensUsed + ops.tokensUsed + domain.tokensUsed,
     evictedCount: prefs.evicted + ops.evicted + domain.evicted,
   }
+}
+
+// =============================================================================
+// Slice 4B: Captain overrides on the knowledge graph
+// =============================================================================
+
+export interface ManualAdjustInput {
+  eventId: string
+  userId: string
+  voyageSlug?: string
+  updates: {
+    attentionScore?: number
+    contextSnippet?: string
+  }
+}
+
+export interface SoftDeleteInput {
+  eventId: string
+  userId: string
+  voyageSlug?: string
+}
+
+/**
+ * Authorise a captain-or-owner mutation on a knowledge_current row.
+ *
+ * - If voyageSlug is provided, caller must be captain of that voyage AND
+ *   the target row must live in that voyage.
+ * - If no voyageSlug, the target row must belong to the caller (personal
+ *   space: voyage_slug IS NULL, user_id = caller).
+ *
+ * Returns { ok: true } on success or { ok: false, status, error } with an
+ * HTTP-friendly status code on failure. Routes can map straight to a
+ * NextResponse.json() without further shape-shifting.
+ */
+const authoriseGraphMutation = async (
+  eventId: string,
+  userId: string,
+  voyageSlug: string | undefined,
+): Promise<
+  | { ok: true }
+  | { ok: false; status: number; error: string }
+> => {
+  const supabase = getAdminClient()
+
+  // Fetch minimal owner/voyage metadata for the target row
+  const { data: row, error } = await supabase
+    .from('knowledge_current')
+    .select('event_id, user_id, voyage_slug')
+    .eq('event_id', eventId)
+    .maybeSingle()
+
+  if (error) {
+    return { ok: false, status: 500, error: `Lookup failed: ${error.message}` }
+  }
+  if (!row) {
+    return { ok: false, status: 404, error: 'Knowledge node not found' }
+  }
+
+  const rowUserId = (row as { user_id: string | null }).user_id
+  const rowVoyageSlug = (row as { voyage_slug: string | null }).voyage_slug
+
+  if (voyageSlug) {
+    if (rowVoyageSlug !== voyageSlug) {
+      return { ok: false, status: 403, error: 'Node does not belong to this voyage' }
+    }
+    const captain = await isCaptain(voyageSlug, userId)
+    if (!captain) {
+      return { ok: false, status: 403, error: 'Captain-only action' }
+    }
+    return { ok: true }
+  }
+
+  // Personal-scope: owner-only
+  if (rowUserId !== userId) {
+    return { ok: false, status: 403, error: 'You do not own this node' }
+  }
+  return { ok: true }
+}
+
+/**
+ * Captain override: adjust attention_score and/or context_snippet on a
+ * knowledge_current row. The source event is not touched — this is a
+ * curation gesture on the computed projection.
+ *
+ * Validates that the actor can mutate the node via authoriseGraphMutation.
+ */
+export const manualAdjust = async (
+  input: ManualAdjustInput,
+): Promise<
+  | { ok: true; row: unknown }
+  | { ok: false; status: number; error: string }
+> => {
+  const { eventId, userId, voyageSlug, updates } = input
+
+  if (updates.attentionScore === undefined && updates.contextSnippet === undefined) {
+    return { ok: false, status: 400, error: 'No updates provided' }
+  }
+  if (
+    updates.attentionScore !== undefined &&
+    (updates.attentionScore < 0 || updates.attentionScore > 1 || Number.isNaN(updates.attentionScore))
+  ) {
+    return { ok: false, status: 400, error: 'attentionScore must be in [0, 1]' }
+  }
+
+  const authz = await authoriseGraphMutation(eventId, userId, voyageSlug)
+  if (!authz.ok) return authz
+
+  const patch: Record<string, unknown> = {}
+  if (updates.attentionScore !== undefined) patch.attention_score = updates.attentionScore
+  if (updates.contextSnippet !== undefined) patch.context_snippet = updates.contextSnippet
+
+  const supabase = getAdminClient()
+  const { data, error } = await supabase
+    .from('knowledge_current')
+    .update(patch)
+    .eq('event_id', eventId)
+    .select()
+    .single()
+
+  if (error) {
+    return { ok: false, status: 500, error: `Update failed: ${error.message}` }
+  }
+  return { ok: true, row: data }
+}
+
+/**
+ * Captain override: soft-delete a knowledge node by forcing attention_score
+ * to 0. The node remains queryable but drops out of every curated/pinned
+ * surface. Spec §4B: "soft-delete via attention→0".
+ */
+export const softDeleteNode = async (
+  input: SoftDeleteInput,
+): Promise<
+  | { ok: true; row: unknown }
+  | { ok: false; status: number; error: string }
+> => {
+  const { eventId, userId, voyageSlug } = input
+
+  const authz = await authoriseGraphMutation(eventId, userId, voyageSlug)
+  if (!authz.ok) return authz
+
+  const supabase = getAdminClient()
+  const { data, error } = await supabase
+    .from('knowledge_current')
+    .update({ attention_score: 0 })
+    .eq('event_id', eventId)
+    .select()
+    .single()
+
+  if (error) {
+    return { ok: false, status: 500, error: `Soft-delete failed: ${error.message}` }
+  }
+  return { ok: true, row: data }
 }

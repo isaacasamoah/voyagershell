@@ -33,6 +33,15 @@ interface VoyagerInterfaceProps {
 // the error message on failure. Drag-and-drop onto the conversation surface is
 // the intended interaction. Comprehension happens async via Cartographer; the
 // extracted knowledge nodes appear in search/graph after processDocument runs.
+//
+// TODO(opal): Slice 4C knowledge graph tab.
+// VoyagerInterface currently has no tab/toggle structure — chat is the only
+// surface. When adding the graph view, import { KnowledgeGraph } from
+// '@/components/ui/KnowledgeGraph' and render it as a secondary panel toggled
+// from the header (terminal-style tab or `:graph` command). Pass
+// { scope: currentVoyage ? 'voyage' : 'personal', voyageSlug: currentVoyage?.slug }.
+// Captain detection for KnowledgePanel edit controls: currentVoyage.role === 'captain'
+// in the voyage membership payload. Data contract: lib/knowledge/graph.ts.
 export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState('');

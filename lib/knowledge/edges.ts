@@ -19,6 +19,7 @@ export type EdgeType =
   | 'relates_to'    // concept <-> concept: lateral connection (HIGH BAR)
   | 'decided_by'    // decision -> person: accountability
   | 'raised_by'     // concern/idea -> person: attribution
+  | 'manual'        // captain-authored edge (Slice 4B) — see migration 035
 
 export interface KnowledgeEdge {
   id: string
@@ -67,6 +68,27 @@ export const createEdge = async (
   }
 
   return data as KnowledgeEdge
+}
+
+/**
+ * Create a captain-authored manual edge (Slice 4B).
+ *
+ * Semantically identical to createEdge() but hard-codes edge_type='manual'
+ * and records the captain's user_id in created_by (a TEXT column; we pass
+ * the UUID as a string rather than the literal 'cartographer').
+ *
+ * Idempotent via the same UNIQUE (source_id, target_id, edge_type) constraint.
+ */
+export const createManualEdge = async ({
+  sourceId,
+  targetId,
+  createdByUserId,
+}: {
+  sourceId: string
+  targetId: string
+  createdByUserId: string
+}): Promise<KnowledgeEdge | null> => {
+  return createEdge(sourceId, targetId, 'manual', createdByUserId)
 }
 
 /**
