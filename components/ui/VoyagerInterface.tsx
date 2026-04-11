@@ -55,6 +55,17 @@ interface VoyagerInterfaceProps {
 //     a parent thread in voyage context for person type, voyage scope for
 //     channel type).
 //
+// TODO(opal): Slice 6 Voyager Forge UI.
+// Endpoint: POST /api/modules/forge — body { description, voyageSlug?, context? }.
+// Returns { draft: DraftModuleManifest } — { status: 'draft', createdBy, createdAt,
+// manifest, connectionTemplate? }. The draft is ADVISORY ONLY; to activate, the
+// user must POST manifest fields to the existing /api/modules install route.
+// 402 + code 'NO_API_KEY' → surface the same "add a reasoning key at /settings/keys"
+// prompt used by chat. 400 invalid_description → ask the user to elaborate. The UX
+// is a terminal sub-mode: `:forge <description>` opens a review panel showing the
+// draft manifest (tools, skillPrompt, connectionTemplate) with Install / Discard
+// actions. No auto-install — review is the point.
+//
 // TODO(opal): Slice 4C knowledge graph tab.
 // VoyagerInterface currently has no tab/toggle structure — chat is the only
 // surface. When adding the graph view, import { KnowledgeGraph } from
