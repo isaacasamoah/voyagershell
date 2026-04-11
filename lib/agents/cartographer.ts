@@ -19,6 +19,8 @@ import { estimateTokens } from '@/lib/conversation/window'
 import { updateKnowledgeEnrichment, type KnowledgeType } from '@/lib/knowledge/events'
 import { createEdge, type EdgeType } from '@/lib/knowledge/edges'
 import { createRetrievalTools, type ToolContext } from '@/lib/retrieval/tools'
+import { resolveApiKey } from '@/lib/keys'
+import type { ResolvedApiKey } from '@/lib/keys/types'
 import { log } from '@/lib/debug/logger'
 
 // =============================================================================
@@ -229,7 +231,8 @@ const stage1Schema = z.object({
 
 const runStage1 = async (
   transcript: string,
-  events: KnowledgeEventRow[]
+  events: KnowledgeEventRow[],
+  resolvedKey: ResolvedApiKey
 ): Promise<Stage1Assessment[]> => {
   if (events.length === 0) return []
 
@@ -247,7 +250,7 @@ Assess each event and return structured output.`
 
   try {
     const { object } = await generateObject({
-      model: modelRouter.select({ task: 'chat', quality: 'balanced' }),
+      model: modelRouter.select({ task: 'chat', quality: 'balanced', resolvedKey }),
       system: STAGE1_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
       schema: stage1Schema,
@@ -297,7 +300,8 @@ Output ONLY the JSON array at the end, prefixed with "CONNECTIONS:" on its own l
 
 const runStage2 = async (
   assessments: Stage1Assessment[],
-  ctx: ToolContext
+  ctx: ToolContext,
+  resolvedKey: ResolvedApiKey
 ): Promise<Stage2Connection[]> => {
   if (assessments.length === 0) return []
 
@@ -314,7 +318,7 @@ const runStage2 = async (
   const { semantic_search, keyword_grep, graph, get_nodes, search_by_time } = tools
 
   const result = await generateText({
-    model: modelRouter.select({ task: 'chat', quality: 'balanced' }),
+    model: modelRouter.select({ task: 'chat', quality: 'balanced', resolvedKey }),
     system: STAGE2_PROMPT,
     messages: [
       {
@@ -828,6 +832,19 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
   log.agent('Cartographer triggered', { sessionId, userId })
 
   try {
+    // Resolve the user's reasoning key once. Fire-and-forget: if nothing is
+    // configured, log and bail -- Cartographer is enrichment, not chat, so
+    // a missing key is never user-facing.
+    const resolvedKey = await resolveApiKey(userId, 'reasoning', { voyageSlug })
+    if (!resolvedKey) {
+      log.agent(
+        'Cartographer skipped: no reasoning key configured',
+        { sessionId, userId },
+        'warn'
+      )
+      return
+    }
+
     // Load unenriched knowledge events from knowledge_current
     const events = await loadUnenrichedEvents(sessionId)
     if (events.length === 0) {
@@ -846,14 +863,14 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
     log.agent('Running Stage 1', { eventCount: events.length })
 
     // Stage 1: Per-event assessment (pure reasoning)
-    const assessments = await runStage1(transcript, events)
+    const assessments = await runStage1(transcript, events, resolvedKey)
     log.agent('Stage 1 complete', { assessmentCount: assessments.length })
 
     // Stage 2: Relationship mapping (agentic with tools)
     const toolCtx: ToolContext = { userId, voyageSlug, conversationId: sessionId }
     log.agent('Running Stage 2', { assessmentCount: assessments.length })
 
-    const connections = await runStage2(assessments, toolCtx)
+    const connections = await runStage2(assessments, toolCtx, resolvedKey)
     log.agent('Stage 2 complete', { connectionCount: connections.length })
 
     // Apply enrichments + re-embed + connect

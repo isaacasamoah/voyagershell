@@ -16,6 +16,7 @@ import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrateg
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
+import { resolveApiKey, NO_KEY_ERROR } from '@/lib/keys';
 import { updateLastSeen, markDelivered } from '@/lib/voyage';
 import { log } from '@/lib/debug';
 import { detectActionIntent } from '@/lib/shell/intent';
@@ -70,20 +71,6 @@ const convertToSimpleMessages = (messages: UIMessage[]): SimpleMessage[] => {
 export const POST = async (req: Request) => {
   log.api('Chat request received');
 
-  // Check for API key
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return new Response(
-      JSON.stringify({
-        error: 'Configuration error',
-        message: 'ANTHROPIC_API_KEY is not configured'
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
-  }
-
   try {
     // Require authentication
     const authResult = await requireAuthResponse();
@@ -94,6 +81,21 @@ export const POST = async (req: Request) => {
 
     // No voyage context = personal space (voyage_id NULL is valid)
     const voyageSlug: string | undefined = requestedVoyageSlug || undefined;
+
+    // Resolve the user's BYO conversation key. No server env fallback.
+    const resolvedKey = await resolveApiKey(userId, 'conversation', {
+      voyageSlug,
+    });
+    if (!resolvedKey) {
+      return new Response(
+        JSON.stringify({
+          error: 'No API key configured',
+          message: NO_KEY_ERROR,
+          code: 'NO_API_KEY',
+        }),
+        { status: 402, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(
@@ -319,12 +321,20 @@ export const POST = async (req: Request) => {
 
     // Primary Voyager with tools
     // Voyager decides when to use tools and self-terminates when done
+    const selectedChatConfig = modelRouter.selectConfig({
+      task: 'chat',
+      quality: 'balanced',
+      streaming: true,
+      toolUse: true,
+      resolvedKey,
+    });
     const result = streamText({
       model: modelRouter.select({
         task: 'chat',
         quality: 'balanced',
         streaming: true,
         toolUse: true,
+        resolvedKey,
       }),
       messages: [...systemMessages, ...messagesWithCache],
       tools: voyagerTools,
@@ -366,12 +376,16 @@ export const POST = async (req: Request) => {
           const outputTokens = usage.outputTokens ?? 0;
           creditTracker.track({
             userId,
-            model: 'claude-sonnet',
+            model: selectedChatConfig.id,
             inputTokens,
             outputTokens,
             cacheCreationTokens,
             cacheReadTokens,
-            cost: modelRouter.estimateCost('claude-sonnet', inputTokens, outputTokens),
+            cost: modelRouter.estimateCost(
+              selectedChatConfig.id,
+              inputTokens,
+              outputTokens
+            ),
             task: 'chat',
             conversationId,
           });

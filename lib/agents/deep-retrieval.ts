@@ -11,6 +11,7 @@ import { createRetrievalTools, type ToolContext } from '@/lib/retrieval/tools'
 import type { RetrievalResult } from './queue'
 import { updateTaskProgress } from './queue'
 import { modelRouter } from '@/lib/models'
+import { resolveApiKey } from '@/lib/keys'
 import { log } from '@/lib/debug'
 
 // =============================================================================
@@ -62,6 +63,24 @@ export async function runBackgroundRetrieval(
 
   await updateTaskProgress(taskId, { stage: 'searching', percent: 10 })
 
+  // Resolve the user's reasoning key. If none is configured, return a no-op
+  // result -- background retrieval must never crash the caller.
+  const resolvedKey = await resolveApiKey(userId, 'reasoning', { voyageSlug })
+  if (!resolvedKey) {
+    log.agent(
+      `[${shortTaskId}] No reasoning key configured, returning no-op`,
+      { userId: userId.slice(0, 8) },
+      'warn'
+    )
+    await updateTaskProgress(taskId, { stage: 'analyzing', percent: 100 })
+    return {
+      findings: [],
+      confidence: 0,
+      summary:
+        'Deep retrieval skipped: no LLM API key configured. Add one at /settings/keys to enable background agents.',
+    }
+  }
+
   const toolCtx: ToolContext = { userId, voyageSlug, conversationId }
   const tools = createRetrievalTools(toolCtx)
 
@@ -70,7 +89,11 @@ export async function runBackgroundRetrieval(
     : `Objective: ${objective}`
 
   const result = await generateText({
-    model: modelRouter.select({ task: 'chat', quality: 'balanced' }),
+    model: modelRouter.select({
+      task: 'chat',
+      quality: 'balanced',
+      resolvedKey,
+    }),
     system: AGENTIC_RETRIEVAL_PROMPT,
     prompt,
     tools,
