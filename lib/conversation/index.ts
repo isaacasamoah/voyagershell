@@ -26,6 +26,29 @@ interface ConversationOptions {
 // Re-export types for convenience
 export type { ExtendedSession, ResumableSession, SessionStatus, MessageRole }
 
+// Slice 5: Conversation branches
+export {
+  createBranch,
+  createPersonBranch,
+  createChannelBranch,
+  closeBranch,
+  getBranchContext,
+  getBranchMessages,
+  routeBranchMessage,
+  isTellIntent,
+  isBranchInviteMention,
+} from './branches'
+export type {
+  BranchType,
+  BranchMetadata,
+  BranchSession,
+  BranchContext,
+  BranchRoute,
+  CreatePersonBranchInput,
+  CreateChannelBranchInput,
+  CreateBranchInput,
+} from './branches'
+
 // =============================================================================
 // Conversation Interface Types
 // =============================================================================

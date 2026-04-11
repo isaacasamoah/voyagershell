@@ -3,7 +3,10 @@ import { waitUntil } from '@vercel/functions';
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts';
 import {
   saveMessage,
+  getBranchContext,
+  routeBranchMessage,
   type ConversationMessage,
+  type BranchContext,
 } from '@/lib/conversation';
 import { computeWindow, getTruncatedMessages } from '@/lib/conversation/window';
 import {
@@ -206,6 +209,94 @@ export const POST = async (req: Request) => {
       });
     }
 
+    // =============================================================================
+    // SLICE 5: Conversation branch detection
+    // =============================================================================
+    // If the current session is a branch, load context so we can either (a)
+    // short-forward messages to another participant without running the LLM,
+    // or (b) inject branch metadata into dynamicSuffix so Voyager knows it is
+    // speaking inside a person/channel branch. The non-branch path is
+    // unaffected -- getBranchContext returns null and we fall through.
+    let branchContext: BranchContext | null = null;
+    let branchRoute: 'other_person' | 'private_counsel' | 'channel' | null = null;
+    if (conversationId) {
+      branchContext = await getBranchContext(conversationId);
+      if (branchContext) {
+        branchRoute = routeBranchMessage({
+          branchSession: branchContext,
+          senderUserId: userId,
+          content: queryText,
+        });
+        log.message('Branch context detected', {
+          conversationId,
+          branchType: branchContext.branchType,
+          route: branchRoute,
+        });
+
+        // For person-branch forwards, write a participant-scoped knowledge
+        // event directly (mirroring resolve_mention's on-the-wire shape) so
+        // the peer sees the message via Awareness / get_messages. The LLM
+        // turn that follows just acknowledges the forward -- it does NOT
+        // author the forwarded content; the user's raw text is the message.
+        if (
+          branchContext.branchType === 'person' &&
+          branchRoute === 'other_person' &&
+          branchContext.participantUserIds &&
+          queryText
+        ) {
+          const peerIds = branchContext.participantUserIds.filter(
+            (id) => id !== userId
+          );
+          if (peerIds.length > 0) {
+            try {
+              // Fetch sender display name for attribution (mirrors
+              // resolve_mention's V6 AC 11 path).
+              const { getAdminClient: _getAdmin } = await import(
+                '@/lib/supabase/admin'
+              );
+              const _admin = _getAdmin();
+              const { data: senderProfile } = await _admin
+                .from('profiles')
+                .select('display_name, email')
+                .eq('id', userId)
+                .maybeSingle();
+              const senderName =
+                (senderProfile as { display_name: string | null; email: string | null } | null)
+                  ?.display_name ??
+                (senderProfile as { email: string | null } | null)?.email ??
+                'Unknown';
+              const allParticipants = Array.from(
+                new Set([userId, ...peerIds])
+              );
+              const contextSnippet = `${senderName} (branch): ${queryText.slice(0, 60)}`;
+              await createMessageEvent(
+                conversationId,
+                'user',
+                queryText,
+                {
+                  userId,
+                  voyageSlug: branchContext.voyageSlug ?? undefined,
+                  participants: allParticipants,
+                  addressedTo: peerIds,
+                  source: 'branch-forward',
+                  senderDisplayName: senderName,
+                  senderUserId: userId,
+                  attentionScore: 0.85,
+                  contextSnippet,
+                }
+              );
+            } catch (forwardError) {
+              log.api(
+                'Branch forward knowledge event failed',
+                { error: String(forwardError) },
+                'error'
+              );
+            }
+          }
+        }
+      }
+    }
+
     // Fetch user profile for display name (prompt composition needs it)
     const { getAdminClient: getAdmin } = await import('@/lib/supabase/admin');
     const adminClient = getAdmin();
@@ -290,6 +381,34 @@ export const POST = async (req: Request) => {
     } catch (error) {
       log.api('Prompt composition failed, using base prompt', { error: String(error) }, 'warn');
       staticPrefix = getBasePrompt() + '\n\n' + toolStrategy;
+    }
+
+    // Slice 5: inject branch context into the dynamic (uncached) prompt so
+    // Voyager knows it is speaking inside a branch. For person-branch
+    // forwards we also tell the model to keep its reply to a short
+    // acknowledgment -- the actual forwarded content was already written to
+    // the knowledge event above.
+    if (branchContext) {
+      const metaLines: string[] = ['[Slice 5: you are inside a conversation branch.]'];
+      if (branchContext.branchType === 'person' && branchContext.participantUserIds) {
+        metaLines.push(
+          `[Branch type: person. Participants: ${branchContext.participantUserIds.join(', ')}.]`
+        );
+        if (branchRoute === 'other_person') {
+          metaLines.push(
+            '[Route: other_person. The user\'s message has already been forwarded to the peer. Respond with a SHORT acknowledgment (e.g. "Sent.") -- do not restate or expand the message.]'
+          );
+        } else if (branchRoute === 'private_counsel') {
+          metaLines.push(
+            '[Route: private_counsel. This turn is private counsel between Voyager and the sender about their conversation with the peer; the peer does NOT see your reply. Speak candidly to the sender.]'
+          );
+        }
+      } else if (branchContext.branchType === 'channel' && branchContext.channelName) {
+        metaLines.push(
+          `[Branch type: channel. Channel: #${branchContext.channelName} (voyage-wide, all members can see).]`
+        );
+      }
+      dynamicSuffix += '\n' + metaLines.join('\n');
     }
 
     // Shell Contract: inject intent guidance into dynamic (uncached) prompt

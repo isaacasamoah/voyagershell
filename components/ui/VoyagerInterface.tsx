@@ -34,6 +34,27 @@ interface VoyagerInterfaceProps {
 // the intended interaction. Comprehension happens async via Cartographer; the
 // extracted knowledge nodes appear in search/graph after processDocument runs.
 //
+// TODO(opal): Slice 5 conversation branch switcher.
+// Branches are sessions rows with branch_type set ('person' | 'channel'). They
+// share public.messages with their parent via session_id, so there is no new
+// messages table to fetch. Navigation contract:
+//   - Fetch branches for the current voyage / parent session via
+//     GET /api/conversation?parent=<id> (endpoint TBD by ship) returning an
+//     array of { id, branchType, title, metadata } rows. listVoyageChannels()
+//     in lib/voyage/channels.ts already provides the channel list.
+//   - Switching to a branch is just setting conversationId to the branch's
+//     session id -- the existing useConversation hook handles everything else.
+//   - Create paths: @<name> ... with '?' or multi-sentence body → person
+//     branch (created server-side by resolve_mention). #<channel> → channel
+//     branch (created by resolve_channel). The tool response includes
+//     branchSessionId for auto-navigation.
+//   - UX: terminal-style breadcrumb "voyage › #channel-name" or a sidebar of
+//     open branches grouped by parent. Closing a branch is non-destructive --
+//     Cartographer enrichment runs via closeBranch() but the session stays.
+//   - No private channels. No branch list in personal space (branches require
+//     a parent thread in voyage context for person type, voyage scope for
+//     channel type).
+//
 // TODO(opal): Slice 4C knowledge graph tab.
 // VoyagerInterface currently has no tab/toggle structure — chat is the only
 // surface. When adding the graph view, import { KnowledgeGraph } from

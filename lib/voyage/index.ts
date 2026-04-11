@@ -19,6 +19,13 @@ import type {
 // Re-export types
 export * from './types';
 
+// Slice 5D: voyage channel helpers
+export {
+  listVoyageChannels,
+  findOrCreateChannel,
+  type VoyageChannelSummary,
+} from './channels';
+
 // Admin client for voyage operations (team management, cross-user queries)
 // Note: User membership checks use userId in params
 const getAdminSupabase = () => getAdminClient();

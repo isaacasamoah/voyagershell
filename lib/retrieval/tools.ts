@@ -21,8 +21,13 @@ import { hybridSearch, type RankedResult } from '@/lib/knowledge/hybrid'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
-import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages } from '@/lib/voyage'
+import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages, findOrCreateChannel } from '@/lib/voyage'
 import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
+import {
+  createPersonBranch,
+  isTellIntent,
+  isBranchInviteMention,
+} from '@/lib/conversation/branches'
 
 // Resolve short ID (8 chars) to full UUID
 const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<string | null> => {
@@ -829,6 +834,38 @@ export const createVoyagerTools = (
       const contentPreview = message.slice(0, 60)
       const contextSnippet = `${senderDisplayName} to ${recipientStr}: ${contentPreview}`
 
+      // Slice 5: classify intent BEFORE the write. Tell mode is the
+      // existing one-off path -- fire-and-forget, no branch. @mention
+      // branch invitations spin up a person branch so the ongoing
+      // thread gets its own session. Everything else falls through to
+      // the legacy one-off path (unchanged behavior).
+      //
+      // HEURISTIC: "start with @name AND (ends in ? OR multi-sentence)"
+      // -- see isBranchInviteMention() in lib/conversation/branches.ts.
+      const tell = isTellIntent(message)
+      const canBranch =
+        !tell &&
+        mentionedIds.length === 1 &&
+        !!ctx.conversationId &&
+        isBranchInviteMention(message)
+
+      let branchSessionId: string | null = null
+      if (canBranch) {
+        const branch = await createPersonBranch({
+          parentSessionId: ctx.conversationId!,
+          userId: ctx.userId,
+          voyageSlug: ctx.voyageSlug ?? null,
+          participantUserIds: mentionedIds,
+          title: `@${recipientNames[0]}`,
+        })
+        branchSessionId = branch?.id ?? null
+      }
+
+      // Write the knowledge event on the SENDER's current thread (unchanged
+      // path). This preserves the resolve_mention on-the-wire behavior for
+      // every case -- tell, one-off, and branch. A branch session is purely
+      // additive scaffolding; the message still lands in the participant-
+      // scoped knowledge event so get_messages / awareness keep working.
       await createMessageEvent(
         ctx.conversationId ?? 'mention',
         'user',
@@ -850,6 +887,39 @@ export const createVoyagerTools = (
         status: 'sent',
         recipients: recipientNames,
         message: message,
+        intent: tell ? 'tell' : branchSessionId ? 'branch' : 'mention',
+        branchSessionId,
+      })
+    },
+  })
+
+  // resolve_channel -- LLM calls this on '#channel' patterns in a voyage.
+  // Idempotent: if the channel already exists, the existing session id is
+  // returned. See lib/voyage/channels.ts for the branch row contract.
+  const resolve_channel = tool({
+    description: `Resolve a #channel mention within the current voyage. Finds or creates a public channel branch (voyage-wide, any member can participate) and returns its session id so the UI can navigate there. Call this when the user posts a message starting with #channel-name inside a voyage.`,
+    inputSchema: z.object({
+      channelName: z.string().describe('Channel name, with or without the leading # (e.g. "product-ideas" or "#product-ideas")'),
+      message: z.string().describe('The message body that triggered the channel resolve (used for summary / routing only)'),
+    }),
+    execute: async (input) => {
+      if (!ctx.voyageSlug) {
+        return 'Channels live in voyages. Switch to a voyage to create or use channels.'
+      }
+      const channel = await findOrCreateChannel({
+        voyageSlug: ctx.voyageSlug,
+        channelName: input.channelName,
+        userId: ctx.userId,
+        parentSessionId: ctx.conversationId ?? null,
+      })
+      if (!channel || channel.metadata.kind !== 'channel') {
+        return `Could not resolve channel #${input.channelName}.`
+      }
+      return JSON.stringify({
+        status: 'resolved',
+        channelName: channel.metadata.channelName,
+        branchSessionId: channel.id,
+        summary: `#${channel.metadata.channelName} is ready.`,
       })
     },
   })
@@ -949,7 +1019,12 @@ export const createVoyagerTools = (
     {
       name: 'resolve_mention',
       tool: resolve_mention,
-      strategyHint: 'Route messages to voyage members via @mention or natural language. Creates participant-scoped knowledge events.',
+      strategyHint: 'Route messages to voyage members via @mention or natural language. Creates participant-scoped knowledge events. Starts a person branch when the mention opens an ongoing thread (Slice 5C).',
+    },
+    {
+      name: 'resolve_channel',
+      tool: resolve_channel,
+      strategyHint: 'Resolve a #channel mention in a voyage. Finds or creates a voyage-public channel branch session (Slice 5D).',
     },
     {
       name: 'get_messages',
@@ -999,6 +1074,7 @@ export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'switch_voyage',
   'set_display_name',
   'resolve_mention',
+  'resolve_channel',
   'get_messages',
   'remember_knowledge',
 ])
