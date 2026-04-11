@@ -138,6 +138,10 @@ export const composePrompt = (input: ComposeInput): ComposedPrompt => {
     metadata: {
       voyageSlug: input.voyageName,
       userId: input.userId,
+      // Build-time metadata for debugPrompt/logging only. NOT injected into
+      // systemPrompt text. The live per-turn time source is the heartbeat
+      // block in lib/prompts/heartbeat.ts, prepended to the dynamic (uncached)
+      // prompt section by composeSystemPrompt().
       timestamp: new Date().toISOString(),
     },
   };

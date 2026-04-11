@@ -42,6 +42,7 @@ export {
 import { composePrompt } from './compose';
 import { CORE_PROMPT } from './core';
 import { mergeUserProfile } from './defaults';
+import { composeHeartbeat } from './heartbeat';
 import type { KnowledgeItem, RetrievedContext } from './types';
 
 // ============================================================================
@@ -160,6 +161,19 @@ export const composeSystemPrompt = async (
 
   // Dynamic prompt: per-turn data that changes every request (not cached)
   const dynamicParts: string[] = [];
+
+  // Heartbeat v2 — structured per-turn reinforcement (Slice 7).
+  // MUST be first in dynamicParts so the live time + identity stance lead
+  // the uncached section on every turn. Workflow state is null in v1 — see
+  // TODO in lib/prompts/heartbeat.ts for the future wiring path.
+  dynamicParts.push(
+    composeHeartbeat({
+      userId,
+      voyageSlug,
+      sessionId,
+      workflowState: null,
+    })
+  );
 
   // Auth state flag — identity handles the behavior (see First Contact in core.ts)
   if (authState === 'unauthenticated') {
