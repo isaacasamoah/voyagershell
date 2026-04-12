@@ -23,6 +23,10 @@ export type ComponentType =
   | 'action_buttons'      // Contextual action buttons
   | 'progress'            // Loading/progress indicator
   | 'email_input'         // Email input via ask_captain tool
+  | 'api_key_input'       // API key input via ask_captain tool
+  | 'module_review'       // Module review card via ask_captain tool
+  | 'document_upload'    // Document upload drop zone via ask_captain tool
+  | 'knowledge_graph'    // Knowledge graph visualisation via ask_captain tool
 
 export interface InlineComponent {
   id: string

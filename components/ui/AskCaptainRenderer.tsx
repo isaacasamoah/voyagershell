@@ -15,9 +15,14 @@ import { useState, useCallback } from 'react'
 import { EmailInputAdapter } from './composition/adapters/EmailInputAdapter'
 import { ConfirmationAdapter } from './composition/adapters/ConfirmationAdapter'
 import { VoyagePickerAdapter } from './composition/adapters/VoyagePickerAdapter'
+import { ApiKeyInputAdapter } from './composition/adapters/ApiKeyInputAdapter'
+import { ModuleReviewAdapter } from './composition/adapters/ModuleReviewAdapter'
+import { DocumentUploadAdapter } from './composition/adapters/DocumentUploadAdapter'
+import { KnowledgeGraphAdapter } from './composition/adapters/KnowledgeGraphAdapter'
 import { Text } from '@/components/ui/primitives'
 import type { ComponentState, ComponentResolution } from '@/lib/ui/components'
 import type { AskCaptainInput } from '@/lib/tools/captain'
+import type { GraphPayload } from '@/lib/knowledge/graph'
 
 // Parse voyage picker result from tool execution (server-side fetched)
 const parseVoyagePickerResult = (result: unknown): {
@@ -49,6 +54,8 @@ interface AskCaptainRendererProps {
   onSendMessage: (text: string) => void
   /** Switch voyage context on the client (voyage_picker side effect) */
   onVoyageSwitch?: (slug: string) => void
+  /** Graph payload from sibling show_knowledge_graph tool result (knowledge_graph only) */
+  graphPayload?: GraphPayload
 }
 
 export const AskCaptainRenderer = ({
@@ -59,6 +66,7 @@ export const AskCaptainRenderer = ({
   sendMagicLink,
   onSendMessage,
   onVoyageSwitch,
+  graphPayload,
 }: AskCaptainRendererProps) => {
   const [componentState, setComponentState] = useState<ComponentState>('active')
   const [resolution, setResolution] = useState<ComponentResolution | undefined>()
@@ -123,6 +131,47 @@ export const AskCaptainRenderer = ({
         }
         break
       }
+      case 'api_key_input': {
+        if (action === 'key_saved') {
+          const d = data as { provider?: string; purpose?: string; hint?: string } | undefined
+          const label = d
+            ? `Saved ${d.provider} ${d.purpose} key (****${d.hint})`
+            : 'Key saved'
+          setComponentState('resolved')
+          setResolution({
+            action: 'key_saved',
+            value: d,
+            label,
+          })
+        }
+        break
+      }
+      case 'module_review': {
+        if (action === 'module_review_response') {
+          const installed = data === 'install'
+          setComponentState('resolved')
+          setResolution({
+            action: installed ? 'install' : 'cancel',
+            value: data,
+            label: installed
+              ? `Installing ${input.manifestPreview?.name ?? 'module'}...`
+              : 'Draft cancelled',
+          })
+        }
+        break
+      }
+      case 'document_upload': {
+        if (action === 'document_uploaded') {
+          const d = data as { fileName?: string } | undefined
+          setComponentState('resolved')
+          setResolution({
+            action: 'document_uploaded',
+            value: d,
+            label: `Uploaded ${d?.fileName ?? 'document'} — processing.`,
+          })
+        }
+        break
+      }
     }
   }, [componentState, input, onSendMessage, onVoyageSwitch])
 
@@ -172,6 +221,56 @@ export const AskCaptainRenderer = ({
         />
       )
     }
+
+    case 'api_key_input':
+      return (
+        <ApiKeyInputAdapter
+          provider={input.provider}
+          purpose={input.purpose}
+          voyageSlug={input.voyageSlug}
+          message={input.message}
+          __state={componentState}
+          __resolution={resolution}
+          onAction={handleAction}
+          onSendMessage={onSendMessage}
+        />
+      )
+
+    case 'module_review':
+      return (
+        <ModuleReviewAdapter
+          draftId={input.draftId}
+          draftSummary={input.draftSummary}
+          manifestPreview={input.manifestPreview}
+          __state={componentState}
+          __resolution={resolution}
+          onAction={handleAction}
+          onSendMessage={onSendMessage}
+        />
+      )
+
+    case 'document_upload':
+      return (
+        <DocumentUploadAdapter
+          voyageSlug={input.voyageSlug}
+          message={input.message}
+          __state={componentState}
+          __resolution={resolution}
+          onAction={handleAction}
+          onSendMessage={onSendMessage}
+        />
+      )
+
+    case 'knowledge_graph':
+      return (
+        <KnowledgeGraphAdapter
+          payload={graphPayload}
+          scope={input.scope}
+          renderMode={input.renderMode}
+          __state={componentState}
+          __resolution={resolution}
+        />
+      )
 
     case 'conversation_picker':
       // Basic list rendering — full adapter can be built later

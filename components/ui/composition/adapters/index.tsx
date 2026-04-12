@@ -9,6 +9,10 @@ import { ActionButtonsAdapter } from './ActionButtonsAdapter'
 import { ProgressAdapter } from './ProgressAdapter'
 import { EmailInputAdapter } from './EmailInputAdapter'
 import { ConfirmationAdapter } from './ConfirmationAdapter'
+import { ApiKeyInputAdapter } from './ApiKeyInputAdapter'
+import { ModuleReviewAdapter } from './ModuleReviewAdapter'
+import { DocumentUploadAdapter } from './DocumentUploadAdapter'
+import { KnowledgeGraphAdapter } from './KnowledgeGraphAdapter'
 
 // Placeholder for unimplemented adapters
 const NotImplementedAdapter: FC<{ type?: string }> = ({ type }) => {
@@ -35,6 +39,10 @@ export const adapters: Record<ComponentType, AnyAdapter> = {
   action_buttons: ActionButtonsAdapter as unknown as AnyAdapter,
   progress: ProgressAdapter as unknown as AnyAdapter,
   email_input: EmailInputAdapter as unknown as AnyAdapter,
+  api_key_input: ApiKeyInputAdapter as unknown as AnyAdapter,
+  module_review: ModuleReviewAdapter as unknown as AnyAdapter,
+  document_upload: DocumentUploadAdapter as unknown as AnyAdapter,
+  knowledge_graph: KnowledgeGraphAdapter as unknown as AnyAdapter,
 }
 
 // Re-export individual adapters for direct use
@@ -43,3 +51,7 @@ export { ActionButtonsAdapter } from './ActionButtonsAdapter'
 export { ProgressAdapter } from './ProgressAdapter'
 export { EmailInputAdapter } from './EmailInputAdapter'
 export { ConfirmationAdapter } from './ConfirmationAdapter'
+export { ApiKeyInputAdapter } from './ApiKeyInputAdapter'
+export { ModuleReviewAdapter } from './ModuleReviewAdapter'
+export { DocumentUploadAdapter } from './DocumentUploadAdapter'
+export { KnowledgeGraphAdapter } from './KnowledgeGraphAdapter'

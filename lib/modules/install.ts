@@ -14,6 +14,7 @@ import {
   type ModuleRow,
   type UserModuleRow,
 } from './types'
+import type { DraftModuleManifest } from './forge'
 
 export type InstallResult =
   | { ok: true; installed: InstalledModule }
@@ -173,6 +174,37 @@ export const uninstallModule = async (
  * that is *active* for a given chat context should use lib/modules/loader.ts
  * instead -- this is the management-API view.
  */
+/**
+ * Write a Forge draft to the modules catalogue as a user-scope row.
+ * This makes it available for installModule() to pick up.
+ */
+export const writeDraftToCatalogue = async (
+  userId: string,
+  draft: DraftModuleManifest
+): Promise<{ ok: true; moduleId: string } | { ok: false; reason: string }> => {
+  const supabase = getAdminClient()
+  const row = {
+    id: draft.manifest.id,
+    name: draft.manifest.name,
+    description: draft.manifest.description,
+    manifest: draft.manifest,
+    is_core: false,
+    scope: 'user',
+    version: draft.manifest.version,
+  }
+
+  const { error } = await (supabase as any)
+    .from('modules')
+    .upsert(row, { onConflict: 'id' })
+
+  if (error) {
+    log.api('writeDraftToCatalogue error', { error: error.message, moduleId: draft.manifest.id }, 'error')
+    return { ok: false, reason: `Failed to write draft to catalogue: ${error.message}` }
+  }
+
+  return { ok: true, moduleId: draft.manifest.id }
+}
+
 export const listUserInstalls = async (
   userId: string
 ): Promise<InstalledModule[]> => {

@@ -303,3 +303,36 @@ export const designModule = async (
     }
   }
 }
+
+// ============================================================================
+// Draft cache — in-memory, 10-minute TTL, per-process
+// ============================================================================
+
+const draftCache = new Map<string, { draft: DraftModuleManifest; userId: string; expiresAt: number }>()
+
+const DRAFT_TTL_MS = 10 * 60 * 1000
+
+const sweepExpired = () => {
+  const now = Date.now()
+  Array.from(draftCache.entries()).forEach(([key, entry]) => {
+    if (entry.expiresAt <= now) draftCache.delete(key)
+  })
+}
+
+export const cacheDraft = (draft: DraftModuleManifest): string => {
+  sweepExpired()
+  const draftId = `draft-${draft.manifest.id}-${Date.now()}`
+  draftCache.set(draftId, {
+    draft,
+    userId: draft.createdBy,
+    expiresAt: Date.now() + DRAFT_TTL_MS,
+  })
+  return draftId
+}
+
+export const getDraft = (id: string, userId: string): DraftModuleManifest | null => {
+  sweepExpired()
+  const entry = draftCache.get(id)
+  if (!entry || entry.userId !== userId) return null
+  return entry.draft
+}

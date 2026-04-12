@@ -22,10 +22,10 @@ import { getUserVoyages } from '@/lib/voyage'
 // z.discriminatedUnion produces `{ oneOf: [...] }` without a root type, which fails validation.
 // Flat schema with enum discriminator achieves the same LLM behavior.
 const askCaptainSchema = z.object({
-  type: z.enum(['email_input', 'conversation_picker', 'voyage_picker', 'confirmation'])
+  type: z.enum(['email_input', 'conversation_picker', 'voyage_picker', 'confirmation', 'api_key_input', 'module_review', 'document_upload', 'knowledge_graph'])
     .describe('Which UI component to render'),
   message: z.string().optional()
-    .describe('Message to show (used by email_input and confirmation)'),
+    .describe('Message to show (used by email_input, confirmation, api_key_input)'),
   confirmLabel: z.string().optional()
     .describe('Label for confirm button (confirmation only, default: Yes)'),
   cancelLabel: z.string().optional()
@@ -37,6 +37,27 @@ const askCaptainSchema = z.object({
     messageCount: z.number().optional(),
     lastMessageAt: z.string().optional(),
   })).optional().describe('Conversations to show (conversation_picker only)'),
+  provider: z.enum(['anthropic', 'openai', 'google', 'openrouter', 'custom']).optional()
+    .describe('Pre-selected provider (api_key_input only)'),
+  purpose: z.enum(['conversation', 'reasoning']).optional()
+    .describe('Pre-selected purpose (api_key_input only)'),
+  voyageSlug: z.string().optional()
+    .describe('Voyage to attach the key to (api_key_input only, omit for personal)'),
+  draftId: z.string().optional()
+    .describe('Draft id from forge_module (module_review only)'),
+  draftSummary: z.string().optional()
+    .describe('Summary of the draft module (module_review only)'),
+  manifestPreview: z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    toolCount: z.number(),
+    hasConnection: z.boolean(),
+  }).optional().describe('Preview of the draft manifest (module_review only)'),
+  scope: z.enum(['personal', 'voyage']).optional()
+    .describe('Graph scope (knowledge_graph only)'),
+  renderMode: z.enum(['inline', 'tab']).optional().default('inline')
+    .describe('How to render the graph: inline in chat or new tab (knowledge_graph only)'),
 })
 
 export type AskCaptainInput = z.infer<typeof askCaptainSchema>
@@ -55,10 +76,14 @@ Types:
 - conversation_picker: Show a list of conversations to select from. Use when user wants to resume a conversation and there are multiple options.
 - voyage_picker: Show voyages to switch between. Just call with type "voyage_picker" — voyages are fetched automatically. No need to supply voyage data.
 - confirmation: Ask the user to confirm an action before proceeding.
+- api_key_input: Show a form to add an API key. Optionally pre-select provider and purpose. The key is submitted directly to the server (never passes through the LLM stream).
+- module_review: Show a draft module review card after forge_module. Displays module name, description, tool count, and connection status. User can install or cancel.
+- document_upload: Show a file upload drop zone for knowledge ingestion. Accepts PDF, Markdown, and plain text up to 10MB. File is posted directly to /api/knowledge/ingest. Optionally scoped to a voyage via voyageSlug.
+- knowledge_graph: Show the knowledge graph visualisation. Pair with the show_knowledge_graph tool which provides the payload. Use scope and renderMode to control display.
 
 The component renders inline in the chat. The user's response comes back as their next message. Do NOT ask the user to type their selection — the UI handles it.
 
-Exception: email_input fires the magic link immediately on the client (no LLM round trip needed for sending).`,
+Exception: email_input fires the magic link immediately on the client (no LLM round trip needed for sending). api_key_input submits directly to the server. document_upload posts directly to the ingest endpoint.`,
     inputSchema: askCaptainSchema,
     execute: async (input) => {
       switch (input.type) {
@@ -82,6 +107,14 @@ Exception: email_input fires the magic link immediately on the client (no LLM ro
         }
         case 'confirmation':
           return `Confirmation dialog rendered: "${input.message}". Awaiting captain's response.`
+        case 'api_key_input':
+          return 'API key input component rendered. Awaiting captain\'s key. The key is submitted directly to the server (no LLM round trip).'
+        case 'module_review':
+          return 'Module review component rendered. Awaiting captain\'s decision.'
+        case 'document_upload':
+          return 'Document upload component rendered. Awaiting file from captain.'
+        case 'knowledge_graph':
+          return 'Knowledge graph component rendered.'
       }
     },
   }),

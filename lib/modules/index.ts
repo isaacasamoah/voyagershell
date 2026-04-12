@@ -5,6 +5,7 @@ export {
   installModule,
   uninstallModule,
   listUserInstalls,
+  writeDraftToCatalogue,
   type InstallInput,
   type InstallResult,
   type UninstallInput,

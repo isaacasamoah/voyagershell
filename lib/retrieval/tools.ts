@@ -21,6 +21,7 @@ import { hybridSearch, type RankedResult } from '@/lib/knowledge/hybrid'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
+import { getGraphData, type GraphPayload } from '@/lib/knowledge/graph'
 import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages, findOrCreateChannel } from '@/lib/voyage'
 import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
 import {
@@ -28,6 +29,9 @@ import {
   isTellIntent,
   isBranchInviteMention,
 } from '@/lib/conversation/branches'
+import type { ApiKeyRow } from '@/lib/keys'
+import { listModules, listUserInstalls, installModule, uninstallModule, writeDraftToCatalogue } from '@/lib/modules'
+import { designModule, cacheDraft, getDraft } from '@/lib/modules/forge'
 
 // Resolve short ID (8 chars) to full UUID
 const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<string | null> => {
@@ -950,6 +954,284 @@ export const createVoyagerTools = (
     },
   })
 
+  // list_api_keys — Read-only listing of the user's configured API keys
+  const list_api_keys = tool({
+    description: `List the user's configured API keys. Shows provider, purpose, key hint, scope, and validity. Use when the user asks "what keys do I have?", "show my keys", "list api keys", etc.`,
+    inputSchema: z.object({
+      scope: z.enum(['personal', 'voyage', 'all']).optional().default('all')
+        .describe('Filter by scope: personal keys only, voyage keys only, or all'),
+    }),
+    execute: async (input) => {
+      const supabase = getAdminClient()
+      const { scope } = input
+
+      let query = (supabase as any)
+        .from('api_keys')
+        .select('id, provider, purpose, key_hint, voyage_slug, is_valid')
+        .eq('user_id', ctx.userId)
+        .order('created_at', { ascending: false })
+
+      if (scope === 'personal') {
+        query = query.is('voyage_slug', null)
+      } else if (scope === 'voyage') {
+        if (!ctx.voyageSlug) {
+          return 'You\'re in personal space. Switch to a voyage to see voyage keys, or use scope "all".'
+        }
+        query = query.eq('voyage_slug', ctx.voyageSlug)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        console.error('[list_api_keys] Query error:', error)
+        return 'Error loading keys.'
+      }
+
+      const rows = (data ?? []) as Pick<ApiKeyRow, 'id' | 'provider' | 'purpose' | 'key_hint' | 'voyage_slug' | 'is_valid'>[]
+
+      if (rows.length === 0) {
+        return 'No API keys configured yet. Say "add my key" to set one up.'
+      }
+
+      const formatted = rows.map((row, i) => {
+        const scopeLabel = row.voyage_slug ? `voyage:${row.voyage_slug}` : 'personal'
+        const valid = row.is_valid ? '✓' : '✗'
+        return `[${i + 1}] ${row.provider} · ${row.purpose} · ****${row.key_hint} · ${scopeLabel} · ${valid}\n    id: ${row.id}`
+      })
+
+      return formatted.join('\n\n')
+    },
+  })
+
+  // remove_api_key — Delete a user's API key by ID (from list_api_keys)
+  const remove_api_key = tool({
+    description: `Remove an API key by its UUID. The keyId comes from list_api_keys output. Confirm via ask_captain before calling. Use when the user says "remove that key", "delete my openai key", etc.`,
+    inputSchema: z.object({
+      keyId: z.string().uuid().describe('The api_keys.id returned from list_api_keys'),
+    }),
+    execute: async (input) => {
+      const { keyId } = input
+      const supabase = getAdminClient()
+
+      // Fetch the row first for the confirmation message
+      const { data: row, error: fetchErr } = await (supabase as any)
+        .from('api_keys')
+        .select('id, provider, purpose, key_hint')
+        .eq('id', keyId)
+        .eq('user_id', ctx.userId)
+        .single()
+
+      if (fetchErr || !row) {
+        return 'Key not found. Use list_api_keys to get valid key IDs.'
+      }
+
+      const typed = row as Pick<ApiKeyRow, 'id' | 'provider' | 'purpose' | 'key_hint'>
+
+      const { count, error: delErr } = await (supabase as any)
+        .from('api_keys')
+        .delete({ count: 'exact' })
+        .eq('id', keyId)
+        .eq('user_id', ctx.userId)
+
+      if (delErr || (count ?? 0) === 0) {
+        return 'Failed to remove key. It may have already been deleted.'
+      }
+
+      return `Removed ${typed.provider} ${typed.purpose} key (****${typed.key_hint}).`
+    },
+  })
+
+  // list_modules — List modules from catalogue with install status
+  const list_modules = tool({
+    description: `List available and installed modules. Shows what's in the catalogue and what the user has installed. Use when the user asks "what modules are available?", "list modules", "show my modules", etc.`,
+    inputSchema: z.object({
+      filter: z.enum(['all', 'installed', 'available']).optional().default('all')
+        .describe('Filter: all (default), installed only, or available only'),
+    }),
+    execute: async (input) => {
+      const { filter } = input
+      const [allModules, installs] = await Promise.all([
+        listModules(),
+        listUserInstalls(ctx.userId),
+      ])
+
+      const installedIds = new Set(installs.map(i => i.moduleId))
+
+      const formatInstalled = () => {
+        if (installs.length === 0) return 'No modules installed.'
+        return `Installed (${installs.length}):\n` + installs.map(i => {
+          const desc = i.module.description.slice(0, 120)
+          const scope = i.voyageSlug ? `installed to voyage ${i.voyageSlug}` : 'installed to personal'
+          return `- ${i.moduleId} — ${i.module.name}: ${desc} [${scope}] (install: ${i.installId.slice(0, 8)})`
+        }).join('\n')
+      }
+
+      const formatAvailable = () => {
+        const available = allModules.filter(m => !installedIds.has(m.id))
+        if (available.length === 0) return 'No modules available.'
+        return `Available (${available.length}):\n` + available.map(m => {
+          const desc = m.description.slice(0, 120)
+          return `- ${m.id} — ${m.name}: ${desc}`
+        }).join('\n')
+      }
+
+      if (filter === 'installed') return formatInstalled()
+      if (filter === 'available') return formatAvailable()
+      return [formatInstalled(), '', formatAvailable()].join('\n')
+    },
+  })
+
+  // install_module — Install a module from catalogue or a forged draft
+  const install_module = tool({
+    description: `Install a module from catalogue or a forged draft. Confirm via ask_captain before calling. Use when the user says "install X", "add that module", "set up X module", etc.`,
+    inputSchema: z.object({
+      moduleId: z.string().describe('Module id from list_modules or catalogue'),
+      scope: z.enum(['personal', 'voyage']).optional().default('personal')
+        .describe('Install scope: personal (default) or voyage'),
+      config: z.record(z.string(), z.any()).optional()
+        .describe('Optional module configuration'),
+      draftId: z.string().optional()
+        .describe('Draft id from forge_module — installs a forged draft'),
+    }),
+    execute: async (input) => {
+      const { moduleId, scope, config, draftId } = input
+
+      // Draft path: write to catalogue first
+      if (draftId) {
+        const draft = getDraft(draftId, ctx.userId)
+        if (!draft) {
+          return 'Draft not found or expired. Run forge_module again to create a new draft.'
+        }
+        const writeResult = await writeDraftToCatalogue(ctx.userId, draft)
+        if (!writeResult.ok) return writeResult.reason
+      }
+
+      if (scope === 'voyage' && !ctx.voyageSlug) {
+        return 'Cannot install to voyage scope — you\'re in personal space. Switch to a voyage first.'
+      }
+
+      const result = await installModule({
+        userId: ctx.userId,
+        moduleId,
+        voyageSlug: scope === 'voyage' ? ctx.voyageSlug : null,
+        config,
+      })
+
+      if (result.ok) {
+        return JSON.stringify({
+          installed: true,
+          moduleId,
+          installId: result.installed.installId,
+          scope,
+          moduleName: result.installed.module.name,
+        })
+      }
+
+      return result.reason
+    },
+  })
+
+  // uninstall_module — Remove an installed module
+  const uninstall_module = tool({
+    description: `Uninstall a module. Call list_modules first and confirm via ask_captain. Use when the user says "remove that module", "uninstall X", etc.`,
+    inputSchema: z.object({
+      installId: z.string().uuid().describe('The user_modules.id from list_modules'),
+    }),
+    execute: async (input) => {
+      const { installId } = input
+      const result = await uninstallModule({
+        userId: ctx.userId,
+        userModuleId: installId,
+      })
+
+      if (result.ok) {
+        return `Removed module (${installId.slice(0, 8)}).`
+      }
+
+      return result.reason
+    },
+  })
+
+  // forge_module — Design a draft module from description
+  const forge_module = tool({
+    description: `Design a draft module from description. After getting draft, call ask_captain with type 'module_review' to show the review card. Use when the user says "create a module that...", "build me a module for...", "forge a module", etc.`,
+    inputSchema: z.object({
+      description: z.string().min(8).describe('What the module should do, in plain language.'),
+      context: z.string().optional().describe('Additional conversation context'),
+    }),
+    execute: async (input) => {
+      const { description, context } = input
+      const result = await designModule({
+        description,
+        userId: ctx.userId,
+        voyageSlug: ctx.voyageSlug,
+        context,
+      })
+
+      if (!result.ok) {
+        if (result.error === 'no_reasoning_key') {
+          return 'Needs a reasoning key. Say "add my key" to set one up.'
+        }
+        return result.message
+      }
+
+      const draftId = cacheDraft(result.draft)
+      return JSON.stringify({
+        ok: true,
+        draft: result.draft,
+        draftId,
+        reviewRendered: false,
+      })
+    },
+  })
+
+  // show_knowledge_graph — Render the knowledge graph visualisation
+  const showKnowledgeGraphSchema = z.object({
+    scope: z.enum(['personal', 'voyage']).optional().default('personal'),
+    knowledgeType: z.string().optional(),
+    minAttention: z.number().min(0).max(1).optional().default(0.3),
+    entity: z.string().optional(),
+    q: z.string().optional(),
+    limit: z.number().int().min(10).max(300).optional().default(100),
+  })
+
+  const show_knowledge_graph = tool({
+    description: `Render the knowledge graph inline. Use when user says "show my graph", "visualize my knowledge", "knowledge map". Pair with ask_captain type 'knowledge_graph' for the interactive component.`,
+    inputSchema: showKnowledgeGraphSchema,
+    execute: async (input) => {
+      const { scope, knowledgeType, minAttention, entity, q, limit } = input
+
+      if (scope === 'voyage' && !ctx.voyageSlug) {
+        return 'Cannot show voyage graph — you\'re in personal space. Switch to a voyage first.'
+      }
+
+      const payload: GraphPayload = await getGraphData({
+        scope,
+        userId: ctx.userId,
+        voyageSlug: scope === 'voyage' ? ctx.voyageSlug : undefined,
+        knowledgeType,
+        minAttention,
+        entity,
+        q,
+        limit,
+      })
+
+      return JSON.stringify({ rendered: true, scope, payload, renderMode: 'inline' })
+    },
+  })
+
+  // upload_document — Render the document upload component via ask_captain
+  const upload_document = tool({
+    description: `Upload a document to the knowledge base. Renders a file drop zone for the user to upload PDF, Markdown, or plain text files. Use when the user says "upload a document", "add a file", "ingest a PDF", etc.`,
+    inputSchema: z.object({
+      message: z.string().optional().describe('Message to show above the upload area'),
+      voyageSlug: z.string().optional().describe('Voyage to attach the document to (omit for personal)'),
+    }),
+    execute: async (_input) => {
+      return 'Document upload component rendered. Awaiting file from captain.'
+    },
+  })
+
   const registrations: ToolRegistration[] = [
     {
       name: 'semantic_search',
@@ -1036,6 +1318,46 @@ export const createVoyagerTools = (
       tool: remember_knowledge,
       strategyHint: 'Save explicit knowledge. "Remember I prefer morning meetings", "note that Tom handles billing", "save this decision".',
     },
+    {
+      name: 'list_api_keys',
+      tool: list_api_keys,
+      strategyHint: 'List configured API keys. "What keys do I have?", "show my keys", "list api keys".',
+    },
+    {
+      name: 'remove_api_key',
+      tool: remove_api_key,
+      strategyHint: 'Remove an API key by UUID. Confirm via ask_captain first; needs keyId from list_api_keys.',
+    },
+    {
+      name: 'list_modules',
+      tool: list_modules,
+      strategyHint: 'List catalogue modules and user installs. "What modules are available?", "show my modules", "list modules".',
+    },
+    {
+      name: 'install_module',
+      tool: install_module,
+      strategyHint: 'Install a module from catalogue or a forged draft. Confirm via ask_captain before calling.',
+    },
+    {
+      name: 'uninstall_module',
+      tool: uninstall_module,
+      strategyHint: 'Uninstall a module. Call list_modules first and confirm via ask_captain.',
+    },
+    {
+      name: 'forge_module',
+      tool: forge_module,
+      strategyHint: 'Design a draft module from description. After getting draft, call ask_captain with type "module_review" to show the review card.',
+    },
+    {
+      name: 'show_knowledge_graph',
+      tool: show_knowledge_graph,
+      strategyHint: 'Render the knowledge graph inline. Use when user says "show my graph", "visualize my knowledge". Pair with ask_captain type "knowledge_graph".',
+    },
+    {
+      name: 'upload_document',
+      tool: upload_document,
+      strategyHint: 'Upload a document to the knowledge base. Renders a file drop zone. "Upload a document", "add a file", "ingest a PDF".',
+    },
   ]
 
   // Merge module tools on top of core. The loader already stripped any
@@ -1077,6 +1399,14 @@ export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'resolve_channel',
   'get_messages',
   'remember_knowledge',
+  'list_api_keys',
+  'remove_api_key',
+  'list_modules',
+  'install_module',
+  'uninstall_module',
+  'forge_module',
+  'show_knowledge_graph',
+  'upload_document',
 ])
 
 // =============================================================================

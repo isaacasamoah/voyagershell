@@ -26,7 +26,7 @@ import type {
 } from './types'
 
 export const NO_KEY_ERROR =
-  'No LLM API key configured. Add one at /settings/keys to start chatting.'
+  'No LLM API key configured. Say "add my key" in chat to set one up.'
 
 const PROVIDER_PRIORITY: KeyProvider[] = [
   'anthropic',
