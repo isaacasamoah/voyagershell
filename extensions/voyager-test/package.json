@@ -1,0 +1,13 @@
+{
+  "name": "voyager-test-extension",
+  "private": true,
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.40",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  }
+}
