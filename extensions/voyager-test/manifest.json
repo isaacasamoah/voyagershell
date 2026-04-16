@@ -7,7 +7,7 @@
   "content_scripts": [
     {
       "matches": [
-        "http://localhost:3000/*",
+        "http://localhost:*/*",
         "https://voyagershell.vercel.app/*"
       ],
       "js": ["dist/content.js"],
