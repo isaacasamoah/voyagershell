@@ -151,3 +151,38 @@ Empty `[]` response = success. Verify with a `SELECT` query if needed.
 
 **Diary:** `~/.claude/diary/branches/voyager/ship-plan.md`
 - Session memory, decisions, discoveries
+
+## Test Bench
+
+Voyager runs as a Next.js app on top of Supabase Postgres.
+
+**Default test adapter:** `browser` — the UI is the primary test surface.
+
+### Required platforms
+
+- Local dev server (`npm run dev` on `localhost:3000`)
+- Supabase project — managed; access via `~/.supabase/access-token`
+- (Optional) Vercel preview URL for staging-shape tests
+
+### Env file locations
+
+- `~/the-workshop/voyagershell/.env.local` — Anthropic key, Supabase URL + anon key, etc.
+- `~/.supabase/access-token` — Supabase Management API token (for migrations).
+
+### Refresh keys
+
+```bash
+cd ~/the-workshop/voyagershell
+vercel env pull .env.local
+```
+
+### Start procedure
+
+```bash
+cd ~/the-workshop/voyagershell
+npm run dev                # localhost:3000
+```
+
+### Per-task override
+
+Adapter overrides land in `CLAUDE.local.md` per ticket — `shell` for migration-only changes; `voice` not applicable (Voyager is text + UI).
