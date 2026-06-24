@@ -221,14 +221,18 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       const part = p as Record<string, unknown>;
       const isSwitchVoyage = part.type === 'tool-switch_voyage' ||
         (part.type === 'dynamic-tool' && part.toolName === 'switch_voyage');
-      if (!isSwitchVoyage || part.state !== 'result') continue;
+      // AI SDK uses state: 'output-available' (not 'result') and stores the
+      // tool result in `output` (not `result`).
+      if (!isSwitchVoyage || part.state !== 'output-available') continue;
 
       try {
-        const result = typeof part.result === 'string' ? JSON.parse(part.result as string) : part.result;
-        if (result?.switched) {
+        const output = typeof part.output === 'string' ? JSON.parse(part.output as string) : part.output;
+        if ((output as Record<string, unknown>)?.switched) {
           // Accept both new canonical `voyageSlug` field and legacy `slug` field
-          const slug = result.voyageSlug !== undefined ? result.voyageSlug : result.slug;
-          handleVoyageSwitch(slug);
+          // (legacy for stale message history from prior server responses)
+          const o = output as Record<string, unknown>;
+          const slug = o.voyageSlug !== undefined ? o.voyageSlug : o.slug;
+          handleVoyageSwitch(slug as string | null);
         }
       } catch { /* ignore parse errors */ }
     }
