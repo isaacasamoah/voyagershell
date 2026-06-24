@@ -16,7 +16,7 @@ import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrateg
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
-import { updateLastSeen, markDelivered } from '@/lib/voyage';
+import { updateLastSeen, markDelivered, assertVoyageMembership, VoyageMismatchError } from '@/lib/voyage';
 import { log } from '@/lib/debug';
 import { detectActionIntent } from '@/lib/shell/intent';
 import { reconcileActions } from '@/lib/shell/reconciler';
@@ -92,8 +92,33 @@ export const POST = async (req: Request) => {
 
     const { messages, conversationId, voyageSlug: requestedVoyageSlug, authState } = await req.json();
 
-    // No voyage context = personal space (voyage_id NULL is valid)
-    const voyageSlug: string | undefined = requestedVoyageSlug || undefined;
+    // No voyage context = personal space (voyage_id NULL is valid).
+    // When a voyageSlug is supplied, assert server-side membership before any
+    // voyage-scoped write — prevents cross-voyage data leaks (ORU-256).
+    let voyageSlug: string | undefined = undefined;
+    let verifiedVoyageId: string | undefined = undefined;
+
+    if (requestedVoyageSlug) {
+      try {
+        verifiedVoyageId = await assertVoyageMembership(userId, requestedVoyageSlug, conversationId || undefined);
+        voyageSlug = requestedVoyageSlug; // only used after verification passes
+      } catch (err) {
+        if (err instanceof VoyageMismatchError) {
+          return new Response(
+            JSON.stringify({
+              error: 'voyage_mismatch',
+              expected: err.expected,
+              received: err.received,
+            }),
+            {
+              status: 403,
+              headers: { 'Content-Type': 'application/json' },
+            }
+          );
+        }
+        throw err; // unexpected error — let outer catch handle it
+      }
+    }
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(

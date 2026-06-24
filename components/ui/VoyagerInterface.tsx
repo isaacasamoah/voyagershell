@@ -40,7 +40,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [authState, setAuthState] = useState<'unauthenticated' | 'authenticated' | 'just-authenticated'>('unauthenticated');
 
   // Voyage context (fetch voyages, pending invites, URL params)
-  const { currentVoyage, setCurrentVoyage, voyages, feedbackMessage } = useVoyageContext({
+  const { currentVoyage, setCurrentVoyage, voyages, feedbackMessage, refetchVoyages } = useVoyageContext({
     isAuthenticated,
     isAuthLoading,
   });
@@ -226,11 +226,35 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       try {
         const result = typeof part.result === 'string' ? JSON.parse(part.result as string) : part.result;
         if (result?.switched) {
-          handleVoyageSwitch(result.slug);
+          // Accept both new canonical `voyageSlug` field and legacy `slug` field
+          const slug = result.voyageSlug !== undefined ? result.voyageSlug : result.slug;
+          handleVoyageSwitch(slug);
         }
       } catch { /* ignore parse errors */ }
     }
   }, [status, messages, handleVoyageSwitch]);
+
+  // Detect create_voyage tool call success — refetch voyages so the new voyage
+  // appears in the picker immediately without a page reload (ORU-256).
+  useEffect(() => {
+    if (status !== 'ready' || messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role !== 'assistant' || !Array.isArray(lastMsg.parts)) return;
+
+    for (const p of lastMsg.parts) {
+      const part = p as Record<string, unknown>;
+      const isCreateVoyage = part.type === 'tool-create_voyage' ||
+        (part.type === 'dynamic-tool' && part.toolName === 'create_voyage');
+      if (!isCreateVoyage || part.state !== 'result') continue;
+
+      try {
+        const result = typeof part.result === 'string' ? JSON.parse(part.result as string) : part.result;
+        if (result?.created) {
+          refetchVoyages();
+        }
+      } catch { /* ignore parse errors */ }
+    }
+  }, [status, messages, refetchVoyages]);
 
   // Send a message as the user (used by ask_captain components)
   const sendUserMessage = useCallback((text: string) => {

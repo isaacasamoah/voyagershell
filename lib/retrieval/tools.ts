@@ -601,7 +601,13 @@ export const createVoyagerTools = (ctx: ToolContext): {
 
       // Handle "personal" explicitly
       if (voyage_name.toLowerCase() === 'personal') {
-        return JSON.stringify({ switched: true, slug: null, name: 'Personal' })
+        // Canonical scope: null slug signals personal space to the client
+        return JSON.stringify({
+          switched: true,
+          voyageSlug: null,
+          name: 'Personal',
+          conversationId: ctx.conversationId ?? null,
+        })
       }
 
       // Look up the user's voyages
@@ -623,7 +629,14 @@ export const createVoyagerTools = (ctx: ToolContext): {
         return `No voyage called "${voyage_name}" found. Your voyages: ${names}`
       }
 
-      return JSON.stringify({ switched: true, slug: match.slug, name: match.name })
+      // Return canonical scope: { switched, voyageSlug, name, conversationId }
+      // The client adopts this as the new context without trusting a stale local slug.
+      return JSON.stringify({
+        switched: true,
+        voyageSlug: match.slug,
+        name: match.name,
+        conversationId: ctx.conversationId ?? null,
+      })
     },
   })
 
