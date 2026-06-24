@@ -147,25 +147,9 @@ export const useConversation = ({
     return () => clearTimeout(timer)
   }, [isAuthLoading, isLoadingConversation, isAuthenticated, messages.length, sendMessage, currentVoyage])
 
-  // Derive title from first real user message (skip auto-sent welcome prompt)
-  const derivedTitle = useMemo(() => {
-    const userMessages = messages.filter((m) => m.role === 'user')
-    const firstReal = userMessages[autoSentCount.current]
-    if (!firstReal) return null
-
-    const text = firstReal.parts
-      ?.filter((p) => p.type === 'text')
-      .map((p) => ('text' in p ? p.text : ''))
-      .join('') ?? ''
-    if (!text) return null
-
-    const words = text.split(/\s+/).slice(0, 6)
-    const title = words.join(' ')
-    return title.length > 40 ? title.slice(0, 40) + '...' : title
-  }, [messages])
-
-  // Title: prefer DB title (loaded on mount), fall back to derived
-  const resolvedTitle = conversationTitle ?? derivedTitle
+  // $CTX = server-confirmed DB title only — never echo user input
+  // null until the server confirms a title (new session shows 'NEW_SESSION' placeholder in the chip)
+  const resolvedTitle = conversationTitle ?? null
 
   // Show success astronaut briefly when response completes
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { log } from '@/lib/debug'
+import { createClient } from '@/lib/supabase/client'
 import type { VoyageMembership } from '@/lib/types'
 
 interface UseVoyageContextParams {
@@ -13,7 +14,7 @@ export const useVoyageContext = ({
 }: UseVoyageContextParams) => {
   const [currentVoyage, setCurrentVoyage] = useState<VoyageMembership | null>(null)
   const [voyages, setVoyages] = useState<VoyageMembership[]>([])
-  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
+  const [displayName, setDisplayName] = useState<string | null>(null)
 
   const fetchVoyages = useCallback(async () => {
     try {
@@ -46,6 +47,23 @@ export const useVoyageContext = ({
     fetchVoyages()
   }, [isAuthenticated, isAuthLoading, fetchVoyages])
 
+  // Fetch display name from profiles when authenticated
+  useEffect(() => {
+    if (!isAuthenticated || isAuthLoading) {
+      setDisplayName(null)
+      return
+    }
+    const supabase = createClient()
+    void (async () => {
+      try {
+        const { data } = await supabase.from('profiles').select('display_name').maybeSingle()
+        setDisplayName((data as { display_name: string | null } | null)?.display_name ?? null)
+      } catch {
+        setDisplayName(null)
+      }
+    })()
+  }, [isAuthenticated, isAuthLoading])
+
   /**
    * Refetch the voyages list from the server.
    * Call after create_voyage succeeds so the new voyage appears in the picker
@@ -59,7 +77,7 @@ export const useVoyageContext = ({
     currentVoyage,
     setCurrentVoyage,
     voyages,
-    feedbackMessage,
+    displayName,
     refetchVoyages,
   }
 }
