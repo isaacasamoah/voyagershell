@@ -96,11 +96,10 @@ export const POST = async (req: Request) => {
     // When a voyageSlug is supplied, assert server-side membership before any
     // voyage-scoped write — prevents cross-voyage data leaks (ORU-256).
     let voyageSlug: string | undefined = undefined;
-    let verifiedVoyageId: string | undefined = undefined;
 
     if (requestedVoyageSlug) {
       try {
-        verifiedVoyageId = await assertVoyageMembership(userId, requestedVoyageSlug, conversationId || undefined);
+        await assertVoyageMembership(userId, requestedVoyageSlug, conversationId || undefined);
         voyageSlug = requestedVoyageSlug; // only used after verification passes
       } catch (err) {
         if (err instanceof VoyageMismatchError) {

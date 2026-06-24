@@ -965,12 +965,19 @@ export const assertVoyageMembership = async (
 
   const voyageId: string = (voyageRow as { id: string }).id
 
-  // Step 3: If a conversationId is provided, verify the session belongs to this voyage.
-  // A mismatch means the body's voyageSlug doesn't match the conversation's actual voyage.
+  // Step 3: If a conversationId is provided, verify the session belongs to this voyage
+  // AND to this user. Two distinct checks:
+  //   a) Ownership: session.user_id must match the authenticated userId — prevents one
+  //      voyage member from claiming another member's conversationId.
+  //   b) Voyage match: session.voyage_id must match the claimed voyage's UUID — prevents
+  //      cross-voyage writes. NULL session.voyage_id (personal space) is a mismatch when
+  //      the client claims a voyage context.
+  // session row === null → conversation doesn't exist yet (first turn) → allow; it will be
+  // created scoped by getOrCreateActiveConversation later in the flow.
   if (conversationId) {
     const { data: session, error: sessionError } = await supabase
       .from('sessions')
-      .select('voyage_id')
+      .select('voyage_id, user_id')
       .eq('id', conversationId)
       .maybeSingle()
 
@@ -979,24 +986,39 @@ export const assertVoyageMembership = async (
       throw new VoyageMismatchError(null, slug)
     }
 
-    // session is null → conversation doesn't exist yet (first turn) — allow; it will be created scoped
     if (session) {
-      const sessionVoyageId: string | null = (session as { voyage_id: string | null }).voyage_id
-      if (sessionVoyageId !== null && sessionVoyageId !== voyageId) {
-        // The conversation belongs to a different voyage — cross-voyage write attempt
+      const sessionRow = session as { voyage_id: string | null; user_id: string | null }
+
+      // a) Ownership check: session must belong to the authenticated user
+      if (sessionRow.user_id !== userId) {
+        log.voyage('assertVoyageMembership: session user mismatch', {
+          conversationId,
+          sessionUserId: sessionRow.user_id,
+          requestingUserId: userId,
+        }, 'warn')
+        throw new VoyageMismatchError(null, slug)
+      }
+
+      // b) Voyage match: session.voyage_id must equal the claimed voyage's UUID.
+      // NULL session.voyage_id (personal space) does NOT match a claimed voyage.
+      if (sessionRow.voyage_id !== voyageId) {
+        // The conversation belongs to a different scope (another voyage, or personal space)
         log.voyage('assertVoyageMembership: session voyage mismatch', {
           conversationId,
-          sessionVoyageId,
+          sessionVoyageId: sessionRow.voyage_id,
           claimedVoyageId: voyageId,
           claimedSlug: slug,
         }, 'warn')
-        // Resolve the session's actual voyage slug for the error payload
-        const { data: actualVoyage } = await supabase
-          .from('voyages')
-          .select('slug')
-          .eq('id', sessionVoyageId)
-          .maybeSingle()
-        const expectedSlug = (actualVoyage as { slug: string } | null)?.slug ?? null
+        // Resolve the session's actual voyage slug for the error payload (null = personal)
+        let expectedSlug: string | null = null
+        if (sessionRow.voyage_id) {
+          const { data: actualVoyage } = await supabase
+            .from('voyages')
+            .select('slug')
+            .eq('id', sessionRow.voyage_id)
+            .maybeSingle()
+          expectedSlug = (actualVoyage as { slug: string } | null)?.slug ?? null
+        }
         throw new VoyageMismatchError(expectedSlug, slug)
       }
     }
