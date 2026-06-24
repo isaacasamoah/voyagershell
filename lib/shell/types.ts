@@ -13,7 +13,8 @@ export interface ActionIntent {
 
 export type ReconciliationOutcome =
   | 'match'                // LLM called the expected tool
-  | 'confabulation_caught' // LLM claimed to act but didn't — fallback executed
+  | 'confabulation_caught' // LLM claimed to act but didn't — server fallback executed
+  | 'forbid_claim'         // LLM claimed a client-side action without tool fire — no fallback; claim was false
   | 'intentional_skip'     // LLM chose not to act (no claim in response)
   | 'fallback_executed'    // No claim check needed — directly executed fallback
 
