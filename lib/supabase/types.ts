@@ -749,7 +749,7 @@ export type Database = {
         | "event"
         | "insight"
         | "concept"
-      session_status: "active" | "historical" | "archived"
+      session_status: "active" | "historical"
       voyage_role: "captain" | "crew"
     }
     CompositeTypes: {
@@ -887,7 +887,7 @@ export const Constants = {
         "insight",
         "concept",
       ],
-      session_status: ["active", "historical", "archived"],
+      session_status: ["active", "historical"],
       voyage_role: ["captain", "crew"],
     },
   },

@@ -49,6 +49,10 @@ interface AskCaptainRendererProps {
   onSendMessage: (text: string) => void
   /** Switch voyage context on the client (voyage_picker side effect) */
   onVoyageSwitch?: (slug: string) => void
+  /** Start a new conversation — calls POST /api/conversation, resets UI state */
+  onNewConversation?: () => Promise<boolean>
+  /** Resume a conversation by ID — calls POST /api/conversation/resume, reloads state */
+  onResumeConversation?: (conversationId: string) => Promise<boolean>
 }
 
 export const AskCaptainRenderer = ({
@@ -59,6 +63,8 @@ export const AskCaptainRenderer = ({
   sendMagicLink,
   onSendMessage,
   onVoyageSwitch,
+  onNewConversation,
+  onResumeConversation,
 }: AskCaptainRendererProps) => {
   const [componentState, setComponentState] = useState<ComponentState>('active')
   const [resolution, setResolution] = useState<ComponentResolution | undefined>()
@@ -90,7 +96,16 @@ export const AskCaptainRenderer = ({
             value: approved,
             label: approved ? 'Confirmed' : 'Cancelled',
           })
-          onSendMessage(approved ? 'Yes' : 'No')
+          if (approved && onNewConversation) {
+            // Wire to backend: archive current session + create fresh one.
+            // Parent passes onNewConversation only when the LLM has established
+            // new-conversation context (C5 makes the claim honest).
+            onNewConversation().then((success) => {
+              onSendMessage(success ? 'Yes, started fresh' : 'Yes')
+            })
+          } else {
+            onSendMessage(approved ? 'Yes' : 'No')
+          }
         }
         break
       }
@@ -119,12 +134,24 @@ export const AskCaptainRenderer = ({
             value: data,
             label: conv?.title ?? 'conversation',
           })
-          onSendMessage(`Resume conversation: ${conv?.title ?? data}`)
+          // Wire to backend: atomically archive current + activate target via RPC,
+          // then notify Voyager so it can greet the resumed conversation.
+          if (onResumeConversation) {
+            onResumeConversation(data).then((success) => {
+              if (success) {
+                onSendMessage(`Resumed conversation: ${conv?.title ?? data}`)
+              } else {
+                onSendMessage(`Resume conversation: ${conv?.title ?? data}`)
+              }
+            })
+          } else {
+            onSendMessage(`Resume conversation: ${conv?.title ?? data}`)
+          }
         }
         break
       }
     }
-  }, [componentState, input, onSendMessage, onVoyageSwitch])
+  }, [componentState, input, onSendMessage, onVoyageSwitch, onNewConversation, onResumeConversation, toolResult])
 
   // If tool is still streaming input, show loading
   if (toolState === 'input-streaming') {

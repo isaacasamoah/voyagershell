@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react'
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, type UIMessage } from 'ai'
 import { log } from '@/lib/debug'
@@ -205,6 +205,82 @@ export const useConversation = ({
     }
   }, [isLoadingConversation, sendMessage])
 
+  // Start new conversation — calls POST /api/conversation, archives current, resets UI state
+  const startNewConversation = useCallback(async (): Promise<boolean> => {
+    const voyageSlug = voyageSlugRef.current
+    log.voyage('Starting new conversation', { voyageSlug: voyageSlug ?? 'personal' })
+
+    try {
+      const res = await fetch('/api/conversation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(voyageSlug ? { voyageSlug } : {}),
+      })
+
+      if (!res.ok) {
+        log.voyage('Failed to start new conversation', { status: res.status }, 'error')
+        return false
+      }
+
+      const data: ConversationResponse = await res.json()
+      setConversationId(data.conversation.id)
+      setConversationTitle(data.conversation.title)
+      setMessages([])
+      setHasUserTyped(false)
+      autoSentCount.current = 0
+      messageTimestamps.current = new Map()
+
+      log.voyage('New conversation started', { conversationId: data.conversation.id })
+      return true
+    } catch (error) {
+      log.voyage('startNewConversation error', { error: String(error) }, 'error')
+      return false
+    }
+  }, [setMessages, setHasUserTyped, autoSentCount, messageTimestamps])
+
+  // Resume an existing conversation — calls POST /api/conversation/resume, reloads UI state
+  const resumeConversation = useCallback(async (targetConversationId: string): Promise<boolean> => {
+    log.voyage('Resuming conversation via API', { targetConversationId })
+
+    try {
+      const res = await fetch('/api/conversation/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: targetConversationId }),
+      })
+
+      if (!res.ok) {
+        log.voyage('Failed to resume conversation', { status: res.status }, 'error')
+        return false
+      }
+
+      const data: ConversationResponse = await res.json()
+      setConversationId(data.conversation.id)
+      setConversationTitle(data.conversation.title)
+
+      if (data.messages.length > 0) {
+        const uiMessages = data.messages.map(apiMessageToUIMessage)
+        for (const msg of data.messages) {
+          if (msg.createdAt) {
+            messageTimestamps.current.set(msg.id, new Date(msg.createdAt))
+          }
+        }
+        setMessages(uiMessages)
+        setHasUserTyped(true)
+      } else {
+        setMessages([])
+        setHasUserTyped(false)
+      }
+      autoSentCount.current = 0
+
+      log.voyage('Conversation resumed', { conversationId: data.conversation.id })
+      return true
+    } catch (error) {
+      log.voyage('resumeConversation error', { error: String(error) }, 'error')
+      return false
+    }
+  }, [setMessages, setHasUserTyped, autoSentCount, messageTimestamps])
+
   return {
     conversationId,
     conversationTitle: resolvedTitle,
@@ -224,5 +300,7 @@ export const useConversation = ({
     isStreaming,
     showSuccess,
     setShowSuccess,
+    startNewConversation,
+    resumeConversation,
   }
 }
