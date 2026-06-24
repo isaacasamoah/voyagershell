@@ -47,21 +47,25 @@ export const useVoyageContext = ({
     fetchVoyages()
   }, [isAuthenticated, isAuthLoading, fetchVoyages])
 
-  // Fetch display name from profiles when authenticated
+  // Fetch display name from profiles when authenticated.
+  // Stale-closure guard (`cancelled`) prevents a slow fetch from overwriting null
+  // after sign-out when two effect firings race.
   useEffect(() => {
     if (!isAuthenticated || isAuthLoading) {
       setDisplayName(null)
       return
     }
+    let cancelled = false
     const supabase = createClient()
     void (async () => {
       try {
         const { data } = await supabase.from('profiles').select('display_name').maybeSingle()
-        setDisplayName((data as { display_name: string | null } | null)?.display_name ?? null)
+        if (!cancelled) setDisplayName((data as { display_name: string | null } | null)?.display_name ?? null)
       } catch {
-        setDisplayName(null)
+        if (!cancelled) setDisplayName(null)
       }
     })()
+    return () => { cancelled = true }
   }, [isAuthenticated, isAuthLoading])
 
   /**
