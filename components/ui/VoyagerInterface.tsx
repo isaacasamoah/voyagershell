@@ -53,6 +53,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     messageTimestamps, messageQueue, setMessageQueue,
     isLoading, isStreaming,
     showSuccess, setShowSuccess,
+    startNewConversation, resumeConversation,
   } = useConversation({
     currentVoyage,
     authState,
@@ -486,6 +487,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                       sendMagicLink={sendMagicLink}
                       onSendMessage={sendUserMessage}
                       onVoyageSwitch={handleVoyageSwitch}
+                      onNewConversation={startNewConversation}
+                      onResumeConversation={resumeConversation}
                     />
                   ),
                 });

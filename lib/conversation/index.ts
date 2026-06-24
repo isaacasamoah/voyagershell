@@ -404,85 +404,45 @@ export const getResumableConversations = async (
 }
 
 /**
- * Resume a historical conversation.
- * Archives the current active conversation and makes the target conversation active.
+ * Resume a historical conversation atomically.
+ * Uses the resume_session DB RPC — archive current + activate target in one transaction.
+ * Both rows transition or neither (no orphaned threads).
  */
 export const resumeConversation = async (
   conversationId: string,
   userId: string
 ): Promise<ConversationWithMessages | null> => {
   const supabase = getClientForUser(userId)
-  console.log('[Conversation] Resuming conversation:', conversationId)
+  console.log('[Conversation] Resuming conversation atomically via RPC:', conversationId)
 
   try {
-    // Direct implementation - could use resume_session RPC for atomicity
-    // Note: Auth is now wired, but multi-step approach works
+    // Atomic archive+activate in a single DB transaction
+    const { data: success, error: rpcError } = await supabase.rpc('resume_session', {
+      p_session_id: conversationId,
+    })
 
-    // First, check the target conversation exists and belongs to user
-    
-    const { data: targetSession, error: targetError } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('id', conversationId)
-      .eq('user_id', userId)
-      .single()
-
-    if (targetError || !targetSession) {
-      console.error('[Conversation] Target conversation not found:', targetError)
+    if (rpcError) {
+      console.error('[Conversation] resume_session RPC error:', rpcError)
       return null
     }
 
-    const target = targetSession as ExtendedSession
-
-    // Can't resume archived conversations
-    if (target.status === 'archived') {
-      console.error('[Conversation] Cannot resume archived conversation')
+    if (!success) {
+      console.error('[Conversation] resume_session returned false — session not found, not owned, or already archived')
       return null
     }
 
-    // If already active, just return it with messages
-    if (target.status === 'active') {
-      console.log('[Conversation] Conversation already active')
-      const messages = await loadConversationMessages(conversationId)
-      return {
-        ...transformSession(target),
-        messages,
-      }
-    }
+    // Fetch updated session and messages after atomic transition
 
-    // Archive current active session (if any)
-    
-    await supabase
-      .from('sessions')
-      .update({
-        status: 'historical' as SessionStatus,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .eq('status', 'active')
-
-    // Make target session active
-    
-    const { error: activateError } = await supabase
-      .from('sessions')
-      .update({
-        status: 'active' as SessionStatus,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', conversationId)
-
-    if (activateError) {
-      console.error('[Conversation] Failed to activate conversation:', activateError)
-      return null
-    }
-
-    // Fetch updated session and messages
-    
-    const { data: updatedSession } = await supabase
+    const { data: updatedSession, error: fetchError } = await supabase
       .from('sessions')
       .select('*')
       .eq('id', conversationId)
       .single()
+
+    if (fetchError || !updatedSession) {
+      console.error('[Conversation] Failed to fetch session after resume:', fetchError)
+      return null
+    }
 
     const messages = await loadConversationMessages(conversationId)
 
