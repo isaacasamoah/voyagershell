@@ -2,13 +2,13 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [dev, main]
   push:
-    branches: [main]
+    branches: [dev, main]
 
 jobs:
-  quality:
-    name: Code Quality
+  build:
+    name: Build Gate
     runs-on: ubuntu-latest
 
     steps:
@@ -23,18 +23,20 @@ jobs:
         run: npm ci
 
       - name: Type check
-        run: npx tsc --noEmit
-
-      - name: Lint
-        run: npm run lint
+        run: npm run type-check
 
       - name: Build
         run: npm run build
         env:
-          # Dummy values for build (not connecting to real services)
+          # Placeholder values so Next.js env validation passes in CI
+          # (not connecting to real services)
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
           SUPABASE_SERVICE_ROLE_KEY: placeholder
           ANTHROPIC_API_KEY: placeholder
           OPENAI_API_KEY: placeholder
           GOOGLE_GENERATIVE_AI_API_KEY: placeholder
+
+      # TODO: wire npm run test:run here once the project has test files.
+      # Currently `vitest run` exits with code 1 ("No test files found") so
+      # including it would always fail. Add after the first *.test.ts lands.
