@@ -416,9 +416,13 @@ export const resumeConversation = async (
   console.log('[Conversation] Resuming conversation atomically via RPC:', conversationId)
 
   try {
-    // Atomic archive+activate in a single DB transaction
+    // Atomic archive+activate in a single DB transaction.
+    // Pass p_user_id explicitly — the server uses the admin client (no JWT),
+    // so auth.uid() would be NULL. The RPC accepts p_user_id as the server-side
+    // ownership proof (validated by requireAuthResponse before this call).
     const { data: success, error: rpcError } = await supabase.rpc('resume_session', {
       p_session_id: conversationId,
+      p_user_id: userId,
     })
 
     if (rpcError) {
