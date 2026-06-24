@@ -245,11 +245,13 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       const part = p as Record<string, unknown>;
       const isCreateVoyage = part.type === 'tool-create_voyage' ||
         (part.type === 'dynamic-tool' && part.toolName === 'create_voyage');
-      if (!isCreateVoyage || part.state !== 'result') continue;
+      // AI SDK uses state: 'output-available' (not 'result') and stores the
+      // tool result in `output` (not `result`).
+      if (!isCreateVoyage || part.state !== 'output-available') continue;
 
       try {
-        const result = typeof part.result === 'string' ? JSON.parse(part.result as string) : part.result;
-        if (result?.created) {
+        const output = typeof part.output === 'string' ? JSON.parse(part.output as string) : part.output;
+        if (output?.created) {
           refetchVoyages();
         }
       } catch { /* ignore parse errors */ }
