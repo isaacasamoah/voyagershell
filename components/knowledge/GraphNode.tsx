@@ -22,11 +22,11 @@ export function GraphNode({ node }: GraphNodeProps) {
     <div className="border border-white/10 rounded-lg p-3 bg-white/5 hover:bg-white/10 transition-colors">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm text-gray-200 flex-1">{preview}</p>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 shrink-0">{label}</span>
+        <span className="type-badge text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 shrink-0">{label}</span>
       </div>
       <div className="mt-2 flex items-center gap-3">
         <div className="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden">
-          <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.round(attention * 100)}%` }} />
+          <div data-testid="attention-bar" className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.round(attention * 100)}%` }} />
         </div>
         <span className="text-xs text-gray-500">{Math.round(attention * 100)}%</span>
         {node.createdAt && <span className="text-xs text-gray-500">{timeAgo(node.createdAt)}</span>}
