@@ -15,13 +15,18 @@ export async function GET() {
     topNodes.map((n) => getConnectedKnowledge(n.eventId, userId))
   )
 
+  // Relationships are bidirectional (lib/knowledge/events.ts writes connected_to
+  // on both ends), so canonicalize each undirected edge by its sorted endpoint
+  // pair — A-B and B-A collapse to one entry.
   const edgeSet = new Map<string, { from: string; to: string }>()
   topNodes.forEach((from, i) => {
     edgeArrays[i].forEach((connected: KnowledgeNode) => {
       if (!nodeIds.has(connected.eventId)) return
-      const key = `${from.eventId}->${connected.eventId}`
+      if (from.eventId === connected.eventId) return
+      const [a, b] = [from.eventId, connected.eventId].sort()
+      const key = `${a}--${b}`
       if (!edgeSet.has(key)) {
-        edgeSet.set(key, { from: from.eventId, to: connected.eventId })
+        edgeSet.set(key, { from: a, to: b })
       }
     })
   })

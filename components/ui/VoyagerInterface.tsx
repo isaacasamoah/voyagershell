@@ -34,7 +34,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [showVoyagePicker, setShowVoyagePicker] = useState(false);
   const voyagePickerRef = useRef<HTMLDivElement>(null);
 
-  // Knowledge graph panel
+  // Knowledge graph panel — only ever open while authenticated, so a sign-out
+  // tears down the rendered knowledge instead of leaving a prior user's data on screen.
   const [showGraphPanel, setShowGraphPanel] = useState(false);
 
   // Auth state
@@ -98,6 +99,21 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
     wasAuthenticatedRef.current = isAuthenticated;
   }, [isAuthenticated, isAuthLoading, setShowSuccess]);
+
+  // Close the knowledge graph panel on sign-out (don't leave a prior user's
+  // knowledge rendered) and on Escape (keyboard dismissal).
+  useEffect(() => {
+    if (!isAuthenticated) setShowGraphPanel(false);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!showGraphPanel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowGraphPanel(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showGraphPanel]);
 
   // Followup state (extracted hook)
   const { triggerFollowup, triggerFollowupRef } = useMessageState({
@@ -651,6 +667,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         />
       )}
       <div
+        role="dialog"
+        aria-label="Knowledge graph"
+        aria-hidden={!showGraphPanel}
         className={`fixed right-0 top-0 z-[70] h-full w-80 bg-gray-900 border-l border-gray-700 transform transition-transform duration-300 ${
           showGraphPanel ? 'translate-x-0' : 'translate-x-full'
         }`}
