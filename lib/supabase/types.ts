@@ -311,6 +311,9 @@ export type Database = {
       }
       profiles: {
         Row: {
+          access_tier: string | null
+          api_key_encrypted: string | null
+          api_provider: string | null
           created_at: string | null
           display_name: string | null
           email: string
@@ -318,6 +321,9 @@ export type Database = {
           personalization: Json | null
         }
         Insert: {
+          access_tier?: string | null
+          api_key_encrypted?: string | null
+          api_provider?: string | null
           created_at?: string | null
           display_name?: string | null
           email: string
@@ -325,6 +331,9 @@ export type Database = {
           personalization?: Json | null
         }
         Update: {
+          access_tier?: string | null
+          api_key_encrypted?: string | null
+          api_provider?: string | null
           created_at?: string | null
           display_name?: string | null
           email?: string

@@ -14,6 +14,7 @@ import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode, type AwarenessItem } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
+import { fetchUserApiKey } from '@/lib/auth/keys';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker } from '@/lib/models';
 import { updateLastSeen, markDelivered, assertVoyageMembership, VoyageMismatchError } from '@/lib/voyage';
@@ -89,6 +90,10 @@ export const POST = async (req: Request) => {
     const authResult = await requireAuthResponse();
     if (authResult instanceof Response) return authResult;
     const userId = authResult;
+
+    // BYO key: if the user stored their own provider key, route their requests
+    // through it (decrypted server-side, never sent to the client).
+    const userKeyCtx = await fetchUserApiKey(userId);
 
     const { messages, conversationId, voyageSlug: requestedVoyageSlug, authState } = await req.json();
 
@@ -349,6 +354,8 @@ export const POST = async (req: Request) => {
         quality: 'balanced',
         streaming: true,
         toolUse: true,
+        userKey: userKeyCtx?.key,
+        userProvider: userKeyCtx?.provider,
       }),
       messages: [...systemMessages, ...messagesWithCache],
       tools: voyagerTools,
