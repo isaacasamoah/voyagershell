@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { UIMessage } from 'ai';
-import { Terminal, Ship, ChevronDown } from 'lucide-react';
+import { Terminal, Ship, ChevronDown, BookOpen } from 'lucide-react';
 import { UserMessage, AssistantMessage, AstronautState, TaskCard, type TaskProgress } from '@/components/chat';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
@@ -13,6 +13,7 @@ import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
+import { GraphView } from '@/components/knowledge/GraphView';
 
 // Running task from background worker (in-progress) — stays here, imports TaskProgress from same barrel
 interface RunningTask {
@@ -32,6 +33,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   // Voyage picker
   const [showVoyagePicker, setShowVoyagePicker] = useState(false);
   const voyagePickerRef = useRef<HTMLDivElement>(null);
+
+  // Knowledge graph panel — only ever open while authenticated, so a sign-out
+  // tears down the rendered knowledge instead of leaving a prior user's data on screen.
+  const [showGraphPanel, setShowGraphPanel] = useState(false);
 
   // Auth state
   const { isAuthenticated, isLoading: isAuthLoading, sendMagicLink, signOut } = useAuth();
@@ -94,6 +99,21 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
     wasAuthenticatedRef.current = isAuthenticated;
   }, [isAuthenticated, isAuthLoading, setShowSuccess]);
+
+  // Close the knowledge graph panel on sign-out (don't leave a prior user's
+  // knowledge rendered) and on Escape (keyboard dismissal).
+  useEffect(() => {
+    if (!isAuthenticated) setShowGraphPanel(false);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!showGraphPanel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowGraphPanel(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showGraphPanel]);
 
   // Followup state (extracted hook)
   const { triggerFollowup, triggerFollowupRef } = useMessageState({
@@ -441,6 +461,21 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             {displayName.toUpperCase().replace(/\s+/g, '_')}
           </div>
         )}
+        {isAuthenticated && (
+          <button
+            type="button"
+            onClick={() => setShowGraphPanel((v) => !v)}
+            aria-label="Toggle knowledge graph"
+            aria-pressed={showGraphPanel}
+            className={`p-1.5 rounded-sm border transition ${
+              showGraphPanel
+                ? 'border-blue-500/40 bg-blue-500/15 text-blue-300'
+                : 'border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-200'
+            }`}
+          >
+            <BookOpen size={16} />
+          </button>
+        )}
       </div>
 
       {/* THE STREAM — astronaut band + scrollable messages
@@ -622,6 +657,24 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             />
           </form>
         </div>
+      </div>
+
+      {/* KNOWLEDGE GRAPH PANEL — slide-in from right */}
+      {showGraphPanel && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/40"
+          onClick={() => setShowGraphPanel(false)}
+        />
+      )}
+      <div
+        role="dialog"
+        aria-label="Knowledge graph"
+        aria-hidden={!showGraphPanel}
+        className={`fixed right-0 top-0 z-[70] h-full w-80 bg-gray-900 border-l border-gray-700 transform transition-transform duration-300 ${
+          showGraphPanel ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {showGraphPanel && <GraphView />}
       </div>
     </div>
   );
