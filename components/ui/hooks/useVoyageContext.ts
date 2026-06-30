@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { log } from '@/lib/debug'
+import { createClient } from '@/lib/supabase/client'
 import type { VoyageMembership } from '@/lib/types'
 
 interface UseVoyageContextParams {
@@ -13,7 +14,7 @@ export const useVoyageContext = ({
 }: UseVoyageContextParams) => {
   const [currentVoyage, setCurrentVoyage] = useState<VoyageMembership | null>(null)
   const [voyages, setVoyages] = useState<VoyageMembership[]>([])
-  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
+  const [displayName, setDisplayName] = useState<string | null>(null)
 
   const fetchVoyages = useCallback(async () => {
     try {
@@ -46,6 +47,27 @@ export const useVoyageContext = ({
     fetchVoyages()
   }, [isAuthenticated, isAuthLoading, fetchVoyages])
 
+  // Fetch display name from profiles when authenticated.
+  // Stale-closure guard (`cancelled`) prevents a slow fetch from overwriting null
+  // after sign-out when two effect firings race.
+  useEffect(() => {
+    if (!isAuthenticated || isAuthLoading) {
+      setDisplayName(null)
+      return
+    }
+    let cancelled = false
+    const supabase = createClient()
+    void (async () => {
+      try {
+        const { data } = await supabase.from('profiles').select('display_name').maybeSingle()
+        if (!cancelled) setDisplayName((data as { display_name: string | null } | null)?.display_name ?? null)
+      } catch {
+        if (!cancelled) setDisplayName(null)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [isAuthenticated, isAuthLoading])
+
   /**
    * Refetch the voyages list from the server.
    * Call after create_voyage succeeds so the new voyage appears in the picker
@@ -59,7 +81,7 @@ export const useVoyageContext = ({
     currentVoyage,
     setCurrentVoyage,
     voyages,
-    feedbackMessage,
+    displayName,
     refetchVoyages,
   }
 }

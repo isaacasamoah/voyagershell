@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { UIMessage } from 'ai';
-import { Terminal, Activity, Ship, ChevronDown } from 'lucide-react';
+import { Terminal, Ship, ChevronDown } from 'lucide-react';
 import { UserMessage, AssistantMessage, AstronautState, TaskCard, type TaskProgress } from '@/components/chat';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
@@ -40,7 +40,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [authState, setAuthState] = useState<'unauthenticated' | 'authenticated' | 'just-authenticated'>('unauthenticated');
 
   // Voyage context (fetch voyages, pending invites, URL params)
-  const { currentVoyage, setCurrentVoyage, voyages, feedbackMessage, refetchVoyages } = useVoyageContext({
+  const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
     isAuthenticated,
     isAuthLoading,
   });
@@ -355,9 +355,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       {/* CONTEXT BAR - Fixed header */}
       <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-indigo-400 group cursor-pointer">
-            <Terminal size={16} className="group-hover:text-indigo-300 transition-colors" />
-            <span className="font-bold tracking-wider group-hover:underline decoration-indigo-500/30 underline-offset-4">VOYAGER_SHELL</span>
+          <div className="flex items-center gap-2 text-indigo-400">
+            <Terminal size={16} />
+            <span className="font-bold tracking-wider">VOYAGER_SHELL</span>
           </div>
 
           {/* Context Chips - only show when authenticated */}
@@ -426,8 +426,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                     </div>
                   )}
                 </div>
-                {/* Conversation context chip */}
-                <div className="px-2 py-1 rounded-sm border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs flex items-center gap-2 cursor-pointer hover:bg-indigo-500/20 transition shadow-[0_0_10px_rgba(99,102,241,0.1)] min-w-0">
+                {/* Conversation context chip — server-confirmed title only, never echoes user input */}
+                <div className="px-2 py-1 rounded-sm border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs flex items-center gap-2 min-w-0">
                   <span className="opacity-30 font-semibold shrink-0">$CTX:</span>
                   <span className="truncate">{conversationTitle || 'NEW_SESSION'}</span>
                 </div>
@@ -436,10 +436,11 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           )}
         </div>
 
-        <div className="flex items-center gap-2 text-[10px] text-green-500/80 font-bold tracking-widest uppercase">
-          <Activity size={10} className="animate-pulse" />
-          <span>System Online</span>
-        </div>
+        {displayName && (
+          <div className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">
+            {displayName.toUpperCase().replace(/\s+/g, '_')}
+          </div>
+        )}
       </div>
 
       {/* THE STREAM — astronaut band + scrollable messages
@@ -562,18 +563,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           </div>
         )}
 
-        {feedbackMessage && (
-          <div className="flex gap-4">
-            <div className="w-12 pt-1 text-right text-green-500/50 text-[10px] font-bold tracking-widest">
-              SYS
-            </div>
-            <div className="flex-1">
-              <div className="text-green-400 text-sm p-3 border border-green-500/30 bg-green-500/10 rounded-sm">
-                {feedbackMessage}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Running Tasks - Show progress */}
         {runningTasks.length > 0 && (
