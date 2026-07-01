@@ -5,7 +5,8 @@
 // This router only returns AI SDK LanguageModel for Anthropic.
 // For Google, use selectConfig() + the appropriate Gemini integration.
 
-import { anthropic } from '@ai-sdk/anthropic'
+import { anthropic, createAnthropic } from '@ai-sdk/anthropic'
+import { createOpenAI } from '@ai-sdk/openai'
 import type { LanguageModel } from 'ai'
 import { DEFAULT_PROVIDERS, type ModelConfig, type ModelProvider } from './providers'
 
@@ -16,6 +17,10 @@ export interface ModelRequirements {
   maxTokens?: number
   streaming?: boolean
   toolUse?: boolean
+  // BYO API key: when present and the selected model's provider matches
+  // userProvider, the model is constructed with the user's own key.
+  userKey?: string
+  userProvider?: string
 }
 
 export interface ModelRouter {
@@ -78,6 +83,23 @@ export const createModelRouter = (options?: {
     // Returns AI SDK LanguageModel (Anthropic only currently)
     select(requirements: ModelRequirements): LanguageModel {
       const config = selectModelConfig(requirements, aiSdkModels)
+
+      // BYO key: when the user supplied their own key for the selected
+      // model's provider, construct the provider client with that key so the
+      // request bills against the user's account instead of the platform's.
+      if (requirements.userKey && requirements.userProvider === config.provider) {
+        if (config.provider === 'anthropic') {
+          return createAnthropic({ apiKey: requirements.userKey })(config.modelId)
+        }
+        if (config.provider === 'openai') {
+          // @ai-sdk/openai pins @ai-sdk/provider@2 while the resolved
+          // LanguageModel type can reference @3 transitively; the runtime
+          // value is a valid v2 model, so bridge the structurally-identical
+          // type identities here.
+          return createOpenAI({ apiKey: requirements.userKey })(config.modelId) as unknown as LanguageModel
+        }
+      }
+
       return createLanguageModel(config)
     },
 
