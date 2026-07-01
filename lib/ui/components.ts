@@ -16,9 +16,6 @@ export interface ComponentResolution {
 
 export type ComponentType =
   | 'voyage_picker'       // List of voyages to select
-  | 'conversation_picker' // List of conversations to resume
-  | 'create_voyage_form'  // Inline form for new voyage
-  | 'invite_card'         // Invite link + copy button
   | 'confirmation'        // Yes/No action confirmation
   | 'action_buttons'      // Contextual action buttons
   | 'progress'            // Loading/progress indicator
