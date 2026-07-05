@@ -12,7 +12,7 @@
 import { generateText, generateObject, stepCountIs } from 'ai'
 import { z } from 'zod'
 import OpenAI from 'openai'
-import { modelRouter } from '@/lib/models/router'
+import { resolveUserModel } from '@/lib/models'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { loadConversationMessages } from '@/lib/conversation'
 import { estimateTokens } from '@/lib/conversation/window'
@@ -229,7 +229,8 @@ const stage1Schema = z.object({
 
 const runStage1 = async (
   transcript: string,
-  events: KnowledgeEventRow[]
+  events: KnowledgeEventRow[],
+  userId: string
 ): Promise<Stage1Assessment[]> => {
   if (events.length === 0) return []
 
@@ -247,7 +248,7 @@ Assess each event and return structured output.`
 
   try {
     const { object } = await generateObject({
-      model: modelRouter.select({ task: 'chat', quality: 'balanced' }),
+      model: await resolveUserModel({ task: 'chat', quality: 'balanced' }, userId),
       system: STAGE1_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
       schema: stage1Schema,
@@ -314,7 +315,7 @@ const runStage2 = async (
   const { semantic_search, keyword_grep, graph, get_nodes, search_by_time } = tools
 
   const result = await generateText({
-    model: modelRouter.select({ task: 'chat', quality: 'balanced' }),
+    model: await resolveUserModel({ task: 'chat', quality: 'balanced' }, ctx.userId),
     system: STAGE2_PROMPT,
     messages: [
       {
@@ -846,7 +847,7 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
     log.agent('Running Stage 1', { eventCount: events.length })
 
     // Stage 1: Per-event assessment (pure reasoning)
-    const assessments = await runStage1(transcript, events)
+    const assessments = await runStage1(transcript, events, userId)
     log.agent('Stage 1 complete', { assessmentCount: assessments.length })
 
     // Stage 2: Relationship mapping (agentic with tools)
