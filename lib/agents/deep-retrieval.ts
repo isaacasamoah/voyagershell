@@ -10,7 +10,7 @@ import { generateText, stepCountIs } from 'ai'
 import { createRetrievalTools, type ToolContext } from '@/lib/retrieval/tools'
 import type { RetrievalResult } from './queue'
 import { updateTaskProgress } from './queue'
-import { modelRouter } from '@/lib/models'
+import { resolveUserModel } from '@/lib/models'
 import { log } from '@/lib/debug'
 
 // =============================================================================
@@ -70,7 +70,7 @@ export async function runBackgroundRetrieval(
     : `Objective: ${objective}`
 
   const result = await generateText({
-    model: modelRouter.select({ task: 'chat', quality: 'balanced' }),
+    model: await resolveUserModel({ task: 'chat', quality: 'balanced' }, userId),
     system: AGENTIC_RETRIEVAL_PROMPT,
     prompt,
     tools,
