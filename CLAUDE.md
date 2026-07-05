@@ -11,6 +11,18 @@ Captured 2026-01-23. Deep architectural thinking: Rust core, Lua extensions, CRD
 
 ---
 
+## Branch flow
+
+```
+feature/* → dev (Vercel preview) → main (Vercel production)
+```
+
+Test on **preview** (built from `dev`). Never test on production. `main` only updates when Isaac explicitly says "release to prod" — that involves user testing and client communication.
+
+Mental model: `dev` is our staging app, `main` is the owner's production app. Forge ship phase always ships to `dev`; production promotion is a separate manual ritual.
+
+Sister projects on the same pattern: `scout-dashboard`, `scout`. Single-trunk projects (no dev): `claude-has-hands`, `slipstream`.
+
 ## What is Voyager?
 
 Your AI co-pilot for life and work. Not a chatbot - an intelligence that:

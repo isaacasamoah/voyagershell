@@ -100,15 +100,19 @@ export const reconcileActions = async (
 
   // Claim without action = confabulation. Execute fallback if enabled.
   if (!FALLBACK_ENABLED.has(intent.verb)) {
-    // Client-side command — log the miss but can't execute server-side
+    // Forbid-claim gate: client-side verb (switch/show/do/sign_out) claimed without tool fire.
+    // The server state did NOT change — the claim is false. No server-side fallback is
+    // possible for client-side verbs. Emits 'forbid_claim' (not 'confabulation_caught') to
+    // distinguish this path from the fallback-executed path, and logs at warn so false
+    // client-verb claims are visible in observability. No log-only-and-return path remains.
     const result: ReconciliationResult = {
-      outcome: 'confabulation_caught',
+      outcome: 'forbid_claim',
       intent,
       expectedTools,
       actualTools: actualToolNames,
       latencyMs: performance.now() - start,
     }
-    log.shell(`${intent.verb} | expected: ${expectedTools[0]} | actual: [${actualToolNames.join(', ')}] | confabulation (no fallback — client-side) | ${result.latencyMs.toFixed(0)}ms`)
+    log.shell(`${intent.verb} | expected: ${expectedTools[0]} | actual: [${actualToolNames.join(', ')}] | FORBID_CLAIM (tool did not fire; client state unchanged) | ${result.latencyMs.toFixed(0)}ms`, undefined, 'warn')
     return result
   }
 

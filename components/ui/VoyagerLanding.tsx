@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Terminal, Activity } from 'lucide-react'
+import { Terminal } from 'lucide-react'
 import { AstronautState } from '@/components/chat'
 import { useAuth } from '@/lib/auth/context'
 
@@ -183,10 +183,6 @@ export const VoyagerLanding = () => {
         <div className="flex items-center gap-2 text-indigo-400">
           <Terminal size={16} />
           <span className="font-bold tracking-wider">VOYAGER_SHELL</span>
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-green-500/80 font-bold tracking-widest uppercase">
-          <Activity size={10} className="animate-pulse" />
-          <span>System Online</span>
         </div>
       </div>
 

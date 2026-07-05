@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { UIMessage } from 'ai';
-import { Terminal, Activity, Ship, ChevronDown } from 'lucide-react';
+import { Terminal, Ship, ChevronDown, BookOpen } from 'lucide-react';
 import { UserMessage, AssistantMessage, AstronautState, TaskCard, type TaskProgress } from '@/components/chat';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
@@ -13,6 +13,7 @@ import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
+import { GraphView } from '@/components/knowledge/GraphView';
 
 // Running task from background worker (in-progress) — stays here, imports TaskProgress from same barrel
 interface RunningTask {
@@ -33,6 +34,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [showVoyagePicker, setShowVoyagePicker] = useState(false);
   const voyagePickerRef = useRef<HTMLDivElement>(null);
 
+  // Knowledge graph panel — only ever open while authenticated, so a sign-out
+  // tears down the rendered knowledge instead of leaving a prior user's data on screen.
+  const [showGraphPanel, setShowGraphPanel] = useState(false);
+
   // Auth state
   const { isAuthenticated, isLoading: isAuthLoading, sendMagicLink, signOut } = useAuth();
 
@@ -40,7 +45,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [authState, setAuthState] = useState<'unauthenticated' | 'authenticated' | 'just-authenticated'>('unauthenticated');
 
   // Voyage context (fetch voyages, pending invites, URL params)
-  const { currentVoyage, setCurrentVoyage, voyages, feedbackMessage } = useVoyageContext({
+  const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
     isAuthenticated,
     isAuthLoading,
   });
@@ -53,6 +58,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     messageTimestamps, messageQueue, setMessageQueue,
     isLoading, isStreaming,
     showSuccess, setShowSuccess,
+    startNewConversation, resumeConversation,
   } = useConversation({
     currentVoyage,
     authState,
@@ -93,6 +99,21 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
     wasAuthenticatedRef.current = isAuthenticated;
   }, [isAuthenticated, isAuthLoading, setShowSuccess]);
+
+  // Close the knowledge graph panel on sign-out (don't leave a prior user's
+  // knowledge rendered) and on Escape (keyboard dismissal).
+  useEffect(() => {
+    if (!isAuthenticated) setShowGraphPanel(false);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!showGraphPanel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowGraphPanel(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showGraphPanel]);
 
   // Followup state (extracted hook)
   const { triggerFollowup, triggerFollowupRef } = useMessageState({
@@ -221,16 +242,46 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       const part = p as Record<string, unknown>;
       const isSwitchVoyage = part.type === 'tool-switch_voyage' ||
         (part.type === 'dynamic-tool' && part.toolName === 'switch_voyage');
-      if (!isSwitchVoyage || part.state !== 'result') continue;
+      // AI SDK uses state: 'output-available' (not 'result') and stores the
+      // tool result in `output` (not `result`).
+      if (!isSwitchVoyage || part.state !== 'output-available') continue;
 
       try {
-        const result = typeof part.result === 'string' ? JSON.parse(part.result as string) : part.result;
-        if (result?.switched) {
-          handleVoyageSwitch(result.slug);
+        const output = typeof part.output === 'string' ? JSON.parse(part.output as string) : part.output;
+        if ((output as Record<string, unknown>)?.switched) {
+          // Accept both new canonical `voyageSlug` field and legacy `slug` field
+          // (legacy for stale message history from prior server responses)
+          const o = output as Record<string, unknown>;
+          const slug = o.voyageSlug !== undefined ? o.voyageSlug : o.slug;
+          handleVoyageSwitch(slug as string | null);
         }
       } catch { /* ignore parse errors */ }
     }
   }, [status, messages, handleVoyageSwitch]);
+
+  // Detect create_voyage tool call success — refetch voyages so the new voyage
+  // appears in the picker immediately without a page reload (ORU-256).
+  useEffect(() => {
+    if (status !== 'ready' || messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role !== 'assistant' || !Array.isArray(lastMsg.parts)) return;
+
+    for (const p of lastMsg.parts) {
+      const part = p as Record<string, unknown>;
+      const isCreateVoyage = part.type === 'tool-create_voyage' ||
+        (part.type === 'dynamic-tool' && part.toolName === 'create_voyage');
+      // AI SDK uses state: 'output-available' (not 'result') and stores the
+      // tool result in `output` (not `result`).
+      if (!isCreateVoyage || part.state !== 'output-available') continue;
+
+      try {
+        const output = typeof part.output === 'string' ? JSON.parse(part.output as string) : part.output;
+        if (output?.created) {
+          refetchVoyages();
+        }
+      } catch { /* ignore parse errors */ }
+    }
+  }, [status, messages, refetchVoyages]);
 
   // Send a message as the user (used by ask_captain components)
   const sendUserMessage = useCallback((text: string) => {
@@ -324,9 +375,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       {/* CONTEXT BAR - Fixed header */}
       <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-indigo-400 group cursor-pointer">
-            <Terminal size={16} className="group-hover:text-indigo-300 transition-colors" />
-            <span className="font-bold tracking-wider group-hover:underline decoration-indigo-500/30 underline-offset-4">VOYAGER_SHELL</span>
+          <div className="flex items-center gap-2 text-indigo-400">
+            <Terminal size={16} />
+            <span className="font-bold tracking-wider">VOYAGER_SHELL</span>
           </div>
 
           {/* Context Chips - only show when authenticated */}
@@ -395,8 +446,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                     </div>
                   )}
                 </div>
-                {/* Conversation context chip */}
-                <div className="px-2 py-1 rounded-sm border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs flex items-center gap-2 cursor-pointer hover:bg-indigo-500/20 transition shadow-[0_0_10px_rgba(99,102,241,0.1)] min-w-0">
+                {/* Conversation context chip — server-confirmed title only, never echoes user input */}
+                <div className="px-2 py-1 rounded-sm border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs flex items-center gap-2 min-w-0">
                   <span className="opacity-30 font-semibold shrink-0">$CTX:</span>
                   <span className="truncate">{conversationTitle || 'NEW_SESSION'}</span>
                 </div>
@@ -405,10 +456,26 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           )}
         </div>
 
-        <div className="flex items-center gap-2 text-[10px] text-green-500/80 font-bold tracking-widest uppercase">
-          <Activity size={10} className="animate-pulse" />
-          <span>System Online</span>
-        </div>
+        {displayName && (
+          <div className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">
+            {displayName.toUpperCase().replace(/\s+/g, '_')}
+          </div>
+        )}
+        {isAuthenticated && (
+          <button
+            type="button"
+            onClick={() => setShowGraphPanel((v) => !v)}
+            aria-label="Toggle knowledge graph"
+            aria-pressed={showGraphPanel}
+            className={`p-1.5 rounded-sm border transition ${
+              showGraphPanel
+                ? 'border-blue-500/40 bg-blue-500/15 text-blue-300'
+                : 'border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-200'
+            }`}
+          >
+            <BookOpen size={16} />
+          </button>
+        )}
       </div>
 
       {/* THE STREAM — astronaut band + scrollable messages
@@ -486,6 +553,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                       sendMagicLink={sendMagicLink}
                       onSendMessage={sendUserMessage}
                       onVoyageSwitch={handleVoyageSwitch}
+                      onNewConversation={startNewConversation}
+                      onResumeConversation={resumeConversation}
                     />
                   ),
                 });
@@ -529,18 +598,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           </div>
         )}
 
-        {feedbackMessage && (
-          <div className="flex gap-4">
-            <div className="w-12 pt-1 text-right text-green-500/50 text-[10px] font-bold tracking-widest">
-              SYS
-            </div>
-            <div className="flex-1">
-              <div className="text-green-400 text-sm p-3 border border-green-500/30 bg-green-500/10 rounded-sm">
-                {feedbackMessage}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Running Tasks - Show progress */}
         {runningTasks.length > 0 && (
@@ -600,6 +657,24 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             />
           </form>
         </div>
+      </div>
+
+      {/* KNOWLEDGE GRAPH PANEL — slide-in from right */}
+      {showGraphPanel && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/40"
+          onClick={() => setShowGraphPanel(false)}
+        />
+      )}
+      <div
+        role="dialog"
+        aria-label="Knowledge graph"
+        aria-hidden={!showGraphPanel}
+        className={`fixed right-0 top-0 z-[70] h-full w-80 bg-gray-900 border-l border-gray-700 transform transition-transform duration-300 ${
+          showGraphPanel ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {showGraphPanel && <GraphView />}
       </div>
     </div>
   );
