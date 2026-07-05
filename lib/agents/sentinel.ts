@@ -10,7 +10,7 @@
 //   D40: MVP model is Haiku via model router (quality: 'fast').
 
 import { generateText } from 'ai'
-import { modelRouter } from '@/lib/models/router'
+import { resolveUserModel } from '@/lib/models'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug/logger'
 
@@ -142,7 +142,7 @@ Message from ${senderName}:
 "${content}"${preferencesSection}`
 
     const result = await generateText({
-      model: modelRouter.select({ task: 'chat', quality: 'fast' }),
+      model: await resolveUserModel({ task: 'chat', quality: 'fast' }, recipientUserId),
       system: SENTINEL_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
       maxOutputTokens: 256,

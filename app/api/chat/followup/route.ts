@@ -9,7 +9,7 @@ import { loadConversationMessages, saveMessage } from '@/lib/conversation'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
 import { emitMessageEvent } from '@/lib/knowledge'
 import { requireAuthResponse } from '@/lib/auth'
-import { modelRouter } from '@/lib/models'
+import { resolveUserModel } from '@/lib/models'
 import { log } from '@/lib/debug'
 
 export const maxDuration = 30
@@ -104,7 +104,7 @@ export const POST = async (req: Request) => {
 
     // 5. Stream response using primary Voyager's model (same voice)
     const result = streamText({
-      model: modelRouter.select({ task: 'chat', quality: 'balanced', streaming: true }),
+      model: await resolveUserModel({ task: 'chat', quality: 'balanced', streaming: true }, task.userId),
       system: systemPrompt,
       messages,
       maxOutputTokens: 2048,

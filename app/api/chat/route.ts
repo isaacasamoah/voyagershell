@@ -15,7 +15,7 @@ import { emitMessageEvent, createMessageEvent, type KnowledgeNode, type Awarenes
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
-import { modelRouter, creditTracker } from '@/lib/models';
+import { modelRouter, creditTracker, resolveUserModelWithMeta } from '@/lib/models';
 import { updateLastSeen, markDelivered, assertVoyageMembership, VoyageMismatchError } from '@/lib/voyage';
 import { log } from '@/lib/debug';
 import { detectActionIntent } from '@/lib/shell/intent';
@@ -341,15 +341,17 @@ export const POST = async (req: Request) => {
       );
     }
 
+    // Resolve the model for THIS user: their brain connection (subscription)
+    // if connected, else the default provider. Nothing else about the turn changes.
+    const { model: chatModel, label: chatModelLabel } = await resolveUserModelWithMeta(
+      { task: 'chat', quality: 'balanced', streaming: true, toolUse: true },
+      userId,
+    );
+
     // Primary Voyager with tools
     // Voyager decides when to use tools and self-terminates when done
     const result = streamText({
-      model: modelRouter.select({
-        task: 'chat',
-        quality: 'balanced',
-        streaming: true,
-        toolUse: true,
-      }),
+      model: chatModel,
       messages: [...systemMessages, ...messagesWithCache],
       tools: voyagerTools,
       maxOutputTokens: 4096,
@@ -388,14 +390,19 @@ export const POST = async (req: Request) => {
         if (usage) {
           const inputTokens = usage.inputTokens ?? 0;
           const outputTokens = usage.outputTokens ?? 0;
+          // Subscription compute (chatModelLabel !== 'claude-sonnet') has no
+          // per-token API cost — record usage, but cost 0.
+          const onDefaultProvider = chatModelLabel === 'claude-sonnet';
           creditTracker.track({
             userId,
-            model: 'claude-sonnet',
+            model: chatModelLabel,
             inputTokens,
             outputTokens,
             cacheCreationTokens,
             cacheReadTokens,
-            cost: modelRouter.estimateCost('claude-sonnet', inputTokens, outputTokens),
+            cost: onDefaultProvider
+              ? modelRouter.estimateCost('claude-sonnet', inputTokens, outputTokens)
+              : 0,
             task: 'chat',
             conversationId,
           });
