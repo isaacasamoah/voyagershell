@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { AstronautState } from '@/components/chat/AstronautState';
 
-const states = ['idle', 'reading', 'error', 'listening', 'celebrating'] as const;
+const states = ['idle', 'reading', 'error', 'celebrating'] as const;
 type S = (typeof states)[number];
 
 // Gesture playground: switch states to watch the book-out / page-turn /
@@ -43,7 +43,7 @@ export default function AstronautPreviewPage() {
         </div>
         <p className="text-xs text-slate-500 text-center max-w-md">
           idle → reading plays book-out · reading → idle plays book-away + the stretch ·
-          reading → listening shelves the book · error/celebrating interrupt directly
+          error/celebrating interrupt directly
         </p>
       </div>
     </div>

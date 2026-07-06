@@ -25,28 +25,25 @@ export const useAstronautState = ({
   const isStreaming = status === 'streaming'
 
   // Compute step depth and tool info from current streaming message
-  const { stepDepth, lastToolName, hasBackgroundSpawn } = useMemo(() => {
-    if (!isStreaming || messages.length === 0) return { stepDepth: 0, lastToolName: null as string | null, hasBackgroundSpawn: false }
+  const { stepDepth, lastToolName } = useMemo(() => {
+    if (!isStreaming || messages.length === 0) return { stepDepth: 0, lastToolName: null as string | null }
     const lastMessage = messages[messages.length - 1]
     if (lastMessage.role !== 'assistant' || !Array.isArray(lastMessage.parts)) {
-      return { stepDepth: 0, lastToolName: null as string | null, hasBackgroundSpawn: false }
+      return { stepDepth: 0, lastToolName: null as string | null }
     }
     let depth = 0
     let toolName: string | null = null
-    let bgSpawn = false
     for (const part of lastMessage.parts) {
       const p = part as Record<string, unknown>
       if (p.type === 'step-start') depth++
       // AI SDK v6: static tools → "tool-{name}", dynamic → "dynamic-tool" + toolName
       if (typeof p.type === 'string' && p.type.startsWith('tool-')) {
         toolName = (p.type as string).slice(5)
-        if (toolName === 'spawn_background_agent') bgSpawn = true
       } else if (p.type === 'dynamic-tool') {
         toolName = (p.toolName as string) ?? null
-        if (toolName === 'spawn_background_agent') bgSpawn = true
       }
     }
-    return { stepDepth: depth, lastToolName: toolName, hasBackgroundSpawn: bgSpawn }
+    return { stepDepth: depth, lastToolName: toolName }
   }, [isStreaming, messages])
 
   // Map tool names to human-readable progress labels
@@ -66,16 +63,13 @@ export const useAstronautState = ({
   }, [isStreaming, lastToolName])
 
   // Compute singleton astronaut state — thinking = consulting the ship's log
-  const astronautState = useMemo((): 'idle' | 'reading' | 'celebrating' | 'error' | 'listening' => {
+  const astronautState = useMemo((): 'idle' | 'reading' | 'celebrating' | 'error' => {
     if (error) return 'error'
     if (showSuccess) return 'celebrating'
-    if (isLoading) {
-      if (hasBackgroundSpawn) return 'listening'     // handed off to background
-      return 'reading'                               // working the log, page-turn per tool beat
-    }
+    if (isLoading) return 'reading'                  // working the log, page-turn per tool beat
     if (isAuthLoading || isLoadingConversation) return 'reading'
     return 'idle'
-  }, [error, showSuccess, isLoading, isAuthLoading, isLoadingConversation, hasBackgroundSpawn])
+  }, [error, showSuccess, isLoading, isAuthLoading, isLoadingConversation])
 
   // Astronaut size: xl hero when user hasn't engaged, lg docked when they have
   const astronautSize = hasUserTyped ? 'lg' as const : 'xl' as const
@@ -86,6 +80,5 @@ export const useAstronautState = ({
     // Page-turn beat: increments as the turn steps through tools
     astronautBeat: stepDepth,
     progressLabel,
-    hasBackgroundSpawn,
   }
 }

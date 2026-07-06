@@ -11,7 +11,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 //
 //   idle ──(tool fires)──▶ book-out ▶ reading ⇆ page-turn
 //   reading ──(answer arrives)──▶ book-away ▶ STRETCH ▶ idle
-//   reading ──(background handoff)──▶ book-away ▶ listening
 //   error / celebrating interrupt directly (no gesture — honesty over theatre)
 //
 // Gestures are atomic: a state change mid-gesture is remembered and played
@@ -36,7 +35,7 @@ const STRETCH_OUT: Step[] = [
 const BOOK_OUT: Step[] = [step(`${A}/book-frames/book-out.png`, 560, 260)];
 const BOOK_AWAY: Step[] = [step(`${A}/book-frames/book-away.png`, 480, 220)];
 
-type AstronautStateType = 'idle' | 'reading' | 'error' | 'listening' | 'celebrating';
+type AstronautStateType = 'idle' | 'reading' | 'error' | 'celebrating';
 
 interface Scene {
   hold: string[];          // 1 frame, or an alternating pair (page turns)
@@ -60,7 +59,6 @@ const SCENES: Record<AstronautStateType, Scene> = {
     enter: BOOK_OUT,
     exit: {
       idle: STRETCH_OUT,     // answer arrived — the satisfying beat
-      listening: BOOK_AWAY,  // handed off to background — just shelve it
       celebrating: BOOK_AWAY,
       default: [],           // errors interrupt; no theatre
     },
@@ -69,11 +67,6 @@ const SCENES: Record<AstronautStateType, Scene> = {
     hold: [`${A}/error.png`],
     alt: 'Voyager hit a snag',
     animation: 'animate-float-error',
-  },
-  listening: {
-    hold: [`${A}/listening.png`],
-    alt: 'Voyager listening for the background crew',
-    animation: 'animate-float-listening',
   },
   celebrating: {
     hold: [`${A}/celebrating.png`],
