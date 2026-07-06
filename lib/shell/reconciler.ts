@@ -8,6 +8,7 @@ import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
 import { searchKnowledge } from '@/lib/knowledge/search'
 import { getVoyageBySlug, getVoyageMembers } from '@/lib/voyage'
 import { log } from '@/lib/debug'
+import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 
 // Verb → expected tool name(s) mapping
 const VERB_TOOL_MAP: Record<CommandVerb, string[]> = {
@@ -201,7 +202,7 @@ const executeTellFallback = async (
     const senderDisplayName = senderMember?.displayName ?? senderMember?.email ?? 'Unknown'
     const content = intent.payload ?? intent.source
 
-    await createMessageEvent(
+    const eventId = await createMessageEvent(
       ctx.conversationId ?? 'shell-reconciler',
       'user',
       content,
@@ -217,6 +218,14 @@ const executeTellFallback = async (
         contextSnippet: `${senderDisplayName} to ${match.displayName}: ${content.slice(0, 60)}`,
       }
     )
+
+    // Every send path fans out delivery receipts — the ledger is the single
+    // delivery truth, and the repair path is a real send path (omega P1).
+    // Awaited: this runs inside the route's waitUntil'd reconciliation task,
+    // so a dangling void promise here could be dropped at task completion.
+    if (eventId) {
+      await fanOutDeliveries(eventId, [match.userId])
+    }
 
     log.shell(`tell fallback executed: message to ${match.displayName}`)
 

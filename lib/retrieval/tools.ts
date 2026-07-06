@@ -729,7 +729,7 @@ export const createVoyagerTools = (ctx: ToolContext): {
 
   // send_message — the tell verb's tool: @mentions or NL routing ("tell tom", "ask sarah")
   const send_message = tool({
-    description: `Resolve @mentions or natural language message routing within the current voyage. Looks up voyage members by name and creates a participant-scoped knowledge event delivering the message. Covers both @name syntax ("@tom fix is ready") and natural language ("tell tom the fix is ready", "ask sarah about the pricing deck", "message tom about X"). Call this whenever someone is addressed or a message needs routing to specific people.`,
+    description: `Send a message to voyage members. Resolves @mentions or natural-language routing, then creates a participant-scoped message event and fans out delivery. Covers both @name syntax ("@tom fix is ready") and natural language ("tell tom the fix is ready", "ask sarah about the pricing deck", "message tom about X"). Call this whenever someone is addressed or a message needs routing to specific people.`,
     inputSchema: z.object({
       names: z.array(z.string()).min(1).describe('Names to resolve (from @mentions or natural language, e.g. ["tom"] or ["tom", "sarah"])'),
       message: z.string().describe('The message content to deliver'),
@@ -841,10 +841,15 @@ export const createVoyagerTools = (ctx: ToolContext): {
       )
 
       // The delivery lane: fan out receipt rows so recipients' live wires
-      // fire (M0.2) and offline recipients catch up. Fire-and-forget — a
-      // delivery hiccup never fails the send (event is on the ledger).
+      // fire (M0.2) and offline recipients catch up. Deferred via waitUntil —
+      // a bare void promise is dropped when the lambda freezes post-stream
+      // (omega P1); a fan-out failure still never fails the send.
       if (eventId) {
-        void fanOutDeliveries(eventId, mentionedIds)
+        if (ctx.waitUntil) {
+          ctx.waitUntil(fanOutDeliveries(eventId, mentionedIds))
+        } else {
+          await fanOutDeliveries(eventId, mentionedIds)
+        }
       }
 
       return JSON.stringify({

@@ -13,8 +13,9 @@ const table = () => (getAdminClient() as unknown as { from: (t: string) => any }
 /**
  * Fan out delivery rows for a message event — one per recipient, at send
  * time. Idempotent via the (event_id, recipient_user_id) unique constraint.
- * Fire-and-forget from the send path: a delivery hiccup must never fail the
- * send (the event is already on the ledger; a later catch-up can re-fan).
+ * A delivery hiccup must never fail the send (the event is already on the
+ * ledger). Failures are logged; there is NO automatic re-fan yet — known
+ * M0.2 gap, tracked in the messaging design doc.
  */
 export const fanOutDeliveries = async (
   eventId: string,

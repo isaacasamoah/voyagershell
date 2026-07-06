@@ -56,7 +56,43 @@ CREATE POLICY message_deliveries_recipient_update ON public.message_deliveries
   FOR UPDATE USING (auth.uid() = recipient_user_id)
   WITH CHECK (auth.uid() = recipient_user_id);
 
+-- Receipts are update-only in two columns: recipients may stamp delivered_at
+-- and seen_at, never re-point a receipt at a different message or user
+-- (RLS WITH CHECK covers recipient_user_id; this trigger closes event_id).
+CREATE OR REPLACE FUNCTION public.message_deliveries_immutable_identity()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $fn$
+BEGIN
+  IF NEW.event_id IS DISTINCT FROM OLD.event_id
+     OR NEW.recipient_user_id IS DISTINCT FROM OLD.recipient_user_id
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'message_deliveries: identity and ordering columns are immutable';
+  END IF;
+  -- Receipts only move forward: a stamped delivered_at/seen_at can be
+  -- updated but never cleared (no un-seeing).
+  IF (OLD.delivered_at IS NOT NULL AND NEW.delivered_at IS NULL)
+     OR (OLD.seen_at IS NOT NULL AND NEW.seen_at IS NULL) THEN
+    RAISE EXCEPTION 'message_deliveries: receipts cannot be cleared';
+  END IF;
+  RETURN NEW;
+END;
+$fn$;
+
+DROP TRIGGER IF EXISTS trg_message_deliveries_immutable ON public.message_deliveries;
+CREATE TRIGGER trg_message_deliveries_immutable
+  BEFORE UPDATE ON public.message_deliveries
+  FOR EACH ROW EXECUTE FUNCTION public.message_deliveries_immutable_identity();
+
+-- Offline catch-up access pattern (recipient + not-yet-delivered): the
+-- seen_at partial index does NOT cover delivered_at IS NULL queries.
+CREATE INDEX IF NOT EXISTS idx_message_deliveries_recipient_undelivered
+  ON public.message_deliveries (recipient_user_id, created_at DESC)
+  WHERE delivered_at IS NULL;
+
 -- Realtime: the client's live wire subscribes to INSERTs on this table.
+-- M0.2 client contract: subscribe on an AUTHENTICATED channel (RLS applies to
+-- postgres_changes) AND filter recipient_user_id=eq.<userId> server-side.
 DO $$ BEGIN
   ALTER PUBLICATION supabase_realtime ADD TABLE public.message_deliveries;
 EXCEPTION

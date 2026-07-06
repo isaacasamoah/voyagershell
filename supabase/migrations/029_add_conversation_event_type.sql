@@ -1,7 +1,7 @@
 -- Add 'conversation' to valid_event_type CHECK constraint AND trigger function.
 -- Commit 8693090 changed chat turns from eventType 'message' to 'conversation'
 -- to distinguish conversation turns (Cartographer enriches) from inter-user messages
--- (resolve_mention, skip Cartographer). Neither the CHECK constraint nor the
+-- (send_message, skip Cartographer). Neither the CHECK constraint nor the
 -- apply_knowledge_event() trigger were updated, so conversation events were either
 -- rejected (CHECK) or silently skipped (trigger → no knowledge_current row).
 
