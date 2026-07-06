@@ -8,10 +8,11 @@ import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
 import { searchKnowledge } from '@/lib/knowledge/search'
 import { getVoyageBySlug, getVoyageMembers } from '@/lib/voyage'
 import { log } from '@/lib/debug'
+import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 
 // Verb → expected tool name(s) mapping
 const VERB_TOOL_MAP: Record<CommandVerb, string[]> = {
-  tell: ['resolve_mention'],
+  tell: ['send_message'],
   find: ['semantic_search', 'keyword_grep', 'search_by_time', 'graph', 'get_nodes', 'web_search'],
   remember: ['remember_knowledge'],
   switch: ['switch_voyage'],       // log-only fallback (client-side action)
@@ -155,7 +156,7 @@ const executeFallback = async (
 
 /**
  * Tell fallback: resolve target name → create message event.
- * Same lookup resolve_mention uses (getVoyageMembers + name match).
+ * Same lookup send_message uses (getVoyageMembers + name match).
  */
 const executeTellFallback = async (
   intent: ActionIntent,
@@ -176,7 +177,7 @@ const executeTellFallback = async (
     const members = await getVoyageMembers(voyage.id)
     const targetLower = intent.target.toLowerCase()
 
-    // Same resolution logic as resolve_mention: display_name or nickname match
+    // Same resolution logic as send_message: display_name or nickname match
     const match = members.find(m => {
       const dn = m.displayName?.toLowerCase() ?? ''
       const nn = m.nickname?.toLowerCase() ?? ''
@@ -201,7 +202,7 @@ const executeTellFallback = async (
     const senderDisplayName = senderMember?.displayName ?? senderMember?.email ?? 'Unknown'
     const content = intent.payload ?? intent.source
 
-    await createMessageEvent(
+    const eventId = await createMessageEvent(
       ctx.conversationId ?? 'shell-reconciler',
       'user',
       content,
@@ -217,6 +218,14 @@ const executeTellFallback = async (
         contextSnippet: `${senderDisplayName} to ${match.displayName}: ${content.slice(0, 60)}`,
       }
     )
+
+    // Every send path fans out delivery receipts — the ledger is the single
+    // delivery truth, and the repair path is a real send path (omega P1).
+    // Awaited: this runs inside the route's waitUntil'd reconciliation task,
+    // so a dangling void promise here could be dropped at task completion.
+    if (eventId) {
+      await fanOutDeliveries(eventId, [match.userId])
+    }
 
     log.shell(`tell fallback executed: message to ${match.displayName}`)
 
