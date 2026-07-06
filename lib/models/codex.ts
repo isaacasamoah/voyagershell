@@ -118,6 +118,111 @@ export const createCodexModel = (cred: CodexCredential): LanguageModel => {
   return wrapped as unknown as LanguageModel
 }
 
+// =============================================================================
+// Device-code connect flow (the self-serve path — /connect)
+// Wire protocol verified against openai/codex device_code_auth.rs + the
+// tumf/opencode-openai-device-auth implementation, 2026-07-06. See
+// ~/obsidian/Projects/voyager/research/device-auth-flow-2026-07-06.md
+// PREREQ per user: ChatGPT → Settings → Security → "Allow device code login".
+// =============================================================================
+
+const DEVICE_AUTH_BASE = 'https://auth.openai.com/api/accounts/deviceauth'
+export const DEVICE_VERIFICATION_URL = 'https://auth.openai.com/codex/device'
+
+export interface DeviceAuthStart {
+  deviceAuthId: string
+  userCode: string
+  /** Poll interval in seconds. */
+  interval: number
+  verificationUrl: string
+}
+
+/** Begin a device-code login: returns the code the user enters at the
+ *  verification URL. */
+export const startDeviceAuth = async (): Promise<DeviceAuthStart> => {
+  const res = await fetch(`${DEVICE_AUTH_BASE}/usercode`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ client_id: CODEX_OAUTH_CLIENT_ID }),
+  })
+  if (!res.ok) {
+    throw new Error(`Device auth start failed: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`)
+  }
+  const json = (await res.json()) as {
+    device_auth_id: string
+    user_code?: string
+    usercode?: string
+    interval?: number | string
+  }
+  const userCode = json.user_code ?? json.usercode
+  if (!json.device_auth_id || !userCode) {
+    throw new Error('Device auth start returned an unexpected shape')
+  }
+  const interval = typeof json.interval === 'string' ? parseInt(json.interval, 10) : (json.interval ?? 5)
+  return {
+    deviceAuthId: json.device_auth_id,
+    userCode,
+    interval: Number.isFinite(interval) && interval > 0 ? interval : 5,
+    verificationUrl: DEVICE_VERIFICATION_URL,
+  }
+}
+
+export type DevicePollResult =
+  | { status: 'pending' }
+  | { status: 'complete'; tokens: RefreshedTokens }
+
+/** One poll attempt. 403/404 = user hasn't approved yet. On success the
+ *  backend hands us a server-minted PKCE pair + authorization code, which we
+ *  immediately exchange for tokens. */
+export const pollDeviceAuth = async (
+  deviceAuthId: string,
+  userCode: string,
+): Promise<DevicePollResult> => {
+  const res = await fetch(`${DEVICE_AUTH_BASE}/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ device_auth_id: deviceAuthId, user_code: userCode }),
+  })
+  if (res.status === 403 || res.status === 404) return { status: 'pending' }
+  if (!res.ok) {
+    throw new Error(`Device auth poll failed: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`)
+  }
+  const json = (await res.json()) as { authorization_code: string; code_verifier: string }
+  if (!json.authorization_code || !json.code_verifier) {
+    throw new Error('Device auth poll returned an unexpected shape')
+  }
+
+  const exchange = await fetch(CODEX_TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: CODEX_OAUTH_CLIENT_ID,
+      code: json.authorization_code,
+      code_verifier: json.code_verifier,
+      redirect_uri: 'https://auth.openai.com/deviceauth/callback',
+    }),
+  })
+  if (!exchange.ok) {
+    throw new Error(`Device auth exchange failed: HTTP ${exchange.status} ${(await exchange.text()).slice(0, 200)}`)
+  }
+  const tokens = (await exchange.json()) as {
+    access_token: string
+    refresh_token: string
+    id_token?: string
+    expires_in?: number
+  }
+  return {
+    status: 'complete',
+    tokens: {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      idToken: tokens.id_token,
+      expiresInSec: tokens.expires_in,
+    },
+  }
+}
+
 export interface RefreshedTokens {
   accessToken: string
   refreshToken: string
