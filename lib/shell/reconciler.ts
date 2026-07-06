@@ -11,7 +11,7 @@ import { log } from '@/lib/debug'
 
 // Verb → expected tool name(s) mapping
 const VERB_TOOL_MAP: Record<CommandVerb, string[]> = {
-  tell: ['resolve_mention'],
+  tell: ['send_message'],
   find: ['semantic_search', 'keyword_grep', 'search_by_time', 'graph', 'get_nodes', 'web_search'],
   remember: ['remember_knowledge'],
   switch: ['switch_voyage'],       // log-only fallback (client-side action)
@@ -155,7 +155,7 @@ const executeFallback = async (
 
 /**
  * Tell fallback: resolve target name → create message event.
- * Same lookup resolve_mention uses (getVoyageMembers + name match).
+ * Same lookup send_message uses (getVoyageMembers + name match).
  */
 const executeTellFallback = async (
   intent: ActionIntent,
@@ -176,7 +176,7 @@ const executeTellFallback = async (
     const members = await getVoyageMembers(voyage.id)
     const targetLower = intent.target.toLowerCase()
 
-    // Same resolution logic as resolve_mention: display_name or nickname match
+    // Same resolution logic as send_message: display_name or nickname match
     const match = members.find(m => {
       const dn = m.displayName?.toLowerCase() ?? ''
       const nn = m.nickname?.toLowerCase() ?? ''

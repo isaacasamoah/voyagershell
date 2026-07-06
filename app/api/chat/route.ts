@@ -218,7 +218,7 @@ export const POST = async (req: Request) => {
 
       // Emit knowledge event (fire-and-forget)
       // Conversation turns → eventType 'conversation' (Cartographer enriches these)
-      // Inter-user messages via resolve_mention → eventType 'message' (skip Cartographer)
+      // Inter-user messages via send_message → eventType 'message' (skip Cartographer)
       emitMessageEvent(conversationId, 'user', queryText, {
         userId: userId,
         voyageSlug: voyageSlug,
