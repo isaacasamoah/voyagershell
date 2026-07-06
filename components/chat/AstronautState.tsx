@@ -23,13 +23,15 @@ interface Step { src: string; holdMs: number; fadeMs: number }
 
 const step = (src: string, holdMs: number, fadeMs = 180): Step => ({ src, holdMs, fadeMs });
 
-// The got-it beat: close the log, limber up, settle. Reuses the stretch frames.
+// The got-it beat: close the log, limber up, settle. Reuses the stretch
+// frames exactly like the landing's cycle: peak, then a slow ease straight
+// back to idle (no settling frame — its raised hand reads as re-grabbing
+// the book right after the stretch).
 const STRETCH_OUT: Step[] = [
   step(`${A}/book-frames/book-away.png`, 520),
   step(`${A}/stretch-frames/frame-1-uncrossing.png`, 90, 120),
   step(`${A}/stretch-frames/frame-2-stretched.png`, 120, 120),
   step(`${A}/stretch-frames/frame-3-peak-stretch.png`, 950, 200),
-  step(`${A}/stretch-frames/frame-4b-settling.png`, 260, 300),
 ];
 
 const BOOK_OUT: Step[] = [step(`${A}/book-frames/book-out.png`, 560, 260)];
@@ -86,7 +88,7 @@ const ALL_FRAMES = Array.from(
 );
 
 const PAGE_TURN_AMBIENT_MS = 3600; // page turns while thinking, absent tool beats
-const SETTLE_FADE_MS = 380;
+const SETTLE_FADE_MS = 500; // slow ease into the hold — matches the landing's stretch return
 
 const sizeClasses = {
   sm: 'w-20 h-20',
