@@ -132,6 +132,7 @@ export const useConversation = ({
   const hasTriggeredWelcomePrompt = useRef(false)
   useEffect(() => {
     if (isAuthLoading || isLoadingConversation) return
+    if (!isAuthenticated) return
     if (hasTriggeredWelcomePrompt.current) return
     if (messages.length > 0) return
 
