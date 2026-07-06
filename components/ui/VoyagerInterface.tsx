@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { UIMessage } from 'ai';
 import { Terminal, Ship } from 'lucide-react';
-import { UserMessage, AssistantMessage, AstronautState, TaskCard, type TaskProgress } from '@/components/chat';
+import { UserMessage, AssistantMessage, AstronautState, TaskCard, HumanMessage, type TaskProgress } from '@/components/chat';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
 import { useRealtimeSubscription } from './hooks/useRealtimeSubscription';
@@ -11,6 +11,7 @@ import { useMessageState } from './hooks/useMessageState';
 import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
+import { useDeliveries } from '@/lib/messaging/useDeliveries';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
 import { VoyagerWordmark } from './VoyagerWordmark';
@@ -35,7 +36,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [hasBrain, setHasBrain] = useState<boolean | null>(null);
 
   // Auth state
-  const { isAuthenticated, isLoading: isAuthLoading, sendMagicLink, signOut } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading, sendMagicLink, signOut, user } = useAuth();
 
   // Auth state tracking for system prompt injection
   const [authState, setAuthState] = useState<'unauthenticated' | 'authenticated' | 'just-authenticated'>('unauthenticated');
@@ -59,6 +60,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       cancelled = true;
     };
   }, [isAuthenticated]);
+
+  // The live wire (M0.2): messages from other humans, delivered on their own
+  // clock — rendered into the feed as they arrive, receipts stamped honestly.
+  const { incoming: incomingMessages, markSeen } = useDeliveries(isAuthenticated ? (user?.id ?? null) : null);
 
   // Voyage context (fetch voyages, pending invites, URL params)
   const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
@@ -178,9 +183,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
   // Auto-scroll to bottom when new messages arrive
   const messageCount = messages.length;
+  const incomingMessageCount = incomingMessages.length;
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messageCount]);
+  }, [messageCount, incomingMessageCount]);
 
   // All messages go to Voyager — no intent detection, no slash commands, no auth gate
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -566,6 +572,18 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             ))}
           </div>
         )}
+
+        {/* Inter-human messages — the delivery lane renders here (live tier).
+            Stacks + tier render policy arrive in M1. */}
+        {incomingMessages.map((m) => (
+          <HumanMessage
+            key={m.deliveryId}
+            senderName={m.senderDisplayName}
+            content={m.content}
+            timestamp={m.createdAt}
+            onSeen={() => markSeen(m.deliveryId)}
+          />
+        ))}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} />
