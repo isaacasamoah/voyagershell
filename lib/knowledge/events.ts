@@ -31,7 +31,7 @@ const getOpenAI = (): OpenAI => {
 // Source event types — these contain THE ACTUAL KNOWLEDGE
 export type SourceEventType =
   | 'conversation'   // Chat turns (user + assistant) — Cartographer enriches these
-  | 'message'        // Inter-user messages via resolve_mention
+  | 'message'        // Inter-user messages via send_message
   | 'document'       // Google Docs, Notion, etc.
   | 'slack_message'  // Slack message/thread
   | 'jira_update'    // Jira ticket/comment

@@ -13,6 +13,7 @@ import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
+import { VoyagerWordmark } from './VoyagerWordmark';
 
 // Running task from background worker (in-progress) — stays here, imports TaskProgress from same barrel
 interface RunningTask {
@@ -188,6 +189,19 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     if (!trimmed) return;
 
     setHasUserTyped(true);
+    if (!isAuthenticated) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `preview-auth-${Date.now()}`,
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'sign in to send live messages from VoyagerShell.' }],
+        } as UIMessage,
+      ]);
+      setInputValue('');
+      return;
+    }
+
     if (isLoading) {
       setMessageQueue(prev => [...prev, trimmed]);
     } else {
@@ -352,16 +366,19 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       return true;
     });
   }, [messages, autoSentCount]);
+  const errorText = error?.message?.trim().startsWith('{')
+    ? "that one didn't get through. try again?"
+    : (error?.message || "that one didn't get through. try again?");
 
   return (
     <div className={`min-h-screen bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden relative ${className || ''}`}>
 
       {/* CONTEXT BAR - Fixed header */}
-      <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-indigo-400">
+      <div className="fixed top-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl overflow-hidden">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-indigo-400 shrink-0">
             <Terminal size={16} />
-            <span className="font-bold tracking-wider">VOYAGER_SHELL</span>
+            <VoyagerWordmark variant="dock" shell={hasUserTyped} />
           </div>
 
           {/* Context Chips - only show when authenticated */}
@@ -398,9 +415,12 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         </div>
 
         {displayName && (
-          <div className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">
+          <div className="hidden sm:block text-[10px] text-slate-500 font-mono tracking-widest uppercase shrink-0">
             {displayName.toUpperCase().replace(/\s+/g, '_')}
           </div>
+        )}
+        {hasUserTyped && (
+          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[#ff5f56]/30 via-[#5ec98f]/30 to-[#b07af5]/30" />
         )}
       </div>
 
@@ -416,9 +436,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
               : 'fixed top-[52px] left-0 right-0 h-[280px] justify-center bg-[#050505] overflow-hidden'
           }`}
         >
-          <div className="transition-all duration-700 ease-in-out">
+          {!hasUserTyped && (
+            <VoyagerWordmark variant="hero" className="-mb-20 scale-[0.74] sm:-mb-32 sm:scale-90" />
+          )}
+          <div className="transition-all duration-700 ease-in-out scale-[0.88] sm:scale-100">
             <AstronautState state={astronautState} beat={astronautBeat} size={astronautSize} />
           </div>
+          {!hasUserTyped && (
+            <p className="mt-1 sm:mt-5 text-center text-[11px] sm:text-xs tracking-[0.24em] sm:tracking-[0.5em] text-transparent bg-clip-text bg-gradient-to-r from-[#f7a34b] via-[#f4e04d] to-[#59a5ff] opacity-60">
+              let&apos;s go together
+            </p>
+          )}
           {progressLabel && isStreaming && (
             <div className="text-center text-xs text-slate-500 mt-1 animate-pulse">
               {progressLabel}
@@ -513,12 +541,12 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         {/* Error state */}
         {error && (
           <div className="flex gap-4">
-            <div className="w-12 pt-1 text-right text-red-500/50 text-[10px] font-bold tracking-widest">
+            <div className="w-12 pt-1 text-right text-[#ff5f56]/60 text-[10px] font-bold tracking-widest">
               ERR
             </div>
-            <div className="flex-1">
-              <div className="text-red-400 text-sm p-3 border border-red-500/30 bg-red-500/10 rounded-sm">
-                {error.message || 'An error occurred. Please try again.'}
+            <div className="flex-1 min-w-0">
+              <div className="text-[#ffb0aa] text-sm p-3 border border-[#ff5f56]/35 bg-[#ff5f56]/10 rounded-sm shadow-[0_0_18px_rgba(255,95,86,0.08)] break-words">
+                {errorText}
               </div>
             </div>
           </div>
@@ -566,7 +594,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                   key={suggestion.id}
                   type="button"
                   onClick={() => handleSuggestionClick(suggestion.action)}
-                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors whitespace-nowrap"
+                  className="text-xs text-slate-400 hover:text-slate-100 transition-colors whitespace-nowrap rounded-sm border border-white/10 hover:border-[#b07af5]/40 bg-white/[0.025] px-2 py-1"
                 >
                   {suggestion.text}
                 </button>
