@@ -419,7 +419,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             {displayName.toUpperCase().replace(/\s+/g, '_')}
           </div>
         )}
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[#ff5f56]/70 via-[#5ec98f]/70 to-[#b07af5]/70" />
+        {hasUserTyped && (
+          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[#ff5f56]/30 via-[#5ec98f]/30 to-[#b07af5]/30" />
+        )}
       </div>
 
       {/* THE STREAM — astronaut band + scrollable messages
