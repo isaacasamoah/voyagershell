@@ -29,13 +29,35 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState('');
 
-  // Voyage picker
+  // Brain connection: null = still checking, false = none resolves (own or
+  // household) → surface the quiet /connect pointer.
+  const [hasBrain, setHasBrain] = useState<boolean | null>(null);
 
   // Auth state
   const { isAuthenticated, isLoading: isAuthLoading, sendMagicLink, signOut } = useAuth();
 
   // Auth state tracking for system prompt injection
   const [authState, setAuthState] = useState<'unauthenticated' | 'authenticated' | 'just-authenticated'>('unauthenticated');
+
+  // Check brain connection once authenticated (covers own + household resolution)
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setHasBrain(null);
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/connections/codex')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setHasBrain(Boolean(d?.connected));
+      })
+      .catch(() => {
+        if (!cancelled) setHasBrain(null); // unknown ≠ disconnected — stay quiet
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
 
   // Voyage context (fetch voyages, pending invites, URL params)
   const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
@@ -525,6 +547,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       {/* INPUT DECK */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur border-t border-white/10 p-4 pb-6">
         <div className="max-w-2xl mx-auto">
+          {/* No brain connected — quiet honest pointer, not a wall */}
+          {isAuthenticated && hasBrain === false && (
+            <div className="mb-3 text-xs text-slate-500">
+              no brain connected —{' '}
+              <a href="/connect" className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4 transition">
+                connect your ChatGPT subscription
+              </a>{' '}
+              to start chatting
+            </div>
+          )}
+
           {/* Context-Aware Suggestions */}
           {suggestions.length > 0 && (
             <div className="flex gap-3 mb-3 overflow-x-auto pb-1 scrollbar-hide">
