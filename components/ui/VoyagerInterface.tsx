@@ -60,7 +60,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   });
 
   // Astronaut state machine (pure derivation from conversation + auth state)
-  const { astronautState, astronautSize, progressLabel } = useAstronautState({
+  const { astronautState, astronautSize, astronautBeat, progressLabel } = useAstronautState({
     messages,
     status,
     error,
@@ -395,7 +395,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           }`}
         >
           <div className="transition-all duration-700 ease-in-out">
-            <AstronautState state={astronautState} size={astronautSize} />
+            <AstronautState state={astronautState} beat={astronautBeat} size={astronautSize} />
           </div>
           {progressLabel && isStreaming && (
             <div className="text-center text-xs text-slate-500 mt-1 animate-pulse">

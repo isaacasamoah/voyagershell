@@ -65,19 +65,17 @@ export const useAstronautState = ({
     return labels[lastToolName] ?? null
   }, [isStreaming, lastToolName])
 
-  // Compute singleton astronaut state with step-aware depth
-  const astronautState = useMemo((): 'idle' | 'searching' | 'celebrating' | 'error' | 'listening' => {
+  // Compute singleton astronaut state — thinking = consulting the ship's log
+  const astronautState = useMemo((): 'idle' | 'reading' | 'celebrating' | 'error' | 'listening' => {
     if (error) return 'error'
     if (showSuccess) return 'celebrating'
     if (isLoading) {
-      // Step-depth-aware states during streaming
       if (hasBackgroundSpawn) return 'listening'     // handed off to background
-      if (stepDepth >= 3) return 'listening'          // multi-step retrieval / deep exploration
-      return 'searching'                              // initial steps
+      return 'reading'                               // working the log, page-turn per tool beat
     }
-    if (isAuthLoading || isLoadingConversation) return 'searching'
+    if (isAuthLoading || isLoadingConversation) return 'reading'
     return 'idle'
-  }, [error, showSuccess, isLoading, isAuthLoading, isLoadingConversation, stepDepth, hasBackgroundSpawn])
+  }, [error, showSuccess, isLoading, isAuthLoading, isLoadingConversation, hasBackgroundSpawn])
 
   // Astronaut size: xl hero when user hasn't engaged, lg docked when they have
   const astronautSize = hasUserTyped ? 'lg' as const : 'xl' as const
@@ -85,6 +83,8 @@ export const useAstronautState = ({
   return {
     astronautState,
     astronautSize,
+    // Page-turn beat: increments as the turn steps through tools
+    astronautBeat: stepDepth,
     progressLabel,
     hasBackgroundSpawn,
   }
