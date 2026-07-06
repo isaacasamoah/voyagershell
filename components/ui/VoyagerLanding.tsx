@@ -153,11 +153,12 @@ export const VoyagerLanding = () => {
       {/* CENTER — rainbow wordmark + astronaut + subtitle + email */}
       <div className="flex-1 flex flex-col items-center justify-center pt-[52px] pb-[120px] px-4">
 
-        {/* VOYAGER — retro rainbow wordmark, arched over the astronaut */}
+        {/* VOYAGER — big 3D retro rainbow wordmark, deep arch over the astronaut.
+            Extrusion = stacked dark layers stepping down-right; face = rainbow sweep. */}
         <svg
-          viewBox="0 0 560 150"
-          className="w-[320px] sm:w-[420px] -mb-8 relative z-10 select-none"
-          style={{ filter: 'drop-shadow(0 0 18px rgba(155, 122, 245, 0.25))' }}
+          viewBox="0 -50 640 300"
+          className="w-[460px] sm:w-[600px] -mb-32 relative z-0 pointer-events-none select-none"
+          style={{ filter: 'drop-shadow(0 0 14px rgba(155, 122, 245, 0.18))' }}
           aria-label="VOYAGER"
           role="img"
         >
@@ -171,13 +172,33 @@ export const VoyagerLanding = () => {
               <stop offset="80%" stopColor="#59a5ff" />
               <stop offset="100%" stopColor="#b07af5" />
             </linearGradient>
-            <path id="voyager-arc" d="M 40 145 A 330 330 0 0 1 520 145" fill="none" />
+            {/* Deep arch — r=300 over a 560 chord */}
+            <path id="voyager-arc" d="M 40 235 A 300 300 0 0 1 600 235" fill="none" />
           </defs>
+          {/* 3D extrusion — deep block shadow stepping down-right */}
+          {[9, 8, 7, 6, 5, 4, 3].map((depth) => (
+            <g key={depth} transform={`translate(${depth}, ${depth + 2})`}>
+              <text
+                fill={depth > 6 ? '#12071f' : '#2a1245'}
+                fontSize="80"
+                fontWeight="900"
+                letterSpacing="26"
+                fontFamily="var(--font-geist-mono), ui-monospace, monospace"
+              >
+                <textPath href="#voyager-arc" startOffset="50%" textAnchor="middle">
+                  VOYAGER
+                </textPath>
+              </text>
+            </g>
+          ))}
+          {/* Face — rainbow gradient with a fine light edge */}
           <text
             fill="url(#voyager-rainbow)"
-            fontSize="58"
-            fontWeight="800"
-            letterSpacing="16"
+            stroke="#fff7e6"
+            strokeWidth="0.75"
+            fontSize="80"
+            fontWeight="900"
+            letterSpacing="26"
             fontFamily="var(--font-geist-mono), ui-monospace, monospace"
           >
             <textPath href="#voyager-arc" startOffset="50%" textAnchor="middle">
@@ -187,7 +208,7 @@ export const VoyagerLanding = () => {
         </svg>
 
         {/* Astronaut — dual-layer crossfade, float animation on container */}
-        <div className="relative w-64 h-64 animate-float-idle mb-6">
+        <div className="relative w-64 h-64 animate-float-idle mb-6 -translate-x-4">
           {/* Back layer — always visible */}
           <img
             src={backSrc}
@@ -208,8 +229,8 @@ export const VoyagerLanding = () => {
           )}
         </div>
 
-        {/* Subtitle — retro gradient lettering */}
-        <p className="mb-8 text-center text-base font-bold tracking-[0.35em] text-transparent bg-clip-text bg-gradient-to-r from-[#f7a34b] via-[#f4e04d] to-[#59a5ff]">
+        {/* Subtitle — quiet retro whisper under the wordmark */}
+        <p className="mb-8 text-center text-xs tracking-[0.5em] text-transparent bg-clip-text bg-gradient-to-r from-[#f7a34b] via-[#f4e04d] to-[#59a5ff] opacity-50">
           let&apos;s go together
         </p>
       </div>
