@@ -45,9 +45,6 @@ export const VoyagerLanding = () => {
   // Auth error from callback (e.g. expired magic link)
   const authError = searchParams.get('auth_error')
 
-  // Welcome line — hidden until LLM responds, fallback after timeout
-  const [welcomeLine, setWelcomeLine] = useState<string | null>(null)
-
   // Astronaut stretch animation — dual-layer crossfade with variable timing
   const [backSrc, setBackSrc] = useState(STRETCH_FRAMES[0])
   const [frontSrc, setFrontSrc] = useState<string | null>(null)
@@ -124,39 +121,6 @@ export const VoyagerLanding = () => {
     }
   }, [])
 
-  // Fire LLM welcome — Strict Mode safe (no ref guard)
-  useEffect(() => {
-    let ignore = false
-
-    const hour = new Date().getHours()
-    const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
-
-    const fallbackTimer = setTimeout(() => {
-      if (!ignore) setWelcomeLine((prev) => prev ?? 'prepare for takeoff.')
-    }, 2000)
-
-    fetch('/api/chat/welcome', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timeOfDay }),
-    })
-      .then((res) => res.ok ? res.json() : null)
-      .then((data) => {
-        if (!ignore && data?.line) {
-          clearTimeout(fallbackTimer)
-          setWelcomeLine(data.line)
-        }
-      })
-      .catch(() => {
-        // Fallback timer will handle it
-      })
-
-    return () => {
-      ignore = true
-      clearTimeout(fallbackTimer)
-    }
-  }, [])
-
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = email.trim()
@@ -186,8 +150,42 @@ export const VoyagerLanding = () => {
         </div>
       </div>
 
-      {/* CENTER — astronaut + welcome + email */}
+      {/* CENTER — rainbow wordmark + astronaut + subtitle + email */}
       <div className="flex-1 flex flex-col items-center justify-center pt-[52px] pb-[120px] px-4">
+
+        {/* VOYAGER — retro rainbow wordmark, arched over the astronaut */}
+        <svg
+          viewBox="0 0 560 150"
+          className="w-[320px] sm:w-[420px] -mb-8 relative z-10 select-none"
+          style={{ filter: 'drop-shadow(0 0 18px rgba(155, 122, 245, 0.25))' }}
+          aria-label="VOYAGER"
+          role="img"
+        >
+          <defs>
+            {/* Classic 70s-stripe rainbow sweep */}
+            <linearGradient id="voyager-rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#ff5f56" />
+              <stop offset="20%" stopColor="#f7a34b" />
+              <stop offset="40%" stopColor="#f4e04d" />
+              <stop offset="60%" stopColor="#5ec98f" />
+              <stop offset="80%" stopColor="#59a5ff" />
+              <stop offset="100%" stopColor="#b07af5" />
+            </linearGradient>
+            <path id="voyager-arc" d="M 40 145 A 330 330 0 0 1 520 145" fill="none" />
+          </defs>
+          <text
+            fill="url(#voyager-rainbow)"
+            fontSize="58"
+            fontWeight="800"
+            letterSpacing="16"
+            fontFamily="var(--font-geist-mono), ui-monospace, monospace"
+          >
+            <textPath href="#voyager-arc" startOffset="50%" textAnchor="middle">
+              VOYAGER
+            </textPath>
+          </text>
+        </svg>
+
         {/* Astronaut — dual-layer crossfade, float animation on container */}
         <div className="relative w-64 h-64 animate-float-idle mb-6">
           {/* Back layer — always visible */}
@@ -210,11 +208,9 @@ export const VoyagerLanding = () => {
           )}
         </div>
 
-        {/* Welcome line — fades in when ready */}
-        <p className={`text-slate-400 text-sm mb-8 text-center max-w-md transition-opacity duration-700 ${
-          welcomeLine ? 'opacity-100' : 'opacity-0'
-        }`}>
-          {welcomeLine ?? '\u00A0'}
+        {/* Subtitle — retro gradient lettering */}
+        <p className="mb-8 text-center text-base font-bold tracking-[0.35em] text-transparent bg-clip-text bg-gradient-to-r from-[#f7a34b] via-[#f4e04d] to-[#59a5ff]">
+          let&apos;s go together
         </p>
       </div>
 

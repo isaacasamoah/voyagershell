@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { UIMessage } from 'ai';
-import { Terminal, Ship, ChevronDown } from 'lucide-react';
+import { Terminal, Ship } from 'lucide-react';
 import { UserMessage, AssistantMessage, AstronautState, TaskCard, type TaskProgress } from '@/components/chat';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
@@ -30,8 +30,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const [inputValue, setInputValue] = useState('');
 
   // Voyage picker
-  const [showVoyagePicker, setShowVoyagePicker] = useState(false);
-  const voyagePickerRef = useRef<HTMLDivElement>(null);
 
   // Auth state
   const { isAuthenticated, isLoading: isAuthLoading, sendMagicLink, signOut } = useAuth();
@@ -180,26 +178,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     setInputValue(action);
   };
 
-  // Voyage picker toggle
-  const handleVoyageChipClick = useCallback(() => {
-    setShowVoyagePicker(prev => !prev);
-  }, []);
-
-  // Close voyage picker on click outside
-  useEffect(() => {
-    if (!showVoyagePicker) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (voyagePickerRef.current && !voyagePickerRef.current.contains(e.target as Node)) {
-        setShowVoyagePicker(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showVoyagePicker]);
-
-  // Switch voyage context from picker (client-side state change + URL update)
+  // Apply a voyage switch to client state + URL. Invoked by the conversational
+  // switch path (switch_voyage tool result) and ask_captain picker — never by
+  // header chrome; the $VOY chip is a read-only indicator.
   const handleVoyageSwitch = useCallback((slug: string | null) => {
-    setShowVoyagePicker(false);
     if (slug === null) {
       setCurrentVoyage(null);
       window.history.replaceState({}, '', window.location.pathname);
@@ -366,65 +348,22 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
               <div className="h-4 w-[1px] bg-white/10 mx-1"></div>
 
               <div className="flex gap-2 overflow-hidden min-w-0">
-                {/* Voyage context chip — click toggles dropdown picker */}
-                <div ref={voyagePickerRef} className="relative shrink-0">
+                {/* Voyage context chip — READ-ONLY indicator. Switching is
+                    conversational only (switch verb → tool → handshake). */}
+                <div className="relative shrink-0">
                   {currentVoyage ? (
-                    <button
-                      type="button"
-                      onClick={handleVoyageChipClick}
-                      className="px-2 py-1 rounded-sm border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs flex items-center gap-2 cursor-pointer hover:bg-purple-500/20 transition shadow-[0_0_10px_rgba(168,85,247,0.1)] min-w-0"
-                    >
+                    <div className="px-2 py-1 rounded-sm border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs flex items-center gap-2 shadow-[0_0_10px_rgba(168,85,247,0.1)] min-w-0">
                       <Ship size={10} className="shrink-0" />
                       <span className="opacity-30 font-semibold shrink-0">$VOY:</span>
                       <span className="truncate max-w-[120px]">{currentVoyage.name.toUpperCase().replace(/\s+/g, '_')}</span>
-                      <ChevronDown size={10} className={`shrink-0 transition-transform ${showVoyagePicker ? 'rotate-180' : ''}`} />
-                    </button>
+                    </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleVoyageChipClick}
-                      className="px-2 py-1 rounded-sm border border-slate-700 bg-slate-800/50 text-slate-400 text-xs flex items-center gap-2 cursor-pointer hover:bg-slate-700/50 transition"
-                    >
+                    <div className="px-2 py-1 rounded-sm border border-slate-700 bg-slate-800/50 text-slate-400 text-xs flex items-center gap-2">
                       <Ship size={10} className="shrink-0" />
                       <span className="opacity-30 font-semibold">$VOY:</span> PERSONAL
-                      <ChevronDown size={10} className={`shrink-0 transition-transform ${showVoyagePicker ? 'rotate-180' : ''}`} />
-                    </button>
-                  )}
-
-                  {/* Voyage picker dropdown */}
-                  {showVoyagePicker && (
-                    <div className="absolute top-full left-0 mt-1 min-w-[200px] bg-[#0a0a0a] border border-white/10 rounded-md shadow-2xl overflow-hidden z-50">
-                      <button
-                        type="button"
-                        onClick={() => handleVoyageSwitch(null)}
-                        className={`w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition ${
-                          !currentVoyage
-                            ? 'bg-indigo-500/10 text-indigo-300'
-                            : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                        }`}
-                      >
-                        <span className="opacity-50">~</span>
-                        <span>Personal</span>
-                        {!currentVoyage && <span className="ml-auto text-[10px] opacity-50">active</span>}
-                      </button>
-                      {voyages.map((v) => (
-                        <button
-                          key={v.slug}
-                          type="button"
-                          onClick={() => handleVoyageSwitch(v.slug)}
-                          className={`w-full px-3 py-2 text-xs text-left flex items-center gap-2 transition ${
-                            currentVoyage?.slug === v.slug
-                              ? 'bg-purple-500/10 text-purple-300'
-                              : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                          }`}
-                        >
-                          <Ship size={10} className="shrink-0 opacity-50" />
-                          <span className="truncate">{v.name}</span>
-                          <span className="ml-auto text-[10px] opacity-40">{v.role}</span>
-                        </button>
-                      ))}
                     </div>
                   )}
+
                 </div>
                 {/* Conversation context chip — server-confirmed title only, never echoes user input */}
                 <div className="px-2 py-1 rounded-sm border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs flex items-center gap-2 min-w-0">
