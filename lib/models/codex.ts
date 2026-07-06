@@ -27,21 +27,70 @@ export interface CodexCredential {
 }
 
 /**
- * The ChatGPT backend requires `store: false` on every Responses call — and it
- * must be set via the SDK (not just the HTTP body), so the SDK serializes
- * function-call items INLINE rather than as stored-item references the backend
- * (store:false) can't resolve. This middleware injects it into every call so
- * all call sites stay backend-agnostic.
+ * Codex-backend compatibility middleware. The ChatGPT backend has hard
+ * constraints the public API doesn't (all verified live, 2026-07-06):
+ *
+ * 1. `store: false` required on every call — and set via the SDK (not the HTTP
+ *    body) so function-call items serialize INLINE rather than as stored-item
+ *    references the backend can't resolve.
+ * 2. `max_output_tokens` is an unsupported parameter → 400. Strip it (and the
+ *    sampling params reasoning models reject) from every call.
+ * 3. `stream: true` required — non-streaming calls 400 with "Stream must be
+ *    set to true". `wrapGenerate` satisfies generateText/generateObject
+ *    callers by running the stream internally and aggregating the result.
  */
-const storeFalseMiddleware: LanguageModelMiddleware = {
+const codexCompatMiddleware: LanguageModelMiddleware = {
   specificationVersion: 'v3',
   transformParams: async ({ params }) => ({
     ...params,
+    maxOutputTokens: undefined, // unsupported parameter on the codex backend
+    temperature: undefined,
+    topP: undefined,
+    frequencyPenalty: undefined,
+    presencePenalty: undefined,
     providerOptions: {
       ...params.providerOptions,
       openai: { ...(params.providerOptions?.openai ?? {}), store: false },
     },
   }),
+  wrapGenerate: async ({ doStream }) => {
+    // Backend only streams — aggregate the stream into a generate result.
+    const { stream, ...rest } = await doStream()
+    const reader = stream.getReader()
+    const content: Record<string, unknown>[] = []
+    const textParts = new Map<string, string>()
+    let finishReason: unknown = 'stop'
+    let usage: unknown = {}
+    let warnings: unknown[] = []
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const part = value as { type: string } & Record<string, unknown>
+      switch (part.type) {
+        case 'stream-start':
+          warnings = (part.warnings as unknown[]) ?? []
+          break
+        case 'text-delta': {
+          const id = (part.id as string) ?? 'text-0'
+          textParts.set(id, (textParts.get(id) ?? '') + ((part.delta as string) ?? ''))
+          break
+        }
+        case 'tool-call':
+          content.push({ ...part })
+          break
+        case 'finish':
+          finishReason = part.finishReason ?? 'stop'
+          usage = part.usage ?? usage
+          break
+        case 'error':
+          throw part.error
+        default:
+          break
+      }
+    }
+    textParts.forEach((text) => content.push({ type: 'text', text }))
+    return { content, finishReason, usage, warnings, ...rest } as never
+  },
 }
 
 /**
@@ -64,7 +113,7 @@ export const createCodexModel = (cred: CodexCredential): LanguageModel => {
   // differs — same reason the app pins one provider version in package.json.
   const wrapped = wrapLanguageModel({
     model: provider.responses(CODEX_MODEL) as never,
-    middleware: storeFalseMiddleware,
+    middleware: codexCompatMiddleware,
   })
   return wrapped as unknown as LanguageModel
 }
