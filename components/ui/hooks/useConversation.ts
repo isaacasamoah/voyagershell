@@ -74,9 +74,16 @@ export const useConversation = ({
   useEffect(() => {
     if (isAuthLoading) return
     if (!isAuthenticated) {
+      setConversationId(null)
+      setConversationTitle(null)
       setIsLoadingConversation(false)
       return
     }
+
+    let cancelled = false
+    setIsLoadingConversation(true)
+    setConversationId(null)
+    setConversationTitle(null)
 
     const fetchActiveConversation = async () => {
       try {
@@ -88,8 +95,12 @@ export const useConversation = ({
         if (!res.ok) throw new Error('Failed to fetch conversation')
 
         const data: ConversationResponse = await res.json()
+        if (cancelled) return
+
         setConversationId(data.conversation.id)
         setConversationTitle(data.conversation.title)
+        autoSentCount.current = 0
+        messageTimestamps.current = new Map()
 
         if (data.messages.length > 0) {
           const uiMessages = data.messages.map(apiMessageToUIMessage)
@@ -119,13 +130,16 @@ export const useConversation = ({
 
         log.voyage('Loaded conversation', { conversationId: data.conversation.id, voyageSlug: voyageSlug ?? 'personal' })
       } catch (error) {
-        log.voyage('Failed to fetch conversation', { error: String(error) }, 'error')
+        if (!cancelled) log.voyage('Failed to fetch conversation', { error: String(error) }, 'error')
       } finally {
-        setIsLoadingConversation(false)
+        if (!cancelled) setIsLoadingConversation(false)
       }
     }
 
     fetchActiveConversation()
+    return () => {
+      cancelled = true
+    }
   }, [setMessages, isAuthenticated, isAuthLoading, currentVoyage?.slug])
 
   // Hidden welcome prompt — triggers Voyager's creative welcome without visible user message
