@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Terminal } from 'lucide-react'
+import { VoyagerWordmark } from '@/components/ui/VoyagerWordmark'
 
 // After magic link callback, shows confirmation and redirects.
 // Broadcasts auth_complete to original tab via BroadcastChannel.
@@ -37,7 +38,7 @@ export default function AuthCompletePage() {
     <div className="min-h-screen bg-[#050505] text-slate-300 font-mono text-sm flex flex-col items-center justify-center gap-6">
       <div className="flex items-center gap-2 text-indigo-400">
         <Terminal size={16} />
-        <span className="font-bold tracking-wider">VOYAGER_SHELL</span>
+        <VoyagerWordmark variant="dock" shell />
       </div>
       <p className="text-green-500">&#10003; signed in</p>
       <p className="text-slate-500 text-xs">

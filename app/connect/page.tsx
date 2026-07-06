@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from 'lucide-react'
 import { AstronautState } from '@/components/chat'
+import { VoyagerWordmark } from '@/components/ui/VoyagerWordmark'
 
 // Connect your ChatGPT subscription as Voyager's brain — device-code flow.
 // The one hard prerequisite (OpenAI-side): Settings → Security →
@@ -87,7 +88,7 @@ export default function ConnectPage() {
     <div className="min-h-screen bg-[#050505] text-slate-300 font-mono text-sm flex flex-col">
       <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] px-4 py-3 flex items-center gap-2 text-indigo-400">
         <Terminal size={16} />
-        <span className="font-bold tracking-wider">VOYAGER_SHELL</span>
+        <VoyagerWordmark variant="dock" shell />
         <span className="text-slate-600 text-xs ml-2">~/connect</span>
       </div>
 
