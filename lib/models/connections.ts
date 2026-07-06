@@ -128,13 +128,9 @@ const refreshRow = async (row: ConnectionRow, payload: OAuthPayload): Promise<st
   }
 }
 
-/**
- * Get a usable codex credential for a user, refreshing if near expiry.
- * Returns null when no active subscription connection exists.
- */
-export const getActiveCodexConnection = async (
-  userId: string,
-): Promise<CodexCredential | null> => {
+/** Find the user's own active connection, else one shared to their household
+ *  voyage (the voyage IS the household — migration 035). */
+const findConnectionRow = async (userId: string): Promise<ConnectionRow | null> => {
   const { data, error } = await table()
     .select('*')
     .eq('user_id', userId)
@@ -147,9 +143,51 @@ export const getActiveCodexConnection = async (
     log.api('Failed to read brain connection', { error: error.message }, 'warn')
     return null
   }
-  if (!data) return null
+  if (data) return data as ConnectionRow
 
-  const row = data as ConnectionRow
+  // Household fallback — TESTING SCOPE ONLY. Gated to the single voyage named
+  // by HOUSEHOLD_SHARE_VOYAGE (unset = feature off). Deliberately NOT a
+  // general multi-user-subscription mechanism; it exists so the household can
+  // test together on one plan.
+  const householdSlug = process.env.HOUSEHOLD_SHARE_VOYAGE
+  if (!householdSlug) return null
+
+  const admin = getAdminClient() as unknown as { from: (t: string) => any }
+  const { data: membership, error: mErr } = await admin
+    .from('voyage_members')
+    .select('voyage_id, voyages!inner(slug)')
+    .eq('user_id', userId)
+    .eq('voyages.slug', householdSlug)
+    .maybeSingle()
+  if (mErr || !membership) return null
+
+  const { data: shared, error: sErr } = await table()
+    .select('*')
+    .eq('shared_voyage_slug', householdSlug)
+    .eq('provider', 'openai')
+    .eq('kind', 'subscription_oauth')
+    .eq('status', 'active')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (sErr) {
+    log.api('Failed to read household connection', { error: sErr.message }, 'warn')
+    return null
+  }
+  return (shared as ConnectionRow) ?? null
+}
+
+/**
+ * Get a usable codex credential for a user — their own connection, else the
+ * household voyage's shared one — refreshing if near expiry.
+ * Returns null when nothing resolves.
+ */
+export const getActiveCodexConnection = async (
+  userId: string,
+): Promise<CodexCredential | null> => {
+  const row = await findConnectionRow(userId)
+  if (!row) return null
+
   const payload = decodePayload(row)
 
   const expMs = row.token_expires_at ? Date.parse(row.token_expires_at) : 0
