@@ -82,16 +82,6 @@ body {
   }
 }
 
-/* listening: minimal bob + breathing. Still, attentive — "holding position" */
-@keyframes float-listening {
-  0%, 100% {
-    transform: translateY(0) rotate(0deg) scale(1);
-  }
-  50% {
-    transform: translateY(-3px) rotate(0.3deg) scale(1.02);
-  }
-}
-
 /* celebrating: energetic drift + pronounced rotation + scale bounce. Joyful — "weightless celebration" */
 @keyframes float-celebrating {
   0%, 100% {
@@ -126,10 +116,6 @@ body {
 .animate-float-searching {
   will-change: transform;
   animation: float-searching 8s ease-in-out infinite;
-}
-
-.animate-float-listening {
-  animation: float-listening 5s ease-in-out infinite;
 }
 
 .animate-float-celebrating {
