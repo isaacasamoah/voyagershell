@@ -185,7 +185,7 @@ export const pollDeviceAuth = async (
   })
   if (res.status === 403 || res.status === 404) return { status: 'pending' }
   if (!res.ok) {
-    throw new Error(`Device auth poll failed: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`)
+    throw new Error(`openai device-auth hiccup (poll) — usually temporary, grab a fresh code. HTTP ${res.status} ${(await res.text()).slice(0, 200)}`)
   }
   const json = (await res.json()) as { authorization_code: string; code_verifier: string }
   if (!json.authorization_code || !json.code_verifier) {
@@ -204,7 +204,7 @@ export const pollDeviceAuth = async (
     }),
   })
   if (!exchange.ok) {
-    throw new Error(`Device auth exchange failed: HTTP ${exchange.status} ${(await exchange.text()).slice(0, 200)}`)
+    throw new Error(`openai device-auth hiccup (exchange) — usually temporary, grab a fresh code. HTTP ${exchange.status} ${(await exchange.text()).slice(0, 200)}`)
   }
   const tokens = (await exchange.json()) as {
     access_token: string
