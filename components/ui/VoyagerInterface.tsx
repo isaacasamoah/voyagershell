@@ -372,9 +372,20 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       return true;
     });
   }, [messages, autoSentCount]);
-  const errorText = error?.message?.trim().startsWith('{')
-    ? "that one didn't get through. try again?"
-    : (error?.message || "that one didn't get through. try again?");
+  const errorText = (() => {
+    const raw = error?.message?.trim() ?? '';
+    if (raw.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.error === 'voyage_mismatch') {
+          const here = parsed.expected ?? 'your personal space';
+          return `this conversation lives in ${here}, but the link points at ${parsed.received}. say "switch to ${parsed.received}" and I'll take you there.`;
+        }
+      } catch { /* fall through to the generic line */ }
+      return "that one didn't get through. try again?";
+    }
+    return raw || "that one didn't get through. try again?";
+  })();
 
   return (
     <div className={`min-h-screen bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden relative ${className || ''}`}>

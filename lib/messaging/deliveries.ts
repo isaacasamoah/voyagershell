@@ -74,12 +74,30 @@ export const stampReceipts = async (
     .in('id', deliveryIds)
     .eq('recipient_user_id', userId) // ownership gate
     .is(stamp.seen ? 'seen_at' : 'delivered_at', null) // forward-only, no re-stamp
-    .select('id')
+    .select('id, event_id')
   if (error) {
     log.api('Receipt stamp failed', { error: error.message }, 'error')
     throw new Error(error.message)
   }
-  return { updatedIds: ((data ?? []) as Array<{ id: string }>).map((row) => row.id) }
+  const rows = (data ?? []) as Array<{ id: string; event_id: string }>
+
+  // Bridge to the awareness lane: once the wire has rendered a message
+  // (delivered), the weave must not re-surface it. Stamps the SAME state
+  // markDelivered writes, so loadAwareness skips it. Temporary two-ledger
+  // bridge — dies in the M1 clean-cut (single delivery truth).
+  if (stamp.delivered && rows.length > 0) {
+    const eventIds = Array.from(new Set(rows.map((r) => r.event_id)))
+    const { error: bridgeError } = await (getAdminClient() as unknown as { from: (t: string) => any })
+      .from('knowledge_current')
+      .update({ delivery_status: 'delivered' })
+      .in('event_id', eventIds)
+      .eq('delivery_status', 'pending')
+    if (bridgeError) {
+      log.api('Weave bridge stamp failed', { error: bridgeError.message }, 'error')
+    }
+  }
+
+  return { updatedIds: rows.map((row) => row.id) }
 }
 
 export const fanOutDeliveries = async (
