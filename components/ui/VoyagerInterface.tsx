@@ -372,15 +372,29 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       return true;
     });
   }, [messages, autoSentCount]);
-  const errorText = error?.message?.trim().startsWith('{')
-    ? "that one didn't get through. try again?"
-    : (error?.message || "that one didn't get through. try again?");
+  const errorText = (() => {
+    const raw = error?.message?.trim() ?? '';
+    if (raw.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.error === 'voyage_mismatch') {
+          const here = parsed.expected ?? 'your personal space';
+          return `this conversation lives in ${here}, but the link points at ${parsed.received}. say "switch to ${parsed.received}" and I'll take you there.`;
+        }
+      } catch { /* fall through to the generic line */ }
+      return "that one didn't get through. try again?";
+    }
+    return raw || "that one didn't get through. try again?";
+  })();
 
   return (
     <div className={`min-h-screen bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden relative ${className || ''}`}>
 
-      {/* CONTEXT BAR - Fixed header */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl overflow-hidden">
+      {/* CONTEXT BAR — fixed header. Hidden while the hero owns the screen;
+          the rainbow hands identity over to the header on the first message. */}
+      <div className={`fixed top-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl overflow-hidden transition-all duration-700 ease-in-out ${
+        hasUserTyped ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full pointer-events-none'
+      }`}>
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex items-center gap-2 text-indigo-400 shrink-0">
             <Terminal size={16} />
@@ -432,20 +446,20 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
       {/* THE STREAM — astronaut band + scrollable messages
           Padding: header (52px) + astronaut band (280px) = 332px in conversation mode */}
-      <div className="max-w-2xl mx-auto px-4 pb-48" style={{ paddingTop: hasUserTyped ? '332px' : '52px' }}>
+      <div className="max-w-2xl mx-auto px-4 pb-48" style={{ paddingTop: hasUserTyped ? '332px' : '0px' }}>
 
         {/* ASTRONAUT BAND — fixed below header in conversation mode */}
         <div
           className={`z-40 flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
             !hasUserTyped
-              ? 'sticky top-[52px] min-h-[calc(100vh-52px-120px)] justify-center'
+              ? 'sticky top-0 min-h-[calc(100vh-120px)] justify-center'
               : 'fixed top-[52px] left-0 right-0 h-[280px] justify-center bg-[#050505] overflow-hidden'
           }`}
         >
           {!hasUserTyped && (
-            <VoyagerWordmark variant="hero" className="-mb-20 scale-[0.74] sm:-mb-32 sm:scale-90" />
+            <VoyagerWordmark variant="hero" className="-mb-12 scale-[0.74] sm:-mb-32 sm:scale-90" />
           )}
-          <div className="transition-all duration-700 ease-in-out scale-[0.88] sm:scale-100">
+          <div className={`transition-all duration-700 ease-in-out ${!hasUserTyped ? 'scale-[0.62]' : 'scale-[0.88]'} sm:scale-100`}>
             <AstronautState state={astronautState} beat={astronautBeat} size={astronautSize} />
           </div>
           {!hasUserTyped && (

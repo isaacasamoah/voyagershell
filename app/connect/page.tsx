@@ -157,7 +157,7 @@ export default function ConnectPage() {
                 </a>{' '}
                 → turn ON <span className="text-slate-200">&ldquo;Allow device code login&rdquo;</span>.
                 <span className="block text-xs text-slate-600 mt-1">
-                  it&apos;s off by default — without it, the next step silently fails.
+                  required — if this is OFF, device login silently fails. and if OpenAI asks you to verify a phone number during approval, complete it on their page; we&apos;ll keep waiting here.
                 </span>
               </li>
               <li>

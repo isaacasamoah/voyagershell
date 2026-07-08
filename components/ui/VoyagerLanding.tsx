@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Terminal } from 'lucide-react'
 import { AstronautState } from '@/components/chat'
 import { VoyagerWordmark } from './VoyagerWordmark'
 import { useAuth } from '@/lib/auth/context'
@@ -143,21 +142,16 @@ export const VoyagerLanding = () => {
   return (
     <div className="min-h-screen bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden relative flex flex-col">
 
-      {/* HEADER */}
-      <div className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#050505] backdrop-blur-md px-4 py-3 flex items-center justify-between shadow-2xl">
-        <div className="flex items-center gap-2 text-indigo-400">
-          <Terminal size={16} />
-          <VoyagerWordmark variant="dock" shell />
-        </div>
-      </div>
+      {/* No header on the landing — the rainbow wordmark IS the identity.
+          The shell header belongs to conversation mode only. */}
 
       {/* CENTER — rainbow wordmark + astronaut + subtitle + email */}
-      <div className="flex-1 flex flex-col items-center justify-center pt-[52px] pb-[120px] px-4">
+      <div className="flex-1 flex flex-col items-center justify-center pb-[120px] px-4">
 
-        <VoyagerWordmark variant="hero" className="-mb-20 scale-[0.78] sm:-mb-32 sm:scale-100" />
+        <VoyagerWordmark variant="hero" className="-mb-12 scale-[0.78] sm:-mb-32 sm:scale-100" />
 
         {/* Astronaut — dual-layer crossfade, float animation on container */}
-        <div className="relative w-56 h-56 sm:w-64 sm:h-64 animate-float-idle mb-4 sm:mb-6 -translate-x-3 sm:-translate-x-4">
+        <div className="relative w-36 h-36 sm:w-64 sm:h-64 animate-float-idle mb-4 sm:mb-6 -translate-x-2 sm:-translate-x-4">
           {/* Back layer — always visible */}
           <img
             src={backSrc}
