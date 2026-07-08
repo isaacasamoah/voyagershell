@@ -193,6 +193,19 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messageCount, incomingMessageCount]);
 
+  // Composing flip collapses/restores the band's padding — re-anchor the
+  // latest message immediately so the reflow never reads as a jump.
+  useEffect(() => {
+    if (!hasUserTyped || !composing) return;
+    const t = window.setTimeout(() => {
+      // scrollIntoView aligns to the layout viewport's bottom — under the
+      // keyboard. Scroll to max instead: the composing bottom padding ends
+      // exactly above the deck, so max scroll = latest message visible.
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    }, 320); // just after the 300ms padding transition settles
+    return () => window.clearTimeout(t);
+  }, [composing, hasUserTyped]);
+
   // All messages go to Voyager — no intent detection, no slash commands, no auth gate
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -483,14 +496,22 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       {/* THE STREAM — astronaut band + scrollable messages
           Padding: header (52px) + astronaut band (280px) = 332px in conversation mode */}
       <div
-        className={`max-w-2xl mx-auto px-4 pb-48 transition-[padding] duration-700 ease-in-out ${
+        className={`max-w-2xl mx-auto px-4 pb-48 transition-[padding] duration-300 ease-out ${
           hasUserTyped ? (composing ? 'pt-[52px]' : 'pt-[222px] sm:pt-[332px]') : 'pt-0'
         }`}
+        style={{
+          // While composing, the keyboard + deck cover the bottom of the
+          // layout viewport — pad past them so the scroll anchor can place
+          // the latest message ABOVE the deck, not underneath the keyboard.
+          paddingBottom: composing ? `${192 + keyboardInset}px` : undefined,
+        }}
       >
 
         {/* ASTRONAUT BAND — fixed below header in conversation mode */}
         <div
-          className={`flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
+          className={`flex flex-col items-center pointer-events-none ${
+            hasUserTyped ? 'transition-all duration-300 ease-out' : 'transition-all duration-700 ease-in-out'
+          } ${
             !hasUserTyped
               ? 'z-40 sticky top-0 min-h-[calc(100dvh-120px)] justify-center'
               : composing
@@ -655,8 +676,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       >
         {/* Composing companion — the astronaut steps down beside your words */}
         <div
-          className={`absolute -top-16 right-3 pointer-events-none transition-all duration-500 ease-in-out ${
-            composing && hasUserTyped ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
+          className={`absolute -top-16 right-3 pointer-events-none transition-all ${
+            composing && hasUserTyped
+              ? 'duration-300 delay-150 ease-out opacity-100 translate-y-0'
+              : 'duration-150 ease-in opacity-0 translate-y-2'
           }`}
         >
           {composing && hasUserTyped && (
