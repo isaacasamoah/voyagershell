@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 // step-aside (composing mode).
 export const useKeyboardViewport = () => {
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const [viewportTop, setViewportTop] = useState(0);
   const [composing, setComposing] = useState(false);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export const useKeyboardViewport = () => {
       const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
       const phoneWidth = window.matchMedia('(max-width: 639px)').matches;
       setKeyboardInset(inset);
+      setViewportTop(vv.offsetTop);
       // 140px threshold separates keyboards from browser-chrome collapses
       setComposing(phoneWidth && inset > 140);
     };
@@ -40,6 +42,7 @@ export const useKeyboardViewport = () => {
         simulated = inset > 0;
         const phoneWidth = window.matchMedia('(max-width: 639px)').matches;
         setKeyboardInset(inset);
+        setViewportTop(0);
         setComposing(phoneWidth && inset > 140);
       };
     }
@@ -50,5 +53,5 @@ export const useKeyboardViewport = () => {
     };
   }, []);
 
-  return { keyboardInset, composing };
+  return { keyboardInset, viewportTop, composing };
 };
