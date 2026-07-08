@@ -232,7 +232,7 @@ const executeTellFallback = async (
     // Note: Sender confirmation is implicit — the LLM's response already contains
     // the claim ("I'll let Tom know") which triggered confabulation detection.
     // The reconciler makes that claim true. The user sees confirmation in the
-    // response text itself. Explicit awareness injection deferred — loadAwareness
+    // response text itself. Explicit awareness injection deferred — retrieval
     // filters out self-sent events (.neq('sender_user_id', userId)), so a new
     // "system notification" mechanism would be needed.
     return 'createMessageEvent'

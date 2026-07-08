@@ -11,12 +11,12 @@ import {
   retrieveForContinuity,
 } from '@/lib/conversation/continuity';
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
-import { emitMessageEvent, createMessageEvent, type KnowledgeNode, type AwarenessItem } from '@/lib/knowledge';
+import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker, resolveUserModelWithMeta } from '@/lib/models';
-import { updateLastSeen, markDelivered, assertVoyageMembership, VoyageMismatchError } from '@/lib/voyage';
+import { resolveSessionVoyage, SessionAccessError } from '@/lib/voyage';
 import { log } from '@/lib/debug';
 import { detectActionIntent } from '@/lib/shell/intent';
 import { reconcileActions } from '@/lib/shell/reconciler';
@@ -90,33 +90,24 @@ export const POST = async (req: Request) => {
     if (authResult instanceof Response) return authResult;
     const userId = authResult;
 
-    const { messages, conversationId, voyageSlug: requestedVoyageSlug, authState } = await req.json();
+    const { messages, conversationId, authState } = await req.json();
 
-    // No voyage context = personal space (voyage_id NULL is valid).
-    // When a voyageSlug is supplied, assert server-side membership before any
-    // voyage-scoped write — prevents cross-voyage data leaks (ORU-256).
+    // Messaging v2 — the session IS the context. Voyage is derived from the
+    // session (conversationId → session.voyage_id), never from a request
+    // field. No client/server reconciliation, no mismatch class: one source
+    // of truth. A message inherits this voyage, so it can never leak to a
+    // null/wrong voyage the way the old dual-channel model did.
     let voyageSlug: string | undefined = undefined;
-
-    if (requestedVoyageSlug) {
-      try {
-        await assertVoyageMembership(userId, requestedVoyageSlug, conversationId || undefined);
-        voyageSlug = requestedVoyageSlug; // only used after verification passes
-      } catch (err) {
-        if (err instanceof VoyageMismatchError) {
-          return new Response(
-            JSON.stringify({
-              error: 'voyage_mismatch',
-              expected: err.expected,
-              received: err.received,
-            }),
-            {
-              status: 403,
-              headers: { 'Content-Type': 'application/json' },
-            }
-          );
-        }
-        throw err; // unexpected error — let outer catch handle it
+    try {
+      voyageSlug = (await resolveSessionVoyage(conversationId || undefined, userId)) ?? undefined;
+    } catch (err) {
+      if (err instanceof SessionAccessError) {
+        return new Response(JSON.stringify({ error: 'session_access_denied' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
+      throw err;
     }
 
     if (!messages || !Array.isArray(messages)) {
@@ -254,10 +245,9 @@ export const POST = async (req: Request) => {
     let dynamicSuffix: string = '';
     let retrievedKnowledge: KnowledgeNode[] = [];
     let retrievalEventId: string | null = null;
-    let loadedAwarenessItems: AwarenessItem[] = [];
 
     try {
-      const { staticPrompt, dynamicPrompt, retrieval, awarenessItems } = await composeSystemPrompt(
+      const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(
         userId,
         {
           profile: { id: userId, displayName },
@@ -267,7 +257,6 @@ export const POST = async (req: Request) => {
           authState,
         }
       );
-      loadedAwarenessItems = awarenessItems;
       // Static prefix: core identity + preferences + pinned + tool strategy (cacheable)
       staticPrefix = staticPrompt + '\n\n' + toolStrategy;
       // Dynamic suffix: auth state, continuity context (per-turn, not cached)
@@ -440,11 +429,6 @@ export const POST = async (req: Request) => {
           }
         }
 
-        // Mark awareness items as delivered + update last_seen_at (fire-and-forget)
-        if (voyageSlug) {
-          waitUntil(markDelivered(userId, voyageSlug, loadedAwarenessItems));
-          waitUntil(updateLastSeen(userId, voyageSlug)); // backward compat
-        }
       },
     });
 

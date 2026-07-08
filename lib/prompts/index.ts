@@ -3,7 +3,7 @@
 // DSPy-compatible: pure functions, structured data
 
 import type { RetrievalResult } from '@/lib/retrieval';
-import { getPinnedKnowledge, loadPreferences, loadAwareness, curatePromptWindow, type KnowledgeNode, type AwarenessItem } from '@/lib/knowledge';
+import { getPinnedKnowledge, loadPreferences, curatePromptWindow, type KnowledgeNode } from '@/lib/knowledge';
 import { loadVoyageContext, formatVoyageContextSection } from '@/lib/voyage';
 import { formatCuratedWindow } from './format/user';
 
@@ -75,26 +75,23 @@ interface ComposeOptions {
  * Primary entry point used by chat routes.
  *
  * Returns staticPrompt (cacheable: identity + preferences + pinned),
- * dynamicPrompt (per-turn: auth state, continuity context, awareness),
- * and awarenessItems (for delivery marking in onFinish).
+ * dynamicPrompt (per-turn: auth state, continuity context).
  * The chat route places these in separate system messages for prompt caching.
  */
 export const composeSystemPrompt = async (
   userId: string,
   options?: ComposeOptions
-): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult; awarenessItems: AwarenessItem[] }> => {
+): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult }> => {
   const { profile, voyageSlug, sessionId, continuityContext, authState } = options ?? {};
   const startTime = Date.now();
 
-  // Load curated knowledge window, awareness items, and voyage context in parallel
-  const [curatedWindow, awarenessItems, voyageContext] = await Promise.all([
+  // Load curated knowledge window + voyage context in parallel. Message
+  // awareness is no longer woven into the prompt (v2) — messages are
+  // delivered on the wire and retrieved on demand, not re-narrated here.
+  const [curatedWindow, voyageContext] = await Promise.all([
     curatePromptWindow(userId, voyageSlug, undefined, sessionId).catch((error) => {
       console.warn('[Prompts] Failed to curate prompt window:', error);
       return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 };
-    }),
-    loadAwareness(userId, voyageSlug).catch((error) => {
-      console.warn('[Prompts] Failed to load awareness:', error);
-      return [] as AwarenessItem[];
     }),
     voyageSlug
       ? loadVoyageContext(voyageSlug, userId).catch((error) => {
@@ -183,15 +180,6 @@ export const composeSystemPrompt = async (
     dynamicParts.push(`# Conversation Context (from earlier)\n${continuityContext}`);
   }
 
-  // Awareness items (Sentinel-classified messages, delivery_status = 'pending')
-  if (awarenessItems.length > 0) {
-    const lines = awarenessItems.map(item => {
-      const prefix = item.tier === 'interrupt' ? 'URGENT:' : 'Also:'
-      return `${prefix} ${item.senderName} (${item.timeAgo}): ${item.content}`
-    })
-    dynamicParts.push('# Awareness\n' + lines.join('\n'))
-  }
-
   const dynamicPrompt = dynamicParts.length > 0
     ? dynamicParts.join('\n\n---\n\n')
     : '';
@@ -215,7 +203,6 @@ export const composeSystemPrompt = async (
     staticPrompt,
     dynamicPrompt,
     retrieval,
-    awarenessItems,
   };
 };
 

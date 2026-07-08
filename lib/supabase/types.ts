@@ -93,8 +93,6 @@ export type Database = {
           connected_to: string[] | null
           content: string
           context_snippet: string | null
-          deliver_after: string | null
-          delivery_status: string
           embedding: string | null
           entities: string[] | null
           event_id: string
@@ -105,7 +103,6 @@ export type Database = {
           sender_user_id: string | null
           session_id: string | null
           source_created_at: string
-          surfacing_tier: string | null
           topics: string[] | null
           updated_at: string
           user_id: string | null
@@ -118,8 +115,6 @@ export type Database = {
           connected_to?: string[] | null
           content: string
           context_snippet?: string | null
-          deliver_after?: string | null
-          delivery_status?: string
           embedding?: string | null
           entities?: string[] | null
           event_id: string
@@ -130,7 +125,6 @@ export type Database = {
           sender_user_id?: string | null
           session_id?: string | null
           source_created_at: string
-          surfacing_tier?: string | null
           topics?: string[] | null
           updated_at?: string
           user_id?: string | null
@@ -143,8 +137,6 @@ export type Database = {
           connected_to?: string[] | null
           content?: string
           context_snippet?: string | null
-          deliver_after?: string | null
-          delivery_status?: string
           embedding?: string | null
           entities?: string[] | null
           event_id?: string
@@ -155,7 +147,6 @@ export type Database = {
           sender_user_id?: string | null
           session_id?: string | null
           source_created_at?: string
-          surfacing_tier?: string | null
           topics?: string[] | null
           updated_at?: string
           user_id?: string | null
@@ -504,7 +495,6 @@ export type Database = {
         Row: {
           id: string
           joined_at: string
-          last_seen_at: string | null
           nickname: string | null
           notifications_enabled: boolean
           role: Database["public"]["Enums"]["voyage_role"]
@@ -515,7 +505,6 @@ export type Database = {
         Insert: {
           id?: string
           joined_at?: string
-          last_seen_at?: string | null
           nickname?: string | null
           notifications_enabled?: boolean
           role?: Database["public"]["Enums"]["voyage_role"]
@@ -526,7 +515,6 @@ export type Database = {
         Update: {
           id?: string
           joined_at?: string
-          last_seen_at?: string | null
           nickname?: string | null
           notifications_enabled?: boolean
           role?: Database["public"]["Enums"]["voyage_role"]

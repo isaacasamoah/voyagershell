@@ -50,12 +50,13 @@ export const useConversation = ({
   const authStateRef = useRef(authState)
   authStateRef.current = authState
 
-  // Create transport with dynamic body that reads current state via refs
+  // Messaging v2 — the chat body carries only the session id. Voyage is
+  // derived server-side from the session, so there's no voyageSlug channel to
+  // drift out of sync with the conversation.
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     body: () => ({
       conversationId: conversationIdRef.current,
-      voyageSlug: voyageSlugRef.current,
       authState: authStateRef.current,
     }),
   }), [])
