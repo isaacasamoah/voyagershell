@@ -68,7 +68,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
   // Mobile composing mode: keyboard up on a phone → the astronaut steps
   // aside (corner dock) and the input deck rides the keyboard.
-  const { keyboardInset, composing } = useKeyboardViewport();
+  const { keyboardInset, viewportTop, composing } = useKeyboardViewport();
 
   // Voyage context (fetch voyages, pending invites, URL params)
   const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
@@ -441,9 +441,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
       {/* CONTEXT BAR — fixed header. Hidden while the hero owns the screen;
           the rainbow hands identity over to the header on the first message. */}
-      <div className={`fixed top-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl overflow-hidden transition-all duration-700 ease-in-out ${
-        hasUserTyped ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full pointer-events-none'
-      }`}>
+      <div
+        className={`fixed top-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl overflow-hidden transition-all duration-700 ease-in-out ${
+          hasUserTyped ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full pointer-events-none'
+        }`}
+        style={{
+          // iOS pans fixed-top elements out of the visual viewport when the
+          // keyboard opens — pin the header to the visual viewport's top.
+          transform: hasUserTyped && composing && viewportTop > 0 ? `translateY(${viewportTop}px)` : undefined,
+          transition: composing ? 'none' : undefined,
+        }}
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex items-center gap-2 text-indigo-400 shrink-0">
             <Terminal size={16} />
@@ -510,7 +518,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         {/* ASTRONAUT BAND — fixed below header in conversation mode */}
         <div
           className={`flex flex-col items-center pointer-events-none ${
-            hasUserTyped ? 'transition-all duration-300 ease-out' : 'transition-all duration-700 ease-in-out'
+            hasUserTyped ? 'transition-all duration-200 ease-out' : 'transition-all duration-700 ease-in-out'
           } ${
             !hasUserTyped
               ? 'z-40 sticky top-0 min-h-[calc(100dvh-120px)] justify-center'
@@ -674,20 +682,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur border-t border-white/10 p-4 pb-6 transition-transform duration-200 ease-out"
         style={{ transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined }}
       >
-        {/* Composing companion — the astronaut steps down beside your words */}
-        <div
-          className={`absolute -top-16 right-3 pointer-events-none transition-all ${
-            composing && hasUserTyped
-              ? 'duration-300 delay-150 ease-out opacity-100 translate-y-0'
-              : 'duration-150 ease-in opacity-0 translate-y-2'
-          }`}
-        >
-          {composing && hasUserTyped && (
-            <div className="scale-[0.7] origin-bottom-right">
-              <AstronautState state={astronautState} beat={astronautBeat} size="sm" />
-            </div>
-          )}
-        </div>
         <div className="max-w-2xl mx-auto">
           {/* No brain connected — quiet honest pointer, not a wall */}
           {isAuthenticated && hasBrain === false && (

@@ -44,6 +44,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // Keyboard shrinks the layout viewport (supported browsers): fixed
+  // header/footer stay genuinely pinned while composing. Where unsupported,
+  // the visualViewport translates in VoyagerInterface compensate.
+  interactiveWidget: 'resizes-content',
 }
 
 export default function RootLayout({
