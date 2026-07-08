@@ -12,7 +12,7 @@ import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useDeliveries } from '@/lib/messaging/useDeliveries';
-import { useKeyboardViewport } from './hooks/useKeyboardViewport';
+import { useVisualViewport } from './hooks/useVisualViewport';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
 import { VoyagerWordmark } from './VoyagerWordmark';
@@ -29,7 +29,7 @@ interface VoyagerInterfaceProps {
 }
 
 export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState('');
 
   // Brain connection: null = still checking, false = none resolves (own or
@@ -68,7 +68,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
   // Mobile composing mode: keyboard up on a phone → the astronaut steps
   // aside (corner dock) and the input deck rides the keyboard.
-  const { keyboardInset, viewportTop, composing } = useKeyboardViewport();
+  const { height: shellHeight, offsetTop: shellTop, composing } = useVisualViewport();
 
   // Voyage context (fetch voyages, pending invites, URL params)
   const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
@@ -186,25 +186,19 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     }
   }, [status, messages, signOut]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Keep the newest message in view. The stream is the ONLY scroll container,
+  // so this is a single line — no page scroll, no dual anchors. Re-runs when
+  // the keyboard toggles (shell resizes) so nothing hides behind the input.
   const messageCount = messages.length;
   const incomingMessageCount = incomingMessages.length;
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messageCount, incomingMessageCount]);
-
-  // Composing flip collapses/restores the band's padding — re-anchor the
-  // latest message immediately so the reflow never reads as a jump.
-  useEffect(() => {
-    if (!hasUserTyped || !composing) return;
-    const t = window.setTimeout(() => {
-      // scrollIntoView aligns to the layout viewport's bottom — under the
-      // keyboard. Scroll to max instead: the composing bottom padding ends
-      // exactly above the deck, so max scroll = latest message visible.
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
-    }, 320); // just after the 300ms padding transition settles
-    return () => window.clearTimeout(t);
-  }, [composing, hasUserTyped]);
+    const el = streamRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    // shellHeight in deps: the keyboard shrinks the stream in several frames
+    // after composing flips — re-anchor on each so the newest line never
+    // slips below the fold (codex review).
+  }, [messageCount, incomingMessageCount, composing, shellHeight]);
 
   // All messages go to Voyager — no intent detection, no slash commands, no auth gate
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -437,21 +431,15 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   })();
 
   return (
-    <div className={`min-h-screen min-h-[100dvh] bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden overscroll-y-none relative ${className || ''}`}>
+    <div
+      className={`fixed top-0 left-0 right-0 h-[100svh] flex flex-col overflow-hidden bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 ${className || ''}`}
+      style={{ height: shellHeight ? `${shellHeight}px` : undefined, top: shellTop ? `${shellTop}px` : undefined }}
+    >
 
-      {/* CONTEXT BAR — fixed header. Hidden while the hero owns the screen;
-          the rainbow hands identity over to the header on the first message. */}
-      <div
-        className={`fixed top-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur-md px-4 h-[52px] flex items-center justify-between shadow-2xl overflow-hidden transition-all duration-700 ease-in-out ${
-          hasUserTyped ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full pointer-events-none'
-        }`}
-        style={{
-          // iOS pans fixed-top elements out of the visual viewport when the
-          // keyboard opens — pin the header to the visual viewport's top.
-          transform: hasUserTyped && composing && viewportTop > 0 ? `translateY(${viewportTop}px)` : undefined,
-          transition: composing ? 'none' : undefined,
-        }}
-      >
+      {/* HEADER — flex-none top row of the shell. No position:fixed, so it
+          cannot drift; only present once the conversation has started. */}
+      {hasUserTyped && (
+      <header className="flex-none relative bg-[#050505] px-4 h-[52px] flex items-center justify-between overflow-hidden">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="flex items-center gap-2 text-indigo-400 shrink-0">
             <Terminal size={16} />
@@ -496,62 +484,40 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             {displayName.toUpperCase().replace(/\s+/g, '_')}
           </div>
         )}
-        {hasUserTyped && (
-          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[#ff5f56]/30 via-[#5ec98f]/30 to-[#b07af5]/30" />
-        )}
-      </div>
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[#ff5f56]/30 via-[#5ec98f]/30 to-[#b07af5]/30" />
+      </header>
+      )}
 
-      {/* THE STREAM — astronaut band + scrollable messages
-          Padding: header (52px) + astronaut band (280px) = 332px in conversation mode */}
-      <div
-        className={`max-w-2xl mx-auto px-4 pb-48 transition-[padding] duration-300 ease-out ${
-          hasUserTyped ? (composing ? 'pt-[52px]' : 'pt-[222px] sm:pt-[332px]') : 'pt-0'
-        }`}
-        style={{
-          // While composing, the keyboard + deck cover the bottom of the
-          // layout viewport — pad past them so the scroll anchor can place
-          // the latest message ABOVE the deck, not underneath the keyboard.
-          paddingBottom: composing ? `${192 + keyboardInset}px` : undefined,
-        }}
-      >
+      {/* STREAM — the ONLY scroll container in the app. flex-1 fills the space
+          between header and input; the astronaut lives at the top of it. */}
+      <div ref={streamRef} className="flex-1 overflow-y-auto overscroll-contain">
+        <div className={`max-w-2xl mx-auto px-4 ${hasUserTyped ? 'py-8' : 'min-h-full flex flex-col justify-center'}`}>
 
-        {/* ASTRONAUT BAND — fixed below header in conversation mode */}
-        <div
-          className={`flex flex-col items-center pointer-events-none ${
-            hasUserTyped ? 'transition-all duration-200 ease-out' : 'transition-all duration-700 ease-in-out'
-          } ${
-            !hasUserTyped
-              ? 'z-40 sticky top-0 min-h-[calc(100dvh-120px)] justify-center'
-              : composing
-                ? 'z-40 fixed top-[52px] left-0 right-0 h-0 justify-center overflow-hidden opacity-0'
-                : 'z-40 fixed top-[52px] left-0 right-0 h-[170px] sm:h-[280px] justify-center bg-[#050505] overflow-hidden opacity-100'
-          }`}
-        >
-          {!hasUserTyped && (
-            <VoyagerWordmark variant="hero" className="-mb-12 scale-[0.74] sm:-mb-32 sm:scale-90" />
-          )}
-          <div className={`transition-all duration-700 ease-in-out ${
-            !hasUserTyped ? 'scale-[0.62] sm:scale-100' : 'scale-[0.55] sm:scale-100'
-          }`}>
-            <AstronautState state={astronautState} beat={astronautBeat} size={astronautSize} />
-          </div>
-          {!hasUserTyped && (
-            <p className="mt-1 sm:mt-5 text-center text-[11px] sm:text-xs tracking-[0.24em] sm:tracking-[0.5em] text-transparent bg-clip-text bg-gradient-to-r from-[#f7a34b] via-[#f4e04d] to-[#59a5ff] opacity-60">
-              let&apos;s go together
-            </p>
-          )}
-          {progressLabel && isStreaming && !composing && (
-            <div className="text-center text-xs text-slate-500 mt-1 animate-pulse">
-              {progressLabel}
+          {/* ASTRONAUT — the hero when untouched; a quiet band at the top of
+              the conversation once talking; absent while composing on mobile.
+              It's ordinary content in the scroll, so it just scrolls away. */}
+          {(!hasUserTyped || !composing) && (
+            <div className={`flex flex-col items-center pointer-events-none ${hasUserTyped ? 'mb-12' : ''}`}>
+              {!hasUserTyped && (
+                <VoyagerWordmark variant="hero" className="-mb-12 scale-[0.74] sm:-mb-32 sm:scale-90" />
+              )}
+              <div className={!hasUserTyped ? 'scale-[0.62] sm:scale-100' : 'scale-[0.5] sm:scale-75'}>
+                <AstronautState state={astronautState} beat={astronautBeat} size={astronautSize} />
+              </div>
+              {!hasUserTyped && (
+                <p className="mt-1 sm:mt-5 text-center text-[11px] sm:text-xs tracking-[0.24em] sm:tracking-[0.5em] text-transparent bg-clip-text bg-gradient-to-r from-[#f7a34b] via-[#f4e04d] to-[#59a5ff] opacity-60">
+                  let&apos;s go together
+                </p>
+              )}
+              {progressLabel && isStreaming && (
+                <div className="text-center text-xs text-slate-500 mt-2 animate-pulse">
+                  {progressLabel}
+                </div>
+              )}
             </div>
           )}
-          {/* Bottom gradient boundary — Voyager's territory fades into message space */}
-          {hasUserTyped && !composing && (
-            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-[#050505] pointer-events-none" />
-          )}
-        </div>
 
-        <div className="space-y-12">
+          <div className="space-y-12">
 
         {/* Messages — auto-sent user messages (hidden prompts) are filtered from rendering */}
         {visibleMessages.map((message, index) => {
@@ -672,16 +638,13 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           />
         ))}
 
-        {/* Scroll anchor */}
-        <div ref={messagesEndRef} />
-        </div>{/* end space-y-12 messages wrapper */}
-      </div>
+        </div>{/* end space-y-12 */}
+        </div>{/* end max-w content */}
+      </div>{/* end STREAM scroll container */}
 
-      {/* INPUT DECK — translates up to ride the mobile keyboard */}
-      <div
-        className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur border-t border-white/10 p-4 pb-6 transition-transform duration-200 ease-out"
-        style={{ transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined }}
-      >
+      {/* INPUT — flex-none bottom row. The shell shrinks with the keyboard,
+          so this sits right on it with no transform. */}
+      <footer className="flex-none bg-[#050505] border-t border-white/10 p-4 pb-6">
         <div className="max-w-2xl mx-auto">
           {/* No brain connected — quiet honest pointer, not a wall */}
           {isAuthenticated && hasBrain === false && (
@@ -730,7 +693,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             />
           </form>
         </div>
-      </div>
+      </footer>
     </div>
   );
 };
