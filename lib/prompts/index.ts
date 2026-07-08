@@ -42,7 +42,6 @@ export {
 import { composePrompt } from './compose';
 import { CORE_PROMPT } from './core';
 import { mergeUserProfile } from './defaults';
-import type { KnowledgeItem, RetrievedContext } from './types';
 
 // ============================================================================
 // PROMPT COMPOSITION — Main entry point for chat routes

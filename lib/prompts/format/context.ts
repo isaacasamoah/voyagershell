@@ -104,9 +104,6 @@ const truncateToTokens = (content: string, maxTokens: number): string => {
 
   return truncated + '\n\n[Additional context truncated]';
 };
-
-;
-
 /**
  * Estimates token count for the formatted context.
  */

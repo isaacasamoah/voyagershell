@@ -186,7 +186,6 @@ export const updateVoyage = async (
       updates.settings = { ...current?.config, ...input.config };
     }
 
-
     const { data, error } = await supabase
       .from('voyages')
       .update(updates)
@@ -333,21 +332,9 @@ export const getVoyageMembers = async (voyageId: string): Promise<VoyageMember[]
     return [];
   }
 };
-
-;
-
-;
-
-;
-
 // =============================================================================
 // INVITE MANAGEMENT
 // =============================================================================
-
-;
-
-;
-
 /**
  * Regenerate a voyage's invite code (captain only).
  */
