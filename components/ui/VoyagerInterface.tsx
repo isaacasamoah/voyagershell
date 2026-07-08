@@ -457,9 +457,9 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           }`}
         >
           {!hasUserTyped && (
-            <VoyagerWordmark variant="hero" className="-mb-20 scale-[0.74] sm:-mb-32 sm:scale-90" />
+            <VoyagerWordmark variant="hero" className="-mb-12 scale-[0.74] sm:-mb-32 sm:scale-90" />
           )}
-          <div className="transition-all duration-700 ease-in-out scale-[0.88] sm:scale-100">
+          <div className={`transition-all duration-700 ease-in-out ${!hasUserTyped ? 'scale-[0.62]' : 'scale-[0.88]'} sm:scale-100`}>
             <AstronautState state={astronautState} beat={astronautBeat} size={astronautSize} />
           </div>
           {!hasUserTyped && (

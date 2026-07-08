@@ -148,10 +148,10 @@ export const VoyagerLanding = () => {
       {/* CENTER — rainbow wordmark + astronaut + subtitle + email */}
       <div className="flex-1 flex flex-col items-center justify-center pb-[120px] px-4">
 
-        <VoyagerWordmark variant="hero" className="-mb-20 scale-[0.78] sm:-mb-32 sm:scale-100" />
+        <VoyagerWordmark variant="hero" className="-mb-12 scale-[0.78] sm:-mb-32 sm:scale-100" />
 
         {/* Astronaut — dual-layer crossfade, float animation on container */}
-        <div className="relative w-56 h-56 sm:w-64 sm:h-64 animate-float-idle mb-4 sm:mb-6 -translate-x-3 sm:-translate-x-4">
+        <div className="relative w-36 h-36 sm:w-64 sm:h-64 animate-float-idle mb-4 sm:mb-6 -translate-x-2 sm:-translate-x-4">
           {/* Back layer — always visible */}
           <img
             src={backSrc}
