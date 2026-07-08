@@ -13,6 +13,9 @@ export const useVoyageContext = ({
   isAuthLoading,
 }: UseVoyageContextParams) => {
   const [currentVoyage, setCurrentVoyage] = useState<VoyageMembership | null>(null)
+  // Has the initial voyage resolution finished? Gates the first conversation
+  // load so it can't race ahead and stick on personal before resume resolves.
+  const [voyageResolved, setVoyageResolved] = useState(false)
   const [voyages, setVoyages] = useState<VoyageMembership[]>([])
   const [displayName, setDisplayName] = useState<string | null>(null)
 
@@ -44,6 +47,8 @@ export const useVoyageContext = ({
       }
     } catch (error) {
       log.voyage('Failed to fetch voyages', { error: String(error) }, 'error')
+    } finally {
+      setVoyageResolved(true)
     }
   }, [])
 
@@ -85,6 +90,7 @@ export const useVoyageContext = ({
 
   return {
     currentVoyage,
+    voyageResolved,
     setCurrentVoyage,
     voyages,
     displayName,
