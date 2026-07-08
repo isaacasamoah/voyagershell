@@ -698,74 +698,6 @@ export const acceptVoyageInvite = async (
 }
 
 // =============================================================================
-// DELIVERY MARKING (Sentinel)
-// =============================================================================
-
-/**
- * Mark awareness items as delivered after they've been surfaced in a turn.
- * Updates delivery_status from 'pending' to 'delivered' — these items
- * will never re-appear in loadAwareness().
- *
- * Called in onFinish (after assistant response) — fire-and-forget via waitUntil.
- * Only marks items that were loaded for this turn (not all pending).
- */
-export const markDelivered = async (
-  userId: string,
-  voyageSlug: string,
-  awarenessItems: Array<{ eventId: string }>
-): Promise<void> => {
-  if (awarenessItems.length === 0) return
-
-  const supabase = getAdminSupabase()
-  const eventIds = awarenessItems.map(item => item.eventId)
-
-  const { error } = await supabase
-    .from('knowledge_current')
-    .update({ delivery_status: 'delivered' })
-    .in('event_id', eventIds)
-    .eq('delivery_status', 'pending')
-
-  if (error) {
-    log.voyage('markDelivered error', { error: error.message }, 'error')
-  }
-}
-
-// =============================================================================
-// LAST SEEN TRACKING
-// =============================================================================
-
-/**
- * Update last_seen_at for a user in a voyage.
- * Called in onFinish (after assistant response) — fire-and-forget via waitUntil.
- * Messages surfaced THIS turn remain "pending" until Voyager has responded.
- */
-export const updateLastSeen = async (userId: string, voyageSlug: string): Promise<void> => {
-  const supabase = getAdminSupabase();
-  try {
-    // Resolve voyage_id from slug
-    const { data: voyage, error: voyageError } = await supabase
-      .from('voyages')
-      .select('id')
-      .eq('slug', voyageSlug)
-      .single();
-
-    if (voyageError || !voyage) return;
-
-    const { error } = await supabase
-      .from('voyage_members')
-      .update({ last_seen_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('voyage_id', voyage.id);
-
-    if (error) {
-      log.voyage('updateLastSeen error', { error: error.message, userId, voyageSlug }, 'error');
-    }
-  } catch (error) {
-    log.voyage('updateLastSeen error', { error: String(error), userId, voyageSlug }, 'error');
-  }
-};
-
-// =============================================================================
 // VOYAGE CONTEXT (for system prompt — F1: Membership Awareness)
 // =============================================================================
 
@@ -794,6 +726,15 @@ const formatActivityAge = (date: Date | null): string => {
   const days = Math.floor(hours / 24)
   return `${days}d ago`
 }
+
+/**
+ * Load voyage context for the system prompt.
+ * Fetches voyage metadata, members, and per-member activity pulse in parallel.
+ * Returns null if voyage not found.
+ *
+ * Activity pulse: MAX(created_at) on knowledge_events per member in the voyage.
+ * Token budget: <= 150 tokens for <= 10 members.
+ */
 
 /**
  * Load voyage context for the system prompt.
@@ -902,164 +843,95 @@ export const formatVoyageContextSection = (ctx: VoyageContext): string => {
  * or when the user is not a member of the claimed voyage.
  * Callers should return HTTP 403.
  */
-export class VoyageMismatchError extends Error {
-  public readonly expected: string | null;
-  public readonly received: string;
-
-  constructor(expected: string | null, received: string) {
-    super(`voyage_mismatch: conversation belongs to voyage "${expected ?? 'personal'}", claimed "${received}"`)
-    this.name = 'VoyageMismatchError'
-    this.expected = expected
-    this.received = received
-  }
-}
-
 /**
  * Assert that `userId` is a member of the voyage identified by `slug`,
  * and (when `conversationId` is provided) that the conversation belongs
  * to that voyage.
  *
  * Returns the voyage's UUID (voyageId) on success.
- * Throws VoyageMismatchError on any mismatch — caller returns 403.
+ * (superseded by resolveSessionVoyage in messaging v2)
  *
  * Design: uses get_voyage_role RPC (returns NULL for non-members) to
  * verify membership, then optionally validates the session's voyage_id.
  */
-export const assertVoyageMembership = async (
-  userId: string,
-  slug: string,
-  conversationId?: string
-): Promise<string> => {
-  const supabase = getAdminSupabase()
-  log.voyage('assertVoyageMembership: verifying', { userId, slug, conversationId })
+/**
+ * SessionAccessError — the caller's conversationId points at a session they
+ * don't own. A hard 403 (security), distinct from "personal space".
+ */
+export class SessionAccessError extends Error {
+  constructor() {
+    super('session_access_denied')
+    this.name = 'SessionAccessError'
+  }
+}
 
-  // Step 1: Resolve voyage by slug and verify user membership in one round-trip.
-  // get_voyage_role returns the user's role or NULL if not a member.
+/**
+ * Messaging v2 — the session IS the context. Resolve a turn's voyage from the
+ * session it belongs to, not from a client-supplied field. One source of
+ * truth: the session's voyage_id. Returns the voyage slug, or null for
+ * personal space. Throws SessionAccessError if the session isn't the caller's.
+ */
+export const resolveSessionVoyage = async (
+  conversationId: string | undefined,
+  userId: string
+): Promise<string | null> => {
+  if (!conversationId) return null // no session yet → personal
+
+  const supabase = getAdminSupabase()
+  const { data: session, error } = await supabase
+    .from('sessions')
+    .select('user_id, voyage_id')
+    .eq('id', conversationId)
+    .maybeSingle()
+
+  if (error) {
+    // A DB/transport error is a 500, not a 403 — don't misreport it as an
+    // access denial (correctness review P3). Fail loud, not fail-closed-wrong.
+    log.voyage('resolveSessionVoyage: lookup error', { error: error.message, conversationId }, 'error')
+    throw new Error(`resolveSessionVoyage lookup failed: ${error.message}`)
+  }
+  // A supplied-but-unknown session id is rejected, not silently treated as
+  // personal — otherwise the route would emit an orphan knowledge event
+  // against a bogus session (codex review). Legit clients always hold a real
+  // conversationId from /api/conversation before sending.
+  if (!session) {
+    log.voyage('resolveSessionVoyage: unknown session', { conversationId }, 'warn')
+    throw new SessionAccessError()
+  }
+
+  const row = session as { user_id: string | null; voyage_id: string | null }
+  if (row.user_id !== userId) {
+    log.voyage('resolveSessionVoyage: ownership mismatch', { conversationId, sessionUser: row.user_id, caller: userId }, 'warn')
+    throw new SessionAccessError()
+  }
+  if (!row.voyage_id) return null // personal session
+
+  const { data: voyage } = await supabase
+    .from('voyages')
+    .select('slug')
+    .eq('id', row.voyage_id)
+    .maybeSingle()
+  const slug = (voyage as { slug: string } | null)?.slug ?? null
+  if (!slug) return null // dangling voyage_id → degrade to personal, safe
+
+  // Membership check — session creation does NOT verify membership (RLS only
+  // gates user_id), so a user could bind a session to a voyage they're not in.
+  // Verify per turn, as the old assertVoyageMembership did, before trusting the
+  // voyage for scoped context/writes (codex review, security).
   const { data: role, error: roleError } = await supabase.rpc('get_voyage_role', {
     p_voyage_slug: slug,
     p_user_id: userId,
   })
-
   if (roleError) {
-    log.voyage('assertVoyageMembership: get_voyage_role error', { error: roleError.message }, 'error')
-    throw new VoyageMismatchError(null, slug)
+    log.voyage('resolveSessionVoyage: role check failed', { error: roleError.message, slug }, 'error')
+    throw new Error(`resolveSessionVoyage role check failed: ${roleError.message}`)
   }
-
   if (!role) {
-    // User is not a member of the claimed voyage
-    log.voyage('assertVoyageMembership: user not a member', { userId, slug }, 'warn')
-    throw new VoyageMismatchError(null, slug)
+    log.voyage('resolveSessionVoyage: not a voyage member', { conversationId, slug, userId }, 'warn')
+    throw new SessionAccessError()
   }
-
-  // Step 2: Resolve the voyage's UUID from slug (needed for session check and downstream writes)
-  const { data: voyageRow, error: voyageError } = await supabase
-    .from('voyages')
-    .select('id')
-    .eq('slug', slug)
-    .single()
-
-  if (voyageError || !voyageRow) {
-    log.voyage('assertVoyageMembership: voyage not found', { slug }, 'error')
-    throw new VoyageMismatchError(null, slug)
-  }
-
-  const voyageId: string = (voyageRow as { id: string }).id
-
-  // Step 3: If a conversationId is provided, verify the session belongs to this voyage
-  // AND to this user. Two distinct checks:
-  //   a) Ownership: session.user_id must match the authenticated userId — prevents one
-  //      voyage member from claiming another member's conversationId.
-  //   b) Voyage match: session.voyage_id must match the claimed voyage's UUID — prevents
-  //      cross-voyage writes. NULL session.voyage_id (personal space) is a mismatch when
-  //      the client claims a voyage context.
-  // session row === null → conversation doesn't exist yet (first turn) → allow; it will be
-  // created scoped by getOrCreateActiveConversation later in the flow.
-  if (conversationId) {
-    const { data: session, error: sessionError } = await supabase
-      .from('sessions')
-      .select('voyage_id, user_id')
-      .eq('id', conversationId)
-      .maybeSingle()
-
-    if (sessionError) {
-      log.voyage('assertVoyageMembership: session lookup error', { error: sessionError.message, conversationId }, 'error')
-      throw new VoyageMismatchError(null, slug)
-    }
-
-    if (session) {
-      const sessionRow = session as { voyage_id: string | null; user_id: string | null }
-
-      // a) Ownership check: session must belong to the authenticated user
-      if (sessionRow.user_id !== userId) {
-        log.voyage('assertVoyageMembership: session user mismatch', {
-          conversationId,
-          sessionUserId: sessionRow.user_id,
-          requestingUserId: userId,
-        }, 'warn')
-        throw new VoyageMismatchError(null, slug)
-      }
-
-      // b) Voyage match: session.voyage_id must equal the claimed voyage's UUID.
-      // NULL session.voyage_id (personal space) does NOT match a claimed voyage.
-      if (sessionRow.voyage_id !== voyageId) {
-        // AUTO-BIND (wedge fix): a personal session claimed into a voyage the
-        // user verifiably belongs to. Privacy guard — rebind ONLY when the
-        // session is still empty; a session with history stays personal and
-        // falls through to the kind mismatch error (which steers the user to
-        // a conversational switch). Empty + member → bind and proceed:
-        // URL, session, and chip converge on the same voyage.
-        if (sessionRow.voyage_id === null) {
-          const { count: messageCount } = await supabase
-            .from('messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('session_id', conversationId)
-          if ((messageCount ?? 0) === 0) {
-            const { error: bindError } = await supabase
-              .from('sessions')
-              .update({ voyage_id: voyageId })
-              .eq('id', conversationId)
-              .is('voyage_id', null) // race guard: only bind a still-personal session
-            if (!bindError) {
-              log.voyage('assertVoyageMembership: auto-bound empty personal session', {
-                conversationId, voyageId, slug,
-              })
-              return voyageId
-            }
-            log.voyage('assertVoyageMembership: auto-bind failed, falling through', {
-              error: bindError.message, conversationId,
-            }, 'warn')
-          }
-        }
-
-        // The conversation belongs to a different scope (another voyage, or personal space)
-        log.voyage('assertVoyageMembership: session voyage mismatch', {
-          conversationId,
-          sessionVoyageId: sessionRow.voyage_id,
-          claimedVoyageId: voyageId,
-          claimedSlug: slug,
-        }, 'warn')
-        // Resolve the session's actual voyage slug for the error payload (null = personal)
-        let expectedSlug: string | null = null
-        if (sessionRow.voyage_id) {
-          const { data: actualVoyage } = await supabase
-            .from('voyages')
-            .select('slug')
-            .eq('id', sessionRow.voyage_id)
-            .maybeSingle()
-          expectedSlug = (actualVoyage as { slug: string } | null)?.slug ?? null
-        }
-        throw new VoyageMismatchError(expectedSlug, slug)
-      }
-    }
-  }
-
-  log.voyage('assertVoyageMembership: verified', { userId, slug, voyageId })
-  return voyageId
+  return slug
 }
-
-// =============================================================================
-// SLUG UTILITIES
-// =============================================================================
 
 /**
  * Generate a URL-friendly slug from a name.
