@@ -26,6 +26,7 @@ export const useConversation = ({
 }: UseConversationParams) => {
   // Conversation state
   const [conversationId, setConversationId] = useState<string | null>(null)
+  const [room, setRoom] = useState<{ people: string[]; aiPresent: boolean }>({ people: [], aiPresent: true })
   const [conversationTitle, setConversationTitle] = useState<string | null>(null)
   const [isLoadingConversation, setIsLoadingConversation] = useState(true)
 
@@ -100,6 +101,8 @@ export const useConversation = ({
 
         setConversationId(data.conversation.id)
         setConversationTitle(data.conversation.title)
+        const roomData = (data as unknown as { room?: { people: string[]; aiPresent: boolean } }).room
+        if (roomData) setRoom(roomData)
         autoSentCount.current = 0
         messageTimestamps.current = new Map()
 
@@ -283,6 +286,7 @@ export const useConversation = ({
 
   return {
     conversationId,
+    room,
     conversationTitle: resolvedTitle,
     isLoadingConversation,
     messages,

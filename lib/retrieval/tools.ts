@@ -19,6 +19,7 @@ import {
 } from '@/lib/knowledge'
 import { hybridSearch, type RankedResult } from '@/lib/knowledge/hybrid'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
+import { getRoom, addRoomPerson, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
@@ -860,7 +861,65 @@ export const createVoyagerTools = (ctx: ToolContext): {
     },
   })
 
-  // remember_knowledge — LLM calls this when user wants to save knowledge explicitly
+  // ── The Room: participants as spine, Voyager as a peer ──
+  // add_to_room / remove_to_room manage who's in the room; set_voyager_presence
+  // toggles the AI. A person in the room receives everything you type (no
+  // per-line "tell"). Adding a person quiets Voyager by default; +voyager
+  // brings it back.
+  const resolveOneMember = async (name: string): Promise<{ userId: string; displayName: string } | { error: string }> => {
+    if (!ctx.voyageSlug) return { error: "Rooms live in voyages. You're in personal space — switch to a voyage first." }
+    const voyage = await getVoyageBySlug(ctx.voyageSlug)
+    if (!voyage) return { error: 'Could not find the current voyage.' }
+    const members = await getVoyageMembers(voyage.id)
+    const lower = name.toLowerCase()
+    const matches = members.filter((m) => {
+      const dn = m.displayName?.toLowerCase() ?? ''
+      const nn = m.nickname?.toLowerCase() ?? ''
+      if (dn === lower || dn.startsWith(lower + ' ') || dn.split(' ').some(part => part === lower)) return true
+      if (nn && nn === lower) return true
+      return false
+    })
+    if (matches.length === 0) return { error: `I don't see anyone called ${name} in this voyage.` }
+    if (matches.length > 1) return { error: `Multiple people match "${name}". Which one?` }
+    if (matches[0].userId === ctx.userId) return { error: "That's you — you're already here." }
+    return { userId: matches[0].userId, displayName: matches[0].displayName ?? matches[0].email ?? name }
+  }
+
+  const add_to_room = tool({
+    description: `Add a person to THIS conversation (the room), so everything the user types reaches them without a separate "tell". Use for "+vanessa", "add vanessa", "bring tom in", "invite sarah here". Adding a person quiets Voyager by default — the user says "+voyager" to bring the AI back.`,
+    inputSchema: z.object({ name: z.string().describe('The person to add') }),
+    execute: async (input) => {
+      if (!ctx.conversationId) return "I can't manage this room — no active conversation."
+      const r = await resolveOneMember(input.name)
+      if ('error' in r) return r.error
+      await addRoomPerson(ctx.conversationId, r.userId)
+      return JSON.stringify({ status: 'added', person: r.displayName, voyagerQuieted: true })
+    },
+  })
+
+  const remove_from_room = tool({
+    description: `Remove a person from THIS conversation (the room). Use for "-vanessa", "remove vanessa", "just us again".`,
+    inputSchema: z.object({ name: z.string().describe('The person to remove') }),
+    execute: async (input) => {
+      if (!ctx.conversationId) return "I can't manage this room — no active conversation."
+      const r = await resolveOneMember(input.name)
+      if ('error' in r) return r.error
+      await removeRoomPerson(ctx.conversationId, r.userId)
+      return JSON.stringify({ status: 'removed', person: r.displayName })
+    },
+  })
+
+  const set_voyager_presence = tool({
+    description: `Toggle whether Voyager (you) is in the room and responds. "+voyager" / "voyager join" → present=true; "-voyager" / "make this private" / "just us humans" → present=false (you go quiet, humans still receive each other's messages).`,
+    inputSchema: z.object({ present: z.boolean().describe('true = Voyager in the room; false = step out') }),
+    execute: async (input) => {
+      if (!ctx.conversationId) return "No active conversation."
+      await setAiPresent(ctx.conversationId, input.present)
+      return JSON.stringify({ status: input.present ? 'voyager_present' : 'voyager_stepped_out' })
+    },
+  })
+
+    // remember_knowledge — LLM calls this when user wants to save knowledge explicitly
   const remember_knowledge = tool({
     description: `Save knowledge explicitly. Use when the user says "remember this", "save this", "note that", "keep in mind", etc. Creates a persistent knowledge event that Voyager will recall in future conversations.`,
     inputSchema: z.object({
@@ -956,6 +1015,21 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'send_message',
       tool: send_message,
       strategyHint: 'Route messages to voyage members via @mention or natural language. Creates participant-scoped knowledge events.',
+    },
+    {
+      name: 'add_to_room',
+      tool: add_to_room,
+      strategyHint: 'Add a person to THIS conversation so the user talks to them directly (no per-line tell). "+vanessa", "add tom".',
+    },
+    {
+      name: 'remove_from_room',
+      tool: remove_from_room,
+      strategyHint: 'Remove a person from THIS conversation. "-vanessa", "just us".',
+    },
+    {
+      name: 'set_voyager_presence',
+      tool: set_voyager_presence,
+      strategyHint: 'Toggle whether you (Voyager) are in the room. "-voyager" to step out (private human thread), "+voyager" to rejoin.',
     },
     {
       name: 'get_messages',

@@ -1,4 +1,4 @@
-import { streamText, stepCountIs, hasToolCall, APICallError } from 'ai';
+import { streamText, stepCountIs, hasToolCall, APICallError, createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import { waitUntil } from '@vercel/functions';
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts';
 import {
@@ -12,11 +12,13 @@ import {
 } from '@/lib/conversation/continuity';
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
+import { getRoom, addRoomPerson, removeRoomPerson, setAiPresent, parseRoomCommand } from '@/lib/messaging/room';
+import { fanOutDeliveries } from '@/lib/messaging/deliveries';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker, resolveUserModelWithMeta } from '@/lib/models';
-import { resolveSessionVoyage, SessionAccessError } from '@/lib/voyage';
+import { resolveSessionVoyage, SessionAccessError, getVoyageBySlug, getVoyageMembers } from '@/lib/voyage';
 import { log } from '@/lib/debug';
 import { detectActionIntent } from '@/lib/shell/intent';
 import { reconcileActions } from '@/lib/shell/reconciler';
@@ -226,6 +228,92 @@ export const POST = async (req: Request) => {
       .eq('id', userId)
       .maybeSingle();
     const displayName = (userProfile as { display_name: string | null } | null)?.display_name ?? undefined;
+
+    // ── The Room ──────────────────────────────────────────────────────────
+    // A message in a room reaches the humans in it automatically (no per-line
+    // "tell"); Voyager only takes a turn if it's present.
+    const room = conversationId
+      ? await getRoom(conversationId)
+      : { roomPeople: [], aiPresent: true };
+
+    // Deterministic `+`/`−` room grammar — executed server-side BEFORE the
+    // model so it can never be confabulated ("Done" without doing it). Returns
+    // a plain confirmation stream, no LLM turn.
+    const roomCmd = queryText ? parseRoomCommand(queryText) : null;
+    if (roomCmd && conversationId) {
+      let confirmation: string;
+      if (roomCmd.op === 'voyager-in') {
+        await setAiPresent(conversationId, true);
+        confirmation = "Back in the room.";
+      } else if (roomCmd.op === 'voyager-out') {
+        await setAiPresent(conversationId, false);
+        confirmation = "Stepped out — just you and whoever else is here. Say +voyager to bring me back.";
+      } else {
+        // add / remove a person — resolve against voyage members
+        const cmdName = roomCmd.op === 'add' || roomCmd.op === 'remove' ? roomCmd.name : '';
+        if (!voyageSlug) {
+          confirmation = "Rooms live in voyages. Switch to a voyage first.";
+        } else {
+          const voyage = await getVoyageBySlug(voyageSlug);
+          const members = voyage ? await getVoyageMembers(voyage.id) : [];
+          const lower = cmdName.toLowerCase();
+          const match = members.find((m) => {
+            const dn = m.displayName?.toLowerCase() ?? '';
+            const nn = m.nickname?.toLowerCase() ?? '';
+            return dn === lower || dn.startsWith(lower + ' ') || dn.split(' ').some(pp => pp === lower) || nn === lower;
+          });
+          if (!match) confirmation = `I don't see anyone called ${cmdName} in this voyage.`;
+          else if (match.userId === userId) confirmation = "That's you — you're already here.";
+          else if (roomCmd.op === 'add') {
+            await addRoomPerson(conversationId, match.userId);
+            confirmation = `Added ${match.displayName ?? cmdName} — they'll get what you type here. (I've stepped back; say +voyager to bring me in.)`;
+          } else {
+            await removeRoomPerson(conversationId, match.userId);
+            confirmation = `Removed ${match.displayName ?? cmdName} from the room.`;
+          }
+        }
+      }
+      const stream = createUIMessageStream({
+        execute: async ({ writer }) => {
+          const id = 'room-cmd';
+          writer.write({ type: 'text-start', id });
+          writer.write({ type: 'text-delta', id, delta: confirmation });
+          writer.write({ type: 'text-end', id });
+        },
+      });
+      return createUIMessageStreamResponse({ stream });
+    }
+
+    if (conversationId && queryText && room.roomPeople.length > 0 && voyageSlug) {
+      // Fan the user's words out to everyone in the room (auto-tell).
+      const voyage = await getVoyageBySlug(voyageSlug);
+      const members = voyage ? await getVoyageMembers(voyage.id) : [];
+      const me = members.find((m) => m.userId === userId);
+      const senderName = me?.displayName ?? me?.email ?? 'Someone';
+      const recipients = room.roomPeople.filter((id) => id !== userId);
+      if (recipients.length > 0) {
+        const eventId = await createMessageEvent(conversationId, 'user', queryText, {
+          userId,
+          voyageSlug,
+          participants: [userId, ...recipients],
+          addressedTo: recipients,
+          source: 'room',
+          senderDisplayName: senderName,
+          senderUserId: userId,
+          attentionScore: 0.85,
+          contextSnippet: `${senderName} in room: ${queryText.slice(0, 60)}`,
+        });
+        if (eventId) void fanOutDeliveries(eventId, recipients);
+      }
+    }
+
+    // Voyager has stepped out of this room → no AI turn. The message was still
+    // saved + delivered to the humans above; return an empty stream.
+    if (!room.aiPresent) {
+      return createUIMessageStreamResponse({
+        stream: createUIMessageStream({ execute: async () => {} }),
+      });
+    }
 
     // Create Voyager tools
     const { tools: voyagerTools, registrations } = createVoyagerTools({
