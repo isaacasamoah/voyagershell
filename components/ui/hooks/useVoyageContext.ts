@@ -32,6 +32,12 @@ export const useVoyageContext = ({
         if (voyage) {
           setCurrentVoyage(voyage)
         }
+      } else if (data.lastActiveVoyageSlug) {
+        // Resume the voyage you were last active in ("come back where I was").
+        // Session-as-context: this drives the chip; the conversation-load path
+        // then loads that voyage's session unchanged. Null → personal (default).
+        const last = data.voyages?.find((v: VoyageMembership) => v.slug === data.lastActiveVoyageSlug)
+        if (last) setCurrentVoyage(last)
       } else if (data.voyages?.length === 1) {
         // Auto-select when user has exactly one voyage
         setCurrentVoyage(data.voyages[0])

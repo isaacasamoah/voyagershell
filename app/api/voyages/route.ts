@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { requireAuthResponse } from '@/lib/auth';
 import {
   getUserVoyages,
+  getLastActiveVoyageSlug,
   createVoyage,
   generateSlug,
   isSlugAvailable,
@@ -24,11 +25,15 @@ export const GET = async () => {
     if (authResult instanceof Response) return authResult;
     const userId = authResult;
 
-    const voyages = await getUserVoyages(userId);
+    const [voyages, lastActiveVoyageSlug] = await Promise.all([
+      getUserVoyages(userId),
+      getLastActiveVoyageSlug(userId),
+    ]);
 
     console.log('[Voyages API] Found', voyages.length, 'voyages:', voyages.map(v => `${v.name} (${v.slug})`).join(', '));
 
     return NextResponse.json({
+      lastActiveVoyageSlug,
       voyages: voyages.map((v) => ({
         id: v.voyageId,
         slug: v.slug,

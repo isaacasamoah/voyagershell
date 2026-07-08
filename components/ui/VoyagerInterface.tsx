@@ -78,7 +78,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
   // Conversation (transport, useChat, fetch, welcome, title sync, message queue)
   const {
-    conversationId, conversationTitle, isLoadingConversation,
+    conversationId, room, conversationTitle, isLoadingConversation,
     messages, sendMessage, setMessages, status, error,
     hasUserTyped, setHasUserTyped, autoSentCount,
     messageTimestamps, messageQueue, setMessageQueue,
@@ -435,6 +435,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                   <span className="opacity-30 font-semibold shrink-0">$CTX:</span>
                   <span className="truncate">{conversationTitle || 'NEW_SESSION'}</span>
                 </div>
+                {/* Room chip — who's in the room + whether Voyager is present.
+                    Honest indicator: you always know where your words go. */}
+                {room.people.length > 0 && (
+                  <div className="px-2 py-1 rounded-sm border border-[#f7a34b]/30 bg-[#f7a34b]/10 text-[#f7a34b] text-xs flex items-center gap-2 min-w-0 shrink-0">
+                    <span className="opacity-40 font-semibold shrink-0">WITH:</span>
+                    <span className="truncate max-w-[140px]">
+                      {room.people.map((p) => p.toUpperCase().replace(/\s+/g, '_')).join(', ')}
+                      {!room.aiPresent && ' · 🧠⬜'}
+                    </span>
+                  </div>
+                )}
               </div>
             </>
           )}

@@ -212,6 +212,27 @@ export const updateVoyage = async (
 /**
  * Get all voyages a user is a member of.
  */
+/**
+ * The slug of the voyage the user was MOST RECENTLY active in (or null for
+ * personal / no active session). Powers "resume where I was" — resolved in the
+ * voyage-context layer so the conversation-load path stays untouched.
+ */
+export const getLastActiveVoyageSlug = async (userId: string): Promise<string | null> => {
+  const supabase = getAdminSupabase()
+  const { data: session } = await supabase
+    .from('sessions')
+    .select('voyage_id')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const voyageId = (session as { voyage_id: string | null } | null)?.voyage_id
+  if (!voyageId) return null
+  const { data: v } = await supabase.from('voyages').select('slug').eq('id', voyageId).maybeSingle()
+  return (v as { slug: string } | null)?.slug ?? null
+}
+
 export const getUserVoyages = async (userId: string): Promise<VoyageMembership[]> => {
   const supabase = getAdminSupabase();
   log.voyage('Getting voyages for user', { userId });
@@ -302,6 +323,28 @@ export const isCaptain = async (voyageSlug: string, userId: string): Promise<boo
 /**
  * Get all members of a voyage.
  */
+/**
+ * Resolve a name to a single voyage member (case-insensitive display_name /
+ * nickname match). ONE implementation — shared by send_message, the room tools,
+ * and the deterministic +/- handler so the matching never drifts. Returns the
+ * member, or null (not found / ambiguous / self — caller decides messaging).
+ */
+export const resolveMemberByName = (
+  members: Array<{ userId: string; displayName?: string | null; nickname?: string | null; email?: string | null }>,
+  name: string
+): { userId: string; displayName: string } | null => {
+  const lower = name.toLowerCase().trim()
+  const matches = members.filter((m) => {
+    const dn = m.displayName?.toLowerCase() ?? ''
+    const nn = m.nickname?.toLowerCase() ?? ''
+    if (dn === lower || dn.startsWith(lower + ' ') || dn.split(' ').some((part) => part === lower)) return true
+    if (nn && nn === lower) return true
+    return false
+  })
+  if (matches.length !== 1) return null
+  return { userId: matches[0].userId, displayName: matches[0].displayName ?? matches[0].email ?? name }
+}
+
 export const getVoyageMembers = async (voyageId: string): Promise<VoyageMember[]> => {
   const supabase = getAdminSupabase();
   log.voyage('Getting members for voyage', { voyageId });
