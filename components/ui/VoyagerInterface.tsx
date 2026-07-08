@@ -494,17 +494,15 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             !hasUserTyped
               ? 'z-40 sticky top-0 min-h-[calc(100dvh-120px)] justify-center'
               : composing
-                ? 'z-[60] fixed top-0 right-1 left-auto w-[60px] h-[52px] justify-center overflow-hidden'
-                : 'z-40 fixed top-[52px] left-0 right-0 h-[170px] sm:h-[280px] justify-center bg-[#050505] overflow-hidden'
+                ? 'z-40 fixed top-[52px] left-0 right-0 h-0 justify-center overflow-hidden opacity-0'
+                : 'z-40 fixed top-[52px] left-0 right-0 h-[170px] sm:h-[280px] justify-center bg-[#050505] overflow-hidden opacity-100'
           }`}
         >
           {!hasUserTyped && (
             <VoyagerWordmark variant="hero" className="-mb-12 scale-[0.74] sm:-mb-32 sm:scale-90" />
           )}
           <div className={`transition-all duration-700 ease-in-out ${
-            !hasUserTyped ? 'scale-[0.62] sm:scale-100'
-            : composing ? 'scale-[0.16]'
-            : 'scale-[0.55] sm:scale-100'
+            !hasUserTyped ? 'scale-[0.62] sm:scale-100' : 'scale-[0.55] sm:scale-100'
           }`}>
             <AstronautState state={astronautState} beat={astronautBeat} size={astronautSize} />
           </div>
@@ -655,6 +653,18 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur border-t border-white/10 p-4 pb-6 transition-transform duration-200 ease-out"
         style={{ transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined }}
       >
+        {/* Composing companion — the astronaut steps down beside your words */}
+        <div
+          className={`absolute -top-16 right-3 pointer-events-none transition-all duration-500 ease-in-out ${
+            composing && hasUserTyped ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'
+          }`}
+        >
+          {composing && hasUserTyped && (
+            <div className="scale-[0.7] origin-bottom-right">
+              <AstronautState state={astronautState} beat={astronautBeat} size="sm" />
+            </div>
+          )}
+        </div>
         <div className="max-w-2xl mx-auto">
           {/* No brain connected — quiet honest pointer, not a wall */}
           {isAuthenticated && hasBrain === false && (
