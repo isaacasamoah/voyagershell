@@ -212,6 +212,27 @@ export const updateVoyage = async (
 /**
  * Get all voyages a user is a member of.
  */
+/**
+ * The slug of the voyage the user was MOST RECENTLY active in (or null for
+ * personal / no active session). Powers "resume where I was" — resolved in the
+ * voyage-context layer so the conversation-load path stays untouched.
+ */
+export const getLastActiveVoyageSlug = async (userId: string): Promise<string | null> => {
+  const supabase = getAdminSupabase()
+  const { data: session } = await supabase
+    .from('sessions')
+    .select('voyage_id')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const voyageId = (session as { voyage_id: string | null } | null)?.voyage_id
+  if (!voyageId) return null
+  const { data: v } = await supabase.from('voyages').select('slug').eq('id', voyageId).maybeSingle()
+  return (v as { slug: string } | null)?.slug ?? null
+}
+
 export const getUserVoyages = async (userId: string): Promise<VoyageMembership[]> => {
   const supabase = getAdminSupabase();
   log.voyage('Getting voyages for user', { userId });
