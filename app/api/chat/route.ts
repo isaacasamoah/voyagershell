@@ -132,7 +132,17 @@ export const POST = async (req: Request) => {
     const lastUserMessage = simpleMessages
       .filter((m) => m.role === 'user')
       .pop();
-    const queryText = lastUserMessage?.content ?? '';
+    // `@voyager …` — a ONE-SHOT private aside to your own co-pilot. Detect +
+    // strip the prefix HERE, before intent detection, so the model and the
+    // reconciler see a clean query (no spurious "tell voyager" intent) and the
+    // saved transcript/knowledge is prefix-free. The aside bypasses the room
+    // below (not fanned to humans; answered even if Voyager stepped out).
+    const rawQuery = lastUserMessage?.content ?? '';
+    const voyagerAside = /^@voyager\b/i.test(rawQuery.trim());
+    const queryText = voyagerAside
+      ? rawQuery.replace(/^@voyager[\s,:!.?-]*/i, '').trim()
+      : rawQuery;
+    if (voyagerAside && lastUserMessage) lastUserMessage.content = queryText;
 
     // Shell Contract: detect verb intent before LLM runs
     const intent = detectActionIntent(queryText);
@@ -261,12 +271,6 @@ export const POST = async (req: Request) => {
       }
       // fell through (not a real command) → treat as a normal message below.
     }
-
-    // `@voyager …` — a ONE-SHOT private aside to your own co-pilot. Bypasses the
-    // room: not fanned to the humans, and answered even if Voyager has stepped
-    // out (your private Voyager is always available). Next plain line returns to
-    // the room. Explicit `@voyager` prefix only — no false positives.
-    const voyagerAside = queryText ? /^@voyager\b/i.test(queryText.trim()) : false;
 
     // Save user message to DB (transcript). A ROOM message skips the extra
     // 'conversation' knowledge event — it emits a 'room' message event below,
