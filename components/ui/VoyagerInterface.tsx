@@ -376,12 +376,20 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   // Yield to the session's actual scope and scrub the URL param, so the next
   // message — including the conversational switch the error suggests — flows
   // in the session's true context instead of hitting the same 403.
+  // ONE-SHOT per error instance: useChat keeps `error` set after it fires, so
+  // without the guard this effect re-applied the OLD scope on every dep
+  // change — snapping the chip back to PERSONAL right after a successful
+  // conversational switch (prod feel-note, 2026-07-08).
+  const handledMismatchRef = useRef<unknown>(null);
   useEffect(() => {
-    const raw = error?.message?.trim() ?? '';
+    if (!error) { handledMismatchRef.current = null; return; }
+    if (handledMismatchRef.current === error) return;
+    const raw = error.message?.trim() ?? '';
     if (!raw.startsWith('{')) return;
     try {
       const parsed = JSON.parse(raw);
       if (parsed.error !== 'voyage_mismatch') return;
+      handledMismatchRef.current = error;
       const expectedSlug = (parsed.expected ?? null) as string | null;
       const match = expectedSlug ? (voyages.find((v) => v.slug === expectedSlug) ?? null) : null;
       setCurrentVoyage(match);
