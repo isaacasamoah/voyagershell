@@ -80,23 +80,7 @@ export const stampReceipts = async (
     throw new Error(error.message)
   }
   const rows = (data ?? []) as Array<{ id: string; event_id: string }>
-
-  // Bridge to the awareness lane: once the wire has rendered a message
-  // (delivered), the weave must not re-surface it. Stamps the SAME state
-  // markDelivered writes, so loadAwareness skips it. Temporary two-ledger
-  // bridge — dies in the M1 clean-cut (single delivery truth).
-  if (stamp.delivered && rows.length > 0) {
-    const eventIds = Array.from(new Set(rows.map((r) => r.event_id)))
-    const { error: bridgeError } = await (getAdminClient() as unknown as { from: (t: string) => any })
-      .from('knowledge_current')
-      .update({ delivery_status: 'delivered' })
-      .in('event_id', eventIds)
-      .eq('delivery_status', 'pending')
-    if (bridgeError) {
-      log.api('Weave bridge stamp failed', { error: bridgeError.message }, 'error')
-    }
-  }
-
+  // v2: the wire is the sole delivery lane — no weave to bridge to.
   return { updatedIds: rows.map((row) => row.id) }
 }
 
