@@ -108,7 +108,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$function$
+$function$;
 
 -- 2. Drop the delivery index (depended on delivery_status)
 DROP INDEX IF EXISTS idx_knowledge_delivery;
@@ -122,3 +122,9 @@ ALTER TABLE public.knowledge_current
 -- 4. Drop the pull-era seen tracking (superseded by message_deliveries.seen_at)
 ALTER TABLE public.voyage_members
   DROP COLUMN IF EXISTS last_seen_at;
+
+-- 5. Verify: these should all be gone (expect zero rows)
+SELECT column_name FROM information_schema.columns
+WHERE (table_name = 'knowledge_current'
+       AND column_name IN ('delivery_status','deliver_after','surfacing_tier'))
+   OR (table_name = 'voyage_members' AND column_name = 'last_seen_at');

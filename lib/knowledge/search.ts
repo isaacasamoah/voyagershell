@@ -632,5 +632,4 @@ export const loadPreferences = async (
 // (message awareness lane removed in v2 — messages deliver on the wire)
 // =============================================================================
 
-/** Relative time formatting for awareness item display */
 export type { Classification }
