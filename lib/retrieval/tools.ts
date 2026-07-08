@@ -23,7 +23,7 @@ import { getRoom, addRoomPerson, removeRoomPerson, setAiPresent } from '@/lib/me
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
-import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages } from '@/lib/voyage'
+import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages, resolveMemberByName } from '@/lib/voyage'
 import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
 
 // Resolve short ID (8 chars) to full UUID
@@ -862,7 +862,7 @@ export const createVoyagerTools = (ctx: ToolContext): {
   })
 
   // ── The Room: participants as spine, Voyager as a peer ──
-  // add_to_room / remove_to_room manage who's in the room; set_voyager_presence
+  // add_to_room / remove_from_room manage who's in the room; set_voyager_presence
   // toggles the AI. A person in the room receives everything you type (no
   // per-line "tell"). Adding a person quiets Voyager by default; +voyager
   // brings it back.
@@ -871,18 +871,10 @@ export const createVoyagerTools = (ctx: ToolContext): {
     const voyage = await getVoyageBySlug(ctx.voyageSlug)
     if (!voyage) return { error: 'Could not find the current voyage.' }
     const members = await getVoyageMembers(voyage.id)
-    const lower = name.toLowerCase()
-    const matches = members.filter((m) => {
-      const dn = m.displayName?.toLowerCase() ?? ''
-      const nn = m.nickname?.toLowerCase() ?? ''
-      if (dn === lower || dn.startsWith(lower + ' ') || dn.split(' ').some(part => part === lower)) return true
-      if (nn && nn === lower) return true
-      return false
-    })
-    if (matches.length === 0) return { error: `I don't see anyone called ${name} in this voyage.` }
-    if (matches.length > 1) return { error: `Multiple people match "${name}". Which one?` }
-    if (matches[0].userId === ctx.userId) return { error: "That's you — you're already here." }
-    return { userId: matches[0].userId, displayName: matches[0].displayName ?? matches[0].email ?? name }
+    const match = resolveMemberByName(members, name)
+    if (!match) return { error: `I don't see anyone called ${name} in this voyage.` }
+    if (match.userId === ctx.userId) return { error: "That's you — you're already here." }
+    return match
   }
 
   const add_to_room = tool({

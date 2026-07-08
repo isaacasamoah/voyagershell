@@ -18,7 +18,7 @@ import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrateg
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
 import { modelRouter, creditTracker, resolveUserModelWithMeta } from '@/lib/models';
-import { resolveSessionVoyage, SessionAccessError, getVoyageBySlug, getVoyageMembers } from '@/lib/voyage';
+import { resolveSessionVoyage, SessionAccessError, getVoyageBySlug, getVoyageMembers, resolveMemberByName } from '@/lib/voyage';
 import { log } from '@/lib/debug';
 import { detectActionIntent } from '@/lib/shell/intent';
 import { reconcileActions } from '@/lib/shell/reconciler';
@@ -203,22 +203,6 @@ export const POST = async (req: Request) => {
       content: m.content,
     }));
 
-    // Save user message to DB (fire-and-forget, don't block streaming)
-    if (conversationId && queryText) {
-      saveMessage(conversationId, 'user', queryText).catch((error) => {
-        console.error('[Chat] Failed to save user message:', error);
-      });
-
-      // Emit knowledge event (fire-and-forget)
-      // Conversation turns → eventType 'conversation' (Cartographer enriches these)
-      // Inter-user messages via send_message → eventType 'message' (skip Cartographer)
-      emitMessageEvent(conversationId, 'user', queryText, {
-        userId: userId,
-        voyageSlug: voyageSlug,
-        eventType: 'conversation',
-      });
-    }
-
     // Fetch user profile for display name (prompt composition needs it)
     const { getAdminClient: getAdmin } = await import('@/lib/supabase/admin');
     const adminClient = getAdmin();
@@ -230,68 +214,78 @@ export const POST = async (req: Request) => {
     const displayName = (userProfile as { display_name: string | null } | null)?.display_name ?? undefined;
 
     // ── The Room ──────────────────────────────────────────────────────────
-    // A message in a room reaches the humans in it automatically (no per-line
-    // "tell"); Voyager only takes a turn if it's present.
+    // Resolve room state + voyage members ONCE (used by commands, fan-out, gate).
     const room = conversationId
       ? await getRoom(conversationId)
       : { roomPeople: [], aiPresent: true };
+    const voyage = voyageSlug ? await getVoyageBySlug(voyageSlug) : null;
+    const voyageMembers = voyage ? await getVoyageMembers(voyage.id) : [];
 
-    // Deterministic `+`/`−` room grammar — executed server-side BEFORE the
-    // model so it can never be confabulated ("Done" without doing it). Returns
-    // a plain confirmation stream, no LLM turn.
+    // Deterministic `+`/`−` room grammar — handled BEFORE any save so it can
+    // never be confabulated AND never pollutes the transcript/knowledge base.
+    // Ephemeral: no saved turn, no knowledge event; a live confirmation, return.
+    // If `+X`/`-X` doesn't resolve to a real member (e.g. "+1", "- done"), it
+    // wasn't a command → fall through to a normal message.
     const roomCmd = queryText ? parseRoomCommand(queryText) : null;
     if (roomCmd && conversationId) {
-      let confirmation: string;
+      let confirmation: string | null = null;
       if (roomCmd.op === 'voyager-in') {
         await setAiPresent(conversationId, true);
-        confirmation = "Back in the room.";
+        confirmation = 'Back in the room.';
       } else if (roomCmd.op === 'voyager-out') {
         await setAiPresent(conversationId, false);
-        confirmation = "Stepped out — just you and whoever else is here. Say +voyager to bring me back.";
-      } else {
-        // add / remove a person — resolve against voyage members
-        const cmdName = roomCmd.op === 'add' || roomCmd.op === 'remove' ? roomCmd.name : '';
-        if (!voyageSlug) {
-          confirmation = "Rooms live in voyages. Switch to a voyage first.";
-        } else {
-          const voyage = await getVoyageBySlug(voyageSlug);
-          const members = voyage ? await getVoyageMembers(voyage.id) : [];
-          const lower = cmdName.toLowerCase();
-          const match = members.find((m) => {
-            const dn = m.displayName?.toLowerCase() ?? '';
-            const nn = m.nickname?.toLowerCase() ?? '';
-            return dn === lower || dn.startsWith(lower + ' ') || dn.split(' ').some(pp => pp === lower) || nn === lower;
-          });
-          if (!match) confirmation = `I don't see anyone called ${cmdName} in this voyage.`;
-          else if (match.userId === userId) confirmation = "That's you — you're already here.";
-          else if (roomCmd.op === 'add') {
+        confirmation = 'Stepped out — just you and whoever else is here. Say +voyager to bring me back.';
+      } else if (voyageSlug && (roomCmd.op === 'add' || roomCmd.op === 'remove')) {
+        const match = resolveMemberByName(voyageMembers, roomCmd.name);
+        if (match && match.userId !== userId) {
+          if (roomCmd.op === 'add') {
             await addRoomPerson(conversationId, match.userId);
-            confirmation = `Added ${match.displayName ?? cmdName} — they'll get what you type here. (I've stepped back; say +voyager to bring me in.)`;
+            confirmation = `Added ${match.displayName} — they'll get what you type here. (I've stepped back; say +voyager to bring me in.)`;
           } else {
             await removeRoomPerson(conversationId, match.userId);
-            confirmation = `Removed ${match.displayName ?? cmdName} from the room.`;
+            confirmation = `Removed ${match.displayName} from the room.`;
           }
         }
       }
-      const stream = createUIMessageStream({
-        execute: async ({ writer }) => {
-          const id = 'room-cmd';
-          writer.write({ type: 'text-start', id });
-          writer.write({ type: 'text-delta', id, delta: confirmation });
-          writer.write({ type: 'text-end', id });
-        },
-      });
-      return createUIMessageStreamResponse({ stream });
+      if (confirmation !== null) {
+        const msg = confirmation;
+        const stream = createUIMessageStream({
+          execute: async ({ writer }) => {
+            const id = 'room-cmd';
+            writer.write({ type: 'text-start', id });
+            writer.write({ type: 'text-delta', id, delta: msg });
+            writer.write({ type: 'text-end', id });
+          },
+        });
+        return createUIMessageStreamResponse({ stream });
+      }
+      // fell through (not a real command) → treat as a normal message below.
     }
 
-    if (conversationId && queryText && room.roomPeople.length > 0 && voyageSlug) {
-      // Fan the user's words out to everyone in the room (auto-tell).
-      const voyage = await getVoyageBySlug(voyageSlug);
-      const members = voyage ? await getVoyageMembers(voyage.id) : [];
-      const me = members.find((m) => m.userId === userId);
-      const senderName = me?.displayName ?? me?.email ?? 'Someone';
-      const recipients = room.roomPeople.filter((id) => id !== userId);
+    // Save user message to DB (transcript). A ROOM message skips the extra
+    // 'conversation' knowledge event — it emits a 'room' message event below,
+    // so the same content is never double-written into the knowledge base.
+    if (conversationId && queryText) {
+      saveMessage(conversationId, 'user', queryText).catch((error) => {
+        console.error('[Chat] Failed to save user message:', error);
+      });
+      if (room.roomPeople.length === 0) {
+        emitMessageEvent(conversationId, 'user', queryText, {
+          userId,
+          voyageSlug,
+          eventType: 'conversation',
+        });
+      }
+    }
+
+    // Room fan-out — deliver to CURRENT voyage members only. A person who left
+    // the voyage after being added must not still receive room messages.
+    if (conversationId && queryText && room.roomPeople.length > 0) {
+      const currentIds = new Set(voyageMembers.map((m) => m.userId));
+      const recipients = room.roomPeople.filter((id) => id !== userId && currentIds.has(id));
       if (recipients.length > 0) {
+        const me = voyageMembers.find((m) => m.userId === userId);
+        const senderName = me?.displayName ?? me?.email ?? 'Someone';
         const eventId = await createMessageEvent(conversationId, 'user', queryText, {
           userId,
           voyageSlug,
@@ -307,8 +301,7 @@ export const POST = async (req: Request) => {
       }
     }
 
-    // Voyager has stepped out of this room → no AI turn. The message was still
-    // saved + delivered to the humans above; return an empty stream.
+    // Voyager has stepped out → no AI turn (message still saved + delivered).
     if (!room.aiPresent) {
       return createUIMessageStreamResponse({
         stream: createUIMessageStream({ execute: async () => {} }),
