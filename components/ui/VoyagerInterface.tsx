@@ -372,6 +372,29 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       return true;
     });
   }, [messages, autoSentCount]);
+  // Wedge escape: on voyage_mismatch the client's claimed voyage is stale.
+  // Yield to the session's actual scope and scrub the URL param, so the next
+  // message — including the conversational switch the error suggests — flows
+  // in the session's true context instead of hitting the same 403.
+  useEffect(() => {
+    const raw = error?.message?.trim() ?? '';
+    if (!raw.startsWith('{')) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.error !== 'voyage_mismatch') return;
+      const expectedSlug = (parsed.expected ?? null) as string | null;
+      const match = expectedSlug ? (voyages.find((v) => v.slug === expectedSlug) ?? null) : null;
+      setCurrentVoyage(match);
+      const url = new URL(window.location.href);
+      if (match) {
+        url.searchParams.set('voyage', match.slug);
+      } else {
+        url.searchParams.delete('voyage');
+      }
+      window.history.replaceState({}, '', url.toString());
+    } catch { /* not a JSON error payload */ }
+  }, [error, voyages, setCurrentVoyage]);
+
   const errorText = (() => {
     const raw = error?.message?.trim() ?? '';
     if (raw.startsWith('{')) {

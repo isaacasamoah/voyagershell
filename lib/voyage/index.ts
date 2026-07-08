@@ -1002,6 +1002,35 @@ export const assertVoyageMembership = async (
       // b) Voyage match: session.voyage_id must equal the claimed voyage's UUID.
       // NULL session.voyage_id (personal space) does NOT match a claimed voyage.
       if (sessionRow.voyage_id !== voyageId) {
+        // AUTO-BIND (wedge fix): a personal session claimed into a voyage the
+        // user verifiably belongs to. Privacy guard — rebind ONLY when the
+        // session is still empty; a session with history stays personal and
+        // falls through to the kind mismatch error (which steers the user to
+        // a conversational switch). Empty + member → bind and proceed:
+        // URL, session, and chip converge on the same voyage.
+        if (sessionRow.voyage_id === null) {
+          const { count: messageCount } = await supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('session_id', conversationId)
+          if ((messageCount ?? 0) === 0) {
+            const { error: bindError } = await supabase
+              .from('sessions')
+              .update({ voyage_id: voyageId })
+              .eq('id', conversationId)
+              .is('voyage_id', null) // race guard: only bind a still-personal session
+            if (!bindError) {
+              log.voyage('assertVoyageMembership: auto-bound empty personal session', {
+                conversationId, voyageId, slug,
+              })
+              return voyageId
+            }
+            log.voyage('assertVoyageMembership: auto-bind failed, falling through', {
+              error: bindError.message, conversationId,
+            }, 'warn')
+          }
+        }
+
         // The conversation belongs to a different scope (another voyage, or personal space)
         log.voyage('assertVoyageMembership: session voyage mismatch', {
           conversationId,
