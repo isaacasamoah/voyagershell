@@ -8,9 +8,11 @@ import { useEffect, useState } from 'react';
 //
 // - height:    what the shell height should be right now (visualViewport.height).
 //              0 until measured — the shell falls back to 100dvh via CSS.
+// - offsetTop: how far iOS has panned the visual viewport down (pins the shell).
 // - composing: keyboard up on a phone-width screen (used to hide the astronaut).
 export const useVisualViewport = () => {
   const [height, setHeight] = useState(0);
+  const [offsetTop, setOffsetTop] = useState(0);
   const [composing, setComposing] = useState(false);
 
   useEffect(() => {
@@ -24,6 +26,7 @@ export const useVisualViewport = () => {
       const phoneWidth = window.matchMedia('(max-width: 639px)').matches;
       const covered = window.innerHeight - vv.height; // keyboard + chrome
       setHeight(vv.height);
+      setOffsetTop(vv.offsetTop); // iOS pans the visual viewport down
       // 140px separates a keyboard from mere browser-chrome collapse
       setComposing(phoneWidth && covered > 140);
     };
@@ -39,6 +42,7 @@ export const useVisualViewport = () => {
         simulated = inset > 0;
         const phoneWidth = window.matchMedia('(max-width: 639px)').matches;
         setHeight(window.innerHeight - inset);
+        setOffsetTop(0);
         setComposing(phoneWidth && inset > 140);
       };
     }
@@ -49,5 +53,5 @@ export const useVisualViewport = () => {
     };
   }, []);
 
-  return { height, composing };
+  return { height, offsetTop, composing };
 };

@@ -68,7 +68,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
   // Mobile composing mode: keyboard up on a phone → the astronaut steps
   // aside (corner dock) and the input deck rides the keyboard.
-  const { height: shellHeight, composing } = useVisualViewport();
+  const { height: shellHeight, offsetTop: shellTop, composing } = useVisualViewport();
 
   // Voyage context (fetch voyages, pending invites, URL params)
   const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
@@ -195,7 +195,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     const el = streamRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [messageCount, incomingMessageCount, composing]);
+    // shellHeight in deps: the keyboard shrinks the stream in several frames
+    // after composing flips — re-anchor on each so the newest line never
+    // slips below the fold (codex review).
+  }, [messageCount, incomingMessageCount, composing, shellHeight]);
 
   // All messages go to Voyager — no intent detection, no slash commands, no auth gate
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -429,8 +432,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
   return (
     <div
-      className={`fixed top-0 left-0 right-0 h-[100dvh] flex flex-col overflow-hidden bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 ${className || ''}`}
-      style={{ height: shellHeight ? `${shellHeight}px` : undefined }}
+      className={`fixed top-0 left-0 right-0 h-[100svh] flex flex-col overflow-hidden bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 ${className || ''}`}
+      style={{ height: shellHeight ? `${shellHeight}px` : undefined, top: shellTop ? `${shellTop}px` : undefined }}
     >
 
       {/* HEADER — flex-none top row of the shell. No position:fixed, so it
