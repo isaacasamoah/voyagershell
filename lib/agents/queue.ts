@@ -18,13 +18,13 @@ export interface AgentTask {
   voyageSlug?: string
   conversationId: string
   status: 'pending' | 'running' | 'complete' | 'failed'
-  result?: RetrievalResult
+  result?: BackgroundTaskResult
   error?: string
   durationMs?: number
   createdAt: Date
 }
 
-export interface RetrievalResult {
+export interface BackgroundTaskResult {
   findings: Array<{
     eventId: string
     content: string
@@ -124,7 +124,7 @@ export async function updateTaskProgress(
  */
 export async function completeTask(
   taskId: string,
-  result: RetrievalResult,
+  result: BackgroundTaskResult,
   durationMs: number,
   meta?: { conversationId?: string; userId?: string }
 ): Promise<void> {
@@ -208,7 +208,7 @@ export async function getTaskById(taskId: string): Promise<AgentTask | null> {
     voyageSlug: data.voyage_slug as string | undefined,
     conversationId: data.conversation_id as string,
     status: data.status as AgentTask['status'],
-    result: data.result as unknown as RetrievalResult | undefined,
+    result: data.result as unknown as BackgroundTaskResult | undefined,
     error: data.error as string | undefined,
     durationMs: data.duration_ms as number | undefined,
     createdAt: new Date(data.created_at as string),
