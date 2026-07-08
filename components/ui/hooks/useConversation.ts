@@ -13,6 +13,7 @@ const apiMessageToUIMessage = (msg: MessageData): UIMessage => ({
 
 interface UseConversationParams {
   currentVoyage: { slug: string; name: string } | null
+  voyageResolved: boolean
   authState: string
   isAuthenticated: boolean
   isAuthLoading: boolean
@@ -20,6 +21,7 @@ interface UseConversationParams {
 
 export const useConversation = ({
   currentVoyage,
+  voyageResolved,
   authState,
   isAuthenticated,
   isAuthLoading,
@@ -79,6 +81,13 @@ export const useConversation = ({
       setConversationId(null)
       setConversationTitle(null)
       setIsLoadingConversation(false)
+      return
+    }
+    // Wait for the initial voyage resolution before the first load, so a
+    // no-voyage fetch can't race ahead and stick on personal before resume
+    // resolves. Once resolved (or a voyage is already set), proceed.
+    if (!voyageResolved && !currentVoyage) {
+      setIsLoadingConversation(true)
       return
     }
 
@@ -144,7 +153,7 @@ export const useConversation = ({
     return () => {
       cancelled = true
     }
-  }, [setMessages, isAuthenticated, isAuthLoading, currentVoyage?.slug])
+  }, [setMessages, isAuthenticated, isAuthLoading, currentVoyage?.slug, voyageResolved])
 
   // Hidden welcome prompt — triggers Voyager's creative welcome without visible user message
   const hasTriggeredWelcomePrompt = useRef(false)

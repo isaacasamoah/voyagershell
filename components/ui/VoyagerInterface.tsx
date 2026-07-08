@@ -71,7 +71,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const { height: shellHeight, offsetTop: shellTop, composing } = useVisualViewport();
 
   // Voyage context (fetch voyages, pending invites, URL params)
-  const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
+  const { currentVoyage, voyageResolved, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
     isAuthenticated,
     isAuthLoading,
   });
@@ -87,6 +87,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     startNewConversation, resumeConversation,
   } = useConversation({
     currentVoyage,
+    voyageResolved,
     authState,
     isAuthenticated,
     isAuthLoading,
