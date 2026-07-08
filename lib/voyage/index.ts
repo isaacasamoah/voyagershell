@@ -885,12 +885,19 @@ export const resolveSessionVoyage = async (
     .maybeSingle()
 
   if (error) {
+    // A DB/transport error is a 500, not a 403 — don't misreport it as an
+    // access denial (correctness review P3). Fail loud, not fail-closed-wrong.
     log.voyage('resolveSessionVoyage: lookup error', { error: error.message, conversationId }, 'error')
+    throw new Error(`resolveSessionVoyage lookup failed: ${error.message}`)
+  }
+  // A supplied-but-unknown session id is rejected, not silently treated as
+  // personal — otherwise the route would emit an orphan knowledge event
+  // against a bogus session (codex review). Legit clients always hold a real
+  // conversationId from /api/conversation before sending.
+  if (!session) {
+    log.voyage('resolveSessionVoyage: unknown session', { conversationId }, 'warn')
     throw new SessionAccessError()
   }
-  // Unknown session id → treat as personal (first turn before the session row
-  // exists; the message write is skipped downstream anyway).
-  if (!session) return null
 
   const row = session as { user_id: string | null; voyage_id: string | null }
   if (row.user_id !== userId) {
@@ -904,7 +911,26 @@ export const resolveSessionVoyage = async (
     .select('slug')
     .eq('id', row.voyage_id)
     .maybeSingle()
-  return (voyage as { slug: string } | null)?.slug ?? null
+  const slug = (voyage as { slug: string } | null)?.slug ?? null
+  if (!slug) return null // dangling voyage_id → degrade to personal, safe
+
+  // Membership check — session creation does NOT verify membership (RLS only
+  // gates user_id), so a user could bind a session to a voyage they're not in.
+  // Verify per turn, as the old assertVoyageMembership did, before trusting the
+  // voyage for scoped context/writes (codex review, security).
+  const { data: role, error: roleError } = await supabase.rpc('get_voyage_role', {
+    p_voyage_slug: slug,
+    p_user_id: userId,
+  })
+  if (roleError) {
+    log.voyage('resolveSessionVoyage: role check failed', { error: roleError.message, slug }, 'error')
+    throw new Error(`resolveSessionVoyage role check failed: ${roleError.message}`)
+  }
+  if (!role) {
+    log.voyage('resolveSessionVoyage: not a voyage member', { conversationId, slug, userId }, 'warn')
+    throw new SessionAccessError()
+  }
+  return slug
 }
 
 /**
