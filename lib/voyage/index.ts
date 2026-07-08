@@ -186,7 +186,6 @@ export const updateVoyage = async (
       updates.settings = { ...current?.config, ...input.config };
     }
 
-
     const { data, error } = await supabase
       .from('voyages')
       .update(updates)
@@ -333,157 +332,9 @@ export const getVoyageMembers = async (voyageId: string): Promise<VoyageMember[]
     return [];
   }
 };
-
-/**
- * Update a member's role in a voyage.
- */
-export const updateMemberRole = async (
-  voyageId: string,
-  userId: string,
-  newRole: VoyageRole
-): Promise<boolean> => {
-  const supabase = getAdminSupabase();
-  log.voyage('Updating member role', { voyageId, userId, newRole });
-
-  try {
-
-    const { error } = await supabase
-      .from('voyage_members')
-      .update({ role: newRole })
-      .eq('voyage_id', voyageId)
-      .eq('user_id', userId);
-
-    if (error) {
-      log.voyage('updateMemberRole error', { error: error.message, voyageId, userId }, 'error');
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    log.voyage('updateMemberRole error', { error: String(error), voyageId, userId }, 'error');
-    return false;
-  }
-};
-
-/**
- * Delete a voyage.
- */
-export const deleteVoyage = async (voyageId: string): Promise<boolean> => {
-  const supabase = getAdminSupabase();
-
-  try {
-    const { error } = await supabase
-      .from('voyages')
-      .delete()
-      .eq('id', voyageId);
-
-    if (error) {
-      log.voyage('deleteVoyage error', { error: error.message, voyageId }, 'error');
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    log.voyage('deleteVoyage error', { error: String(error), voyageId }, 'error');
-    return false;
-  }
-};
-
-/**
- * Leave a voyage (remove own membership).
- */
-export const leaveVoyage = async (voyageId: string, userId: string): Promise<boolean> => {
-  const supabase = getAdminSupabase();
-
-  try {
-    const { error } = await supabase
-      .from('voyage_members')
-      .delete()
-      .eq('voyage_id', voyageId)
-      .eq('user_id', userId);
-
-    if (error) {
-      log.voyage('leaveVoyage error', { error: error.message, voyageId, userId }, 'error');
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    log.voyage('leaveVoyage error', { error: String(error), voyageId, userId }, 'error');
-    return false;
-  }
-};
-
 // =============================================================================
 // INVITE MANAGEMENT
 // =============================================================================
-
-/**
- * Join a voyage using an invite code.
- */
-export const joinVoyageByCode = async (
-  inviteCode: string,
-  userId: string
-): Promise<Voyage | null> => {
-  const supabase = getAdminSupabase();
-  log.voyage('Joining voyage with code', { inviteCode });
-
-  try {
-    // Use the database function
-
-    const { data: voyageId, error } = await supabase.rpc('join_voyage_by_code', {
-      p_invite_code: inviteCode,
-      p_user_id: userId,
-    });
-
-    if (error) {
-      log.voyage('joinVoyageByCode error', { error: error.message, inviteCode }, 'error');
-      return null;
-    }
-
-    if (!voyageId) {
-      log.voyage('Invalid invite code', { inviteCode });
-      return null;
-    }
-
-    // Fetch the voyage
-    return getVoyageById(voyageId);
-  } catch (error) {
-    log.voyage('joinVoyageByCode error', { error: String(error), inviteCode }, 'error');
-    return null;
-  }
-};
-
-/**
- * Get voyage by invite code (for preview before joining).
- */
-export const getVoyageByInviteCode = async (inviteCode: string): Promise<Voyage | null> => {
-  const supabase = getAdminSupabase();
-  log.voyage('Looking up voyage by invite code', { inviteCode });
-
-  try {
-
-    const { data, error } = await supabase
-      .from('voyages')
-      .select('*')
-      .eq('invite_code', inviteCode)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return null;
-      }
-      log.voyage('getVoyageByInviteCode error', { error: error.message, inviteCode }, 'error');
-      return null;
-    }
-
-    return transformVoyage(data as VoyageRow);
-  } catch (error) {
-    log.voyage('getVoyageByInviteCode error', { error: String(error), inviteCode }, 'error');
-    return null;
-  }
-};
-
 /**
  * Regenerate a voyage's invite code (captain only).
  */

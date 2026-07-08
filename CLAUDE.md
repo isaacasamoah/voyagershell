@@ -135,7 +135,6 @@ Empty `[]` response = success. Verify with a `SELECT` query if needed.
 
 | Pattern | Location | Purpose |
 |---------|----------|---------|
-| Agent Primitives | `lib/agents/primitives.ts` | Declarative agent definitions |
 | Tool Definitions | `lib/prompts/types.ts` | Standard tool interface |
 | Captain Tools | `lib/tools/captain.ts` | ask_captain presentation tool |
 | Debug Logging | `lib/debug/logger.ts` | Toggleable structured logging |

@@ -104,14 +104,6 @@ const truncateToTokens = (content: string, maxTokens: number): string => {
 
   return truncated + '\n\n[Additional context truncated]';
 };
-
-/**
- * Formats a simple "no context" message when retrieval returns empty.
- */
-export const formatNoContext = (): string => {
-  return '# Context\n\nNo relevant context found for this query.';
-};
-
 /**
  * Estimates token count for the formatted context.
  */

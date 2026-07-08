@@ -20,6 +20,13 @@ export type EdgeType =
   | 'decided_by'    // decision -> person: accountability
   | 'raised_by'     // concern/idea -> person: attribution
 
+// knowledge_edges is not in generated Supabase types yet — cast through any
+const edgesTable = () => (getAdminClient() as any).from('knowledge_edges')
+
+// =============================================================================
+// Edge Operations
+// =============================================================================
+
 export interface KnowledgeEdge {
   id: string
   source_id: string
@@ -28,13 +35,6 @@ export interface KnowledgeEdge {
   created_by: string
   created_at: string
 }
-
-// knowledge_edges is not in generated Supabase types yet — cast through any
-const edgesTable = () => (getAdminClient() as any).from('knowledge_edges')
-
-// =============================================================================
-// Edge Operations
-// =============================================================================
 
 /**
  * Create a typed directional edge between two knowledge nodes.
@@ -69,60 +69,3 @@ export const createEdge = async (
   return data as KnowledgeEdge
 }
 
-/**
- * Get outgoing edges from a node.
- * Optional type filter and limit.
- */
-export const getEdgesFrom = async (
-  nodeId: string,
-  edgeType?: EdgeType,
-  limit: number = 50
-): Promise<KnowledgeEdge[]> => {
-  let query = edgesTable()
-    .select('*')
-    .eq('source_id', nodeId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
-
-  if (edgeType) {
-    query = query.eq('edge_type', edgeType)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    console.error('[edges] getEdgesFrom error:', error)
-    return []
-  }
-
-  return (data ?? []) as KnowledgeEdge[]
-}
-
-/**
- * Get incoming edges to a node.
- * Optional type filter and limit.
- */
-export const getEdgesTo = async (
-  nodeId: string,
-  edgeType?: EdgeType,
-  limit: number = 50
-): Promise<KnowledgeEdge[]> => {
-  let query = edgesTable()
-    .select('*')
-    .eq('target_id', nodeId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
-
-  if (edgeType) {
-    query = query.eq('edge_type', edgeType)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    console.error('[edges] getEdgesTo error:', error)
-    return []
-  }
-
-  return (data ?? []) as KnowledgeEdge[]
-}

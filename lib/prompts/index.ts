@@ -3,7 +3,7 @@
 // DSPy-compatible: pure functions, structured data
 
 import type { RetrievalResult } from '@/lib/retrieval';
-import { getPinnedKnowledge, loadPreferences, curatePromptWindow, type KnowledgeNode } from '@/lib/knowledge';
+import { curatePromptWindow, type KnowledgeNode } from '@/lib/knowledge';
 import { loadVoyageContext, formatVoyageContextSection } from '@/lib/voyage';
 import { formatCuratedWindow } from './format/user';
 
@@ -42,7 +42,6 @@ export {
 import { composePrompt } from './compose';
 import { CORE_PROMPT } from './core';
 import { mergeUserProfile } from './defaults';
-import type { KnowledgeItem, RetrievedContext } from './types';
 
 // ============================================================================
 // PROMPT COMPOSITION — Main entry point for chat routes
@@ -101,21 +100,11 @@ export const composeSystemPrompt = async (
       : Promise.resolve(null),
   ]);
 
-  // Build pinned knowledge from curated preferences (for backward compat with composePrompt)
+  // Preferences render exactly once, via formatCuratedWindow below ("What I
+  // Know About You"). composePrompt no longer re-renders them (the old shim
+  // narrated the same preferences 2-3x per system prompt). `pinned` is kept
+  // only for the return metadata / logging.
   const pinned = curatedWindow.preferences;
-  const pinnedKnowledge: KnowledgeItem[] = pinned.map((k: KnowledgeNode) => ({
-    id: k.eventId,
-    content: k.content,
-    source: 'pinned' as const,
-    relevance: 1.0,
-  }));
-
-  // Build context items from pinned knowledge only (no pre-retrieval)
-  const contextItems: KnowledgeItem[] = [...pinnedKnowledge];
-
-  const retrievedContext: RetrievedContext = {
-    items: contextItems,
-  };
 
   // Build user profile in new format
   const userProfile = profile
@@ -143,8 +132,8 @@ export const composeSystemPrompt = async (
   const composed = composePrompt({
     userId,
     userProfile,
-    pinnedKnowledge,
-    retrievedContext,
+    pinnedKnowledge: [],
+    retrievedContext: { items: [] },
   });
 
   // Build curated knowledge section (stable across turns — cacheable)
