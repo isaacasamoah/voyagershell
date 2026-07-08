@@ -12,6 +12,7 @@ import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useDeliveries } from '@/lib/messaging/useDeliveries';
+import { useKeyboardViewport } from './hooks/useKeyboardViewport';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
 import { VoyagerWordmark } from './VoyagerWordmark';
@@ -64,6 +65,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   // The live wire (M0.2): messages from other humans, delivered on their own
   // clock — rendered into the feed as they arrive, receipts stamped honestly.
   const { incoming: incomingMessages, markSeen } = useDeliveries(isAuthenticated ? (user?.id ?? null) : null);
+
+  // Mobile composing mode: keyboard up on a phone → the astronaut steps
+  // aside (corner dock) and the input deck rides the keyboard.
+  const { keyboardInset, composing } = useKeyboardViewport();
 
   // Voyage context (fetch voyages, pending invites, URL params)
   const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
@@ -419,7 +424,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   })();
 
   return (
-    <div className={`min-h-screen bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden relative ${className || ''}`}>
+    <div className={`min-h-screen min-h-[100dvh] bg-[#050505] text-slate-300 font-mono text-sm selection:bg-indigo-500/30 overflow-x-hidden overscroll-y-none relative ${className || ''}`}>
 
       {/* CONTEXT BAR — fixed header. Hidden while the hero owns the screen;
           the rainbow hands identity over to the header on the first message. */}
@@ -477,20 +482,30 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
       {/* THE STREAM — astronaut band + scrollable messages
           Padding: header (52px) + astronaut band (280px) = 332px in conversation mode */}
-      <div className="max-w-2xl mx-auto px-4 pb-48" style={{ paddingTop: hasUserTyped ? '332px' : '0px' }}>
+      <div
+        className={`max-w-2xl mx-auto px-4 pb-48 transition-[padding] duration-700 ease-in-out ${
+          hasUserTyped ? (composing ? 'pt-[52px]' : 'pt-[222px] sm:pt-[332px]') : 'pt-0'
+        }`}
+      >
 
         {/* ASTRONAUT BAND — fixed below header in conversation mode */}
         <div
-          className={`z-40 flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
+          className={`flex flex-col items-center pointer-events-none transition-all duration-700 ease-in-out ${
             !hasUserTyped
-              ? 'sticky top-0 min-h-[calc(100vh-120px)] justify-center'
-              : 'fixed top-[52px] left-0 right-0 h-[280px] justify-center bg-[#050505] overflow-hidden'
+              ? 'z-40 sticky top-0 min-h-[calc(100dvh-120px)] justify-center'
+              : composing
+                ? 'z-[60] fixed top-0 right-1 left-auto w-[60px] h-[52px] justify-center overflow-hidden'
+                : 'z-40 fixed top-[52px] left-0 right-0 h-[170px] sm:h-[280px] justify-center bg-[#050505] overflow-hidden'
           }`}
         >
           {!hasUserTyped && (
             <VoyagerWordmark variant="hero" className="-mb-12 scale-[0.74] sm:-mb-32 sm:scale-90" />
           )}
-          <div className={`transition-all duration-700 ease-in-out ${!hasUserTyped ? 'scale-[0.62]' : 'scale-[0.88]'} sm:scale-100`}>
+          <div className={`transition-all duration-700 ease-in-out ${
+            !hasUserTyped ? 'scale-[0.62] sm:scale-100'
+            : composing ? 'scale-[0.16]'
+            : 'scale-[0.55] sm:scale-100'
+          }`}>
             <AstronautState state={astronautState} beat={astronautBeat} size={astronautSize} />
           </div>
           {!hasUserTyped && (
@@ -498,13 +513,13 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
               let&apos;s go together
             </p>
           )}
-          {progressLabel && isStreaming && (
+          {progressLabel && isStreaming && !composing && (
             <div className="text-center text-xs text-slate-500 mt-1 animate-pulse">
               {progressLabel}
             </div>
           )}
           {/* Bottom gradient boundary — Voyager's territory fades into message space */}
-          {hasUserTyped && (
+          {hasUserTyped && !composing && (
             <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-[#050505] pointer-events-none" />
           )}
         </div>
@@ -635,8 +650,11 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         </div>{/* end space-y-12 messages wrapper */}
       </div>
 
-      {/* INPUT DECK */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur border-t border-white/10 p-4 pb-6">
+      {/* INPUT DECK — translates up to ride the mobile keyboard */}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 bg-[#050505] backdrop-blur border-t border-white/10 p-4 pb-6 transition-transform duration-200 ease-out"
+        style={{ transform: keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : undefined }}
+      >
         <div className="max-w-2xl mx-auto">
           {/* No brain connected — quiet honest pointer, not a wall */}
           {isAuthenticated && hasBrain === false && (
