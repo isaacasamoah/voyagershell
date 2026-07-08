@@ -466,32 +466,3 @@ export const resumeConversation = async (
 // Utility Functions
 // =============================================================================
 
-/**
- * Get a single conversation by ID.
- */
-export const getConversation = async (
-  conversationId: string
-): Promise<Conversation | null> => {
-  const supabase = getAdminSupabase()
-
-  try {
-    
-    const { data, error } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('id', conversationId)
-      .single()
-
-    if (error) {
-      console.error('[Conversation] getConversation error:', error)
-      return null
-    }
-
-    return transformSession(data as ExtendedSession)
-  } catch (error) {
-    console.error('[Conversation] getConversation error:', error)
-    return null
-  }
-}
-
-

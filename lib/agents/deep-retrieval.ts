@@ -8,7 +8,7 @@
 
 import { generateText, stepCountIs } from 'ai'
 import { createRetrievalTools, type ToolContext } from '@/lib/retrieval/tools'
-import type { RetrievalResult } from './queue'
+import type { BackgroundTaskResult } from './queue'
 import { updateTaskProgress } from './queue'
 import { resolveUserModel } from '@/lib/models'
 import { log } from '@/lib/debug'
@@ -51,7 +51,7 @@ When done, provide a clear summary of your findings. Focus on what's most releva
 
 export async function runBackgroundRetrieval(
   input: BackgroundRetrievalInput
-): Promise<RetrievalResult> {
+): Promise<BackgroundTaskResult> {
   const { taskId, objective, context, userId, voyageSlug, conversationId } = input
   const shortTaskId = taskId.slice(0, 8)
 
@@ -81,7 +81,7 @@ export async function runBackgroundRetrieval(
   await updateTaskProgress(taskId, { stage: 'analyzing', percent: 80 })
 
   // Extract findings from tool call results
-  const findings: RetrievalResult['findings'] = []
+  const findings: BackgroundTaskResult['findings'] = []
   const seenIds = new Set<string>()
 
   for (const step of result.steps) {

@@ -86,13 +86,6 @@ const getConfidence = (type: ReferenceType, trigger: string): number => {
 }
 
 /**
- * Check if any signals were detected.
- */
-export const hasReferenceSignals = (message: string): boolean => {
-  return detectReferenceSignals(message).length > 0
-}
-
-/**
  * Context for continuity retrieval.
  */
 export interface ContinuityContext {

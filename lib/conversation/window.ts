@@ -105,17 +105,3 @@ export const getTruncatedMessages = (
   return allMessages.slice(0, windowResult.truncatedCount)
 }
 
-/**
- * Check if the window is under pressure (close to budget).
- * Useful for deciding when to be more aggressive with retrieval.
- */
-export const isWindowUnderPressure = (
-  windowResult: WindowResult,
-  config: WindowConfig = DEFAULT_WINDOW
-): boolean => {
-  const availableBudget = config.maxTokens - config.reserveForContext
-  const usageRatio = windowResult.tokenCount / availableBudget
-
-  // Consider under pressure if >80% of budget used
-  return usageRatio > 0.8
-}

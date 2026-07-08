@@ -30,12 +30,7 @@ export type { PromptWindowConfig, CuratedWindow } from './curator'
 export {
   searchKnowledge,
   getKnowledgeByIds,
-  getConnectedKnowledge,
-  getRecentKnowledge,
-  getPinnedKnowledge,
-  formatKnowledgeForPrompt,
   keywordGrep,
-  loadPreferences,
   buildScopeFilter,
 } from './search'
 
@@ -53,5 +48,5 @@ export type { RerankOptions, RerankResult } from './rerank'
 export { reformulateQuery } from './reformulate'
 
 // Typed directional edges (v2)
-export { createEdge, getEdgesFrom, getEdgesTo } from './edges'
-export type { EdgeType, KnowledgeEdge } from './edges'
+export { createEdge } from './edges'
+export type { EdgeType } from './edges'
