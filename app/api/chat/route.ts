@@ -132,7 +132,17 @@ export const POST = async (req: Request) => {
     const lastUserMessage = simpleMessages
       .filter((m) => m.role === 'user')
       .pop();
-    const queryText = lastUserMessage?.content ?? '';
+    // `@voyager …` — a ONE-SHOT private aside to your own co-pilot. Detect +
+    // strip the prefix HERE, before intent detection, so the model and the
+    // reconciler see a clean query (no spurious "tell voyager" intent) and the
+    // saved transcript/knowledge is prefix-free. The aside bypasses the room
+    // below (not fanned to humans; answered even if Voyager stepped out).
+    const rawQuery = lastUserMessage?.content ?? '';
+    const voyagerAside = /^@voyager\b/i.test(rawQuery.trim());
+    const queryText = voyagerAside
+      ? rawQuery.replace(/^@voyager[\s,:!.?-]*/i, '').trim()
+      : rawQuery;
+    if (voyagerAside && lastUserMessage) lastUserMessage.content = queryText;
 
     // Shell Contract: detect verb intent before LLM runs
     const intent = detectActionIntent(queryText);
@@ -269,7 +279,7 @@ export const POST = async (req: Request) => {
       saveMessage(conversationId, 'user', queryText).catch((error) => {
         console.error('[Chat] Failed to save user message:', error);
       });
-      if (room.roomPeople.length === 0) {
+      if (room.roomPeople.length === 0 || voyagerAside) {
         emitMessageEvent(conversationId, 'user', queryText, {
           userId,
           voyageSlug,
@@ -280,7 +290,7 @@ export const POST = async (req: Request) => {
 
     // Room fan-out — deliver to CURRENT voyage members only. A person who left
     // the voyage after being added must not still receive room messages.
-    if (conversationId && queryText && room.roomPeople.length > 0) {
+    if (conversationId && queryText && room.roomPeople.length > 0 && !voyagerAside) {
       const currentIds = new Set(voyageMembers.map((m) => m.userId));
       const recipients = room.roomPeople.filter((id) => id !== userId && currentIds.has(id));
       if (recipients.length > 0) {
@@ -302,7 +312,8 @@ export const POST = async (req: Request) => {
     }
 
     // Voyager has stepped out → no AI turn (message still saved + delivered).
-    if (!room.aiPresent) {
+    // EXCEPT an `@voyager` aside, which always reaches your private co-pilot.
+    if (!room.aiPresent && !voyagerAside) {
       return createUIMessageStreamResponse({
         stream: createUIMessageStream({ execute: async () => {} }),
       });
