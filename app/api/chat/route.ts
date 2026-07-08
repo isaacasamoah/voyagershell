@@ -262,6 +262,12 @@ export const POST = async (req: Request) => {
       // fell through (not a real command) → treat as a normal message below.
     }
 
+    // `@voyager …` — a ONE-SHOT private aside to your own co-pilot. Bypasses the
+    // room: not fanned to the humans, and answered even if Voyager has stepped
+    // out (your private Voyager is always available). Next plain line returns to
+    // the room. Explicit `@voyager` prefix only — no false positives.
+    const voyagerAside = queryText ? /^@voyager\b/i.test(queryText.trim()) : false;
+
     // Save user message to DB (transcript). A ROOM message skips the extra
     // 'conversation' knowledge event — it emits a 'room' message event below,
     // so the same content is never double-written into the knowledge base.
@@ -269,7 +275,7 @@ export const POST = async (req: Request) => {
       saveMessage(conversationId, 'user', queryText).catch((error) => {
         console.error('[Chat] Failed to save user message:', error);
       });
-      if (room.roomPeople.length === 0) {
+      if (room.roomPeople.length === 0 || voyagerAside) {
         emitMessageEvent(conversationId, 'user', queryText, {
           userId,
           voyageSlug,
@@ -280,7 +286,7 @@ export const POST = async (req: Request) => {
 
     // Room fan-out — deliver to CURRENT voyage members only. A person who left
     // the voyage after being added must not still receive room messages.
-    if (conversationId && queryText && room.roomPeople.length > 0) {
+    if (conversationId && queryText && room.roomPeople.length > 0 && !voyagerAside) {
       const currentIds = new Set(voyageMembers.map((m) => m.userId));
       const recipients = room.roomPeople.filter((id) => id !== userId && currentIds.has(id));
       if (recipients.length > 0) {
@@ -302,7 +308,8 @@ export const POST = async (req: Request) => {
     }
 
     // Voyager has stepped out → no AI turn (message still saved + delivered).
-    if (!room.aiPresent) {
+    // EXCEPT an `@voyager` aside, which always reaches your private co-pilot.
+    if (!room.aiPresent && !voyagerAside) {
       return createUIMessageStreamResponse({
         stream: createUIMessageStream({ execute: async () => {} }),
       });
