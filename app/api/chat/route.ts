@@ -92,7 +92,7 @@ export const POST = async (req: Request) => {
     if (authResult instanceof Response) return authResult;
     const userId = authResult;
 
-    const { messages, conversationId, authState } = await req.json();
+    const { messages, conversationId, authState, autoSent } = await req.json();
 
     // Messaging v2 — the session IS the context. Voyage is derived from the
     // session (conversationId → session.voyage_id), never from a request
@@ -275,7 +275,10 @@ export const POST = async (req: Request) => {
     // Save user message to DB (transcript). A ROOM message skips the extra
     // 'conversation' knowledge event — it emits a 'room' message event below,
     // so the same content is never double-written into the knowledge base.
-    if (conversationId && queryText) {
+    // The synthetic auto-sent welcome ('good morning') is NEVER persisted — it
+    // only triggers Voyager's greeting; persisting it would render a fake user
+    // turn in the event-stream feed.
+    if (conversationId && queryText && !autoSent) {
       saveMessage(conversationId, 'user', queryText).catch((error) => {
         console.error('[Chat] Failed to save user message:', error);
       });

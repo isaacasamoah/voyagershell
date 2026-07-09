@@ -13,7 +13,7 @@ import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useEventFeed } from '@/lib/messaging/useEventFeed';
-import { shouldShowStreamingReply, type FeedEvent, type StreamingReply } from '@/lib/messaging/feed-types';
+import { shouldShowStreamingReply, shouldShowOptimisticUser, type FeedEvent, type StreamingReply } from '@/lib/messaging/feed-types';
 import { useVisualViewport } from './hooks/useVisualViewport';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
@@ -486,6 +486,16 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     );
   };
 
+  // The user's just-sent message, shown live until its 'conversation' event
+  // lands in the feed — so it never vanishes during the send round-trip.
+  const renderOptimisticUser = () => {
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (!lastUser) return null;
+    const content = getMessageText(lastUser);
+    if (!shouldShowOptimisticUser(content, feedEvents)) return null;
+    return <UserMessage key={`optimistic-${lastUser.id}`} content={content} timestamp="LIVE" username="you" />;
+  };
+
   const renderStreamingReply = () => {
     if (!shouldShowStreamingReply(streamingReply, feedEvents)) return null;
     const streamingMessage = messages.find((message) => message.id === streamingReply.id);
@@ -613,6 +623,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
         {/* One ordered event stream from /api/feed; useChat is only the live transient. */}
         {feedEvents.map(renderFeedEvent)}
+        {renderOptimisticUser()}
         {renderStreamingReply()}
 
         {/* Error state */}

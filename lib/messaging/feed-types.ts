@@ -31,8 +31,10 @@ export interface StreamingReply {
   startedAt: string
 }
 
+// Epoch comparison — feed events can mix DB (`+00:00`) and client-optimistic
+// (`Z`) timestamp formats; string compare would mis-order across formats.
 const compareFeedEvents = (a: FeedEvent, b: FeedEvent) => {
-  const byCreatedAt = a.createdAt.localeCompare(b.createdAt)
+  const byCreatedAt = Date.parse(a.createdAt) - Date.parse(b.createdAt)
   if (byCreatedAt !== 0) return byCreatedAt
   return a.id.localeCompare(b.id)
 }
@@ -82,7 +84,7 @@ export const hasSettledAssistantEvent = (
   return events.some((event) => (
     event.role === 'assistant'
     && event.content.trim() === normalized
-    && (!startedAt || event.createdAt >= startedAt)
+    && (!startedAt || Date.parse(event.createdAt) >= Date.parse(startedAt))
   ))
 }
 
@@ -93,3 +95,16 @@ export const shouldShowStreamingReply = (
   Boolean(reply?.content.trim())
   && !hasSettledAssistantEvent(events, reply?.content ?? '', reply?.startedAt)
 )
+
+// The auto-sent hidden welcome ("good morning") is never persisted, so it must
+// never render as an optimistic user turn either.
+const WELCOME_RE = /^good (morning|afternoon|evening)\b/i
+
+// Show a just-sent user message as an optimistic transient until its own
+// 'conversation' event lands in the feed (avoids the send→round-trip vanish),
+// excluding the hidden welcome.
+export const shouldShowOptimisticUser = (content: string, events: FeedEvent[]): boolean => {
+  const normalized = content.trim()
+  if (!normalized || WELCOME_RE.test(normalized)) return false
+  return !events.some((e) => e.role === 'user' && e.content.trim() === normalized)
+}

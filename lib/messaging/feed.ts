@@ -109,7 +109,10 @@ export const getFeed = async (userId: string, conversationId: string): Promise<F
     .select('id,event_type,content,created_at,metadata,source_ref,actor_type,user_id,participants,voyage_slug')
     .in('event_type', ['conversation', 'message'])
     .contains('participants', [userId])
-    .order('created_at', { ascending: true })
+    // Recent-N cap: fetch newest 200, client sorts ascending. Bounds a long
+    // history + the per-Realtime-insert refetch.
+    .order('created_at', { ascending: false })
+    .limit(200)
 
   query = voyageSlug ? query.eq('voyage_slug', voyageSlug) : query.is('voyage_slug', null)
 
