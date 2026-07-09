@@ -17,44 +17,6 @@ const table = () => (getAdminClient() as unknown as { from: (t: string) => any }
  * ledger). Failures are logged; there is NO automatic re-fan yet — known
  * M0.2 gap, tracked in the messaging design doc.
  */
-export interface PendingMessage {
-  deliveryId: string
-  eventId: string
-  content: string
-  senderDisplayName: string
-  createdAt: string
-  deliveredAt: string | null
-}
-
-/** The caller's unseen messages, oldest first — the live wire's catch-up and
- *  the welcome brief's raw material. */
-export const getPendingMessages = async (userId: string): Promise<PendingMessage[]> => {
-  const { data, error } = await table()
-    .select('id, event_id, created_at, delivered_at, knowledge_events(content, metadata)')
-    .eq('recipient_user_id', userId)
-    .is('seen_at', null)
-    .order('created_at', { ascending: true })
-    .limit(100)
-  if (error) {
-    log.api('Pending messages query failed', { error: error.message }, 'error')
-    return []
-  }
-  return ((data ?? []) as Array<{
-    id: string
-    event_id: string
-    created_at: string
-    delivered_at: string | null
-    knowledge_events: { content: string; metadata: Record<string, unknown> | null } | null
-  }>).map((row) => ({
-    deliveryId: row.id,
-    eventId: row.event_id,
-    content: row.knowledge_events?.content ?? '',
-    senderDisplayName:
-      (row.knowledge_events?.metadata?.sender_display_name as string | undefined) ?? 'someone',
-    createdAt: row.created_at,
-    deliveredAt: row.delivered_at,
-  }))
-}
 
 /** Stamp delivered/seen on the caller's own delivery rows. Ownership enforced
  *  here; forward-only movement enforced by the DB trigger. */

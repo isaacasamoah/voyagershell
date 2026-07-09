@@ -116,6 +116,8 @@ export const POST = async (req: Request) => {
           emitMessageEvent(conversationId, 'assistant', text, {
             userId: task.userId,
             voyageSlug: task.voyageSlug,
+            participants: [task.userId],
+            eventType: 'conversation',
           })
         }
       },

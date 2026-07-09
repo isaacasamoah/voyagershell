@@ -40,10 +40,11 @@ export const useConversation = ({
 
   // Hero → conversation mode tracking
   const [hasUserTyped, setHasUserTyped] = useState(false)
-  const autoSentCount = useRef(0)
+  // Set true right before the hidden welcome send; consumed (reset) by the
+  // transport body so the route knows NOT to persist that synthetic turn.
+  const autoSentRef = useRef(false)
 
   // Side-channel for message timestamps (UIMessage type doesn't include createdAt)
-  const messageTimestamps = useRef<Map<string, Date>>(new Map())
 
   // Refs for transport (read dynamically, avoid re-creating transport)
   const conversationIdRef = useRef<string | null>(null)
@@ -58,10 +59,15 @@ export const useConversation = ({
   // drift out of sync with the conversation.
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
-    body: () => ({
-      conversationId: conversationIdRef.current,
-      authState: authStateRef.current,
-    }),
+    body: () => {
+      const autoSent = autoSentRef.current
+      autoSentRef.current = false // consume: true for exactly the next request
+      return {
+        conversationId: conversationIdRef.current,
+        authState: authStateRef.current,
+        autoSent,
+      }
+    },
   }), [])
 
   // useChat with transport
@@ -112,31 +118,11 @@ export const useConversation = ({
         setConversationTitle(data.conversation.title)
         const roomData = (data as unknown as { room?: { people: string[]; aiPresent: boolean } }).room
         if (roomData) setRoom(roomData)
-        autoSentCount.current = 0
-        messageTimestamps.current = new Map()
 
         if (data.messages.length > 0) {
           const uiMessages = data.messages.map(apiMessageToUIMessage)
-          // Store timestamps from DB for accurate display
-          for (const msg of data.messages) {
-            if (msg.createdAt) {
-              messageTimestamps.current.set(msg.id, new Date(msg.createdAt))
-            }
-          }
           setMessages(uiMessages)
           setHasUserTyped(true)
-
-          // Detect auto-sent welcome prompt to maintain correct message filtering
-          const firstUserMsg = uiMessages.find((m: { role: string }) => m.role === 'user')
-          if (firstUserMsg) {
-            const text = firstUserMsg.parts
-              ?.filter((p: { type: string }) => p.type === 'text')
-              .map((p: { type: string; text?: string }) => p.text ?? '')
-              .join('') ?? ''
-            if (/^good (morning|afternoon|evening)/i.test(text)) {
-              autoSentCount.current = 1
-            }
-          }
         } else {
           setMessages([])
         }
@@ -169,7 +155,7 @@ export const useConversation = ({
     const voyageContext = currentVoyage ? ` in ${currentVoyage.name}` : ''
 
     const timer = setTimeout(() => {
-      autoSentCount.current++
+      autoSentRef.current = true
       sendMessage({ text: `good ${timeOfDay}${voyageContext}` })
     }, 300)
     return () => clearTimeout(timer)
@@ -239,8 +225,6 @@ export const useConversation = ({
       setConversationTitle(data.conversation.title)
       setMessages([])
       setHasUserTyped(false)
-      autoSentCount.current = 0
-      messageTimestamps.current = new Map()
 
       log.voyage('New conversation started', { conversationId: data.conversation.id })
       return true
@@ -248,7 +232,7 @@ export const useConversation = ({
       log.voyage('startNewConversation error', { error: String(error) }, 'error')
       return false
     }
-  }, [setMessages, setHasUserTyped, autoSentCount, messageTimestamps])
+  }, [setMessages, setHasUserTyped])
 
   // Resume an existing conversation — calls POST /api/conversation/resume, reloads UI state
   const resumeConversation = useCallback(async (targetConversationId: string): Promise<boolean> => {
@@ -271,19 +255,12 @@ export const useConversation = ({
       setConversationTitle(data.conversation.title)
 
       if (data.messages.length > 0) {
-        const uiMessages = data.messages.map(apiMessageToUIMessage)
-        for (const msg of data.messages) {
-          if (msg.createdAt) {
-            messageTimestamps.current.set(msg.id, new Date(msg.createdAt))
-          }
-        }
-        setMessages(uiMessages)
+        setMessages(data.messages.map(apiMessageToUIMessage))
         setHasUserTyped(true)
       } else {
         setMessages([])
         setHasUserTyped(false)
       }
-      autoSentCount.current = 0
 
       log.voyage('Conversation resumed', { conversationId: data.conversation.id })
       return true
@@ -291,7 +268,7 @@ export const useConversation = ({
       log.voyage('resumeConversation error', { error: String(error) }, 'error')
       return false
     }
-  }, [setMessages, setHasUserTyped, autoSentCount, messageTimestamps])
+  }, [setMessages, setHasUserTyped])
 
   return {
     conversationId,
@@ -305,8 +282,6 @@ export const useConversation = ({
     error,
     hasUserTyped,
     setHasUserTyped,
-    autoSentCount,
-    messageTimestamps,
     messageQueue,
     setMessageQueue,
     isLoading,
