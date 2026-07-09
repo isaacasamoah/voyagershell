@@ -364,6 +364,73 @@ export const keywordGrep = async (
   }
 }
 
+export const personAnchoredSearch = async (
+  callerUserId: string,
+  senderUserId: string,
+  options: { voyageSlug?: string; query?: string; limit?: number } = {}
+): Promise<GrepResult[]> => {
+  try {
+    const supabase = getClientForUser(callerUserId)
+    const query = options.query
+
+    const { data, error } = await (supabase.rpc as Function)('scoped_knowledge_fetch', {
+      p_user_id: callerUserId,
+      p_voyage_slug: options.voyageSlug ?? null,
+      p_participants: [callerUserId],
+      p_scope: options.voyageSlug ? 'all' : 'personal',
+      p_content_match: query ? `%${query}%` : null,
+      p_case_sensitive: false,
+      p_min_attention: 0.0,
+      p_match_count: options.limit ?? 20,
+      p_sender_user_id: senderUserId,
+    })
+
+    if (error) {
+      console.error('[Knowledge] personAnchoredSearch error:', error)
+      return []
+    }
+
+    const rows = (data ?? []) as KnowledgeNodeInput[]
+
+    return rows.map((row) => {
+      const content = row.content
+      const lowerContent = content.toLowerCase()
+      const lowerQuery = query?.toLowerCase()
+      const rawMatchStart = lowerQuery ? lowerContent.indexOf(lowerQuery) : -1
+      const matchStart = rawMatchStart >= 0 ? rawMatchStart : 0
+
+      let highlight: string
+      if (query && rawMatchStart >= 0) {
+        const start = Math.max(0, rawMatchStart - 50)
+        const end = Math.min(content.length, rawMatchStart + query.length + 50)
+        highlight = content.slice(start, end)
+        if (start > 0) highlight = '...' + highlight
+        if (end < content.length) highlight = highlight + '...'
+      } else {
+        highlight = content.slice(0, 120)
+        if (content.length > 120) highlight = highlight + '...'
+      }
+
+      return {
+        eventId: row.event_id,
+        content: row.content,
+        classifications: row.classifications ?? [],
+        entities: row.entities ?? [],
+        topics: row.topics ?? [],
+        createdAt: new Date(row.source_created_at),
+        knowledgeType: row.knowledge_type ?? null,
+        attentionScore: row.attention_score ?? 0.5,
+        contextSnippet: row.context_snippet ?? null,
+        highlight,
+        matchStart,
+      }
+    })
+  } catch (error) {
+    console.error('[Knowledge] personAnchoredSearch error:', error)
+    return []
+  }
+}
+
 // =============================================================================
 // Preference Loading (for system prompt injection)
 // =============================================================================

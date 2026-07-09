@@ -31,6 +31,7 @@ export {
   searchKnowledge,
   getKnowledgeByIds,
   keywordGrep,
+  personAnchoredSearch,
 } from './search'
 
 export type { KnowledgeNode, SearchOptions, GrepOptions, GrepResult } from './search'
