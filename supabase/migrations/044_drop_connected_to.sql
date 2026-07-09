@@ -1,5 +1,10 @@
 -- APPLY ONLY AT PROD PROMOTION - prod still reads connected_to until Cut 3a ships to main.
 --
+-- PREREQUISITE: migration 045 MUST already be applied before this runs — the
+-- keyword_search body below calls knowledge_in_scope(), which 045 creates. On the
+-- shared dev+prod DB 045 is already applied, so this is satisfied; a fresh-DB
+-- number-order replay must apply 045 first.
+--
 -- Cut 3a legacy cleanup:
 -- - 037_messaging_v2_drop_weave.sql:88-101 left an event_type='connection'
 --   trigger branch that writes knowledge_current.connected_to.

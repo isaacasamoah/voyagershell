@@ -143,7 +143,10 @@ BEGIN
       OR (
         p_scope = 'voyage'
         AND knowledge_in_scope(kc.user_id, kc.voyage_slug, kc.event_type, kc.knowledge_type, kc.participants, p_user_id, p_voyage_slug, p_participants)
-        AND kc.voyage_slug IS NOT NULL
+        -- Exclude the personal layer only when a voyage is actually named. With a
+        -- NULL slug, 'voyage' degrades to personal (knowledge_in_scope returns only
+        -- L1 rows) — matching the pre-unification keywordGrep fallback behavior.
+        AND (p_voyage_slug IS NULL OR kc.voyage_slug IS NOT NULL)
       )
       OR (
         p_scope = 'all'
