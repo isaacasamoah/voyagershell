@@ -210,4 +210,39 @@ describe('room invitations', () => {
     expect(secondInvite).toEqual({ state: 'invited', spaceId: firstInvite.spaceId })
     expect(db.space_members.get(`${firstInvite.spaceId}:vanessa`)?.state).toBe('invited')
   })
+
+  it('accepts a fresh invite even when the invitee already has their own room', async () => {
+    seedVoyage()
+    // Vanessa already owns a room and her session is linked to it.
+    db.spaces.set('space-vanessa', { id: 'space-vanessa', kind: 'room', voyage_id: 'voyage-1', ai_present: false, created_by: 'vanessa', created_at: '2026-07-09T00:00:00.000Z' })
+    db.space_members.set('space-vanessa:vanessa', { space_id: 'space-vanessa', user_id: 'vanessa', state: 'active' })
+    const vanessa = db.sessions.get('vanessa-session'); if (vanessa) vanessa.space_id = 'space-vanessa'
+
+    const { inviteToRoom, linkPendingSpace } = await loadModules()
+    const invite = await inviteToRoom('isaac-session', 'vanessa') // space-1, vanessa invited
+    const link = await linkPendingSpace('vanessa-session', 'vanessa', 'voyage-1')
+
+    // The pending INVITE wins over her own active room — she joins the shared space.
+    expect(link).toEqual({ linked: true, spaceId: invite.spaceId, wasInvited: true })
+    expect(db.sessions.get('vanessa-session')?.space_id).toBe(invite.spaceId)
+    expect(db.space_members.get(`${invite.spaceId}:vanessa`)?.state).toBe('active')
+  })
+
+  it('does not hijack an already-linked session when there is no fresh invite', async () => {
+    seedVoyage()
+    // Vanessa is active in her own room (session linked) AND active in another
+    // room of the same voyage — but has NO pending invite.
+    db.spaces.set('space-vanessa', { id: 'space-vanessa', kind: 'room', voyage_id: 'voyage-1', ai_present: false, created_by: 'vanessa', created_at: '2026-07-09T00:00:00.000Z' })
+    db.spaces.set('space-other', { id: 'space-other', kind: 'room', voyage_id: 'voyage-1', ai_present: false, created_by: 'other', created_at: '2026-07-09T00:00:05.000Z' })
+    db.space_members.set('space-vanessa:vanessa', { space_id: 'space-vanessa', user_id: 'vanessa', state: 'active' })
+    db.space_members.set('space-other:vanessa', { space_id: 'space-other', user_id: 'vanessa', state: 'active' })
+    const vanessa = db.sessions.get('vanessa-session'); if (vanessa) vanessa.space_id = 'space-vanessa'
+
+    const { linkPendingSpace } = await loadModules()
+    const link = await linkPendingSpace('vanessa-session', 'vanessa', 'voyage-1')
+
+    // No invite → an ordinary message must not re-point her linked session.
+    expect(link).toEqual({ linked: false })
+    expect(db.sessions.get('vanessa-session')?.space_id).toBe('space-vanessa')
+  })
 })

@@ -35,9 +35,20 @@ const getSession = async (sessionId: string): Promise<SessionRow | null> => {
   return (data as SessionRow | null) ?? null
 }
 
-const setAiPresent = async (spaceId: string, aiPresent: boolean): Promise<void> => {
+const setSpaceAiPresent = async (spaceId: string, aiPresent: boolean): Promise<void> => {
   const { error } = await spaces().update({ ai_present: aiPresent }).eq('id', spaceId)
   if (error) log.api('invite room presence update failed', { spaceId, error: error.message }, 'error')
+}
+
+/** Re-invite a member who previously left. Guarded on state='left' so a
+ *  concurrent accept (state='active') is never clobbered back to 'invited'. */
+const reinviteLeftMember = async (spaceId: string, userId: string): Promise<void> => {
+  const { error } = await spaceMembers()
+    .update({ state: 'invited' })
+    .eq('space_id', spaceId)
+    .eq('user_id', userId)
+    .eq('state', 'left')
+  if (error) log.api('re-invite left member failed', { spaceId, userId, error: error.message }, 'error')
 }
 
 const getMember = async (spaceId: string, userId: string): Promise<SpaceMemberRow | null> => {
@@ -73,7 +84,7 @@ const linkSessionToSpace = async (sessionId: string, spaceId: string): Promise<b
   return true
 }
 
-export const isHouseholdVoyage = async (voyageId: string): Promise<boolean> => {
+const isHouseholdVoyage = async (voyageId: string): Promise<boolean> => {
   const householdSlug = process.env.HOUSEHOLD_SHARE_VOYAGE
   if (!householdSlug) return false
 
@@ -88,7 +99,7 @@ export const isHouseholdVoyage = async (voyageId: string): Promise<boolean> => {
   return ((data as { slug: string } | null)?.slug ?? null) === householdSlug
 }
 
-export const findVoyageSession = async (
+const findVoyageSession = async (
   userId: string,
   voyageId: string,
 ): Promise<{ id: string } | null> => {
@@ -117,7 +128,7 @@ export const inviteToRoom = async (
   if (!spaceId) return { state: 'invited', spaceId: null }
 
   await activateMembers(spaceId, [session.user_id])
-  await setAiPresent(spaceId, false)
+  await setSpaceAiPresent(spaceId, false)
 
   const autoAccept = session.voyage_id ? await isHouseholdVoyage(session.voyage_id) : false
   if (autoAccept) {
@@ -129,10 +140,14 @@ export const inviteToRoom = async (
     return { state: 'active', spaceId }
   }
 
+  // Never downgrade an already-active/invited row; only (re)invite a fresh or
+  // previously-left member. The re-invite is guarded so it can't clobber a
+  // concurrent accept (see reinviteLeftMember).
   const existing = await getMember(spaceId, inviteeUserId)
   if (existing?.state === 'active') return { state: 'active', spaceId }
-
-  await upsertMemberState(spaceId, inviteeUserId, 'invited')
+  if (existing?.state === 'invited') return { state: 'invited', spaceId }
+  if (existing?.state === 'left') await reinviteLeftMember(spaceId, inviteeUserId)
+  else await upsertMemberState(spaceId, inviteeUserId, 'invited')
   return { state: 'invited', spaceId }
 }
 
@@ -143,11 +158,6 @@ export const linkPendingSpace = async (
 ): Promise<{ linked: boolean; spaceId?: string; wasInvited?: boolean }> => {
   const session = await getSession(sessionId)
   if (!session || session.user_id !== userId || session.voyage_id !== voyageId) return { linked: false }
-
-  if (session.space_id) {
-    const current = await getMember(session.space_id, userId)
-    if (current?.state === 'active') return { linked: false }
-  }
 
   const { data: memberships, error: memberError } = await spaceMembers()
     .select('space_id, user_id, state')
@@ -174,8 +184,17 @@ export const linkPendingSpace = async (
   }
 
   const orderedSpaces = (matchingSpaces as SpaceRow[] | null) ?? []
+  // A pending INVITE always wins — accept it even if this session is already on
+  // another space (the reciprocal accept moves the user into the shared room).
   const invitedSpace = orderedSpaces.find((space) => memberBySpace.get(space.id)?.state === 'invited')
-  const chosenSpace = invitedSpace ?? orderedSpaces.find((space) => memberBySpace.get(space.id)?.state === 'active')
+  // Otherwise only (re)link an already-ACTIVE membership when this session isn't
+  // on a space yet — e.g. a household auto-accept that activated the user before
+  // they had a session. Never hijack an already-linked session on an ordinary
+  // message.
+  const activeSpace = session.space_id
+    ? undefined
+    : orderedSpaces.find((space) => memberBySpace.get(space.id)?.state === 'active')
+  const chosenSpace = invitedSpace ?? activeSpace
   if (!chosenSpace) return { linked: false }
 
   const chosenMember = memberBySpace.get(chosenSpace.id)
