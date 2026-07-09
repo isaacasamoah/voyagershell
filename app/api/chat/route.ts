@@ -12,7 +12,8 @@ import {
 } from '@/lib/conversation/continuity';
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
-import { getRoom, addRoomPerson, removeRoomPerson, setAiPresent, parseRoomCommand } from '@/lib/messaging/room';
+import { getRoom, removeRoomPerson, setAiPresent, parseRoomCommand } from '@/lib/messaging/room';
+import { inviteToRoom, linkPendingSpace } from '@/lib/messaging/invites';
 import { fanOutDeliveries } from '@/lib/messaging/deliveries';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
@@ -225,7 +226,7 @@ export const POST = async (req: Request) => {
 
     // ── The Room ──────────────────────────────────────────────────────────
     // Resolve room state + voyage members ONCE (used by commands, fan-out, gate).
-    const room = conversationId
+    let room = conversationId
       ? await getRoom(conversationId)
       : { roomPeople: [], aiPresent: true };
     const voyage = voyageSlug ? await getVoyageBySlug(voyageSlug) : null;
@@ -249,8 +250,23 @@ export const POST = async (req: Request) => {
         const match = resolveMemberByName(voyageMembers, roomCmd.name);
         if (match && match.userId !== userId) {
           if (roomCmd.op === 'add') {
-            await addRoomPerson(conversationId, match.userId);
-            confirmation = `Added ${match.displayName} — they'll get what you type here. (I've stepped back; say +voyager to bring me in.)`;
+            const invite = await inviteToRoom(conversationId, match.userId);
+            if (invite.state === 'invited') {
+              const me = voyageMembers.find((m) => m.userId === userId);
+              const senderName = me?.displayName ?? me?.email ?? 'Someone';
+              const eventId = await createMessageEvent(conversationId, 'user',
+                `${senderName} invited you to a room — reply to join.`, {
+                  userId, voyageSlug, participants: [match.userId],
+                  addressedTo: [match.userId], source: 'invite',
+                  senderDisplayName: senderName, senderUserId: userId,
+                  attentionScore: 0.9,
+                  contextSnippet: `${senderName} invited you to a room`,
+                })
+              if (eventId) void fanOutDeliveries(eventId, [match.userId])
+              confirmation = `Invited ${match.displayName} — they'll see it and can hop in by replying. (I've stepped back; say +voyager to bring me in.)`;
+            } else {
+              confirmation = `Added ${match.displayName} — they'll get what you type here. (I've stepped back; say +voyager to bring me in.)`;
+            }
           } else {
             await removeRoomPerson(conversationId, match.userId);
             confirmation = `Removed ${match.displayName} from the room.`;
@@ -270,6 +286,13 @@ export const POST = async (req: Request) => {
         return createUIMessageStreamResponse({ stream });
       }
       // fell through (not a real command) → treat as a normal message below.
+    }
+
+    // Reciprocal accept: the invitee's first message accepts a pending invite and
+    // links her session to the shared space, making the room two-sided.
+    if (conversationId && queryText && voyage && !autoSent) {
+      const link = await linkPendingSpace(conversationId, userId, voyage.id)
+      if (link.linked) room = await getRoom(conversationId)
     }
 
     // Save user message to DB (transcript). A ROOM message skips the extra

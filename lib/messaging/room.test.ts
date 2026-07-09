@@ -182,7 +182,7 @@ describe('space-backed room API', () => {
     await expect(getRoom('session-b')).resolves.toEqual({ roomPeople: ['user-a'], aiPresent: false })
   })
 
-  it('adds people through space_members and only links the session to a space', async () => {
+  it('activates members through space_members and only links the session to a space', async () => {
     db.sessions.set('session-a', {
       id: 'session-a',
       user_id: 'user-a',
@@ -190,9 +190,12 @@ describe('space-backed room API', () => {
       space_id: null,
     })
 
-    const { addRoomPerson } = await loadRoomModule()
-    const room = await addRoomPerson('session-a', 'user-b')
-    const spaceId = db.sessions.get('session-a')?.space_id
+    const { activateMembers, ensureSpace, getRoom } = await loadRoomModule()
+    const session = db.sessions.get('session-a')
+    if (!session) throw new Error('missing test session')
+    const spaceId = await ensureSpace(session, false)
+    await activateMembers(spaceId ?? '', ['user-a', 'user-b'])
+    const room = await getRoom('session-a')
 
     expect(spaceId).toBe('space-1')
     expect(sessionUpdates).toEqual([{ space_id: 'space-1' }])
