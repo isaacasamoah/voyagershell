@@ -13,7 +13,7 @@ export interface RoomState {
   aiPresent: boolean
 }
 
-interface SessionRow {
+export interface SessionRow {
   id: string
   user_id: string | null
   voyage_id: string | null
@@ -77,12 +77,12 @@ const createSpaceForSession = async (
   return spaceId
 }
 
-const ensureSpace = async (
+export const ensureSpace = async (
   session: SessionRow,
   aiPresent: boolean,
 ): Promise<string | null> => session.space_id ?? createSpaceForSession(session, aiPresent)
 
-const activateMembers = async (spaceId: string, userIds: Array<string | null>): Promise<void> => {
+export const activateMembers = async (spaceId: string, userIds: Array<string | null>): Promise<void> => {
   const rows = Array.from(new Set(userIds.filter((id): id is string => Boolean(id))))
     .map((user_id) => ({ space_id: spaceId, user_id, state: 'active' }))
   if (rows.length === 0) return
@@ -115,21 +115,6 @@ export const getRoom = async (sessionId: string): Promise<RoomState> => {
     .filter((id): id is string => Boolean(id) && id !== session.user_id)
   const aiPresent = ((space as SpaceRow | null)?.ai_present) ?? true
   return { roomPeople, aiPresent }
-}
-
-/** Add a person to the room. Entering a human thread quiets Voyager by default
- *  (spaces.ai_present = false); `+voyager` brings it back. */
-export const addRoomPerson = async (sessionId: string, userId: string): Promise<RoomState> => {
-  const session = await getSession(sessionId)
-  if (!session) return { roomPeople: [], aiPresent: true }
-
-  const spaceId = await ensureSpace(session, false)
-  if (!spaceId) return getRoom(sessionId)
-
-  await activateMembers(spaceId, [session.user_id, userId])
-  const { error } = await spaces().update({ ai_present: false }).eq('id', spaceId)
-  if (error) log.api('addRoomPerson failed', { spaceId, error: error.message }, 'error')
-  return getRoom(sessionId)
 }
 
 export const removeRoomPerson = async (sessionId: string, userId: string): Promise<RoomState> => {

@@ -19,7 +19,8 @@ import {
 } from '@/lib/knowledge'
 import { hybridSearch, type RankedResult } from '@/lib/knowledge/hybrid'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
-import { getRoom, addRoomPerson, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
+import { getRoom, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
+import { inviteToRoom } from '@/lib/messaging/invites'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
@@ -884,8 +885,8 @@ export const createVoyagerTools = (ctx: ToolContext): {
       if (!ctx.conversationId) return "I can't manage this room — no active conversation."
       const r = await resolveOneMember(input.name)
       if ('error' in r) return r.error
-      await addRoomPerson(ctx.conversationId, r.userId)
-      return JSON.stringify({ status: 'added', person: r.displayName, voyagerQuieted: true })
+      const invite = await inviteToRoom(ctx.conversationId, r.userId)
+      return JSON.stringify({ status: invite.state === 'active' ? 'added' : 'invited', person: r.displayName, voyagerQuieted: true })
     },
   })
 
