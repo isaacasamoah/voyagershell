@@ -49,6 +49,9 @@ BEGIN
     VALUES (session_row.voyage_id, COALESCE(session_row.ai_present, TRUE), session_row.user_id)
     RETURNING id INTO new_space_id;
 
+    -- Owner is always a member; unnested room_people are guarded against
+    -- cross-voyage stale ids (a legacy room_people entry that no longer belongs
+    -- to session_row.voyage_id must not be seeded as an active space member).
     INSERT INTO public.space_members (space_id, user_id, state)
     SELECT new_space_id, member_id, 'active'
     FROM (
@@ -57,6 +60,14 @@ BEGIN
       SELECT unnest(session_row.room_people) AS member_id
     ) members
     WHERE member_id IS NOT NULL
+      AND (
+        member_id = session_row.user_id
+        OR EXISTS (
+          SELECT 1 FROM public.voyage_members vm
+          WHERE vm.voyage_id = session_row.voyage_id
+            AND vm.user_id = members.member_id
+        )
+      )
     ON CONFLICT (space_id, user_id)
     DO UPDATE SET state = 'active';
 
