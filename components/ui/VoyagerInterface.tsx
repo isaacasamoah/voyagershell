@@ -4,6 +4,7 @@ import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import type { UIMessage } from 'ai';
 import { Terminal, Ship } from 'lucide-react';
 import { UserMessage, AssistantMessage, AstronautState, TaskCard, HumanMessage, type TaskProgress } from '@/components/chat';
+import type { MessagePart } from '@/components/chat/AssistantMessage';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
 import { useRealtimeSubscription } from './hooks/useRealtimeSubscription';
@@ -11,7 +12,8 @@ import { useMessageState } from './hooks/useMessageState';
 import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
-import { useDeliveries } from '@/lib/messaging/useDeliveries';
+import { useEventFeed } from '@/lib/messaging/useEventFeed';
+import { shouldShowStreamingReply, shouldShowOptimisticUser, type FeedEvent, type StreamingReply } from '@/lib/messaging/feed-types';
 import { useVisualViewport } from './hooks/useVisualViewport';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
@@ -62,10 +64,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     };
   }, [isAuthenticated]);
 
-  // The live wire (M0.2): messages from other humans, delivered on their own
-  // clock — rendered into the feed as they arrive, receipts stamped honestly.
-  const { incoming: incomingMessages, markSeen } = useDeliveries(isAuthenticated ? (user?.id ?? null) : null);
-
   // Mobile composing mode: keyboard up on a phone → the astronaut steps
   // aside (corner dock) and the input deck rides the keyboard.
   const { height: shellHeight, offsetTop: shellTop, composing } = useVisualViewport();
@@ -80,8 +78,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const {
     conversationId, room, conversationTitle, isLoadingConversation,
     messages, sendMessage, setMessages, status, error,
-    hasUserTyped, setHasUserTyped, autoSentCount,
-    messageTimestamps, messageQueue, setMessageQueue,
+    hasUserTyped, setHasUserTyped,
+    messageQueue, setMessageQueue,
     isLoading, isStreaming,
     showSuccess, setShowSuccess,
     startNewConversation, resumeConversation,
@@ -92,6 +90,16 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     isAuthenticated,
     isAuthLoading,
   });
+  const feedUserId = isAuthenticated ? (user?.id ?? null) : null;
+  const { events: feedEvents, markSeen: markFeedSeen } = useEventFeed({
+    conversationId,
+    userId: feedUserId,
+  });
+  const [streamingReply, setStreamingReply] = useState<StreamingReply | null>(null);
+
+  useEffect(() => {
+    if (feedEvents.length > 0) setHasUserTyped(true);
+  }, [feedEvents.length, setHasUserTyped]);
 
   // Astronaut state machine (pure derivation from conversation + auth state)
   const { astronautState, astronautSize, astronautBeat, progressLabel } = useAstronautState({
@@ -190,8 +198,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   // Keep the newest message in view. The stream is the ONLY scroll container,
   // so this is a single line — no page scroll, no dual anchors. Re-runs when
   // the keyboard toggles (shell resizes) so nothing hides behind the input.
-  const messageCount = messages.length;
-  const incomingMessageCount = incomingMessages.length;
+  const feedEventCount = feedEvents.length;
+  const streamingReplyId = streamingReply?.id ?? null;
   useEffect(() => {
     const el = streamRef.current;
     if (!el) return;
@@ -199,7 +207,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     // shellHeight in deps: the keyboard shrinks the stream in several frames
     // after composing flips — re-anchor on each so the newest line never
     // slips below the fold (codex review).
-  }, [messageCount, incomingMessageCount, composing, shellHeight]);
+  }, [feedEventCount, streamingReplyId, composing, shellHeight]);
 
   // All messages go to Voyager — no intent detection, no slash commands, no auth gate
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -311,7 +319,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   }, [isLoading, sendMessage, setHasUserTyped, setMessageQueue]);
 
   // Helper to extract text content from UIMessage
-  const getMessageText = (message: UIMessage): string => {
+  const getMessageText = useCallback((message: UIMessage): string => {
     if (Array.isArray(message.parts)) {
       return message.parts
         .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
@@ -319,10 +327,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         .join('');
     }
     return '';
-  };
+  }, []);
 
   // Helper to extract ask_captain tool call parts from a UIMessage
-  const getAskCaptainParts = (message: UIMessage): Array<{
+  const getAskCaptainParts = useCallback((message: UIMessage): Array<{
     toolCallId: string
     state: string
     input: unknown
@@ -344,7 +352,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       }
     }
     return results;
-  };
+  }, []);
 
   // Compute context-aware suggestions
   const suggestionContext: SuggestionContext = useMemo(() => ({
@@ -372,38 +380,140 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   // Keep triggerFollowup ref updated so realtime handler always has latest function
   useEffect(() => {
     triggerFollowupRef.current = triggerFollowup;
-  }, [triggerFollowup]);
+  }, [triggerFollowup, triggerFollowupRef]);
 
-  // Filter auto-sent messages for rendering
-  const visibleMessages = useMemo(() => {
-    let userMsgsSeen = 0;
-    return messages.filter((msg) => {
-      if (msg.role === 'user') {
-        userMsgsSeen++;
-        if (userMsgsSeen <= autoSentCount.current) return false;
-      }
-      return true;
-    });
-  }, [messages, autoSentCount]);
+  useEffect(() => {
+    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+    if (!lastAssistant) return;
 
-  // One chronological thread: chat turns (user + assistant) and delivered human
-  // messages merged and sorted by time — NOT two stacked lists. In-flight chat
-  // messages (no persisted timestamp yet) fall back to now, so a streaming reply
-  // stays anchored at the bottom.
-  const lastChatId = visibleMessages[visibleMessages.length - 1]?.id;
-  const feed = useMemo(() => {
-    const chatItems = visibleMessages.map((message) => ({
-      kind: 'chat' as const,
-      at: (messageTimestamps.current.get(message.id) ?? new Date()).getTime(),
-      message,
-    }));
-    const humanItems = incomingMessages.map((m) => ({
-      kind: 'human' as const,
-      at: new Date(m.createdAt).getTime(),
-      delivery: m,
-    }));
-    return [...chatItems, ...humanItems].sort((a, b) => a.at - b.at);
-  }, [visibleMessages, incomingMessages]);
+    const content = getMessageText(lastAssistant);
+    const hasCaptainParts = getAskCaptainParts(lastAssistant).length > 0;
+    if (!content && !hasCaptainParts) return;
+    if (!isStreaming && streamingReply?.id !== lastAssistant.id) return;
+
+    setStreamingReply((prev) => (
+      prev?.id === lastAssistant.id
+        ? { ...prev, content }
+        : { id: lastAssistant.id, content, startedAt: new Date().toISOString() }
+    ));
+  }, [getAskCaptainParts, getMessageText, isStreaming, messages, streamingReply?.id]);
+
+  useEffect(() => {
+    if (!streamingReply) return;
+    if (!shouldShowStreamingReply(streamingReply, feedEvents)) setStreamingReply(null);
+  }, [feedEvents, streamingReply]);
+
+  useEffect(() => {
+    setStreamingReply(null);
+  }, [conversationId]);
+
+  const formatEventTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+
+  const buildAssistantParts = useCallback((message: UIMessage, content: string): MessagePart[] | null => {
+    const captainParts = getAskCaptainParts(message);
+    if (captainParts.length === 0) return null;
+
+    const messageParts: MessagePart[] = [];
+    if (content) {
+      messageParts.push({ type: 'text', text: content });
+    }
+
+    for (const captainPart of captainParts) {
+      messageParts.push({
+        type: 'react',
+        element: (
+          <AskCaptainRenderer
+            key={captainPart.toolCallId}
+            input={captainPart.input as Parameters<typeof AskCaptainRenderer>[0]['input']}
+            toolState={captainPart.state}
+            toolResult={captainPart.result}
+            toolCallId={captainPart.toolCallId}
+            sendMagicLink={sendMagicLink}
+            onSendMessage={sendUserMessage}
+            onVoyageSwitch={handleVoyageSwitch}
+            onNewConversation={startNewConversation}
+            onResumeConversation={resumeConversation}
+          />
+        ),
+      });
+    }
+
+    return messageParts;
+  }, [
+    getAskCaptainParts,
+    handleVoyageSwitch,
+    resumeConversation,
+    sendMagicLink,
+    sendUserMessage,
+    startNewConversation,
+  ]);
+
+  const renderFeedEvent = (event: FeedEvent) => {
+    if (event.role === 'human') {
+      return (
+        <HumanMessage
+          key={event.id}
+          senderName={event.senderDisplayName ?? 'someone'}
+          content={event.content}
+          timestamp={event.createdAt}
+          onSeen={event.deliveryId && !event.seen ? () => markFeedSeen(event.deliveryId as string) : undefined}
+        />
+      );
+    }
+
+    const timestamp = formatEventTime(event.createdAt);
+    if (event.role === 'user') {
+      return (
+        <UserMessage
+          key={event.id}
+          content={event.content}
+          timestamp={timestamp}
+          username="you"
+        />
+      );
+    }
+
+    return (
+      <AssistantMessage
+        key={event.id}
+        content={event.content}
+        timestamp={timestamp}
+      />
+    );
+  };
+
+  // The user's just-sent message, shown live until its 'conversation' event
+  // lands in the feed — so it never vanishes during the send round-trip.
+  const renderOptimisticUser = () => {
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (!lastUser) return null;
+    const content = getMessageText(lastUser);
+    if (!shouldShowOptimisticUser(content, feedEvents)) return null;
+    return <UserMessage key={`optimistic-${lastUser.id}`} content={content} timestamp="LIVE" username="you" />;
+  };
+
+  const renderStreamingReply = () => {
+    if (!shouldShowStreamingReply(streamingReply, feedEvents)) return null;
+    const streamingMessage = messages.find((message) => message.id === streamingReply.id);
+    const content = streamingMessage ? getMessageText(streamingMessage) : streamingReply.content;
+    const parts = streamingMessage ? buildAssistantParts(streamingMessage, content) : null;
+
+    return (
+      <AssistantMessage
+        key={`streaming-${streamingReply.id}`}
+        content={parts ? undefined : content}
+        parts={parts ?? undefined}
+        timestamp="LIVE"
+        isStreaming={isStreaming}
+        onAction={handleComponentAction}
+      />
+    );
+  };
+
   const errorText = (() => {
     const raw = error?.message?.trim() ?? '';
     // Never surface raw JSON payloads (e.g. session_access_denied) — kind line.
@@ -511,96 +621,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
           <div className="space-y-12">
 
-        {/* One chronological feed — chat turns + delivered human messages, time-sorted */}
-        {feed.map((item) => {
-          if (item.kind === 'human') {
-            const m = item.delivery;
-            return (
-              <HumanMessage
-                key={m.deliveryId}
-                senderName={m.senderDisplayName}
-                content={m.content}
-                timestamp={m.createdAt}
-                onSeen={() => markSeen(m.deliveryId)}
-              />
-            );
-          }
-          const message = item.message;
-          const msgDate = messageTimestamps.current.get(message.id) ?? new Date();
-          const timestamp = msgDate.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-          });
-
-          const content = getMessageText(message);
-
-          if (message.role === 'user') {
-            return (
-              <UserMessage
-                key={message.id}
-                content={content}
-                timestamp={timestamp}
-                username="you"
-              />
-            );
-          }
-
-          if (message.role === 'assistant') {
-            const isCurrentlyStreaming = isStreaming && message.id === lastChatId;
-            const captainParts = getAskCaptainParts(message);
-
-            // If this message has ask_captain tool calls, render them inline
-            if (captainParts.length > 0) {
-              const messageParts: import('@/components/chat/AssistantMessage').MessagePart[] = [];
-
-              if (content) {
-                messageParts.push({ type: 'text', text: content });
-              }
-
-              for (const captainPart of captainParts) {
-                messageParts.push({
-                  type: 'react',
-                  element: (
-                    <AskCaptainRenderer
-                      key={captainPart.toolCallId}
-                      input={captainPart.input as Parameters<typeof AskCaptainRenderer>[0]['input']}
-                      toolState={captainPart.state}
-                      toolResult={captainPart.result}
-                      toolCallId={captainPart.toolCallId}
-                      sendMagicLink={sendMagicLink}
-                      onSendMessage={sendUserMessage}
-                      onVoyageSwitch={handleVoyageSwitch}
-                      onNewConversation={startNewConversation}
-                      onResumeConversation={resumeConversation}
-                    />
-                  ),
-                });
-              }
-
-              return (
-                <AssistantMessage
-                  key={message.id}
-                  parts={messageParts}
-                  timestamp={timestamp}
-                  isStreaming={isCurrentlyStreaming}
-                  onAction={handleComponentAction}
-                />
-              );
-            }
-
-            return (
-              <AssistantMessage
-                key={message.id}
-                content={content}
-                timestamp={timestamp}
-                isStreaming={isCurrentlyStreaming}
-              />
-            );
-          }
-
-          return null;
-        })}
+        {/* One ordered event stream from /api/feed; useChat is only the live transient. */}
+        {feedEvents.map(renderFeedEvent)}
+        {renderOptimisticUser()}
+        {renderStreamingReply()}
 
         {/* Error state */}
         {error && (
