@@ -13,7 +13,6 @@ import {
   searchKnowledge,
   keywordGrep,
   getKnowledgeByIds,
-  buildScopeFilter,
   type KnowledgeNode,
   type GrepResult,
 } from '@/lib/knowledge'
@@ -296,24 +295,16 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
       const untilDate = until ? parseRelativeDate(until) : new Date()
 
       const supabase = getAdminClient()
-
-      let dbQuery = supabase
-        .from('knowledge_current')
-        .select('event_id, content, source_created_at, classifications, entities, topics, knowledge_type, attention_score, context_snippet')
-        .gte('attention_score', 0.1)
-        .gte('source_created_at', sinceDate.toISOString())
-        .lte('source_created_at', untilDate.toISOString())
-        .order('source_created_at', { ascending: false })
-        .limit(Math.min(limit, 30))
-
-      // Two-layer scope: personal (voyage_slug NULL) + voyage (participant-filtered)
-      if (ctx.voyageSlug) {
-        dbQuery = dbQuery.or(buildScopeFilter(ctx.userId, ctx.voyageSlug))
-      } else {
-        dbQuery = dbQuery.eq('user_id', ctx.userId).is('voyage_slug', null)
-      }
-
-      const { data, error } = await dbQuery
+      const { data, error } = await (supabase.rpc as Function)('scoped_knowledge_fetch', {
+        p_user_id: ctx.userId,
+        p_voyage_slug: ctx.voyageSlug,
+        p_participants: [ctx.userId],
+        p_scope: ctx.voyageSlug ? 'all' : 'personal',
+        p_since: sinceDate.toISOString(),
+        p_until: untilDate.toISOString(),
+        p_min_attention: 0.1,
+        p_match_count: Math.min(limit, 30),
+      })
 
       if (error) {
         return `Error searching by time: ${error.message}`

@@ -124,37 +124,6 @@ const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
 })
 
 // =============================================================================
-// Scope Filters (PostgREST two-layer pattern)
-// =============================================================================
-
-/**
- * Build a PostgREST .or() filter for 4-layer privacy-scoped knowledge retrieval:
- *   Layer 1: Personal space — user_id = me AND voyage_slug IS NULL
- *   Layer 2: My voyage content — voyage_slug = X AND user_id = me
- *   Layer 3: Shared explicit — voyage_slug = X AND event_type = 'explicit' AND knowledge_type IN ('domain', 'operational')
- *   Layer 4: My messages — voyage_slug = X AND event_type = 'message' AND participants contains me
- *
- * Privacy invariant: event_type is the stable privacy dimension.
- * - conversation events are ALWAYS author-only (covered by Layer 2)
- * - explicit events with knowledge_type domain/operational are voyage-wide (Layer 3)
- * - explicit events with knowledge_type preference or NULL are author-only (Layer 2)
- * - message events are participant-scoped (Layer 4)
- *
- * Used by all direct-query functions. Same signature, privacy-aware internals.
- */
-export const buildScopeFilter = (userId: string, voyageSlug: string): string =>
-  [
-    // Layer 1: Personal space (no voyage)
-    `and(user_id.eq.${userId},voyage_slug.is.null)`,
-    // Layer 2: My own content in this voyage (conversations, preferences, unenriched)
-    `and(voyage_slug.eq.${voyageSlug},user_id.eq.${userId})`,
-    // Layer 3: Shared explicit domain/operational from any member
-    `and(voyage_slug.eq.${voyageSlug},event_type.eq.explicit,knowledge_type.in.(domain,operational))`,
-    // Layer 4: Messages where I'm a participant
-    `and(voyage_slug.eq.${voyageSlug},event_type.eq.message,or(participants.is.null,participants.cs.{${userId}}))`,
-  ].join(',')
-
-// =============================================================================
 // Search Functions
 // =============================================================================
 
@@ -339,34 +308,18 @@ export const keywordGrep = async (
 
     const supabase = getClientForUser(userId)
 
-    // Build the query - using ILIKE for case-insensitive, LIKE for case-sensitive
-    const operator = caseSensitive ? 'like' : 'ilike'
     const searchPattern = `%${pattern}%`
 
-
-    let query = supabase
-      .from('knowledge_current')
-      .select('event_id, content, source_created_at, classifications, entities, topics, knowledge_type, attention_score, context_snippet, sender_display_name, sender_user_id, event_type')
-      .filter('content', operator, searchPattern)
-      .gte('attention_score', minAttention)
-
-    // Apply scope filters — all voyage paths use buildScopeFilter for privacy
-    if (scope === 'personal') {
-      query = query.eq('user_id', userId).is('voyage_slug', null)
-    } else if (scope === 'voyage' && voyageSlug) {
-      // Voyage only — privacy-scoped, exclude personal layer
-      query = query.or(buildScopeFilter(userId, voyageSlug))
-        .not('voyage_slug', 'is', null)
-    } else if (voyageSlug) {
-      query = query.or(buildScopeFilter(userId, voyageSlug))
-    } else {
-      query = query.eq('user_id', userId).is('voyage_slug', null)
-    }
-
-    const { data, error } = await query
-      .order('attention_score', { ascending: false })
-      .order('source_created_at', { ascending: false })
-      .limit(limit)
+    const { data, error } = await (supabase.rpc as Function)('scoped_knowledge_fetch', {
+      p_user_id: userId,
+      p_voyage_slug: voyageSlug,
+      p_participants: [userId],
+      p_scope: scope,
+      p_content_match: searchPattern,
+      p_case_sensitive: caseSensitive,
+      p_min_attention: minAttention,
+      p_match_count: limit,
+    })
 
     if (error) {
       console.error('[Knowledge] Grep error:', error)
