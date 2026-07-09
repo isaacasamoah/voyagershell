@@ -12,6 +12,7 @@ import { z } from 'zod'
 import {
   searchKnowledge,
   keywordGrep,
+  personAnchoredSearch,
   getKnowledgeByIds,
   type KnowledgeNode,
   type GrepResult,
@@ -58,6 +59,20 @@ export interface ToolContext {
   waitUntil?: (promise: Promise<unknown>) => void
   /** Conversation messages for context capture (used by spawn_background_agent) */
   messages?: Array<{ role: string; content: string }>
+}
+
+const resolveOneMember = async (
+  ctx: ToolContext,
+  name: string
+): Promise<{ userId: string; displayName: string } | { error: string }> => {
+  if (!ctx.voyageSlug) return { error: "Rooms live in voyages. You're in personal space — switch to a voyage first." }
+  const voyage = await getVoyageBySlug(ctx.voyageSlug)
+  if (!voyage) return { error: 'Could not find the current voyage.' }
+  const members = await getVoyageMembers(voyage.id)
+  const match = resolveMemberByName(members, name)
+  if (!match) return { error: `I don't see anyone called ${name} in this voyage.` }
+  if (match.userId === ctx.userId) return { error: "That's you — you're already here." }
+  return match
 }
 
 // =============================================================================
@@ -131,6 +146,12 @@ const graphSchema = z.object({
   edge_type: z.string().nullable().optional().describe('Filter by edge type: supersedes, supports, contradicts, elaborates, triggered_by, relates_to, decided_by, raised_by. Null returns all types.'),
   direction: z.enum(['outgoing', 'incoming', 'both']).optional().default('both').describe('Edge direction to traverse'),
   depth: z.number().min(1).max(3).optional().default(1).describe('Traversal depth (1-3 hops)'),
+})
+
+const anchoredSearchSchema = z.object({
+  person: z.string().describe('The person to anchor on (name as the user referred to them)'),
+  query: z.string().optional().describe('Optional topic to narrow to, e.g. "the almond tree idea"'),
+  limit: z.number().optional().default(15),
 })
 
 const getNodesSchema = z.object({
@@ -273,6 +294,23 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
           return `[${i + 1}] id:${shortId} [${edgeLabel}]${hopLabel}\n${row.content}`
         })
         .join('\n\n')
+    },
+  }),
+
+  anchored_search: tool({
+    description: `Retrieve what a SPECIFIC PERSON has shared or contributed, optionally about a topic. Anchor-first retrieval: use this the moment the user names a person — "what did Vanessa say about X", "what has Tom contributed", "@vanessa on pricing". Returns that person's contributions that YOU can see (shared + co-participated), ranked by attention. For general topic search with no named person, use semantic_search instead.`,
+    inputSchema: anchoredSearchSchema,
+    execute: async (input) => {
+      if (!ctx.voyageSlug) return 'Anchoring on a person needs a voyage context.'
+      const r = await resolveOneMember(ctx, input.person)
+      if ('error' in r) return r.error
+      const results = await personAnchoredSearch(ctx.userId, r.userId, {
+        voyageSlug: ctx.voyageSlug,
+        query: input.query,
+        limit: Math.min(input.limit ?? 15, 20),
+      })
+      if (results.length === 0) return `Nothing from ${r.displayName}${input.query ? ` about "${input.query}"` : ''} that you can see.`
+      return formatGrepResult(results)
     },
   }),
 
@@ -855,23 +893,12 @@ export const createVoyagerTools = (ctx: ToolContext): {
   // toggles the AI. A person in the room receives everything you type (no
   // per-line "tell"). Adding a person quiets Voyager by default; +voyager
   // brings it back.
-  const resolveOneMember = async (name: string): Promise<{ userId: string; displayName: string } | { error: string }> => {
-    if (!ctx.voyageSlug) return { error: "Rooms live in voyages. You're in personal space — switch to a voyage first." }
-    const voyage = await getVoyageBySlug(ctx.voyageSlug)
-    if (!voyage) return { error: 'Could not find the current voyage.' }
-    const members = await getVoyageMembers(voyage.id)
-    const match = resolveMemberByName(members, name)
-    if (!match) return { error: `I don't see anyone called ${name} in this voyage.` }
-    if (match.userId === ctx.userId) return { error: "That's you — you're already here." }
-    return match
-  }
-
   const add_to_room = tool({
     description: `Add a person to THIS conversation (the room), so everything the user types reaches them without a separate "tell". Use for "+vanessa", "add vanessa", "bring tom in", "invite sarah here". Adding a person quiets Voyager by default — the user says "+voyager" to bring the AI back.`,
     inputSchema: z.object({ name: z.string().describe('The person to add') }),
     execute: async (input) => {
       if (!ctx.conversationId) return "I can't manage this room — no active conversation."
-      const r = await resolveOneMember(input.name)
+      const r = await resolveOneMember(ctx, input.name)
       if ('error' in r) return r.error
       const invite = await inviteToRoom(ctx.conversationId, r.userId)
       return JSON.stringify({ status: invite.state === 'active' ? 'added' : 'invited', person: r.displayName, voyagerQuieted: true })
@@ -883,7 +910,7 @@ export const createVoyagerTools = (ctx: ToolContext): {
     inputSchema: z.object({ name: z.string().describe('The person to remove') }),
     execute: async (input) => {
       if (!ctx.conversationId) return "I can't manage this room — no active conversation."
-      const r = await resolveOneMember(input.name)
+      const r = await resolveOneMember(ctx, input.name)
       if ('error' in r) return r.error
       await removeRoomPerson(ctx.conversationId, r.userId)
       return JSON.stringify({ status: 'removed', person: r.displayName })
@@ -941,6 +968,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'graph',
       tool: retrieval.graph,
       strategyHint: 'Traverse the knowledge graph from a node. Three patterns: (1) incoming supports edges for evidence, (2) outgoing supersedes for replaced knowledge, (3) both directions depth 2-3 for neighbourhood exploration.',
+    },
+    {
+      name: 'anchored_search',
+      tool: retrieval.anchored_search,
+      strategyHint: 'Anchor-first retrieval for named people. Use when the user asks what a specific voyage member shared or contributed, optionally about a topic.',
     },
     {
       name: 'get_nodes',
