@@ -283,6 +283,7 @@ export const POST = async (req: Request) => {
         emitMessageEvent(conversationId, 'user', queryText, {
           userId,
           voyageSlug,
+          participants: [userId],
           eventType: 'conversation',
         });
       }
@@ -498,6 +499,7 @@ export const POST = async (req: Request) => {
             await createMessageEvent(conversationId, 'assistant', text, {
               userId: userId,
               voyageSlug: voyageSlug,
+              participants: [userId],
               eventType: 'conversation',
             });
 
