@@ -40,7 +40,6 @@ export interface KnowledgeNode {
   classifications: string[]   // Metadata: fact, decision, preference, etc.
   entities: string[]          // Metadata: people, systems, projects
   topics: string[]            // Metadata: domain topics
-  connectedTo: string[]       // Graph: related event IDs
   createdAt: Date             // When the source event was created
   similarity?: number         // Search relevance score
   knowledgeType: string | null   // domain | operational | preference (NULL = treat as operational)
@@ -75,7 +74,6 @@ interface KnowledgeNodeInput {
   classifications?: string[] | null
   entities?: string[] | null
   topics?: string[] | null
-  connected_to?: string[] | null
   participants?: string[] | null
   similarity?: number
   knowledge_type?: string | null
@@ -114,7 +112,6 @@ const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
   classifications: row.classifications ?? [],
   entities: row.entities ?? [],
   topics: row.topics ?? [],
-  connectedTo: row.connected_to ?? [],
   createdAt: new Date(row.source_created_at),
   similarity: row.similarity,
   knowledgeType: row.knowledge_type ?? null,
@@ -253,7 +250,7 @@ export const getKnowledgeByIds = async (eventIds: string[], userId?: string): Pr
 
     let query = supabase
       .from('knowledge_current')
-      .select('*')
+      .select('event_id, content, source_created_at, classifications, entities, topics, knowledge_type, attention_score, context_snippet, sender_display_name, sender_user_id, event_type')
       .in('event_id', eventIds)
 
     // Participant filter: only return nodes the user can access
@@ -349,7 +346,7 @@ export const keywordGrep = async (
 
     let query = supabase
       .from('knowledge_current')
-      .select('*')
+      .select('event_id, content, source_created_at, classifications, entities, topics, knowledge_type, attention_score, context_snippet, sender_display_name, sender_user_id, event_type')
       .filter('content', operator, searchPattern)
       .gte('attention_score', minAttention)
 
@@ -400,7 +397,6 @@ export const keywordGrep = async (
         classifications: row.classifications ?? [],
         entities: row.entities ?? [],
         topics: row.topics ?? [],
-        connectedTo: row.connected_to ?? [],
         createdAt: new Date(row.source_created_at),
         knowledgeType: row.knowledge_type ?? null,
         attentionScore: row.attention_score ?? 0.5,

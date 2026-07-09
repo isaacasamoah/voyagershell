@@ -75,8 +75,7 @@ const formatKnowledgeResult = (nodes: KnowledgeNode[]): string => {
       const shortId = node.eventId.slice(0, 8) // Short ID for readability
       const pinned = node.attentionScore >= 0.9 ? ' [PINNED]' : ''
       const similarity = node.similarity ? ` (${(node.similarity * 100).toFixed(0)}%)` : ''
-      const connected = node.connectedTo?.length ? ` [${node.connectedTo.length} connections]` : ''
-      return `[${i + 1}] id:${shortId}${pinned}${similarity}${connected}\n${node.content}`
+      return `[${i + 1}] id:${shortId}${pinned}${similarity}\n${node.content}`
     })
     .join('\n\n')
 }
@@ -107,8 +106,7 @@ const formatGrepResult = (results: GrepResult[]): string => {
     .map((r, i) => {
       const shortId = r.eventId.slice(0, 8)
       const pinned = r.attentionScore >= 0.9 ? ' [PINNED]' : ''
-      const connected = r.connectedTo?.length ? ` [${r.connectedTo.length} connections]` : ''
-      return `[${i + 1}] id:${shortId}${pinned}${connected}\n...${r.highlight}...`
+      return `[${i + 1}] id:${shortId}${pinned}\n...${r.highlight}...`
     })
     .join('\n\n')
 }
@@ -301,7 +299,7 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
 
       let dbQuery = supabase
         .from('knowledge_current')
-        .select('*')
+        .select('event_id, content, source_created_at, classifications, entities, topics, knowledge_type, attention_score, context_snippet')
         .gte('attention_score', 0.1)
         .gte('source_created_at', sinceDate.toISOString())
         .lte('source_created_at', untilDate.toISOString())
@@ -332,7 +330,6 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
         classifications: (row.classifications as string[]) ?? [],
         entities: (row.entities as string[]) ?? [],
         topics: (row.topics as string[]) ?? [],
-        connectedTo: (row.connected_to as string[]) ?? [],
         createdAt: new Date(row.source_created_at as string),
         knowledgeType: (row.knowledge_type as string | null) ?? null,
         attentionScore: (row.attention_score as number) ?? 0.5,
