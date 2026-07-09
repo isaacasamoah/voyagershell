@@ -31,7 +31,6 @@ export {
   searchKnowledge,
   getKnowledgeByIds,
   keywordGrep,
-  buildScopeFilter,
 } from './search'
 
 export type { KnowledgeNode, SearchOptions, GrepOptions, GrepResult } from './search'

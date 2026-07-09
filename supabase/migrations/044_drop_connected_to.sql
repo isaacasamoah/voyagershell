@@ -1,5 +1,10 @@
 -- APPLY ONLY AT PROD PROMOTION - prod still reads connected_to until Cut 3a ships to main.
 --
+-- PREREQUISITE: migration 045 MUST already be applied before this runs — the
+-- keyword_search body below calls knowledge_in_scope(), which 045 creates. On the
+-- shared dev+prod DB 045 is already applied, so this is satisfied; a fresh-DB
+-- number-order replay must apply 045 first.
+--
 -- Cut 3a legacy cleanup:
 -- - 037_messaging_v2_drop_weave.sql:88-101 left an event_type='connection'
 --   trigger branch that writes knowledge_current.connected_to.
@@ -119,12 +124,12 @@ BEGIN
     kc.event_id,
     kc.content,
     kc.source_created_at,
-    ts_rank(kc.search_vector, plainto_tsquery('english', p_query)) AS rank_score,
+    ts_rank(kc.search_vector, plainto_tsquery('english', p_query))::double precision AS rank_score,
     kc.classifications,
     kc.entities,
     kc.topics,
     kc.knowledge_type,
-    kc.attention_score,
+    kc.attention_score::double precision,
     kc.context_snippet,
     kc.sender_display_name,
     kc.sender_user_id,
@@ -132,26 +137,7 @@ BEGIN
   FROM knowledge_current kc
   WHERE kc.search_vector @@ plainto_tsquery('english', p_query)
     AND kc.attention_score >= p_min_attention
-    -- 4-layer privacy-scoped filter — MUST stay byte-identical to the live
-    -- keyword_search definition. This migration ONLY removes connected_to from
-    -- the return surface; it must NOT change privacy semantics.
-    AND (
-      -- Layer 1: Personal space
-      (kc.user_id = p_user_id AND kc.voyage_slug IS NULL)
-      OR
-      -- Layer 2: My own content in this voyage
-      (kc.voyage_slug = p_voyage_slug AND kc.user_id = p_user_id)
-      OR
-      -- Layer 3: Shared explicit domain/operational from any member
-      (kc.voyage_slug = p_voyage_slug
-        AND kc.event_type = 'explicit'
-        AND kc.knowledge_type IN ('domain', 'operational'))
-      OR
-      -- Layer 4: Messages where I'm a participant
-      (kc.voyage_slug = p_voyage_slug
-        AND kc.event_type = 'message'
-        AND (kc.participants IS NULL OR p_participants && kc.participants))
-    )
+    AND knowledge_in_scope(kc.user_id, kc.voyage_slug, kc.event_type, kc.knowledge_type, kc.participants, p_user_id, p_voyage_slug, p_participants)
     AND (p_knowledge_type IS NULL OR kc.knowledge_type = p_knowledge_type)
   ORDER BY rank_score DESC
   LIMIT p_match_count;
