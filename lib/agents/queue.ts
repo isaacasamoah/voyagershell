@@ -29,7 +29,6 @@ export interface BackgroundTaskResult {
     eventId: string
     content: string
     similarity?: number
-    connectedTo?: string[]
   }>
   confidence: number
   summary?: string

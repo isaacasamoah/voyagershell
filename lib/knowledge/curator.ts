@@ -61,7 +61,6 @@ interface CuratorRow {
   classifications: string[] | null
   entities: string[] | null
   topics: string[] | null
-  connected_to: string[] | null
   sender_display_name?: string | null
   sender_user_id?: string | null
   event_type?: string | null
@@ -84,7 +83,6 @@ const toNode = (row: CuratorRow): KnowledgeNode => ({
   classifications: row.classifications ?? [],
   entities: row.entities ?? [],
   topics: row.topics ?? [],
-  connectedTo: row.connected_to ?? [],
   createdAt: new Date(row.source_created_at),
   knowledgeType: row.knowledge_type ?? null,
   attentionScore: effectiveAttention(row), // F4.4: includes promotion boost
@@ -179,7 +177,7 @@ export const curatePromptWindow = async (
     (async () => {
       let query = supabase
         .from('knowledge_current')
-        .select('event_id, content, knowledge_type, attention_score, context_snippet, source_created_at, classifications, entities, topics, connected_to, sender_display_name, sender_user_id, event_type, session_id, promotion_count')
+        .select('event_id, content, knowledge_type, attention_score, context_snippet, source_created_at, classifications, entities, topics, sender_display_name, sender_user_id, event_type, session_id, promotion_count')
         .gte('attention_score', 0.3)
 
       if (voyageSlug) {
