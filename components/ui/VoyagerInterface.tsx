@@ -71,14 +71,14 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const { height: shellHeight, offsetTop: shellTop, composing } = useVisualViewport();
 
   // Voyage context (fetch voyages, pending invites, URL params)
-  const { currentVoyage, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
+  const { currentVoyage, voyageResolved, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
     isAuthenticated,
     isAuthLoading,
   });
 
   // Conversation (transport, useChat, fetch, welcome, title sync, message queue)
   const {
-    conversationId, conversationTitle, isLoadingConversation,
+    conversationId, room, conversationTitle, isLoadingConversation,
     messages, sendMessage, setMessages, status, error,
     hasUserTyped, setHasUserTyped, autoSentCount,
     messageTimestamps, messageQueue, setMessageQueue,
@@ -87,6 +87,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     startNewConversation, resumeConversation,
   } = useConversation({
     currentVoyage,
+    voyageResolved,
     authState,
     isAuthenticated,
     isAuthLoading,
@@ -384,6 +385,25 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       return true;
     });
   }, [messages, autoSentCount]);
+
+  // One chronological thread: chat turns (user + assistant) and delivered human
+  // messages merged and sorted by time — NOT two stacked lists. In-flight chat
+  // messages (no persisted timestamp yet) fall back to now, so a streaming reply
+  // stays anchored at the bottom.
+  const lastChatId = visibleMessages[visibleMessages.length - 1]?.id;
+  const feed = useMemo(() => {
+    const chatItems = visibleMessages.map((message) => ({
+      kind: 'chat' as const,
+      at: (messageTimestamps.current.get(message.id) ?? new Date()).getTime(),
+      message,
+    }));
+    const humanItems = incomingMessages.map((m) => ({
+      kind: 'human' as const,
+      at: new Date(m.createdAt).getTime(),
+      delivery: m,
+    }));
+    return [...chatItems, ...humanItems].sort((a, b) => a.at - b.at);
+  }, [visibleMessages, incomingMessages]);
   const errorText = (() => {
     const raw = error?.message?.trim() ?? '';
     // Never surface raw JSON payloads (e.g. session_access_denied) — kind line.
@@ -435,6 +455,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
                   <span className="opacity-30 font-semibold shrink-0">$CTX:</span>
                   <span className="truncate">{conversationTitle || 'NEW_SESSION'}</span>
                 </div>
+                {/* Room chip — who's in the room + whether Voyager is present.
+                    Honest indicator: you always know where your words go. */}
+                {room.people.length > 0 && (
+                  <div className="px-2 py-1 rounded-sm border border-[#f7a34b]/30 bg-[#f7a34b]/10 text-[#f7a34b] text-xs flex items-center gap-2 min-w-0 shrink-0">
+                    <span className="opacity-40 font-semibold shrink-0">WITH:</span>
+                    <span className="truncate max-w-[140px]">
+                      {room.people.map((p) => p.toUpperCase().replace(/\s+/g, '_')).join(', ')}
+                      {!room.aiPresent && ' · 🧠⬜'}
+                    </span>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -480,8 +511,21 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
 
           <div className="space-y-12">
 
-        {/* Messages — auto-sent user messages (hidden prompts) are filtered from rendering */}
-        {visibleMessages.map((message, index) => {
+        {/* One chronological feed — chat turns + delivered human messages, time-sorted */}
+        {feed.map((item) => {
+          if (item.kind === 'human') {
+            const m = item.delivery;
+            return (
+              <HumanMessage
+                key={m.deliveryId}
+                senderName={m.senderDisplayName}
+                content={m.content}
+                timestamp={m.createdAt}
+                onSeen={() => markSeen(m.deliveryId)}
+              />
+            );
+          }
+          const message = item.message;
           const msgDate = messageTimestamps.current.get(message.id) ?? new Date();
           const timestamp = msgDate.toLocaleTimeString('en-US', {
             hour: '2-digit',
@@ -503,7 +547,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           }
 
           if (message.role === 'assistant') {
-            const isCurrentlyStreaming = isStreaming && index === visibleMessages.length - 1;
+            const isCurrentlyStreaming = isStreaming && message.id === lastChatId;
             const captainParts = getAskCaptainParts(message);
 
             // If this message has ask_captain tool calls, render them inline
@@ -586,18 +630,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             ))}
           </div>
         )}
-
-        {/* Inter-human messages — the delivery lane renders here (live tier).
-            Stacks + tier render policy arrive in M1. */}
-        {incomingMessages.map((m) => (
-          <HumanMessage
-            key={m.deliveryId}
-            senderName={m.senderDisplayName}
-            content={m.content}
-            timestamp={m.createdAt}
-            onSeen={() => markSeen(m.deliveryId)}
-          />
-        ))}
 
         </div>{/* end space-y-12 */}
         </div>{/* end max-w content */}

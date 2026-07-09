@@ -13,6 +13,7 @@ const apiMessageToUIMessage = (msg: MessageData): UIMessage => ({
 
 interface UseConversationParams {
   currentVoyage: { slug: string; name: string } | null
+  voyageResolved: boolean
   authState: string
   isAuthenticated: boolean
   isAuthLoading: boolean
@@ -20,12 +21,14 @@ interface UseConversationParams {
 
 export const useConversation = ({
   currentVoyage,
+  voyageResolved,
   authState,
   isAuthenticated,
   isAuthLoading,
 }: UseConversationParams) => {
   // Conversation state
   const [conversationId, setConversationId] = useState<string | null>(null)
+  const [room, setRoom] = useState<{ people: string[]; aiPresent: boolean }>({ people: [], aiPresent: true })
   const [conversationTitle, setConversationTitle] = useState<string | null>(null)
   const [isLoadingConversation, setIsLoadingConversation] = useState(true)
 
@@ -80,6 +83,13 @@ export const useConversation = ({
       setIsLoadingConversation(false)
       return
     }
+    // Wait for the initial voyage resolution before the first load, so a
+    // no-voyage fetch can't race ahead and stick on personal before resume
+    // resolves. Once resolved (or a voyage is already set), proceed.
+    if (!voyageResolved && !currentVoyage) {
+      setIsLoadingConversation(true)
+      return
+    }
 
     let cancelled = false
     setIsLoadingConversation(true)
@@ -100,6 +110,8 @@ export const useConversation = ({
 
         setConversationId(data.conversation.id)
         setConversationTitle(data.conversation.title)
+        const roomData = (data as unknown as { room?: { people: string[]; aiPresent: boolean } }).room
+        if (roomData) setRoom(roomData)
         autoSentCount.current = 0
         messageTimestamps.current = new Map()
 
@@ -141,7 +153,7 @@ export const useConversation = ({
     return () => {
       cancelled = true
     }
-  }, [setMessages, isAuthenticated, isAuthLoading, currentVoyage?.slug])
+  }, [setMessages, isAuthenticated, isAuthLoading, currentVoyage?.slug, voyageResolved])
 
   // Hidden welcome prompt — triggers Voyager's creative welcome without visible user message
   const hasTriggeredWelcomePrompt = useRef(false)
@@ -283,6 +295,7 @@ export const useConversation = ({
 
   return {
     conversationId,
+    room,
     conversationTitle: resolvedTitle,
     isLoadingConversation,
     messages,

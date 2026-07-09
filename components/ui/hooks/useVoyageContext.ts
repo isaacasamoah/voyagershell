@@ -13,6 +13,9 @@ export const useVoyageContext = ({
   isAuthLoading,
 }: UseVoyageContextParams) => {
   const [currentVoyage, setCurrentVoyage] = useState<VoyageMembership | null>(null)
+  // Has the initial voyage resolution finished? Gates the first conversation
+  // load so it can't race ahead and stick on personal before resume resolves.
+  const [voyageResolved, setVoyageResolved] = useState(false)
   const [voyages, setVoyages] = useState<VoyageMembership[]>([])
   const [displayName, setDisplayName] = useState<string | null>(null)
 
@@ -32,12 +35,20 @@ export const useVoyageContext = ({
         if (voyage) {
           setCurrentVoyage(voyage)
         }
+      } else if (data.lastActiveVoyageSlug) {
+        // Resume the voyage you were last active in ("come back where I was").
+        // Session-as-context: this drives the chip; the conversation-load path
+        // then loads that voyage's session unchanged. Null → personal (default).
+        const last = data.voyages?.find((v: VoyageMembership) => v.slug === data.lastActiveVoyageSlug)
+        if (last) setCurrentVoyage(last)
       } else if (data.voyages?.length === 1) {
         // Auto-select when user has exactly one voyage
         setCurrentVoyage(data.voyages[0])
       }
     } catch (error) {
       log.voyage('Failed to fetch voyages', { error: String(error) }, 'error')
+    } finally {
+      setVoyageResolved(true)
     }
   }, [])
 
@@ -79,6 +90,7 @@ export const useVoyageContext = ({
 
   return {
     currentVoyage,
+    voyageResolved,
     setCurrentVoyage,
     voyages,
     displayName,
