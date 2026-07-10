@@ -150,6 +150,7 @@ const findNewestMembershipSpace = async (
     .in('id', spaceIds)
     .eq('voyage_id', session.voyage_id)
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false }) // deterministic tiebreak on identical timestamps
     .limit(1)
     .maybeSingle()
   if (spaceError) {
