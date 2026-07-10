@@ -193,7 +193,7 @@ describe('space-backed room API', () => {
     const { activateMembers, ensureSpace, getRoom } = await loadRoomModule()
     const session = db.sessions.get('session-a')
     if (!session) throw new Error('missing test session')
-    const spaceId = await ensureSpace(session, false)
+    const spaceId = await ensureSpace(session, true)
     await activateMembers(spaceId ?? '', ['user-a', 'user-b'])
     const room = await getRoom('session-a')
 
@@ -201,8 +201,8 @@ describe('space-backed room API', () => {
     expect(sessionUpdates).toEqual([{ space_id: 'space-1' }])
     expect(db.space_members.get(`${spaceId}:user-a`)?.state).toBe('active')
     expect(db.space_members.get(`${spaceId}:user-b`)?.state).toBe('active')
-    expect(db.spaces.get(spaceId ?? '')?.ai_present).toBe(false)
-    expect(room).toEqual({ roomPeople: ['user-b'], aiPresent: false })
+    expect(db.spaces.get(spaceId ?? '')?.ai_present).toBe(true)
+    expect(room).toEqual({ roomPeople: ['user-b'], aiPresent: true })
   })
 
   it('exposes only active space members as roomPeople for message fan-out', async () => {

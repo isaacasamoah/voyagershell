@@ -158,7 +158,7 @@ describe('room invitations', () => {
     else process.env.HOUSEHOLD_SHARE_VOYAGE = originalHousehold
   })
 
-  it('invites without adding the invitee to active room fan-out', async () => {
+  it('leaves an invitation untouched during ordinary message flow', async () => {
     seedVoyage()
     const { getRoom, inviteToRoom } = await loadModules()
 
@@ -168,81 +168,101 @@ describe('room invitations', () => {
     expect(invite).toEqual({ state: 'invited', spaceId: 'space-1' })
     expect(db.space_members.get(`${spaceId}:isaac`)?.state).toBe('active')
     expect(db.space_members.get(`${spaceId}:vanessa`)?.state).toBe('invited')
-    await expect(getRoom('isaac-session')).resolves.toEqual({ roomPeople: [], aiPresent: false })
+    await expect(getRoom('isaac-session')).resolves.toEqual({ roomPeople: [], aiPresent: true })
+
+    // Room reads and ordinary message handling do not invoke the explicit
+    // response transition, so neither membership nor audience can change.
+    await expect(getRoom('vanessa-session')).resolves.toEqual({ roomPeople: [], aiPresent: true })
+    expect(db.space_members.get(`${spaceId}:vanessa`)?.state).toBe('invited')
+    expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
   })
 
-  it('accepts reciprocally and links both sessions to the shared space', async () => {
+  it('accepts explicitly and links the responding session to the shared space', async () => {
     seedVoyage()
-    const { getRoom, inviteToRoom, linkPendingSpace } = await loadModules()
+    const { getRoom, inviteToRoom, respondToRoomInvite } = await loadModules()
 
     const invite = await inviteToRoom('isaac-session', 'vanessa')
-    const link = await linkPendingSpace('vanessa-session', 'vanessa', 'voyage-1')
+    const response = await respondToRoomInvite('vanessa-session', 'vanessa', true)
 
-    expect(link).toEqual({ linked: true, spaceId: invite.spaceId, wasInvited: true })
+    expect(response).toEqual({ responded: true, accepted: true, spaceId: invite.spaceId })
     expect(db.space_members.get(`${invite.spaceId}:vanessa`)?.state).toBe('active')
     expect(db.sessions.get('vanessa-session')?.space_id).toBe(invite.spaceId)
-    await expect(getRoom('vanessa-session')).resolves.toEqual({ roomPeople: ['isaac'], aiPresent: false })
-    await expect(getRoom('isaac-session')).resolves.toEqual({ roomPeople: ['vanessa'], aiPresent: false })
+    await expect(getRoom('vanessa-session')).resolves.toEqual({ roomPeople: ['isaac'], aiPresent: true })
+    await expect(getRoom('isaac-session')).resolves.toEqual({ roomPeople: ['vanessa'], aiPresent: true })
   })
 
-  it('auto-accepts household voyage invites and links the latest invitee session', async () => {
+  it('declines explicitly without linking the responding session', async () => {
+    seedVoyage()
+    const { inviteToRoom, respondToRoomInvite } = await loadModules()
+
+    const invite = await inviteToRoom('isaac-session', 'vanessa')
+    const response = await respondToRoomInvite('vanessa-session', 'vanessa', false)
+
+    expect(response).toEqual({ responded: true, accepted: false })
+    expect(db.space_members.get(`${invite.spaceId}:vanessa`)?.state).toBe('left')
+    expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
+  })
+
+  it('reports when there is no pending invite', async () => {
+    seedVoyage()
+    const { respondToRoomInvite } = await loadModules()
+
+    await expect(respondToRoomInvite('vanessa-session', 'vanessa', true)).resolves.toEqual({
+      responded: false,
+      reason: 'no_pending_invite',
+    })
+    expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
+  })
+
+  it('re-invites after a decline so consent can be given later', async () => {
+    seedVoyage()
+    const { inviteToRoom, respondToRoomInvite } = await loadModules()
+
+    const firstInvite = await inviteToRoom('isaac-session', 'vanessa')
+    await respondToRoomInvite('vanessa-session', 'vanessa', false)
+    expect(db.space_members.get(`${firstInvite.spaceId}:vanessa`)?.state).toBe('left')
+    const secondInvite = await inviteToRoom('isaac-session', 'vanessa')
+
+    expect(secondInvite).toEqual({ state: 'invited', spaceId: firstInvite.spaceId })
+    expect(db.space_members.get(`${firstInvite.spaceId}:vanessa`)?.state).toBe('invited')
+    expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
+  })
+
+  it('responds to the newest pending room in the session voyage', async () => {
+    seedVoyage()
+    const { inviteToRoom, respondToRoomInvite } = await loadModules()
+
+    const older = await inviteToRoom('isaac-session', 'vanessa')
+    const isaacSession = db.sessions.get('isaac-session')
+    if (isaacSession) isaacSession.space_id = null
+    const newer = await inviteToRoom('isaac-session', 'vanessa')
+    const response = await respondToRoomInvite('vanessa-session', 'vanessa', true)
+
+    expect(response).toEqual({ responded: true, accepted: true, spaceId: newer.spaceId })
+    expect(db.space_members.get(`${older.spaceId}:vanessa`)?.state).toBe('invited')
+    expect(db.space_members.get(`${newer.spaceId}:vanessa`)?.state).toBe('active')
+    expect(db.sessions.get('vanessa-session')?.space_id).toBe(newer.spaceId)
+  })
+
+  it('auto-accepts a household member without capturing their session, then enters explicitly', async () => {
     seedVoyage()
     process.env.HOUSEHOLD_SHARE_VOYAGE = 'fambam'
-    const { inviteToRoom } = await loadModules()
+    const { enterActiveRoom, inviteToRoom, respondToRoomInvite } = await loadModules()
 
     const invite = await inviteToRoom('isaac-session', 'vanessa')
 
     expect(invite).toEqual({ state: 'active', spaceId: 'space-1' })
     expect(db.space_members.get('space-1:vanessa')?.state).toBe('active')
-    expect(db.sessions.get('vanessa-session')?.space_id).toBe('space-1')
-  })
+    expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
+    await expect(respondToRoomInvite('vanessa-session', 'vanessa', true)).resolves.toEqual({
+      responded: false,
+      reason: 'no_pending_invite',
+    })
 
-  it('re-enters a left member as invited without sticking on left', async () => {
-    seedVoyage()
-    const { inviteToRoom, removeRoomPerson } = await loadModules()
-
-    const firstInvite = await inviteToRoom('isaac-session', 'vanessa')
-    await removeRoomPerson('isaac-session', 'vanessa')
-    expect(db.space_members.get(`${firstInvite.spaceId}:vanessa`)?.state).toBe('left')
-
-    const secondInvite = await inviteToRoom('isaac-session', 'vanessa')
-
-    expect(secondInvite).toEqual({ state: 'invited', spaceId: firstInvite.spaceId })
-    expect(db.space_members.get(`${firstInvite.spaceId}:vanessa`)?.state).toBe('invited')
-  })
-
-  it('accepts a fresh invite even when the invitee already has their own room', async () => {
-    seedVoyage()
-    // Vanessa already owns a room and her session is linked to it.
-    db.spaces.set('space-vanessa', { id: 'space-vanessa', kind: 'room', voyage_id: 'voyage-1', ai_present: false, created_by: 'vanessa', created_at: '2026-07-09T00:00:00.000Z' })
-    db.space_members.set('space-vanessa:vanessa', { space_id: 'space-vanessa', user_id: 'vanessa', state: 'active' })
-    const vanessa = db.sessions.get('vanessa-session'); if (vanessa) vanessa.space_id = 'space-vanessa'
-
-    const { inviteToRoom, linkPendingSpace } = await loadModules()
-    const invite = await inviteToRoom('isaac-session', 'vanessa') // space-1, vanessa invited
-    const link = await linkPendingSpace('vanessa-session', 'vanessa', 'voyage-1')
-
-    // The pending INVITE wins over her own active room — she joins the shared space.
-    expect(link).toEqual({ linked: true, spaceId: invite.spaceId, wasInvited: true })
+    await expect(enterActiveRoom('vanessa-session', 'vanessa')).resolves.toEqual({
+      entered: true,
+      spaceId: invite.spaceId,
+    })
     expect(db.sessions.get('vanessa-session')?.space_id).toBe(invite.spaceId)
-    expect(db.space_members.get(`${invite.spaceId}:vanessa`)?.state).toBe('active')
-  })
-
-  it('does not hijack an already-linked session when there is no fresh invite', async () => {
-    seedVoyage()
-    // Vanessa is active in her own room (session linked) AND active in another
-    // room of the same voyage — but has NO pending invite.
-    db.spaces.set('space-vanessa', { id: 'space-vanessa', kind: 'room', voyage_id: 'voyage-1', ai_present: false, created_by: 'vanessa', created_at: '2026-07-09T00:00:00.000Z' })
-    db.spaces.set('space-other', { id: 'space-other', kind: 'room', voyage_id: 'voyage-1', ai_present: false, created_by: 'other', created_at: '2026-07-09T00:00:05.000Z' })
-    db.space_members.set('space-vanessa:vanessa', { space_id: 'space-vanessa', user_id: 'vanessa', state: 'active' })
-    db.space_members.set('space-other:vanessa', { space_id: 'space-other', user_id: 'vanessa', state: 'active' })
-    const vanessa = db.sessions.get('vanessa-session'); if (vanessa) vanessa.space_id = 'space-vanessa'
-
-    const { linkPendingSpace } = await loadModules()
-    const link = await linkPendingSpace('vanessa-session', 'vanessa', 'voyage-1')
-
-    // No invite → an ordinary message must not re-point her linked session.
-    expect(link).toEqual({ linked: false })
-    expect(db.sessions.get('vanessa-session')?.space_id).toBe('space-vanessa')
   })
 })

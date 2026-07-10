@@ -20,7 +20,7 @@ import {
 import { hybridSearch, type RankedResult } from '@/lib/knowledge/hybrid'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { getRoom, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
-import { inviteToRoom } from '@/lib/messaging/invites'
+import { enterActiveRoom, inviteToRoom, respondToRoomInvite } from '@/lib/messaging/invites'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, runGuardedBackgroundTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
@@ -896,17 +896,36 @@ export const createVoyagerTools = (ctx: ToolContext): {
   // ── The Room: participants as spine, Voyager as a peer ──
   // add_to_room / remove_from_room manage who's in the room; set_voyager_presence
   // toggles the AI. A person in the room receives everything you type (no
-  // per-line "tell"). Adding a person quiets Voyager by default; +voyager
-  // brings it back.
+  // per-line "tell").
   const add_to_room = tool({
-    description: `Add a person to THIS conversation (the room), so everything the user types reaches them without a separate "tell". Use for "+vanessa", "add vanessa", "bring tom in", "invite sarah here". Adding a person quiets Voyager by default — the user says "+voyager" to bring the AI back.`,
+    description: `Add a person to THIS conversation (the room), so everything the user types reaches them without a separate "tell". Use for "+vanessa", "add vanessa", "bring tom in", "invite sarah here".`,
     inputSchema: z.object({ name: z.string().describe('The person to add') }),
     execute: async (input) => {
       if (!ctx.conversationId) return "I can't manage this room — no active conversation."
       const r = await resolveOneMember(ctx, input.name)
       if ('error' in r) return r.error
       const invite = await inviteToRoom(ctx.conversationId, r.userId)
-      return JSON.stringify({ status: invite.state === 'active' ? 'added' : 'invited', person: r.displayName, voyagerQuieted: true })
+      return JSON.stringify({ status: invite.state === 'active' ? 'added' : 'invited', person: r.displayName })
+    },
+  })
+
+  const respond_to_room_invite = tool({
+    description: `Respond to a pending room invitation on the user's behalf. Call when the user engages with an invite — "join", "sure, add me", "yes" (accept:true) or "no thanks", "not now", "decline" (accept:false). Also call with accept:true when a household member wants to hop into a room they were auto-added to.`,
+    inputSchema: z.object({
+      accept: z.boolean().describe('true = join the room, false = decline'),
+    }),
+    execute: async (input) => {
+      if (!ctx.conversationId) return 'No pending room invite.'
+
+      const response = await respondToRoomInvite(ctx.conversationId, ctx.userId, input.accept)
+      if (response.responded) return JSON.stringify(response)
+
+      if (input.accept) {
+        const entered = await enterActiveRoom(ctx.conversationId, ctx.userId)
+        if (entered.entered) return JSON.stringify(entered)
+      }
+
+      return 'No pending room invite.'
     },
   })
 
@@ -1038,6 +1057,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'add_to_room',
       tool: add_to_room,
       strategyHint: 'Add a person to THIS conversation so the user talks to them directly (no per-line tell). "+vanessa", "add tom".',
+    },
+    {
+      name: 'respond_to_room_invite',
+      tool: respond_to_room_invite,
+      strategyHint: 'Accept or decline a pending room invitation when the user responds to it.',
     },
     {
       name: 'remove_from_room',
