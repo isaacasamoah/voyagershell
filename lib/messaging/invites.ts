@@ -35,11 +35,6 @@ const getSession = async (sessionId: string): Promise<SessionRow | null> => {
   return (data as SessionRow | null) ?? null
 }
 
-const setSpaceAiPresent = async (spaceId: string, aiPresent: boolean): Promise<void> => {
-  const { error } = await spaces().update({ ai_present: aiPresent }).eq('id', spaceId)
-  if (error) log.api('invite room presence update failed', { spaceId, error: error.message }, 'error')
-}
-
 /** Re-invite a member who previously left. Guarded on state='left' so a
  *  concurrent accept (state='active') is never clobbered back to 'invited'. */
 const reinviteLeftMember = async (spaceId: string, userId: string): Promise<void> => {
@@ -99,24 +94,6 @@ const isHouseholdVoyage = async (voyageId: string): Promise<boolean> => {
   return ((data as { slug: string } | null)?.slug ?? null) === householdSlug
 }
 
-const findVoyageSession = async (
-  userId: string,
-  voyageId: string,
-): Promise<{ id: string } | null> => {
-  const { data, error } = await sessions()
-    .select('id')
-    .eq('user_id', userId)
-    .eq('voyage_id', voyageId)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error) {
-    log.api('invite voyage session lookup failed', { userId, voyageId, error: error.message }, 'error')
-    return null
-  }
-  return (data as { id: string } | null) ?? null
-}
-
 export const inviteToRoom = async (
   sessionId: string,
   inviteeUserId: string,
@@ -124,19 +101,14 @@ export const inviteToRoom = async (
   const session = await getSession(sessionId)
   if (!session) return { state: 'invited', spaceId: null }
 
-  const spaceId = await ensureSpace(session, false)
+  const spaceId = await ensureSpace(session, true)
   if (!spaceId) return { state: 'invited', spaceId: null }
 
   await activateMembers(spaceId, [session.user_id])
-  await setSpaceAiPresent(spaceId, false)
 
   const autoAccept = session.voyage_id ? await isHouseholdVoyage(session.voyage_id) : false
   if (autoAccept) {
     await activateMembers(spaceId, [inviteeUserId])
-    const inviteeSession = session.voyage_id
-      ? await findVoyageSession(inviteeUserId, session.voyage_id)
-      : null
-    if (inviteeSession) await linkSessionToSpace(inviteeSession.id, spaceId)
     return { state: 'active', spaceId }
   }
 
@@ -151,56 +123,86 @@ export const inviteToRoom = async (
   return { state: 'invited', spaceId }
 }
 
-export const linkPendingSpace = async (
+const findNewestMembershipSpace = async (
   sessionId: string,
   userId: string,
-  voyageId: string,
-): Promise<{ linked: boolean; spaceId?: string; wasInvited?: boolean }> => {
+  state: Extract<MemberState, 'invited' | 'active'>,
+): Promise<{ session: SessionRow; spaceId: string } | null> => {
   const session = await getSession(sessionId)
-  if (!session || session.user_id !== userId || session.voyage_id !== voyageId) return { linked: false }
+  if (!session || session.user_id !== userId || !session.voyage_id) return null
 
   const { data: memberships, error: memberError } = await spaceMembers()
     .select('space_id, user_id, state')
     .eq('user_id', userId)
-    .in('state', ['invited', 'active'])
+    .eq('state', state)
   if (memberError) {
-    log.api('pending invite lookup failed', { userId, voyageId, error: memberError.message }, 'error')
-    return { linked: false }
+    log.api('room membership lookup failed', { userId, state, error: memberError.message }, 'error')
+    return null
   }
 
-  const rows = ((memberships as SpaceMemberRow[] | null) ?? [])
-    .filter((row) => row.space_id !== session.space_id)
-  if (rows.length === 0) return { linked: false }
+  const spaceIds = ((memberships as SpaceMemberRow[] | null) ?? [])
+    .map((row) => row.space_id)
+    .filter((spaceId) => spaceId !== session.space_id)
+  if (spaceIds.length === 0) return null
 
-  const memberBySpace = new Map(rows.map((row) => [row.space_id, row]))
-  const { data: matchingSpaces, error: spaceError } = await spaces()
+  const { data: matchingSpace, error: spaceError } = await spaces()
     .select('id, voyage_id, created_at')
-    .in('id', Array.from(memberBySpace.keys()))
-    .eq('voyage_id', voyageId)
+    .in('id', spaceIds)
+    .eq('voyage_id', session.voyage_id)
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false }) // deterministic tiebreak on identical timestamps
+    .limit(1)
+    .maybeSingle()
   if (spaceError) {
-    log.api('pending invite space lookup failed', { userId, voyageId, error: spaceError.message }, 'error')
-    return { linked: false }
+    log.api('room membership space lookup failed', {
+      userId,
+      voyageId: session.voyage_id,
+      state,
+      error: spaceError.message,
+    }, 'error')
+    return null
   }
 
-  const orderedSpaces = (matchingSpaces as SpaceRow[] | null) ?? []
-  // A pending INVITE always wins — accept it even if this session is already on
-  // another space (the reciprocal accept moves the user into the shared room).
-  const invitedSpace = orderedSpaces.find((space) => memberBySpace.get(space.id)?.state === 'invited')
-  // Otherwise only (re)link an already-ACTIVE membership when this session isn't
-  // on a space yet — e.g. a household auto-accept that activated the user before
-  // they had a session. Never hijack an already-linked session on an ordinary
-  // message.
-  const activeSpace = session.space_id
-    ? undefined
-    : orderedSpaces.find((space) => memberBySpace.get(space.id)?.state === 'active')
-  const chosenSpace = invitedSpace ?? activeSpace
-  if (!chosenSpace) return { linked: false }
+  const found = matchingSpace as SpaceRow | null
+  return found ? { session, spaceId: found.id } : null
+}
 
-  const chosenMember = memberBySpace.get(chosenSpace.id)
-  await upsertMemberState(chosenSpace.id, userId, 'active')
-  const linked = await linkSessionToSpace(sessionId, chosenSpace.id)
-  if (!linked) return { linked: false }
+export type RoomInviteResponse =
+  | { responded: true; accepted: true; spaceId: string }
+  | { responded: true; accepted: false }
+  | { responded: false; reason: 'no_pending_invite' }
 
-  return { linked: true, spaceId: chosenSpace.id, wasInvited: chosenMember?.state === 'invited' }
+export const respondToRoomInvite = async (
+  sessionId: string,
+  userId: string,
+  accept: boolean,
+): Promise<RoomInviteResponse> => {
+  const pending = await findNewestMembershipSpace(sessionId, userId, 'invited')
+  if (!pending) return { responded: false, reason: 'no_pending_invite' }
+
+  const state: Extract<MemberState, 'active' | 'left'> = accept ? 'active' : 'left'
+  const { error } = await spaceMembers()
+    .update({ state })
+    .eq('space_id', pending.spaceId)
+    .eq('user_id', userId)
+    .eq('state', 'invited')
+  if (error) {
+    log.api('room invite response failed', { sessionId, userId, spaceId: pending.spaceId, state, error: error.message }, 'error')
+  }
+
+  if (!accept) return { responded: true, accepted: false }
+
+  await linkSessionToSpace(sessionId, pending.spaceId)
+  return { responded: true, accepted: true, spaceId: pending.spaceId }
+}
+
+export const enterActiveRoom = async (
+  sessionId: string,
+  userId: string,
+): Promise<{ entered: boolean; spaceId?: string }> => {
+  const active = await findNewestMembershipSpace(sessionId, userId, 'active')
+  if (!active || active.session.space_id) return { entered: false }
+
+  const linked = await linkSessionToSpace(sessionId, active.spaceId)
+  return linked ? { entered: true, spaceId: active.spaceId } : { entered: false }
 }

@@ -13,7 +13,7 @@ import {
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
 import { getRoom, removeRoomPerson, setAiPresent, parseRoomCommand } from '@/lib/messaging/room';
-import { inviteToRoom, linkPendingSpace } from '@/lib/messaging/invites';
+import { inviteToRoom } from '@/lib/messaging/invites';
 import { fanOutDeliveries } from '@/lib/messaging/deliveries';
 import { isVoyagerAside, stripVoyagerAside } from '@/lib/messaging/feed-types';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
@@ -227,7 +227,7 @@ export const POST = async (req: Request) => {
 
     // ── The Room ──────────────────────────────────────────────────────────
     // Resolve room state + voyage members ONCE (used by commands, fan-out, gate).
-    let room = conversationId
+    const room = conversationId
       ? await getRoom(conversationId)
       : { roomPeople: [], aiPresent: true };
     const voyage = voyageSlug ? await getVoyageBySlug(voyageSlug) : null;
@@ -264,9 +264,9 @@ export const POST = async (req: Request) => {
                   contextSnippet: `${senderName} invited you to a room`,
                 })
               if (eventId) void fanOutDeliveries(eventId, [match.userId])
-              confirmation = `Invited ${match.displayName} — they'll see it and can hop in by replying. (I've stepped back; say +voyager to bring me in.)`;
+              confirmation = `Invited ${match.displayName} — they can hop in by replying to the invite.`;
             } else {
-              confirmation = `Added ${match.displayName} — they'll get what you type here. (I've stepped back; say +voyager to bring me in.)`;
+              confirmation = `Added ${match.displayName} — they'll get what you type here.`;
             }
           } else {
             await removeRoomPerson(conversationId, match.userId);
@@ -287,13 +287,6 @@ export const POST = async (req: Request) => {
         return createUIMessageStreamResponse({ stream });
       }
       // fell through (not a real command) → treat as a normal message below.
-    }
-
-    // Reciprocal accept: the invitee's first message accepts a pending invite and
-    // links her session to the shared space, making the room two-sided.
-    if (conversationId && queryText && voyage && !autoSent) {
-      const link = await linkPendingSpace(conversationId, userId, voyage.id)
-      if (link.linked) room = await getRoom(conversationId)
     }
 
     // Save user message to DB (transcript). A ROOM message skips the extra
@@ -339,9 +332,11 @@ export const POST = async (req: Request) => {
       }
     }
 
-    // Voyager has stepped out → no AI turn (message still saved + delivered).
-    // EXCEPT an `@voyager` aside, which always reaches your private co-pilot.
-    if (!room.aiPresent && !voyagerAside) {
+    // In a human room, Voyager only answers when addressed. An `@voyager`
+    // aside is the rescue hatch and still works after an explicit -voyager.
+    // Solo conversations continue to receive an AI turn for every message.
+    const addressed = voyagerAside || /^(hey |hi |ok |okay )?voyager\b/i.test(queryText.trim());
+    if (room.roomPeople.length > 0 && !voyagerAside && (!addressed || room.aiPresent === false)) {
       return createUIMessageStreamResponse({
         stream: createUIMessageStream({ execute: async () => {} }),
       });
