@@ -434,6 +434,26 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
                 })
               },
               onComplete: async (result) => {
+                const eventId = await createMessageEvent(
+                  ctx.conversationId!,
+                  'assistant',
+                  result.message,
+                  {
+                    userId: ctx.userId,
+                    voyageSlug: ctx.voyageSlug,
+                    participants: [ctx.userId],
+                    addressedTo: [ctx.userId],
+                    source: 'agent',
+                    senderDisplayName: 'Voyager',
+                    attentionScore: 0.85,
+                    eventType: 'message',
+                    contextSnippet: `Voyager research: ${objective.slice(0, 60)}`,
+                  },
+                )
+                if (!eventId) {
+                  throw new Error('Failed to create background research message event')
+                }
+                await fanOutDeliveries(eventId, [ctx.userId])
                 await completeTask(taskId, result, Date.now() - startTime, {
                   conversationId: ctx.conversationId,
                   userId: ctx.userId,

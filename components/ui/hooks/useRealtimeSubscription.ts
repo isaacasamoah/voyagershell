@@ -6,7 +6,7 @@ import type { TaskProgress } from '@/components/chat';
 interface RealtimeCallbacks {
   onTaskInsert: (task: { id: string; task: string; progress?: TaskProgress }) => void;
   onTaskUpdate: (taskId: string, status: string, data: Record<string, unknown>) => void;
-  onTaskComplete: (taskId: string, data: Record<string, unknown>) => void;
+  onTaskComplete: (taskId: string) => void;
 }
 
 /**
@@ -63,7 +63,7 @@ export const useRealtimeSubscription = (
           if (status === 'running') {
             callbacks.onTaskUpdate(taskId, status, newData);
           } else if (status === 'complete') {
-            callbacks.onTaskComplete(taskId, newData);
+            callbacks.onTaskComplete(taskId);
           } else if (status === 'failed') {
             log.agent('Background task failed', { taskId, error: newData.error });
             callbacks.onTaskUpdate(taskId, status, newData);

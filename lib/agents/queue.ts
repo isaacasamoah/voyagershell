@@ -26,12 +26,12 @@ export interface AgentTask {
 
 export interface BackgroundTaskResult {
   findings: Array<{
-    eventId: string
+    eventId?: string
     content: string
     similarity?: number
   }>
   confidence: number
-  summary?: string
+  message: string
 }
 
 export interface EnqueueParams {
@@ -131,8 +131,7 @@ export async function updateTaskProgress(
 }
 
 /**
- * Mark a task as complete with results.
- * Emits background.completed event for downstream processing.
+ * Mark a task as complete with results for the audit trail.
  */
 export async function completeTask(
   taskId: string,
@@ -159,7 +158,7 @@ export async function completeTask(
 
   console.log(`[AgentQueue] Task completed: ${taskId} (${durationMs}ms)`)
 
-  // Emit event for downstream processing (followup, etc.)
+  // Emit the existing completion signal for any audit consumers.
   if (meta?.conversationId && meta?.userId) {
     const { dispatcher } = await import('./event-dispatcher')
     dispatcher.emit('background.completed', {
@@ -276,8 +275,7 @@ export async function reapStuckTasks(): Promise<number> {
 }
 
 /**
- * Get a single task by ID.
- * Used for followup generation when background task completes.
+ * Get a single task by ID for audit inspection.
  */
 export async function getTaskById(taskId: string): Promise<AgentTask | null> {
   const supabase = getAdminClient()
