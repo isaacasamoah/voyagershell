@@ -20,7 +20,7 @@ import {
 import { hybridSearch, type RankedResult } from '@/lib/knowledge/hybrid'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { getRoom, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
-import { enterActiveRoom, inviteToRoom, respondToRoomInvite } from '@/lib/messaging/invites'
+import { enterActiveRoom, inviteToRoom, respondToRoomInvite, deliverRoomInvite } from '@/lib/messaging/invites'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, runGuardedBackgroundTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
@@ -898,14 +898,27 @@ export const createVoyagerTools = (ctx: ToolContext): {
   // toggles the AI. A person in the room receives everything you type (no
   // per-line "tell").
   const add_to_room = tool({
-    description: `Add a person to THIS conversation (the room), so everything the user types reaches them without a separate "tell". Use for "+vanessa", "add vanessa", "bring tom in", "invite sarah here".`,
-    inputSchema: z.object({ name: z.string().describe('The person to add') }),
+    description: `INVITE a person to THIS conversation (the room). They get a knock and join only when they accept — they are NOT in the room until then. Use for "+vanessa", "add vanessa", "bring tom in", "invite sarah here".`,
+    inputSchema: z.object({ name: z.string().describe('The person to invite') }),
     execute: async (input) => {
       if (!ctx.conversationId) return "I can't manage this room — no active conversation."
       const r = await resolveOneMember(ctx, input.name)
       if ('error' in r) return r.error
       const invite = await inviteToRoom(ctx.conversationId, r.userId)
-      return JSON.stringify({ status: invite.state === 'active' ? 'added' : 'invited', person: r.displayName })
+      if (invite.state === 'invited') {
+        // The knock — same delivery as the `+name` path (one source).
+        const voyage = ctx.voyageSlug ? await getVoyageBySlug(ctx.voyageSlug) : null
+        const members = voyage ? await getVoyageMembers(voyage.id) : []
+        const me = members.find((m) => m.userId === ctx.userId)
+        await deliverRoomInvite(
+          ctx.conversationId,
+          { userId: ctx.userId, displayName: me?.displayName ?? me?.email ?? 'Someone' },
+          r.userId,
+          ctx.voyageSlug,
+        )
+        return `${r.displayName} has been INVITED — they are NOT in the room yet and cannot see these messages. They received a knock and will join only if they accept. Tell the user exactly this; do not claim they were added.`
+      }
+      return `${r.displayName} is in the room — they'll receive what's typed here.`
     },
   })
 
