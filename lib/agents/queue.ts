@@ -131,13 +131,13 @@ export async function updateTaskProgress(
 }
 
 /**
- * Mark a task as complete with results for the audit trail.
+ * Mark a task as complete with results. Surfacing is the caller's job (the
+ * result rides the delivery ledger); this writes only the terminal state.
  */
 export async function completeTask(
   taskId: string,
   result: BackgroundTaskResult,
   durationMs: number,
-  meta?: { conversationId?: string; userId?: string }
 ): Promise<void> {
   const supabase = getAdminClient()
 
@@ -157,16 +157,6 @@ export async function completeTask(
   }
 
   console.log(`[AgentQueue] Task completed: ${taskId} (${durationMs}ms)`)
-
-  // Emit the existing completion signal for any audit consumers.
-  if (meta?.conversationId && meta?.userId) {
-    const { dispatcher } = await import('./event-dispatcher')
-    dispatcher.emit('background.completed', {
-      taskId,
-      conversationId: meta.conversationId,
-      userId: meta.userId,
-    })
-  }
 }
 
 /**
@@ -274,35 +264,3 @@ export async function reapStuckTasks(): Promise<number> {
   }
 }
 
-/**
- * Get a single task by ID for audit inspection.
- */
-export async function getTaskById(taskId: string): Promise<AgentTask | null> {
-  const supabase = getAdminClient()
-
-  const { data, error } = await supabase
-    .from('agent_tasks')
-    .select('*')
-    .eq('id', taskId)
-    .single()
-
-  if (error || !data) {
-    console.error('[AgentQueue] Failed to get task by ID:', error)
-    return null
-  }
-
-  return {
-    id: data.id as string,
-    task: data.task as string,
-    code: data.code as string,
-    priority: data.priority as 'low' | 'normal' | 'high',
-    userId: data.user_id as string,
-    voyageSlug: data.voyage_slug as string | undefined,
-    conversationId: data.conversation_id as string,
-    status: data.status as AgentTask['status'],
-    result: data.result as unknown as BackgroundTaskResult | undefined,
-    error: data.error as string | undefined,
-    durationMs: data.duration_ms as number | undefined,
-    createdAt: new Date(data.created_at as string),
-  }
-}

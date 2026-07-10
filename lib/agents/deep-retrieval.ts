@@ -127,9 +127,22 @@ export async function runBackgroundRetrieval(
     steps: result.steps.length,
   })
 
+  // The final text IS the delivered message — never ship a blank bubble.
+  // Empty text + findings → honest fallback; empty both → throw (the guard
+  // converts it into failTask, not a false 'complete').
+  const finalText = result.text.trim()
+  const message = finalText.length > 0
+    ? finalText
+    : findings.length > 0
+      ? `I dug into this and surfaced ${findings.length} related item${findings.length === 1 ? '' : 's'}, but couldn't shape a clear answer. Ask me again and I'll go deeper.`
+      : ''
+  if (!message) {
+    throw new Error('Background research produced no answer text and no findings')
+  }
+
   return {
     findings,
     confidence: findings.length > 0 ? Math.min(findings.length / 5, 1.0) : 0,
-    message: result.text,
+    message,
   }
 }

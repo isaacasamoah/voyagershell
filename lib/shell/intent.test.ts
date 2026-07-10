@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { detectReferenceSignals } from '@/lib/conversation/continuity'
 import { detectActionIntent } from './intent'
-import * as mod from './signals'
 
+// R2 deleted the deterministic retrieval-dispatch plane (signals.ts is gone
+// entirely). These are the cooperative prompt-shaping signals that stay.
 describe('cooperative shell signals', () => {
   it('keeps action intent detection', () => {
     expect(detectActionIntent('tell tom the deadline moved')).toMatchObject({
@@ -16,10 +17,5 @@ describe('cooperative shell signals', () => {
     expect(detectReferenceSignals('Remember when we discussed the launch?')).toContainEqual(
       expect.objectContaining({ type: 'cross-session', trigger: 'Remember when' }),
     )
-  })
-
-  it('does not export deterministic retrieval dispatch', () => {
-    expect(mod).not.toHaveProperty('detectRetrievalSignals')
-    expect(mod).not.toHaveProperty('dispatchRetrievalAgent')
   })
 })
