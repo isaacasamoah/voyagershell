@@ -624,6 +624,11 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         {/* One ordered event stream from /api/feed; useChat is only the live transient. */}
         {feedEvents.map(renderFeedEvent)}
         {renderOptimisticUser()}
+        {/* Queued messages are real user intent — show them, never swallow them.
+            (Honest indicator: typed text must stay visible until it truly lands.) */}
+        {messageQueue.map((queued, i) => (
+          <UserMessage key={`queued-${i}`} content={queued} timestamp="QUEUED" username="you" />
+        ))}
         {renderStreamingReply()}
 
         {/* Error state */}

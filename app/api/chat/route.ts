@@ -15,6 +15,7 @@ import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/
 import { getRoom, removeRoomPerson, setAiPresent, parseRoomCommand } from '@/lib/messaging/room';
 import { inviteToRoom, linkPendingSpace } from '@/lib/messaging/invites';
 import { fanOutDeliveries } from '@/lib/messaging/deliveries';
+import { isVoyagerAside, stripVoyagerAside } from '@/lib/messaging/feed-types';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
@@ -141,10 +142,8 @@ export const POST = async (req: Request) => {
     // saved transcript/knowledge is prefix-free. The aside bypasses the room
     // below (not fanned to humans; answered even if Voyager stepped out).
     const rawQuery = lastUserMessage?.content ?? '';
-    const voyagerAside = /^@voyager\b/i.test(rawQuery.trim());
-    const queryText = voyagerAside
-      ? rawQuery.replace(/^@voyager[\s,:!.?-]*/i, '').trim()
-      : rawQuery;
+    const voyagerAside = isVoyagerAside(rawQuery);
+    const queryText = voyagerAside ? stripVoyagerAside(rawQuery) : rawQuery;
     if (voyagerAside && lastUserMessage) lastUserMessage.content = queryText;
 
     // Shell Contract: detect verb intent before LLM runs
