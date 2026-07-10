@@ -25,3 +25,9 @@ WHERE profile.username IS NULL
 
 COMMENT ON COLUMN public.profiles.username IS
   'Global addressing handle; display_name is the message label.';
+
+-- Backfill hygiene: only pattern-valid handles survive; others claim via set_username.
+UPDATE public.profiles
+SET username = NULL
+WHERE username IS NOT NULL
+  AND username !~ '^[a-z0-9][a-z0-9_.-]{1,30}$';
