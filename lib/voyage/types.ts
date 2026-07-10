@@ -36,6 +36,7 @@ export interface VoyageMember {
   // Joined profile info
   email?: string;
   displayName?: string;
+  username?: string;
 }
 
 export interface VoyageMembership {

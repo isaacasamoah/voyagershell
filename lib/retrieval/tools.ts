@@ -25,6 +25,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { enqueueAgentTask, completeTask, runGuardedBackgroundTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
 import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages, resolveMemberByName } from '@/lib/voyage'
+import { normalizeUsername } from '@/lib/voyage/username'
 import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
 
 // Resolve short ID (8 chars) to full UUID
@@ -676,7 +677,7 @@ export const createVoyagerTools = (ctx: ToolContext): {
 
   // set_display_name — LLM calls this when user tells Voyager their name
   const set_display_name = tool({
-    description: `Set the user's display name. Use when a new user tells you what to call them, or when any user wants to change their display name. Natural follow-up: confirm with their name ("Got it, {name}.").`,
+    description: `Set the user's display name. Use when a new user tells you what to call them, or when any user wants to change their display name. Natural follow-up: confirm with their name ("Got it, {name}."). Distinct from username (the addressing handle) — display name is only how their messages are labeled.`,
     inputSchema: z.object({
       name: z.string().min(1).max(50).describe('The display name to set'),
     }),
@@ -692,6 +693,33 @@ export const createVoyagerTools = (ctx: ToolContext): {
         return 'Failed to save your name. Try again?'
       }
       return JSON.stringify({ set: true, name })
+    },
+  })
+
+  // set_username — LLM calls this when the user claims an addressing handle
+  const set_username = tool({
+    description: `Set the user's USERNAME — their unique addressing handle (how others reach them: "+isaac", "tell isaac"). Use when the user claims a handle ("set my username to isaac", "let people reach me as isaac"). Distinct from display name (how their messages are labeled). Usernames are lowercase letters/numbers/._- (2-31 chars).`,
+    inputSchema: z.object({ username: z.string() }),
+    execute: async (input) => {
+      const normalized = normalizeUsername(input.username)
+      if (!normalized.ok) return normalized.error
+
+      const { username } = normalized
+      const supabase = getAdminClient()
+      const { error } = await supabase
+        .from('profiles')
+        .update({ username })
+        .eq('id', ctx.userId)
+
+      if (error?.code === '23505') {
+        return `That username's taken — try another.`
+      }
+      if (error) {
+        console.error('[set_username] Error:', error)
+        return 'Failed to save your username. Try again?'
+      }
+
+      return `Username set: ${username}. People can now reach you with +${username} or "tell ${username}".`
     },
   })
 
@@ -790,9 +818,19 @@ export const createVoyagerTools = (ctx: ToolContext): {
       const notFound: string[] = []
 
       for (const name of names) {
-        const lower = name.toLowerCase()
+        const lower = name.toLowerCase().trim()
 
-        // AC 3: Check display_name first (case-insensitive), then nickname
+        const usernameMatches = members.filter((m) => m.username?.toLowerCase() === lower)
+        if (usernameMatches.length === 1) {
+          const match = usernameMatches[0]
+          if (match.userId === ctx.userId) {
+            return `That's you! No need to send a message to yourself.`
+          }
+          resolved.push({ userId: match.userId, displayName: match.displayName ?? match.email ?? 'unknown' })
+          continue
+        }
+
+        // AC 3: After username, check display_name (case-insensitive), then nickname
         const matches = members.filter((m) => {
           const dn = m.displayName?.toLowerCase() ?? ''
           const nn = m.nickname?.toLowerCase() ?? ''
@@ -1060,6 +1098,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'set_display_name',
       tool: set_display_name,
       strategyHint: 'Set user display name. New users without a name, or name change requests.',
+    },
+    {
+      name: 'set_username',
+      tool: set_username,
+      strategyHint: 'Set the unique username people use to address the user.',
     },
     {
       name: 'send_message',
