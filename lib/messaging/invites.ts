@@ -21,7 +21,6 @@ interface SpaceRow {
 const sessions = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('sessions')
 const spaces = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('spaces')
 const spaceMembers = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('space_members')
-const voyages = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('voyages')
 
 const getSession = async (sessionId: string): Promise<SessionRow | null> => {
   const { data, error } = await sessions()
@@ -79,21 +78,10 @@ const linkSessionToSpace = async (sessionId: string, spaceId: string): Promise<b
   return true
 }
 
-const isHouseholdVoyage = async (voyageId: string): Promise<boolean> => {
-  const householdSlug = process.env.HOUSEHOLD_SHARE_VOYAGE
-  if (!householdSlug) return false
-
-  const { data, error } = await voyages()
-    .select('slug')
-    .eq('id', voyageId)
-    .maybeSingle()
-  if (error) {
-    log.api('household voyage lookup failed', { voyageId, error: error.message }, 'error')
-    return false
-  }
-  return ((data as { slug: string } | null)?.slug ?? null) === householdSlug
-}
-
+// Every invite knocks — household voyages included. HOUSEHOLD_SHARE_VOYAGE is
+// a BRAIN-SHARE (subscription) concept only (lib/models/connections.ts); it no
+// longer grants social auto-accept. If a trust tier returns, it comes back as
+// attested voyage config, not an env-var side effect. (Isaac, 2026-07-10)
 export const inviteToRoom = async (
   sessionId: string,
   inviteeUserId: string,
@@ -105,12 +93,6 @@ export const inviteToRoom = async (
   if (!spaceId) return { state: 'invited', spaceId: null }
 
   await activateMembers(spaceId, [session.user_id])
-
-  const autoAccept = session.voyage_id ? await isHouseholdVoyage(session.voyage_id) : false
-  if (autoAccept) {
-    await activateMembers(spaceId, [inviteeUserId])
-    return { state: 'active', spaceId }
-  }
 
   // Never downgrade an already-active/invited row; only (re)invite a fresh or
   // previously-left member. The re-invite is guarded so it can't clobber a

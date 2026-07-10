@@ -244,25 +244,32 @@ describe('room invitations', () => {
     expect(db.sessions.get('vanessa-session')?.space_id).toBe(newer.spaceId)
   })
 
-  it('auto-accepts a household member without capturing their session, then enters explicitly', async () => {
+  it('knocks even in a household voyage — HOUSEHOLD_SHARE_VOYAGE grants no social auto-accept', async () => {
     seedVoyage()
     process.env.HOUSEHOLD_SHARE_VOYAGE = 'fambam'
-    const { enterActiveRoom, inviteToRoom, respondToRoomInvite } = await loadModules()
+    const { inviteToRoom } = await loadModules()
 
     const invite = await inviteToRoom('isaac-session', 'vanessa')
 
-    expect(invite).toEqual({ state: 'active', spaceId: 'space-1' })
-    expect(db.space_members.get('space-1:vanessa')?.state).toBe('active')
+    expect(invite).toEqual({ state: 'invited', spaceId: 'space-1' })
+    expect(db.space_members.get('space-1:vanessa')?.state).toBe('invited')
     expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
-    await expect(respondToRoomInvite('vanessa-session', 'vanessa', true)).resolves.toEqual({
-      responded: false,
-      reason: 'no_pending_invite',
-    })
+  })
 
-    await expect(enterActiveRoom('vanessa-session', 'vanessa')).resolves.toEqual({
+  it('re-enters an already-active room from a new session via enterActiveRoom', async () => {
+    seedVoyage()
+    const { enterActiveRoom, inviteToRoom, respondToRoomInvite } = await loadModules()
+
+    await inviteToRoom('isaac-session', 'vanessa')
+    await respondToRoomInvite('vanessa-session', 'vanessa', true)
+    const spaceId = db.sessions.get('vanessa-session')?.space_id
+    // a fresh session in the same voyage re-enters by choice
+    db.sessions.set('vanessa-session-2', { id: 'vanessa-session-2', user_id: 'vanessa', voyage_id: 'voyage-1', space_id: null, updated_at: '2026-07-10T00:00:03.000Z' })
+
+    await expect(enterActiveRoom('vanessa-session-2', 'vanessa')).resolves.toEqual({
       entered: true,
-      spaceId: invite.spaceId,
+      spaceId,
     })
-    expect(db.sessions.get('vanessa-session')?.space_id).toBe(invite.spaceId)
+    expect(db.sessions.get('vanessa-session-2')?.space_id).toBe(spaceId)
   })
 })
