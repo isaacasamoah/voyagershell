@@ -100,11 +100,22 @@ export const shouldShowStreamingReply = (
 // never render as an optimistic user turn either.
 const WELCOME_RE = /^good (morning|afternoon|evening)\b/i
 
+// `@voyager …` asides are persisted STRIPPED by the server (route.ts removes
+// the prefix before saving). The client must compare the same shape, or the
+// optimistic message never settles and the composer wedges into queue mode.
+// ONE source for the strip — the route imports these too.
+export const isVoyagerAside = (text: string): boolean => /^@voyager\b/i.test(text.trim())
+export const stripVoyagerAside = (text: string): string => (
+  text.trim().replace(/^@voyager[\s,:!.?-]*/i, '').trim()
+)
+
 // Show a just-sent user message as an optimistic transient until its own
 // 'conversation' event lands in the feed (avoids the send→round-trip vanish),
-// excluding the hidden welcome.
+// excluding the hidden welcome. Compares aside-stripped content on both sides
+// so a settled `@voyager …` turn releases its optimistic twin.
+// (Interim until the HarnessEvent turn-done signal — the seam owns the real close.)
 export const shouldShowOptimisticUser = (content: string, events: FeedEvent[]): boolean => {
-  const normalized = content.trim()
+  const normalized = stripVoyagerAside(content)
   if (!normalized || WELCOME_RE.test(normalized)) return false
-  return !events.some((e) => e.role === 'user' && e.content.trim() === normalized)
+  return !events.some((e) => e.role === 'user' && stripVoyagerAside(e.content) === normalized)
 }

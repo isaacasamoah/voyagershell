@@ -40,7 +40,6 @@ export interface KnowledgeNode {
   classifications: string[]   // Metadata: fact, decision, preference, etc.
   entities: string[]          // Metadata: people, systems, projects
   topics: string[]            // Metadata: domain topics
-  connectedTo: string[]       // Graph: related event IDs
   createdAt: Date             // When the source event was created
   similarity?: number         // Search relevance score
   knowledgeType: string | null   // domain | operational | preference (NULL = treat as operational)
@@ -75,7 +74,6 @@ interface KnowledgeNodeInput {
   classifications?: string[] | null
   entities?: string[] | null
   topics?: string[] | null
-  connected_to?: string[] | null
   participants?: string[] | null
   similarity?: number
   knowledge_type?: string | null
@@ -114,7 +112,6 @@ const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
   classifications: row.classifications ?? [],
   entities: row.entities ?? [],
   topics: row.topics ?? [],
-  connectedTo: row.connected_to ?? [],
   createdAt: new Date(row.source_created_at),
   similarity: row.similarity,
   knowledgeType: row.knowledge_type ?? null,
@@ -125,37 +122,6 @@ const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
   senderUserId: row.sender_user_id ?? undefined,
   eventType: row.event_type ?? undefined,
 })
-
-// =============================================================================
-// Scope Filters (PostgREST two-layer pattern)
-// =============================================================================
-
-/**
- * Build a PostgREST .or() filter for 4-layer privacy-scoped knowledge retrieval:
- *   Layer 1: Personal space — user_id = me AND voyage_slug IS NULL
- *   Layer 2: My voyage content — voyage_slug = X AND user_id = me
- *   Layer 3: Shared explicit — voyage_slug = X AND event_type = 'explicit' AND knowledge_type IN ('domain', 'operational')
- *   Layer 4: My messages — voyage_slug = X AND event_type = 'message' AND participants contains me
- *
- * Privacy invariant: event_type is the stable privacy dimension.
- * - conversation events are ALWAYS author-only (covered by Layer 2)
- * - explicit events with knowledge_type domain/operational are voyage-wide (Layer 3)
- * - explicit events with knowledge_type preference or NULL are author-only (Layer 2)
- * - message events are participant-scoped (Layer 4)
- *
- * Used by all direct-query functions. Same signature, privacy-aware internals.
- */
-export const buildScopeFilter = (userId: string, voyageSlug: string): string =>
-  [
-    // Layer 1: Personal space (no voyage)
-    `and(user_id.eq.${userId},voyage_slug.is.null)`,
-    // Layer 2: My own content in this voyage (conversations, preferences, unenriched)
-    `and(voyage_slug.eq.${voyageSlug},user_id.eq.${userId})`,
-    // Layer 3: Shared explicit domain/operational from any member
-    `and(voyage_slug.eq.${voyageSlug},event_type.eq.explicit,knowledge_type.in.(domain,operational))`,
-    // Layer 4: Messages where I'm a participant
-    `and(voyage_slug.eq.${voyageSlug},event_type.eq.message,or(participants.is.null,participants.cs.{${userId}}))`,
-  ].join(',')
 
 // =============================================================================
 // Search Functions
@@ -253,7 +219,7 @@ export const getKnowledgeByIds = async (eventIds: string[], userId?: string): Pr
 
     let query = supabase
       .from('knowledge_current')
-      .select('*')
+      .select('event_id, content, source_created_at, classifications, entities, topics, knowledge_type, attention_score, context_snippet, sender_display_name, sender_user_id, event_type')
       .in('event_id', eventIds)
 
     // Participant filter: only return nodes the user can access
@@ -342,34 +308,18 @@ export const keywordGrep = async (
 
     const supabase = getClientForUser(userId)
 
-    // Build the query - using ILIKE for case-insensitive, LIKE for case-sensitive
-    const operator = caseSensitive ? 'like' : 'ilike'
     const searchPattern = `%${pattern}%`
 
-
-    let query = supabase
-      .from('knowledge_current')
-      .select('*')
-      .filter('content', operator, searchPattern)
-      .gte('attention_score', minAttention)
-
-    // Apply scope filters — all voyage paths use buildScopeFilter for privacy
-    if (scope === 'personal') {
-      query = query.eq('user_id', userId).is('voyage_slug', null)
-    } else if (scope === 'voyage' && voyageSlug) {
-      // Voyage only — privacy-scoped, exclude personal layer
-      query = query.or(buildScopeFilter(userId, voyageSlug))
-        .not('voyage_slug', 'is', null)
-    } else if (voyageSlug) {
-      query = query.or(buildScopeFilter(userId, voyageSlug))
-    } else {
-      query = query.eq('user_id', userId).is('voyage_slug', null)
-    }
-
-    const { data, error } = await query
-      .order('attention_score', { ascending: false })
-      .order('source_created_at', { ascending: false })
-      .limit(limit)
+    const { data, error } = await (supabase.rpc as Function)('scoped_knowledge_fetch', {
+      p_user_id: userId,
+      p_voyage_slug: voyageSlug,
+      p_participants: [userId],
+      p_scope: scope,
+      p_content_match: searchPattern,
+      p_case_sensitive: caseSensitive,
+      p_min_attention: minAttention,
+      p_match_count: limit,
+    })
 
     if (error) {
       console.error('[Knowledge] Grep error:', error)
@@ -400,7 +350,6 @@ export const keywordGrep = async (
         classifications: row.classifications ?? [],
         entities: row.entities ?? [],
         topics: row.topics ?? [],
-        connectedTo: row.connected_to ?? [],
         createdAt: new Date(row.source_created_at),
         knowledgeType: row.knowledge_type ?? null,
         attentionScore: row.attention_score ?? 0.5,
@@ -411,6 +360,73 @@ export const keywordGrep = async (
     })
   } catch (error) {
     console.error('[Knowledge] keywordGrep error:', error)
+    return []
+  }
+}
+
+export const personAnchoredSearch = async (
+  callerUserId: string,
+  senderUserId: string,
+  options: { voyageSlug?: string; query?: string; limit?: number } = {}
+): Promise<GrepResult[]> => {
+  try {
+    const supabase = getClientForUser(callerUserId)
+    const query = options.query
+
+    const { data, error } = await (supabase.rpc as Function)('scoped_knowledge_fetch', {
+      p_user_id: callerUserId,
+      p_voyage_slug: options.voyageSlug ?? null,
+      p_participants: [callerUserId],
+      p_scope: options.voyageSlug ? 'all' : 'personal',
+      p_content_match: query ? `%${query}%` : null,
+      p_case_sensitive: false,
+      p_min_attention: 0.0,
+      p_match_count: options.limit ?? 20,
+      p_sender_user_id: senderUserId,
+    })
+
+    if (error) {
+      console.error('[Knowledge] personAnchoredSearch error:', error)
+      return []
+    }
+
+    const rows = (data ?? []) as KnowledgeNodeInput[]
+
+    return rows.map((row) => {
+      const content = row.content
+      const lowerContent = content.toLowerCase()
+      const lowerQuery = query?.toLowerCase()
+      const rawMatchStart = lowerQuery ? lowerContent.indexOf(lowerQuery) : -1
+      const matchStart = rawMatchStart >= 0 ? rawMatchStart : 0
+
+      let highlight: string
+      if (query && rawMatchStart >= 0) {
+        const start = Math.max(0, rawMatchStart - 50)
+        const end = Math.min(content.length, rawMatchStart + query.length + 50)
+        highlight = content.slice(start, end)
+        if (start > 0) highlight = '...' + highlight
+        if (end < content.length) highlight = highlight + '...'
+      } else {
+        highlight = content.slice(0, 120)
+        if (content.length > 120) highlight = highlight + '...'
+      }
+
+      return {
+        eventId: row.event_id,
+        content: row.content,
+        classifications: row.classifications ?? [],
+        entities: row.entities ?? [],
+        topics: row.topics ?? [],
+        createdAt: new Date(row.source_created_at),
+        knowledgeType: row.knowledge_type ?? null,
+        attentionScore: row.attention_score ?? 0.5,
+        contextSnippet: row.context_snippet ?? null,
+        highlight,
+        matchStart,
+      }
+    })
+  } catch (error) {
+    console.error('[Knowledge] personAnchoredSearch error:', error)
     return []
   }
 }

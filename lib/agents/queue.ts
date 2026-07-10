@@ -29,7 +29,6 @@ export interface BackgroundTaskResult {
     eventId: string
     content: string
     similarity?: number
-    connectedTo?: string[]
   }>
   confidence: number
   summary?: string
@@ -45,6 +44,19 @@ export interface EnqueueParams {
   originalQuery?: string
   conversationSnapshot?: object[]
 }
+
+interface GuardedBackgroundTaskOptions<T> {
+  taskId: string
+  run: () => Promise<T>
+  onComplete: (result: T) => Promise<void>
+  onFailure?: (error: unknown) => void
+  fail?: (taskId: string, errorMessage: string) => Promise<void>
+  timeoutMs?: number
+}
+
+const BACKGROUND_TASK_TIMEOUT_MS = 25_000
+const STUCK_TASK_TTL_MS = 5 * 60 * 1000
+const REAPED_TASK_ERROR = 'reaped: no terminal state within TTL'
 
 // =============================================================================
 // Queue Operations
@@ -179,6 +191,88 @@ export async function failTask(taskId: string, errorMessage: string): Promise<vo
   }
 
   console.log(`[AgentQueue] Task failed: ${taskId} - ${errorMessage}`)
+}
+
+/**
+ * Run a background task with a deadline and guarantee a terminal write attempt.
+ */
+export async function runGuardedBackgroundTask<T>({
+  taskId,
+  run,
+  onComplete,
+  onFailure,
+  fail = failTask,
+  timeoutMs = BACKGROUND_TASK_TIMEOUT_MS,
+}: GuardedBackgroundTaskOptions<T>): Promise<void> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Background agent timed out')), timeoutMs)
+  })
+
+  try {
+    const result = await Promise.race([run(), timeout])
+    await onComplete(result)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    try {
+      await fail(taskId, message)
+    } catch (failError) {
+      console.error(`[AgentQueue] Failed to record failure for task ${taskId}:`, failError)
+    }
+    onFailure?.(error)
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
+/**
+ * Fail pending or running tasks that have not written progress within the TTL.
+ */
+export async function reapStuckTasks(): Promise<number> {
+  try {
+    const tasks = () => (
+      getAdminClient() as unknown as { from: (table: string) => any }
+    ).from('agent_tasks')
+    const cutoff = new Date(Date.now() - STUCK_TASK_TTL_MS).toISOString()
+    const updatedAt = new Date().toISOString()
+
+    // PostgREST updates cannot embed SQL expressions, so preserve
+    // error=COALESCE(error, fallback) with two disjoint bulk updates.
+    const { data: rowsWithoutError, error: nullError } = await tasks()
+      .update({
+        status: 'failed',
+        error: REAPED_TASK_ERROR,
+        updated_at: updatedAt,
+      })
+      .in('status', ['running', 'pending'])
+      .lt('updated_at', cutoff)
+      .is('error', null)
+      .select('id')
+
+    if (nullError) {
+      console.error('[AgentQueue] Failed to reap stuck tasks:', nullError)
+      return 0
+    }
+
+    const { data: rowsWithError, error: existingError } = await tasks()
+      .update({
+        status: 'failed',
+        updated_at: updatedAt,
+      })
+      .in('status', ['running', 'pending'])
+      .lt('updated_at', cutoff)
+      .select('id')
+
+    if (existingError) {
+      console.error('[AgentQueue] Failed to reap stuck tasks:', existingError)
+      return 0
+    }
+
+    return (rowsWithoutError?.length ?? 0) + (rowsWithError?.length ?? 0)
+  } catch (error) {
+    console.error('[AgentQueue] Failed to reap stuck tasks:', error)
+    return 0
+  }
 }
 
 /**

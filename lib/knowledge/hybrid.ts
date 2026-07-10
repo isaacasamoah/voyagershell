@@ -25,7 +25,6 @@ export interface RankedResult {
     classifications?: string[] | null
     entities?: string[] | null
     topics?: string[] | null
-    connected_to?: string[] | null
     knowledge_type?: string | null
     attention_score?: number | null
     context_snippet?: string | null
@@ -56,7 +55,6 @@ interface KeywordResult {
   classifications?: string[] | null
   entities?: string[] | null
   topics?: string[] | null
-  connected_to?: string[] | null
   knowledge_type?: string | null
   attention_score?: number | null
   context_snippet?: string | null
@@ -288,7 +286,6 @@ export const hybridSearch = async (
         classifications: node.classifications,
         entities: node.entities,
         topics: node.topics,
-        connected_to: node.connectedTo,
         knowledge_type: node.knowledgeType,
         attention_score: node.attentionScore,
         context_snippet: node.contextSnippet,
@@ -306,7 +303,6 @@ export const hybridSearch = async (
         classifications: row.classifications,
         entities: row.entities,
         topics: row.topics,
-        connected_to: row.connected_to,
         knowledge_type: row.knowledge_type,
         attention_score: row.attention_score,
         context_snippet: row.context_snippet,

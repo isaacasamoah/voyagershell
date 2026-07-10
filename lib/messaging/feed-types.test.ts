@@ -81,3 +81,39 @@ describe('event-stream feed primitives', () => {
     expect(shouldShowStreamingReply(reply, [olderMatchingEvent, settledEvent])).toBe(false)
   })
 })
+
+// F2 root-cause regression: the server persists `@voyager …` asides STRIPPED,
+// so the optimistic settle must compare aside-stripped content on both sides —
+// or the composer wedges into queue mode after every aside (2026-07-10, live).
+import { shouldShowOptimisticUser, stripVoyagerAside, isVoyagerAside } from './feed-types'
+
+describe('aside-aware optimistic settle', () => {
+  it('strips the @voyager prefix exactly like the route', () => {
+    expect(stripVoyagerAside('@voyager what is the almond tree idea?')).toBe('what is the almond tree idea?')
+    expect(stripVoyagerAside('@Voyager, remind me')).toBe('remind me')
+    expect(stripVoyagerAside('plain message')).toBe('plain message')
+    expect(isVoyagerAside('@voyager hi')).toBe(true)
+    expect(isVoyagerAside('email @voyager later')).toBe(false)
+  })
+
+  it('settles an aside once its STRIPPED event lands (the wedge bug)', () => {
+    const settled = event('settled', '2026-07-10T10:14:00.000Z', {
+      role: 'user',
+      content: 'what is the almond tree idea?',
+    })
+    // before the event lands: show optimistic
+    expect(shouldShowOptimisticUser('@voyager what is the almond tree idea?', [])).toBe(true)
+    // after: the stripped twin releases it
+    expect(shouldShowOptimisticUser('@voyager what is the almond tree idea?', [settled])).toBe(false)
+  })
+
+  it('still settles plain messages by exact content', () => {
+    const settled = event('settled', '2026-07-10T10:14:00.000Z', { role: 'user', content: 'hello there' })
+    expect(shouldShowOptimisticUser('hello there', [settled])).toBe(false)
+    expect(shouldShowOptimisticUser('hello there', [])).toBe(true)
+  })
+
+  it('never shows the hidden welcome optimistically', () => {
+    expect(shouldShowOptimisticUser('good morning in fambam', [])).toBe(false)
+  })
+})

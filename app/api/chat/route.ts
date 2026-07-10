@@ -12,11 +12,14 @@ import {
 } from '@/lib/conversation/continuity';
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
-import { getRoom, addRoomPerson, removeRoomPerson, setAiPresent, parseRoomCommand } from '@/lib/messaging/room';
+import { getRoom, removeRoomPerson, setAiPresent, parseRoomCommand } from '@/lib/messaging/room';
+import { inviteToRoom } from '@/lib/messaging/invites';
 import { fanOutDeliveries } from '@/lib/messaging/deliveries';
+import { isVoyagerAside, stripVoyagerAside } from '@/lib/messaging/feed-types';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
+import { reapStuckTasks } from '@/lib/agents/queue';
 import { modelRouter, creditTracker, resolveUserModelWithMeta } from '@/lib/models';
 import { resolveSessionVoyage, SessionAccessError, getVoyageBySlug, getVoyageMembers, resolveMemberByName } from '@/lib/voyage';
 import { log } from '@/lib/debug';
@@ -91,6 +94,7 @@ export const POST = async (req: Request) => {
     const authResult = await requireAuthResponse();
     if (authResult instanceof Response) return authResult;
     const userId = authResult;
+    void reapStuckTasks().catch(() => {});
 
     const { messages, conversationId, authState, autoSent } = await req.json();
 
@@ -138,10 +142,8 @@ export const POST = async (req: Request) => {
     // saved transcript/knowledge is prefix-free. The aside bypasses the room
     // below (not fanned to humans; answered even if Voyager stepped out).
     const rawQuery = lastUserMessage?.content ?? '';
-    const voyagerAside = /^@voyager\b/i.test(rawQuery.trim());
-    const queryText = voyagerAside
-      ? rawQuery.replace(/^@voyager[\s,:!.?-]*/i, '').trim()
-      : rawQuery;
+    const voyagerAside = isVoyagerAside(rawQuery);
+    const queryText = voyagerAside ? stripVoyagerAside(rawQuery) : rawQuery;
     if (voyagerAside && lastUserMessage) lastUserMessage.content = queryText;
 
     // Shell Contract: detect verb intent before LLM runs
@@ -249,8 +251,23 @@ export const POST = async (req: Request) => {
         const match = resolveMemberByName(voyageMembers, roomCmd.name);
         if (match && match.userId !== userId) {
           if (roomCmd.op === 'add') {
-            await addRoomPerson(conversationId, match.userId);
-            confirmation = `Added ${match.displayName} — they'll get what you type here. (I've stepped back; say +voyager to bring me in.)`;
+            const invite = await inviteToRoom(conversationId, match.userId);
+            if (invite.state === 'invited') {
+              const me = voyageMembers.find((m) => m.userId === userId);
+              const senderName = me?.displayName ?? me?.email ?? 'Someone';
+              const eventId = await createMessageEvent(conversationId, 'user',
+                `${senderName} invited you to a room — reply to join.`, {
+                  userId, voyageSlug, participants: [match.userId],
+                  addressedTo: [match.userId], source: 'invite',
+                  senderDisplayName: senderName, senderUserId: userId,
+                  attentionScore: 0.9,
+                  contextSnippet: `${senderName} invited you to a room`,
+                })
+              if (eventId) void fanOutDeliveries(eventId, [match.userId])
+              confirmation = `Invited ${match.displayName} — they can hop in by replying to the invite.`;
+            } else {
+              confirmation = `Added ${match.displayName} — they'll get what you type here.`;
+            }
           } else {
             await removeRoomPerson(conversationId, match.userId);
             confirmation = `Removed ${match.displayName} from the room.`;
@@ -315,9 +332,11 @@ export const POST = async (req: Request) => {
       }
     }
 
-    // Voyager has stepped out → no AI turn (message still saved + delivered).
-    // EXCEPT an `@voyager` aside, which always reaches your private co-pilot.
-    if (!room.aiPresent && !voyagerAside) {
+    // In a human room, Voyager only answers when addressed. An `@voyager`
+    // aside is the rescue hatch and still works after an explicit -voyager.
+    // Solo conversations continue to receive an AI turn for every message.
+    const addressed = voyagerAside || /^(hey |hi |ok |okay )?voyager\b/i.test(queryText.trim());
+    if (room.roomPeople.length > 0 && !voyagerAside && (!addressed || room.aiPresent === false)) {
       return createUIMessageStreamResponse({
         stream: createUIMessageStream({ execute: async () => {} }),
       });

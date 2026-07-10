@@ -12,7 +12,7 @@
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { estimateTokens } from '@/lib/conversation/window'
-import { buildScopeFilter, type KnowledgeNode } from './search'
+import type { KnowledgeNode } from './search'
 
 // =============================================================================
 // Types
@@ -61,7 +61,6 @@ interface CuratorRow {
   classifications: string[] | null
   entities: string[] | null
   topics: string[] | null
-  connected_to: string[] | null
   sender_display_name?: string | null
   sender_user_id?: string | null
   event_type?: string | null
@@ -84,7 +83,6 @@ const toNode = (row: CuratorRow): KnowledgeNode => ({
   classifications: row.classifications ?? [],
   entities: row.entities ?? [],
   topics: row.topics ?? [],
-  connectedTo: row.connected_to ?? [],
   createdAt: new Date(row.source_created_at),
   knowledgeType: row.knowledge_type ?? null,
   attentionScore: effectiveAttention(row), // F4.4: includes promotion boost
@@ -176,23 +174,14 @@ export const curatePromptWindow = async (
 
   // Parallel: fetch knowledge candidates + recent session IDs for operational filtering
   const [knowledgeResult, recentSessions] = await Promise.all([
-    (async () => {
-      let query = supabase
-        .from('knowledge_current')
-        .select('event_id, content, knowledge_type, attention_score, context_snippet, source_created_at, classifications, entities, topics, connected_to, sender_display_name, sender_user_id, event_type, session_id, promotion_count')
-        .gte('attention_score', 0.3)
-
-      if (voyageSlug) {
-        query = query.or(buildScopeFilter(userId, voyageSlug))
-      } else {
-        query = query.eq('user_id', userId).is('voyage_slug', null)
-      }
-
-      return query
-        .order('attention_score', { ascending: false })
-        .order('source_created_at', { ascending: false })
-        .limit(500)
-    })(),
+    (supabase.rpc as Function)('scoped_knowledge_fetch', {
+      p_user_id: userId,
+      p_voyage_slug: voyageSlug,
+      p_participants: [userId],
+      p_scope: voyageSlug ? 'all' : 'personal',
+      p_min_attention: 0.3,
+      p_match_count: 500,
+    }),
     getRecentSessionIds(userId, sessionId, config.operationalSessionWindow),
   ])
 

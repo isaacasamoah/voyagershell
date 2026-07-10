@@ -12,16 +12,17 @@ import { z } from 'zod'
 import {
   searchKnowledge,
   keywordGrep,
+  personAnchoredSearch,
   getKnowledgeByIds,
-  buildScopeFilter,
   type KnowledgeNode,
   type GrepResult,
 } from '@/lib/knowledge'
 import { hybridSearch, type RankedResult } from '@/lib/knowledge/hybrid'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
-import { getRoom, addRoomPerson, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
+import { getRoom, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
+import { enterActiveRoom, inviteToRoom, respondToRoomInvite } from '@/lib/messaging/invites'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
+import { enqueueAgentTask, completeTask, runGuardedBackgroundTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
 import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages, resolveMemberByName } from '@/lib/voyage'
 import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
@@ -60,6 +61,20 @@ export interface ToolContext {
   messages?: Array<{ role: string; content: string }>
 }
 
+const resolveOneMember = async (
+  ctx: ToolContext,
+  name: string
+): Promise<{ userId: string; displayName: string } | { error: string }> => {
+  if (!ctx.voyageSlug) return { error: "Rooms live in voyages. You're in personal space — switch to a voyage first." }
+  const voyage = await getVoyageBySlug(ctx.voyageSlug)
+  if (!voyage) return { error: 'Could not find the current voyage.' }
+  const members = await getVoyageMembers(voyage.id)
+  const match = resolveMemberByName(members, name)
+  if (!match) return { error: `I don't see anyone called ${name} in this voyage.` }
+  if (match.userId === ctx.userId) return { error: "That's you — you're already here." }
+  return match
+}
+
 // =============================================================================
 // Result Formatters
 // =============================================================================
@@ -74,8 +89,7 @@ const formatKnowledgeResult = (nodes: KnowledgeNode[]): string => {
       const shortId = node.eventId.slice(0, 8) // Short ID for readability
       const pinned = node.attentionScore >= 0.9 ? ' [PINNED]' : ''
       const similarity = node.similarity ? ` (${(node.similarity * 100).toFixed(0)}%)` : ''
-      const connected = node.connectedTo?.length ? ` [${node.connectedTo.length} connections]` : ''
-      return `[${i + 1}] id:${shortId}${pinned}${similarity}${connected}\n${node.content}`
+      return `[${i + 1}] id:${shortId}${pinned}${similarity}\n${node.content}`
     })
     .join('\n\n')
 }
@@ -106,8 +120,7 @@ const formatGrepResult = (results: GrepResult[]): string => {
     .map((r, i) => {
       const shortId = r.eventId.slice(0, 8)
       const pinned = r.attentionScore >= 0.9 ? ' [PINNED]' : ''
-      const connected = r.connectedTo?.length ? ` [${r.connectedTo.length} connections]` : ''
-      return `[${i + 1}] id:${shortId}${pinned}${connected}\n...${r.highlight}...`
+      return `[${i + 1}] id:${shortId}${pinned}\n...${r.highlight}...`
     })
     .join('\n\n')
 }
@@ -133,6 +146,12 @@ const graphSchema = z.object({
   edge_type: z.string().nullable().optional().describe('Filter by edge type: supersedes, supports, contradicts, elaborates, triggered_by, relates_to, decided_by, raised_by. Null returns all types.'),
   direction: z.enum(['outgoing', 'incoming', 'both']).optional().default('both').describe('Edge direction to traverse'),
   depth: z.number().min(1).max(3).optional().default(1).describe('Traversal depth (1-3 hops)'),
+})
+
+const anchoredSearchSchema = z.object({
+  person: z.string().describe('The person to anchor on (name as the user referred to them)'),
+  query: z.string().optional().describe('Optional topic to narrow to, e.g. "the almond tree idea"'),
+  limit: z.number().optional().default(15),
 })
 
 const getNodesSchema = z.object({
@@ -278,6 +297,23 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
     },
   }),
 
+  anchored_search: tool({
+    description: `Retrieve what a SPECIFIC PERSON has shared or contributed, optionally about a topic. Anchor-first retrieval: use this the moment the user names a person — "what did Vanessa say about X", "what has Tom contributed", "@vanessa on pricing". Returns that person's contributions that YOU can see (shared + co-participated), ranked by attention. For general topic search with no named person, use semantic_search instead.`,
+    inputSchema: anchoredSearchSchema,
+    execute: async (input) => {
+      if (!ctx.voyageSlug) return 'Anchoring on a person needs a voyage context.'
+      const r = await resolveOneMember(ctx, input.person)
+      if ('error' in r) return r.error
+      const results = await personAnchoredSearch(ctx.userId, r.userId, {
+        voyageSlug: ctx.voyageSlug,
+        query: input.query,
+        limit: Math.min(input.limit ?? 15, 20),
+      })
+      if (results.length === 0) return `Nothing from ${r.displayName}${input.query ? ` about "${input.query}"` : ''} that you can see.`
+      return formatGrepResult(results)
+    },
+  }),
+
   get_nodes: tool({
     description: `Retrieve specific knowledge nodes by their event IDs. Returns full node content and metadata for each requested ID.`,
     inputSchema: getNodesSchema,
@@ -297,24 +333,16 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
       const untilDate = until ? parseRelativeDate(until) : new Date()
 
       const supabase = getAdminClient()
-
-      let dbQuery = supabase
-        .from('knowledge_current')
-        .select('*')
-        .gte('attention_score', 0.1)
-        .gte('source_created_at', sinceDate.toISOString())
-        .lte('source_created_at', untilDate.toISOString())
-        .order('source_created_at', { ascending: false })
-        .limit(Math.min(limit, 30))
-
-      // Two-layer scope: personal (voyage_slug NULL) + voyage (participant-filtered)
-      if (ctx.voyageSlug) {
-        dbQuery = dbQuery.or(buildScopeFilter(ctx.userId, ctx.voyageSlug))
-      } else {
-        dbQuery = dbQuery.eq('user_id', ctx.userId).is('voyage_slug', null)
-      }
-
-      const { data, error } = await dbQuery
+      const { data, error } = await (supabase.rpc as Function)('scoped_knowledge_fetch', {
+        p_user_id: ctx.userId,
+        p_voyage_slug: ctx.voyageSlug,
+        p_participants: [ctx.userId],
+        p_scope: ctx.voyageSlug ? 'all' : 'personal',
+        p_since: sinceDate.toISOString(),
+        p_until: untilDate.toISOString(),
+        p_min_attention: 0.1,
+        p_match_count: Math.min(limit, 30),
+      })
 
       if (error) {
         return `Error searching by time: ${error.message}`
@@ -331,7 +359,6 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
         classifications: (row.classifications as string[]) ?? [],
         entities: (row.entities as string[]) ?? [],
         topics: (row.topics as string[]) ?? [],
-        connectedTo: (row.connected_to as string[]) ?? [],
         createdAt: new Date(row.source_created_at as string),
         knowledgeType: (row.knowledge_type as string | null) ?? null,
         attentionScore: (row.attention_score as number) ?? 0.5,
@@ -391,26 +418,31 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
         if (ctx.waitUntil) {
           const executeTask = async () => {
             const startTime = Date.now()
-            try {
-              // Import and run the background retrieval agent
-              const { runBackgroundRetrieval } = await import('@/lib/agents/deep-retrieval')
-              const result = await runBackgroundRetrieval({
-                taskId,
-                objective,
-                context: context ?? '',
-                userId: ctx.userId,
-                voyageSlug: ctx.voyageSlug,
-                conversationId: ctx.conversationId!,
-              })
-              await completeTask(taskId, result, Date.now() - startTime, {
-                conversationId: ctx.conversationId,
-                userId: ctx.userId,
-              })
-              console.log(`[spawn_background_agent] Task ${taskId.slice(0, 8)} completed: ${result.findings.length} findings`)
-            } catch (error) {
-              await failTask(taskId, error instanceof Error ? error.message : 'Unknown error')
-              console.error(`[spawn_background_agent] Task ${taskId.slice(0, 8)} failed:`, error)
-            }
+            await runGuardedBackgroundTask({
+              taskId,
+              run: async () => {
+                // Import and run the background retrieval agent
+                const { runBackgroundRetrieval } = await import('@/lib/agents/deep-retrieval')
+                return runBackgroundRetrieval({
+                  taskId,
+                  objective,
+                  context: context ?? '',
+                  userId: ctx.userId,
+                  voyageSlug: ctx.voyageSlug,
+                  conversationId: ctx.conversationId!,
+                })
+              },
+              onComplete: async (result) => {
+                await completeTask(taskId, result, Date.now() - startTime, {
+                  conversationId: ctx.conversationId,
+                  userId: ctx.userId,
+                })
+                console.log(`[spawn_background_agent] Task ${taskId.slice(0, 8)} completed: ${result.findings.length} findings`)
+              },
+              onFailure: (error) => {
+                console.error(`[spawn_background_agent] Task ${taskId.slice(0, 8)} failed:`, error)
+              },
+            })
           }
           ctx.waitUntil(executeTask())
         }
@@ -864,28 +896,36 @@ export const createVoyagerTools = (ctx: ToolContext): {
   // ── The Room: participants as spine, Voyager as a peer ──
   // add_to_room / remove_from_room manage who's in the room; set_voyager_presence
   // toggles the AI. A person in the room receives everything you type (no
-  // per-line "tell"). Adding a person quiets Voyager by default; +voyager
-  // brings it back.
-  const resolveOneMember = async (name: string): Promise<{ userId: string; displayName: string } | { error: string }> => {
-    if (!ctx.voyageSlug) return { error: "Rooms live in voyages. You're in personal space — switch to a voyage first." }
-    const voyage = await getVoyageBySlug(ctx.voyageSlug)
-    if (!voyage) return { error: 'Could not find the current voyage.' }
-    const members = await getVoyageMembers(voyage.id)
-    const match = resolveMemberByName(members, name)
-    if (!match) return { error: `I don't see anyone called ${name} in this voyage.` }
-    if (match.userId === ctx.userId) return { error: "That's you — you're already here." }
-    return match
-  }
-
+  // per-line "tell").
   const add_to_room = tool({
-    description: `Add a person to THIS conversation (the room), so everything the user types reaches them without a separate "tell". Use for "+vanessa", "add vanessa", "bring tom in", "invite sarah here". Adding a person quiets Voyager by default — the user says "+voyager" to bring the AI back.`,
+    description: `Add a person to THIS conversation (the room), so everything the user types reaches them without a separate "tell". Use for "+vanessa", "add vanessa", "bring tom in", "invite sarah here".`,
     inputSchema: z.object({ name: z.string().describe('The person to add') }),
     execute: async (input) => {
       if (!ctx.conversationId) return "I can't manage this room — no active conversation."
-      const r = await resolveOneMember(input.name)
+      const r = await resolveOneMember(ctx, input.name)
       if ('error' in r) return r.error
-      await addRoomPerson(ctx.conversationId, r.userId)
-      return JSON.stringify({ status: 'added', person: r.displayName, voyagerQuieted: true })
+      const invite = await inviteToRoom(ctx.conversationId, r.userId)
+      return JSON.stringify({ status: invite.state === 'active' ? 'added' : 'invited', person: r.displayName })
+    },
+  })
+
+  const respond_to_room_invite = tool({
+    description: `Respond to a pending room invitation on the user's behalf. Call when the user engages with an invite — "join", "sure, add me", "yes" (accept:true) or "no thanks", "not now", "decline" (accept:false). Also call with accept:true when a household member wants to hop into a room they were auto-added to.`,
+    inputSchema: z.object({
+      accept: z.boolean().describe('true = join the room, false = decline'),
+    }),
+    execute: async (input) => {
+      if (!ctx.conversationId) return 'No pending room invite.'
+
+      const response = await respondToRoomInvite(ctx.conversationId, ctx.userId, input.accept)
+      if (response.responded) return JSON.stringify(response)
+
+      if (input.accept) {
+        const entered = await enterActiveRoom(ctx.conversationId, ctx.userId)
+        if (entered.entered) return JSON.stringify(entered)
+      }
+
+      return 'No pending room invite.'
     },
   })
 
@@ -894,7 +934,7 @@ export const createVoyagerTools = (ctx: ToolContext): {
     inputSchema: z.object({ name: z.string().describe('The person to remove') }),
     execute: async (input) => {
       if (!ctx.conversationId) return "I can't manage this room — no active conversation."
-      const r = await resolveOneMember(input.name)
+      const r = await resolveOneMember(ctx, input.name)
       if ('error' in r) return r.error
       await removeRoomPerson(ctx.conversationId, r.userId)
       return JSON.stringify({ status: 'removed', person: r.displayName })
@@ -952,6 +992,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'graph',
       tool: retrieval.graph,
       strategyHint: 'Traverse the knowledge graph from a node. Three patterns: (1) incoming supports edges for evidence, (2) outgoing supersedes for replaced knowledge, (3) both directions depth 2-3 for neighbourhood exploration.',
+    },
+    {
+      name: 'anchored_search',
+      tool: retrieval.anchored_search,
+      strategyHint: 'Anchor-first retrieval for named people. Use when the user asks what a specific voyage member shared or contributed, optionally about a topic.',
     },
     {
       name: 'get_nodes',
@@ -1012,6 +1057,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'add_to_room',
       tool: add_to_room,
       strategyHint: 'Add a person to THIS conversation so the user talks to them directly (no per-line tell). "+vanessa", "add tom".',
+    },
+    {
+      name: 'respond_to_room_invite',
+      tool: respond_to_room_invite,
+      strategyHint: 'Accept or decline a pending room invitation when the user responds to it.',
     },
     {
       name: 'remove_from_room',
