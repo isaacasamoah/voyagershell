@@ -910,7 +910,7 @@ export const createVoyagerTools = (ctx: ToolContext): {
   })
 
   const respond_to_room_invite = tool({
-    description: `Respond to a pending room invitation on the user's behalf. Call when the user engages with an invite — "join", "sure, add me", "yes" (accept:true) or "no thanks", "not now", "decline" (accept:false). Also call with accept:true when a household member wants to hop into a room they were auto-added to.`,
+    description: `Respond to a pending room invitation on the user's behalf. Call when the user engages with an invite — "join", "sure, add me", "yes" (accept:true) or "no thanks", "not now", "decline" (accept:false). Also call with accept:true when the user wants to hop back into a room they're already a member of from a new session.`,
     inputSchema: z.object({
       accept: z.boolean().describe('true = join the room, false = decline'),
     }),
