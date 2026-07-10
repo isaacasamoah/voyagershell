@@ -81,11 +81,3 @@ export const createEventDispatcher = (): EventDispatcher => {
 // =============================================================================
 
 export const dispatcher = createEventDispatcher()
-
-// =============================================================================
-// Handler Registration (module-level, fires on first import)
-// =============================================================================
-
-dispatcher.on('background.completed', (payload) => {
-  log.agent('Background task completed', payload as Record<string, unknown>)
-})
