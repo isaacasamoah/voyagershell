@@ -3,7 +3,7 @@ import type { Json } from '@/lib/supabase/types'
 import { SessionAccessError, resolveSessionVoyage } from '@/lib/voyage'
 import { sortFeedEvents, type FeedEvent, type FeedEventRole, type FeedEventType } from './feed-types'
 
-interface FeedEventRow {
+export interface FeedEventRow {
   id: string
   event_type: string
   content: string | null
@@ -62,7 +62,7 @@ const getFeedRole = (row: FeedEventRow, userId: string): FeedEventRole => {
   return getSenderUserId(row) === userId ? 'user' : 'human'
 }
 
-const isInFeedContext = (
+export const isInFeedContext = (
   row: FeedEventRow,
   userId: string,
   conversationId: string,

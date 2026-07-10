@@ -8,7 +8,6 @@ import type { MessagePart } from '@/components/chat/AssistantMessage';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
 import { useRealtimeSubscription } from './hooks/useRealtimeSubscription';
-import { useMessageState } from './hooks/useMessageState';
 import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
@@ -135,14 +134,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     wasAuthenticatedRef.current = isAuthenticated;
   }, [isAuthenticated, isAuthLoading, setShowSuccess]);
 
-  // Followup state (extracted hook)
-  const { triggerFollowup, triggerFollowupRef } = useMessageState({
-    conversationId,
-    status,
-    setMessages: (fn) => setMessages(fn as any),
-    setShowSuccess,
-  });
-
   // Realtime subscription for background agent tasks
   const realtimeCallbacks = useMemo(() => ({
     onTaskInsert: (task: { id: string; task: string; progress?: TaskProgress }) => {
@@ -161,13 +152,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         setRunningTasks((prev) => prev.filter((t) => t.id !== taskId));
       }
     },
-    onTaskComplete: (taskId: string, data: Record<string, unknown>) => {
+    onTaskComplete: (taskId: string) => {
       setRunningTasks((prev) => prev.filter((t) => t.id !== taskId));
-      if (data.result) {
-        triggerFollowupRef.current(taskId);
-      }
     },
-  }), [triggerFollowupRef]);
+  }), []);
 
   useRealtimeSubscription(conversationId, isAuthenticated, realtimeCallbacks);
 
@@ -376,11 +364,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       }
     }
   }, [conversationId, isLoading, sendMessage]);
-
-  // Keep triggerFollowup ref updated so realtime handler always has latest function
-  useEffect(() => {
-    triggerFollowupRef.current = triggerFollowup;
-  }, [triggerFollowup, triggerFollowupRef]);
 
   useEffect(() => {
     const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
