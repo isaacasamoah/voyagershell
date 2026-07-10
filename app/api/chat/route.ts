@@ -13,7 +13,7 @@ import {
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
 import { getRoom, removeRoomPerson, setAiPresent, parseRoomCommand } from '@/lib/messaging/room';
-import { inviteToRoom } from '@/lib/messaging/invites';
+import { inviteToRoom, deliverRoomInvite } from '@/lib/messaging/invites';
 import { fanOutDeliveries } from '@/lib/messaging/deliveries';
 import { isVoyagerAside, stripVoyagerAside } from '@/lib/messaging/feed-types';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
@@ -255,15 +255,7 @@ export const POST = async (req: Request) => {
             if (invite.state === 'invited') {
               const me = voyageMembers.find((m) => m.userId === userId);
               const senderName = me?.displayName ?? me?.email ?? 'Someone';
-              const eventId = await createMessageEvent(conversationId, 'user',
-                `${senderName} invited you to a room — reply to join.`, {
-                  userId, voyageSlug, participants: [match.userId],
-                  addressedTo: [match.userId], source: 'invite',
-                  senderDisplayName: senderName, senderUserId: userId,
-                  attentionScore: 0.9,
-                  contextSnippet: `${senderName} invited you to a room`,
-                })
-              if (eventId) void fanOutDeliveries(eventId, [match.userId])
+              await deliverRoomInvite(conversationId, { userId, displayName: senderName }, match.userId, voyageSlug);
               confirmation = `Invited ${match.displayName} — they can hop in by replying to the invite.`;
             } else {
               confirmation = `Added ${match.displayName} — they'll get what you type here.`;

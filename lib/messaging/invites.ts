@@ -78,6 +78,34 @@ const linkSessionToSpace = async (sessionId: string, spaceId: string): Promise<b
   return true
 }
 
+/**
+ * Deliver the knock — the visible invite message, ONE source for every invite
+ * path (`+name` grammar AND the add_to_room tool). An invited row without a
+ * delivered knock is invisible to the invitee (live gap, 2026-07-10).
+ */
+export const deliverRoomInvite = async (
+  conversationId: string,
+  inviter: { userId: string; displayName: string },
+  inviteeUserId: string,
+  voyageSlug?: string,
+): Promise<void> => {
+  const { createMessageEvent } = await import('@/lib/knowledge/events')
+  const { fanOutDeliveries } = await import('@/lib/messaging/deliveries')
+  const eventId = await createMessageEvent(conversationId, 'user',
+    `${inviter.displayName} invited you to a room — reply to join.`, {
+      userId: inviter.userId,
+      voyageSlug,
+      participants: [inviteeUserId],
+      addressedTo: [inviteeUserId],
+      source: 'invite',
+      senderDisplayName: inviter.displayName,
+      senderUserId: inviter.userId,
+      attentionScore: 0.9,
+      contextSnippet: `${inviter.displayName} invited you to a room`,
+    })
+  if (eventId) void fanOutDeliveries(eventId, [inviteeUserId])
+}
+
 // Every invite knocks — household voyages included. HOUSEHOLD_SHARE_VOYAGE is
 // a BRAIN-SHARE (subscription) concept only (lib/models/connections.ts); it no
 // longer grants social auto-accept. If a trust tier returns, it comes back as
