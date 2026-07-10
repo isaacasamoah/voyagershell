@@ -175,10 +175,12 @@ const executeTellFallback = async (
     }
 
     const members = await getVoyageMembers(voyage.id)
-    const targetLower = intent.target.toLowerCase()
+    const targetLower = intent.target.toLowerCase().trim()
 
-    // Same resolution logic as send_message: display_name or nickname match
-    const match = members.find(m => {
+    const usernameMatches = members.filter(m => m.username?.toLowerCase() === targetLower)
+
+    // Same resolution logic as send_message: username, display_name, or nickname match
+    const match = usernameMatches.length === 1 ? usernameMatches[0] : members.find(m => {
       const dn = m.displayName?.toLowerCase() ?? ''
       const nn = m.nickname?.toLowerCase() ?? ''
       return dn === targetLower
