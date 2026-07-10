@@ -454,10 +454,7 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
                   throw new Error('Failed to create background research message event')
                 }
                 await fanOutDeliveries(eventId, [ctx.userId])
-                await completeTask(taskId, result, Date.now() - startTime, {
-                  conversationId: ctx.conversationId,
-                  userId: ctx.userId,
-                })
+                await completeTask(taskId, result, Date.now() - startTime)
                 console.log(`[spawn_background_agent] Task ${taskId.slice(0, 8)} completed: ${result.findings.length} findings`)
               },
               onFailure: (error) => {

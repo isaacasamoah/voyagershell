@@ -70,3 +70,36 @@ describe('runBackgroundRetrieval', () => {
     expect(result.confidence).toBe(0.4)
   })
 })
+
+// Omega P2 (2026-07-10): an empty final text must never ship a blank bubble.
+describe('empty final text', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    updateTaskProgress.mockResolvedValue(undefined)
+  })
+
+  it('falls back to an honest findings summary when text is empty but findings exist', async () => {
+    generateText.mockImplementation(async (options: {
+      onStepFinish: (step: { toolResults: Array<Record<string, unknown>> }) => void
+    }) => {
+      options.onStepFinish({
+        toolResults: [{ toolName: 'semantic_search', output: 'a real tool result' }],
+      })
+      return { text: '   ', steps: [{}] }
+    })
+    const { runBackgroundRetrieval } = await loadModule()
+    const result = await runBackgroundRetrieval({
+      taskId: 'task-1', objective: 'x', context: '', userId: 'u', conversationId: 'c',
+    })
+    expect(result.message).toMatch(/couldn't shape a clear answer/)
+    expect(result.message.trim().length).toBeGreaterThan(0)
+  })
+
+  it('throws (→ failTask via the guard) when text and findings are both empty', async () => {
+    generateText.mockImplementation(async () => ({ text: '', steps: [] }))
+    const { runBackgroundRetrieval } = await loadModule()
+    await expect(runBackgroundRetrieval({
+      taskId: 'task-1', objective: 'x', context: '', userId: 'u', conversationId: 'c',
+    })).rejects.toThrow(/no answer text and no findings/)
+  })
+})

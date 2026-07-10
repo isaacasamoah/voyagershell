@@ -144,7 +144,6 @@ describe('spawn_background_agent delivery', () => {
       'task-12345678',
       result,
       expect.any(Number),
-      { conversationId: 'conversation-1', userId: 'user-1' },
     )
     expect(createMessageEvent.mock.invocationCallOrder[0])
       .toBeLessThan(completeTask.mock.invocationCallOrder[0])
