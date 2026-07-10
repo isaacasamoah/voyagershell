@@ -18,6 +18,7 @@ import { fanOutDeliveries } from '@/lib/messaging/deliveries';
 import { logRetrievalEvent, logCitations, createVoyagerTools, composeToolStrategy } from '@/lib/retrieval';
 import { requireAuthResponse } from '@/lib/auth';
 import { shouldRunEnrichment, runCartographer } from '@/lib/agents/cartographer';
+import { reapStuckTasks } from '@/lib/agents/queue';
 import { modelRouter, creditTracker, resolveUserModelWithMeta } from '@/lib/models';
 import { resolveSessionVoyage, SessionAccessError, getVoyageBySlug, getVoyageMembers, resolveMemberByName } from '@/lib/voyage';
 import { log } from '@/lib/debug';
@@ -92,6 +93,7 @@ export const POST = async (req: Request) => {
     const authResult = await requireAuthResponse();
     if (authResult instanceof Response) return authResult;
     const userId = authResult;
+    void reapStuckTasks().catch(() => {});
 
     const { messages, conversationId, authState, autoSent } = await req.json();
 

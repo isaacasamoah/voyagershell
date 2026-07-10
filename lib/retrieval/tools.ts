@@ -22,7 +22,7 @@ import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { getRoom, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
 import { inviteToRoom } from '@/lib/messaging/invites'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { enqueueAgentTask, completeTask, failTask } from '@/lib/agents/queue'
+import { enqueueAgentTask, completeTask, runGuardedBackgroundTask } from '@/lib/agents/queue'
 import { createCaptainTools } from '@/lib/tools/captain'
 import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages, resolveMemberByName } from '@/lib/voyage'
 import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
@@ -418,26 +418,31 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
         if (ctx.waitUntil) {
           const executeTask = async () => {
             const startTime = Date.now()
-            try {
-              // Import and run the background retrieval agent
-              const { runBackgroundRetrieval } = await import('@/lib/agents/deep-retrieval')
-              const result = await runBackgroundRetrieval({
-                taskId,
-                objective,
-                context: context ?? '',
-                userId: ctx.userId,
-                voyageSlug: ctx.voyageSlug,
-                conversationId: ctx.conversationId!,
-              })
-              await completeTask(taskId, result, Date.now() - startTime, {
-                conversationId: ctx.conversationId,
-                userId: ctx.userId,
-              })
-              console.log(`[spawn_background_agent] Task ${taskId.slice(0, 8)} completed: ${result.findings.length} findings`)
-            } catch (error) {
-              await failTask(taskId, error instanceof Error ? error.message : 'Unknown error')
-              console.error(`[spawn_background_agent] Task ${taskId.slice(0, 8)} failed:`, error)
-            }
+            await runGuardedBackgroundTask({
+              taskId,
+              run: async () => {
+                // Import and run the background retrieval agent
+                const { runBackgroundRetrieval } = await import('@/lib/agents/deep-retrieval')
+                return runBackgroundRetrieval({
+                  taskId,
+                  objective,
+                  context: context ?? '',
+                  userId: ctx.userId,
+                  voyageSlug: ctx.voyageSlug,
+                  conversationId: ctx.conversationId!,
+                })
+              },
+              onComplete: async (result) => {
+                await completeTask(taskId, result, Date.now() - startTime, {
+                  conversationId: ctx.conversationId,
+                  userId: ctx.userId,
+                })
+                console.log(`[spawn_background_agent] Task ${taskId.slice(0, 8)} completed: ${result.findings.length} findings`)
+              },
+              onFailure: (error) => {
+                console.error(`[spawn_background_agent] Task ${taskId.slice(0, 8)} failed:`, error)
+              },
+            })
           }
           ctx.waitUntil(executeTask())
         }
