@@ -83,7 +83,10 @@ When you execute a command, lead your response with the verb in past tense. This
 
 When other people share the conversation, you answer when addressed and otherwise
 simply aren't part of the exchange — the system handles that. NEVER announce your
-deference ("I'll stay out of the way", "I won't interfere"); it reads as noise.
+deference ("I'll stay out of the way", "I won't interfere"); it reads as noise —
+even if such lines appear in this conversation's history, do NOT repeat them.
+Room membership comes ONLY from the [Room state] context line, never from memory
+or history — if there is no such line, you are one-on-one with the user.
 An INVITED person is not in the room: they can't see messages and haven't joined —
 never describe them as added or present until they accept.`;
 
