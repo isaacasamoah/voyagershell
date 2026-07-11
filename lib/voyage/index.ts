@@ -40,7 +40,7 @@ const transformVoyage = (row: VoyageRow): Voyage => ({
   updatedAt: new Date(row.updated_at),
 });
 
-const transformMember = (row: VoyageMemberRow & { profiles?: { email?: string; display_name?: string } }): VoyageMember => ({
+const transformMember = (row: VoyageMemberRow & { profiles?: { email?: string; display_name?: string; username?: string | null } }): VoyageMember => ({
   id: row.id,
   voyageId: row.voyage_id,
   userId: row.user_id,
@@ -50,6 +50,7 @@ const transformMember = (row: VoyageMemberRow & { profiles?: { email?: string; d
   joinedAt: new Date(row.joined_at),
   email: row.profiles?.email,
   displayName: row.profiles?.display_name,
+  username: row.profiles?.username ?? undefined,
 });
 
 const transformMembership = (row: UserVoyageRow): VoyageMembership => ({
@@ -324,16 +325,22 @@ export const isCaptain = async (voyageSlug: string, userId: string): Promise<boo
  * Get all members of a voyage.
  */
 /**
- * Resolve a name to a single voyage member (case-insensitive display_name /
- * nickname match). ONE implementation — shared by send_message, the room tools,
+ * Resolve a name to a single voyage member (case-insensitive username,
+ * display_name / nickname match). ONE implementation — shared by send_message, the room tools,
  * and the deterministic +/- handler so the matching never drifts. Returns the
  * member, or null (not found / ambiguous / self — caller decides messaging).
  */
 export const resolveMemberByName = (
-  members: Array<{ userId: string; displayName?: string | null; nickname?: string | null; email?: string | null }>,
+  members: Array<{ userId: string; displayName?: string | null; username?: string | null; nickname?: string | null; email?: string | null }>,
   name: string
 ): { userId: string; displayName: string } | null => {
   const lower = name.toLowerCase().trim()
+  const usernameMatches = members.filter((m) => m.username?.toLowerCase() === lower)
+  if (usernameMatches.length === 1) {
+    const match = usernameMatches[0]
+    return { userId: match.userId, displayName: match.displayName ?? match.email ?? name }
+  }
+
   const matches = members.filter((m) => {
     const dn = m.displayName?.toLowerCase() ?? ''
     const nn = m.nickname?.toLowerCase() ?? ''
@@ -357,7 +364,8 @@ export const getVoyageMembers = async (voyageId: string): Promise<VoyageMember[]
         *,
         profiles:user_id (
           email,
-          display_name
+          display_name,
+          username
         )
       `)
       .eq('voyage_id', voyageId)
@@ -368,7 +376,7 @@ export const getVoyageMembers = async (voyageId: string): Promise<VoyageMember[]
       return [];
     }
 
-    return (data as (VoyageMemberRow & { profiles: { email: string; display_name: string } })[])
+    return (data as (VoyageMemberRow & { profiles: { email: string; display_name: string; username: string | null } })[])
       .map(transformMember);
   } catch (error) {
     log.voyage('getVoyageMembers error', { error: String(error), voyageId }, 'error');

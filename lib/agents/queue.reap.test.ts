@@ -128,7 +128,7 @@ describe('agent task terminal discipline', () => {
       onComplete: complete,
       fail,
     })
-    await vi.advanceTimersByTimeAsync(25_000)
+    await vi.advanceTimersByTimeAsync(280_000)
     await guardedTask
 
     expect(run).toHaveBeenCalledOnce()

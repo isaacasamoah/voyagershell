@@ -26,12 +26,12 @@ export interface AgentTask {
 
 export interface BackgroundTaskResult {
   findings: Array<{
-    eventId: string
+    eventId?: string
     content: string
     similarity?: number
   }>
   confidence: number
-  summary?: string
+  message: string
 }
 
 export interface EnqueueParams {
@@ -47,14 +47,14 @@ export interface EnqueueParams {
 
 interface GuardedBackgroundTaskOptions<T> {
   taskId: string
-  run: () => Promise<T>
+  run: (signal: AbortSignal) => Promise<T>
   onComplete: (result: T) => Promise<void>
   onFailure?: (error: unknown) => void
   fail?: (taskId: string, errorMessage: string) => Promise<void>
   timeoutMs?: number
 }
 
-const BACKGROUND_TASK_TIMEOUT_MS = 25_000
+const BACKGROUND_TASK_TIMEOUT_MS = 280_000 // fits inside the route's maxDuration=300s
 const STUCK_TASK_TTL_MS = 5 * 60 * 1000
 const REAPED_TASK_ERROR = 'reaped: no terminal state within TTL'
 
@@ -123,6 +123,9 @@ export async function updateTaskProgress(
       updated_at: new Date().toISOString(),
     })
     .eq('id', taskId)
+    // A progress write must NEVER resurrect a terminal task ('failed'/'complete')
+    // back to 'running' — that made timed-out zombies (live, 2026-07-11).
+    .in('status', ['pending', 'running'])
 
   if (error) {
     console.error('[AgentQueue] Failed to update progress:', error)
@@ -131,14 +134,13 @@ export async function updateTaskProgress(
 }
 
 /**
- * Mark a task as complete with results.
- * Emits background.completed event for downstream processing.
+ * Mark a task as complete with results. Surfacing is the caller's job (the
+ * result rides the delivery ledger); this writes only the terminal state.
  */
 export async function completeTask(
   taskId: string,
   result: BackgroundTaskResult,
   durationMs: number,
-  meta?: { conversationId?: string; userId?: string }
 ): Promise<void> {
   const supabase = getAdminClient()
 
@@ -158,16 +160,6 @@ export async function completeTask(
   }
 
   console.log(`[AgentQueue] Task completed: ${taskId} (${durationMs}ms)`)
-
-  // Emit event for downstream processing (followup, etc.)
-  if (meta?.conversationId && meta?.userId) {
-    const { dispatcher } = await import('./event-dispatcher')
-    dispatcher.emit('background.completed', {
-      taskId,
-      conversationId: meta.conversationId,
-      userId: meta.userId,
-    })
-  }
 }
 
 /**
@@ -205,12 +197,16 @@ export async function runGuardedBackgroundTask<T>({
   timeoutMs = BACKGROUND_TASK_TIMEOUT_MS,
 }: GuardedBackgroundTaskOptions<T>): Promise<void> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const controller = new AbortController()
   const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Background agent timed out')), timeoutMs)
+    timeoutId = setTimeout(() => {
+      controller.abort() // actually stop the loop — a raced-out run must not keep burning
+      reject(new Error('Background agent timed out'))
+    }, timeoutMs)
   })
 
   try {
-    const result = await Promise.race([run(), timeout])
+    const result = await Promise.race([run(controller.signal), timeout])
     await onComplete(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
@@ -275,36 +271,3 @@ export async function reapStuckTasks(): Promise<number> {
   }
 }
 
-/**
- * Get a single task by ID.
- * Used for followup generation when background task completes.
- */
-export async function getTaskById(taskId: string): Promise<AgentTask | null> {
-  const supabase = getAdminClient()
-
-  const { data, error } = await supabase
-    .from('agent_tasks')
-    .select('*')
-    .eq('id', taskId)
-    .single()
-
-  if (error || !data) {
-    console.error('[AgentQueue] Failed to get task by ID:', error)
-    return null
-  }
-
-  return {
-    id: data.id as string,
-    task: data.task as string,
-    code: data.code as string,
-    priority: data.priority as 'low' | 'normal' | 'high',
-    userId: data.user_id as string,
-    voyageSlug: data.voyage_slug as string | undefined,
-    conversationId: data.conversation_id as string,
-    status: data.status as AgentTask['status'],
-    result: data.result as unknown as BackgroundTaskResult | undefined,
-    error: data.error as string | undefined,
-    durationMs: data.duration_ms as number | undefined,
-    createdAt: new Date(data.created_at as string),
-  }
-}

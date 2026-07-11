@@ -43,14 +43,47 @@ You have tools for semantic search, keyword grep, graph traversal, time-based se
 
 Think between each tool call. Explain what you found and what you'll search for next.
 
-When done, provide a clear summary of your findings. Focus on what's most relevant to the objective.`
+Your final response must be a self-authored Voyager message that clearly synthesizes
+what you found for the user. It will be delivered to the user verbatim, so do not
+describe it as notes for another assistant and do not ask another model to rewrite it.`
+
+const TOOL_RESULT_DIGEST_LENGTH = 600
+
+const compactToolResult = (toolName: string, output: unknown): string | null => {
+  let text: string
+  if (typeof output === 'string') {
+    text = output
+  } else {
+    try {
+      text = JSON.stringify(output)
+    } catch {
+      text = String(output)
+    }
+  }
+
+  const compact = text.replace(/\s+/g, ' ').trim()
+  if (!compact) return null
+
+  const digest = compact.length > TOOL_RESULT_DIGEST_LENGTH
+    ? `${compact.slice(0, TOOL_RESULT_DIGEST_LENGTH)}…`
+    : compact
+  return `${toolName}: ${digest}`
+}
+
+const getStructuredEventId = (output: unknown): string | undefined => {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return undefined
+  const record = output as Record<string, unknown>
+  const eventId = record.eventId ?? record.event_id
+  return typeof eventId === 'string' ? eventId : undefined
+}
 
 // =============================================================================
 // Main Entry Point
 // =============================================================================
 
 export async function runBackgroundRetrieval(
-  input: BackgroundRetrievalInput
+  input: BackgroundRetrievalInput,
+  signal?: AbortSignal
 ): Promise<BackgroundTaskResult> {
   const { taskId, objective, context, userId, voyageSlug, conversationId } = input
   const shortTaskId = taskId.slice(0, 8)
@@ -69,55 +102,49 @@ export async function runBackgroundRetrieval(
     ? `Objective: ${objective}\n\nConversation context:\n${context}`
     : `Objective: ${objective}`
 
+  const findings: BackgroundTaskResult['findings'] = []
   const result = await generateText({
+    abortSignal: signal,
     model: await resolveUserModel({ task: 'chat', quality: 'balanced' }, userId),
     system: AGENTIC_RETRIEVAL_PROMPT,
     prompt,
     tools,
     stopWhen: stepCountIs(20),
     maxOutputTokens: 4096,
+    onStepFinish: ({ toolResults }) => {
+      for (const toolResult of toolResults) {
+        const content = compactToolResult(toolResult.toolName, toolResult.output)
+        if (!content) continue
+
+        const eventId = getStructuredEventId(toolResult.output)
+        findings.push(eventId ? { eventId, content } : { content })
+      }
+    },
   })
 
   await updateTaskProgress(taskId, { stage: 'analyzing', percent: 80 })
-
-  // Extract findings from tool call results
-  const findings: BackgroundTaskResult['findings'] = []
-  const seenIds = new Set<string>()
-
-  for (const step of result.steps) {
-    for (const toolResult of step.toolResults) {
-      const text = typeof toolResult.output === 'string' ? toolResult.output : ''
-      // Parse node IDs from formatted results: [N] id:XXXXXXXX
-      const idRegex = /id:([a-f0-9]{8})/g
-      let match: RegExpExecArray | null
-      while ((match = idRegex.exec(text)) !== null) {
-        const shortId = match[1]
-        if (!seenIds.has(shortId)) {
-          seenIds.add(shortId)
-          // Extract the content line after the ID line
-          const idPos = text.indexOf(`id:${shortId}`)
-          const contentStart = text.indexOf('\n', idPos)
-          const contentEnd = text.indexOf('\n\n', contentStart + 1)
-          const content = contentEnd > 0
-            ? text.slice(contentStart + 1, contentEnd).trim()
-            : text.slice(contentStart + 1, contentStart + 300).trim()
-
-          if (content) {
-            findings.push({ eventId: shortId, content })
-          }
-        }
-      }
-    }
-  }
 
   log.agent(`[${shortTaskId}] === AGENTIC RETRIEVAL COMPLETE ===`, {
     findings: findings.length,
     steps: result.steps.length,
   })
 
+  // The final text IS the delivered message — never ship a blank bubble.
+  // Empty text + findings → honest fallback; empty both → throw (the guard
+  // converts it into failTask, not a false 'complete').
+  const finalText = result.text.trim()
+  const message = finalText.length > 0
+    ? finalText
+    : findings.length > 0
+      ? `I dug into this and surfaced ${findings.length} related item${findings.length === 1 ? '' : 's'}, but couldn't shape a clear answer. Ask me again and I'll go deeper.`
+      : ''
+  if (!message) {
+    throw new Error('Background research produced no answer text and no findings')
+  }
+
   return {
     findings,
     confidence: findings.length > 0 ? Math.min(findings.length / 5, 1.0) : 0,
-    summary: result.text || `Found ${findings.length} relevant items.`,
+    message,
   }
 }

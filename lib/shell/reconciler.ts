@@ -1,11 +1,10 @@
 // Shell Contract: Reconciler
 // Post-LLM verification in onFinish. The guarantee layer.
 // Compares detected intent against actual tool calls.
-// Catches confabulation, executes fallbacks for server-side commands.
+// Catches confabulation, executes additive fallbacks for tell/remember commands.
 
 import type { ActionIntent, CommandVerb, ReconciliationOutcome, ReconciliationResult } from './types'
 import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
-import { searchKnowledge } from '@/lib/knowledge/search'
 import { getVoyageBySlug, getVoyageMembers } from '@/lib/voyage'
 import { log } from '@/lib/debug'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
@@ -20,9 +19,6 @@ const VERB_TOOL_MAP: Record<CommandVerb, string[]> = {
   do: ['create_voyage', 'invite_to_voyage', 'sign_out', 'set_display_name'],
   summon: ['spawn_background_agent'],
 }
-
-// Verbs where the reconciler can execute a server-side fallback
-const FALLBACK_ENABLED = new Set<CommandVerb>(['tell', 'find', 'remember', 'summon'])
 
 // Claim detection — does the response text suggest the action happened?
 // Conservative patterns — high confidence only, expand based on logs.
@@ -39,8 +35,6 @@ interface ReconcileContext {
   userId: string
   voyageSlug?: string
   conversationId?: string
-  waitUntil?: (p: Promise<unknown>) => void
-  messages?: Array<{ role: string; content: string }>
 }
 
 interface ToolCallInfo {
@@ -51,8 +45,8 @@ interface ToolCallInfo {
  * Reconcile detected intent against actual tool calls.
  * Called in onFinish after streaming completes.
  *
- * For server-side commands (tell, find): executes fallback if LLM confabulated.
- * For client-side commands (switch, sign_out): logs miss but does not execute.
+ * For additive commands (tell, remember): executes fallback if LLM confabulated.
+ * For all other commands: forbids a false claim without taking action.
  */
 export const reconcileActions = async (
   intent: ActionIntent | null,
@@ -99,9 +93,9 @@ export const reconcileActions = async (
     return result
   }
 
-  // Claim without action = confabulation. Execute fallback if enabled.
-  if (!FALLBACK_ENABLED.has(intent.verb)) {
-    // Forbid-claim gate: client-side verb (switch/show/do/sign_out) claimed without tool fire.
+  // Claim without action = confabulation. Execute only additive fallbacks.
+  if (intent.verb !== 'tell' && intent.verb !== 'remember') {
+    // Forbid-claim gate: no action occurred and no additive fallback is available.
     // The server state did NOT change — the claim is false. No server-side fallback is
     // possible for client-side verbs. Emits 'forbid_claim' (not 'confabulation_caught') to
     // distinguish this path from the fallback-executed path, and logs at warn so false
@@ -143,12 +137,8 @@ const executeFallback = async (
   switch (intent.verb) {
     case 'tell':
       return executeTellFallback(intent, ctx)
-    case 'find':
-      return executeFindFallback(intent, ctx)
     case 'remember':
       return executeRememberFallback(intent, ctx)
-    case 'summon':
-      return executeSummonFallback(intent, ctx)
     default:
       return null
   }
@@ -175,10 +165,12 @@ const executeTellFallback = async (
     }
 
     const members = await getVoyageMembers(voyage.id)
-    const targetLower = intent.target.toLowerCase()
+    const targetLower = intent.target.toLowerCase().trim()
 
-    // Same resolution logic as send_message: display_name or nickname match
-    const match = members.find(m => {
+    const usernameMatches = members.filter(m => m.username?.toLowerCase() === targetLower)
+
+    // Same resolution logic as send_message: username, display_name, or nickname match
+    const match = usernameMatches.length === 1 ? usernameMatches[0] : members.find(m => {
       const dn = m.displayName?.toLowerCase() ?? ''
       const nn = m.nickname?.toLowerCase() ?? ''
       return dn === targetLower
@@ -243,34 +235,6 @@ const executeTellFallback = async (
 }
 
 /**
- * Find fallback: execute searchKnowledge with the intent payload.
- * Results are logged — surfacing to user requires awareness injection (future).
- */
-const executeFindFallback = async (
-  intent: ActionIntent,
-  ctx: ReconcileContext,
-): Promise<string | null> => {
-  if (!intent.payload) {
-    log.shell('[SHELL] find fallback skipped: no payload to search')
-    return null
-  }
-
-  try {
-    const results = await searchKnowledge(ctx.userId, intent.payload, {
-      voyageSlug: ctx.voyageSlug,
-      limit: 5,
-    })
-
-    log.shell(`find fallback executed: ${results.length} results for "${intent.payload.slice(0, 40)}"`)
-    // Results logged for now — awareness injection for next turn is a future enhancement
-    return 'searchKnowledge'
-  } catch (error) {
-    log.shell(`find fallback error: ${String(error)}`, undefined, 'error')
-    return null
-  }
-}
-
-/**
  * Remember fallback: persist the intent payload as explicit knowledge.
  * Same as what remember_knowledge tool does.
  */
@@ -300,50 +264,6 @@ const executeRememberFallback = async (
     return 'createExplicitEvent'
   } catch (error) {
     log.shell(`remember fallback error: ${String(error)}`, undefined, 'error')
-    return null
-  }
-}
-
-/**
- * Summon fallback: enqueue background agent task + run retrieval.
- * Same path as spawn_background_agent tool.
- */
-const executeSummonFallback = async (
-  intent: ActionIntent,
-  ctx: ReconcileContext,
-): Promise<string | null> => {
-  if (!intent.payload || !ctx.waitUntil || !ctx.conversationId) {
-    log.shell('summon fallback skipped: missing payload, waitUntil, or conversationId')
-    return null
-  }
-
-  try {
-    const { enqueueAgentTask } = await import('@/lib/agents/queue')
-    const { runBackgroundRetrieval } = await import('@/lib/agents/deep-retrieval')
-
-    const taskId = await enqueueAgentTask({
-      task: intent.payload,
-      userId: ctx.userId,
-      voyageSlug: ctx.voyageSlug,
-      conversationId: ctx.conversationId,
-      originalQuery: intent.source,
-      conversationSnapshot: ctx.messages as object[] | undefined,
-    })
-
-    ctx.waitUntil(
-      runBackgroundRetrieval({
-        taskId,
-        objective: intent.payload,
-        userId: ctx.userId,
-        voyageSlug: ctx.voyageSlug,
-        conversationId: ctx.conversationId,
-      })
-    )
-
-    log.shell(`summon fallback executed: task ${taskId} enqueued for "${intent.payload.slice(0, 40)}"`)
-    return 'enqueueAgentTask'
-  } catch (error) {
-    log.shell(`summon fallback error: ${String(error)}`, undefined, 'error')
     return null
   }
 }

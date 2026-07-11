@@ -25,9 +25,10 @@ import { resolveSessionVoyage, SessionAccessError, getVoyageBySlug, getVoyageMem
 import { log } from '@/lib/debug';
 import { detectActionIntent } from '@/lib/shell/intent';
 import { reconcileActions } from '@/lib/shell/reconciler';
-import { detectRetrievalSignals, dispatchRetrievalAgent } from '@/lib/shell/signals';
 
-export const maxDuration = 30;
+// 300s (Vercel Pro / fluid compute ceiling): deep research runs INSIDE this
+// function via waitUntil — the background budget below must fit within it.
+export const maxDuration = 300;
 
 
 // Message types for AI SDK v6
@@ -148,9 +149,6 @@ export const POST = async (req: Request) => {
 
     // Shell Contract: detect verb intent before LLM runs
     const intent = detectActionIntent(queryText);
-
-    // Shell Contract: detect retrieval signals alongside verb detection
-    const retrievalSignals = detectRetrievalSignals(queryText);
 
     log.message('Processing user message', {
       conversationId,
@@ -424,19 +422,6 @@ export const POST = async (req: Request) => {
         : {}),
     }));
 
-    // Signal detection: dispatch retrieval agent in parallel with LLM response
-    if (retrievalSignals.length > 0 && intent?.verb !== 'find') {
-      waitUntil(
-        dispatchRetrievalAgent(retrievalSignals, queryText, {
-          userId,
-          voyageSlug,
-          conversationId,
-          waitUntil,
-          messages: windowedSimpleMessages,
-        })
-      );
-    }
-
     // Resolve the model for THIS user: their brain connection (subscription)
     // if connected, else the default provider. Nothing else about the turn changes.
     const { model: chatModel, label: chatModelLabel } = await resolveUserModelWithMeta(
@@ -464,7 +449,7 @@ export const POST = async (req: Request) => {
               intent,
               allToolCalls.map(tc => ({ toolName: tc.toolName })),
               text ?? '',
-              { userId, voyageSlug, conversationId, waitUntil, messages: windowedSimpleMessages },
+              { userId, voyageSlug, conversationId },
             ).catch(err => log.api('Shell reconciliation error', { error: String(err) }, 'error'))
           );
         }
