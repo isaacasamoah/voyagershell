@@ -82,7 +82,8 @@ const getStructuredEventId = (output: unknown): string | undefined => {
 // =============================================================================
 
 export async function runBackgroundRetrieval(
-  input: BackgroundRetrievalInput
+  input: BackgroundRetrievalInput,
+  signal?: AbortSignal
 ): Promise<BackgroundTaskResult> {
   const { taskId, objective, context, userId, voyageSlug, conversationId } = input
   const shortTaskId = taskId.slice(0, 8)
@@ -103,6 +104,7 @@ export async function runBackgroundRetrieval(
 
   const findings: BackgroundTaskResult['findings'] = []
   const result = await generateText({
+    abortSignal: signal,
     model: await resolveUserModel({ task: 'chat', quality: 'balanced' }, userId),
     system: AGENTIC_RETRIEVAL_PROMPT,
     prompt,
