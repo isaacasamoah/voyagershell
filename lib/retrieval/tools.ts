@@ -385,7 +385,7 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
   }),
 
   spawn_background_agent: tool({
-    description: `Spawn a background agent for deep asynchronous research. The agent has full access to retrieval tools and works independently. Results surface via realtime when complete. Suitable for comprehensive multi-topic searches or research spanning long time periods.`,
+    description: `Spawn a background agent for deep asynchronous research. The agent works independently and its finished answer arrives in the user's feed as a delivered Voyager message. YOU MUST CALL THIS TOOL whenever you tell the user you are researching in the background — announcing research without calling it is a false promise. Suitable for comprehensive multi-topic searches or research spanning long time periods.`,
     inputSchema: spawnBackgroundAgentSchema,
     execute: async (input) => {
       const { objective, context, priority } = input
