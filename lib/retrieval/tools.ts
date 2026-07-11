@@ -421,7 +421,7 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
             const startTime = Date.now()
             await runGuardedBackgroundTask({
               taskId,
-              run: async () => {
+              run: async (signal) => {
                 // Import and run the background retrieval agent
                 const { runBackgroundRetrieval } = await import('@/lib/agents/deep-retrieval')
                 return runBackgroundRetrieval({
@@ -431,7 +431,7 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
                   userId: ctx.userId,
                   voyageSlug: ctx.voyageSlug,
                   conversationId: ctx.conversationId!,
-                })
+                }, signal)
               },
               onComplete: async (result) => {
                 const eventId = await createMessageEvent(

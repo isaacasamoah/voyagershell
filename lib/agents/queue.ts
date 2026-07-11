@@ -47,14 +47,14 @@ export interface EnqueueParams {
 
 interface GuardedBackgroundTaskOptions<T> {
   taskId: string
-  run: () => Promise<T>
+  run: (signal: AbortSignal) => Promise<T>
   onComplete: (result: T) => Promise<void>
   onFailure?: (error: unknown) => void
   fail?: (taskId: string, errorMessage: string) => Promise<void>
   timeoutMs?: number
 }
 
-const BACKGROUND_TASK_TIMEOUT_MS = 25_000
+const BACKGROUND_TASK_TIMEOUT_MS = 280_000 // fits inside the route's maxDuration=300s
 const STUCK_TASK_TTL_MS = 5 * 60 * 1000
 const REAPED_TASK_ERROR = 'reaped: no terminal state within TTL'
 
@@ -123,6 +123,9 @@ export async function updateTaskProgress(
       updated_at: new Date().toISOString(),
     })
     .eq('id', taskId)
+    // A progress write must NEVER resurrect a terminal task ('failed'/'complete')
+    // back to 'running' — that made timed-out zombies (live, 2026-07-11).
+    .in('status', ['pending', 'running'])
 
   if (error) {
     console.error('[AgentQueue] Failed to update progress:', error)
@@ -194,12 +197,16 @@ export async function runGuardedBackgroundTask<T>({
   timeoutMs = BACKGROUND_TASK_TIMEOUT_MS,
 }: GuardedBackgroundTaskOptions<T>): Promise<void> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const controller = new AbortController()
   const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Background agent timed out')), timeoutMs)
+    timeoutId = setTimeout(() => {
+      controller.abort() // actually stop the loop — a raced-out run must not keep burning
+      reject(new Error('Background agent timed out'))
+    }, timeoutMs)
   })
 
   try {
-    const result = await Promise.race([run(), timeout])
+    const result = await Promise.race([run(controller.signal), timeout])
     await onComplete(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'

@@ -26,7 +26,9 @@ import { log } from '@/lib/debug';
 import { detectActionIntent } from '@/lib/shell/intent';
 import { reconcileActions } from '@/lib/shell/reconciler';
 
-export const maxDuration = 30;
+// 300s (Vercel Pro / fluid compute ceiling): deep research runs INSIDE this
+// function via waitUntil — the background budget below must fit within it.
+export const maxDuration = 300;
 
 
 // Message types for AI SDK v6
