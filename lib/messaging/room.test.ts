@@ -233,3 +233,20 @@ describe('space-backed room API', () => {
     expect(db.spaces.get('space-1')?.ai_present).toBe(true)
   })
 })
+
+// Room truth (2026-07-11): the model receives the code-attested roster.
+describe('describeRoomForPrompt', () => {
+  it('is empty when nobody else is in or invited', async () => {
+    const { describeRoomForPrompt } = await loadRoomModule()
+    expect(describeRoomForPrompt({ active: [], invited: [], aiPresent: true })).toBe('')
+  })
+
+  it('names active and invited distinctly, marking invited as unable to see messages', async () => {
+    const { describeRoomForPrompt } = await loadRoomModule()
+    const line = describeRoomForPrompt({ active: ['elisheya'], invited: ['tom'], aiPresent: true })
+    expect(line).toContain('in the room: elisheya')
+    expect(line).toContain('invited but NOT joined')
+    expect(line).toContain('tom')
+    expect(line).toContain('cannot see these messages')
+  })
+})

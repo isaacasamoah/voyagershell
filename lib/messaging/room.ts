@@ -156,3 +156,53 @@ export const parseRoomCommand = (text: string): RoomCommand | null => {
   if (/^voyager$/i.test(name)) return { op: sign === '+' ? 'voyager-in' : 'voyager-out' }
   return { op: sign === '+' ? 'add' : 'remove', name }
 }
+
+// ── Room roster (code-attested truth for the model) ─────────────────────────
+// The model must never guess room membership: this is injected into the turn
+// context so "who's in the room" and invited-vs-joined are always honest.
+export interface RoomRoster {
+  active: string[]   // display names, excluding the session owner
+  invited: string[]  // display names — knocked, NOT joined, cannot see messages
+  aiPresent: boolean
+}
+
+export const getRoomRoster = async (sessionId: string): Promise<RoomRoster> => {
+  const session = await getSession(sessionId)
+  if (!session?.space_id) return { active: [], invited: [], aiPresent: true }
+
+  const [{ data: space }, { data: members, error }] = await Promise.all([
+    spaces().select('ai_present').eq('id', session.space_id).maybeSingle(),
+    spaceMembers()
+      .select('user_id, state, profiles:user_id (display_name, email)')
+      .eq('space_id', session.space_id)
+      .in('state', ['active', 'invited']),
+  ])
+  if (error) {
+    log.api('getRoomRoster failed', { sessionId, error: error.message }, 'error')
+    return { active: [], invited: [], aiPresent: true }
+  }
+
+  const rows = (members ?? []) as Array<{
+    user_id: string | null
+    state: string
+    profiles: { display_name: string | null; email: string | null } | null
+  }>
+  const name = (r: (typeof rows)[number]) =>
+    r.profiles?.display_name ?? r.profiles?.email ?? 'someone'
+  const others = rows.filter((r) => r.user_id && r.user_id !== session.user_id)
+  return {
+    active: others.filter((r) => r.state === 'active').map(name),
+    invited: others.filter((r) => r.state === 'invited').map(name),
+    aiPresent: ((space as { ai_present: boolean | null } | null)?.ai_present) ?? true,
+  }
+}
+
+/** The one honest line the model sees about the room, every turn. */
+export const describeRoomForPrompt = (roster: RoomRoster): string => {
+  if (roster.active.length === 0 && roster.invited.length === 0) return ''
+  const parts: string[] = []
+  if (roster.active.length > 0) parts.push(`in the room: ${roster.active.join(', ')}`)
+  if (roster.invited.length > 0)
+    parts.push(`invited but NOT joined (they cannot see these messages): ${roster.invited.join(', ')}`)
+  return `\n[Room state (authoritative): ${parts.join('; ')}. Describe the room ONLY from this line — never from conversation history.]`
+}

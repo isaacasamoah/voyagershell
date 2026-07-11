@@ -12,7 +12,7 @@ import {
 } from '@/lib/conversation/continuity';
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals';
 import { emitMessageEvent, createMessageEvent, type KnowledgeNode } from '@/lib/knowledge';
-import { getRoom, removeRoomPerson, setAiPresent, parseRoomCommand } from '@/lib/messaging/room';
+import { getRoom, removeRoomPerson, setAiPresent, parseRoomCommand, getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room';
 import { inviteToRoom, deliverRoomInvite } from '@/lib/messaging/invites';
 import { fanOutDeliveries } from '@/lib/messaging/deliveries';
 import { isVoyagerAside, stripVoyagerAside } from '@/lib/messaging/feed-types';
@@ -385,6 +385,15 @@ export const POST = async (req: Request) => {
     } catch (error) {
       log.api('Prompt composition failed, using base prompt', { error: String(error) }, 'warn');
       staticPrefix = getBasePrompt() + '\n\n' + toolStrategy;
+    }
+
+    // Room truth: the model NEVER guesses membership — inject the code-attested
+    // roster (active vs invited-not-joined) into the dynamic prompt every turn.
+    if (conversationId) {
+      try {
+        const roster = await getRoomRoster(conversationId);
+        dynamicSuffix += describeRoomForPrompt(roster);
+      } catch { /* roster is additive context — never block the turn */ }
     }
 
     // Shell Contract: inject intent guidance into dynamic (uncached) prompt
