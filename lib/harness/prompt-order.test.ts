@@ -142,3 +142,43 @@ describe('harness prompt cache order', () => {
     )).toHaveLength(1)
   })
 })
+
+// Omega P2 (2026-07-11): a window can END on an assistant message (resumed
+// conversations). The <context> block must still land on the LAST USER message
+// (mid-history), exactly once, with cache control on the true last message.
+it('injects context onto the last USER message even when the window ends on an assistant turn', async () => {
+  const { runTurn } = await loadRunTurn()
+  const host: HarnessHost = {
+    defer: vi.fn(),
+    now: () => new Date('2026-07-11T00:00:00.000Z'),
+  }
+
+  await runTurn({
+    userId: 'user-1',
+    conversationId: 'conversation-1',
+    voyageSlug: null,
+    authState: 'authenticated',
+    autoSent: false,
+    messages: [
+      { role: 'user', content: 'Earlier question' },
+      { role: 'user', content: 'Current question' },
+      { role: 'assistant', content: 'Trailing assistant answer' },
+    ],
+    displayName: 'Isaac',
+  }, host)
+
+  const [{ messages }] = streamText.mock.calls.at(-1)!
+  const users = messages.filter((m: { role: string }) => m.role === 'user')
+  const lastUser = users.at(-1) as { content: string }
+  // context on the last USER message, raw text preserved after it
+  expect(lastUser.content).toContain('<context>')
+  expect(lastUser.content).toContain('Current question')
+  // exactly once across the whole array
+  const occurrences = messages.filter((m: { content?: string }) =>
+    typeof m.content === 'string' && m.content.includes('<context>')).length
+  expect(occurrences).toBe(1)
+  // trailing assistant message untouched
+  const last = messages.at(-1) as { role: string; content: string }
+  expect(last.role).toBe('assistant')
+  expect(last.content).toBe('Trailing assistant answer')
+})
