@@ -6,6 +6,7 @@ import { detectReferenceSignals, retrieveForContinuity } from '@/lib/conversatio
 import { log } from '@/lib/debug'
 import { type KnowledgeNode } from '@/lib/knowledge'
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals'
+import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room'
 import { isVoyagerAside, stripVoyagerAside } from '@/lib/messaging/feed-types'
 import { resolveUserModelWithMeta } from '@/lib/models'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
@@ -134,6 +135,15 @@ export const runTurn = async (
   } catch (error) {
     log.api('Prompt composition failed, using base prompt', { error: String(error) }, 'warn')
     staticPrefix = `${getBasePrompt()}\n\n${toolStrategy}`
+  }
+
+  // Room truth: the model NEVER guesses membership — inject the code-attested
+  // roster (active vs invited-not-joined) into the dynamic prompt every turn.
+  if (ctx.conversationId) {
+    try {
+      const roster = await getRoomRoster(ctx.conversationId)
+      dynamicSuffix += describeRoomForPrompt(roster)
+    } catch { /* roster is additive context — never block the turn */ }
   }
 
   if (intent) {
