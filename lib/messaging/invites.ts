@@ -3,6 +3,7 @@
 import { log } from '@/lib/debug'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { activateMembers, ensureSpace, type SessionRow } from '@/lib/messaging/room'
+import { resolveSessionVoyage } from '@/lib/voyage'
 
 type MemberState = 'invited' | 'active' | 'left'
 
@@ -21,6 +22,7 @@ interface SpaceRow {
 const sessions = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('sessions')
 const spaces = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('spaces')
 const spaceMembers = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('space_members')
+const profiles = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('profiles')
 
 const getSession = async (sessionId: string): Promise<SessionRow | null> => {
   const { data, error } = await sessions()
@@ -137,6 +139,11 @@ const findNewestMembershipSpace = async (
   sessionId: string,
   userId: string,
   state: Extract<MemberState, 'invited' | 'active'>,
+  // Accepting an invite must consider the session's OWN space (the invitee may
+  // already be linked to it while still 'invited') — so acceptance never
+  // strands. Re-entry (enterActiveRoom) excludes it: you can't re-enter the
+  // space you're already in.
+  excludeCurrentSpace = true,
 ): Promise<{ session: SessionRow; spaceId: string } | null> => {
   const session = await getSession(sessionId)
   if (!session || session.user_id !== userId || !session.voyage_id) return null
@@ -152,7 +159,7 @@ const findNewestMembershipSpace = async (
 
   const spaceIds = ((memberships as SpaceMemberRow[] | null) ?? [])
     .map((row) => row.space_id)
-    .filter((spaceId) => spaceId !== session.space_id)
+    .filter((spaceId) => !excludeCurrentSpace || spaceId !== session.space_id)
   if (spaceIds.length === 0) return null
 
   const { data: matchingSpace, error: spaceError } = await spaces()
@@ -187,7 +194,7 @@ export const respondToRoomInvite = async (
   userId: string,
   accept: boolean,
 ): Promise<RoomInviteResponse> => {
-  const pending = await findNewestMembershipSpace(sessionId, userId, 'invited')
+  const pending = await findNewestMembershipSpace(sessionId, userId, 'invited', false)
   if (!pending) return { responded: false, reason: 'no_pending_invite' }
 
   const state: Extract<MemberState, 'active' | 'left'> = accept ? 'active' : 'left'
@@ -215,4 +222,52 @@ export const enterActiveRoom = async (
 
   const linked = await linkSessionToSpace(sessionId, active.spaceId)
   return linked ? { entered: true, spaceId: active.spaceId } : { entered: false }
+}
+
+/**
+ * Announce a fresh join to the rest of the room over the SAME realtime lane as
+ * any message: a 'join'-sourced event whose participants are the other active
+ * members. Their `useEventFeed` subscription fires on the knowledge_events
+ * INSERT (participants match) and refetches — the "X joined the room" line
+ * lands instantly, no turn required. The joiner is excluded (they already see
+ * "✓ You joined" on their knock). Best-effort — never throws into the accept.
+ */
+export const announceJoin = async (
+  conversationId: string,
+  spaceId: string,
+  joinerUserId: string,
+): Promise<void> => {
+  try {
+    const { data: memberRows } = await spaceMembers()
+      .select('user_id')
+      .eq('space_id', spaceId)
+      .eq('state', 'active')
+    const recipients = ((memberRows as Array<{ user_id: string | null }> | null) ?? [])
+      .map((row) => row.user_id)
+      .filter((id): id is string => Boolean(id) && id !== joinerUserId)
+    if (recipients.length === 0) return
+
+    const { data: profile } = await profiles()
+      .select('display_name')
+      .eq('id', joinerUserId)
+      .maybeSingle()
+    const joinerName = (profile as { display_name: string | null } | null)?.display_name ?? 'Someone'
+    const voyageSlug = (await resolveSessionVoyage(conversationId, joinerUserId)) ?? undefined
+
+    const { createMessageEvent } = await import('@/lib/knowledge/events')
+    const { fanOutDeliveries } = await import('@/lib/messaging/deliveries')
+    const eventId = await createMessageEvent(conversationId, 'user', `${joinerName} joined the room`, {
+      userId: joinerUserId,
+      voyageSlug,
+      participants: recipients,
+      addressedTo: recipients,
+      source: 'join',
+      senderUserId: joinerUserId,
+      senderDisplayName: joinerName,
+      attentionScore: 0.3,
+    })
+    if (eventId) void fanOutDeliveries(eventId, recipients)
+  } catch (error) {
+    log.api('announceJoin failed', { conversationId, spaceId, joinerUserId, error: String(error) }, 'error')
+  }
 }
