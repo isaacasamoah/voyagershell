@@ -131,6 +131,30 @@ export const useEventFeed = ({ conversationId, userId }: UseEventFeedParams) => 
     void loadFeed(true)
   }, [conversationId, loadFeed, userId])
 
+  // Catch-up backstop. Supabase Realtime is best-effort — a dropped push (tab
+  // backgrounded, a brief websocket reconnect) leaves a delivered message
+  // invisible until the NEXT push triggers a refetch. Re-pull on focus /
+  // visibility and on a slow interval while active so a missed push self-heals
+  // within seconds instead of hanging until the next message arrives.
+  useEffect(() => {
+    if (!conversationId || !userId) return
+
+    const catchUp = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      void loadFeed(false)
+    }
+
+    window.addEventListener('focus', catchUp)
+    document.addEventListener('visibilitychange', catchUp)
+    const interval = setInterval(catchUp, 12_000)
+
+    return () => {
+      window.removeEventListener('focus', catchUp)
+      document.removeEventListener('visibilitychange', catchUp)
+      clearInterval(interval)
+    }
+  }, [conversationId, userId, loadFeed])
+
   useEffect(() => {
     if (!conversationId || !userId) return
 

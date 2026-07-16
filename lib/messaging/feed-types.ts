@@ -40,6 +40,12 @@ export interface StreamingReply {
   id: string
   content: string
   startedAt: string
+  // How many assistant events were already in the feed when this reply began
+  // streaming. The transient is dismissed once the feed holds MORE than this —
+  // i.e. this turn's own persisted reply has landed. Count-based reconciliation
+  // is immune to content normalization and client/server clock skew, both of
+  // which broke the old exact-content match and left the reply pinned forever.
+  settledCount: number
 }
 
 // Epoch comparison — feed events can mix DB (`+00:00`) and client-optimistic
@@ -88,27 +94,20 @@ export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
   deliveryId: event.delivery_id,
 })
 
-export const hasSettledAssistantEvent = (
-  events: FeedEvent[],
-  content: string,
-  startedAt?: string,
-): boolean => {
-  const normalized = content.trim()
-  if (!normalized) return false
+// Each assistant turn persists exactly one assistant feed event. Counting them
+// is the reconciliation key — no fragile string compare, no clock arithmetic.
+export const countAssistantEvents = (events: FeedEvent[]): number => (
+  events.reduce((n, event) => (event.role === 'assistant' ? n + 1 : n), 0)
+)
 
-  return events.some((event) => (
-    event.role === 'assistant'
-    && event.content.trim() === normalized
-    && (!startedAt || Date.parse(event.createdAt) >= Date.parse(startedAt))
-  ))
-}
-
+// Show the live streaming transient only until this turn's own persisted reply
+// lands — detected as one MORE assistant event than existed when it started.
 export const shouldShowStreamingReply = (
   reply: StreamingReply | null,
   events: FeedEvent[],
 ): reply is StreamingReply => (
   Boolean(reply?.content.trim())
-  && !hasSettledAssistantEvent(events, reply?.content ?? '', reply?.startedAt)
+  && countAssistantEvents(events) <= (reply?.settledCount ?? 0)
 )
 
 // The auto-sent hidden welcome ("good morning") is never persisted, so it must

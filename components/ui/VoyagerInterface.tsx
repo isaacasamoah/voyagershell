@@ -12,7 +12,7 @@ import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useEventFeed } from '@/lib/messaging/useEventFeed';
-import { shouldShowStreamingReply, shouldShowOptimisticUser, type FeedEvent, type StreamingReply } from '@/lib/messaging/feed-types';
+import { shouldShowStreamingReply, shouldShowOptimisticUser, countAssistantEvents, type FeedEvent, type StreamingReply } from '@/lib/messaging/feed-types';
 import { useVisualViewport } from './hooks/useVisualViewport';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
@@ -95,6 +95,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     userId: feedUserId,
   });
   const [streamingReply, setStreamingReply] = useState<StreamingReply | null>(null);
+  // Latest feed events, read at turn-start to snapshot the assistant count
+  // without re-running the streaming effect on every feed change.
+  const feedEventsRef = useRef(feedEvents);
+  useEffect(() => { feedEventsRef.current = feedEvents; }, [feedEvents]);
 
   useEffect(() => {
     if (feedEvents.length > 0) setHasUserTyped(true);
@@ -377,7 +381,14 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     setStreamingReply((prev) => (
       prev?.id === lastAssistant.id
         ? { ...prev, content }
-        : { id: lastAssistant.id, content, startedAt: new Date().toISOString() }
+        : {
+            id: lastAssistant.id,
+            content,
+            startedAt: new Date().toISOString(),
+            // Snapshot the assistant-event count at turn start; the transient
+            // clears once the feed holds one more (this turn's own reply).
+            settledCount: countAssistantEvents(feedEventsRef.current),
+          }
     ));
   }, [getAskCaptainParts, getMessageText, isStreaming, messages, streamingReply?.id]);
 
