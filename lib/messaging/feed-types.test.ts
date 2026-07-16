@@ -90,17 +90,37 @@ describe('event-stream feed primitives', () => {
     expect(next.map((item) => item.id)).toEqual(['first', 'second', 'third'])
   })
 
-  it('shows the streaming reply until its persisted event lands, without duplicating it', () => {
+  it('shows the streaming reply until this turn\'s persisted event lands (count-based)', () => {
+    // One assistant event already in the feed when the reply starts streaming.
+    const olderEvent = event('older', '2026-07-09T10:01:00.000Z')
     const reply = {
       id: 'streaming-assistant',
       content: 'final answer',
       startedAt: '2026-07-09T10:02:00.000Z',
+      settledCount: 1,
     }
-    const olderMatchingEvent = event('older', '2026-07-09T10:01:00.000Z', { content: 'final answer' })
-    const settledEvent = event('settled', '2026-07-09T10:03:00.000Z', { content: 'final answer' })
+    const settledEvent = event('settled', '2026-07-09T10:03:00.000Z')
 
-    expect(shouldShowStreamingReply(reply, [olderMatchingEvent])).toBe(true)
-    expect(shouldShowStreamingReply(reply, [olderMatchingEvent, settledEvent])).toBe(false)
+    expect(shouldShowStreamingReply(reply, [olderEvent])).toBe(true)            // still 1 → show
+    expect(shouldShowStreamingReply(reply, [olderEvent, settledEvent])).toBe(false) // now 2 → dismiss
+  })
+
+  it('dismisses the transient even when stored content differs from the stream (the stuck-at-bottom bug)', () => {
+    // The persisted reply is normalized differently from what streamed — the
+    // old exact-content match would never fire and pin the transient forever.
+    const reply = {
+      id: 'streaming-assistant',
+      content: 'The Sun is ~5,500°C at the surface',
+      startedAt: '2026-07-09T10:02:00.000Z',
+      settledCount: 0,
+    }
+    const persistedDifferently = event('settled', '2026-07-09T10:03:00.000Z', {
+      content: 'The Sun’s temperature depends where you measure: **Surface** ~5,500 °C…',
+    })
+
+    // Count went 0 → 1: the turn settled, so the transient clears regardless of
+    // content or clock skew.
+    expect(shouldShowStreamingReply(reply, [persistedDifferently])).toBe(false)
   })
 })
 
