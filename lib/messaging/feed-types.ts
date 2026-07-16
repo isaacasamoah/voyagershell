@@ -1,10 +1,18 @@
 export type FeedEventType = 'conversation' | 'message'
 export type FeedEventRole = 'user' | 'assistant' | 'human'
+// A knock is a message event whose metadata.source === 'invite'. Orthogonal to
+// role — the invitee sees it as a 'human' event; `kind` marks it interactive.
+export type FeedEventKind = 'message' | 'invite'
+export type InviteState = 'invited' | 'active' | 'left'
 
 export interface FeedEvent {
   id: string
   eventType: FeedEventType
   role: FeedEventRole
+  kind: FeedEventKind
+  // The viewer's own membership state for the invite's space. Only meaningful
+  // when kind === 'invite'; drives whether the Join/Decline buttons show.
+  inviteState: InviteState | null
   senderDisplayName: string | null
   senderUserId: string | null
   content: string
@@ -17,6 +25,8 @@ export interface FeedApiEvent {
   id: string
   event_type: FeedEventType
   role: FeedEventRole
+  kind: FeedEventKind
+  invite_state: InviteState | null
   sender_display_name: string | null
   sender_user_id: string | null
   content: string
@@ -53,6 +63,8 @@ export const toFeedApiEvent = (event: FeedEvent): FeedApiEvent => ({
   id: event.id,
   event_type: event.eventType,
   role: event.role,
+  kind: event.kind,
+  invite_state: event.inviteState,
   sender_display_name: event.senderDisplayName,
   sender_user_id: event.senderUserId,
   content: event.content,
@@ -65,6 +77,8 @@ export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
   id: event.id,
   eventType: event.event_type,
   role: event.role,
+  kind: event.kind ?? 'message',
+  inviteState: event.invite_state ?? null,
   senderDisplayName: event.sender_display_name,
   senderUserId: event.sender_user_id,
   content: event.content,

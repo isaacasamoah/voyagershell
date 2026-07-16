@@ -137,6 +137,11 @@ const findNewestMembershipSpace = async (
   sessionId: string,
   userId: string,
   state: Extract<MemberState, 'invited' | 'active'>,
+  // Accepting an invite must consider the session's OWN space (the invitee may
+  // already be linked to it while still 'invited') — so acceptance never
+  // strands. Re-entry (enterActiveRoom) excludes it: you can't re-enter the
+  // space you're already in.
+  excludeCurrentSpace = true,
 ): Promise<{ session: SessionRow; spaceId: string } | null> => {
   const session = await getSession(sessionId)
   if (!session || session.user_id !== userId || !session.voyage_id) return null
@@ -152,7 +157,7 @@ const findNewestMembershipSpace = async (
 
   const spaceIds = ((memberships as SpaceMemberRow[] | null) ?? [])
     .map((row) => row.space_id)
-    .filter((spaceId) => spaceId !== session.space_id)
+    .filter((spaceId) => !excludeCurrentSpace || spaceId !== session.space_id)
   if (spaceIds.length === 0) return null
 
   const { data: matchingSpace, error: spaceError } = await spaces()
@@ -187,7 +192,7 @@ export const respondToRoomInvite = async (
   userId: string,
   accept: boolean,
 ): Promise<RoomInviteResponse> => {
-  const pending = await findNewestMembershipSpace(sessionId, userId, 'invited')
+  const pending = await findNewestMembershipSpace(sessionId, userId, 'invited', false)
   if (!pending) return { responded: false, reason: 'no_pending_invite' }
 
   const state: Extract<MemberState, 'active' | 'left'> = accept ? 'active' : 'left'

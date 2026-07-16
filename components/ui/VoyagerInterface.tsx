@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { UIMessage } from 'ai';
 import { Terminal, Ship } from 'lucide-react';
-import { UserMessage, AssistantMessage, AstronautState, TaskCard, HumanMessage, type TaskProgress } from '@/components/chat';
+import { UserMessage, AssistantMessage, AstronautState, TaskCard, HumanMessage, InviteKnock, type TaskProgress } from '@/components/chat';
 import type { MessagePart } from '@/components/chat/AssistantMessage';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
@@ -436,6 +436,19 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   ]);
 
   const renderFeedEvent = (event: FeedEvent) => {
+    if (event.kind === 'invite') {
+      return (
+        <InviteKnock
+          key={event.id}
+          content={event.content}
+          senderName={event.senderDisplayName ?? 'someone'}
+          timestamp={event.createdAt}
+          inviteState={event.inviteState}
+          conversationId={conversationId}
+        />
+      );
+    }
+
     if (event.role === 'human') {
       return (
         <HumanMessage
