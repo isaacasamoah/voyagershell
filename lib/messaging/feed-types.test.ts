@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  fromFeedApiEvent,
   mergeFeedEvent,
   shouldShowStreamingReply,
   sortFeedEvents,
+  toFeedApiEvent,
   type FeedEvent,
 } from './feed-types'
 
@@ -10,6 +12,8 @@ const event = (id: string, createdAt: string, patch: Partial<FeedEvent> = {}): F
   id,
   eventType: 'conversation',
   role: 'assistant',
+  kind: 'message',
+  inviteState: null,
   senderDisplayName: 'Voyager',
   senderUserId: null,
   content: id,
@@ -56,6 +60,24 @@ describe('event-stream feed primitives', () => {
       'message:peer-message',
       'conversation:voyager-turn',
     ])
+  })
+
+  it('round-trips invite kind + invite state through the API shape', () => {
+    const knock = event('knock', '2026-07-16T02:22:00.000Z', {
+      eventType: 'message',
+      role: 'human',
+      kind: 'invite',
+      inviteState: 'invited',
+      senderDisplayName: 'isaac',
+    })
+
+    const restored = fromFeedApiEvent(toFeedApiEvent(knock))
+    expect(restored.kind).toBe('invite')
+    expect(restored.inviteState).toBe('invited')
+    // A plain message defaults cleanly and never carries an invite state.
+    const plain = fromFeedApiEvent(toFeedApiEvent(event('m', '2026-07-16T02:23:00.000Z')))
+    expect(plain.kind).toBe('message')
+    expect(plain.inviteState).toBeNull()
   })
 
   it('inserts live events at their createdAt position', () => {
