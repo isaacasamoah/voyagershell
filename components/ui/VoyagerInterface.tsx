@@ -378,18 +378,25 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     if (!content && !hasCaptainParts) return;
     if (!isStreaming && streamingReply?.id !== lastAssistant.id) return;
 
-    setStreamingReply((prev) => (
-      prev?.id === lastAssistant.id
-        ? { ...prev, content }
-        : {
-            id: lastAssistant.id,
-            content,
-            startedAt: new Date().toISOString(),
-            // Snapshot the assistant-event count at turn start; the transient
-            // clears once the feed holds one more (this turn's own reply).
-            settledCount: countAssistantEvents(feedEventsRef.current),
-          }
-    ));
+    setStreamingReply((prev) => {
+      // useChat returns a NEW `messages` array reference every render, so this
+      // effect runs every render. When the transient's guard is open (same id),
+      // building a fresh object each render re-renders → this effect runs again
+      // → Maximum update depth (#185). Return the SAME object when content is
+      // unchanged so React bails and the loop can't sustain. (Surfaces in the
+      // aside→room race, where the transient lingers with the guard open.)
+      if (prev?.id === lastAssistant.id) {
+        return prev.content === content ? prev : { ...prev, content };
+      }
+      return {
+        id: lastAssistant.id,
+        content,
+        startedAt: new Date().toISOString(),
+        // Snapshot the assistant-event count at turn start; the transient
+        // clears once the feed holds one more (this turn's own reply).
+        settledCount: countAssistantEvents(feedEventsRef.current),
+      };
+    });
   }, [getAskCaptainParts, getMessageText, isStreaming, messages, streamingReply?.id]);
 
   useEffect(() => {
