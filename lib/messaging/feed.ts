@@ -51,10 +51,13 @@ const getSenderDisplayName = (row: FeedEventRow): string | null => (
   isObject(row.metadata) ? getString(row.metadata, 'sender_display_name') : null
 )
 
-// A knock is a message event stamped `source: 'invite'` (see deliverRoomInvite).
+// Message events carry a `source` marker: 'invite' → interactive knock,
+// 'join' → a system line ("X joined the room"); anything else is a plain message.
 const getFeedKind = (row: FeedEventRow): FeedEventKind => {
   const source = isObject(row.metadata) ? getString(row.metadata, 'source') : null
-  return source === 'invite' ? 'invite' : 'message'
+  if (source === 'invite') return 'invite'
+  if (source === 'join') return 'system'
+  return 'message'
 }
 
 // The viewer's own membership state across this voyage's space(s). Prefer an

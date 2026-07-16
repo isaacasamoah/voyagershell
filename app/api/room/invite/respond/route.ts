@@ -4,7 +4,7 @@
 // remains for conversational decline; the button is the primary accept path.
 
 import { requireAuthResponse } from '@/lib/auth'
-import { enterActiveRoom, respondToRoomInvite } from '@/lib/messaging/invites'
+import { announceJoin, enterActiveRoom, respondToRoomInvite } from '@/lib/messaging/invites'
 import { log } from '@/lib/debug'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +28,12 @@ export const POST = async (req: Request) => {
 
   try {
     const response = await respondToRoomInvite(conversationId, auth, accept)
-    if (response.responded) return Response.json({ ok: true, ...response })
+    if (response.responded) {
+      // Genuine invited→active transition — tell the rest of the room over the
+      // realtime lane so the join lands instantly, not on their next turn.
+      if (response.accepted) await announceJoin(conversationId, response.spaceId, auth)
+      return Response.json({ ok: true, ...response })
+    }
 
     // Accepting from a fresh session where membership is already active —
     // no pending invite to flip, so just re-enter the room.

@@ -1,8 +1,9 @@
 export type FeedEventType = 'conversation' | 'message'
 export type FeedEventRole = 'user' | 'assistant' | 'human'
-// A knock is a message event whose metadata.source === 'invite'. Orthogonal to
-// role — the invitee sees it as a 'human' event; `kind` marks it interactive.
-export type FeedEventKind = 'message' | 'invite'
+// A knock is a message event whose metadata.source === 'invite'; a 'system'
+// line (e.g. "X joined the room") is metadata.source === 'join'. Orthogonal to
+// role — the recipient sees them as 'human' events; `kind` marks how to render.
+export type FeedEventKind = 'message' | 'invite' | 'system'
 export type InviteState = 'invited' | 'active' | 'left'
 
 export interface FeedEvent {

@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { UIMessage } from 'ai';
 import { Terminal, Ship } from 'lucide-react';
-import { UserMessage, AssistantMessage, AstronautState, TaskCard, HumanMessage, InviteKnock, type TaskProgress } from '@/components/chat';
+import { UserMessage, AssistantMessage, AstronautState, TaskCard, HumanMessage, InviteKnock, SystemLine, type TaskProgress } from '@/components/chat';
 import type { MessagePart } from '@/components/chat/AssistantMessage';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
@@ -436,6 +436,16 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   ]);
 
   const renderFeedEvent = (event: FeedEvent) => {
+    if (event.kind === 'system') {
+      return (
+        <SystemLine
+          key={event.id}
+          content={event.content}
+          onSeen={event.deliveryId && !event.seen ? () => markFeedSeen(event.deliveryId as string) : undefined}
+        />
+      );
+    }
+
     if (event.kind === 'invite') {
       return (
         <InviteKnock
