@@ -143,8 +143,14 @@ export const toFeedEvents = (
   }))
 }
 
-export const getFeed = async (userId: string, conversationId: string): Promise<FeedEvent[]> => {
-  const voyageSlug = await resolveSessionVoyage(conversationId, userId)
+export const queryScopedEvents = async (
+  userId: string,
+  conversationId: string,
+  voyageSlug?: string | null,
+): Promise<FeedEventRow[]> => {
+  const scopedVoyageSlug = voyageSlug === undefined
+    ? await resolveSessionVoyage(conversationId, userId)
+    : voyageSlug
   const supabase = typedTable()
 
   let query = supabase
@@ -157,13 +163,19 @@ export const getFeed = async (userId: string, conversationId: string): Promise<F
     .order('created_at', { ascending: false })
     .limit(200)
 
-  query = voyageSlug ? query.eq('voyage_slug', voyageSlug) : query.is('voyage_slug', null)
+  query = scopedVoyageSlug ? query.eq('voyage_slug', scopedVoyageSlug) : query.is('voyage_slug', null)
 
   const { data, error } = await query
   if (error) throw new Error(error.message)
 
-  const rows = ((data ?? []) as FeedEventRow[])
-    .filter((row) => isInFeedContext(row, userId, conversationId, voyageSlug))
+  return ((data ?? []) as FeedEventRow[])
+    .filter((row) => isInFeedContext(row, userId, conversationId, scopedVoyageSlug))
+}
+
+export const getFeed = async (userId: string, conversationId: string): Promise<FeedEvent[]> => {
+  const voyageSlug = await resolveSessionVoyage(conversationId, userId)
+  const supabase = typedTable()
+  const rows = await queryScopedEvents(userId, conversationId, voyageSlug)
   const messageIds = rows
     .filter((row) => row.event_type === 'message')
     .map((row) => row.id)
