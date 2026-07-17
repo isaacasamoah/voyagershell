@@ -244,6 +244,23 @@ describe('room invitations', () => {
     expect(db.sessions.get('vanessa-session')?.space_id).toBe(newer.spaceId)
   })
 
+  it('accepts an invite on the responding session\'s own space (self-space not excluded)', async () => {
+    seedVoyage()
+    const { getRoom, inviteToRoom, respondToRoomInvite } = await loadModules()
+
+    const invite = await inviteToRoom('isaac-session', 'vanessa')
+    // Vanessa's session is already linked to the invited space while she is
+    // still 'invited' — the click must still promote her, not strand her.
+    const vanessaSession = db.sessions.get('vanessa-session')
+    if (vanessaSession) vanessaSession.space_id = invite.spaceId ?? null
+
+    const response = await respondToRoomInvite('vanessa-session', 'vanessa', true)
+
+    expect(response).toEqual({ responded: true, accepted: true, spaceId: invite.spaceId })
+    expect(db.space_members.get(`${invite.spaceId}:vanessa`)?.state).toBe('active')
+    await expect(getRoom('vanessa-session')).resolves.toEqual({ roomPeople: ['isaac'], aiPresent: true })
+  })
+
   it('knocks even in a household voyage — HOUSEHOLD_SHARE_VOYAGE grants no social auto-accept', async () => {
     seedVoyage()
     process.env.HOUSEHOLD_SHARE_VOYAGE = 'fambam'

@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { UIMessage } from 'ai';
 import { Terminal, Ship } from 'lucide-react';
-import { UserMessage, AssistantMessage, AstronautState, TaskCard, HumanMessage, type TaskProgress } from '@/components/chat';
+import { UserMessage, AssistantMessage, AstronautState, TaskCard, HumanMessage, InviteKnock, SystemLine, type TaskProgress } from '@/components/chat';
 import type { MessagePart } from '@/components/chat/AssistantMessage';
 import { useAuth } from '@/lib/auth/context';
 import { getSuggestions, getWelcomeSuggestion, type SuggestionContext } from '@/lib/ui/suggestions';
@@ -12,7 +12,7 @@ import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useEventFeed } from '@/lib/messaging/useEventFeed';
-import { shouldShowStreamingReply, shouldShowOptimisticUser, type FeedEvent, type StreamingReply } from '@/lib/messaging/feed-types';
+import { shouldShowStreamingReply, shouldShowOptimisticUser, countAssistantEvents, type FeedEvent, type StreamingReply } from '@/lib/messaging/feed-types';
 import { useVisualViewport } from './hooks/useVisualViewport';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
@@ -95,6 +95,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     userId: feedUserId,
   });
   const [streamingReply, setStreamingReply] = useState<StreamingReply | null>(null);
+  // Latest feed events, read at turn-start to snapshot the assistant count
+  // without re-running the streaming effect on every feed change.
+  const feedEventsRef = useRef(feedEvents);
+  useEffect(() => { feedEventsRef.current = feedEvents; }, [feedEvents]);
 
   useEffect(() => {
     if (feedEvents.length > 0) setHasUserTyped(true);
@@ -374,11 +378,25 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     if (!content && !hasCaptainParts) return;
     if (!isStreaming && streamingReply?.id !== lastAssistant.id) return;
 
-    setStreamingReply((prev) => (
-      prev?.id === lastAssistant.id
-        ? { ...prev, content }
-        : { id: lastAssistant.id, content, startedAt: new Date().toISOString() }
-    ));
+    setStreamingReply((prev) => {
+      // useChat returns a NEW `messages` array reference every render, so this
+      // effect runs every render. When the transient's guard is open (same id),
+      // building a fresh object each render re-renders → this effect runs again
+      // → Maximum update depth (#185). Return the SAME object when content is
+      // unchanged so React bails and the loop can't sustain. (Surfaces in the
+      // aside→room race, where the transient lingers with the guard open.)
+      if (prev?.id === lastAssistant.id) {
+        return prev.content === content ? prev : { ...prev, content };
+      }
+      return {
+        id: lastAssistant.id,
+        content,
+        startedAt: new Date().toISOString(),
+        // Snapshot the assistant-event count at turn start; the transient
+        // clears once the feed holds one more (this turn's own reply).
+        settledCount: countAssistantEvents(feedEventsRef.current),
+      };
+    });
   }, [getAskCaptainParts, getMessageText, isStreaming, messages, streamingReply?.id]);
 
   useEffect(() => {
@@ -436,6 +454,29 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   ]);
 
   const renderFeedEvent = (event: FeedEvent) => {
+    if (event.kind === 'system') {
+      return (
+        <SystemLine
+          key={event.id}
+          content={event.content}
+          onSeen={event.deliveryId && !event.seen ? () => markFeedSeen(event.deliveryId as string) : undefined}
+        />
+      );
+    }
+
+    if (event.kind === 'invite') {
+      return (
+        <InviteKnock
+          key={event.id}
+          content={event.content}
+          senderName={event.senderDisplayName ?? 'someone'}
+          timestamp={event.createdAt}
+          inviteState={event.inviteState}
+          conversationId={conversationId}
+        />
+      );
+    }
+
     if (event.role === 'human') {
       return (
         <HumanMessage

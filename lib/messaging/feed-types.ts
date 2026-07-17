@@ -1,10 +1,19 @@
 export type FeedEventType = 'conversation' | 'message'
 export type FeedEventRole = 'user' | 'assistant' | 'human'
+// A knock is a message event whose metadata.source === 'invite'; a 'system'
+// line (e.g. "X joined the room") is metadata.source === 'join'. Orthogonal to
+// role — the recipient sees them as 'human' events; `kind` marks how to render.
+export type FeedEventKind = 'message' | 'invite' | 'system'
+export type InviteState = 'invited' | 'active' | 'left'
 
 export interface FeedEvent {
   id: string
   eventType: FeedEventType
   role: FeedEventRole
+  kind: FeedEventKind
+  // The viewer's own membership state for the invite's space. Only meaningful
+  // when kind === 'invite'; drives whether the Join/Decline buttons show.
+  inviteState: InviteState | null
   senderDisplayName: string | null
   senderUserId: string | null
   content: string
@@ -17,6 +26,8 @@ export interface FeedApiEvent {
   id: string
   event_type: FeedEventType
   role: FeedEventRole
+  kind: FeedEventKind
+  invite_state: InviteState | null
   sender_display_name: string | null
   sender_user_id: string | null
   content: string
@@ -29,6 +40,12 @@ export interface StreamingReply {
   id: string
   content: string
   startedAt: string
+  // How many assistant events were already in the feed when this reply began
+  // streaming. The transient is dismissed once the feed holds MORE than this —
+  // i.e. this turn's own persisted reply has landed. Count-based reconciliation
+  // is immune to content normalization and client/server clock skew, both of
+  // which broke the old exact-content match and left the reply pinned forever.
+  settledCount: number
 }
 
 // Epoch comparison — feed events can mix DB (`+00:00`) and client-optimistic
@@ -53,6 +70,8 @@ export const toFeedApiEvent = (event: FeedEvent): FeedApiEvent => ({
   id: event.id,
   event_type: event.eventType,
   role: event.role,
+  kind: event.kind,
+  invite_state: event.inviteState,
   sender_display_name: event.senderDisplayName,
   sender_user_id: event.senderUserId,
   content: event.content,
@@ -65,6 +84,8 @@ export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
   id: event.id,
   eventType: event.event_type,
   role: event.role,
+  kind: event.kind ?? 'message',
+  inviteState: event.invite_state ?? null,
   senderDisplayName: event.sender_display_name,
   senderUserId: event.sender_user_id,
   content: event.content,
@@ -73,27 +94,20 @@ export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
   deliveryId: event.delivery_id,
 })
 
-export const hasSettledAssistantEvent = (
-  events: FeedEvent[],
-  content: string,
-  startedAt?: string,
-): boolean => {
-  const normalized = content.trim()
-  if (!normalized) return false
+// Each assistant turn persists exactly one assistant feed event. Counting them
+// is the reconciliation key — no fragile string compare, no clock arithmetic.
+export const countAssistantEvents = (events: FeedEvent[]): number => (
+  events.reduce((n, event) => (event.role === 'assistant' ? n + 1 : n), 0)
+)
 
-  return events.some((event) => (
-    event.role === 'assistant'
-    && event.content.trim() === normalized
-    && (!startedAt || Date.parse(event.createdAt) >= Date.parse(startedAt))
-  ))
-}
-
+// Show the live streaming transient only until this turn's own persisted reply
+// lands — detected as one MORE assistant event than existed when it started.
 export const shouldShowStreamingReply = (
   reply: StreamingReply | null,
   events: FeedEvent[],
 ): reply is StreamingReply => (
   Boolean(reply?.content.trim())
-  && !hasSettledAssistantEvent(events, reply?.content ?? '', reply?.startedAt)
+  && countAssistantEvents(events) <= (reply?.settledCount ?? 0)
 )
 
 // The auto-sent hidden welcome ("good morning") is never persisted, so it must
