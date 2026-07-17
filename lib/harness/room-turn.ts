@@ -1,4 +1,3 @@
-import { saveMessage } from '@/lib/conversation'
 import { createMessageEvent } from '@/lib/knowledge'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { deliverRoomInvite, inviteToRoom } from '@/lib/messaging/invites'
@@ -20,11 +19,6 @@ const deferUserPersistence = (
   emitConversationEvent: boolean,
 ) => {
   if (!conversationId) return
-
-  host.defer(saveMessage(conversationId, 'user', queryText).catch((error) => {
-    console.error('[Chat] Failed to save user message:', error)
-    return null
-  }))
 
   if (emitConversationEvent) {
     host.defer(createMessageEvent(conversationId, 'user', queryText, {

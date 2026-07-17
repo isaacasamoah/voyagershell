@@ -14,7 +14,7 @@ import { z } from 'zod'
 import OpenAI from 'openai'
 import { resolveUserModel } from '@/lib/models'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { loadConversationMessages } from '@/lib/conversation'
+import { composeContextFromStream } from '@/lib/conversation'
 import { estimateTokens } from '@/lib/conversation/window'
 import { updateKnowledgeEnrichment, type KnowledgeType } from '@/lib/knowledge/events'
 import { createEdge, type EdgeType } from '@/lib/knowledge/edges'
@@ -138,10 +138,12 @@ const loadUnenrichedEvents = async (sessionId: string): Promise<KnowledgeEventRo
  */
 const buildEnrichmentWindow = async (
   sessionId: string,
-  oldestUnenrichedTime: string
+  oldestUnenrichedTime: string,
+  userId: string,
+  voyageSlug?: string,
 ): Promise<string> => {
-  // Load all session messages
-  const allMessages = await loadConversationMessages(sessionId, 500)
+  // Load session history from the same scoped stream that feeds turn context.
+  const allMessages = await composeContextFromStream(userId, sessionId, voyageSlug ?? null)
   if (allMessages.length === 0) return ''
 
   // Find the index of the first message at or after oldest unenriched event
@@ -838,7 +840,7 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
 
     // Build purpose-built enrichment window
     const oldestUnenrichedTime = events[0].source_created_at
-    const transcript = await buildEnrichmentWindow(sessionId, oldestUnenrichedTime)
+    const transcript = await buildEnrichmentWindow(sessionId, oldestUnenrichedTime, userId, voyageSlug)
     if (!transcript) {
       log.agent('No transcript available, skipping', { sessionId })
       return

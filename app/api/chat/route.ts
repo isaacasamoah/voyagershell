@@ -1,27 +1,36 @@
 import { APICallError, createUIMessageStream, createUIMessageStreamResponse } from 'ai'
 import { requireAuthResponse } from '@/lib/auth'
-import { createVercelHost, runTurn, type SimpleMessage, type TurnContext, type TurnResult } from '@/lib/harness'
+import { createVercelHost, runTurn, type TurnContext, type TurnResult } from '@/lib/harness'
 import type { AuthState } from '@/lib/prompts'
 import { resolveSessionVoyage, SessionAccessError } from '@/lib/voyage'
 import { log } from '@/lib/debug'
 
 export const maxDuration = 300
 
-interface IncomingMessage { role: SimpleMessage['role']; parts?: Array<{ type: string; text?: string }>; content?: string }
+type IncomingRole = 'user' | 'assistant' | 'system'
+
+interface IncomingMessage { role: IncomingRole; parts?: Array<{ type: string; text?: string }>; content?: string }
 
 interface ChatBody { messages?: IncomingMessage[]; conversationId?: string; authState?: AuthState; autoSent?: boolean }
 
-const toSimpleMessages = (messages: IncomingMessage[]): SimpleMessage[] => messages
-  .map((message) => ({
-    role: message.role,
-    content: Array.isArray(message.parts)
-      ? message.parts
-        .filter((part) => part.type === 'text' && part.text)
-        .map((part) => part.text)
-        .join('')
-      : typeof message.content === 'string' ? message.content : '',
-  }))
-  .filter((message) => message.content.trim() !== '')
+const getMessageText = (message: IncomingMessage): string => (
+  Array.isArray(message.parts)
+    ? message.parts
+      .filter((part) => part.type === 'text' && part.text)
+      .map((part) => part.text)
+      .join('')
+    : typeof message.content === 'string' ? message.content : ''
+)
+
+const getNewestUserMessage = (items: IncomingMessage[]): string => {
+  for (let index = items.length - 1; index >= 0; index--) {
+    const message = items[index]
+    if (message.role !== 'user') continue
+    const text = getMessageText(message)
+    if (text.trim() !== '') return text
+  }
+  return ''
+}
 
 const jsonResponse = (status: number, body: Record<string, string>) => new Response(
   JSON.stringify(body),
@@ -81,7 +90,7 @@ export const POST = async (req: Request) => {
       voyageSlug,
       authState,
       autoSent,
-      messages: toSimpleMessages(messages),
+      newMessage: getNewestUserMessage(messages),
       displayName,
     }
     return adaptTurn(await runTurn(ctx, createVercelHost()))

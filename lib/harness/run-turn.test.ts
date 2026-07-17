@@ -3,7 +3,7 @@ import type { HarnessHost, TurnContext } from './types'
 
 const streamText = vi.fn()
 const reapStuckTasks = vi.fn()
-const saveMessage = vi.fn()
+const composeContextFromStream = vi.fn()
 const createMessageEvent = vi.fn()
 const fanOutDeliveries = vi.fn()
 const deliverRoomInvite = vi.fn()
@@ -39,7 +39,7 @@ const loadRunTurn = async () => {
     shouldRunEnrichment: vi.fn(),
     runCartographer: vi.fn(),
   }))
-  vi.doMock('@/lib/conversation', () => ({ saveMessage }))
+  vi.doMock('@/lib/conversation', () => ({ composeContextFromStream }))
   vi.doMock('@/lib/conversation/window', () => ({
     computeWindow: vi.fn((messages) => ({ messages, hasMoreHistory: false })),
     getTruncatedMessages: vi.fn(() => []),
@@ -109,7 +109,7 @@ const context = (overrides: Partial<TurnContext> = {}): TurnContext => ({
   voyageSlug: null,
   authState: 'authenticated',
   autoSent: false,
-  messages: [{ role: 'user', content: 'Hello Voyager' }],
+  newMessage: 'Hello Voyager',
   displayName: 'Isaac',
   ...overrides,
 })
@@ -128,7 +128,7 @@ describe('runTurn', () => {
     vi.clearAllMocks()
     streamText.mockReturnValue(streamResult)
     reapStuckTasks.mockResolvedValue(undefined)
-    saveMessage.mockResolvedValue(null)
+    composeContextFromStream.mockResolvedValue([])
     createMessageEvent.mockResolvedValue('event-1')
     fanOutDeliveries.mockResolvedValue(undefined)
     getRoom.mockResolvedValue({ roomPeople: [], aiPresent: true })
@@ -159,7 +159,7 @@ describe('runTurn', () => {
     })
   })
 
-  it('runs a solo turn headlessly and defers user save and event emission', async () => {
+  it('runs a solo turn headlessly and defers user event emission', async () => {
     const { runTurn } = await loadRunTurn()
     const { host, deferred } = stubHost()
 
@@ -167,14 +167,13 @@ describe('runTurn', () => {
 
     expect(result).toEqual({ kind: 'stream', result: streamResult })
     expect(streamText).toHaveBeenCalledOnce()
-    expect(saveMessage).toHaveBeenCalledWith('conversation-1', 'user', 'Hello Voyager')
     expect(createMessageEvent).toHaveBeenCalledWith(
       'conversation-1',
       'user',
       'Hello Voyager',
       expect.objectContaining({ eventType: 'conversation' }),
     )
-    expect(deferred).toHaveLength(3)
+    expect(deferred).toHaveLength(2)
     await Promise.all(deferred)
   })
 
@@ -192,7 +191,7 @@ describe('runTurn', () => {
 
     const result = await runTurn(context({
       voyageSlug: 'launch',
-      messages: [{ role: 'user', content: '+vanessa' }],
+      newMessage: '+vanessa',
     }), stubHost().host)
 
     expect(result).toEqual({
@@ -219,7 +218,7 @@ describe('runTurn', () => {
 
     const result = await runTurn(context({
       voyageSlug: 'launch',
-      messages: [{ role: 'user', content: 'The fix is ready' }],
+      newMessage: 'The fix is ready',
     }), stubHost().host)
 
     expect(result).toEqual({ kind: 'empty' })
@@ -238,13 +237,18 @@ describe('runTurn', () => {
 
     const result = await runTurn(context({
       voyageSlug: 'launch',
-      messages: [{ role: 'user', content: '@voyager help me think' }],
+      newMessage: '@voyager help me think',
     }), stubHost().host)
 
     expect(result.kind).toBe('stream')
     expect(streamText).toHaveBeenCalledOnce()
     expect(fanOutDeliveries).not.toHaveBeenCalled()
-    expect(saveMessage).toHaveBeenCalledWith('conversation-1', 'user', 'help me think')
+    expect(createMessageEvent).toHaveBeenCalledWith(
+      'conversation-1',
+      'user',
+      'help me think',
+      expect.objectContaining({ eventType: 'conversation' }),
+    )
   })
 
   it('does not persist the synthetic auto-sent welcome', async () => {
@@ -252,11 +256,10 @@ describe('runTurn', () => {
 
     const result = await runTurn(context({
       autoSent: true,
-      messages: [{ role: 'user', content: 'good morning' }],
+      newMessage: 'good morning',
     }), stubHost().host)
 
     expect(result.kind).toBe('stream')
-    expect(saveMessage).not.toHaveBeenCalled()
     expect(createMessageEvent).not.toHaveBeenCalled()
   })
 

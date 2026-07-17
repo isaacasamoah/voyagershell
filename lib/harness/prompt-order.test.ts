@@ -3,6 +3,7 @@ import type { HarnessHost } from './types'
 
 const streamText = vi.fn()
 const composeSystemPrompt = vi.fn()
+const composeContextFromStream = vi.fn()
 
 const loadRunTurn = async () => {
   vi.resetModules()
@@ -18,7 +19,7 @@ const loadRunTurn = async () => {
     shouldRunEnrichment: vi.fn(),
     runCartographer: vi.fn(),
   }))
-  vi.doMock('@/lib/conversation', () => ({ saveMessage: vi.fn().mockResolvedValue(null) }))
+  vi.doMock('@/lib/conversation', () => ({ composeContextFromStream }))
   vi.doMock('@/lib/conversation/window', () => ({
     computeWindow: vi.fn((messages) => ({ messages, hasMoreHistory: false })),
     getTruncatedMessages: vi.fn(() => []),
@@ -85,6 +86,7 @@ describe('harness prompt cache order', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     streamText.mockReturnValue({ toUIMessageStreamResponse: vi.fn() })
+    composeContextFromStream.mockResolvedValue([])
     composeSystemPrompt.mockResolvedValue({
       staticPrompt: 'STATIC-CONTENT',
       dynamicPrompt: 'DYNAMIC-CONTENT',
@@ -103,6 +105,22 @@ describe('harness prompt cache order', () => {
 
   it('keeps static cached and prepends dynamic context once to the last raw user message', async () => {
     const { runTurn } = await loadRunTurn()
+    composeContextFromStream.mockResolvedValue([
+      {
+        id: 'event-1',
+        conversationId: 'conversation-1',
+        role: 'user',
+        content: 'Earlier question',
+        createdAt: new Date('2026-07-11T00:00:00.000Z'),
+      },
+      {
+        id: 'event-2',
+        conversationId: 'conversation-1',
+        role: 'assistant',
+        content: 'Earlier answer',
+        createdAt: new Date('2026-07-11T00:00:01.000Z'),
+      },
+    ])
     const host: HarnessHost = {
       defer: vi.fn(),
       now: () => new Date('2026-07-11T00:00:00.000Z'),
@@ -113,11 +131,7 @@ describe('harness prompt cache order', () => {
       conversationId: 'conversation-1',
       voyageSlug: null,
       authState: 'authenticated',
-      messages: [
-        { role: 'user', content: 'Earlier question' },
-        { role: 'assistant', content: 'Earlier answer' },
-        { role: 'user', content: 'Current question' },
-      ],
+      newMessage: 'Current question',
       displayName: 'Isaac',
     }, host)
 
@@ -143,11 +157,24 @@ describe('harness prompt cache order', () => {
   })
 })
 
-// Omega P2 (2026-07-11): a window can END on an assistant message (resumed
-// conversations). The <context> block must still land on the LAST USER message
-// (mid-history), exactly once, with cache control on the true last message.
-it('injects context onto the last USER message even when the window ends on an assistant turn', async () => {
+it('injects context onto the appended current user message when stream history ends on an assistant turn', async () => {
   const { runTurn } = await loadRunTurn()
+  composeContextFromStream.mockResolvedValue([
+    {
+      id: 'event-1',
+      conversationId: 'conversation-1',
+      role: 'user',
+      content: 'Earlier question',
+      createdAt: new Date('2026-07-11T00:00:00.000Z'),
+    },
+    {
+      id: 'event-2',
+      conversationId: 'conversation-1',
+      role: 'assistant',
+      content: 'Trailing assistant answer',
+      createdAt: new Date('2026-07-11T00:00:01.000Z'),
+    },
+  ])
   const host: HarnessHost = {
     defer: vi.fn(),
     now: () => new Date('2026-07-11T00:00:00.000Z'),
@@ -159,11 +186,7 @@ it('injects context onto the last USER message even when the window ends on an a
     voyageSlug: null,
     authState: 'authenticated',
     autoSent: false,
-    messages: [
-      { role: 'user', content: 'Earlier question' },
-      { role: 'user', content: 'Current question' },
-      { role: 'assistant', content: 'Trailing assistant answer' },
-    ],
+    newMessage: 'Current question',
     displayName: 'Isaac',
   }, host)
 
@@ -177,8 +200,7 @@ it('injects context onto the last USER message even when the window ends on an a
   const occurrences = messages.filter((m: { content?: string }) =>
     typeof m.content === 'string' && m.content.includes('<context>')).length
   expect(occurrences).toBe(1)
-  // trailing assistant message untouched
-  const last = messages.at(-1) as { role: string; content: string }
-  expect(last.role).toBe('assistant')
-  expect(last.content).toBe('Trailing assistant answer')
+  const streamAssistant = messages[2] as { role: string; content: string }
+  expect(streamAssistant.role).toBe('assistant')
+  expect(streamAssistant.content).toBe('Trailing assistant answer')
 })
