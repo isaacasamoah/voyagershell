@@ -89,15 +89,19 @@ const updateSessionActivity = async (conversationId: string): Promise<void> => {
   if (!UUID_RE.test(conversationId)) return
 
   const timestamp = new Date().toISOString()
-  const { error } = await getAdminSupabase()
-    .from('sessions')
-    .update({
-      last_message_at: timestamp,
-      updated_at: timestamp,
-    })
-    .eq('id', conversationId)
+  try {
+    const { error } = await getAdminSupabase()
+      .from('sessions')
+      .update({
+        last_message_at: timestamp,
+        updated_at: timestamp,
+      })
+      .eq('id', conversationId)
 
-  if (error) {
+    if (error) {
+      console.error('[Knowledge] Failed to update session activity:', error)
+    }
+  } catch (error) {
     console.error('[Knowledge] Failed to update session activity:', error)
   }
 }
