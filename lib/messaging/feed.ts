@@ -188,6 +188,7 @@ export const queryScopedEventsForConversations = async (
     .select('id,event_type,content,created_at,metadata,source_ref,actor_type,user_id,participants,voyage_slug')
     .in('event_type', ['conversation', 'message'])
     .contains('participants', [userId])
+    // createMessageEvent writes metadata.session_id and source_ref.conversation_id together; getFeedEventSessionId still prefers metadata.
     .in('source_ref->>conversation_id', conversationIds)
     .order('created_at', { ascending: false })
     .limit(limit)

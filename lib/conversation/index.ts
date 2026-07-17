@@ -1,5 +1,5 @@
 // Conversation service for Slice 3: Conversation Continuity
-// Manages session lifecycle, message persistence, and conversation resumption
+// Composes conversations from the event stream and manages session lifecycle/resumption
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getClientForContext } from '@/lib/supabase/authenticated'
@@ -8,9 +8,8 @@ import { getFeedEventSessionId, queryScopedEventsForConversations } from '@/lib/
 import type {
   ExtendedSession,
   SessionStatus,
-  MessageRole,
 } from '@/lib/supabase/types'
-import { composeContextFromStream, composeContextRows } from './stream-context'
+import { composeContextFromStream, composeContextRows, type ConversationMessage } from './stream-context'
 
 // Admin client for operations without user context (legacy)
 const getAdminSupabase = () => getAdminClient()
@@ -25,7 +24,8 @@ interface ConversationOptions {
 
 // Re-export types for convenience
 export type { ExtendedSession, SessionStatus, MessageRole } from '@/lib/supabase/types'
-export { composeContextFromStream } from './stream-context'
+export { composeContextFromStream, renderMessagesForModel } from './stream-context'
+export type { ConversationMessage } from './stream-context'
 
 // =============================================================================
 // Conversation Interface Types
@@ -40,17 +40,6 @@ export interface Conversation {
   lastMessageAt: Date
   createdAt: Date
   updatedAt: Date
-}
-
-export interface ConversationMessage {
-  id: string
-  conversationId: string
-  role: MessageRole
-  content: string
-  createdAt: Date
-  authorDisplayName?: string | null
-  authorUserId?: string | null
-  isPrivate?: boolean
 }
 
 export interface ConversationWithMessages extends Conversation {

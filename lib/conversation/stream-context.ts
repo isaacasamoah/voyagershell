@@ -4,7 +4,7 @@ import type { Json, MessageRole } from '@/lib/supabase/types'
 
 type JsonRecord = { [key: string]: Json | undefined }
 
-export interface StreamConversationMessage {
+export interface ConversationMessage {
   id: string
   conversationId: string
   role: MessageRole
@@ -22,11 +22,6 @@ const isObject = (value: Json | null): value is JsonRecord => (
 const getString = (value: JsonRecord, key: string): string | null => {
   const item = value[key]
   return typeof item === 'string' ? item : null
-}
-
-const getBoolean = (value: JsonRecord, key: string): boolean | null => {
-  const item = value[key]
-  return typeof item === 'boolean' ? item : null
 }
 
 const getSourceRole = (row: FeedEventRow): MessageRole => {
@@ -70,7 +65,7 @@ const isPrivateUserTurn = (row: FeedEventRow, userId: string): boolean => (
   && getSourceRole(row) === 'user'
   && row.participants?.includes(userId) === true
   && isObject(row.metadata)
-  && (getString(row.metadata, 'source') === 'aside' || getBoolean(row.metadata, 'private') === true)
+  && getString(row.metadata, 'source') === 'aside'
 )
 
 const getAttributionName = (row: FeedEventRow): string => (
@@ -84,7 +79,7 @@ const mapStreamEventToMessage = (
   row: FeedEventRow,
   userId: string,
   conversationId: string,
-): StreamConversationMessage => {
+): ConversationMessage => {
   const content = row.content ?? ''
   const rowConversationId = getSessionId(row) ?? conversationId
 
@@ -131,7 +126,7 @@ const mapStreamEventToMessage = (
   }
 }
 
-export const renderMessagesForModel = <T extends StreamConversationMessage>(messages: T[]): T[] => (
+export const renderMessagesForModel = <T extends ConversationMessage>(messages: T[]): T[] => (
   messages.map((message) => {
     const content = message.isPrivate
       ? `[PRIVATE]: ${message.content}`
@@ -146,7 +141,7 @@ export const composeContextRows = (
   rows: FeedEventRow[],
   userId: string,
   conversationId: string,
-): StreamConversationMessage[] => (
+): ConversationMessage[] => (
   sortRowsLikeFeed(rows).map((row) => mapStreamEventToMessage(row, userId, conversationId))
 )
 
@@ -155,7 +150,7 @@ export const composeContextFromStream = async (
   conversationId: string,
   voyageSlug: string | null,
   limit = 200,
-): Promise<StreamConversationMessage[]> => {
+): Promise<ConversationMessage[]> => {
   const rows = await queryScopedEvents(userId, conversationId, voyageSlug, limit)
   return composeContextRows(rows, userId, conversationId)
 }
