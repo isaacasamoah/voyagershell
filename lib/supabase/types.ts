@@ -851,7 +851,6 @@ export type KnowledgeClassification =
 // Table row types
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type Session = Database['public']['Tables']['sessions']['Row']
-export type Message = Database['public']['Tables']['messages']['Row']
 export type AgentTask = Database['public']['Tables']['agent_tasks']['Row']
 export type KnowledgeEvent = Database['public']['Tables']['knowledge_events']['Row']
 export type KnowledgeCurrent = Database['public']['Tables']['knowledge_current']['Row']
@@ -861,7 +860,6 @@ export type LearningSignal = Database['public']['Tables']['learning_signals']['R
 export type RetrievalEvent = Database['public']['Tables']['retrieval_events']['Row']
 
 // Insert types
-export type NewMessage = Database['public']['Tables']['messages']['Insert']
 export type NewAgentTask = Database['public']['Tables']['agent_tasks']['Insert']
 
 // Enum types
@@ -871,7 +869,6 @@ export type MessageRole = 'user' | 'assistant' | 'system'
 
 // Session types used by conversation service
 export type ExtendedSession = Session
-export type ResumableSession = Database['public']['Functions']['get_resumable_sessions']['Returns'][number]
 
 // Search result type from search_knowledge RPC
 export type KnowledgeSearchResult = Database['public']['Functions']['search_knowledge']['Returns'][number]
