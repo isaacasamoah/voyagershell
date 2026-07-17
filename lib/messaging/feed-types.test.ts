@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  fromFeedApiEvent,
   mergeFeedEvent,
   shouldShowStreamingReply,
   sortFeedEvents,
+  toFeedApiEvent,
   type FeedEvent,
 } from './feed-types'
 
@@ -10,6 +12,8 @@ const event = (id: string, createdAt: string, patch: Partial<FeedEvent> = {}): F
   id,
   eventType: 'conversation',
   role: 'assistant',
+  kind: 'message',
+  inviteState: null,
   senderDisplayName: 'Voyager',
   senderUserId: null,
   content: id,
@@ -58,6 +62,24 @@ describe('event-stream feed primitives', () => {
     ])
   })
 
+  it('round-trips invite kind + invite state through the API shape', () => {
+    const knock = event('knock', '2026-07-16T02:22:00.000Z', {
+      eventType: 'message',
+      role: 'human',
+      kind: 'invite',
+      inviteState: 'invited',
+      senderDisplayName: 'isaac',
+    })
+
+    const restored = fromFeedApiEvent(toFeedApiEvent(knock))
+    expect(restored.kind).toBe('invite')
+    expect(restored.inviteState).toBe('invited')
+    // A plain message defaults cleanly and never carries an invite state.
+    const plain = fromFeedApiEvent(toFeedApiEvent(event('m', '2026-07-16T02:23:00.000Z')))
+    expect(plain.kind).toBe('message')
+    expect(plain.inviteState).toBeNull()
+  })
+
   it('inserts live events at their createdAt position', () => {
     const current = [
       event('first', '2026-07-09T10:01:00.000Z'),
@@ -68,17 +90,37 @@ describe('event-stream feed primitives', () => {
     expect(next.map((item) => item.id)).toEqual(['first', 'second', 'third'])
   })
 
-  it('shows the streaming reply until its persisted event lands, without duplicating it', () => {
+  it('shows the streaming reply until this turn\'s persisted event lands (count-based)', () => {
+    // One assistant event already in the feed when the reply starts streaming.
+    const olderEvent = event('older', '2026-07-09T10:01:00.000Z')
     const reply = {
       id: 'streaming-assistant',
       content: 'final answer',
       startedAt: '2026-07-09T10:02:00.000Z',
+      settledCount: 1,
     }
-    const olderMatchingEvent = event('older', '2026-07-09T10:01:00.000Z', { content: 'final answer' })
-    const settledEvent = event('settled', '2026-07-09T10:03:00.000Z', { content: 'final answer' })
+    const settledEvent = event('settled', '2026-07-09T10:03:00.000Z')
 
-    expect(shouldShowStreamingReply(reply, [olderMatchingEvent])).toBe(true)
-    expect(shouldShowStreamingReply(reply, [olderMatchingEvent, settledEvent])).toBe(false)
+    expect(shouldShowStreamingReply(reply, [olderEvent])).toBe(true)            // still 1 → show
+    expect(shouldShowStreamingReply(reply, [olderEvent, settledEvent])).toBe(false) // now 2 → dismiss
+  })
+
+  it('dismisses the transient even when stored content differs from the stream (the stuck-at-bottom bug)', () => {
+    // The persisted reply is normalized differently from what streamed — the
+    // old exact-content match would never fire and pin the transient forever.
+    const reply = {
+      id: 'streaming-assistant',
+      content: 'The Sun is ~5,500°C at the surface',
+      startedAt: '2026-07-09T10:02:00.000Z',
+      settledCount: 0,
+    }
+    const persistedDifferently = event('settled', '2026-07-09T10:03:00.000Z', {
+      content: 'The Sun’s temperature depends where you measure: **Surface** ~5,500 °C…',
+    })
+
+    // Count went 0 → 1: the turn settled, so the transient clears regardless of
+    // content or clock skew.
+    expect(shouldShowStreamingReply(reply, [persistedDifferently])).toBe(false)
   })
 })
 
