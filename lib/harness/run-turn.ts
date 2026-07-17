@@ -1,6 +1,7 @@
 import { hasToolCall, stepCountIs, streamText } from 'ai'
 import { reapStuckTasks } from '@/lib/agents/queue'
 import { composeContextFromStream } from '@/lib/conversation'
+import { renderMessagesForModel } from '@/lib/conversation/stream-context'
 import { computeWindow, getTruncatedMessages } from '@/lib/conversation/window'
 import type { ConversationMessage } from '@/lib/conversation'
 import { detectReferenceSignals, retrieveForContinuity } from '@/lib/conversation/continuity'
@@ -36,9 +37,9 @@ export const runTurn = async (
   const streamContext = conversationId
     ? await composeContextFromStream(userId, conversationId, voyageSlug)
     : []
-  const conversationMessages: ConversationMessage[] = [...streamContext]
+  const rawConversationMessages: ConversationMessage[] = [...streamContext]
   if (queryText) {
-    conversationMessages.push({
+    rawConversationMessages.push({
       id: 'in-flight-user-message',
       conversationId: conversationId ?? '',
       role: 'user',
@@ -46,6 +47,7 @@ export const runTurn = async (
       createdAt: host.now(),
     })
   }
+  const conversationMessages: ConversationMessage[] = renderMessagesForModel(rawConversationMessages)
 
   log.message('Processing user message', {
     conversationId,

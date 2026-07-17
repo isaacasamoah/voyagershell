@@ -17,6 +17,7 @@ const deferUserPersistence = (
   host: HarnessHost,
   queryText: string,
   emitConversationEvent: boolean,
+  source?: string,
 ) => {
   if (!conversationId) return
 
@@ -26,6 +27,7 @@ const deferUserPersistence = (
       voyageSlug: voyageSlug ?? undefined,
       participants: [userId],
       eventType: 'conversation',
+      source,
     }).then(() => undefined).catch((error) => {
       console.error('[Knowledge] emitMessageEvent error (non-blocking):', error)
     }))
@@ -88,6 +90,7 @@ export const runRoomTurn = async ({
       host,
       queryText,
       room.roomPeople.length === 0 || voyagerAside,
+      voyagerAside && room.roomPeople.length > 0 ? 'aside' : undefined,
     )
   }
 

@@ -4,6 +4,7 @@ import type { HarnessHost } from './types'
 const streamText = vi.fn()
 const composeSystemPrompt = vi.fn()
 const composeContextFromStream = vi.fn()
+const renderMessagesForModel = vi.fn((messages) => messages)
 
 const loadRunTurn = async () => {
   vi.resetModules()
@@ -20,6 +21,7 @@ const loadRunTurn = async () => {
     runCartographer: vi.fn(),
   }))
   vi.doMock('@/lib/conversation', () => ({ composeContextFromStream }))
+  vi.doMock('@/lib/conversation/stream-context', () => ({ renderMessagesForModel }))
   vi.doMock('@/lib/conversation/window', () => ({
     computeWindow: vi.fn((messages) => ({ messages, hasMoreHistory: false })),
     getTruncatedMessages: vi.fn(() => []),
@@ -87,6 +89,7 @@ describe('harness prompt cache order', () => {
     vi.clearAllMocks()
     streamText.mockReturnValue({ toUIMessageStreamResponse: vi.fn() })
     composeContextFromStream.mockResolvedValue([])
+    renderMessagesForModel.mockImplementation((messages) => messages)
     composeSystemPrompt.mockResolvedValue({
       staticPrompt: 'STATIC-CONTENT',
       dynamicPrompt: 'DYNAMIC-CONTENT',
@@ -155,9 +158,8 @@ describe('harness prompt cache order', () => {
       (message: { content: string }) => message.content.includes('DYNAMIC-CONTENT'),
     )).toHaveLength(1)
   })
-})
 
-it('injects context onto the appended current user message when stream history ends on an assistant turn', async () => {
+  it('injects context onto the appended current user message when stream history ends on an assistant turn', async () => {
   const { runTurn } = await loadRunTurn()
   composeContextFromStream.mockResolvedValue([
     {
@@ -203,4 +205,5 @@ it('injects context onto the appended current user message when stream history e
   const streamAssistant = messages[2] as { role: string; content: string }
   expect(streamAssistant.role).toBe('assistant')
   expect(streamAssistant.content).toBe('Trailing assistant answer')
+  })
 })

@@ -4,12 +4,15 @@ import type { Json, MessageRole } from '@/lib/supabase/types'
 
 type JsonRecord = { [key: string]: Json | undefined }
 
-interface StreamConversationMessage {
+export interface StreamConversationMessage {
   id: string
   conversationId: string
   role: MessageRole
   content: string
   createdAt: Date
+  authorDisplayName?: string | null
+  authorUserId?: string | null
+  isPrivate?: boolean
 }
 
 const isObject = (value: Json | null): value is JsonRecord => (
@@ -19,6 +22,11 @@ const isObject = (value: Json | null): value is JsonRecord => (
 const getString = (value: JsonRecord, key: string): string | null => {
   const item = value[key]
   return typeof item === 'string' ? item : null
+}
+
+const getBoolean = (value: JsonRecord, key: string): boolean | null => {
+  const item = value[key]
+  return typeof item === 'boolean' ? item : null
 }
 
 const getSourceRole = (row: FeedEventRow): MessageRole => {
@@ -60,17 +68,17 @@ const sortRowsLikeFeed = (rows: FeedEventRow[]): FeedEventRow[] => {
 const isPrivateUserTurn = (row: FeedEventRow, userId: string): boolean => (
   row.event_type === 'conversation'
   && getSourceRole(row) === 'user'
-  && row.participants?.length === 1
-  && row.participants[0] === userId
+  && row.participants?.includes(userId) === true
+  && isObject(row.metadata)
+  && (getString(row.metadata, 'source') === 'aside' || getBoolean(row.metadata, 'private') === true)
 )
 
-const attributedContent = (row: FeedEventRow, content: string): string => {
-  const displayName = getSenderDisplayName(row)
+const getAttributionName = (row: FeedEventRow): string => (
+  getSenderDisplayName(row)
     ?? (row.actor_type === 'voyager' ? 'Voyager' : null)
     ?? row.user_id
     ?? 'Someone'
-  return `[${displayName}]: ${content}`
-}
+)
 
 const mapStreamEventToMessage = (
   row: FeedEventRow,
@@ -88,8 +96,10 @@ const mapStreamEventToMessage = (
       id: row.id,
       conversationId: rowConversationId,
       role,
-      content: isPrivateUserTurn(row, userId) ? `[PRIVATE]: ${content}` : content,
+      content,
       createdAt: new Date(row.created_at),
+      authorUserId: row.user_id,
+      isPrivate: isPrivateUserTurn(row, userId),
     }
   }
 
@@ -99,8 +109,11 @@ const mapStreamEventToMessage = (
       id: row.id,
       conversationId: rowConversationId,
       role: ownerIsViewer ? 'assistant' : 'user',
-      content: ownerIsViewer ? content : attributedContent(row, content),
+      content,
       createdAt: new Date(row.created_at),
+      authorDisplayName: ownerIsViewer ? null : getAttributionName(row),
+      authorUserId: row.user_id,
+      isPrivate: false,
     }
   }
 
@@ -110,16 +123,39 @@ const mapStreamEventToMessage = (
     id: row.id,
     conversationId: rowConversationId,
     role: 'user',
-    content: authoredByViewer ? content : attributedContent(row, content),
+    content,
     createdAt: new Date(row.created_at),
+    authorDisplayName: authoredByViewer ? null : getAttributionName(row),
+    authorUserId: senderUserId,
+    isPrivate: false,
   }
 }
+
+export const renderMessagesForModel = <T extends StreamConversationMessage>(messages: T[]): T[] => (
+  messages.map((message) => {
+    const content = message.isPrivate
+      ? `[PRIVATE]: ${message.content}`
+      : message.authorDisplayName
+        ? `[${message.authorDisplayName}]: ${message.content}`
+        : message.content
+    return { ...message, content }
+  })
+)
+
+export const composeContextRows = (
+  rows: FeedEventRow[],
+  userId: string,
+  conversationId: string,
+): StreamConversationMessage[] => (
+  sortRowsLikeFeed(rows).map((row) => mapStreamEventToMessage(row, userId, conversationId))
+)
 
 export const composeContextFromStream = async (
   userId: string,
   conversationId: string,
   voyageSlug: string | null,
+  limit = 200,
 ): Promise<StreamConversationMessage[]> => {
-  const rows = await queryScopedEvents(userId, conversationId, voyageSlug)
-  return sortRowsLikeFeed(rows).map((row) => mapStreamEventToMessage(row, userId, conversationId))
+  const rows = await queryScopedEvents(userId, conversationId, voyageSlug, limit)
+  return composeContextRows(rows, userId, conversationId)
 }

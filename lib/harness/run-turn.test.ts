@@ -4,6 +4,7 @@ import type { HarnessHost, TurnContext } from './types'
 const streamText = vi.fn()
 const reapStuckTasks = vi.fn()
 const composeContextFromStream = vi.fn()
+const renderMessagesForModel = vi.fn((messages) => messages)
 const createMessageEvent = vi.fn()
 const fanOutDeliveries = vi.fn()
 const deliverRoomInvite = vi.fn()
@@ -40,6 +41,7 @@ const loadRunTurn = async () => {
     runCartographer: vi.fn(),
   }))
   vi.doMock('@/lib/conversation', () => ({ composeContextFromStream }))
+  vi.doMock('@/lib/conversation/stream-context', () => ({ renderMessagesForModel }))
   vi.doMock('@/lib/conversation/window', () => ({
     computeWindow: vi.fn((messages) => ({ messages, hasMoreHistory: false })),
     getTruncatedMessages: vi.fn(() => []),
@@ -129,6 +131,7 @@ describe('runTurn', () => {
     streamText.mockReturnValue(streamResult)
     reapStuckTasks.mockResolvedValue(undefined)
     composeContextFromStream.mockResolvedValue([])
+    renderMessagesForModel.mockImplementation((messages) => messages)
     createMessageEvent.mockResolvedValue('event-1')
     fanOutDeliveries.mockResolvedValue(undefined)
     getRoom.mockResolvedValue({ roomPeople: [], aiPresent: true })
@@ -247,7 +250,7 @@ describe('runTurn', () => {
       'conversation-1',
       'user',
       'help me think',
-      expect.objectContaining({ eventType: 'conversation' }),
+      expect.objectContaining({ eventType: 'conversation', source: 'aside' }),
     )
   })
 
