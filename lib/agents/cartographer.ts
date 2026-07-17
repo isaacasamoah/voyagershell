@@ -143,7 +143,7 @@ const buildEnrichmentWindow = async (
   voyageSlug?: string,
 ): Promise<string> => {
   // Load session history from the same scoped stream that feeds turn context.
-  const allMessages = await composeContextFromStream(userId, sessionId, voyageSlug ?? null)
+  const allMessages = await composeContextFromStream(userId, sessionId, voyageSlug ?? null, 500)
   if (allMessages.length === 0) return ''
 
   // Find the index of the first message at or after oldest unenriched event

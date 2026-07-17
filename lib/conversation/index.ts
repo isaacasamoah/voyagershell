@@ -4,12 +4,13 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getClientForContext } from '@/lib/supabase/authenticated'
 import { getVoyageBySlug, resolveSessionVoyage } from '@/lib/voyage'
+import { getFeedEventSessionId, queryScopedEventsForConversations } from '@/lib/messaging/feed'
 import type {
   ExtendedSession,
   SessionStatus,
   MessageRole,
 } from '@/lib/supabase/types'
-import { composeContextFromStream } from './stream-context'
+import { composeContextFromStream, composeContextRows } from './stream-context'
 
 // Admin client for operations without user context (legacy)
 const getAdminSupabase = () => getAdminClient()
@@ -23,7 +24,7 @@ interface ConversationOptions {
 }
 
 // Re-export types for convenience
-export type { ExtendedSession, ResumableSession, SessionStatus, MessageRole } from '@/lib/supabase/types'
+export type { ExtendedSession, SessionStatus, MessageRole } from '@/lib/supabase/types'
 export { composeContextFromStream } from './stream-context'
 
 // =============================================================================
@@ -47,6 +48,9 @@ export interface ConversationMessage {
   role: MessageRole
   content: string
   createdAt: Date
+  authorDisplayName?: string | null
+  authorUserId?: string | null
+  isPrivate?: boolean
 }
 
 export interface ConversationWithMessages extends Conversation {
@@ -72,8 +76,8 @@ const transformSession = (row: ExtendedSession): Conversation => ({
   userId: row.user_id,
   title: row.title,
   status: row.status,
-  messageCount: row.message_count ?? 0,
-  lastMessageAt: new Date(row.last_message_at ?? row.created_at ?? Date.now()),
+  messageCount: 0,
+  lastMessageAt: new Date(row.created_at ?? Date.now()),
   createdAt: new Date(row.created_at ?? Date.now()),
   updatedAt: new Date(row.updated_at ?? Date.now()),
 })
@@ -253,10 +257,7 @@ export const getResumableConversations = async (
         id,
         title,
         status,
-        message_count,
-        last_message_at,
-        created_at,
-        updated_at
+        created_at
       `)
       .eq('user_id', userId)
       .in('status', ['active', 'historical'])
@@ -286,27 +287,41 @@ export const getResumableConversations = async (
       id: string
       title: string | null
       status: SessionStatus
-      message_count: number | null
-      last_message_at: string | null
       created_at: string
-      updated_at: string | null
     }
 
-    const conversations = (await Promise.all((data as SessionRow[]).map(async (row) => {
-      const messages: ConversationMessage[] = await composeContextFromStream(userId, row.id, voyageSlug ?? null)
+    const sessionRows = data as SessionRow[]
+    const sessionIds = sessionRows.map((row) => row.id)
+    const eventRows = await queryScopedEventsForConversations(userId, sessionIds, voyageSlug ?? null)
+    const eventRowsBySession = new Map<string, typeof eventRows>()
+    eventRows.forEach((row) => {
+      const sessionId = getFeedEventSessionId(row)
+      if (!sessionId) return
+      const rows = eventRowsBySession.get(sessionId) ?? []
+      rows.push(row)
+      eventRowsBySession.set(sessionId, rows)
+    })
+
+    const conversations = sessionRows.map((row): ResumableConversation | null => {
+      const messages: ConversationMessage[] = composeContextRows(
+        eventRowsBySession.get(row.id) ?? [],
+        userId,
+        row.id,
+      )
       const firstMessage = messages[0]
       const lastMessage = messages.at(-1)
+      if (!lastMessage) return null
       return {
         id: row.id,
         title: row.title,
         status: row.status,
         messageCount: messages.length,
-        lastMessageAt: lastMessage?.createdAt ?? new Date(row.last_message_at ?? row.created_at),
+        lastMessageAt: lastMessage.createdAt,
         createdAt: new Date(row.created_at),
-        preview: firstMessage?.content?.slice(0, 100) ?? null,
+        preview: firstMessage ? firstMessage.content.slice(0, 100) : null,
       }
-    })))
-      .filter((row) => row.messageCount > 0)
+    })
+      .filter((row): row is ResumableConversation => row !== null)
       .sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime())
       .slice(0, limit)
 
