@@ -25,6 +25,7 @@ interface ConversationOptions {
 
 // Re-export types for convenience
 export type { ExtendedSession, ResumableSession, SessionStatus, MessageRole }
+export { composeContextFromStream } from './stream-context'
 
 // =============================================================================
 // Conversation Interface Types
@@ -465,4 +466,3 @@ export const resumeConversation = async (
 // =============================================================================
 // Utility Functions
 // =============================================================================
-
