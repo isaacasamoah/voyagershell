@@ -124,7 +124,12 @@ export const runTurn = async (
       queryText,
       truncatedMessages,
       {
-        userId,
+        // Cross-session continuity searches the BRAIN user's past conversations —
+        // Isaac's Wren recalls Isaac's history, never the summoner's. Anchoring on
+        // the summoner would inject THEIR private "[From previous conversations]"
+        // into the owner's publicly-fanned reply (the same §6.5 leak the prompt
+        // composition below closes). Self-summon: brainUserId === userId, unchanged.
+        userId: brainUserId,
         voyageSlug: voyageSlug ?? undefined,
         conversationId: conversationId ?? '',
       },
@@ -161,6 +166,13 @@ export const runTurn = async (
   const roomResult = await runRoomTurn({ ctx, host, queryText, address })
   if (roomResult) return roomResult
 
+  // In-turn tools stay bound to the SUMMONER (userId), NOT the brain owner — a
+  // cross-owner summon must never let a bystander's words drive WRITES (add to
+  // room, set display name, actions) against the owner's account. Read tools
+  // therefore read the summoner's own data; the reply's grounding (persona,
+  // knowledge, continuity) is the owner's. Whether a summoned voyager should act
+  // on the owner's account at all is a deferred design question (owner-summon
+  // toggle, out of scope) — left summoner-scoped as the safe default.
   const { tools, registrations } = createVoyagerTools({
     userId,
     voyageSlug: voyageSlug ?? undefined,
@@ -181,8 +193,14 @@ export const runTurn = async (
     // is an addressing fallback, not a name — provenance is decided in the data
     // layer, so `summonedVoyagerName` is already null when unnamed.
     const voyagerName = summonedVoyagerName ?? undefined
-    const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(userId, {
-      profile: { id: userId, displayName },
+    // Compose the prompt on the BRAIN user — a cross-owner summon runs Isaac's
+    // Wren on ISAAC's persona + curated knowledge + retrieval, never the
+    // summoner's. Anchoring on `userId` here would ground a publicly-fanned reply
+    // in the SUMMONER's private "What I Know About You" while attributing it to
+    // the owner — leaking the summoner's data under someone else's name. The
+    // model + context already resolve on brainUserId; identity must too (C2).
+    const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(brainUserId, {
+      profile: { id: brainUserId, displayName: isCrossOwnerSummon ? summon.voyagerOwnerName : displayName },
       voyageSlug: voyageSlug ?? undefined,
       sessionId: conversationId,
       continuityContext,

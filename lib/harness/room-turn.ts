@@ -156,9 +156,8 @@ export const runRoomTurn = async ({
   // handle); a mid-sentence mention or plain chatter is NOT addressed. An
   // explicit summon proceeds on the OWNER's terms — naming a voyager aloud
   // overrides the ambient `+voyager out` toggle, exactly as a knock does.
-  const isSummon = address.mode === 'summon'
-  const addressed = isAside || isSummon
-  if (room.roomPeople.length > 0 && !isAside && !isSummon && (!addressed || room.aiPresent === false)) {
+  const addressed = isAside || address.mode === 'summon'
+  if (room.roomPeople.length > 0 && !addressed) {
     return { kind: 'empty' }
   }
 

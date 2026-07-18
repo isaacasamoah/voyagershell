@@ -143,6 +143,27 @@ describe('cut ④ · RISKIEST claim — owner-anchored attribution, verified on 
     expect(msg.authorDisplayName).toBe('Wren')
   })
 
+  it("an UNNAMED voyager's fan-out still attributes as [Voyager] — never bare text", () => {
+    // BUG-2 regression. A voyager its owner hasn't named yet arrives as
+    // voyagerName='' upstream (finishTurn coerces the nullable name). The plan
+    // must persist NO sender_display_name — undefined, not '' — so stream-context's
+    // `?? 'Voyager'` fallback fires. A persisted '' is not nullish, so it would
+    // survive the coalesce, strip the attribution, and a bystander would ingest
+    // the voyager's words as their OWN turn (the §6.5 inversion, unnamed path).
+    const unnamed = planPublicReply({
+      ...wrenInput,
+      voyagerName: '',
+      mode: 'summon',
+      summonerUserId: ELISHEYA,
+      activeMemberIds: [ISAAC, ELISHEYA, NOMAD],
+    })
+    expect(unnamed.senderDisplayName).toBeUndefined()
+    expect(unnamed.ownerDisplayName).toBeUndefined() // no owner line without a name
+    const [msg] = composeContextRows([rowFromPlan(unnamed, 'The budget looks tight.')], NOMAD, CONV)
+    expect(msg.role).toBe('user')
+    expect(msg.authorDisplayName).toBe('Voyager') // attributed, NOT '' / bare text
+  })
+
   it('CONTROL — persisting the same reply as a conversation event WOULD invert it', () => {
     // Documents WHY the plan uses event_type='message' + user_id=owner. A
     // 'conversation' assistant row maps to role=assistant for EVERY viewer, so a

@@ -97,8 +97,14 @@ export const planPublicReply = (input: PublicReplyInput): PublicReplyPlan => {
     userId: voyagerOwnerUserId,
     participants: [voyagerOwnerUserId, ...recipients], // = all active members
     recipients,
-    senderDisplayName: voyagerName,
-    ownerDisplayName: voyagerOwnerName,
+    // An UNNAMED voyager (voyagerName === '') must persist NO sender_display_name,
+    // not an empty string: stream-context's `getSenderDisplayName(row) ?? 'Voyager'`
+    // fallback only fires on null/undefined, so a persisted '' would strip the
+    // `[Voyager]:` attribution and read back as the reader's OWN words (the §6.5
+    // inversion). Undefined lets the fallback attribute it; render then shows the
+    // flat "VOYAGER" with no owner line, exactly as a solo reply does.
+    senderDisplayName: voyagerName || undefined,
+    ownerDisplayName: voyagerName ? voyagerOwnerName : undefined,
     source: 'room',
   }
 }
