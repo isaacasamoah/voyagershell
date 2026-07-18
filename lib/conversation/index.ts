@@ -1,16 +1,15 @@
 // Conversation service for Slice 3: Conversation Continuity
-// Manages session lifecycle, message persistence, and conversation resumption
+// Composes conversations from the event stream and manages session lifecycle/resumption
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getClientForContext } from '@/lib/supabase/authenticated'
-import { getVoyageBySlug } from '@/lib/voyage'
+import { getVoyageBySlug, resolveSessionVoyage } from '@/lib/voyage'
+import { getFeedEventSessionId, queryScopedEventsForConversations } from '@/lib/messaging/feed'
 import type {
-  Message,
   ExtendedSession,
-  ResumableSession,
   SessionStatus,
-  MessageRole,
 } from '@/lib/supabase/types'
+import { composeContextFromStream, composeContextRows, type ConversationMessage } from './stream-context'
 
 // Admin client for operations without user context (legacy)
 const getAdminSupabase = () => getAdminClient()
@@ -24,7 +23,9 @@ interface ConversationOptions {
 }
 
 // Re-export types for convenience
-export type { ExtendedSession, ResumableSession, SessionStatus, MessageRole }
+export type { ExtendedSession, SessionStatus, MessageRole } from '@/lib/supabase/types'
+export { composeContextFromStream, renderMessagesForModel } from './stream-context'
+export type { ConversationMessage } from './stream-context'
 
 // =============================================================================
 // Conversation Interface Types
@@ -39,14 +40,6 @@ export interface Conversation {
   lastMessageAt: Date
   createdAt: Date
   updatedAt: Date
-}
-
-export interface ConversationMessage {
-  id: string
-  conversationId: string
-  role: MessageRole
-  content: string
-  createdAt: Date
 }
 
 export interface ConversationWithMessages extends Conversation {
@@ -72,29 +65,28 @@ const transformSession = (row: ExtendedSession): Conversation => ({
   userId: row.user_id,
   title: row.title,
   status: row.status,
-  messageCount: row.message_count ?? 0,
-  lastMessageAt: new Date(row.last_message_at ?? row.created_at ?? Date.now()),
+  messageCount: 0,
+  lastMessageAt: new Date(row.created_at ?? Date.now()),
   createdAt: new Date(row.created_at ?? Date.now()),
   updatedAt: new Date(row.updated_at ?? Date.now()),
 })
 
-const transformMessage = (row: Message): ConversationMessage => ({
-  id: row.id,
-  conversationId: row.session_id ?? '',
-  role: row.role as MessageRole,
-  content: row.content,
-  createdAt: new Date(row.created_at ?? Date.now()),
-})
+const loadConversationFromStream = async (
+  session: ExtendedSession,
+  userId: string,
+  voyageSlug: string | null,
+): Promise<ConversationWithMessages> => {
+  const conversation = transformSession(session)
+  const messages: ConversationMessage[] = await composeContextFromStream(userId, session.id, voyageSlug)
+  const lastMessage = messages.at(-1)
 
-const transformResumable = (row: ResumableSession): ResumableConversation => ({
-  id: row.id,
-  title: row.title,
-  status: row.status,
-  messageCount: row.message_count,
-  lastMessageAt: new Date(row.last_message_at),
-  createdAt: new Date(row.created_at),
-  preview: row.preview,
-})
+  return {
+    ...conversation,
+    messageCount: messages.length,
+    lastMessageAt: lastMessage?.createdAt ?? conversation.lastMessageAt,
+    messages,
+  }
+}
 
 // =============================================================================
 // Core Functions
@@ -171,108 +163,17 @@ export const getOrCreateActiveConversation = async (
 
     console.log('[Conversation] Active session ID:', session.id)
 
-    // Fetch messages for this session
-    
-    const { data: messages, error: messagesError } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('session_id', session.id)
-      .order('created_at', { ascending: true })
-
-    if (messagesError) {
-      console.error('[Conversation] Messages fetch error:', messagesError)
-      return null
-    }
-
-    const conversation = transformSession(session)
-    const conversationMessages = (messages as Message[]).map(transformMessage)
+    const conversation = await loadConversationFromStream(session, userId, voyageSlug ?? null)
 
     console.log(
       '[Conversation] Loaded conversation with',
-      conversationMessages.length,
+      conversation.messages.length,
       'messages'
     )
 
-    return {
-      ...conversation,
-      messages: conversationMessages,
-    }
+    return conversation
   } catch (error) {
     console.error('[Conversation] getOrCreateActiveConversation error:', error)
-    return null
-  }
-}
-
-/**
- * Load messages for a conversation.
- * Returns messages ordered by creation time (oldest first).
- */
-export const loadConversationMessages = async (
-  conversationId: string,
-  limit = 100
-): Promise<ConversationMessage[]> => {
-  const supabase = getAdminSupabase()
-  console.log('[Conversation] Loading messages for:', conversationId, 'limit:', limit)
-
-  try {
-    
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('session_id', conversationId)
-      .order('created_at', { ascending: true })
-      .limit(limit)
-
-    if (error) {
-      console.error('[Conversation] loadConversationMessages error:', error)
-      return []
-    }
-
-    const messages = (data as Message[]).map(transformMessage)
-    console.log('[Conversation] Loaded', messages.length, 'messages')
-
-    return messages
-  } catch (error) {
-    console.error('[Conversation] loadConversationMessages error:', error)
-    return []
-  }
-}
-
-/**
- * Save a message to a conversation.
- * The database trigger will auto-update session metadata.
- */
-export const saveMessage = async (
-  conversationId: string,
-  role: MessageRole,
-  content: string
-): Promise<ConversationMessage | null> => {
-  const supabase = getAdminSupabase()
-  console.log('[Conversation] Saving message to:', conversationId, 'role:', role)
-
-  try {
-    
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({
-        session_id: conversationId,
-        role,
-        content,
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('[Conversation] saveMessage error:', error)
-      return null
-    }
-
-    const message = transformMessage(data as Message)
-    console.log('[Conversation] Message saved:', message.id)
-
-    return message
-  } catch (error) {
-    console.error('[Conversation] saveMessage error:', error)
     return null
   }
 }
@@ -337,6 +238,7 @@ export const getResumableConversations = async (
     }
 
     // Query sessions directly with voyage filtering
+    const fetchLimit = Math.min(Math.max(limit * 5, limit), 100)
     
     let query = supabase
       .from('sessions')
@@ -344,16 +246,12 @@ export const getResumableConversations = async (
         id,
         title,
         status,
-        message_count,
-        last_message_at,
-        created_at,
-        messages!inner (content)
+        created_at
       `)
       .eq('user_id', userId)
       .in('status', ['active', 'historical'])
-      .gte('message_count', 1)
       .order('last_message_at', { ascending: false })
-      .limit(limit)
+      .limit(fetchLimit)
 
     if (voyageId) {
       query = query.eq('voyage_id', voyageId)
@@ -374,25 +272,47 @@ export const getResumableConversations = async (
     }
 
     // Transform results - extract first message as preview
-    interface SessionWithMessages {
+    interface SessionRow {
       id: string
       title: string | null
       status: SessionStatus
-      message_count: number
-      last_message_at: string
       created_at: string
-      messages: { content: string }[]
     }
 
-    const conversations = (data as SessionWithMessages[]).map((row) => ({
-      id: row.id,
-      title: row.title,
-      status: row.status,
-      messageCount: row.message_count,
-      lastMessageAt: new Date(row.last_message_at),
-      createdAt: new Date(row.created_at),
-      preview: row.messages?.[0]?.content?.slice(0, 100) ?? null,
-    }))
+    const sessionRows = data as SessionRow[]
+    const sessionIds = sessionRows.map((row) => row.id)
+    const eventRows = await queryScopedEventsForConversations(userId, sessionIds, voyageSlug ?? null)
+    const eventRowsBySession = new Map<string, typeof eventRows>()
+    eventRows.forEach((row) => {
+      const sessionId = getFeedEventSessionId(row)
+      if (!sessionId) return
+      const rows = eventRowsBySession.get(sessionId) ?? []
+      rows.push(row)
+      eventRowsBySession.set(sessionId, rows)
+    })
+
+    const conversations = sessionRows.map((row): ResumableConversation | null => {
+      const messages: ConversationMessage[] = composeContextRows(
+        eventRowsBySession.get(row.id) ?? [],
+        userId,
+        row.id,
+      )
+      const firstMessage = messages[0]
+      const lastMessage = messages.at(-1)
+      if (!lastMessage) return null
+      return {
+        id: row.id,
+        title: row.title,
+        status: row.status,
+        messageCount: messages.length,
+        lastMessageAt: lastMessage.createdAt,
+        createdAt: new Date(row.created_at),
+        preview: firstMessage ? firstMessage.content.slice(0, 100) : null,
+      }
+    })
+      .filter((row): row is ResumableConversation => row !== null)
+      .sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime())
+      .slice(0, limit)
 
     console.log('[Conversation] Found', conversations.length, 'resumable conversations')
 
@@ -435,7 +355,7 @@ export const resumeConversation = async (
       return null
     }
 
-    // Fetch updated session and messages after atomic transition
+    // Fetch updated session after atomic transition
 
     const { data: updatedSession, error: fetchError } = await supabase
       .from('sessions')
@@ -448,14 +368,10 @@ export const resumeConversation = async (
       return null
     }
 
-    const messages = await loadConversationMessages(conversationId)
-
     console.log('[Conversation] Conversation resumed successfully')
 
-    return {
-      ...transformSession(updatedSession as ExtendedSession),
-      messages,
-    }
+    const resumedVoyageSlug = await resolveSessionVoyage(conversationId, userId)
+    return await loadConversationFromStream(updatedSession as ExtendedSession, userId, resumedVoyageSlug)
   } catch (error) {
     console.error('[Conversation] resumeConversation error:', error)
     return null
@@ -465,4 +381,3 @@ export const resumeConversation = async (
 // =============================================================================
 // Utility Functions
 // =============================================================================
-

@@ -83,6 +83,29 @@ const toVectorString = (embedding: number[]): string => {
   return `[${embedding.join(',')}]`
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const updateSessionActivity = async (conversationId: string): Promise<void> => {
+  if (!UUID_RE.test(conversationId)) return
+
+  const timestamp = new Date().toISOString()
+  try {
+    const { error } = await getAdminSupabase()
+      .from('sessions')
+      .update({
+        last_message_at: timestamp,
+        updated_at: timestamp,
+      })
+      .eq('id', conversationId)
+
+    if (error) {
+      console.error('[Knowledge] Failed to update session activity:', error)
+    }
+  } catch (error) {
+    console.error('[Knowledge] Failed to update session activity:', error)
+  }
+}
+
 // =============================================================================
 // Source Event Creation
 // =============================================================================
@@ -181,7 +204,7 @@ export const createSourceEvent = async (params: CreateSourceEventParams): Promis
 
 /**
  * Create a message source event.
- * Called after a message is saved to the conversation.
+ * Persists a conversation-scoped source event.
  *
  * FIRE-AND-FORGET — should never block the chat response.
  */
@@ -229,6 +252,10 @@ export const createMessageEvent = async (
     },
     actorType: role === 'user' ? 'user' : 'voyager',
   })
+
+  if (eventId && (eventType === 'conversation' || eventType === 'message')) {
+    await updateSessionActivity(conversationId)
+  }
 
   // V6: Post-INSERT enrichment for attention_score + context_snippet
   // Same dual-write pattern as embeddings: INSERT (trigger) then UPDATE (enrichment)

@@ -1,4 +1,3 @@
-import { saveMessage } from '@/lib/conversation'
 import { createMessageEvent } from '@/lib/knowledge'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { deliverRoomInvite, inviteToRoom } from '@/lib/messaging/invites'
@@ -18,13 +17,9 @@ const deferUserPersistence = (
   host: HarnessHost,
   queryText: string,
   emitConversationEvent: boolean,
+  source?: string,
 ) => {
   if (!conversationId) return
-
-  host.defer(saveMessage(conversationId, 'user', queryText).catch((error) => {
-    console.error('[Chat] Failed to save user message:', error)
-    return null
-  }))
 
   if (emitConversationEvent) {
     host.defer(createMessageEvent(conversationId, 'user', queryText, {
@@ -32,6 +27,7 @@ const deferUserPersistence = (
       voyageSlug: voyageSlug ?? undefined,
       participants: [userId],
       eventType: 'conversation',
+      source,
     }).then(() => undefined).catch((error) => {
       console.error('[Knowledge] emitMessageEvent error (non-blocking):', error)
     }))
@@ -94,6 +90,7 @@ export const runRoomTurn = async ({
       host,
       queryText,
       room.roomPeople.length === 0 || voyagerAside,
+      voyagerAside && room.roomPeople.length > 0 ? 'aside' : undefined,
     )
   }
 

@@ -1,18 +1,13 @@
 import type { StreamTextResult, ToolSet } from 'ai'
 import type { AuthState } from '@/lib/prompts'
 
-export interface SimpleMessage {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-}
-
 export interface TurnContext {
   userId: string
   conversationId?: string
   voyageSlug: string | null
   authState?: AuthState
   autoSent?: boolean
-  messages: SimpleMessage[]
+  newMessage: string
   displayName?: string
 }
 

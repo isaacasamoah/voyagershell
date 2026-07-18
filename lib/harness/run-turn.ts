@@ -1,5 +1,7 @@
 import { hasToolCall, stepCountIs, streamText } from 'ai'
 import { reapStuckTasks } from '@/lib/agents/queue'
+import { composeContextFromStream } from '@/lib/conversation'
+import { renderMessagesForModel } from '@/lib/conversation/stream-context'
 import { computeWindow, getTruncatedMessages } from '@/lib/conversation/window'
 import type { ConversationMessage } from '@/lib/conversation'
 import { detectReferenceSignals, retrieveForContinuity } from '@/lib/conversation/continuity'
@@ -24,30 +26,36 @@ export const runTurn = async (
   ctx: TurnContext,
   host: HarnessHost,
 ): Promise<TurnResult> => {
-  const { userId, conversationId, voyageSlug, authState, messages, displayName } = ctx
-  const lastUserMessage = messages.filter((message) => message.role === 'user').pop()
-  const rawQuery = lastUserMessage?.content ?? ''
+  const { userId, conversationId, voyageSlug, authState, newMessage, displayName } = ctx
+  const rawQuery = newMessage
   const voyagerAside = isVoyagerAside(rawQuery)
   const queryText = voyagerAside ? stripVoyagerAside(rawQuery) : rawQuery
-  if (voyagerAside && lastUserMessage) lastUserMessage.content = queryText
 
   const intent = detectActionIntent(queryText)
   host.defer(reapStuckTasks().catch(() => {}))
 
+  const streamContext = conversationId
+    ? await composeContextFromStream(userId, conversationId, voyageSlug)
+    : []
+  const rawConversationMessages: ConversationMessage[] = [...streamContext]
+  if (queryText) {
+    rawConversationMessages.push({
+      id: 'in-flight-user-message',
+      conversationId: conversationId ?? '',
+      role: 'user',
+      content: queryText,
+      createdAt: host.now(),
+    })
+  }
+  const conversationMessages: ConversationMessage[] = renderMessagesForModel(rawConversationMessages)
+
   log.message('Processing user message', {
     conversationId,
     voyageSlug,
-    messageCount: messages.length,
+    messageCount: conversationMessages.length,
     queryLength: queryText.length,
   })
 
-  const conversationMessages: ConversationMessage[] = messages.map((message, index) => ({
-    id: `msg-${index}`,
-    conversationId: conversationId ?? '',
-    role: message.role as 'user' | 'assistant',
-    content: message.content,
-    createdAt: host.now(),
-  }))
   const windowResult = computeWindow(conversationMessages)
   const truncatedMessages = getTruncatedMessages(conversationMessages, windowResult)
   const referenceSignals = queryText ? detectReferenceSignals(queryText) : []
@@ -87,7 +95,8 @@ export const runTurn = async (
     }
   }
 
-  const windowedMessages = windowResult.messages.map((message) => ({
+  const { messages: selectedWindowMessages } = windowResult
+  const windowedMessages = selectedWindowMessages.map((message) => ({
     role: message.role,
     content: message.content,
   }))
@@ -167,7 +176,7 @@ export const runTurn = async (
   // Keep the cacheable system prefix first and place per-turn context at the
   // front of the last user message, leaving the raw user text after it.
   const lastUserIndex = windowedMessages.findLastIndex((message) => message.role === 'user')
-  const messagesWithCache = windowedMessages.map((message, index) => ({
+  const cachedPromptItems = windowedMessages.map((message, index) => ({
     ...message,
     ...(dynamicSuffix && index === lastUserIndex
       ? { content: `<context>\n${dynamicSuffix}\n</context>\n\n${message.content}` }
@@ -187,7 +196,7 @@ export const runTurn = async (
   )
   const result = streamText({
     model: chatModel,
-    messages: [staticSystemMessage, ...dynamicSystemMessages, ...messagesWithCache],
+    messages: [staticSystemMessage, ...dynamicSystemMessages, ...cachedPromptItems],
     tools,
     maxOutputTokens: 4096,
     stopWhen: [stepCountIs(15), hasToolCall('spawn_background_agent')],

@@ -1,6 +1,5 @@
 import type { StreamTextOnFinishCallback, ToolSet } from 'ai'
 import { runCartographer, shouldRunEnrichment } from '@/lib/agents/cartographer'
-import { saveMessage } from '@/lib/conversation'
 import { createMessageEvent, type KnowledgeNode } from '@/lib/knowledge'
 import { creditTracker, modelRouter } from '@/lib/models'
 import { logCitations } from '@/lib/retrieval'
@@ -77,7 +76,6 @@ export const finishTurn = async (
 
   if (conversationId && text) {
     try {
-      await saveMessage(conversationId, 'assistant', text)
       await createMessageEvent(conversationId, 'assistant', text, {
         userId,
         voyageSlug: voyageSlug ?? undefined,
@@ -94,7 +92,7 @@ export const finishTurn = async (
         }))
       }
     } catch (error) {
-      console.error('[Chat] Failed to save assistant message:', error)
+      console.error('[Chat] Failed to persist assistant event:', error)
     }
   }
 }
