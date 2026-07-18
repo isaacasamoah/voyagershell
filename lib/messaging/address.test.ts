@@ -113,6 +113,46 @@ describe('resolveAddress — footguns (substring / common-word / case / unicode)
   })
 })
 
+describe('resolveAddress — trailing punctuation glued to the handle stays PRIVATE', () => {
+  // The confidentiality edge: `@wren.actually secret` greedily tokenises to
+  // `wren.actually`, which is no handle. It must NOT downgrade to a published
+  // `plain` (the aside would fan out to the room) — the separator-boundary
+  // prefix `wren` is the own handle, so it stays an aside.
+  it('@own with a glued trailing dot → aside (not a published plain)', () => {
+    const r = resolveAddress('@wren.actually keep this between us', isaac)
+    expect(r.mode).toBe('aside')
+    expect(r.mode).not.toBe('plain')
+    expect(r.stripped).toBe('actually keep this between us')
+  })
+
+  it('@own with a glued trailing hyphen / ellipsis-dots → aside', () => {
+    expect(resolveAddress('@wren-hmm one sec', isaac).mode).toBe('aside')
+    expect(resolveAddress('@wren... thinking', isaac).mode).toBe('aside')
+  })
+
+  it('the composer still shows a private-aside badge for the glued form', () => {
+    // The confidentiality guarantee is that it badges as a private aside at all
+    // (the badge reflects the typed token by design — C5).
+    expect(composerAsideBadge('@wren.actually psst', isaac)).not.toBeNull()
+  })
+
+  it('leading own-handle with glued punctuation still summons', () => {
+    expect(resolveAddress('wren. what next?', isaac).mode).toBe('summon')
+  })
+
+  it("@another's-voyager with glued punctuation still REDIRECTS, never aside", () => {
+    // Elisheya @-ing Isaac's Wren with trailing punctuation must not become an
+    // aside for her — C1 holds for every separator-boundary candidate.
+    const r = resolveAddress('@wren.please advise', elisheya)
+    expect(r.mode).toBe('redirect')
+    expect(r.mode).not.toBe('aside')
+  })
+
+  it('substring guard survives: "@wrench" (no separator) is still plain', () => {
+    expect(resolveAddress('@wrench pass it', isaac).mode).toBe('plain')
+  })
+})
+
 describe('resolveAddress — C3: legacy `voyager` survives only as an alias for your own', () => {
   it('@voyager → aside to own (same result as @wren for the owner)', () => {
     const viaAlias = resolveAddress('@voyager help', isaac)

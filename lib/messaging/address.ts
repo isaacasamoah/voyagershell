@@ -48,6 +48,34 @@ const readHandleToken = (s: string): string | null => {
   return match ? match[0].toLowerCase() : null
 }
 
+// Handle candidates from a greedy token, longest first: the whole token, then
+// each prefix cut at a `.`/`-`/`_` separator boundary. `wren.actually` →
+// ['wren.actually', 'wren']; `wren.voyager` → ['wren.voyager', 'wren'].
+//
+// This rescues an own-aside whose handle has trailing punctuation glued to it
+// with no space — `@wren.actually secret` — where the greedy token isn't a
+// handle but its separator-terminated prefix `wren` is. Without it the aside
+// silently downgrades to a published `plain` and fans out to the room: an
+// intended private whisper made public (a confidentiality regression on C1/C5).
+//
+// Only SEPARATOR-terminated prefixes are tried, so the `wrench` ≠ `wren`
+// substring guard stays intact — `wrench` has no separator, so no shorter
+// prefix is ever considered. Every candidate is still checked through the
+// same isOwn / otherVoyager gates below, so C1 holds by construction: a
+// candidate can only ever open an aside for the SPEAKER'S OWN handle.
+const handleCandidates = (token: string): string[] => {
+  const out = [token]
+  const sep = /[._-]/g
+  const cuts: number[] = []
+  let m: RegExpExecArray | null
+  while ((m = sep.exec(token)) !== null) cuts.push(m.index)
+  for (let i = cuts.length - 1; i >= 0; i--) {
+    const prefix = token.slice(0, cuts[i])
+    if (prefix) out.push(prefix)
+  }
+  return out
+}
+
 const stripLeading = (text: string, consumed: number): string =>
   text.slice(consumed).replace(LEADING_SEP, '').trim()
 
@@ -75,19 +103,26 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
     const token = readHandleToken(text.slice(1))
     if (!token) return { mode: 'plain', stripped: text }
 
-    if (isOwn(token)) {
-      // Aside to your own voyager — the whisper. Only you ever see it.
-      return { mode: 'aside', stripped: stripLeading(text, 1 + token.length) }
-    }
-    const other = otherVoyager(token)
-    if (other) {
-      // `@` another person's voyager NEVER opens a private channel — the whole
-      // point of C1. Redirect, keep the text intact for public fall-through.
-      return {
-        mode: 'redirect',
-        targetHandle: token,
-        targetOwnerName: other.ownerName,
-        stripped: text,
+    // Longest known handle first: a full-token match (own or another's) wins
+    // over a shorter separator-boundary prefix, so an explicit `@other.voyager`
+    // still redirects rather than aside-matching a `@other` prefix.
+    for (const cand of handleCandidates(token)) {
+      if (isOwn(cand)) {
+        // Aside to your own voyager — the whisper. Only you ever see it. The
+        // aside carries no targetHandle: it ALWAYS routes to the speaker's own
+        // voyager, so `@voyager` and `@wren` stay identical results (C3).
+        return { mode: 'aside', stripped: stripLeading(text, 1 + cand.length) }
+      }
+      const other = otherVoyager(cand)
+      if (other) {
+        // `@` another person's voyager NEVER opens a private channel — the whole
+        // point of C1. Redirect, keep the text intact for public fall-through.
+        return {
+          mode: 'redirect',
+          targetHandle: cand,
+          targetOwnerName: other.ownerName,
+          stripped: text,
+        }
       }
     }
     // `@human` or unknown `@token` — not an aside. Plain passthrough.
@@ -98,20 +133,22 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
   const greetLen = GREETING.exec(text)?.[0].length ?? 0
   const token = readHandleToken(text.slice(greetLen))
   if (token) {
-    if (isOwn(token)) {
-      return {
-        mode: 'summon',
-        targetHandle: token,
-        stripped: stripLeading(text, greetLen + token.length),
+    for (const cand of handleCandidates(token)) {
+      if (isOwn(cand)) {
+        return {
+          mode: 'summon',
+          targetHandle: cand,
+          stripped: stripLeading(text, greetLen + cand.length),
+        }
       }
-    }
-    const other = otherVoyager(token)
-    if (other) {
-      return {
-        mode: 'summon',
-        targetHandle: token,
-        targetOwnerName: other.ownerName,
-        stripped: stripLeading(text, greetLen + token.length),
+      const other = otherVoyager(cand)
+      if (other) {
+        return {
+          mode: 'summon',
+          targetHandle: cand,
+          targetOwnerName: other.ownerName,
+          stripped: stripLeading(text, greetLen + cand.length),
+        }
       }
     }
   }
