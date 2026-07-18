@@ -530,7 +530,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
     if (!lastUser) return null;
     const content = getMessageText(lastUser);
-    if (!shouldShowOptimisticUser(content, feedEvents)) return null;
+    if (!shouldShowOptimisticUser(content, feedEvents, ownVoyagerHandle)) return null;
     return <UserMessage key={`optimistic-${lastUser.id}`} content={content} timestamp="LIVE" username="you" />;
   };
 

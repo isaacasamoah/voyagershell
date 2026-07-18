@@ -116,14 +116,14 @@ export const shouldShowStreamingReply = (
 // never render as an optimistic user turn either.
 const WELCOME_RE = /^good (morning|afternoon|evening)\b/i
 
-// `@voyager …` asides are persisted STRIPPED by the server (runTurn removes the
+// `@<handle> …` asides are persisted STRIPPED by the server (runTurn removes the
 // prefix via resolveAddress before saving). The client must compare the same
 // shape, or the optimistic message never settles and the composer wedges into
 // queue mode. ONE source for the strip — the SAME resolver the server uses, so
-// the classification can never drift. `ownHandle` lets a named `@wren` aside
-// strip too; the default carries the `voyager` alias for the common case.
-export const isVoyagerAside = (text: string, ownHandle = ''): boolean =>
-  resolveAddress(text, { ownVoyagerHandle: ownHandle, ownVoyagerAliases: ['voyager'] }).mode === 'aside'
+// the classification can never drift. `ownHandle` is the caller's own voyager
+// handle (claimed name or derived default); without it a named `@wren` aside
+// would strip nothing client-side while the server stripped it — the wedge. The
+// `voyager` alias still carries the common `@voyager` case even when '' is passed.
 export const stripVoyagerAside = (text: string, ownHandle = ''): string => {
   const result = resolveAddress(text, { ownVoyagerHandle: ownHandle, ownVoyagerAliases: ['voyager'] })
   return result.mode === 'aside' ? result.stripped : text.trim()
@@ -131,11 +131,16 @@ export const stripVoyagerAside = (text: string, ownHandle = ''): string => {
 
 // Show a just-sent user message as an optimistic transient until its own
 // 'conversation' event lands in the feed (avoids the send→round-trip vanish),
-// excluding the hidden welcome. Compares aside-stripped content on both sides
-// so a settled `@voyager …` turn releases its optimistic twin.
+// excluding the hidden welcome. Compares aside-stripped content on both sides —
+// against the caller's OWN handle — so a settled `@wren …` aside releases its
+// optimistic twin instead of wedging the composer.
 // (Interim until the HarnessEvent turn-done signal — the seam owns the real close.)
-export const shouldShowOptimisticUser = (content: string, events: FeedEvent[]): boolean => {
-  const normalized = stripVoyagerAside(content)
+export const shouldShowOptimisticUser = (
+  content: string,
+  events: FeedEvent[],
+  ownHandle = '',
+): boolean => {
+  const normalized = stripVoyagerAside(content, ownHandle)
   if (!normalized || WELCOME_RE.test(normalized)) return false
-  return !events.some((e) => e.role === 'user' && stripVoyagerAside(e.content) === normalized)
+  return !events.some((e) => e.role === 'user' && stripVoyagerAside(e.content, ownHandle) === normalized)
 }

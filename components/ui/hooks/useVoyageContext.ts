@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { log } from '@/lib/debug'
+import { pickOwnVoyagerHandle } from '@/lib/messaging/address'
 import { createClient } from '@/lib/supabase/client'
 import type { VoyageMembership } from '@/lib/types'
 
@@ -74,15 +75,22 @@ export const useVoyageContext = ({
     let cancelled = false
     const supabase = createClient()
     void (async () => {
+      let username: string | null = null
       try {
-        const { data } = await supabase.from('profiles').select('display_name').maybeSingle()
-        if (!cancelled) setDisplayName((data as { display_name: string | null } | null)?.display_name ?? null)
+        const { data } = await supabase.from('profiles').select('display_name, username').maybeSingle()
+        const profile = data as { display_name: string | null; username: string | null } | null
+        username = profile?.username ?? null
+        if (!cancelled) setDisplayName(profile?.display_name ?? null)
       } catch {
         if (!cancelled) setDisplayName(null)
       }
       try {
         const { data } = await supabase.from('handles').select('handle').eq('kind', 'voyager').maybeSingle()
-        if (!cancelled) setOwnVoyagerHandle((data as { handle: string } | null)?.handle ?? '')
+        const rowHandle = (data as { handle: string } | null)?.handle ?? null
+        // Derive the own handle through the SAME pure rule the server uses, so the
+        // composer badge and the optimistic settle see the handle the reply gate
+        // stripped — a derived `<username>.voyager` default included, not just ''.
+        if (!cancelled) setOwnVoyagerHandle(pickOwnVoyagerHandle(rowHandle, username))
       } catch {
         if (!cancelled) setOwnVoyagerHandle('')
       }
