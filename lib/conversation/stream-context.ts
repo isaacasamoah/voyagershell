@@ -58,6 +58,7 @@ const sortRowsLikeFeed = (rows: FeedEventRow[]): FeedEventRow[] => {
     createdAt: row.created_at,
     seen: true,
     deliveryId: null,
+    isAside: false, // sort-only projection; the value is discarded (mapped back to rows)
   }))).map((event) => byId.get(event.id)!)
 }
 

@@ -99,6 +99,9 @@ describe('cut ④ · aside/solo stay PRIVATE — no fan-out (regression guard)',
     expect(plan.participants).toEqual([ISAAC])
     expect(plan.recipients).toEqual([])
     expect(plan.senderDisplayName).toBeUndefined() // stays the flat "Voyager"
+    // ORU-449 POC — the reply to an aside is itself marked private, so the feed
+    // can give BOTH the whisper AND its reply the "private to you" treatment.
+    expect(plan.source).toBe('aside')
   })
 
   it('a solo turn (no other members) is not fanned even on a summon', () => {
@@ -110,6 +113,20 @@ describe('cut ④ · aside/solo stay PRIVATE — no fan-out (regression guard)',
     })
     expect(plan.fanOut).toBe(false)
     expect(plan.participants).toEqual([ISAAC])
+    // ORU-449 POC — a solo ('summon' with no audience → private) reply carries NO
+    // aside marker: only a real `@handle` aside gets the private treatment.
+    expect(plan.source).toBeUndefined()
+  })
+
+  it('ORU-449 POC — a plain solo reply carries no aside marker', () => {
+    const plan = planPublicReply({
+      ...wrenInput,
+      mode: 'plain',
+      summonerUserId: ISAAC,
+      activeMemberIds: [ISAAC],
+    })
+    expect(plan.fanOut).toBe(false)
+    expect(plan.source).toBeUndefined()
   })
 })
 

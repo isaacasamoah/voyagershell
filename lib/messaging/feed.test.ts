@@ -58,6 +58,39 @@ describe('delivered Voyager messages in the event feed', () => {
   })
 })
 
+// ── ORU-449 POC — a private aside is projected isAside:true (both halves) ─────
+const asideRow = (role: 'user' | 'assistant'): FeedEventRow => ({
+  id: `aside-${role}`,
+  event_type: 'conversation',
+  content: role === 'user' ? 'how do I say this gently?' : 'Try leading with the win.',
+  created_at: '2026-07-18T10:00:00.000Z',
+  metadata: { session_id: 'conv-solo', source: 'aside' },
+  source_ref: { conversation_id: 'conv-solo', role },
+  actor_type: role === 'assistant' ? 'voyager' : 'user',
+  user_id: 'user-1',
+  participants: ['user-1'], // never fanned — the whisper stays with the asker
+  voyage_slug: null,
+})
+
+describe('ORU-449 POC — a private aside carries isAside so render marks it "private to you"', () => {
+  it('the @handle whisper (role user) projects isAside:true', () => {
+    const [event] = toFeedEvents([asideRow('user')], [], 'user-1')
+    expect(event.role).toBe('user')
+    expect(event.isAside).toBe(true)
+  })
+
+  it('the reply to the aside (role assistant) ALSO projects isAside:true', () => {
+    const [event] = toFeedEvents([asideRow('assistant')], [], 'user-1')
+    expect(event.role).toBe('assistant')
+    expect(event.isAside).toBe(true) // the gap this POC closes — the reply was unmarked
+  })
+
+  it('an ordinary message is NOT an aside (no source marker)', () => {
+    const [event] = toFeedEvents([voyagerMessage('launch')], [], 'user-1')
+    expect(event.isAside).toBe(false)
+  })
+})
+
 // ── cut ④ — attributed render (WREN ✦) + owner-authored seen ─────────────────
 const fannedWrenReply = (viewerIsOwner: boolean): FeedEventRow => ({
   id: 'evt-wren-public',

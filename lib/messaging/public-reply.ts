@@ -87,6 +87,13 @@ export const planPublicReply = (input: PublicReplyInput): PublicReplyPlan => {
       userId: voyagerOwnerUserId, // self-summon: owner === summoner; aside is own-only
       participants: [summonerUserId],
       recipients: [],
+      // A reply to an `@handle` aside is itself private — mark it so the feed can
+      // give BOTH the whisper and its reply the "private to you" treatment. The
+      // whisper already persists source:'aside' (room-turn.ts); without this the
+      // reply landed as an unmarked `conversation` event, indistinguishable from a
+      // solo reply, so half the aside read like an ordinary room line. A solo
+      // ('plain') reply carries no aside marker.
+      source: mode === 'aside' ? 'aside' : undefined,
     }
   }
 
