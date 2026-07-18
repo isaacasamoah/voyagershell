@@ -511,6 +511,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           content={event.content}
           timestamp={timestamp}
           username="you"
+          isAside={event.isAside}
         />
       );
     }
@@ -522,6 +523,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         timestamp={timestamp}
         voyagerName={event.senderDisplayName}
         ownerName={event.ownerName}
+        isAside={event.isAside}
       />
     );
   };
