@@ -1,0 +1,128 @@
+// The addressing grammar — the ONE code-attested resolver for how an utterance
+// addresses a Voyager. This is the trust boundary from Principle 1: an `@`-aside
+// can ONLY ever reach the speaker's OWN voyager, and that fact is COMPUTED here,
+// never model-guessed (the rule the invite bug violated).
+//
+// Pure + isomorphic: no DB, no server imports. The client (composer badge) and
+// the server (reply gate) both resolve through this same function, so the
+// privacy classification can never drift between what you see and what happens.
+//
+// Generalizes what shipped as two literal-`voyager` sites: the `@voyager` aside
+// (feed-types.isVoyagerAside) and the leading-`voyager` summon regex
+// (room-turn). `voyager` survives only as an alias for "your own".
+
+export type AddressMode = 'aside' | 'summon' | 'redirect' | 'plain'
+
+// A voyager handle visible to the speaker in the current room. `isOwn` is the
+// trust boundary — the ONLY thing that authorizes a private aside.
+export interface VoyagerHandle {
+  handle: string     // normalized, e.g. 'wren' or 'isaac.voyager'
+  ownerName: string  // owner's display name, for the redirect line
+  isOwn: boolean
+}
+
+export interface AddressContext {
+  // The speaker's own voyager handle (claimed name or derived `<username>.voyager`).
+  // Empty string when the user has no username yet — the `voyager` alias still carries it.
+  ownVoyagerHandle: string
+  ownVoyagerAliases?: string[]         // legacy aliases for your own voyager, e.g. ['voyager']
+  roomVoyagerHandles?: VoyagerHandle[] // every voyager handle in the room, own included
+}
+
+export interface AddressResult {
+  mode: AddressMode
+  targetHandle?: string      // summon / redirect target
+  targetOwnerName?: string   // redirect line: "Wren is <ownerName>'s…"
+  stripped: string           // message with the leading address token removed
+}
+
+// Greedy handle-token read: consumes the WHOLE leading run of handle chars, so
+// `wrench` never matches `wren` — the substring footgun dies at tokenization,
+// not at a fragile per-handle regex. Returns the lowercased token, or null.
+const HANDLE_TOKEN = /^[a-z0-9_.-]+/i
+const GREETING = /^(hey|hi|ok|okay)\s+/i
+const LEADING_SEP = /^[\s,:;!.?…—-]+/
+
+const readHandleToken = (s: string): string | null => {
+  const match = HANDLE_TOKEN.exec(s)
+  return match ? match[0].toLowerCase() : null
+}
+
+const stripLeading = (text: string, consumed: number): string =>
+  text.slice(consumed).replace(LEADING_SEP, '').trim()
+
+const normalize = (s: string): string => s.trim().toLowerCase()
+
+export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult => {
+  const text = raw.trim()
+
+  const ownSet = new Set(
+    [ctx.ownVoyagerHandle, ...(ctx.ownVoyagerAliases ?? [])]
+      .map(normalize)
+      .filter((h) => h.length > 0),
+  )
+  const roomVoyagers = new Map(
+    (ctx.roomVoyagerHandles ?? []).map((v) => [normalize(v.handle), v]),
+  )
+  const isOwn = (handle: string): boolean => ownSet.has(handle)
+  const otherVoyager = (handle: string): VoyagerHandle | undefined => {
+    const v = roomVoyagers.get(handle)
+    return v && !v.isOwn ? v : undefined
+  }
+
+  // ── `@handle …` — the private-aside path ──────────────────────────────────
+  if (text.startsWith('@')) {
+    const token = readHandleToken(text.slice(1))
+    if (!token) return { mode: 'plain', stripped: text }
+
+    if (isOwn(token)) {
+      // Aside to your own voyager — the whisper. Only you ever see it.
+      return { mode: 'aside', stripped: stripLeading(text, 1 + token.length) }
+    }
+    const other = otherVoyager(token)
+    if (other) {
+      // `@` another person's voyager NEVER opens a private channel — the whole
+      // point of C1. Redirect, keep the text intact for public fall-through.
+      return {
+        mode: 'redirect',
+        targetHandle: token,
+        targetOwnerName: other.ownerName,
+        stripped: text,
+      }
+    }
+    // `@human` or unknown `@token` — not an aside. Plain passthrough.
+    return { mode: 'plain', stripped: text }
+  }
+
+  // ── `<handle>, …` — the public-summon path (leading name, vocative) ────────
+  const greetLen = GREETING.exec(text)?.[0].length ?? 0
+  const token = readHandleToken(text.slice(greetLen))
+  if (token) {
+    if (isOwn(token)) {
+      return {
+        mode: 'summon',
+        targetHandle: token,
+        stripped: stripLeading(text, greetLen + token.length),
+      }
+    }
+    const other = otherVoyager(token)
+    if (other) {
+      return {
+        mode: 'summon',
+        targetHandle: token,
+        targetOwnerName: other.ownerName,
+        stripped: stripLeading(text, greetLen + token.length),
+      }
+    }
+  }
+
+  // Mid-sentence mentions, plain chatter, and unregistered leading words all
+  // land here — NOT a summon.
+  return { mode: 'plain', stripped: text }
+}
+
+// A voyager's default handle until its owner names it: `<username>.voyager`.
+// One derivation, shared by the migration backfill and the runtime lookup so
+// the default can never drift between the two.
+export const deriveVoyagerHandle = (username: string): string =>
+  `${username.trim().toLowerCase()}.voyager`
