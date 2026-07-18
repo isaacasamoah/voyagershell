@@ -18,6 +18,10 @@ export const useVoyageContext = ({
   const [voyageResolved, setVoyageResolved] = useState(false)
   const [voyages, setVoyages] = useState<VoyageMembership[]>([])
   const [displayName, setDisplayName] = useState<string | null>(null)
+  // The user's OWN voyager handle — powers the composer badge. RLS scopes the
+  // read to the caller's own row; '' when unnamed (the `voyager` alias carries
+  // the badge regardless).
+  const [ownVoyagerHandle, setOwnVoyagerHandle] = useState<string>('')
 
   const fetchVoyages = useCallback(async () => {
     try {
@@ -64,6 +68,7 @@ export const useVoyageContext = ({
   useEffect(() => {
     if (!isAuthenticated || isAuthLoading) {
       setDisplayName(null)
+      setOwnVoyagerHandle('')
       return
     }
     let cancelled = false
@@ -74,6 +79,12 @@ export const useVoyageContext = ({
         if (!cancelled) setDisplayName((data as { display_name: string | null } | null)?.display_name ?? null)
       } catch {
         if (!cancelled) setDisplayName(null)
+      }
+      try {
+        const { data } = await supabase.from('handles').select('handle').eq('kind', 'voyager').maybeSingle()
+        if (!cancelled) setOwnVoyagerHandle((data as { handle: string } | null)?.handle ?? '')
+      } catch {
+        if (!cancelled) setOwnVoyagerHandle('')
       }
     })()
     return () => { cancelled = true }
@@ -94,6 +105,7 @@ export const useVoyageContext = ({
     setCurrentVoyage,
     voyages,
     displayName,
+    ownVoyagerHandle,
     refetchVoyages,
   }
 }

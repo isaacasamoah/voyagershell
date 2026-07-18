@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveVoyagerHandle, resolveAddress, type AddressContext } from './address'
+import { composerAsideBadge, deriveVoyagerHandle, resolveAddress, type AddressContext } from './address'
 
 // Isaac owns Wren; Elisheya is in the room and owns Hermes.
 const isaac: AddressContext = {
@@ -131,5 +131,24 @@ describe('deriveVoyagerHandle — C2: default handle derivation', () => {
   it('derives `<username>.voyager`, lowercased', () => {
     expect(deriveVoyagerHandle('isaac')).toBe('isaac.voyager')
     expect(deriveVoyagerHandle('Elisheya')).toBe('elisheya.voyager')
+  })
+})
+
+describe('composerAsideBadge — C5: the @-inversion mitigation', () => {
+  it('typing @own → "→ private aside to <Name>"', () => {
+    expect(composerAsideBadge('@wren how do I', isaac)).toBe('→ private aside to Wren')
+  })
+
+  it('the @voyager alias badges too, capitalised', () => {
+    expect(composerAsideBadge('@voyager think with me', isaac)).toBe('→ private aside to Voyager')
+  })
+
+  it("typing @another-person's-voyager → NO private-aside badge (redirect, not aside)", () => {
+    expect(composerAsideBadge('@hermes hi', isaac)).toBeNull()
+  })
+
+  it('plain text and mid-sentence mentions → no badge', () => {
+    expect(composerAsideBadge('ask wren later', isaac)).toBeNull()
+    expect(composerAsideBadge('wren, summon', isaac)).toBeNull()
   })
 })

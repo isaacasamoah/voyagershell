@@ -126,3 +126,16 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
 // the default can never drift between the two.
 export const deriveVoyagerHandle = (username: string): string =>
   `${username.trim().toLowerCase()}.voyager`
+
+// The composer badge — the @-inversion mitigation (C5). Typing `@<own-handle>`
+// surfaces "→ private aside to <Name>" at composition time, so the deliberately
+// inverted convention (`@` = private whisper, not public mention) is visible
+// BEFORE you send. Derived from the SAME resolver, so what you see can never
+// drift from what the server does. Returns null when the text is not an
+// own-aside (a mention of another's voyager shows NO private-aside badge).
+export const composerAsideBadge = (raw: string, ctx: AddressContext): string | null => {
+  if (resolveAddress(raw, ctx).mode !== 'aside') return null
+  const token = readHandleToken(raw.trim().slice(1))
+  const name = token ? token.charAt(0).toUpperCase() + token.slice(1) : 'your Voyager'
+  return `→ private aside to ${name}`
+}
