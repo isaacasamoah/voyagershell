@@ -222,9 +222,12 @@ export const getKnowledgeByIds = async (eventIds: string[], userId?: string): Pr
       .select('event_id, content, source_created_at, classifications, entities, topics, knowledge_type, attention_score, context_snippet, sender_display_name, sender_user_id, event_type')
       .in('event_id', eventIds)
 
-    // Participant filter: only return nodes the user can access
+    // Participant filter: only return nodes the user can access.
+    // A NULL participants array is NOT globally visible — it is author-only
+    // (visible solely to the row's user_id). A non-NULL array is visible to
+    // anyone it contains. (ORU-450: previously NULL was treated as public.)
     if (userId) {
-      query = query.or(`participants.is.null,participants.cs.{${userId}}`)
+      query = query.or(`and(participants.is.null,user_id.eq.${userId}),participants.cs.{${userId}}`)
     }
 
     const { data, error } = await query
