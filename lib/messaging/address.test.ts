@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { composerAsideBadge, deriveVoyagerHandle, resolveAddress, type AddressContext } from './address'
+import {
+  composerAsideBadge,
+  deriveVoyagerHandle,
+  pickOwnVoyagerHandle,
+  resolveAddress,
+  voyagerCustomName,
+  type AddressContext,
+} from './address'
 
 // Isaac owns Wren; Elisheya is in the room and owns Hermes.
 const isaac: AddressContext = {
@@ -150,5 +157,43 @@ describe('composerAsideBadge — C5: the @-inversion mitigation', () => {
   it('plain text and mid-sentence mentions → no badge', () => {
     expect(composerAsideBadge('ask wren later', isaac)).toBeNull()
     expect(composerAsideBadge('wren, summon', isaac)).toBeNull()
+  })
+})
+
+describe('pickOwnVoyagerHandle — a claimed row wins, else the derived default', () => {
+  it('returns a claimed voyager name over the derived default', () => {
+    expect(pickOwnVoyagerHandle('wren', 'isaac')).toBe('wren')
+  })
+
+  it('falls back to <username>.voyager when the voyager is unnamed', () => {
+    expect(pickOwnVoyagerHandle(null, 'isaac')).toBe('isaac.voyager')
+  })
+
+  it('lowercases a claimed handle so it can never drift from the index', () => {
+    expect(pickOwnVoyagerHandle('Wren', 'isaac')).toBe('wren')
+  })
+
+  it('returns empty when the user has no username yet', () => {
+    expect(pickOwnVoyagerHandle(null, null)).toBe('')
+  })
+})
+
+describe('voyagerCustomName — provenance by value, not by suffix', () => {
+  it('recognises an ordinary custom name', () => {
+    expect(voyagerCustomName('wren', 'isaac')).toBe('wren')
+  })
+
+  it('treats the derived default as NOT a custom name', () => {
+    expect(voyagerCustomName('isaac.voyager', 'isaac')).toBeNull()
+  })
+
+  // The bug the `.endsWith('.voyager')` heuristic caused: a legally-claimed name
+  // that happens to end in `.voyager` was suppressed from the prompt identity.
+  it('recognises a custom name that ends in .voyager (the suffix-heuristic bug)', () => {
+    expect(voyagerCustomName('nova.voyager', 'alice')).toBe('nova.voyager')
+  })
+
+  it('is null for an unnamed voyager (no row)', () => {
+    expect(voyagerCustomName(null, 'isaac')).toBeNull()
   })
 })

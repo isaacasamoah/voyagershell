@@ -5,7 +5,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug'
 import { normalizeUsername } from '@/lib/voyage/username'
-import { deriveVoyagerHandle, type VoyagerHandle } from './address'
+import { pickOwnVoyagerHandle, voyagerCustomName, type VoyagerHandle } from './address'
 
 export type HandleKind = 'human' | 'voyager'
 
@@ -26,18 +26,6 @@ interface MemberProfileRow {
 
 const from = (table: string) =>
   (getAdminClient() as unknown as { from: (t: string) => any }).from(table)
-
-// ── Pure selection: a claimed row wins, else the derived default, else '' ─────
-// deriveVoyagerHandle() is the twin of the migration's `|| '.voyager'` backfill,
-// so the default handle can never drift between backfill and runtime.
-export const pickOwnVoyagerHandle = (
-  rowHandle: string | null | undefined,
-  username: string | null | undefined,
-): string => {
-  if (rowHandle) return rowHandle.trim().toLowerCase()
-  if (username) return deriveVoyagerHandle(username)
-  return ''
-}
 
 // ── Pure assembly: member ids + fetched rows → the room's VoyagerHandle set ───
 // isOwn is the trust boundary — true ONLY for the caller's own voyager.
@@ -63,17 +51,31 @@ export const toRoomVoyagerHandles = (
   return out
 }
 
-// The caller's own voyager handle: claimed name, else derived `<username>.voyager`,
-// else '' (no username yet — the `voyager` alias still carries the aside).
-export const getOwnVoyagerHandle = async (userId: string): Promise<string> => {
-  const [{ data: row }, { data: profile }] = await Promise.all([
+// The caller's own voyager identity: the addressing `handle` (claimed name, else
+// derived `<username>.voyager`, else '') plus the custom `name` for the prompt.
+//
+// A CUSTOM name is a claimed row whose handle DIFFERS from the derived default —
+// provenance by value, not by suffix, so a user who names their voyager
+// `nova.voyager` (username `alice`, derived `alice.voyager`) is still recognised
+// as named. The old `.endsWith('.voyager')` heuristic suppressed exactly that.
+//
+// Fails CLOSED on a handles-read error: it must never INVENT a derived handle
+// from an errored read (that would silently reclassify an aside). A null row
+// with NO error is a genuinely unnamed voyager, which legitimately derives.
+export const getOwnVoyagerIdentity = async (
+  userId: string,
+): Promise<{ handle: string; name: string | null }> => {
+  const [{ data: row, error: rowError }, { data: profile }] = await Promise.all([
     from('handles').select('handle').eq('owner_user_id', userId).eq('kind', 'voyager').maybeSingle(),
     from('profiles').select('username').eq('id', userId).maybeSingle(),
   ])
-  return pickOwnVoyagerHandle(
-    (row as { handle: string } | null)?.handle,
-    (profile as { username: string | null } | null)?.username,
-  )
+  if (rowError) return { handle: '', name: null }
+  const rowHandle = (row as { handle: string } | null)?.handle ?? null
+  const username = (profile as { username: string | null } | null)?.username ?? null
+  return {
+    handle: pickOwnVoyagerHandle(rowHandle, username),
+    name: voyagerCustomName(rowHandle, username),
+  }
 }
 
 // Every room member's voyager handle, own included, each isOwn-tagged for the

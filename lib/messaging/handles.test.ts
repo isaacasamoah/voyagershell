@@ -1,23 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pickOwnVoyagerHandle, renameVoyagerHandle, toRoomVoyagerHandles } from './handles'
-
-describe('pickOwnVoyagerHandle — a claimed row wins, else the derived default', () => {
-  it('returns a claimed voyager name over the derived default', () => {
-    expect(pickOwnVoyagerHandle('wren', 'isaac')).toBe('wren')
-  })
-
-  it('falls back to <username>.voyager when the voyager is unnamed', () => {
-    expect(pickOwnVoyagerHandle(null, 'isaac')).toBe('isaac.voyager')
-  })
-
-  it('lowercases a claimed handle so it can never drift from the index', () => {
-    expect(pickOwnVoyagerHandle('Wren', 'isaac')).toBe('wren')
-  })
-
-  it('returns empty when the user has no username yet', () => {
-    expect(pickOwnVoyagerHandle(null, null)).toBe('')
-  })
-})
+import { renameVoyagerHandle, toRoomVoyagerHandles } from './handles'
 
 describe('toRoomVoyagerHandles — isOwn is true ONLY for the caller', () => {
   const caller = 'user-isaac'

@@ -8,8 +8,8 @@
 // privacy classification can never drift between what you see and what happens.
 //
 // Generalizes what shipped as two literal-`voyager` sites: the `@voyager` aside
-// (feed-types.isVoyagerAside) and the leading-`voyager` summon regex
-// (room-turn). `voyager` survives only as an alias for "your own".
+// (feed-types) and the leading-`voyager` summon regex (room-turn). `voyager`
+// survives only as an alias for "your own".
 
 export type AddressMode = 'aside' | 'summon' | 'redirect' | 'plain'
 
@@ -126,6 +126,32 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
 // the default can never drift between the two.
 export const deriveVoyagerHandle = (username: string): string =>
   `${username.trim().toLowerCase()}.voyager`
+
+// The caller's own voyager handle from its raw parts: a claimed row wins, else
+// the derived default, else ''. Pure and isomorphic — it lives HERE (not in the
+// server-only handles data layer) so the client composer + optimistic settle
+// resolve the OWN handle through the exact same rule the server does, and the
+// classification can never drift between what you see and what happens.
+export const pickOwnVoyagerHandle = (
+  rowHandle: string | null | undefined,
+  username: string | null | undefined,
+): string => {
+  if (rowHandle) return rowHandle.trim().toLowerCase()
+  if (username) return deriveVoyagerHandle(username)
+  return ''
+}
+
+// A voyager's CUSTOM name (for the prompt identity) vs its derived default.
+// Provenance by VALUE: a claimed row whose handle differs from `<username>.voyager`
+// is a real name — so `nova.voyager` named by user `alice` counts, which a
+// `.endsWith('.voyager')` suffix test wrongly suppressed. '' / derived → null.
+export const voyagerCustomName = (
+  rowHandle: string | null | undefined,
+  username: string | null | undefined,
+): string | null => {
+  const derived = username ? deriveVoyagerHandle(username) : null
+  return rowHandle && rowHandle !== derived ? rowHandle : null
+}
 
 // The composer badge — the @-inversion mitigation (C5). Typing `@<own-handle>`
 // surfaces "→ private aside to <Name>" at composition time, so the deliberately

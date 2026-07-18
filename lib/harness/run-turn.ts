@@ -10,7 +10,7 @@ import { type KnowledgeNode } from '@/lib/knowledge'
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals'
 import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room'
 import { resolveAddress } from '@/lib/messaging/address'
-import { getOwnVoyagerHandle, listRoomVoyagerHandles } from '@/lib/messaging/handles'
+import { getOwnVoyagerIdentity, listRoomVoyagerHandles } from '@/lib/messaging/handles'
 import { resolveUserModelWithMeta } from '@/lib/models'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
 import {
@@ -33,10 +33,11 @@ export const runTurn = async (
   // Resolve the address ONCE, server-side, from the real handle set — the same
   // pure resolver the composer badge uses (Principle 1: privacy is computed,
   // never model-guessed). `voyager` survives only as an alias for your own.
-  const [ownVoyagerHandle, roomVoyagerHandles] = await Promise.all([
-    getOwnVoyagerHandle(userId),
+  const [ownIdentity, roomVoyagerHandles] = await Promise.all([
+    getOwnVoyagerIdentity(userId),
     conversationId ? listRoomVoyagerHandles(conversationId, userId) : Promise.resolve([]),
   ])
+  const ownVoyagerHandle = ownIdentity.handle
   const address = resolveAddress(rawQuery, {
     ownVoyagerHandle,
     ownVoyagerAliases: ['voyager'],
@@ -135,9 +136,9 @@ export const runTurn = async (
   try {
     // The Voyager knows its own name only when custom-claimed — the derived
     // default (`<username>.voyager`) is an addressing fallback, not a name.
-    const voyagerName = ownVoyagerHandle && !ownVoyagerHandle.endsWith('.voyager')
-      ? ownVoyagerHandle
-      : undefined
+    // Provenance is decided in the data layer (claimed handle ≠ derived default),
+    // never re-inferred here from the handle's shape.
+    const voyagerName = ownIdentity.name ?? undefined
     const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(userId, {
       profile: { id: userId, displayName },
       voyageSlug: voyageSlug ?? undefined,
