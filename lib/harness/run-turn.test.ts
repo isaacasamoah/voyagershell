@@ -166,6 +166,19 @@ describe('runTurn', () => {
     })
   })
 
+  // cut ④ loop guard (the hard rule): a turn may begin ONLY on human-authored
+  // input. A synthetic voyager-originated turn — the shape a future realtime→turn
+  // bridge would produce — must be refused before any model call, so two named
+  // Voyagers can never answer each other unbidden.
+  it('refuses a voyager-originated turn (loop guard) — no model call, returns empty', async () => {
+    const { runTurn } = await loadRunTurn()
+    const result = await runTurn(context({ originatorActorType: 'voyager' }), stubHost().host)
+
+    expect(result).toEqual({ kind: 'empty' })
+    expect(streamText).not.toHaveBeenCalled()
+    expect(createMessageEvent).not.toHaveBeenCalled()
+  })
+
   it('runs a solo turn headlessly and defers user event emission', async () => {
     const { runTurn } = await loadRunTurn()
     const { host, deferred } = stubHost()

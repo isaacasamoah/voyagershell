@@ -26,6 +26,12 @@ export interface TurnContext {
   autoSent?: boolean
   newMessage: string
   displayName?: string
+  // cut ④ loop guard: the actor_type of the input that OPENED this turn. A turn
+  // may begin ONLY on human-authored input ('user'); an actor=voyager event must
+  // NEVER trigger another Voyager's turn. Defaults to 'user' (the human POST is
+  // the only caller today) — a future realtime→turn bridge that forwards a
+  // voyager event must set this honestly, and runTurn's gate will reject it.
+  originatorActorType?: string
 }
 
 export interface HarnessHost {

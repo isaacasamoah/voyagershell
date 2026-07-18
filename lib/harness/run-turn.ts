@@ -11,6 +11,7 @@ import { detectLearningSignal, emitSignal } from '@/lib/learning/signals'
 import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room'
 import { capitalizeName, resolveAddress } from '@/lib/messaging/address'
 import { getOwnVoyagerIdentity, listRoomVoyagerHandles } from '@/lib/messaging/handles'
+import { isHumanTurnInput } from '@/lib/messaging/public-reply'
 import { resolveUserModelWithMeta } from '@/lib/models'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
 import {
@@ -29,6 +30,20 @@ export const runTurn = async (
 ): Promise<TurnResult> => {
   const { userId, conversationId, voyageSlug, authState, newMessage, displayName } = ctx
   const rawQuery = newMessage
+
+  // ── The loop guard (the hard rule, code-attested) ─────────────────────────
+  // A Voyager turn may begin ONLY on human-authored input. actor=voyager events
+  // NEVER trigger another Voyager's turn — two named Voyagers cannot answer each
+  // other unbidden (§4). This holds by architecture today (the only caller is a
+  // human POST /api/chat), but the invariant lives HERE so a future realtime→turn
+  // bridge that forwards a voyager-authored event is caught, not silently looped.
+  if (!isHumanTurnInput(ctx.originatorActorType ?? 'user')) {
+    log.api('runTurn refused a non-human-originated turn (loop guard)', {
+      originatorActorType: ctx.originatorActorType,
+      conversationId,
+    }, 'warn')
+    return { kind: 'empty' }
+  }
 
   // Resolve the address ONCE, server-side, from the real handle set — the same
   // pure resolver the composer badge uses (Principle 1: privacy is computed,

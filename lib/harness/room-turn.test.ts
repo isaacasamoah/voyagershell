@@ -89,6 +89,21 @@ describe('runRoomTurn — the resolver mode drives the gate', () => {
     expect(fanOutDeliveries).not.toHaveBeenCalled()
   })
 
+  // cut ④ — an explicit summon proceeds on the OWNER's terms: naming a voyager
+  // aloud overrides the ambient `+voyager out` toggle (aiPresent === false),
+  // exactly as a knock does. Ambient chatter with the voyager stepped out stays out.
+  it('summon with the voyager stepped out (aiPresent false) STILL fires', async () => {
+    getRoom.mockResolvedValue({ roomPeople: ['user-elisheya'], aiPresent: false })
+    const { runRoomTurn } = await loadRoomTurn()
+    const result = await runRoomTurn({
+      ctx: ctx({ newMessage: 'wren, come back' }),
+      host: host(),
+      queryText: 'wren, come back',
+      address: addr({ mode: 'summon', targetHandle: 'wren', stripped: 'come back' }),
+    })
+    expect(result).toBeNull() // proceeds to the model turn
+  })
+
   it('leading-name summon → falls through to the model turn (null)', async () => {
     const { runRoomTurn } = await loadRoomTurn()
     const result = await runRoomTurn({
