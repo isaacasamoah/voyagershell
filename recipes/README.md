@@ -14,6 +14,8 @@ do not replace them.
 | `./recipes/handles-uniqueness.sh` | `idx_handles_lower` rejects a cross-case dup on dev (non-mutating; requires `~/.supabase/access-token`) | `HANDLES_UNIQUE_OK` |
 | `./recipes/typecheck.sh` | `tsc --noEmit` clean | `TYPECHECK_OK` |
 | `./recipes/full-suite.sh` | the full unit suite | `FULL_SUITE_GREEN` |
+| `./recipes/public-voice.sh` | **cut ④** — fan-out plan + owner-anchored attribution (§6.5, riskiest) on the REAL stream-context mapper + loop guard | `PUBLIC_VOICE_POC_GREEN` |
+| `./recipes/public-voice-room-bench.sh` | **cut ④ Test-gate primary** — the two-account fambam ritual (LLM via chh), backed by deterministic DB assertions: public fan-out under the owner + deliveries, loop guard (no voyager reply chained off a voyager reply), aside stays participants=[asker]. Runbook mode prints the ritual; assertion mode needs `PUBLIC_VOICE_BENCH_SESSION_ID` + `~/.supabase/access-token` | `PUBLIC_VOICE_ROOM_BENCH_OK` |
 
 ## Human residual (browser, two-account fambam — optional for Isaac)
 
