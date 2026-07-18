@@ -70,3 +70,24 @@ describe('two-account bench — @wren aside is private to Isaac, verified from B
     expect(resolveAddress('@voyager hi', elisheyaCtx).mode).toBe('aside')
   })
 })
+
+describe('two-account bench — a mis-typed @handle is HELD, never published to the room', () => {
+  // The exact live incident: `@wren <secret>` typed BEFORE the handle existed
+  // reached the other member. From either account, a leading `@token` that
+  // names no reachable voyager must hold with a private notice — not fan out.
+  it('a typo of your own handle holds with a private notice (Isaac fat-fingers "wren")', () => {
+    const r = resolveAddress('@wrne the code is 4321', isaacCtx)
+    expect(r.mode).toBe('held')
+    expect(r.mode).not.toBe('plain')
+    expect(r.notice).toContain('without the @')
+  })
+
+  it("@ another member's HUMAN handle holds (a person is not asideable, must not leak)", () => {
+    // Elisheya is a human in the shared namespace, not a voyager Isaac can @.
+    expect(resolveAddress('@elisheya the numbers', isaacCtx).mode).toBe('held')
+  })
+
+  it('an unknown token holds from the OTHER account too (Elisheya @-ing nobody)', () => {
+    expect(resolveAddress('@nobody psst', elisheyaCtx).mode).toBe('held')
+  })
+})

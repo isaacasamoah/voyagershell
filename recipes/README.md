@@ -9,7 +9,7 @@ do not replace them.
 
 | Recipe | Asserts | Marker |
 |---|---|---|
-| `./recipes/address-grammar.sh` | @own=aside · @other=redirect (never aside) · leading-name=summon · mid-sentence=neither · @voyager alias parity | `ADDRESS_GRAMMAR_GREEN` |
+| `./recipes/address-grammar.sh` | @own=aside · @other=redirect (never aside) · leading-name=summon · mid-sentence=neither · @voyager alias parity · **@unknown / @typo / @human = held (never fanned out)** | `ADDRESS_GRAMMAR_GREEN` |
 | `./recipes/two-account-bench.sh` | Two accounts, one names "wren": @wren aside private to its owner **verified from the other account**, summon addressed, @other redirect, mid-sentence nothing — real data-layer assembly → real resolver | `TWO_ACCOUNT_BENCH_OK` |
 | `./recipes/handles-uniqueness.sh` | `idx_handles_lower` rejects a cross-case dup on dev (non-mutating; requires `~/.supabase/access-token`) | `HANDLES_UNIQUE_OK` |
 | `./recipes/typecheck.sh` | `tsc --noEmit` clean | `TYPECHECK_OK` |
@@ -24,3 +24,4 @@ Two signed-in accounts (e.g. Isaac + Elisheya) in one room:
 3. Account B: type `@wren …` — **no** private-aside badge; the message posts to the room and A/B see the gentle redirect ("wren is Isaac's Voyager — @ only reaches your own…"). No private line into A's Voyager opens.
 4. Account B: type `wren, …` — the summon is addressed (leading-name).
 5. Either account: a mid-sentence "wren" does nothing.
+6. **The typo case (the Test Gate regression).** BEFORE naming the Voyager — or with any mis-typed handle, e.g. `@wrne <secret>` or `@wren <secret>` before `wren` exists — Account A types it and sends. The words **do NOT** reach Account B's feed; A gets a private notice ("No one called "wrne" is here — say it without the @ to send it to the room."). Nothing fans out. This is the confidentiality guard the Test Gate required.

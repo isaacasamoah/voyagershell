@@ -11,7 +11,7 @@
 // (feed-types) and the leading-`voyager` summon regex (room-turn). `voyager`
 // survives only as an alias for "your own".
 
-export type AddressMode = 'aside' | 'summon' | 'redirect' | 'plain'
+export type AddressMode = 'aside' | 'summon' | 'redirect' | 'held' | 'plain'
 
 // A voyager handle visible to the speaker in the current room. `isOwn` is the
 // trust boundary — the ONLY thing that authorizes a private aside.
@@ -33,6 +33,7 @@ export interface AddressResult {
   mode: AddressMode
   targetHandle?: string      // summon / redirect target
   targetOwnerName?: string   // redirect line: "Wren is <ownerName>'s…"
+  notice?: string            // held: the private line the SENDER alone sees
   stripped: string           // message with the leading address token removed
 }
 
@@ -81,6 +82,13 @@ const stripLeading = (text: string, consumed: number): string =>
 
 const normalize = (s: string): string => s.trim().toLowerCase()
 
+// The private line the sender — and ONLY the sender — sees when a leading
+// `@token` names no reachable voyager. It is what makes the hold non-silent:
+// the message stops here, but the user is told why and how to actually send it
+// (drop the `@` and the same words go to the room).
+const heldNotice = (token: string): string =>
+  `No one called "${token}" is here — say it without the @ to send it to the room.`
+
 export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult => {
   const text = raw.trim()
 
@@ -125,8 +133,16 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
         }
       }
     }
-    // `@human` or unknown `@token` — not an aside. Plain passthrough.
-    return { mode: 'plain', stripped: text }
+    // A leading `@token` that resolves to NO reachable voyager — an unknown
+    // handle, a typo of your own, or a human's handle — must NEVER fan out to
+    // the room. `@wren <secret>` typed before `wren` existed once fell through
+    // as a published `plain` and reached the other member (the confidentiality
+    // regression the Test Gate caught). HOLD it: the caller returns the private
+    // notice to the sender alone and delivers nothing. Only the `@` path holds —
+    // a bare leading word that matches nothing (summon path below) stays
+    // ordinary chatter, never withheld.
+    const rawToken = text.slice(1, 1 + token.length)
+    return { mode: 'held', notice: heldNotice(rawToken), stripped: text }
   }
 
   // ── `<handle>, …` — the public-summon path (leading name, vocative) ────────

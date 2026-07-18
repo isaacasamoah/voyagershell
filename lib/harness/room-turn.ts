@@ -22,6 +22,13 @@ const redirectLine = (address: AddressResult): string => {
   return `${name} is ${owner}'s Voyager — @ only reaches your own. Say "${name}, …" to summon them into the room.`
 }
 
+// The token-less form of the held notice. The resolver always attaches a
+// per-token `address.notice`; this is the generic line used only if a held
+// result ever arrives without one, so the gate never emits an empty message
+// on the confidentiality path.
+const HELD_NOTICE_FALLBACK =
+  'No one by that name is here — say it without the @ to send it to the room.'
+
 const deferUserPersistence = (
   { userId, conversationId, voyageSlug }: TurnContext,
   host: HarnessHost,
@@ -93,6 +100,17 @@ export const runRoomTurn = async ({
       }
     }
     if (confirmation !== null) return { kind: 'text', text: confirmation }
+  }
+
+  // A leading `@token` that names no reachable voyager is HELD — never fanned
+  // out. This is the Test Gate rework's hard requirement: `@wren <secret>`
+  // typed before `wren` existed must not reach the room. Return the private
+  // notice to the sender ONLY, and short-circuit BEFORE persistence and
+  // delivery so the held words are never written to the room feed nor delivered
+  // to another member. (Drop the `@` and the same words become an ordinary
+  // room message.)
+  if (address.mode === 'held') {
+    return { kind: 'text', text: address.notice ?? HELD_NOTICE_FALLBACK }
   }
 
   if (conversationId && queryText && !autoSent) {

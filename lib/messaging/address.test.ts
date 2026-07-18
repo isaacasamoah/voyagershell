@@ -43,10 +43,14 @@ describe('resolveAddress — C1: the aside is own-voyager-only (the trust bounda
     expect(r.stripped).toBe('@wren what do you think?')
   })
 
-  it('@human handle → plain, never aside (humans are not asideable)', () => {
-    // elisheya is a human handle in the shared namespace, not a voyager
+  it('@human handle → held, never aside AND never a published plain', () => {
+    // elisheya is a human handle in the shared namespace, not a voyager. It
+    // names no reachable voyager, so it must be held (not fanned out), never
+    // aside — humans are not asideable, and the words must not leak to the room.
     const r = resolveAddress('@elisheya hi', isaac)
-    expect(r.mode).toBe('plain')
+    expect(r.mode).toBe('held')
+    expect(r.mode).not.toBe('aside')
+    expect(r.mode).not.toBe('plain')
   })
 
   it('bare @own with no message → aside with empty body (caller no-ops)', () => {
@@ -87,8 +91,10 @@ describe('resolveAddress — summon (leading name, vocative)', () => {
 
 describe('resolveAddress — footguns (substring / common-word / case / unicode)', () => {
   it('substring: "wrench," does NOT summon "wren"', () => {
+    // Leading-name (no `@`) that matches nothing is ordinary chatter — plain.
     expect(resolveAddress('wrench, pass it here', isaac).mode).toBe('plain')
-    expect(resolveAddress('@wrenette hush', isaac).mode).toBe('plain')
+    // But a leading `@`-substring names no reachable voyager → held, never aside.
+    expect(resolveAddress('@wrenette hush', isaac).mode).toBe('held')
   })
 
   it('leading common English word that is NOT a registered handle stays inert', () => {
@@ -148,8 +154,56 @@ describe('resolveAddress — trailing punctuation glued to the handle stays PRIV
     expect(r.mode).not.toBe('aside')
   })
 
-  it('substring guard survives: "@wrench" (no separator) is still plain', () => {
-    expect(resolveAddress('@wrench pass it', isaac).mode).toBe('plain')
+  it('substring guard survives: "@wrench" (no separator) never opens a wren aside', () => {
+    // The substring guard holds: `@wrench` must not become Wren's aside. It is
+    // held (no reachable voyager), never a published plain, never an aside.
+    const r = resolveAddress('@wrench pass it', isaac)
+    expect(r.mode).not.toBe('aside')
+    expect(r.mode).toBe('held')
+  })
+})
+
+describe('resolveAddress — held: a leading @token that names no voyager NEVER fans out (Test Gate rework)', () => {
+  // The confidentiality regression the Test Gate caught: `@wren <secret>` typed
+  // BEFORE the handle `wren` existed fell through as a published `plain` and
+  // reached the other member. A leading `@token` that is neither (a) the
+  // sender's own voyager (aside) nor (b) another member's voyager (redirect)
+  // must be HELD — server returns a private notice, the words never fan out.
+  it('@unknown-token → held with a private notice (never plain, never fanned out)', () => {
+    const r = resolveAddress('@nobody the code is 4321', isaac)
+    expect(r.mode).toBe('held')
+    expect(r.mode).not.toBe('plain')
+    expect(r.notice).toContain('without the @')
+    expect(r.notice).toContain('nobody')
+  })
+
+  it('@typo-of-own-voyager → held, not an accidental publish', () => {
+    // Isaac owns "wren"; a fat-fingered "@wrne" resolves to nothing.
+    const r = resolveAddress('@wrne keep this between us', isaac)
+    expect(r.mode).toBe('held')
+    expect(r.mode).not.toBe('plain')
+  })
+
+  it('@human-handle → held (a person is not a voyager, and must not leak)', () => {
+    expect(resolveAddress('@elisheya the numbers', isaac).mode).toBe('held')
+  })
+
+  it('a homoglyph of your own @handle fails SAFE — held, never aside, never plain', () => {
+    // Cyrillic look-alike of "wren" is not the ASCII handle → no aside opens…
+    const r = resolveAddress('@wrеn secret', isaac) // the "е" is Cyrillic U+0435
+    expect(r.mode).not.toBe('aside')
+    expect(r.mode).toBe('held') // …and it does not fan out either
+  })
+
+  it('the SUMMON path (leading name, no @) that matches nothing stays plain, NOT held', () => {
+    // Only the `@` path holds. An ordinary sentence that happens to start with a
+    // capitalised word must never be withheld from the room.
+    expect(resolveAddress('Will, you attend?', isaac).mode).toBe('plain')
+    expect(resolveAddress('Nobody knows the answer', isaac).mode).toBe('plain')
+  })
+
+  it('a bare leading "@" with no token is not an address attempt → plain', () => {
+    expect(resolveAddress('@ hi everyone', isaac).mode).toBe('plain')
   })
 })
 

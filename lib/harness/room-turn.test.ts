@@ -111,4 +111,25 @@ describe('runRoomTurn — the resolver mode drives the gate', () => {
     expect(result?.kind).toBe('empty')
     expect(fanOutDeliveries).toHaveBeenCalledWith('event-1', ['user-elisheya'])
   })
+
+  it('held (@unknown token) → private notice to the sender, NEVER fanned out or persisted', async () => {
+    // The Test Gate regression: `@wren <secret>` typed before `wren` existed
+    // reached the other member. Held must return the notice to the sender only,
+    // touching neither the room fan-out nor the persisted stream.
+    const { runRoomTurn } = await loadRoomTurn()
+    const result = await runRoomTurn({
+      ctx: ctx({ newMessage: '@wren the code is 4321' }),
+      host: host(),
+      queryText: '@wren the code is 4321',
+      address: addr({
+        mode: 'held',
+        notice: 'No one called "wren" is here — say it without the @ to send it to the room.',
+        stripped: '@wren the code is 4321',
+      }),
+    })
+    expect(result?.kind).toBe('text')
+    expect(result && 'text' in result ? result.text : '').toContain('without the @')
+    expect(fanOutDeliveries).not.toHaveBeenCalled()
+    expect(createMessageEvent).not.toHaveBeenCalled()
+  })
 })
