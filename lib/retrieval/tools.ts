@@ -26,6 +26,7 @@ import { enqueueAgentTask, completeTask, runGuardedBackgroundTask } from '@/lib/
 import { createCaptainTools } from '@/lib/tools/captain'
 import { createVoyage, generateSlug, isSlugAvailable, getVoyageBySlug, getVoyageMembers, isCaptain, sendVoyageInvite, getUserVoyages, resolveMemberByName } from '@/lib/voyage'
 import { normalizeUsername } from '@/lib/voyage/username'
+import { claimHandle, renameVoyagerHandle } from '@/lib/messaging/handles'
 import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
 
 // Resolve short ID (8 chars) to full UUID
@@ -722,6 +723,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       if (!normalized.ok) return normalized.error
 
       const { username } = normalized
+      // The handles namespace is the uniqueness authority — claim there FIRST so
+      // the human handle row lands alongside the profile label (G4 parity).
+      const claim = await claimHandle(ctx.userId, username, 'human')
+      if (!claim.ok) return claim.error
+
       const supabase = getAdminClient()
       const { error } = await supabase
         .from('profiles')
@@ -737,6 +743,22 @@ export const createVoyagerTools = (ctx: ToolContext): {
       }
 
       return `Username set: ${username}. People can now reach you with +${username} or "tell ${username}".`
+    },
+  })
+
+  // name_voyager — LLM calls this when the user names their own Voyager. The
+  // name becomes a handle in the shared namespace: "@<name>" is a private aside
+  // to their OWN Voyager, "<name>, …" summons it. Same set_username-style
+  // validation (pattern + reserved), uniqueness across the whole namespace.
+  const name_voyager = tool({
+    description: `Name the user's Voyager — give their agent a personal name they can address ("call you Wren", "name my voyager Sol"). After naming, "@<name>" is a private aside only their own Voyager hears, and "<name>, …" summons it aloud. Lowercase letters/numbers/._- (2-31 chars), unique across everyone's handles.`,
+    inputSchema: z.object({
+      name: z.string().describe('The name to give the Voyager, e.g. "Wren"'),
+    }),
+    execute: async (input) => {
+      const result = await renameVoyagerHandle(ctx.userId, input.name)
+      if (!result.ok) return result.error
+      return `Done — I'm ${result.handle} now. Whisper "@${result.handle} …" for a private aside, or say "${result.handle}, …" to summon me.`
     },
   })
 
@@ -1120,6 +1142,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       name: 'set_username',
       tool: set_username,
       strategyHint: 'Set the unique username people use to address the user.',
+    },
+    {
+      name: 'name_voyager',
+      tool: name_voyager,
+      strategyHint: 'Name the user\'s own Voyager ("call you Wren"). Enables @<name> private asides and "<name>, …" summons.',
     },
     {
       name: 'send_message',

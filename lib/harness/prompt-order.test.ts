@@ -41,9 +41,9 @@ const loadRunTurn = async () => {
     emitSignal: vi.fn(),
   }))
   vi.doMock('@/lib/messaging/deliveries', () => ({ fanOutDeliveries: vi.fn() }))
-  vi.doMock('@/lib/messaging/feed-types', () => ({
-    isVoyagerAside: vi.fn(() => false),
-    stripVoyagerAside: vi.fn((text) => text),
+  vi.doMock('@/lib/messaging/handles', () => ({
+    getOwnVoyagerIdentity: vi.fn().mockResolvedValue({ handle: '', name: null }),
+    listRoomVoyagerHandles: vi.fn().mockResolvedValue([]),
   }))
   vi.doMock('@/lib/messaging/invites', () => ({
     deliverRoomInvite: vi.fn(),

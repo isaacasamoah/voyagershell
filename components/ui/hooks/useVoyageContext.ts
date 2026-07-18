@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { log } from '@/lib/debug'
+import { pickOwnVoyagerHandle } from '@/lib/messaging/address'
 import { createClient } from '@/lib/supabase/client'
 import type { VoyageMembership } from '@/lib/types'
 
@@ -18,6 +19,10 @@ export const useVoyageContext = ({
   const [voyageResolved, setVoyageResolved] = useState(false)
   const [voyages, setVoyages] = useState<VoyageMembership[]>([])
   const [displayName, setDisplayName] = useState<string | null>(null)
+  // The user's OWN voyager handle — powers the composer badge. RLS scopes the
+  // read to the caller's own row; '' when unnamed (the `voyager` alias carries
+  // the badge regardless).
+  const [ownVoyagerHandle, setOwnVoyagerHandle] = useState<string>('')
 
   const fetchVoyages = useCallback(async () => {
     try {
@@ -64,16 +69,30 @@ export const useVoyageContext = ({
   useEffect(() => {
     if (!isAuthenticated || isAuthLoading) {
       setDisplayName(null)
+      setOwnVoyagerHandle('')
       return
     }
     let cancelled = false
     const supabase = createClient()
     void (async () => {
+      let username: string | null = null
       try {
-        const { data } = await supabase.from('profiles').select('display_name').maybeSingle()
-        if (!cancelled) setDisplayName((data as { display_name: string | null } | null)?.display_name ?? null)
+        const { data } = await supabase.from('profiles').select('display_name, username').maybeSingle()
+        const profile = data as { display_name: string | null; username: string | null } | null
+        username = profile?.username ?? null
+        if (!cancelled) setDisplayName(profile?.display_name ?? null)
       } catch {
         if (!cancelled) setDisplayName(null)
+      }
+      try {
+        const { data } = await supabase.from('handles').select('handle').eq('kind', 'voyager').maybeSingle()
+        const rowHandle = (data as { handle: string } | null)?.handle ?? null
+        // Derive the own handle through the SAME pure rule the server uses, so the
+        // composer badge and the optimistic settle see the handle the reply gate
+        // stripped — a derived `<username>.voyager` default included, not just ''.
+        if (!cancelled) setOwnVoyagerHandle(pickOwnVoyagerHandle(rowHandle, username))
+      } catch {
+        if (!cancelled) setOwnVoyagerHandle('')
       }
     })()
     return () => { cancelled = true }
@@ -94,6 +113,7 @@ export const useVoyageContext = ({
     setCurrentVoyage,
     voyages,
     displayName,
+    ownVoyagerHandle,
     refetchVoyages,
   }
 }

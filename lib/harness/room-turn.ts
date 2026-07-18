@@ -3,14 +3,31 @@ import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { deliverRoomInvite, inviteToRoom } from '@/lib/messaging/invites'
 import { getRoom, parseRoomCommand, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
 import { getVoyageBySlug, getVoyageMembers, resolveMemberByName } from '@/lib/voyage'
+import type { AddressResult } from '@/lib/messaging/address'
 import type { HarnessHost, TurnContext, TurnResult } from './types'
 
 interface RoomTurnInput {
   ctx: TurnContext
   host: HarnessHost
   queryText: string
-  voyagerAside: boolean
+  address: AddressResult
 }
+
+// `@`-ing another member's voyager NEVER opens a private channel (C1). The
+// message already flows through public room semantics above; this gentle line
+// nudges the asker toward the right address without a cross-owner private line.
+const redirectLine = (address: AddressResult): string => {
+  const owner = address.targetOwnerName ?? 'someone else'
+  const name = address.targetHandle ?? 'that voyager'
+  return `${name} is ${owner}'s Voyager — @ only reaches your own. Say "${name}, …" to summon them into the room.`
+}
+
+// The token-less form of the held notice. The resolver always attaches a
+// per-token `address.notice`; this is the generic line used only if a held
+// result ever arrives without one, so the gate never emits an empty message
+// on the confidentiality path.
+const HELD_NOTICE_FALLBACK =
+  'No one by that name is here — say it without the @ to send it to the room.'
 
 const deferUserPersistence = (
   { userId, conversationId, voyageSlug }: TurnContext,
@@ -38,8 +55,9 @@ export const runRoomTurn = async ({
   ctx,
   host,
   queryText,
-  voyagerAside,
+  address,
 }: RoomTurnInput): Promise<TurnResult | null> => {
+  const isAside = address.mode === 'aside'
   const { userId, conversationId, voyageSlug, autoSent } = ctx
   const room = conversationId
     ? await getRoom(conversationId)
@@ -84,17 +102,28 @@ export const runRoomTurn = async ({
     if (confirmation !== null) return { kind: 'text', text: confirmation }
   }
 
+  // A leading `@token` that names no reachable voyager is HELD — never fanned
+  // out. This is the Test Gate rework's hard requirement: `@wren <secret>`
+  // typed before `wren` existed must not reach the room. Return the private
+  // notice to the sender ONLY, and short-circuit BEFORE persistence and
+  // delivery so the held words are never written to the room feed nor delivered
+  // to another member. (Drop the `@` and the same words become an ordinary
+  // room message.)
+  if (address.mode === 'held') {
+    return { kind: 'text', text: address.notice ?? HELD_NOTICE_FALLBACK }
+  }
+
   if (conversationId && queryText && !autoSent) {
     deferUserPersistence(
       ctx,
       host,
       queryText,
-      room.roomPeople.length === 0 || voyagerAside,
-      voyagerAside && room.roomPeople.length > 0 ? 'aside' : undefined,
+      room.roomPeople.length === 0 || isAside,
+      isAside && room.roomPeople.length > 0 ? 'aside' : undefined,
     )
   }
 
-  if (conversationId && queryText && room.roomPeople.length > 0 && !voyagerAside) {
+  if (conversationId && queryText && room.roomPeople.length > 0 && !isAside) {
     const currentIds = new Set(voyageMembers.map((member) => member.userId))
     const recipients = room.roomPeople.filter((id) => id !== userId && currentIds.has(id))
     if (recipients.length > 0) {
@@ -115,8 +144,17 @@ export const runRoomTurn = async ({
     }
   }
 
-  const addressed = voyagerAside || /^(hey |hi |ok |okay )?voyager\b/i.test(queryText.trim())
-  if (room.roomPeople.length > 0 && !voyagerAside && (!addressed || room.aiPresent === false)) {
+  // `@other-voyager`: public semantics already ran (fan-out above); nudge the
+  // asker toward the right address instead of opening a private channel. Cross-
+  // owner summon EXECUTION is deferred to cut ④ — parsed here, not run.
+  if (address.mode === 'redirect') {
+    return { kind: 'text', text: redirectLine(address) }
+  }
+
+  // The voyager fires for an aside (own) or a summon (own or another's handle);
+  // a mid-sentence mention or plain chatter is NOT addressed.
+  const addressed = isAside || address.mode === 'summon'
+  if (room.roomPeople.length > 0 && !isAside && (!addressed || room.aiPresent === false)) {
     return { kind: 'empty' }
   }
 

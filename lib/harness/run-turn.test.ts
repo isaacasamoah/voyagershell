@@ -16,6 +16,8 @@ const setAiPresent = vi.fn()
 const getVoyageBySlug = vi.fn()
 const getVoyageMembers = vi.fn()
 const resolveMemberByName = vi.fn()
+const getOwnVoyagerIdentity = vi.fn()
+const listRoomVoyagerHandles = vi.fn()
 const composeSystemPrompt = vi.fn()
 const createVoyagerTools = vi.fn()
 const composeToolStrategy = vi.fn()
@@ -63,12 +65,9 @@ const loadRunTurn = async () => {
     emitSignal,
   }))
   vi.doMock('@/lib/messaging/deliveries', () => ({ fanOutDeliveries }))
-  vi.doMock('@/lib/messaging/feed-types', () => ({
-    isVoyagerAside: (text: string) => /^@voyager\b/i.test(text.trim()),
-    stripVoyagerAside: (text: string) => text
-      .trim()
-      .replace(/^@voyager[\s,:!.?-]*/i, '')
-      .trim(),
+  vi.doMock('@/lib/messaging/handles', () => ({
+    getOwnVoyagerIdentity,
+    listRoomVoyagerHandles,
   }))
   vi.doMock('@/lib/messaging/invites', () => ({
     deliverRoomInvite,
@@ -135,6 +134,8 @@ describe('runTurn', () => {
     createMessageEvent.mockResolvedValue('event-1')
     fanOutDeliveries.mockResolvedValue(undefined)
     getRoom.mockResolvedValue({ roomPeople: [], aiPresent: true })
+    getOwnVoyagerIdentity.mockResolvedValue({ handle: '', name: null })
+    listRoomVoyagerHandles.mockResolvedValue([])
     parseRoomCommand.mockReturnValue(null)
     getVoyageBySlug.mockResolvedValue(null)
     getVoyageMembers.mockResolvedValue([])

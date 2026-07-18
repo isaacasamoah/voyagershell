@@ -9,7 +9,8 @@ import { log } from '@/lib/debug'
 import { type KnowledgeNode } from '@/lib/knowledge'
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals'
 import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room'
-import { isVoyagerAside, stripVoyagerAside } from '@/lib/messaging/feed-types'
+import { resolveAddress } from '@/lib/messaging/address'
+import { getOwnVoyagerIdentity, listRoomVoyagerHandles } from '@/lib/messaging/handles'
 import { resolveUserModelWithMeta } from '@/lib/models'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
 import {
@@ -28,8 +29,23 @@ export const runTurn = async (
 ): Promise<TurnResult> => {
   const { userId, conversationId, voyageSlug, authState, newMessage, displayName } = ctx
   const rawQuery = newMessage
-  const voyagerAside = isVoyagerAside(rawQuery)
-  const queryText = voyagerAside ? stripVoyagerAside(rawQuery) : rawQuery
+
+  // Resolve the address ONCE, server-side, from the real handle set — the same
+  // pure resolver the composer badge uses (Principle 1: privacy is computed,
+  // never model-guessed). `voyager` survives only as an alias for your own.
+  const [ownIdentity, roomVoyagerHandles] = await Promise.all([
+    getOwnVoyagerIdentity(userId),
+    conversationId ? listRoomVoyagerHandles(conversationId, userId) : Promise.resolve([]),
+  ])
+  const ownVoyagerHandle = ownIdentity.handle
+  const address = resolveAddress(rawQuery, {
+    ownVoyagerHandle,
+    ownVoyagerAliases: ['voyager'],
+    roomVoyagerHandles,
+  })
+  // Strip only the private aside — a summon keeps its raw text so the room
+  // fan-out preserves the vocative humans see.
+  const queryText = address.mode === 'aside' ? address.stripped : rawQuery
 
   const intent = detectActionIntent(queryText)
   host.defer(reapStuckTasks().catch(() => {}))
@@ -101,7 +117,7 @@ export const runTurn = async (
     content: message.content,
   }))
 
-  const roomResult = await runRoomTurn({ ctx, host, queryText, voyagerAside })
+  const roomResult = await runRoomTurn({ ctx, host, queryText, address })
   if (roomResult) return roomResult
 
   const { tools, registrations } = createVoyagerTools({
@@ -118,12 +134,19 @@ export const runTurn = async (
   let retrievedKnowledge: KnowledgeNode[] = []
   let retrievalEventId: string | null = null
   try {
+    // The Voyager knows its own name only when custom-claimed — the derived
+    // default (`<username>.voyager`) is an addressing fallback, not a name.
+    // Provenance is decided in the data layer (claimed handle ≠ derived default),
+    // never re-inferred here from the handle's shape.
+    const voyagerName = ownIdentity.name ?? undefined
     const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(userId, {
       profile: { id: userId, displayName },
       voyageSlug: voyageSlug ?? undefined,
       sessionId: conversationId,
       continuityContext,
       authState,
+      voyagerName,
+      ownerName: displayName,
     })
     staticPrefix = `${staticPrompt}\n\n${toolStrategy}`
     dynamicSuffix = dynamicPrompt

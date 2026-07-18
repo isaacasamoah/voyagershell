@@ -85,6 +85,35 @@ export type Database = {
           },
         ]
       }
+      handles: {
+        Row: {
+          created_at: string
+          handle: string
+          kind: string
+          owner_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          handle: string
+          kind: string
+          owner_user_id: string
+        }
+        Update: {
+          created_at?: string
+          handle?: string
+          kind?: string
+          owner_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "handles_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_current: {
         Row: {
           addressed_to: string[] | null
@@ -850,6 +879,7 @@ export type KnowledgeClassification =
 
 // Table row types
 export type Profile = Database['public']['Tables']['profiles']['Row']
+export type Handle = Database['public']['Tables']['handles']['Row']
 export type Session = Database['public']['Tables']['sessions']['Row']
 export type AgentTask = Database['public']['Tables']['agent_tasks']['Row']
 export type KnowledgeEvent = Database['public']['Tables']['knowledge_events']['Row']
