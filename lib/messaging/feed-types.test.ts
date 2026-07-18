@@ -15,6 +15,7 @@ const event = (id: string, createdAt: string, patch: Partial<FeedEvent> = {}): F
   kind: 'message',
   inviteState: null,
   senderDisplayName: 'Voyager',
+  ownerName: null,
   senderUserId: null,
   content: id,
   createdAt,

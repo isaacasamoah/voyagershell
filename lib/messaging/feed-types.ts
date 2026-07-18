@@ -17,6 +17,9 @@ export interface FeedEvent {
   // when kind === 'invite'; drives whether the Join/Decline buttons show.
   inviteState: InviteState | null
   senderDisplayName: string | null
+  // cut ④: the owner behind a fanned voyager reply, e.g. "Isaac" — renders
+  // "WREN ✦ (Isaac's Voyager)". Null for human/solo/unnamed events.
+  ownerName: string | null
   senderUserId: string | null
   content: string
   createdAt: string
@@ -31,6 +34,7 @@ export interface FeedApiEvent {
   kind: FeedEventKind
   invite_state: InviteState | null
   sender_display_name: string | null
+  owner_name: string | null
   sender_user_id: string | null
   content: string
   created_at: string
@@ -75,6 +79,7 @@ export const toFeedApiEvent = (event: FeedEvent): FeedApiEvent => ({
   kind: event.kind,
   invite_state: event.inviteState,
   sender_display_name: event.senderDisplayName,
+  owner_name: event.ownerName,
   sender_user_id: event.senderUserId,
   content: event.content,
   created_at: event.createdAt,
@@ -89,6 +94,7 @@ export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
   kind: event.kind ?? 'message',
   inviteState: event.invite_state ?? null,
   senderDisplayName: event.sender_display_name,
+  ownerName: event.owner_name ?? null,
   senderUserId: event.sender_user_id,
   content: event.content,
   createdAt: event.created_at,

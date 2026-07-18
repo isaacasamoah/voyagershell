@@ -51,6 +51,13 @@ const getSenderDisplayName = (row: FeedEventRow): string | null => (
   isObject(row.metadata) ? getString(row.metadata, 'sender_display_name') : null
 )
 
+// cut ④: the summoned voyager's OWNER display name, e.g. "Isaac" — drives the
+// "(Isaac's Voyager)" attribution on a fanned public reply. Null on a solo/aside
+// reply, so it renders the flat "Voyager".
+const getOwnerDisplayName = (row: FeedEventRow): string | null => (
+  isObject(row.metadata) ? getString(row.metadata, 'owner_display_name') : null
+)
+
 // Message events carry a `source` marker: 'invite' → interactive knock,
 // 'join' → a system line ("X joined the room"); anything else is a plain message.
 const getFeedKind = (row: FeedEventRow): FeedEventKind => {
@@ -126,6 +133,11 @@ export const toFeedEvents = (
     const kind = getFeedKind(row)
     const delivery = deliveryByEventId.get(row.id) ?? null
     const isSelfAuthoredMessage = row.event_type === 'message' && role === 'user'
+    // cut ④: the viewer's OWN voyager's public reply has no delivery row (the
+    // owner is excluded from the fan-out) — it is inherently "seen", never an
+    // unread badge on your own voyager's words.
+    const isOwnVoyagerMessage =
+      row.event_type === 'message' && row.actor_type === 'voyager' && row.user_id === userId
 
     return {
       id: row.id,
@@ -133,11 +145,14 @@ export const toFeedEvents = (
       role,
       kind,
       inviteState: kind === 'invite' ? viewerInviteState : null,
-      senderDisplayName: role === 'assistant' ? 'Voyager' : getSenderDisplayName(row),
+      // cut ④: a fanned voyager reply carries its voyager name (metadata) so the
+      // room renders "WREN ✦"; a solo/aside reply has none → the flat "Voyager".
+      senderDisplayName: getSenderDisplayName(row),
+      ownerName: role === 'assistant' ? getOwnerDisplayName(row) : null,
       senderUserId: getSenderUserId(row) ?? row.user_id,
       content: row.content ?? '',
       createdAt: row.created_at,
-      seen: row.event_type !== 'message' || isSelfAuthoredMessage || Boolean(delivery?.seen_at),
+      seen: row.event_type !== 'message' || isSelfAuthoredMessage || isOwnVoyagerMessage || Boolean(delivery?.seen_at),
       deliveryId: delivery?.id ?? null,
     }
   }))
