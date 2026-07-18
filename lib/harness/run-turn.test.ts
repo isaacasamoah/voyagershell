@@ -10,6 +10,7 @@ const fanOutDeliveries = vi.fn()
 const deliverRoomInvite = vi.fn()
 const inviteToRoom = vi.fn()
 const getRoom = vi.fn()
+const getActiveMemberIds = vi.fn()
 const parseRoomCommand = vi.fn()
 const removeRoomPerson = vi.fn()
 const setAiPresent = vi.fn()
@@ -75,6 +76,7 @@ const loadRunTurn = async () => {
   }))
   vi.doMock('@/lib/messaging/room', () => ({
     getRoom,
+    getActiveMemberIds,
     parseRoomCommand,
     removeRoomPerson,
     setAiPresent,
@@ -134,6 +136,7 @@ describe('runTurn', () => {
     createMessageEvent.mockResolvedValue('event-1')
     fanOutDeliveries.mockResolvedValue(undefined)
     getRoom.mockResolvedValue({ roomPeople: [], aiPresent: true })
+    getActiveMemberIds.mockResolvedValue(['user-1'])
     getOwnVoyagerIdentity.mockResolvedValue({ handle: '', name: null })
     listRoomVoyagerHandles.mockResolvedValue([])
     parseRoomCommand.mockReturnValue(null)
@@ -161,6 +164,19 @@ describe('runTurn', () => {
       label: 'claude-sonnet',
       viaConnection: false,
     })
+  })
+
+  // cut ④ loop guard (the hard rule): a turn may begin ONLY on human-authored
+  // input. A synthetic voyager-originated turn — the shape a future realtime→turn
+  // bridge would produce — must be refused before any model call, so two named
+  // Voyagers can never answer each other unbidden.
+  it('refuses a voyager-originated turn (loop guard) — no model call, returns empty', async () => {
+    const { runTurn } = await loadRunTurn()
+    const result = await runTurn(context({ originatorActorType: 'voyager' }), stubHost().host)
+
+    expect(result).toEqual({ kind: 'empty' })
+    expect(streamText).not.toHaveBeenCalled()
+    expect(createMessageEvent).not.toHaveBeenCalled()
   })
 
   it('runs a solo turn headlessly and defers user event emission', async () => {
@@ -281,5 +297,62 @@ describe('runTurn', () => {
     })
 
     expect(estimateCost).toHaveBeenCalledWith('claude-sonnet', 120, 30)
+  })
+
+  // cut ④ — a cross-owner public summon: Elisheya (user-2) says "wren, …" in a
+  // populated room. The reply must persist under the OWNER (user-1 = Wren's
+  // owner) as a `message` event fanned to the room, and run on the owner's brain.
+  it('a cross-owner summon persists the reply under the owner + fans it out', async () => {
+    getRoom.mockResolvedValue({ roomPeople: ['user-1'], aiPresent: true })
+    getActiveMemberIds.mockResolvedValue(['user-1', 'user-2'])
+    getVoyageBySlug.mockResolvedValue({ id: 'voyage-1' })
+    getVoyageMembers.mockResolvedValue([
+      { userId: 'user-1', displayName: 'Isaac' },
+      { userId: 'user-2', displayName: 'Elisheya' },
+    ])
+    // Elisheya's room view: Wren is Isaac's (user-1).
+    listRoomVoyagerHandles.mockResolvedValue([
+      { handle: 'wren', ownerName: 'Isaac', isOwn: false, ownerUserId: 'user-1', name: 'Wren' },
+      { handle: 'hermes', ownerName: 'Elisheya', isOwn: true, ownerUserId: 'user-2', name: 'Hermes' },
+    ])
+    getOwnVoyagerIdentity.mockResolvedValue({ handle: 'hermes', name: 'hermes' })
+    const { runTurn } = await loadRunTurn()
+
+    // Elisheya (user-2) summons Wren.
+    await runTurn(context({
+      userId: 'user-2',
+      displayName: 'Elisheya',
+      voyageSlug: 'launch',
+      newMessage: 'wren, what did we decide?',
+    }), stubHost().host)
+
+    // W3: the model + context resolve on the OWNER (user-1), not the summoner.
+    expect(resolveUserModelWithMeta).toHaveBeenCalledWith(expect.anything(), 'user-1')
+    expect(composeContextFromStream).toHaveBeenCalledWith('user-1', 'conversation-1', 'launch')
+
+    const onFinish = streamText.mock.calls[0][0].onFinish
+    await onFinish({
+      text: 'You both landed on the same tradeoff.',
+      steps: [],
+      finishReason: 'stop',
+      usage: null,
+      providerMetadata: {},
+    })
+
+    // W2: reply persists under the OWNER as a `message` event, fanned to Elisheya.
+    expect(createMessageEvent).toHaveBeenCalledWith(
+      'conversation-1',
+      'assistant',
+      'You both landed on the same tradeoff.',
+      expect.objectContaining({
+        userId: 'user-1',
+        eventType: 'message',
+        senderDisplayName: 'Wren',
+        ownerDisplayName: 'Isaac',
+        source: 'room',
+        participants: expect.arrayContaining(['user-1', 'user-2']),
+      }),
+    )
+    expect(fanOutDeliveries).toHaveBeenCalledWith('event-1', ['user-2'])
   })
 })

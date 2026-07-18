@@ -5,7 +5,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug'
 import { normalizeUsername } from '@/lib/voyage/username'
-import { pickOwnVoyagerHandle, voyagerCustomName, type VoyagerHandle } from './address'
+import { pickOwnVoyagerHandle, voyagerCustomName, capitalizeName, type VoyagerHandle } from './address'
 
 export type HandleKind = 'human' | 'voyager'
 
@@ -40,12 +40,18 @@ export const toRoomVoyagerHandles = (
   const out: VoyagerHandle[] = []
   for (const id of memberIds) {
     const profile = profileById.get(id)
-    const handle = pickOwnVoyagerHandle(handleByOwner.get(id), profile?.username)
+    const rowHandle = handleByOwner.get(id)
+    const handle = pickOwnVoyagerHandle(rowHandle, profile?.username)
     if (!handle) continue
+    // The custom name (claimed handle ≠ derived default), title-cased for display.
+    // Null when unnamed — the fanned reply then stays the flat "Voyager".
+    const custom = voyagerCustomName(rowHandle, profile?.username)
     out.push({
       handle,
       ownerName: profile?.display_name ?? profile?.username ?? 'someone',
       isOwn: id === callerId,
+      ownerUserId: id, // the identity of record for a cross-owner summon (§6.5)
+      name: custom ? capitalizeName(custom) : null,
     })
   }
   return out

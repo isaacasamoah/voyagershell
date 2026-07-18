@@ -93,6 +93,33 @@ export const activateMembers = async (spaceId: string, userIds: Array<string | n
   if (error) log.api('activate room members failed', { spaceId, error: error.message }, 'error')
 }
 
+// Every ACTIVE member of the session's room, INCLUDING the session owner —
+// recomputed FRESH at call time. cut ④ fans a public reply to exactly this set,
+// and it must be read at REPLY time (turn-end), never a turn-start snapshot: a
+// stream can run up to 300s and outlive a roster (adversary risk #2). Returns
+// [callerFallback] when the session has no space yet (a solo turn).
+export const getActiveMemberIds = async (
+  sessionId: string,
+  callerFallback: string,
+): Promise<string[]> => {
+  const session = await getSession(sessionId)
+  if (!session?.space_id) return [callerFallback]
+
+  const { data: members, error } = await activeMemberRows(session.space_id)
+  if (error) {
+    log.api('getActiveMemberIds failed', { sessionId, error: error.message }, 'error')
+    return [callerFallback]
+  }
+  const ids = ((members as SpaceMemberRow[] | null) ?? [])
+    .map((member) => member.user_id)
+    .filter((id): id is string => Boolean(id))
+  // The session owner + caller are always active in their own room even if the
+  // membership row lags; the union guarantees the fan-out set never drops them.
+  return Array.from(
+    new Set([session.user_id, callerFallback, ...ids].filter((id): id is string => Boolean(id))),
+  )
+}
+
 export const getRoom = async (sessionId: string): Promise<RoomState> => {
   const session = await getSession(sessionId)
   if (!session?.space_id) return { roomPeople: [], aiPresent: true }

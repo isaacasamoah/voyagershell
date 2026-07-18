@@ -520,6 +520,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         key={event.id}
         content={event.content}
         timestamp={timestamp}
+        voyagerName={event.senderDisplayName}
+        ownerName={event.ownerName}
       />
     );
   };

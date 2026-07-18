@@ -52,6 +52,7 @@ const sortRowsLikeFeed = (rows: FeedEventRow[]): FeedEventRow[] => {
     kind: 'message',
     inviteState: null,
     senderDisplayName: null,
+    ownerName: null,
     senderUserId: null,
     content: row.content ?? '',
     createdAt: row.created_at,

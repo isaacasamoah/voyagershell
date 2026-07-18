@@ -19,6 +19,15 @@ export interface VoyagerHandle {
   handle: string     // normalized, e.g. 'wren' or 'isaac.voyager'
   ownerName: string  // owner's display name, for the redirect line
   isOwn: boolean
+  // The owner's user id — the identity of record for a cross-owner summon (cut ④).
+  // A summon resolves this so the reply persists + runs under the OWNER, not the
+  // summoner (§6.5). Optional so callers that only need the aside/summon
+  // CLASSIFICATION (composer badge) need not fetch it.
+  ownerUserId?: string
+  // The voyager's CUSTOM name (e.g. "Wren"), or null when unnamed (a derived
+  // `<username>.voyager` handle). Rides the fanned reply's sender_display_name so
+  // the room renders WREN ✦; null keeps the flat "Voyager".
+  name?: string | null
 }
 
 export interface AddressContext {
@@ -31,10 +40,16 @@ export interface AddressContext {
 
 export interface AddressResult {
   mode: AddressMode
-  targetHandle?: string      // summon / redirect target
-  targetOwnerName?: string   // redirect line: "Wren is <ownerName>'s…"
-  notice?: string            // held: the private line the SENDER alone sees
-  stripped: string           // message with the leading address token removed
+  targetHandle?: string        // summon / redirect target
+  targetOwnerName?: string     // redirect line: "Wren is <ownerName>'s…"
+  targetOwnerUserId?: string   // cut ④: the summoned voyager's OWNER user id — the
+                               // identity the reply persists + runs under (§6.5).
+                               // Set only for a CROSS-owner summon/redirect; a
+                               // self-summon leaves it undefined (owner = summoner).
+  targetVoyagerName?: string | null // the summoned voyager's custom name, for the
+                               // WREN ✦ attribution; null/undefined ⇒ flat "Voyager".
+  notice?: string              // held: the private line the SENDER alone sees
+  stripped: string             // message with the leading address token removed
 }
 
 // Greedy handle-token read: consumes the WHOLE leading run of handle chars, so
@@ -129,6 +144,8 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
           mode: 'redirect',
           targetHandle: cand,
           targetOwnerName: other.ownerName,
+          targetOwnerUserId: other.ownerUserId,
+          targetVoyagerName: other.name ?? null,
           stripped: text,
         }
       }
@@ -163,6 +180,8 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
           mode: 'summon',
           targetHandle: cand,
           targetOwnerName: other.ownerName,
+          targetOwnerUserId: other.ownerUserId,
+          targetVoyagerName: other.name ?? null,
           stripped: stripLeading(text, greetLen + cand.length),
         }
       }
@@ -193,6 +212,12 @@ export const pickOwnVoyagerHandle = (
   if (username) return deriveVoyagerHandle(username)
   return ''
 }
+
+// Title-case a voyager handle for display, e.g. `wren` → `Wren`. One rule, so
+// the composer badge, the prompt identity, and the WREN ✦ attribution all show
+// the same shape from the same lowercase-normalized handle.
+export const capitalizeName = (handle: string): string =>
+  handle ? handle.charAt(0).toUpperCase() + handle.slice(1) : handle
 
 // A voyager's CUSTOM name (for the prompt identity) vs its derived default.
 // Provenance by VALUE: a claimed row whose handle differs from `<username>.voyager`

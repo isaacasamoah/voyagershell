@@ -9,8 +9,9 @@ import { log } from '@/lib/debug'
 import { type KnowledgeNode } from '@/lib/knowledge'
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals'
 import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room'
-import { resolveAddress } from '@/lib/messaging/address'
+import { capitalizeName, resolveAddress } from '@/lib/messaging/address'
 import { getOwnVoyagerIdentity, listRoomVoyagerHandles } from '@/lib/messaging/handles'
+import { isHumanTurnInput } from '@/lib/messaging/public-reply'
 import { resolveUserModelWithMeta } from '@/lib/models'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
 import {
@@ -21,7 +22,7 @@ import {
 import { detectActionIntent } from '@/lib/shell/intent'
 import { finishTurn } from './finish-turn'
 import { runRoomTurn } from './room-turn'
-import type { HarnessHost, TurnContext, TurnResult } from './types'
+import type { HarnessHost, SummonResolution, TurnContext, TurnResult } from './types'
 
 export const runTurn = async (
   ctx: TurnContext,
@@ -29,6 +30,20 @@ export const runTurn = async (
 ): Promise<TurnResult> => {
   const { userId, conversationId, voyageSlug, authState, newMessage, displayName } = ctx
   const rawQuery = newMessage
+
+  // ── The loop guard (the hard rule, code-attested) ─────────────────────────
+  // A Voyager turn may begin ONLY on human-authored input. actor=voyager events
+  // NEVER trigger another Voyager's turn — two named Voyagers cannot answer each
+  // other unbidden (§4). This holds by architecture today (the only caller is a
+  // human POST /api/chat), but the invariant lives HERE so a future realtime→turn
+  // bridge that forwards a voyager-authored event is caught, not silently looped.
+  if (!isHumanTurnInput(ctx.originatorActorType ?? 'user')) {
+    log.api('runTurn refused a non-human-originated turn (loop guard)', {
+      originatorActorType: ctx.originatorActorType,
+      conversationId,
+    }, 'warn')
+    return { kind: 'empty' }
+  }
 
   // Resolve the address ONCE, server-side, from the real handle set — the same
   // pure resolver the composer badge uses (Principle 1: privacy is computed,
@@ -47,11 +62,33 @@ export const runTurn = async (
   // fan-out preserves the vocative humans see.
   const queryText = address.mode === 'aside' ? address.stripped : rawQuery
 
+  // cut ④ — resolve WHOSE voyager answers. A cross-owner summon (Elisheya says
+  // "wren, …") runs on Isaac's brain + identity + context and persists under
+  // Isaac; a self-summon / aside / plain turn collapses to the summoner. The
+  // owner is the identity of record for the reply (§6.5).
+  const isCrossOwnerSummon = address.mode === 'summon' && Boolean(address.targetOwnerUserId)
+  const brainUserId = isCrossOwnerSummon ? (address.targetOwnerUserId as string) : userId
+  const summonedVoyagerName = address.mode === 'summon'
+    ? (isCrossOwnerSummon
+        ? (address.targetVoyagerName ?? null)
+        : (ownIdentity.name ? capitalizeName(ownIdentity.name) : null))
+    : (ownIdentity.name ? capitalizeName(ownIdentity.name) : null)
+  const summon: SummonResolution = {
+    mode: address.mode,
+    summonerUserId: userId,
+    voyagerOwnerUserId: brainUserId,
+    voyagerName: summonedVoyagerName,
+    voyagerOwnerName: isCrossOwnerSummon ? (address.targetOwnerName ?? 'someone') : (displayName ?? 'someone'),
+  }
+
   const intent = detectActionIntent(queryText)
   host.defer(reapStuckTasks().catch(() => {}))
 
+  // Compose the turn context for the BRAIN user — the owner on a cross-owner
+  // summon. Privacy is enforced structurally by the participants-gated read:
+  // the owner only ever sees rows they are a participant of.
   const streamContext = conversationId
-    ? await composeContextFromStream(userId, conversationId, voyageSlug)
+    ? await composeContextFromStream(brainUserId, conversationId, voyageSlug)
     : []
   const rawConversationMessages: ConversationMessage[] = [...streamContext]
   if (queryText) {
@@ -61,6 +98,10 @@ export const runTurn = async (
       role: 'user',
       content: queryText,
       createdAt: host.now(),
+      // On a cross-owner summon the in-flight utterance is ANOTHER human's — the
+      // owner's brain must read it as "[Elisheya]: …", never as its own words.
+      authorDisplayName: isCrossOwnerSummon ? (displayName ?? null) : null,
+      authorUserId: userId,
     })
   }
   const conversationMessages: ConversationMessage[] = renderMessagesForModel(rawConversationMessages)
@@ -83,7 +124,12 @@ export const runTurn = async (
       queryText,
       truncatedMessages,
       {
-        userId,
+        // Cross-session continuity searches the BRAIN user's past conversations —
+        // Isaac's Wren recalls Isaac's history, never the summoner's. Anchoring on
+        // the summoner would inject THEIR private "[From previous conversations]"
+        // into the owner's publicly-fanned reply (the same §6.5 leak the prompt
+        // composition below closes). Self-summon: brainUserId === userId, unchanged.
+        userId: brainUserId,
         voyageSlug: voyageSlug ?? undefined,
         conversationId: conversationId ?? '',
       },
@@ -120,6 +166,13 @@ export const runTurn = async (
   const roomResult = await runRoomTurn({ ctx, host, queryText, address })
   if (roomResult) return roomResult
 
+  // In-turn tools stay bound to the SUMMONER (userId), NOT the brain owner — a
+  // cross-owner summon must never let a bystander's words drive WRITES (add to
+  // room, set display name, actions) against the owner's account. Read tools
+  // therefore read the summoner's own data; the reply's grounding (persona,
+  // knowledge, continuity) is the owner's. Whether a summoned voyager should act
+  // on the owner's account at all is a deferred design question (owner-summon
+  // toggle, out of scope) — left summoner-scoped as the safe default.
   const { tools, registrations } = createVoyagerTools({
     userId,
     voyageSlug: voyageSlug ?? undefined,
@@ -134,19 +187,26 @@ export const runTurn = async (
   let retrievedKnowledge: KnowledgeNode[] = []
   let retrievalEventId: string | null = null
   try {
-    // The Voyager knows its own name only when custom-claimed — the derived
-    // default (`<username>.voyager`) is an addressing fallback, not a name.
-    // Provenance is decided in the data layer (claimed handle ≠ derived default),
-    // never re-inferred here from the handle's shape.
-    const voyagerName = ownIdentity.name ?? undefined
-    const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(userId, {
-      profile: { id: userId, displayName },
+    // The Voyager speaks as the SUMMONED voyager — its owner's identity. On a
+    // cross-owner summon that is Isaac's Wren (name + owner from the resolved
+    // summon), not the summoner's own. The derived default (`<username>.voyager`)
+    // is an addressing fallback, not a name — provenance is decided in the data
+    // layer, so `summonedVoyagerName` is already null when unnamed.
+    const voyagerName = summonedVoyagerName ?? undefined
+    // Compose the prompt on the BRAIN user — a cross-owner summon runs Isaac's
+    // Wren on ISAAC's persona + curated knowledge + retrieval, never the
+    // summoner's. Anchoring on `userId` here would ground a publicly-fanned reply
+    // in the SUMMONER's private "What I Know About You" while attributing it to
+    // the owner — leaking the summoner's data under someone else's name. The
+    // model + context already resolve on brainUserId; identity must too (C2).
+    const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(brainUserId, {
+      profile: { id: brainUserId, displayName: isCrossOwnerSummon ? summon.voyagerOwnerName : displayName },
       voyageSlug: voyageSlug ?? undefined,
       sessionId: conversationId,
       continuityContext,
       authState,
       voyagerName,
-      ownerName: displayName,
+      ownerName: summon.voyagerOwnerName,
     })
     staticPrefix = `${staticPrompt}\n\n${toolStrategy}`
     dynamicSuffix = dynamicPrompt
@@ -213,9 +273,11 @@ export const runTurn = async (
     ? [{ role: 'system' as const, content: dynamicSuffix }]
     : []
 
+  // Resolve the model on the BRAIN user — a cross-owner summon runs on the
+  // owner's brain (their model choice / BYO key), not the summoner's.
   const { model: chatModel, label: chatModelLabel } = await resolveUserModelWithMeta(
     { task: 'chat', quality: 'balanced', streaming: true, toolUse: true },
-    userId,
+    brainUserId,
   )
   const result = streamText({
     model: chatModel,
@@ -230,6 +292,7 @@ export const runTurn = async (
       chatModelLabel,
       retrievalEventId: () => retrievalEventId,
       retrievedKnowledge,
+      summon,
     }),
   })
 

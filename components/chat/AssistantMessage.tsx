@@ -21,6 +21,11 @@ interface AssistantMessageProps {
   timestamp?: string;
   isStreaming?: boolean;
   onAction?: (action: string, data?: unknown) => void;
+  // cut ④ — a named Voyager speaking in the room. When set, the label becomes
+  // "WREN ✦ (Isaac's Voyager)" — visibly non-human, attributed to its owner.
+  // Unset (a solo/unnamed reply) keeps the flat "VOYAGER".
+  voyagerName?: string | null;
+  ownerName?: string | null;
 }
 
 export const AssistantMessage = ({
@@ -29,6 +34,8 @@ export const AssistantMessage = ({
   timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
   isStreaming = false,
   onAction,
+  voyagerName,
+  ownerName,
 }: AssistantMessageProps) => {
   // Normalize to parts array
   const messageParts: MessagePart[] = parts ?? (content ? [{ type: 'text', text: content }] : []);
@@ -40,11 +47,21 @@ export const AssistantMessage = ({
       </div>
       <div className="flex-1 min-w-0 space-y-4">
         <div className="relative pl-2">
-          {/* Label — no astronaut in messages (AC2) */}
+          {/* Label — no astronaut in messages (AC2). cut ④: a named Voyager in
+              the room shows "WREN ✦ (Isaac's Voyager)" — the ✦ badge marks it
+              visibly non-human, the owner attribution makes whose it is plain. */}
           <div className="flex items-center gap-2 mb-3">
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ff5f56] via-[#5ec98f] to-[#b07af5] text-xs font-bold">
-              VOYAGER
+              {voyagerName ? voyagerName.toUpperCase() : 'VOYAGER'}
             </span>
+            {voyagerName && (
+              <span className="text-[#b07af5] text-xs font-bold" aria-label="AI">✦</span>
+            )}
+            {voyagerName && ownerName && (
+              <span className="text-slate-500 text-[10px] font-medium tracking-wide">
+                ({ownerName}&rsquo;s Voyager)
+              </span>
+            )}
             {isStreaming && (
               <span className="text-[#59a5ff] text-[10px] animate-pulse">streaming...</span>
             )}

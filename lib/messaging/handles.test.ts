@@ -43,8 +43,11 @@ describe('toRoomVoyagerHandles — isOwn is true ONLY for the caller', () => {
       ],
     )
     expect(result).toEqual([
-      { handle: 'wren', ownerName: 'Isaac', isOwn: true },
-      { handle: 'elisheya.voyager', ownerName: 'Elisheya', isOwn: false },
+      // cut ④: the handle set now carries owner_user_id (the identity a summon
+      // persists + runs under) and the voyager's title-cased custom name.
+      { handle: 'wren', ownerName: 'Isaac', isOwn: true, ownerUserId: caller, name: 'Wren' },
+      // 'elisheya.voyager' is a DERIVED default → unnamed → name: null.
+      { handle: 'elisheya.voyager', ownerName: 'Elisheya', isOwn: false, ownerUserId: other, name: null },
     ])
   })
 

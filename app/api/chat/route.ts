@@ -92,6 +92,9 @@ export const POST = async (req: Request) => {
       autoSent,
       newMessage: getNewestUserMessage(messages),
       displayName,
+      // This endpoint only ever carries a human's typed message — the loop guard
+      // asserts it (a turn may begin ONLY on human-authored input).
+      originatorActorType: 'user',
     }
     return adaptTurn(await runTurn(ctx, createVercelHost()))
   } catch (error) {
