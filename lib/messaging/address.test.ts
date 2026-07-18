@@ -291,3 +291,35 @@ describe('voyagerCustomName — provenance by value, not by suffix', () => {
     expect(voyagerCustomName(null, 'isaac')).toBeNull()
   })
 })
+
+describe('resolveAddress — cut ④: a cross-owner summon carries the OWNER identity', () => {
+  // Elisheya's view of the room: Wren is Isaac's, Hermes is hers. The handle set
+  // now carries owner_user_id + the voyager's name (the data-layer threading).
+  const elisheyaWithOwners: AddressContext = {
+    ownVoyagerHandle: 'hermes',
+    ownVoyagerAliases: ['voyager'],
+    roomVoyagerHandles: [
+      { handle: 'wren', ownerName: 'Isaac', isOwn: false, ownerUserId: 'user-isaac', name: 'Wren' },
+      { handle: 'hermes', ownerName: 'Elisheya', isOwn: true, ownerUserId: 'user-elisheya', name: 'Hermes' },
+    ],
+  }
+
+  it('summoning another member’s voyager carries targetOwnerUserId + name', () => {
+    const r = resolveAddress('wren, what do you make of that?', elisheyaWithOwners)
+    expect(r.mode).toBe('summon')
+    expect(r.targetOwnerUserId).toBe('user-isaac') // the identity of record (§6.5)
+    expect(r.targetVoyagerName).toBe('Wren')
+  })
+
+  it('@another’s voyager redirect also carries the owner id (never a private channel)', () => {
+    const r = resolveAddress('@wren advise', elisheyaWithOwners)
+    expect(r.mode).toBe('redirect')
+    expect(r.targetOwnerUserId).toBe('user-isaac')
+  })
+
+  it('a SELF-summon leaves targetOwnerUserId undefined (owner = summoner)', () => {
+    const r = resolveAddress('hermes, help', elisheyaWithOwners)
+    expect(r.mode).toBe('summon')
+    expect(r.targetOwnerUserId).toBeUndefined() // run-turn defaults owner to the summoner
+  })
+})
