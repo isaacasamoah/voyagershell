@@ -133,12 +133,19 @@ export const runTurn = async (
   let retrievedKnowledge: KnowledgeNode[] = []
   let retrievalEventId: string | null = null
   try {
+    // The Voyager knows its own name only when custom-claimed — the derived
+    // default (`<username>.voyager`) is an addressing fallback, not a name.
+    const voyagerName = ownVoyagerHandle && !ownVoyagerHandle.endsWith('.voyager')
+      ? ownVoyagerHandle
+      : undefined
     const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(userId, {
       profile: { id: userId, displayName },
       voyageSlug: voyageSlug ?? undefined,
       sessionId: conversationId,
       continuityContext,
       authState,
+      voyagerName,
+      ownerName: displayName,
     })
     staticPrefix = `${staticPrompt}\n\n${toolStrategy}`
     dynamicSuffix = dynamicPrompt
