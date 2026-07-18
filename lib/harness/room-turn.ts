@@ -145,16 +145,20 @@ export const runRoomTurn = async ({
   }
 
   // `@other-voyager`: public semantics already ran (fan-out above); nudge the
-  // asker toward the right address instead of opening a private channel. Cross-
-  // owner summon EXECUTION is deferred to cut ④ — parsed here, not run.
+  // asker toward the right address instead of opening a private channel. A
+  // leading-NAME summon of another member's voyager is a different address (mode
+  // 'summon', handled below) — it now runs on the owner's brain (cut ④).
   if (address.mode === 'redirect') {
     return { kind: 'text', text: redirectLine(address) }
   }
 
-  // The voyager fires for an aside (own) or a summon (own or another's handle);
-  // a mid-sentence mention or plain chatter is NOT addressed.
-  const addressed = isAside || address.mode === 'summon'
-  if (room.roomPeople.length > 0 && !isAside && (!addressed || room.aiPresent === false)) {
+  // The voyager fires for an aside (own) or a summon (own OR another member's
+  // handle); a mid-sentence mention or plain chatter is NOT addressed. An
+  // explicit summon proceeds on the OWNER's terms — naming a voyager aloud
+  // overrides the ambient `+voyager out` toggle, exactly as a knock does.
+  const isSummon = address.mode === 'summon'
+  const addressed = isAside || isSummon
+  if (room.roomPeople.length > 0 && !isAside && !isSummon && (!addressed || room.aiPresent === false)) {
     return { kind: 'empty' }
   }
 

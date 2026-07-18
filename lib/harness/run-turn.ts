@@ -9,7 +9,7 @@ import { log } from '@/lib/debug'
 import { type KnowledgeNode } from '@/lib/knowledge'
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals'
 import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room'
-import { resolveAddress } from '@/lib/messaging/address'
+import { capitalizeName, resolveAddress } from '@/lib/messaging/address'
 import { getOwnVoyagerIdentity, listRoomVoyagerHandles } from '@/lib/messaging/handles'
 import { resolveUserModelWithMeta } from '@/lib/models'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
@@ -21,7 +21,7 @@ import {
 import { detectActionIntent } from '@/lib/shell/intent'
 import { finishTurn } from './finish-turn'
 import { runRoomTurn } from './room-turn'
-import type { HarnessHost, TurnContext, TurnResult } from './types'
+import type { HarnessHost, SummonResolution, TurnContext, TurnResult } from './types'
 
 export const runTurn = async (
   ctx: TurnContext,
@@ -47,11 +47,33 @@ export const runTurn = async (
   // fan-out preserves the vocative humans see.
   const queryText = address.mode === 'aside' ? address.stripped : rawQuery
 
+  // cut ④ — resolve WHOSE voyager answers. A cross-owner summon (Elisheya says
+  // "wren, …") runs on Isaac's brain + identity + context and persists under
+  // Isaac; a self-summon / aside / plain turn collapses to the summoner. The
+  // owner is the identity of record for the reply (§6.5).
+  const isCrossOwnerSummon = address.mode === 'summon' && Boolean(address.targetOwnerUserId)
+  const brainUserId = isCrossOwnerSummon ? (address.targetOwnerUserId as string) : userId
+  const summonedVoyagerName = address.mode === 'summon'
+    ? (isCrossOwnerSummon
+        ? (address.targetVoyagerName ?? null)
+        : (ownIdentity.name ? capitalizeName(ownIdentity.name) : null))
+    : (ownIdentity.name ? capitalizeName(ownIdentity.name) : null)
+  const summon: SummonResolution = {
+    mode: address.mode,
+    summonerUserId: userId,
+    voyagerOwnerUserId: brainUserId,
+    voyagerName: summonedVoyagerName,
+    voyagerOwnerName: isCrossOwnerSummon ? (address.targetOwnerName ?? 'someone') : (displayName ?? 'someone'),
+  }
+
   const intent = detectActionIntent(queryText)
   host.defer(reapStuckTasks().catch(() => {}))
 
+  // Compose the turn context for the BRAIN user — the owner on a cross-owner
+  // summon. Privacy is enforced structurally by the participants-gated read:
+  // the owner only ever sees rows they are a participant of.
   const streamContext = conversationId
-    ? await composeContextFromStream(userId, conversationId, voyageSlug)
+    ? await composeContextFromStream(brainUserId, conversationId, voyageSlug)
     : []
   const rawConversationMessages: ConversationMessage[] = [...streamContext]
   if (queryText) {
@@ -61,6 +83,10 @@ export const runTurn = async (
       role: 'user',
       content: queryText,
       createdAt: host.now(),
+      // On a cross-owner summon the in-flight utterance is ANOTHER human's — the
+      // owner's brain must read it as "[Elisheya]: …", never as its own words.
+      authorDisplayName: isCrossOwnerSummon ? (displayName ?? null) : null,
+      authorUserId: userId,
     })
   }
   const conversationMessages: ConversationMessage[] = renderMessagesForModel(rawConversationMessages)
@@ -134,11 +160,12 @@ export const runTurn = async (
   let retrievedKnowledge: KnowledgeNode[] = []
   let retrievalEventId: string | null = null
   try {
-    // The Voyager knows its own name only when custom-claimed — the derived
-    // default (`<username>.voyager`) is an addressing fallback, not a name.
-    // Provenance is decided in the data layer (claimed handle ≠ derived default),
-    // never re-inferred here from the handle's shape.
-    const voyagerName = ownIdentity.name ?? undefined
+    // The Voyager speaks as the SUMMONED voyager — its owner's identity. On a
+    // cross-owner summon that is Isaac's Wren (name + owner from the resolved
+    // summon), not the summoner's own. The derived default (`<username>.voyager`)
+    // is an addressing fallback, not a name — provenance is decided in the data
+    // layer, so `summonedVoyagerName` is already null when unnamed.
+    const voyagerName = summonedVoyagerName ?? undefined
     const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(userId, {
       profile: { id: userId, displayName },
       voyageSlug: voyageSlug ?? undefined,
@@ -146,7 +173,7 @@ export const runTurn = async (
       continuityContext,
       authState,
       voyagerName,
-      ownerName: displayName,
+      ownerName: summon.voyagerOwnerName,
     })
     staticPrefix = `${staticPrompt}\n\n${toolStrategy}`
     dynamicSuffix = dynamicPrompt
@@ -213,9 +240,11 @@ export const runTurn = async (
     ? [{ role: 'system' as const, content: dynamicSuffix }]
     : []
 
+  // Resolve the model on the BRAIN user — a cross-owner summon runs on the
+  // owner's brain (their model choice / BYO key), not the summoner's.
   const { model: chatModel, label: chatModelLabel } = await resolveUserModelWithMeta(
     { task: 'chat', quality: 'balanced', streaming: true, toolUse: true },
-    userId,
+    brainUserId,
   )
   const result = streamText({
     model: chatModel,
@@ -230,6 +259,7 @@ export const runTurn = async (
       chatModelLabel,
       retrievalEventId: () => retrievalEventId,
       retrievedKnowledge,
+      summon,
     }),
   })
 
