@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pickOwnVoyagerHandle, toRoomVoyagerHandles } from './handles'
+import { pickOwnVoyagerHandle, renameVoyagerHandle, toRoomVoyagerHandles } from './handles'
 
 describe('pickOwnVoyagerHandle — a claimed row wins, else the derived default', () => {
   it('returns a claimed voyager name over the derived default', () => {
@@ -78,5 +78,19 @@ describe('toRoomVoyagerHandles — isOwn is true ONLY for the caller', () => {
       [{ id: other, username: 'elisheya', display_name: null }],
     )
     expect(result[0].ownerName).toBe('elisheya')
+  })
+})
+
+// The naming ritual rides set_username-style validation. Reserved words and
+// pattern violations are rejected BEFORE any namespace write — no DB needed.
+describe('renameVoyagerHandle — validation gate (no DB)', () => {
+  it('rejects a reserved word', async () => {
+    const result = await renameVoyagerHandle('user-1', 'voyager')
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects a pattern violation', async () => {
+    const result = await renameVoyagerHandle('user-1', 'A!')
+    expect(result.ok).toBe(false)
   })
 })
