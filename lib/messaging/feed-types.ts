@@ -1,3 +1,5 @@
+import { resolveAddress } from './address'
+
 export type FeedEventType = 'conversation' | 'message'
 export type FeedEventRole = 'user' | 'assistant' | 'human'
 // A knock is a message event whose metadata.source === 'invite'; a 'system'
@@ -114,14 +116,18 @@ export const shouldShowStreamingReply = (
 // never render as an optimistic user turn either.
 const WELCOME_RE = /^good (morning|afternoon|evening)\b/i
 
-// `@voyager …` asides are persisted STRIPPED by the server (route.ts removes
-// the prefix before saving). The client must compare the same shape, or the
-// optimistic message never settles and the composer wedges into queue mode.
-// ONE source for the strip — the route imports these too.
-export const isVoyagerAside = (text: string): boolean => /^@voyager\b/i.test(text.trim())
-export const stripVoyagerAside = (text: string): string => (
-  text.trim().replace(/^@voyager[\s,:!.?-]*/i, '').trim()
-)
+// `@voyager …` asides are persisted STRIPPED by the server (runTurn removes the
+// prefix via resolveAddress before saving). The client must compare the same
+// shape, or the optimistic message never settles and the composer wedges into
+// queue mode. ONE source for the strip — the SAME resolver the server uses, so
+// the classification can never drift. `ownHandle` lets a named `@wren` aside
+// strip too; the default carries the `voyager` alias for the common case.
+export const isVoyagerAside = (text: string, ownHandle = ''): boolean =>
+  resolveAddress(text, { ownVoyagerHandle: ownHandle, ownVoyagerAliases: ['voyager'] }).mode === 'aside'
+export const stripVoyagerAside = (text: string, ownHandle = ''): string => {
+  const result = resolveAddress(text, { ownVoyagerHandle: ownHandle, ownVoyagerAliases: ['voyager'] })
+  return result.mode === 'aside' ? result.stripped : text.trim()
+}
 
 // Show a just-sent user message as an optimistic transient until its own
 // 'conversation' event lands in the feed (avoids the send→round-trip vanish),

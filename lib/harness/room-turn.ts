@@ -3,13 +3,23 @@ import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { deliverRoomInvite, inviteToRoom } from '@/lib/messaging/invites'
 import { getRoom, parseRoomCommand, removeRoomPerson, setAiPresent } from '@/lib/messaging/room'
 import { getVoyageBySlug, getVoyageMembers, resolveMemberByName } from '@/lib/voyage'
+import type { AddressResult } from '@/lib/messaging/address'
 import type { HarnessHost, TurnContext, TurnResult } from './types'
 
 interface RoomTurnInput {
   ctx: TurnContext
   host: HarnessHost
   queryText: string
-  voyagerAside: boolean
+  address: AddressResult
+}
+
+// `@`-ing another member's voyager NEVER opens a private channel (C1). The
+// message already flows through public room semantics above; this gentle line
+// nudges the asker toward the right address without a cross-owner private line.
+const redirectLine = (address: AddressResult): string => {
+  const owner = address.targetOwnerName ?? 'someone else'
+  const name = address.targetHandle ?? 'that voyager'
+  return `${name} is ${owner}'s Voyager — @ only reaches your own. Say "${name}, …" to summon them into the room.`
 }
 
 const deferUserPersistence = (
@@ -38,8 +48,9 @@ export const runRoomTurn = async ({
   ctx,
   host,
   queryText,
-  voyagerAside,
+  address,
 }: RoomTurnInput): Promise<TurnResult | null> => {
+  const isAside = address.mode === 'aside'
   const { userId, conversationId, voyageSlug, autoSent } = ctx
   const room = conversationId
     ? await getRoom(conversationId)
@@ -89,12 +100,12 @@ export const runRoomTurn = async ({
       ctx,
       host,
       queryText,
-      room.roomPeople.length === 0 || voyagerAside,
-      voyagerAside && room.roomPeople.length > 0 ? 'aside' : undefined,
+      room.roomPeople.length === 0 || isAside,
+      isAside && room.roomPeople.length > 0 ? 'aside' : undefined,
     )
   }
 
-  if (conversationId && queryText && room.roomPeople.length > 0 && !voyagerAside) {
+  if (conversationId && queryText && room.roomPeople.length > 0 && !isAside) {
     const currentIds = new Set(voyageMembers.map((member) => member.userId))
     const recipients = room.roomPeople.filter((id) => id !== userId && currentIds.has(id))
     if (recipients.length > 0) {
@@ -115,8 +126,17 @@ export const runRoomTurn = async ({
     }
   }
 
-  const addressed = voyagerAside || /^(hey |hi |ok |okay )?voyager\b/i.test(queryText.trim())
-  if (room.roomPeople.length > 0 && !voyagerAside && (!addressed || room.aiPresent === false)) {
+  // `@other-voyager`: public semantics already ran (fan-out above); nudge the
+  // asker toward the right address instead of opening a private channel. Cross-
+  // owner summon EXECUTION is deferred to cut ④ — parsed here, not run.
+  if (address.mode === 'redirect') {
+    return { kind: 'text', text: redirectLine(address) }
+  }
+
+  // The voyager fires for an aside (own) or a summon (own or another's handle);
+  // a mid-sentence mention or plain chatter is NOT addressed.
+  const addressed = isAside || address.mode === 'summon'
+  if (room.roomPeople.length > 0 && !isAside && (!addressed || room.aiPresent === false)) {
     return { kind: 'empty' }
   }
 
