@@ -12,14 +12,17 @@
 -- (lib/supabase/admin.ts → SUPABASE_SECRET_KEY), and service_role has BYPASSRLS.
 -- Enabling RLS closes the authenticated-REST leak WITHOUT touching any app path.
 --
--- PROOF-OF-CONCEPT SLICE (ORU-450 spec phase): this file currently contains the
--- two load-bearing shapes —
---   (1) retrieval_events RLS  — the cleanest owner-only backstop, and
---   (2) the search_knowledge auth.uid() gate — the riskiest claim (a
---       SECURITY DEFINER function GRANTed to `authenticated` that trusted a
---       caller-supplied p_user_id / p_participants).
--- Build GROWS this same migration through the work list: RLS on spaces,
--- space_members and voyage_invites, plus graph_traverse scoping.
+-- The backstop, in six sections:
+--   (1) retrieval_events — owner-only SELECT.
+--   (2) search_knowledge — auth.uid() + voyage-membership gate on the
+--       SECURITY DEFINER RPC that trusted caller-supplied p_user_id / voyage.
+--   (3) spaces — member-only SELECT.
+--   (4) space_members — co-member-only roster.
+--   (5) voyage_invites — captain-only SELECT.
+--   (6) graph_traverse — caller-scoped via knowledge_in_scope(), locked to the
+--       service-role admin client.
+-- Sections (1) and (2)'s auth.uid() gate began as the spec-phase proof of
+-- concept (the riskiest claim, C1); Build grew the rest.
 -- =============================================================================
 
 
@@ -36,7 +39,8 @@ DROP POLICY IF EXISTS "retrieval_events owner read" ON public.retrieval_events;
 CREATE POLICY "retrieval_events owner read"
   ON public.retrieval_events
   FOR SELECT
-  USING (user_id = auth.uid());
+  TO authenticated
+  USING (user_id = (SELECT auth.uid()));
 
 
 -- ---------------------------------------------------------------------------
@@ -79,15 +83,32 @@ AS $function$
 DECLARE
   v_caller UUID := auth.uid();
 BEGIN
-  -- Gate: authenticated callers may only search as themselves.
-  -- v_caller IS NULL for the trusted service-role app path — left unrestricted.
+  -- Gate: authenticated callers may only search as themselves, within voyages
+  -- they belong to. v_caller IS NULL for the trusted service-role app path —
+  -- left entirely unrestricted (the app already scopes every call in code).
   IF v_caller IS NOT NULL THEN
+    -- (1) identity: search only as yourself.
     IF p_user_id IS DISTINCT FROM v_caller THEN
       RAISE EXCEPTION 'search_knowledge: p_user_id must equal auth.uid()'
         USING ERRCODE = '42501';  -- insufficient_privilege
     END IF;
-    -- Never trust a caller-supplied audience: derive it server-side.
+    -- (2) never trust a caller-supplied audience: derive it server-side.
     p_participants := ARRAY[v_caller];
+    -- (3) voyage membership: naming a voyage you don't belong to would leak its
+    --     L3 shared (domain/operational) knowledge and L4 NULL-participant
+    --     messages through knowledge_in_scope, which has no membership check of
+    --     its own. Gating identity alone is not enough — gate the voyage too.
+    --     This EXISTS runs as the definer, so it bypasses voyage_members RLS
+    --     (no recursion) and reads the true membership.
+    IF p_voyage_slug IS NOT NULL AND NOT EXISTS (
+      SELECT 1
+      FROM public.voyage_members vm
+      JOIN public.voyages v ON v.id = vm.voyage_id
+      WHERE v.slug = p_voyage_slug AND vm.user_id = v_caller
+    ) THEN
+      RAISE EXCEPTION 'search_knowledge: caller is not a member of voyage %', p_voyage_slug
+        USING ERRCODE = '42501';  -- insufficient_privilege
+    END IF;
   END IF;
 
   RETURN QUERY
@@ -120,8 +141,12 @@ GRANT EXECUTE ON FUNCTION public.search_knowledge TO authenticated;
 -- policy triggers "infinite recursion detected in policy"; running the check
 -- as the function's definer (which bypasses RLS) breaks that loop. STABLE +
 -- fixed search_path; owned by the migration role.
+--
+-- It answers ONLY about the caller (auth.uid()), never an arbitrary user id —
+-- so exposing it to `authenticated` (which RLS policy evaluation requires) is
+-- not a membership oracle: a direct caller learns only their own memberships.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.is_active_space_member(p_space_id uuid, p_user_id uuid)
+CREATE OR REPLACE FUNCTION public.is_active_space_member(p_space_id uuid)
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
@@ -132,10 +157,12 @@ AS $$
     SELECT 1
     FROM public.space_members sm
     WHERE sm.space_id = p_space_id
-      AND sm.user_id = p_user_id
+      AND sm.user_id = auth.uid()
       AND sm.state = 'active'
   );
 $$;
+REVOKE EXECUTE ON FUNCTION public.is_active_space_member(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_active_space_member(uuid) TO authenticated;
 
 
 -- ---------------------------------------------------------------------------
@@ -150,9 +177,10 @@ DROP POLICY IF EXISTS "spaces member read" ON public.spaces;
 CREATE POLICY "spaces member read"
   ON public.spaces
   FOR SELECT
+  TO authenticated
   USING (
-    created_by = auth.uid()
-    OR public.is_active_space_member(spaces.id, auth.uid())
+    created_by = (SELECT auth.uid())
+    OR public.is_active_space_member(spaces.id)
   );
 
 
@@ -169,32 +197,51 @@ DROP POLICY IF EXISTS "space_members co-member read" ON public.space_members;
 CREATE POLICY "space_members co-member read"
   ON public.space_members
   FOR SELECT
+  TO authenticated
   USING (
-    user_id = auth.uid()
-    OR public.is_active_space_member(space_members.space_id, auth.uid())
+    user_id = (SELECT auth.uid())
+    OR public.is_active_space_member(space_members.space_id)
   );
 
 
 -- ---------------------------------------------------------------------------
--- (5) voyage_invites — invitee emails are visible only to the voyage's
---     captain. Reuses the existing is_voyage_captain(slug, user) helper,
---     joining voyage_id → slug. Writes stay on the service-role app path
---     (voyage/index.ts); authenticated REST callers get captain-scoped reads.
+-- (5) voyage_invites — invitee emails are visible only to the voyage's captain.
+--
+--     Captaincy helper is SECURITY DEFINER and keyed by voyage_id. The existing
+--     is_voyage_captain(slug, user) is plain STABLE SQL (invoker-rights): using
+--     it here would read voyage_members AS THE CALLER, and voyage_members' own
+--     SELECT policy (011_voyages.sql) is self-referential — that path throws
+--     "infinite recursion detected in policy for relation voyage_members".
+--     A definer helper bypasses voyage_members RLS, breaking the loop; it also
+--     answers only about auth.uid(), so it is not a captaincy oracle. Writes
+--     stay on the service-role app path (voyage/index.ts).
 -- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.is_voyage_captain_by_id(p_voyage_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path TO 'public'
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.voyage_members vm
+    WHERE vm.voyage_id = p_voyage_id
+      AND vm.user_id = auth.uid()
+      AND vm.role = 'captain'
+  );
+$$;
+REVOKE EXECUTE ON FUNCTION public.is_voyage_captain_by_id(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_voyage_captain_by_id(uuid) TO authenticated;
+
 ALTER TABLE public.voyage_invites ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "voyage_invites captain read" ON public.voyage_invites;
 CREATE POLICY "voyage_invites captain read"
   ON public.voyage_invites
   FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.voyages v
-      WHERE v.id = voyage_invites.voyage_id
-        AND public.is_voyage_captain(v.slug, auth.uid())
-    )
-  );
+  TO authenticated
+  USING (public.is_voyage_captain_by_id(voyage_invites.voyage_id));
 
 
 -- ---------------------------------------------------------------------------
@@ -320,3 +367,13 @@ BEGIN
   LIMIT p_max_nodes;
 END;
 $$;
+
+-- graph_traverse is invoker-rights (no SECURITY DEFINER) and takes caller-
+-- supplied scope args with no internal auth.uid() check — its ONLY intended
+-- caller is the service-role admin client (lib/retrieval/tools.ts). A freshly
+-- CREATEd function defaults EXECUTE to PUBLIC (anon + authenticated); leaving
+-- that would let an authenticated REST caller reach it directly with forged
+-- scope args. Lock it to service_role so the admin-client-only claim above is
+-- enforced, not merely assumed.
+REVOKE EXECUTE ON FUNCTION public.graph_traverse(uuid, text, text, int, float, int, uuid, text, uuid[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.graph_traverse(uuid, text, text, int, float, int, uuid, text, uuid[]) TO service_role;

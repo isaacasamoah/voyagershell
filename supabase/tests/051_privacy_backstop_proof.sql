@@ -5,8 +5,9 @@
 --   • retrieval_events RLS is owner-only for authenticated callers, and the
 --     service-role app path still reads every row.
 --   • search_knowledge rejects a forged p_user_id from an authenticated caller,
---     accepts an honest self-query, and leaves the service-role app path (the
---     way the real app calls it) unrestricted.
+--     rejects a non-member naming another family's voyage, accepts an honest
+--     self-query, and leaves the service-role app path (the way the real app
+--     calls it) unrestricted.
 --   • spaces / space_members / voyage_invites RLS: a signed-in NON-member reads
 --     0 rows of another family's room, roster, and invitee emails; the real
 --     member/captain still sees their own.
@@ -124,8 +125,13 @@ BEGIN
   IF n >= 1 THEN RAISE NOTICE 'PASS retrieval_events: authenticated B sees its own rows';
   ELSE ok := FALSE; RAISE WARNING 'FAIL retrieval_events: authenticated B could not see its own rows'; END IF;
 
-  -- (c) service_role (app path) still sees every row
+  -- (c) service_role (app path) still sees every row.
+  -- Clear the jwt claims GUC: set_config(..., is_local=TRUE) persists for the
+  -- whole transaction and RESET role does NOT clear it, so without this the
+  -- service-role path would still carry a prior probe's auth.uid() and no longer
+  -- faithfully model the app (auth.uid() = NULL).
   SET LOCAL role service_role;
+  PERFORM set_config('request.jwt.claims', '', TRUE);
   SELECT count(*) INTO n FROM public.retrieval_events;
   RESET role;
   IF n >= 2 THEN RAISE NOTICE 'PASS retrieval_events: service_role app path reads all rows (%).', n;
@@ -165,7 +171,11 @@ BEGIN
   ELSE ok := FALSE; RAISE WARNING 'FAIL search_knowledge: authenticated honest self-query was rejected'; END IF;
 
   -- (f) service_role app path with any p_user_id  → must SUCCEED (no regression)
+  -- Clear the leaked jwt claims from probe (e) (see (c)); otherwise auth.uid()
+  -- stays = userB inside the function, the gate fires, and this probe FALSE-FAILS
+  -- a correct migration.
   SET LOCAL role service_role;
+  PERFORM set_config('request.jwt.claims', '', TRUE);
   raised := FALSE;
   BEGIN
     PERFORM * FROM public.search_knowledge(
@@ -176,6 +186,38 @@ BEGIN
   RESET role;
   IF NOT raised THEN RAISE NOTICE 'PASS search_knowledge: service_role app path unrestricted';
   ELSE ok := FALSE; RAISE WARNING 'FAIL search_knowledge: service_role app path regressed'; END IF;
+
+  -- (f2) authenticated B (non-member) naming A's voyage  → must be REJECTED.
+  --      Identity is honest (p_user_id = B) but B is not a member of fam-a-450,
+  --      so the voyage-membership gate must block the L3/L4-NULL leak.
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub','00000000-0000-0000-0000-00000000000b')::text, TRUE);
+  raised := FALSE;
+  BEGIN
+    PERFORM * FROM public.search_knowledge(
+      array_fill(0::real, ARRAY[1536])::vector,
+      p_user_id => '00000000-0000-0000-0000-00000000000b'::uuid,
+      p_voyage_slug => 'fam-a-450');
+  EXCEPTION WHEN insufficient_privilege THEN raised := TRUE;
+  END;
+  RESET role;
+  IF raised THEN RAISE NOTICE 'PASS search_knowledge: authenticated non-member voyage query rejected';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL search_knowledge: authenticated non-member read another voyage'; END IF;
+
+  -- (f3) authenticated A (member/captain) naming its OWN voyage  → must SUCCEED.
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub','00000000-0000-0000-0000-00000000000a')::text, TRUE);
+  raised := FALSE;
+  BEGIN
+    PERFORM * FROM public.search_knowledge(
+      array_fill(0::real, ARRAY[1536])::vector,
+      p_user_id => '00000000-0000-0000-0000-00000000000a'::uuid,
+      p_voyage_slug => 'fam-a-450');
+  EXCEPTION WHEN OTHERS THEN raised := TRUE;
+  END;
+  RESET role;
+  IF NOT raised THEN RAISE NOTICE 'PASS search_knowledge: member self-query in own voyage allowed';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL search_knowledge: member self-query in own voyage was rejected'; END IF;
 
   -- ===========================================================================
   -- spaces: member-only for authenticated; full for service_role
