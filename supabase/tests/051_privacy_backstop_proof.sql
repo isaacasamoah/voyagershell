@@ -13,6 +13,19 @@
 --     member/captain still sees their own.
 --   • graph_traverse: caller-scoped — an A-scoped traversal sees A's node, a
 --     B-scoped or unscoped traversal sees nothing of A's personal graph.
+--   • EXECUTE-surface lockdown: anon cannot EXECUTE search_knowledge (proves the
+--     REVOKE ... FROM PUBLIC), and neither anon nor authenticated can EXECUTE
+--     graph_traverse (proves it is locked to service_role). These fire at the
+--     grant layer, before any row work, so they are seed-independent.
+--
+-- KNOWN HARNESS LIMITS (row-level positives — deferred, tracked for follow-up):
+--   The self-query / member positives (probes e, f3) assert "no exception", not
+--   "N rows returned", because the seed uses NULL embeddings and the probes use a
+--   zero query vector (cosine distance is undefined → no rows match regardless of
+--   scope). Turning these into row-count assertions — and adding a member-forges-
+--   p_participants L4 probe — needs a real matching-embedding fixture; the code
+--   defenses themselves (the p_participants := ARRAY[auth.uid()] override and the
+--   voyage-membership gate) are exercised by the exception-based probes (d, f2).
 --
 -- HOW TO RUN (Test gate, against the live PREVIEW db — NOT prod):
 --   psql "$PREVIEW_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/051_privacy_backstop_proof.sql
@@ -317,6 +330,63 @@ BEGIN
     NULL, 'both', 2, 0.3, 50);
   IF n = 0 THEN RAISE NOTICE 'PASS graph_traverse: unscoped call denies by default (0 rows)';
   ELSE ok := FALSE; RAISE WARNING 'FAIL graph_traverse: unscoped call leaked % rows', n; END IF;
+
+  -- ===========================================================================
+  -- EXECUTE-surface lockdown. The gates above assume the WRONG role cannot even
+  -- reach these functions. Prove that at the grant layer — these fire before any
+  -- row work, so they are deterministic regardless of seed/embedding state.
+  -- ===========================================================================
+
+  -- (p) anon (the public key, auth.uid() = NULL) must NOT be able to EXECUTE
+  --     search_knowledge. This is the exact hole 051's REVOKE ... FROM PUBLIC
+  --     closes: a function's default grant is EXECUTE TO PUBLIC (which includes
+  --     anon), and anon's auth.uid() is NULL just like the trusted service-role
+  --     path — so without the REVOKE, the conditional guard is SKIPPED for anon
+  --     and a forged p_user_id reads cross-family. Denial is at the grant layer.
+  SET LOCAL role anon;
+  raised := FALSE;
+  BEGIN
+    PERFORM * FROM public.search_knowledge(
+      array_fill(0::real, ARRAY[1536])::vector,
+      p_user_id => '00000000-0000-0000-0000-00000000000a'::uuid);
+  EXCEPTION WHEN insufficient_privilege THEN raised := TRUE;
+  END;
+  RESET role;
+  IF raised THEN RAISE NOTICE 'PASS search_knowledge: anon cannot EXECUTE (REVOKE FROM PUBLIC holds)';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL search_knowledge: anon executed it — PUBLIC EXECUTE not revoked (cross-family leak open)'; END IF;
+
+  -- (q) graph_traverse is GRANTed to service_role ONLY. An authenticated REST
+  --     caller must NOT be able to EXECUTE it — otherwise arg-driven scoping is
+  --     the only thing between a forged-arg caller and the graph. Proves the
+  --     REVOKE FROM PUBLIC / GRANT service_role lockdown, not just the scoping.
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub','00000000-0000-0000-0000-00000000000b')::text, TRUE);
+  raised := FALSE;
+  BEGIN
+    PERFORM * FROM public.graph_traverse(
+      '00000000-0000-0000-0000-0000000000d1'::uuid,
+      NULL, 'both', 2, 0.3, 50,
+      p_user_id => '00000000-0000-0000-0000-00000000000b'::uuid);
+  EXCEPTION WHEN insufficient_privilege THEN raised := TRUE;
+  END;
+  RESET role;
+  IF raised THEN RAISE NOTICE 'PASS graph_traverse: authenticated caller cannot EXECUTE (service_role only)';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL graph_traverse: authenticated caller executed it — not locked to service_role'; END IF;
+
+  -- (r) …and anon cannot EXECUTE graph_traverse either.
+  SET LOCAL role anon;
+  PERFORM set_config('request.jwt.claims', '{}', TRUE);
+  raised := FALSE;
+  BEGIN
+    PERFORM * FROM public.graph_traverse(
+      '00000000-0000-0000-0000-0000000000d1'::uuid,
+      NULL, 'both', 2, 0.3, 50,
+      p_user_id => '00000000-0000-0000-0000-00000000000a'::uuid);
+  EXCEPTION WHEN insufficient_privilege THEN raised := TRUE;
+  END;
+  RESET role;
+  IF raised THEN RAISE NOTICE 'PASS graph_traverse: anon cannot EXECUTE';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL graph_traverse: anon executed it'; END IF;
 
   -- ===========================================================================
   IF ok THEN RAISE NOTICE 'ALL PASS';

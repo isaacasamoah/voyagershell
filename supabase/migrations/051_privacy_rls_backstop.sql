@@ -131,7 +131,20 @@ BEGIN
 END;
 $function$;
 
+-- Lock the EXECUTE surface. search_knowledge has been GRANTed to `authenticated`
+-- since 010, but was never REVOKEd FROM PUBLIC — and a function's default grant
+-- is EXECUTE TO PUBLIC, which includes `anon`. That is the hole this whole gate
+-- exists to close: `anon` (whose key ships in every client bundle) also has
+-- auth.uid() = NULL, so the conditional guard above is SKIPPED for it exactly as
+-- it is for the trusted service-role app path — an anon REST caller could forge
+-- p_user_id / p_participants and read cross-family. REVOKE FROM PUBLIC removes
+-- both `anon` and the implicit `service_role` grant, so we then GRANT the two
+-- roles that legitimately call it: `authenticated` (gated to itself by the guard)
+-- and `service_role` (the admin-client app path, auth.uid() = NULL, unrestricted
+-- by design). This mirrors the graph_traverse lockdown at the end of this file.
+REVOKE EXECUTE ON FUNCTION public.search_knowledge FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.search_knowledge TO authenticated;
+GRANT EXECUTE ON FUNCTION public.search_knowledge TO service_role;
 
 
 -- ---------------------------------------------------------------------------
