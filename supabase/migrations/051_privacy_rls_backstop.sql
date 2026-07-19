@@ -294,7 +294,7 @@ RETURNS TABLE (
   content TEXT,
   source_created_at TIMESTAMPTZ,
   knowledge_type TEXT,
-  attention_score FLOAT,
+  attention_score REAL,
   context_snippet TEXT,
   edge_type TEXT,
   edge_direction TEXT,
