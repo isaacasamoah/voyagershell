@@ -114,7 +114,7 @@ BEGIN
   RETURN QUERY
   SELECT
     kc.event_id, kc.content, kc.classifications, kc.entities, kc.topics,
-    kc.connected_to, kc.participants, kc.source_created_at,
+    NULL::uuid[], kc.participants, kc.source_created_at,
     (1 - (kc.embedding <=> query_embedding))::FLOAT AS similarity,
     kc.knowledge_type, kc.attention_score, kc.context_snippet,
     kc.sender_display_name, kc.sender_user_id, kc.event_type
