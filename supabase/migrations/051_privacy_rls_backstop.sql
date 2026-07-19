@@ -143,6 +143,7 @@ $function$;
 -- and `service_role` (the admin-client app path, auth.uid() = NULL, unrestricted
 -- by design). This mirrors the graph_traverse lockdown at the end of this file.
 REVOKE EXECUTE ON FUNCTION public.search_knowledge FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.search_knowledge FROM anon;
 GRANT EXECUTE ON FUNCTION public.search_knowledge TO authenticated;
 GRANT EXECUTE ON FUNCTION public.search_knowledge TO service_role;
 
@@ -389,4 +390,6 @@ $$;
 -- scope args. Lock it to service_role so the admin-client-only claim above is
 -- enforced, not merely assumed.
 REVOKE EXECUTE ON FUNCTION public.graph_traverse(uuid, text, text, int, float, int, uuid, text, uuid[]) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.graph_traverse(uuid, text, text, int, float, int, uuid, text, uuid[]) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.graph_traverse(uuid, text, text, int, float, int, uuid, text, uuid[]) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.graph_traverse(uuid, text, text, int, float, int, uuid, text, uuid[]) TO service_role;
