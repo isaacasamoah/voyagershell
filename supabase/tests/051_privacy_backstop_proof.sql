@@ -131,7 +131,7 @@ BEGIN
   -- service-role path would still carry a prior probe's auth.uid() and no longer
   -- faithfully model the app (auth.uid() = NULL).
   SET LOCAL role service_role;
-  PERFORM set_config('request.jwt.claims', '', TRUE);
+  PERFORM set_config('request.jwt.claims', '{}', TRUE);
   SELECT count(*) INTO n FROM public.retrieval_events;
   RESET role;
   IF n >= 2 THEN RAISE NOTICE 'PASS retrieval_events: service_role app path reads all rows (%).', n;
@@ -175,7 +175,7 @@ BEGIN
   -- stays = userB inside the function, the gate fires, and this probe FALSE-FAILS
   -- a correct migration.
   SET LOCAL role service_role;
-  PERFORM set_config('request.jwt.claims', '', TRUE);
+  PERFORM set_config('request.jwt.claims', '{}', TRUE);
   raised := FALSE;
   BEGIN
     PERFORM * FROM public.search_knowledge(
