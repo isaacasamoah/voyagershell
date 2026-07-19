@@ -111,3 +111,212 @@ END;
 $function$;
 
 GRANT EXECUTE ON FUNCTION public.search_knowledge TO authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Membership helper — SECURITY DEFINER so the space_members SELECT policy can
+-- ask "is the caller an active member of this space?" WITHOUT recursing into
+-- its own RLS. A plain query against space_members inside a space_members
+-- policy triggers "infinite recursion detected in policy"; running the check
+-- as the function's definer (which bypasses RLS) breaks that loop. STABLE +
+-- fixed search_path; owned by the migration role.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.is_active_space_member(p_space_id uuid, p_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path TO 'public'
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.space_members sm
+    WHERE sm.space_id = p_space_id
+      AND sm.user_id = p_user_id
+      AND sm.state = 'active'
+  );
+$$;
+
+
+-- ---------------------------------------------------------------------------
+-- (3) spaces — a private room is visible only to its members (and its creator).
+--     Writes stay on the service-role app path (feed.ts, room.ts, invites.ts),
+--     which bypasses RLS; authenticated REST callers get member-scoped reads
+--     and no direct writes.
+-- ---------------------------------------------------------------------------
+ALTER TABLE public.spaces ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "spaces member read" ON public.spaces;
+CREATE POLICY "spaces member read"
+  ON public.spaces
+  FOR SELECT
+  USING (
+    created_by = auth.uid()
+    OR public.is_active_space_member(spaces.id, auth.uid())
+  );
+
+
+-- ---------------------------------------------------------------------------
+-- (4) space_members — "who is in this room" is visible only to co-members.
+--     You always see your own membership row; you see the rest of a space's
+--     roster only when you are yourself an active member of that space. The
+--     roster check goes through is_active_space_member() to avoid RLS
+--     self-recursion.
+-- ---------------------------------------------------------------------------
+ALTER TABLE public.space_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "space_members co-member read" ON public.space_members;
+CREATE POLICY "space_members co-member read"
+  ON public.space_members
+  FOR SELECT
+  USING (
+    user_id = auth.uid()
+    OR public.is_active_space_member(space_members.space_id, auth.uid())
+  );
+
+
+-- ---------------------------------------------------------------------------
+-- (5) voyage_invites — invitee emails are visible only to the voyage's
+--     captain. Reuses the existing is_voyage_captain(slug, user) helper,
+--     joining voyage_id → slug. Writes stay on the service-role app path
+--     (voyage/index.ts); authenticated REST callers get captain-scoped reads.
+-- ---------------------------------------------------------------------------
+ALTER TABLE public.voyage_invites ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "voyage_invites captain read" ON public.voyage_invites;
+CREATE POLICY "voyage_invites captain read"
+  ON public.voyage_invites
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.voyages v
+      WHERE v.id = voyage_invites.voyage_id
+        AND public.is_voyage_captain(v.slug, auth.uid())
+    )
+  );
+
+
+-- ---------------------------------------------------------------------------
+-- (6) graph_traverse — scope the knowledge graph to the caller.
+--
+--     graph_traverse runs on the service-role admin client (lib/retrieval/
+--     tools.ts), so RLS cannot reach it — its privacy must live inside the
+--     query. Migration 030's signature had NO scope params and its final
+--     SELECT read knowledge_current unscoped: a traversal could surface any
+--     family's nodes reachable by an edge. We add p_user_id / p_voyage_slug /
+--     p_participants and apply the canonical knowledge_in_scope() predicate in
+--     BOTH the base-case node discovery (so the walk only roots on nodes the
+--     caller may see) AND the final SELECT (so every emitted node is in scope).
+--
+--     CLEAN TRANSITION (spec WL7): the old 6-arg signature is DROPPed in the
+--     SAME migration, immediately before the re-CREATE. No wrapper, no parallel
+--     signature. The sole caller (tools.ts) is updated in the same commit to
+--     pass the new scope args. With all three scope args NULL, knowledge_in_scope
+--     denies every row — an unscoped call now safely returns nothing rather than
+--     leaking, so the deny-by-default posture holds if a caller ever forgets.
+-- ---------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.graph_traverse(uuid, text, text, int, float, int);
+
+CREATE OR REPLACE FUNCTION public.graph_traverse(
+  p_node_id UUID,
+  p_edge_type TEXT DEFAULT NULL,
+  p_direction TEXT DEFAULT 'both',
+  p_depth INT DEFAULT 1,
+  p_min_attention FLOAT DEFAULT 0.3,
+  p_max_nodes INT DEFAULT 50,
+  p_user_id UUID DEFAULT NULL,
+  p_voyage_slug TEXT DEFAULT NULL,
+  p_participants UUID[] DEFAULT NULL
+)
+RETURNS TABLE (
+  event_id UUID,
+  content TEXT,
+  source_created_at TIMESTAMPTZ,
+  knowledge_type TEXT,
+  attention_score FLOAT,
+  context_snippet TEXT,
+  edge_type TEXT,
+  edge_direction TEXT,
+  hop INT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH RECURSIVE traversal AS (
+    -- Base case: direct edges from/to the start node, restricted to nodes the
+    -- caller is allowed to see (knowledge_in_scope on the discovered node).
+    SELECT
+      CASE
+        WHEN p_direction IN ('outgoing', 'both') AND e.source_id = p_node_id THEN e.target_id
+        WHEN p_direction IN ('incoming', 'both') AND e.target_id = p_node_id THEN e.source_id
+      END AS node_id,
+      e.edge_type AS e_type,
+      CASE
+        WHEN e.source_id = p_node_id THEN 'outgoing'
+        ELSE 'incoming'
+      END AS e_direction,
+      1 AS depth
+    FROM knowledge_edges e
+    WHERE (
+      (p_direction IN ('outgoing', 'both') AND e.source_id = p_node_id)
+      OR (p_direction IN ('incoming', 'both') AND e.target_id = p_node_id)
+    )
+    AND (p_edge_type IS NULL OR e.edge_type = p_edge_type)
+    AND EXISTS (
+      SELECT 1 FROM knowledge_current kc0
+      WHERE kc0.event_id = CASE
+          WHEN p_direction IN ('outgoing', 'both') AND e.source_id = p_node_id THEN e.target_id
+          WHEN p_direction IN ('incoming', 'both') AND e.target_id = p_node_id THEN e.source_id
+        END
+        AND knowledge_in_scope(kc0.user_id, kc0.voyage_slug, kc0.event_type, kc0.knowledge_type, kc0.participants, p_user_id, p_voyage_slug, p_participants)
+    )
+
+    UNION
+
+    -- Recursive case: follow edges from discovered nodes
+    SELECT
+      CASE
+        WHEN e.source_id = t.node_id THEN e.target_id
+        ELSE e.source_id
+      END AS node_id,
+      e.edge_type AS e_type,
+      CASE
+        WHEN e.source_id = t.node_id THEN 'outgoing'
+        ELSE 'incoming'
+      END AS e_direction,
+      t.depth + 1 AS depth
+    FROM knowledge_edges e
+    INNER JOIN traversal t ON (
+      (e.source_id = t.node_id AND p_direction IN ('outgoing', 'both'))
+      OR (e.target_id = t.node_id AND p_direction IN ('incoming', 'both'))
+    )
+    WHERE t.depth < p_depth
+      AND (p_edge_type IS NULL OR e.edge_type = p_edge_type)
+      -- Prevent cycles: don't revisit the start node
+      AND CASE
+        WHEN e.source_id = t.node_id THEN e.target_id
+        ELSE e.source_id
+      END != p_node_id
+  )
+  SELECT DISTINCT ON (kc.event_id)
+    kc.event_id,
+    kc.content,
+    kc.source_created_at,
+    kc.knowledge_type,
+    kc.attention_score,
+    kc.context_snippet,
+    t.e_type AS edge_type,
+    t.e_direction AS edge_direction,
+    t.depth AS hop
+  FROM traversal t
+  INNER JOIN knowledge_current kc ON kc.event_id = t.node_id
+  WHERE kc.attention_score >= p_min_attention
+    AND t.node_id IS NOT NULL
+    -- Final backstop: every emitted node must be in the caller's scope.
+    AND knowledge_in_scope(kc.user_id, kc.voyage_slug, kc.event_type, kc.knowledge_type, kc.participants, p_user_id, p_voyage_slug, p_participants)
+  ORDER BY kc.event_id, t.depth ASC
+  LIMIT p_max_nodes;
+END;
+$$;
