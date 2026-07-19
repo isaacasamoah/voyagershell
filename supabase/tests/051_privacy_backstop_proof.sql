@@ -1,12 +1,17 @@
 -- =============================================================================
 -- Proof harness — ORU-450 database-layer privacy backstop
 -- =============================================================================
--- Deterministic, self-seeding SQL proof of the PoC slice in migration 051:
+-- Deterministic, self-seeding SQL proof of migration 051's full backstop:
 --   • retrieval_events RLS is owner-only for authenticated callers, and the
 --     service-role app path still reads every row.
 --   • search_knowledge rejects a forged p_user_id from an authenticated caller,
 --     accepts an honest self-query, and leaves the service-role app path (the
 --     way the real app calls it) unrestricted.
+--   • spaces / space_members / voyage_invites RLS: a signed-in NON-member reads
+--     0 rows of another family's room, roster, and invitee emails; the real
+--     member/captain still sees their own.
+--   • graph_traverse: caller-scoped — an A-scoped traversal sees A's node, a
+--     B-scoped or unscoped traversal sees nothing of A's personal graph.
 --
 -- HOW TO RUN (Test gate, against the live PREVIEW db — NOT prod):
 --   psql "$PREVIEW_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/051_privacy_backstop_proof.sql
@@ -34,6 +39,62 @@ SET client_min_messages = warning;
 INSERT INTO public.retrieval_events (user_id, query, nodes_returned)
 VALUES (:'userA', 'family A private query', ARRAY[]::uuid[]),
        (:'userB', 'family B private query', ARRAY[]::uuid[]);
+
+-- --- Identities behind the FKs (spaces/voyages need real profiles) -----------
+-- A = family-A captain/owner; B = a signed-in NON-member of family A.
+INSERT INTO auth.users (id, email)
+VALUES (:'userA', 'a-450@proof.local'), (:'userB', 'b-450@proof.local')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.profiles (id, email, display_name)
+VALUES (:'userA', 'a-450@proof.local', 'Family A'),
+       (:'userB', 'b-450@proof.local', 'Family B')
+ON CONFLICT (id) DO NOTHING;
+
+-- --- Family A's voyage + captaincy -------------------------------------------
+\set voyA '00000000-0000-0000-0000-0000000000a1'
+INSERT INTO public.voyages (id, slug, name)
+VALUES (:'voyA', 'fam-a-450', 'Family A Voyage')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.voyage_members (voyage_id, user_id, role)
+VALUES (:'voyA', :'userA', 'captain')
+ON CONFLICT (voyage_id, user_id) DO NOTHING;
+
+-- --- voyage_invites: one pending invite A issued in family A's voyage --------
+INSERT INTO public.voyage_invites (voyage_id, email, invited_by, status)
+VALUES (:'voyA', 'guest@proof.local', :'userA', 'pending');
+
+-- --- spaces + space_members: a private room in family A, A the only member ---
+\set spaceA '00000000-0000-0000-0000-0000000000c1'
+INSERT INTO public.spaces (id, kind, voyage_id, created_by)
+VALUES (:'spaceA', 'room', :'voyA', :'userA')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.space_members (space_id, user_id, state)
+VALUES (:'spaceA', :'userA', 'active')
+ON CONFLICT (space_id, user_id) DO NOTHING;
+
+-- --- graph_traverse: two of A's PERSONAL (L1) nodes, an edge between them ----
+--     A1 --supports--> A2.  Personal knowledge (user_id=A, voyage_slug NULL) so
+--     only A's own scope may traverse it; a B-scoped or unscoped call must not.
+\set nodeA1 '00000000-0000-0000-0000-0000000000d1'
+\set nodeA2 '00000000-0000-0000-0000-0000000000d2'
+INSERT INTO public.knowledge_events (id, user_id, voyage_slug, event_type, content)
+VALUES (:'nodeA1', :'userA', NULL, 'explicit', 'A node one'),
+       (:'nodeA2', :'userA', NULL, 'explicit', 'A node two')
+ON CONFLICT (id) DO NOTHING;
+-- Force the exact knowledge_current state the traversal reads (independent of
+-- any enrichment trigger): both nodes personal, above the attention floor.
+INSERT INTO public.knowledge_current
+  (event_id, user_id, voyage_slug, content, event_type, knowledge_type, attention_score, participants, source_created_at)
+VALUES
+  (:'nodeA1', :'userA', NULL, 'A node one', 'explicit', 'domain', 0.9, NULL, NOW()),
+  (:'nodeA2', :'userA', NULL, 'A node two', 'explicit', 'domain', 0.9, NULL, NOW())
+ON CONFLICT (event_id) DO UPDATE
+  SET user_id = EXCLUDED.user_id, voyage_slug = EXCLUDED.voyage_slug,
+      event_type = EXCLUDED.event_type, knowledge_type = EXCLUDED.knowledge_type,
+      attention_score = EXCLUDED.attention_score, participants = EXCLUDED.participants;
+INSERT INTO public.knowledge_edges (source_id, target_id, edge_type)
+VALUES (:'nodeA1', :'nodeA2', 'supports')
+ON CONFLICT (source_id, target_id, edge_type) DO NOTHING;
 
 DO $proof$
 DECLARE
@@ -115,6 +176,105 @@ BEGIN
   RESET role;
   IF NOT raised THEN RAISE NOTICE 'PASS search_knowledge: service_role app path unrestricted';
   ELSE ok := FALSE; RAISE WARNING 'FAIL search_knowledge: service_role app path regressed'; END IF;
+
+  -- ===========================================================================
+  -- spaces: member-only for authenticated; full for service_role
+  -- ===========================================================================
+
+  -- (g) authenticated B (non-member) must NOT see A's space
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub','00000000-0000-0000-0000-00000000000b')::text, TRUE);
+  SELECT count(*) INTO n FROM public.spaces
+    WHERE id = '00000000-0000-0000-0000-0000000000c1';
+  RESET role;
+  IF n = 0 THEN RAISE NOTICE 'PASS spaces: authenticated non-member sees 0 of A''s spaces';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL spaces: authenticated non-member saw % of A''s spaces', n; END IF;
+
+  -- (h) authenticated A (member) DOES see its own space
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub','00000000-0000-0000-0000-00000000000a')::text, TRUE);
+  SELECT count(*) INTO n FROM public.spaces
+    WHERE id = '00000000-0000-0000-0000-0000000000c1';
+  RESET role;
+  IF n = 1 THEN RAISE NOTICE 'PASS spaces: authenticated member sees its own space';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL spaces: authenticated member could not see its own space (saw %)', n; END IF;
+
+  -- ===========================================================================
+  -- space_members: co-member-only roster for authenticated
+  -- ===========================================================================
+
+  -- (i) authenticated B (non-member) must NOT read A's room roster
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub','00000000-0000-0000-0000-00000000000b')::text, TRUE);
+  SELECT count(*) INTO n FROM public.space_members
+    WHERE space_id = '00000000-0000-0000-0000-0000000000c1';
+  RESET role;
+  IF n = 0 THEN RAISE NOTICE 'PASS space_members: authenticated non-member sees 0 of A''s roster';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL space_members: authenticated non-member saw % roster rows', n; END IF;
+
+  -- (j) authenticated A (member) DOES see its own membership row
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub','00000000-0000-0000-0000-00000000000a')::text, TRUE);
+  SELECT count(*) INTO n FROM public.space_members
+    WHERE space_id = '00000000-0000-0000-0000-0000000000c1';
+  RESET role;
+  IF n >= 1 THEN RAISE NOTICE 'PASS space_members: authenticated member sees its own roster';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL space_members: authenticated member could not see its own roster'; END IF;
+
+  -- ===========================================================================
+  -- voyage_invites: captain-only for authenticated
+  -- ===========================================================================
+
+  -- (k) authenticated B (non-captain) must NOT read A's invitee emails
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub','00000000-0000-0000-0000-00000000000b')::text, TRUE);
+  SELECT count(*) INTO n FROM public.voyage_invites
+    WHERE voyage_id = '00000000-0000-0000-0000-0000000000a1';
+  RESET role;
+  IF n = 0 THEN RAISE NOTICE 'PASS voyage_invites: authenticated non-captain sees 0 invitee emails';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL voyage_invites: authenticated non-captain saw % invitee emails', n; END IF;
+
+  -- (l) authenticated A (captain) DOES see its own voyage's invites
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub','00000000-0000-0000-0000-00000000000a')::text, TRUE);
+  SELECT count(*) INTO n FROM public.voyage_invites
+    WHERE voyage_id = '00000000-0000-0000-0000-0000000000a1';
+  RESET role;
+  IF n >= 1 THEN RAISE NOTICE 'PASS voyage_invites: captain sees own voyage''s invites';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL voyage_invites: captain could not see own voyage''s invites'; END IF;
+
+  -- ===========================================================================
+  -- graph_traverse: caller-scoped. RLS cannot reach it (admin client), so the
+  -- p_user_id/p_voyage_slug/p_participants args + knowledge_in_scope() are the
+  -- boundary. Called directly (no role switch) — scoping is arg-driven.
+  -- ===========================================================================
+
+  -- (m) A-scoped traversal from A1 sees A's own connected node A2
+  SELECT count(*) INTO n FROM public.graph_traverse(
+    '00000000-0000-0000-0000-0000000000d1'::uuid,
+    NULL, 'both', 2, 0.3, 50,
+    p_user_id => '00000000-0000-0000-0000-00000000000a'::uuid,
+    p_voyage_slug => NULL,
+    p_participants => ARRAY['00000000-0000-0000-0000-00000000000a'::uuid]);
+  IF n >= 1 THEN RAISE NOTICE 'PASS graph_traverse: A-scoped traversal sees A''s in-scope node';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL graph_traverse: A-scoped traversal saw no in-scope node'; END IF;
+
+  -- (n) B-scoped traversal from A1 must see NOTHING (A's nodes are personal)
+  SELECT count(*) INTO n FROM public.graph_traverse(
+    '00000000-0000-0000-0000-0000000000d1'::uuid,
+    NULL, 'both', 2, 0.3, 50,
+    p_user_id => '00000000-0000-0000-0000-00000000000b'::uuid,
+    p_voyage_slug => NULL,
+    p_participants => ARRAY['00000000-0000-0000-0000-00000000000b'::uuid]);
+  IF n = 0 THEN RAISE NOTICE 'PASS graph_traverse: B-scoped traversal sees 0 of A''s nodes';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL graph_traverse: B-scoped traversal saw % of A''s nodes', n; END IF;
+
+  -- (o) unscoped (all scope args NULL) must deny by default → NOTHING
+  SELECT count(*) INTO n FROM public.graph_traverse(
+    '00000000-0000-0000-0000-0000000000d1'::uuid,
+    NULL, 'both', 2, 0.3, 50);
+  IF n = 0 THEN RAISE NOTICE 'PASS graph_traverse: unscoped call denies by default (0 rows)';
+  ELSE ok := FALSE; RAISE WARNING 'FAIL graph_traverse: unscoped call leaked % rows', n; END IF;
 
   -- ===========================================================================
   IF ok THEN RAISE NOTICE 'ALL PASS';
