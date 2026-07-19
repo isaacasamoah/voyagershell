@@ -37,7 +37,7 @@ const getString = (value: JsonRecord, key: string): string | null => {
   return typeof item === 'string' ? item : null
 }
 
-const getSessionId = (row: FeedEventRow): string | null => {
+export const getFeedEventSessionId = (row: FeedEventRow): string | null => {
   const metadataSessionId = isObject(row.metadata) ? getString(row.metadata, 'session_id') : null
   if (metadataSessionId) return metadataSessionId
   return isObject(row.source_ref) ? getString(row.source_ref, 'conversation_id') : null
@@ -49,6 +49,13 @@ const getSenderUserId = (row: FeedEventRow): string | null => (
 
 const getSenderDisplayName = (row: FeedEventRow): string | null => (
   isObject(row.metadata) ? getString(row.metadata, 'sender_display_name') : null
+)
+
+// cut ④: the summoned voyager's OWNER display name, e.g. "Isaac" — drives the
+// "(Isaac's Voyager)" attribution on a fanned public reply. Null on a solo/aside
+// reply, so it renders the flat "Voyager".
+const getOwnerDisplayName = (row: FeedEventRow): string | null => (
+  isObject(row.metadata) ? getString(row.metadata, 'owner_display_name') : null
 )
 
 // Message events carry a `source` marker: 'invite' → interactive knock,
@@ -108,7 +115,7 @@ export const isInFeedContext = (
   voyageSlug: string | null,
 ) => {
   if (!row.participants?.includes(userId)) return false
-  if (row.event_type === 'conversation') return getSessionId(row) === conversationId
+  if (row.event_type === 'conversation') return getFeedEventSessionId(row) === conversationId
   if (row.event_type !== 'message') return false
   return voyageSlug ? row.voyage_slug === voyageSlug : row.voyage_slug === null
 }
@@ -126,6 +133,11 @@ export const toFeedEvents = (
     const kind = getFeedKind(row)
     const delivery = deliveryByEventId.get(row.id) ?? null
     const isSelfAuthoredMessage = row.event_type === 'message' && role === 'user'
+    // cut ④: the viewer's OWN voyager's public reply has no delivery row (the
+    // owner is excluded from the fan-out) — it is inherently "seen", never an
+    // unread badge on your own voyager's words.
+    const isOwnVoyagerMessage =
+      row.event_type === 'message' && row.actor_type === 'voyager' && row.user_id === userId
 
     return {
       id: row.id,
@@ -133,18 +145,28 @@ export const toFeedEvents = (
       role,
       kind,
       inviteState: kind === 'invite' ? viewerInviteState : null,
-      senderDisplayName: role === 'assistant' ? 'Voyager' : getSenderDisplayName(row),
+      // cut ④: a fanned voyager reply carries its voyager name (metadata) so the
+      // room renders "WREN ✦"; a solo/aside reply has none → the flat "Voyager".
+      senderDisplayName: getSenderDisplayName(row),
+      ownerName: role === 'assistant' ? getOwnerDisplayName(row) : null,
       senderUserId: getSenderUserId(row) ?? row.user_id,
       content: row.content ?? '',
       createdAt: row.created_at,
-      seen: row.event_type !== 'message' || isSelfAuthoredMessage || Boolean(delivery?.seen_at),
+      seen: row.event_type !== 'message' || isSelfAuthoredMessage || isOwnVoyagerMessage || Boolean(delivery?.seen_at),
       deliveryId: delivery?.id ?? null,
     }
   }))
 }
 
-export const getFeed = async (userId: string, conversationId: string): Promise<FeedEvent[]> => {
-  const voyageSlug = await resolveSessionVoyage(conversationId, userId)
+export const queryScopedEvents = async (
+  userId: string,
+  conversationId: string,
+  voyageSlug?: string | null,
+  limit = 200,
+): Promise<FeedEventRow[]> => {
+  const scopedVoyageSlug = voyageSlug === undefined
+    ? await resolveSessionVoyage(conversationId, userId)
+    : voyageSlug
   const supabase = typedTable()
 
   let query = supabase
@@ -152,18 +174,57 @@ export const getFeed = async (userId: string, conversationId: string): Promise<F
     .select('id,event_type,content,created_at,metadata,source_ref,actor_type,user_id,participants,voyage_slug')
     .in('event_type', ['conversation', 'message'])
     .contains('participants', [userId])
-    // Recent-N cap: fetch newest 200, client sorts ascending. Bounds a long
+    // Recent-N cap: fetch newest N, client sorts ascending. Bounds a long
     // history + the per-Realtime-insert refetch.
     .order('created_at', { ascending: false })
-    .limit(200)
+    .limit(limit)
+
+  query = scopedVoyageSlug ? query.eq('voyage_slug', scopedVoyageSlug) : query.is('voyage_slug', null)
+
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+
+  return ((data ?? []) as FeedEventRow[])
+    .filter((row) => isInFeedContext(row, userId, conversationId, scopedVoyageSlug))
+}
+
+export const queryScopedEventsForConversations = async (
+  userId: string,
+  conversationIds: string[],
+  voyageSlug: string | null,
+  limit = 10_000,
+): Promise<FeedEventRow[]> => {
+  if (conversationIds.length === 0) return []
+  const supabase = typedTable()
+  const conversationIdSet = new Set(conversationIds)
+
+  let query = supabase
+    .from('knowledge_events')
+    .select('id,event_type,content,created_at,metadata,source_ref,actor_type,user_id,participants,voyage_slug')
+    .in('event_type', ['conversation', 'message'])
+    .contains('participants', [userId])
+    // createMessageEvent writes metadata.session_id and source_ref.conversation_id together; getFeedEventSessionId still prefers metadata.
+    .in('source_ref->>conversation_id', conversationIds)
+    .order('created_at', { ascending: false })
+    .limit(limit)
 
   query = voyageSlug ? query.eq('voyage_slug', voyageSlug) : query.is('voyage_slug', null)
 
   const { data, error } = await query
   if (error) throw new Error(error.message)
 
-  const rows = ((data ?? []) as FeedEventRow[])
-    .filter((row) => isInFeedContext(row, userId, conversationId, voyageSlug))
+  return ((data ?? []) as FeedEventRow[]).filter((row) => {
+    const eventConversationId = getFeedEventSessionId(row)
+    return Boolean(eventConversationId && conversationIdSet.has(eventConversationId))
+      && row.participants?.includes(userId) === true
+      && (row.event_type === 'conversation' || row.event_type === 'message')
+  })
+}
+
+export const getFeed = async (userId: string, conversationId: string): Promise<FeedEvent[]> => {
+  const voyageSlug = await resolveSessionVoyage(conversationId, userId)
+  const supabase = typedTable()
+  const rows = await queryScopedEvents(userId, conversationId, voyageSlug)
   const messageIds = rows
     .filter((row) => row.event_type === 'message')
     .map((row) => row.id)

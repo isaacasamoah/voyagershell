@@ -13,6 +13,7 @@ import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useEventFeed } from '@/lib/messaging/useEventFeed';
 import { shouldShowStreamingReply, shouldShowOptimisticUser, countAssistantEvents, type FeedEvent, type StreamingReply } from '@/lib/messaging/feed-types';
+import { composerAsideBadge } from '@/lib/messaging/address';
 import { useVisualViewport } from './hooks/useVisualViewport';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
@@ -68,10 +69,23 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const { height: shellHeight, offsetTop: shellTop, composing } = useVisualViewport();
 
   // Voyage context (fetch voyages, pending invites, URL params)
-  const { currentVoyage, voyageResolved, setCurrentVoyage, voyages, displayName, refetchVoyages } = useVoyageContext({
+  const { currentVoyage, voyageResolved, setCurrentVoyage, voyages, displayName, ownVoyagerHandle, refetchVoyages } = useVoyageContext({
     isAuthenticated,
     isAuthLoading,
   });
+
+  // Composer badge (C5): typing `@<own-handle>` surfaces "→ private aside to
+  // <Name>" from the SAME resolver the server uses, so the @-inversion is
+  // visible before you send. Empty room set client-side → @another's-voyager
+  // shows no private-aside badge (redirect, not aside).
+  const asideBadge = useMemo(
+    () => composerAsideBadge(inputValue, {
+      ownVoyagerHandle,
+      ownVoyagerAliases: ['voyager'],
+      roomVoyagerHandles: [],
+    }),
+    [inputValue, ownVoyagerHandle],
+  );
 
   // Conversation (transport, useChat, fetch, welcome, title sync, message queue)
   const {
@@ -506,6 +520,8 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         key={event.id}
         content={event.content}
         timestamp={timestamp}
+        voyagerName={event.senderDisplayName}
+        ownerName={event.ownerName}
       />
     );
   };
@@ -516,7 +532,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
     if (!lastUser) return null;
     const content = getMessageText(lastUser);
-    if (!shouldShowOptimisticUser(content, feedEvents)) return null;
+    if (!shouldShowOptimisticUser(content, feedEvents, ownVoyagerHandle)) return null;
     return <UserMessage key={`optimistic-${lastUser.id}`} content={content} timestamp="LIVE" username="you" />;
   };
 
@@ -726,6 +742,11 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             </div>
           )}
 
+          {asideBadge && (
+            <div className="text-[#5ec98f] text-xs font-mono mb-1 pl-8 animate-pulse">
+              {asideBadge}
+            </div>
+          )}
           <form onSubmit={handleSubmit}>
             <InputArea
               value={inputValue}

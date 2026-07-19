@@ -1,3 +1,5 @@
+import { resolveAddress } from './address'
+
 export type FeedEventType = 'conversation' | 'message'
 export type FeedEventRole = 'user' | 'assistant' | 'human'
 // A knock is a message event whose metadata.source === 'invite'; a 'system'
@@ -15,6 +17,9 @@ export interface FeedEvent {
   // when kind === 'invite'; drives whether the Join/Decline buttons show.
   inviteState: InviteState | null
   senderDisplayName: string | null
+  // cut ④: the owner behind a fanned voyager reply, e.g. "Isaac" — renders
+  // "WREN ✦ (Isaac's Voyager)". Null for human/solo/unnamed events.
+  ownerName: string | null
   senderUserId: string | null
   content: string
   createdAt: string
@@ -29,6 +34,7 @@ export interface FeedApiEvent {
   kind: FeedEventKind
   invite_state: InviteState | null
   sender_display_name: string | null
+  owner_name: string | null
   sender_user_id: string | null
   content: string
   created_at: string
@@ -73,6 +79,7 @@ export const toFeedApiEvent = (event: FeedEvent): FeedApiEvent => ({
   kind: event.kind,
   invite_state: event.inviteState,
   sender_display_name: event.senderDisplayName,
+  owner_name: event.ownerName,
   sender_user_id: event.senderUserId,
   content: event.content,
   created_at: event.createdAt,
@@ -87,6 +94,7 @@ export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
   kind: event.kind ?? 'message',
   inviteState: event.invite_state ?? null,
   senderDisplayName: event.sender_display_name,
+  ownerName: event.owner_name ?? null,
   senderUserId: event.sender_user_id,
   content: event.content,
   createdAt: event.created_at,
@@ -114,22 +122,31 @@ export const shouldShowStreamingReply = (
 // never render as an optimistic user turn either.
 const WELCOME_RE = /^good (morning|afternoon|evening)\b/i
 
-// `@voyager …` asides are persisted STRIPPED by the server (route.ts removes
-// the prefix before saving). The client must compare the same shape, or the
-// optimistic message never settles and the composer wedges into queue mode.
-// ONE source for the strip — the route imports these too.
-export const isVoyagerAside = (text: string): boolean => /^@voyager\b/i.test(text.trim())
-export const stripVoyagerAside = (text: string): string => (
-  text.trim().replace(/^@voyager[\s,:!.?-]*/i, '').trim()
-)
+// `@<handle> …` asides are persisted STRIPPED by the server (runTurn removes the
+// prefix via resolveAddress before saving). The client must compare the same
+// shape, or the optimistic message never settles and the composer wedges into
+// queue mode. ONE source for the strip — the SAME resolver the server uses, so
+// the classification can never drift. `ownHandle` is the caller's own voyager
+// handle (claimed name or derived default); without it a named `@wren` aside
+// would strip nothing client-side while the server stripped it — the wedge. The
+// `voyager` alias still carries the common `@voyager` case even when '' is passed.
+export const stripVoyagerAside = (text: string, ownHandle = ''): string => {
+  const result = resolveAddress(text, { ownVoyagerHandle: ownHandle, ownVoyagerAliases: ['voyager'] })
+  return result.mode === 'aside' ? result.stripped : text.trim()
+}
 
 // Show a just-sent user message as an optimistic transient until its own
 // 'conversation' event lands in the feed (avoids the send→round-trip vanish),
-// excluding the hidden welcome. Compares aside-stripped content on both sides
-// so a settled `@voyager …` turn releases its optimistic twin.
+// excluding the hidden welcome. Compares aside-stripped content on both sides —
+// against the caller's OWN handle — so a settled `@wren …` aside releases its
+// optimistic twin instead of wedging the composer.
 // (Interim until the HarnessEvent turn-done signal — the seam owns the real close.)
-export const shouldShowOptimisticUser = (content: string, events: FeedEvent[]): boolean => {
-  const normalized = stripVoyagerAside(content)
+export const shouldShowOptimisticUser = (
+  content: string,
+  events: FeedEvent[],
+  ownHandle = '',
+): boolean => {
+  const normalized = stripVoyagerAside(content, ownHandle)
   if (!normalized || WELCOME_RE.test(normalized)) return false
-  return !events.some((e) => e.role === 'user' && stripVoyagerAside(e.content) === normalized)
+  return !events.some((e) => e.role === 'user' && stripVoyagerAside(e.content, ownHandle) === normalized)
 }

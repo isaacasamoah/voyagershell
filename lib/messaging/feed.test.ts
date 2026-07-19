@@ -57,3 +57,40 @@ describe('delivered Voyager messages in the event feed', () => {
     })
   })
 })
+
+// ── cut ④ — attributed render (WREN ✦) + owner-authored seen ─────────────────
+const fannedWrenReply = (viewerIsOwner: boolean): FeedEventRow => ({
+  id: 'evt-wren-public',
+  event_type: 'message',
+  content: 'You both landed on the same tradeoff.',
+  created_at: '2026-07-18T09:00:00.000Z',
+  metadata: {
+    session_id: 'conv-fambam',
+    source: 'room',
+    sender_display_name: 'Wren',
+    sender_user_id: 'user-isaac',
+    owner_display_name: 'Isaac',
+  },
+  source_ref: { conversation_id: 'conv-fambam', role: 'assistant' },
+  actor_type: 'voyager',
+  user_id: 'user-isaac', // the OWNER is the identity of record
+  participants: ['user-isaac', 'user-elisheya'],
+  voyage_slug: null,
+})
+
+describe('cut ④ — a fanned voyager reply renders WREN ✦ (Isaac’s Voyager)', () => {
+  it('carries the voyager name + owner name for the attributed badge', () => {
+    const [event] = toFeedEvents([fannedWrenReply(false)], [], 'user-elisheya')
+    expect(event.role).toBe('assistant')
+    expect(event.senderDisplayName).toBe('Wren') // NOT the flat "Voyager"
+    expect(event.ownerName).toBe('Isaac')
+  })
+
+  it('the OWNER’s own public reply is inherently seen (no delivery, no unread badge)', () => {
+    // The owner is excluded from the fan-out, so there is no delivery row — the
+    // message must still count as seen for them.
+    const [event] = toFeedEvents([fannedWrenReply(true)], [], 'user-isaac')
+    expect(event.seen).toBe(true)
+    expect(event.deliveryId).toBeNull()
+  })
+})

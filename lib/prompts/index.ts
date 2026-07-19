@@ -66,6 +66,8 @@ interface ComposeOptions {
   sessionId?: string;  // Current session ID for operational tier recency filtering
   continuityContext?: string | null;  // Retrieved context from conversation history
   authState?: AuthState;
+  voyagerName?: string;  // The Voyager's own name (custom handle) — identity line, omitted when unnamed
+  ownerName?: string;  // The human owner's display name, for the identity line
 }
 
 
@@ -81,7 +83,7 @@ export const composeSystemPrompt = async (
   userId: string,
   options?: ComposeOptions
 ): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult }> => {
-  const { profile, voyageSlug, sessionId, continuityContext, authState } = options ?? {};
+  const { profile, voyageSlug, sessionId, continuityContext, authState, voyagerName, ownerName } = options ?? {};
   const startTime = Date.now();
 
   // Load curated knowledge window + voyage context in parallel. Message
@@ -134,6 +136,8 @@ export const composeSystemPrompt = async (
     userProfile,
     pinnedKnowledge: [],
     retrievedContext: { items: [] },
+    voyagerName,
+    ownerName,
   });
 
   // Build curated knowledge section (stable across turns — cacheable)

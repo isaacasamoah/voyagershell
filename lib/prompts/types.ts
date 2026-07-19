@@ -130,7 +130,7 @@ export interface RetrievedContext {
 // ============================================================================
 
 export interface PromptLayer {
-  name: 'core' | 'voyage' | 'user' | 'tools' | 'context';
+  name: 'core' | 'identity' | 'voyage' | 'user' | 'tools' | 'context';
   content: string;
   tokenEstimate: number;
 }

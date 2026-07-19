@@ -64,6 +64,7 @@ export interface SourceEventMetadata {
   source?: string          // V3 messaging: originating channel/context
   sender_display_name?: string  // V6: human-readable sender name
   sender_user_id?: string       // V6: sender UUID for attribution
+  owner_display_name?: string   // cut ④: the summoned voyager's owner, for "WREN ✦ (Isaac's Voyager)"
 }
 
 // =============================================================================
@@ -81,6 +82,29 @@ const generateEmbedding = async (text: string): Promise<number[]> => {
 
 const toVectorString = (embedding: number[]): string => {
   return `[${embedding.join(',')}]`
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const updateSessionActivity = async (conversationId: string): Promise<void> => {
+  if (!UUID_RE.test(conversationId)) return
+
+  const timestamp = new Date().toISOString()
+  try {
+    const { error } = await getAdminSupabase()
+      .from('sessions')
+      .update({
+        last_message_at: timestamp,
+        updated_at: timestamp,
+      })
+      .eq('id', conversationId)
+
+    if (error) {
+      console.error('[Knowledge] Failed to update session activity:', error)
+    }
+  } catch (error) {
+    console.error('[Knowledge] Failed to update session activity:', error)
+  }
 }
 
 // =============================================================================
@@ -181,7 +205,7 @@ export const createSourceEvent = async (params: CreateSourceEventParams): Promis
 
 /**
  * Create a message source event.
- * Called after a message is saved to the conversation.
+ * Persists a conversation-scoped source event.
  *
  * FIRE-AND-FORGET — should never block the chat response.
  */
@@ -199,6 +223,9 @@ export const createMessageEvent = async (
     // V6: inline classification + sender attribution
     senderDisplayName?: string
     senderUserId?: string
+    // cut ④: the summoned voyager's OWNER display name, e.g. "Isaac". Rides
+    // metadata so the room feed renders "WREN ✦ (Isaac's Voyager)".
+    ownerDisplayName?: string
     attentionScore?: number
     contextSnippet?: string
     /** Override event type. Default: 'message'. Use 'conversation' for chat turns. */
@@ -221,6 +248,7 @@ export const createMessageEvent = async (
       source: options?.source,
       sender_display_name: options?.senderDisplayName,
       sender_user_id: options?.senderUserId,
+      owner_display_name: options?.ownerDisplayName,
     },
     sourceType: 'conversation',
     sourceRef: {
@@ -229,6 +257,10 @@ export const createMessageEvent = async (
     },
     actorType: role === 'user' ? 'user' : 'voyager',
   })
+
+  if (eventId && (eventType === 'conversation' || eventType === 'message')) {
+    await updateSessionActivity(conversationId)
+  }
 
   // V6: Post-INSERT enrichment for attention_score + context_snippet
   // Same dual-write pattern as embeddings: INSERT (trigger) then UPDATE (enrichment)

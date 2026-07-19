@@ -14,7 +14,7 @@ import { z } from 'zod'
 import OpenAI from 'openai'
 import { resolveUserModel } from '@/lib/models'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { loadConversationMessages } from '@/lib/conversation'
+import { composeContextFromStream, renderMessagesForModel } from '@/lib/conversation'
 import { estimateTokens } from '@/lib/conversation/window'
 import { updateKnowledgeEnrichment, type KnowledgeType } from '@/lib/knowledge/events'
 import { createEdge, type EdgeType } from '@/lib/knowledge/edges'
@@ -136,24 +136,27 @@ const loadUnenrichedEvents = async (sessionId: string): Promise<KnowledgeEventRo
  * Truncates from the context-before portion if over budget (preserving
  * messages around unenriched events).
  */
-const buildEnrichmentWindow = async (
+export const buildEnrichmentWindow = async (
   sessionId: string,
-  oldestUnenrichedTime: string
+  oldestUnenrichedTime: string,
+  userId: string,
+  voyageSlug?: string,
 ): Promise<string> => {
-  // Load all session messages
-  const allMessages = await loadConversationMessages(sessionId, 500)
+  // Load session history from the same scoped stream that feeds turn context.
+  const allMessages = await composeContextFromStream(userId, sessionId, voyageSlug ?? null, 500)
   if (allMessages.length === 0) return ''
+  const modelMessages = renderMessagesForModel(allMessages)
 
   // Find the index of the first message at or after oldest unenriched event
   const anchorTime = new Date(oldestUnenrichedTime).getTime()
-  let anchorIndex = allMessages.findIndex(
+  let anchorIndex = modelMessages.findIndex(
     (m) => m.createdAt.getTime() >= anchorTime
   )
   if (anchorIndex === -1) anchorIndex = 0
 
   // Context window: N messages before anchor through end
   const contextStart = Math.max(0, anchorIndex - CONTEXT_MESSAGES_BEFORE)
-  const windowMessages = allMessages.slice(contextStart)
+  const windowMessages = modelMessages.slice(contextStart)
 
   // Format messages
   const formatted = windowMessages.map((m) => `${m.role}: ${m.content}`)
@@ -838,7 +841,7 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
 
     // Build purpose-built enrichment window
     const oldestUnenrichedTime = events[0].source_created_at
-    const transcript = await buildEnrichmentWindow(sessionId, oldestUnenrichedTime)
+    const transcript = await buildEnrichmentWindow(sessionId, oldestUnenrichedTime, userId, voyageSlug)
     if (!transcript) {
       log.agent('No transcript available, skipping', { sessionId })
       return

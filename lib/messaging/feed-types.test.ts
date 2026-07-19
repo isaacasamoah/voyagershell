@@ -15,6 +15,7 @@ const event = (id: string, createdAt: string, patch: Partial<FeedEvent> = {}): F
   kind: 'message',
   inviteState: null,
   senderDisplayName: 'Voyager',
+  ownerName: null,
   senderUserId: null,
   content: id,
   createdAt,
@@ -127,15 +128,19 @@ describe('event-stream feed primitives', () => {
 // F2 root-cause regression: the server persists `@voyager …` asides STRIPPED,
 // so the optimistic settle must compare aside-stripped content on both sides —
 // or the composer wedges into queue mode after every aside (2026-07-10, live).
-import { shouldShowOptimisticUser, stripVoyagerAside, isVoyagerAside } from './feed-types'
+import { shouldShowOptimisticUser, stripVoyagerAside } from './feed-types'
 
 describe('aside-aware optimistic settle', () => {
   it('strips the @voyager prefix exactly like the route', () => {
     expect(stripVoyagerAside('@voyager what is the almond tree idea?')).toBe('what is the almond tree idea?')
     expect(stripVoyagerAside('@Voyager, remind me')).toBe('remind me')
     expect(stripVoyagerAside('plain message')).toBe('plain message')
-    expect(isVoyagerAside('@voyager hi')).toBe(true)
-    expect(isVoyagerAside('email @voyager later')).toBe(false)
+  })
+
+  it('strips a NAMED aside when the caller passes its own handle', () => {
+    expect(stripVoyagerAside('@wren think with me', 'wren')).toBe('think with me')
+    // …but without the handle a named aside is NOT stripped (only the alias is)
+    expect(stripVoyagerAside('@wren think with me')).toBe('@wren think with me')
   })
 
   it('settles an aside once its STRIPPED event lands (the wedge bug)', () => {
@@ -147,6 +152,17 @@ describe('aside-aware optimistic settle', () => {
     expect(shouldShowOptimisticUser('@voyager what is the almond tree idea?', [])).toBe(true)
     // after: the stripped twin releases it
     expect(shouldShowOptimisticUser('@voyager what is the almond tree idea?', [settled])).toBe(false)
+  })
+
+  it('settles a NAMED @wren aside against the caller own handle (F1 regression)', () => {
+    // Server persists the aside STRIPPED; the client must strip with the same
+    // own-handle or the optimistic twin never releases and the composer wedges.
+    const settled = event('settled', '2026-07-10T10:15:00.000Z', {
+      role: 'user',
+      content: 'think with me',
+    })
+    expect(shouldShowOptimisticUser('@wren think with me', [], 'wren')).toBe(true)
+    expect(shouldShowOptimisticUser('@wren think with me', [settled], 'wren')).toBe(false)
   })
 
   it('still settles plain messages by exact content', () => {
