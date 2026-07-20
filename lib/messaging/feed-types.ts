@@ -150,3 +150,13 @@ export const shouldShowOptimisticUser = (
   if (!normalized || WELCOME_RE.test(normalized)) return false
   return !events.some((e) => e.role === 'user' && stripVoyagerAside(e.content, ownHandle) === normalized)
 }
+
+// The optimistic LIVE lane may only show text typed in THIS client since load.
+// Hydrated messages (restored from the stream) are settled history — and after
+// role-flattening they can carry OTHER people's words under role 'user', so
+// surfacing one as "YOU" mis-attributes it to the viewer.
+export const isHydratedMessage = (message: { metadata?: unknown }): boolean => (
+  typeof message.metadata === 'object'
+  && message.metadata !== null
+  && (message.metadata as { hydrated?: boolean }).hydrated === true
+)
