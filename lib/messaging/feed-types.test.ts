@@ -6,6 +6,7 @@ import {
   sortFeedEvents,
   toFeedApiEvent,
   type FeedEvent,
+  isHydratedMessage,
 } from './feed-types'
 
 const event = (id: string, createdAt: string, patch: Partial<FeedEvent> = {}): FeedEvent => ({
@@ -173,5 +174,16 @@ describe('aside-aware optimistic settle', () => {
 
   it('never shows the hidden welcome optimistically', () => {
     expect(shouldShowOptimisticUser('good morning in fambam', [])).toBe(false)
+  })
+})
+
+// Optimistic-lane honesty (2026-07-20): hydrated stream messages can carry
+// OTHER people's words under role 'user' — they must never render as "YOU".
+describe('isHydratedMessage', () => {
+  it('is true only for messages tagged by stream hydration', () => {
+    expect(isHydratedMessage({ metadata: { hydrated: true } })).toBe(true)
+    expect(isHydratedMessage({ metadata: {} })).toBe(false)
+    expect(isHydratedMessage({})).toBe(false)
+    expect(isHydratedMessage({ metadata: null })).toBe(false)
   })
 })

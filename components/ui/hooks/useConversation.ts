@@ -5,10 +5,15 @@ import { log } from '@/lib/debug'
 import type { ConversationResponse, MessageData } from '@/lib/types'
 
 // Convert API message to UIMessage format for useChat
+// Messages restored from the stream are settled history — they must NEVER
+// enter the optimistic LIVE lane (that lane is only for text typed in THIS
+// client since load). Without this flag, another person's message (or their
+// Voyager's reply, role-flattened to 'user' for the model) renders as "YOU".
 const apiMessageToUIMessage = (msg: MessageData): UIMessage => ({
   id: msg.id,
   role: msg.role,
   parts: [{ type: 'text' as const, text: msg.content }],
+  metadata: { hydrated: true },
 })
 
 interface UseConversationParams {

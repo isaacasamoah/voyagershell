@@ -12,7 +12,7 @@ import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useEventFeed } from '@/lib/messaging/useEventFeed';
-import { shouldShowStreamingReply, shouldShowOptimisticUser, countAssistantEvents, type FeedEvent, type StreamingReply } from '@/lib/messaging/feed-types';
+import { shouldShowStreamingReply, shouldShowOptimisticUser, countAssistantEvents, type FeedEvent, type StreamingReply, isHydratedMessage } from '@/lib/messaging/feed-types';
 import { composerAsideBadge } from '@/lib/messaging/address';
 import { useVisualViewport } from './hooks/useVisualViewport';
 import { InputArea } from './InputArea';
@@ -384,7 +384,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   }, [conversationId, isLoading, sendMessage]);
 
   useEffect(() => {
-    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
+    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && !isHydratedMessage(message));
     if (!lastAssistant) return;
 
     const content = getMessageText(lastAssistant);
@@ -529,7 +529,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   // The user's just-sent message, shown live until its 'conversation' event
   // lands in the feed — so it never vanishes during the send round-trip.
   const renderOptimisticUser = () => {
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user' && !isHydratedMessage(m));
     if (!lastUser) return null;
     const content = getMessageText(lastUser);
     if (!shouldShowOptimisticUser(content, feedEvents, ownVoyagerHandle)) return null;
