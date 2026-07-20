@@ -268,6 +268,12 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
         p_depth: depth,
         p_min_attention: 0.3,
         p_max_nodes: 50,
+        // Scope the traversal to the caller — graph_traverse runs on the admin
+        // client (RLS-bypassed), so privacy is enforced by these args inside
+        // knowledge_in_scope(). Omitting them denies every row (deny-by-default).
+        p_user_id: ctx.userId,
+        p_voyage_slug: ctx.voyageSlug ?? null,
+        p_participants: [ctx.userId],
       })
 
       if (error) {
