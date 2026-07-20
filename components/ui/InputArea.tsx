@@ -43,6 +43,17 @@ export const InputArea = ({
     return () => document.removeEventListener('click', handleClick);
   }, [isLoading]);
 
+  // Height derives from value — the ONE resize source. Growing only on typing
+  // events left the box wedged tall after send cleared the value through React
+  // (no input event fires), which ate a quarter of a phone screen with the
+  // keyboard up.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+  }, [value]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -64,11 +75,6 @@ export const InputArea = ({
           onKeyDown={handleKeyDown}
           rows={1}
           style={{ height: 'auto' }}
-          onInput={(e) => {
-            const target = e.target as HTMLTextAreaElement;
-            target.style.height = 'auto';
-            target.style.height = Math.min(target.scrollHeight, 128) + 'px';
-          }}
         />
       </div>
       {queueCount > 0 && (
