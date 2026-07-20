@@ -222,9 +222,15 @@ export const getKnowledgeByIds = async (eventIds: string[], userId?: string): Pr
       .select('event_id, content, source_created_at, classifications, entities, topics, knowledge_type, attention_score, context_snippet, sender_display_name, sender_user_id, event_type')
       .in('event_id', eventIds)
 
-    // Participant filter: only return nodes the user can access
+    // Participant filter for this by-id hydration path: only return nodes the
+    // user can access. Here a NULL participants array is author-only (visible
+    // solely to the row's user_id), NOT globally visible. A non-NULL array is
+    // visible to anyone it contains. (ORU-450: previously NULL was treated as
+    // public.) Note: the voyage-scoped L4 path in knowledge_in_scope / the room
+    // feed intentionally treats NULL participants as visible to voyage members —
+    // that is a different, voyage-gated context, not this by-id lookup.
     if (userId) {
-      query = query.or(`participants.is.null,participants.cs.{${userId}}`)
+      query = query.or(`and(participants.is.null,user_id.eq.${userId}),participants.cs.{${userId}}`)
     }
 
     const { data, error } = await query

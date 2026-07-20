@@ -80,13 +80,14 @@ const toVectorString = (embedding: number[]): string => `[${embedding.join(',')}
  * Check whether enrichment should run for this session.
  * Returns true when unenriched event count >= ENRICHMENT_THRESHOLD.
  */
-export const shouldRunEnrichment = async (sessionId: string): Promise<boolean> => {
+export const shouldRunEnrichment = async (sessionId: string, userId: string): Promise<boolean> => {
   const supabase = getAdminClient()
 
   const { count, error } = await supabase
     .from('knowledge_current')
     .select('*', { count: 'exact', head: true })
     .eq('session_id', sessionId)
+    .eq('user_id', userId)  // ORU-450: a shared room never feeds another participant's rows into the wrong user's classification
     .is('knowledge_type', null)
     .neq('event_type', 'message')  // D23: messages skip Cartographer — classified at write time
 
@@ -105,13 +106,14 @@ export const shouldRunEnrichment = async (sessionId: string): Promise<boolean> =
 // Load Unenriched Events from knowledge_current
 // =============================================================================
 
-const loadUnenrichedEvents = async (sessionId: string): Promise<KnowledgeEventRow[]> => {
+const loadUnenrichedEvents = async (sessionId: string, userId: string): Promise<KnowledgeEventRow[]> => {
   const supabase = getAdminClient()
 
   const { data, error } = await supabase
     .from('knowledge_current')
     .select('event_id, content, source_created_at')
     .eq('session_id', sessionId)
+    .eq('user_id', userId)  // ORU-450: enrich only the triggering user's own rows — never a co-participant's
     .is('knowledge_type', null)
     .neq('event_type', 'message')  // D23: messages skip Cartographer — classified at write time
     .order('source_created_at', { ascending: true })
@@ -833,7 +835,7 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
 
   try {
     // Load unenriched knowledge events from knowledge_current
-    const events = await loadUnenrichedEvents(sessionId)
+    const events = await loadUnenrichedEvents(sessionId, userId)
     if (events.length === 0) {
       log.agent('No unenriched events found, skipping', { sessionId })
       return

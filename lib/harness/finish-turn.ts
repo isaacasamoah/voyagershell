@@ -111,7 +111,7 @@ export const finishTurn = async (
       if (plan.fanOut && eventId) await fanOutDeliveries(eventId, plan.recipients)
       logCitations(options.retrievalEventId(), text, retrievedKnowledge)
 
-      if (await shouldRunEnrichment(conversationId)) {
+      if (await shouldRunEnrichment(conversationId, userId)) {
         host.defer(runCartographer({
           sessionId: conversationId,
           userId,
