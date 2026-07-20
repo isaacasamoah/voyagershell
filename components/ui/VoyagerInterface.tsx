@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { UIMessage } from 'ai';
-import { Terminal, Ship } from 'lucide-react';
+import { Terminal, Ship, LogOut } from 'lucide-react';
 import { UserMessage, AssistantMessage, AstronautState, TaskCard, HumanMessage, InviteKnock, SystemLine, type TaskProgress } from '@/components/chat';
 import type { MessagePart } from '@/components/chat/AssistantMessage';
 import { useAuth } from '@/lib/auth/context';
@@ -623,11 +623,28 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           )}
         </div>
 
-        {displayName && (
-          <div className="hidden sm:block text-[10px] text-slate-500 font-mono tracking-widest uppercase shrink-0">
-            {displayName.toUpperCase().replace(/\s+/g, '_')}
-          </div>
-        )}
+        {/* Right chrome — identity + the sign-out affordance. Sign-out is a
+            real control wired straight to signOut(); auth intent never has to
+            pass through the composer to happen (ORU-449 W2 · C2). */}
+        <div className="flex items-center gap-3 shrink-0">
+          {displayName && (
+            <div className="hidden sm:block text-[10px] text-slate-500 font-mono tracking-widest uppercase">
+              {displayName.toUpperCase().replace(/\s+/g, '_')}
+            </div>
+          )}
+          {isAuthenticated && (
+            <button
+              type="button"
+              onClick={() => signOut()}
+              title="Sign out"
+              aria-label="Sign out"
+              className="flex items-center gap-1 px-2 py-1 rounded-sm border border-white/10 text-slate-500 hover:text-[#ff5f56] hover:border-[#ff5f56]/40 text-[10px] font-mono tracking-widest uppercase transition-colors"
+            >
+              <LogOut size={12} className="shrink-0" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          )}
+        </div>
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[#ff5f56]/30 via-[#5ec98f]/30 to-[#b07af5]/30" />
       </header>
       )}
