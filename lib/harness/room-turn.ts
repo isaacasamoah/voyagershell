@@ -91,7 +91,9 @@ export const runRoomTurn = async ({
             )
             confirmation = `Invited ${match.displayName} — they can hop in by replying to the invite.`
           } else {
-            confirmation = `Added ${match.displayName} — they'll get what you type here.`
+            // invite.state === 'active' — they're already here; nothing changed,
+            // so the copy must not imply an add happened (ORU-449 W3 · C3).
+            confirmation = `${match.displayName} is already in the room.`
           }
         } else {
           await removeRoomPerson(conversationId, match.userId)
