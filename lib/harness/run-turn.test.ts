@@ -10,7 +10,6 @@ const fanOutDeliveries = vi.fn()
 const deliverRoomInvite = vi.fn()
 const inviteToRoom = vi.fn()
 const getRoom = vi.fn()
-const getActiveMemberIds = vi.fn()
 const parseRoomCommand = vi.fn()
 const removeRoomPerson = vi.fn()
 const setAiPresent = vi.fn()
@@ -18,7 +17,6 @@ const getVoyageBySlug = vi.fn()
 const getVoyageMembers = vi.fn()
 const resolveMemberByName = vi.fn()
 const getOwnVoyagerIdentity = vi.fn()
-const listRoomVoyagerHandles = vi.fn()
 const composeSystemPrompt = vi.fn()
 const createVoyagerTools = vi.fn()
 const composeToolStrategy = vi.fn()
@@ -68,7 +66,6 @@ const loadRunTurn = async () => {
   vi.doMock('@/lib/messaging/deliveries', () => ({ fanOutDeliveries }))
   vi.doMock('@/lib/messaging/handles', () => ({
     getOwnVoyagerIdentity,
-    listRoomVoyagerHandles,
   }))
   vi.doMock('@/lib/messaging/invites', () => ({
     deliverRoomInvite,
@@ -76,7 +73,6 @@ const loadRunTurn = async () => {
   }))
   vi.doMock('@/lib/messaging/room', () => ({
     getRoom,
-    getActiveMemberIds,
     parseRoomCommand,
     removeRoomPerson,
     setAiPresent,
@@ -136,9 +132,7 @@ describe('runTurn', () => {
     createMessageEvent.mockResolvedValue('event-1')
     fanOutDeliveries.mockResolvedValue(undefined)
     getRoom.mockResolvedValue({ roomPeople: [], aiPresent: true })
-    getActiveMemberIds.mockResolvedValue(['user-1'])
     getOwnVoyagerIdentity.mockResolvedValue({ handle: '', name: null })
-    listRoomVoyagerHandles.mockResolvedValue([])
     parseRoomCommand.mockReturnValue(null)
     getVoyageBySlug.mockResolvedValue(null)
     getVoyageMembers.mockResolvedValue([])
@@ -166,7 +160,7 @@ describe('runTurn', () => {
     })
   })
 
-  // cut ④ loop guard (the hard rule): a turn may begin ONLY on human-authored
+  // Loop guard (the hard rule): a turn may begin ONLY on human-authored
   // input. A synthetic voyager-originated turn — the shape a future realtime→turn
   // bridge would produce — must be refused before any model call, so two named
   // Voyagers can never answer each other unbidden.
@@ -299,60 +293,60 @@ describe('runTurn', () => {
     expect(estimateCost).toHaveBeenCalledWith('claude-sonnet', 120, 30)
   })
 
-  // cut ④ — a cross-owner public summon: Elisheya (user-2) says "wren, …" in a
-  // populated room. The reply must persist under the OWNER (user-1 = Wren's
-  // owner) as a `message` event fanned to the room, and run on the owner's brain.
-  it('a cross-owner summon persists the reply under the owner + fans it out', async () => {
+  it('a leading Voyager name is ordinary human room text, never an invocation', async () => {
     getRoom.mockResolvedValue({ roomPeople: ['user-1'], aiPresent: true })
-    getActiveMemberIds.mockResolvedValue(['user-1', 'user-2'])
     getVoyageBySlug.mockResolvedValue({ id: 'voyage-1' })
     getVoyageMembers.mockResolvedValue([
       { userId: 'user-1', displayName: 'Isaac' },
       { userId: 'user-2', displayName: 'Elisheya' },
     ])
-    // Elisheya's room view: Wren is Isaac's (user-1).
-    listRoomVoyagerHandles.mockResolvedValue([
-      { handle: 'wren', ownerName: 'Isaac', isOwn: false, ownerUserId: 'user-1', name: 'Wren' },
-      { handle: 'hermes', ownerName: 'Elisheya', isOwn: true, ownerUserId: 'user-2', name: 'Hermes' },
-    ])
     getOwnVoyagerIdentity.mockResolvedValue({ handle: 'hermes', name: 'hermes' })
     const { runTurn } = await loadRunTurn()
 
-    // Elisheya (user-2) summons Wren.
-    await runTurn(context({
+    const result = await runTurn(context({
       userId: 'user-2',
       displayName: 'Elisheya',
       voyageSlug: 'launch',
       newMessage: 'wren, what did we decide?',
     }), stubHost().host)
 
-    // W3: the model + context resolve on the OWNER (user-1), not the summoner.
-    expect(resolveUserModelWithMeta).toHaveBeenCalledWith(expect.anything(), 'user-1')
-    expect(composeContextFromStream).toHaveBeenCalledWith('user-1', 'conversation-1', 'launch')
+    expect(result).toEqual({ kind: 'empty' })
+    expect(streamText).not.toHaveBeenCalled()
+    expect(resolveUserModelWithMeta).not.toHaveBeenCalled()
+    expect(fanOutDeliveries).toHaveBeenCalledWith('event-1', ['user-1'])
+  })
 
+  it('persists an owner Voyager reply as private conversation data only', async () => {
+    getRoom.mockResolvedValue({ roomPeople: ['user-2'], aiPresent: true })
+    getVoyageBySlug.mockResolvedValue({ id: 'voyage-1' })
+    getVoyageMembers.mockResolvedValue([
+      { userId: 'user-1', displayName: 'Isaac' },
+      { userId: 'user-2', displayName: 'Elisheya' },
+    ])
+    getOwnVoyagerIdentity.mockResolvedValue({ handle: 'wren', name: 'wren' })
+    const { runTurn } = await loadRunTurn()
+
+    await runTurn(context({ voyageSlug: 'launch', newMessage: '@wren think with me' }), stubHost().host)
     const onFinish = streamText.mock.calls[0][0].onFinish
     await onFinish({
-      text: 'You both landed on the same tradeoff.',
+      text: 'A private answer.',
       steps: [],
       finishReason: 'stop',
       usage: null,
       providerMetadata: {},
     })
 
-    // W2: reply persists under the OWNER as a `message` event, fanned to Elisheya.
     expect(createMessageEvent).toHaveBeenCalledWith(
       'conversation-1',
       'assistant',
-      'You both landed on the same tradeoff.',
-      expect.objectContaining({
+      'A private answer.',
+      {
         userId: 'user-1',
-        eventType: 'message',
-        senderDisplayName: 'Wren',
-        ownerDisplayName: 'Isaac',
-        source: 'room',
-        participants: expect.arrayContaining(['user-1', 'user-2']),
-      }),
+        voyageSlug: 'launch',
+        participants: ['user-1'],
+        eventType: 'conversation',
+      },
     )
-    expect(fanOutDeliveries).toHaveBeenCalledWith('event-1', ['user-2'])
+    expect(fanOutDeliveries).not.toHaveBeenCalled()
   })
 })

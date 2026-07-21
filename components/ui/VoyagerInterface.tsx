@@ -13,7 +13,7 @@ import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useEventFeed } from '@/lib/messaging/useEventFeed';
 import { shouldShowStreamingReply, shouldShowOptimisticUser, countAssistantEvents, type FeedEvent, type StreamingReply, isHydratedMessage } from '@/lib/messaging/feed-types';
-import { composerAsideBadge } from '@/lib/messaging/address';
+import { resolveComposerAudience } from '@/lib/messaging/address';
 import { useVisualViewport } from './hooks/useVisualViewport';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
@@ -74,19 +74,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     isAuthLoading,
   });
 
-  // Composer badge (C5): typing `@<own-handle>` surfaces "→ private aside to
-  // <Name>" from the SAME resolver the server uses, so the @-inversion is
-  // visible before you send. Empty room set client-side → @another's-voyager
-  // shows no private-aside badge (redirect, not aside).
-  const asideBadge = useMemo(
-    () => composerAsideBadge(inputValue, {
-      ownVoyagerHandle,
-      ownVoyagerAliases: ['voyager'],
-      roomVoyagerHandles: [],
-    }),
-    [inputValue, ownVoyagerHandle],
-  );
-
   // Conversation (transport, useChat, fetch, welcome, title sync, message queue)
   const {
     conversationId, room, conversationTitle, isLoadingConversation,
@@ -103,6 +90,14 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     isAuthenticated,
     isAuthLoading,
   });
+  const composerAudience = useMemo(
+    () => resolveComposerAudience(
+      inputValue,
+      { ownVoyagerHandle, ownVoyagerAliases: ['voyager'] },
+      room.people,
+    ),
+    [inputValue, ownVoyagerHandle, room.people],
+  );
   const feedUserId = isAuthenticated ? (user?.id ?? null) : null;
   const { events: feedEvents, markSeen: markFeedSeen } = useEventFeed({
     conversationId,
@@ -246,6 +241,16 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const handleSuggestionClick = (action: string) => {
     setInputValue(action);
   };
+
+  const shareToRoom = useCallback(async (sourceEventId: string) => {
+    if (!conversationId) throw new Error('No active room');
+    const response = await fetch('/api/messages/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceEventId, conversationId }),
+    });
+    if (!response.ok) throw new Error('Share failed');
+  }, [conversationId]);
 
   // Apply a voyage switch to client state + URL. Invoked by the conversational
   // switch path (switch_voyage tool result) and ask_captain picker — never by
@@ -511,6 +516,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
           content={event.content}
           timestamp={timestamp}
           username="you"
+          audienceLabel={event.eventType === 'conversation' ? 'Only you + your Voyager' : 'This room'}
         />
       );
     }
@@ -522,6 +528,13 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         timestamp={timestamp}
         voyagerName={event.senderDisplayName}
         ownerName={event.ownerName}
+        audienceLabel={event.eventType === 'conversation' ? 'Only you + your Voyager' : 'This room'}
+        shareTarget={event.eventType === 'conversation' && room.people.length > 0
+          ? `this room · you + ${room.people.join(', ')}`
+          : undefined}
+        onShare={event.eventType === 'conversation' && room.people.length > 0
+          ? () => shareToRoom(event.id)
+          : undefined}
       />
     );
   };
@@ -533,7 +546,12 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     if (!lastUser) return null;
     const content = getMessageText(lastUser);
     if (!shouldShowOptimisticUser(content, feedEvents, ownVoyagerHandle)) return null;
-    return <UserMessage key={`optimistic-${lastUser.id}`} content={content} timestamp="LIVE" username="you" />;
+    const audience = resolveComposerAudience(
+      content,
+      { ownVoyagerHandle, ownVoyagerAliases: ['voyager'] },
+      room.people,
+    );
+    return <UserMessage key={`optimistic-${lastUser.id}`} content={content} timestamp="LIVE" username="you" audienceLabel={audience.label} />;
   };
 
   const renderStreamingReply = () => {
@@ -550,6 +568,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         timestamp="LIVE"
         isStreaming={isStreaming}
         onAction={handleComponentAction}
+        audienceLabel="Only you + your Voyager"
       />
     );
   };
@@ -742,11 +761,15 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             </div>
           )}
 
-          {asideBadge && (
-            <div className="text-[#5ec98f] text-xs font-mono mb-1 pl-8 animate-pulse">
-              {asideBadge}
-            </div>
-          )}
+          <div className={`text-xs font-mono mb-1 pl-8 ${
+            composerAudience.kind === 'private'
+              ? 'text-[#5ec98f]'
+              : composerAudience.kind === 'held'
+                ? 'text-[#ff8b84]'
+                : 'text-[#59a5ff]'
+          }`}>
+            {composerAudience.label}
+          </div>
           <form onSubmit={handleSubmit}>
             <InputArea
               value={inputValue}

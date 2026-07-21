@@ -17,8 +17,7 @@ export interface FeedEvent {
   // when kind === 'invite'; drives whether the Join/Decline buttons show.
   inviteState: InviteState | null
   senderDisplayName: string | null
-  // cut ④: the owner behind a fanned voyager reply, e.g. "Isaac" — renders
-  // "WREN ✦ (Isaac's Voyager)". Null for human/solo/unnamed events.
+  // Historical public Voyager attribution. New Voyager output is private.
   ownerName: string | null
   senderUserId: string | null
   content: string

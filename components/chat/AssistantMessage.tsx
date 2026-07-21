@@ -21,11 +21,13 @@ interface AssistantMessageProps {
   timestamp?: string;
   isStreaming?: boolean;
   onAction?: (action: string, data?: unknown) => void;
-  // cut ④ — a named Voyager speaking in the room. When set, the label becomes
-  // "WREN ✦ (Isaac's Voyager)" — visibly non-human, attributed to its owner.
-  // Unset (a solo/unnamed reply) keeps the flat "VOYAGER".
+  // Historical public Voyager rows can still carry name + owner attribution.
+  // New Voyager output is owner-private and normally uses the flat label.
   voyagerName?: string | null;
   ownerName?: string | null;
+  audienceLabel?: string;
+  shareTarget?: string;
+  onShare?: () => Promise<void>;
 }
 
 export const AssistantMessage = ({
@@ -36,9 +38,31 @@ export const AssistantMessage = ({
   onAction,
   voyagerName,
   ownerName,
+  audienceLabel,
+  shareTarget,
+  onShare,
 }: AssistantMessageProps) => {
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const [sharing, setSharing] = React.useState(false);
+  const [shared, setShared] = React.useState(false);
+  const [shareError, setShareError] = React.useState<string | null>(null);
   // Normalize to parts array
   const messageParts: MessagePart[] = parts ?? (content ? [{ type: 'text', text: content }] : []);
+
+  const confirmShare = async () => {
+    if (!onShare || sharing || shared) return;
+    setSharing(true);
+    setShareError(null);
+    try {
+      await onShare();
+      setShared(true);
+      setShareOpen(false);
+    } catch {
+      setShareError('Share failed. Nothing was posted.');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   return (
     <div className="flex gap-4">
@@ -47,9 +71,8 @@ export const AssistantMessage = ({
       </div>
       <div className="flex-1 min-w-0 space-y-4">
         <div className="relative pl-2">
-          {/* Label — no astronaut in messages (AC2). cut ④: a named Voyager in
-              the room shows "WREN ✦ (Isaac's Voyager)" — the ✦ badge marks it
-              visibly non-human, the owner attribution makes whose it is plain. */}
+          {/* Label — no astronaut in messages. Historical named public rows keep
+              their non-human and owner attribution; new output is private. */}
           <div className="flex items-center gap-2 mb-3">
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ff5f56] via-[#5ec98f] to-[#b07af5] text-xs font-bold">
               {voyagerName ? voyagerName.toUpperCase() : 'VOYAGER'}
@@ -60,6 +83,11 @@ export const AssistantMessage = ({
             {voyagerName && ownerName && (
               <span className="text-slate-500 text-[10px] font-medium tracking-wide">
                 ({ownerName}&rsquo;s Voyager)
+              </span>
+            )}
+            {audienceLabel && (
+              <span className="text-slate-500 text-[9px] font-medium tracking-wide">
+                {audienceLabel}
               </span>
             )}
             {isStreaming && (
@@ -92,6 +120,46 @@ export const AssistantMessage = ({
               )}
             </div>
           </div>
+
+          {onShare && shareTarget && !isStreaming && (
+            <div className="ml-4 mt-3">
+              <button
+                type="button"
+                onClick={() => setShareOpen((open) => !open)}
+                disabled={shared}
+                className="text-[10px] tracking-wide text-[#5ec98f] hover:text-[#8de0b5] disabled:text-slate-600 transition-colors"
+              >
+                {shared ? `Shared to ${shareTarget}` : `Share to ${shareTarget}`}
+              </button>
+              {shareOpen && !shared && (
+                <div className="mt-2 max-w-xl border border-[#5ec98f]/25 bg-[#5ec98f]/[0.04] p-3 text-xs">
+                  <div className="text-slate-300 mb-2">Share exactly this Voyager response to {shareTarget} as your message?</div>
+                  <div className="max-h-32 overflow-y-auto border-l-2 border-[#5ec98f]/40 pl-3 text-slate-400 whitespace-pre-wrap">
+                    {content}
+                  </div>
+                  {shareError && <div className="mt-2 text-[#ff8b84]">{shareError}</div>}
+                  <div className="mt-3 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={confirmShare}
+                      disabled={sharing}
+                      className="text-[#5ec98f] hover:text-[#8de0b5] disabled:text-slate-600"
+                    >
+                      {sharing ? 'Sharing…' : 'Confirm share'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShareOpen(false)}
+                      disabled={sharing}
+                      className="text-slate-500 hover:text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

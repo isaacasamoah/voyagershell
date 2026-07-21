@@ -46,7 +46,7 @@ const formatIdentity = (voyagerName: string, ownerName?: string): string => {
   const display = voyagerName.charAt(0).toUpperCase() + voyagerName.slice(1);
   const owner = ownerName?.trim() || 'your';
   const owned = ownerName?.trim() ? `${owner}'s` : 'your own';
-  return `## Your Name\n\nYou are ${display}, ${owned} Voyager. When ${owner} whispers "@${voyagerName} …", only you hear it — a private aside. When they say "${voyagerName}, …", they're summoning you into the room.`;
+  return `## Your Name\n\nYou are ${display}, ${owned} Voyager. When ${owner} writes "@${voyagerName} …", only you and ${owner} can see the exchange. Your name is identity, not permission for anyone else to invoke you.`;
 };
 
 /**

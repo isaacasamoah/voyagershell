@@ -5,7 +5,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug'
 import { normalizeUsername } from '@/lib/voyage/username'
-import { pickOwnVoyagerHandle, voyagerCustomName, capitalizeName, type VoyagerHandle } from './address'
+import { pickOwnVoyagerHandle, voyagerCustomName } from './address'
 
 export type HandleKind = 'human' | 'voyager'
 
@@ -13,49 +13,8 @@ export type HandleResult =
   | { ok: true; handle: string }
   | { ok: false; error: string }
 
-interface HandleOwnerRow {
-  handle: string
-  owner_user_id: string
-}
-
-interface MemberProfileRow {
-  id: string
-  username: string | null
-  display_name: string | null
-}
-
 const from = (table: string) =>
   (getAdminClient() as unknown as { from: (t: string) => any }).from(table)
-
-// ── Pure assembly: member ids + fetched rows → the room's VoyagerHandle set ───
-// isOwn is the trust boundary — true ONLY for the caller's own voyager.
-export const toRoomVoyagerHandles = (
-  memberIds: string[],
-  callerId: string,
-  handleRows: HandleOwnerRow[],
-  profiles: MemberProfileRow[],
-): VoyagerHandle[] => {
-  const handleByOwner = new Map(handleRows.map((r) => [r.owner_user_id, r.handle]))
-  const profileById = new Map(profiles.map((p) => [p.id, p]))
-  const out: VoyagerHandle[] = []
-  for (const id of memberIds) {
-    const profile = profileById.get(id)
-    const rowHandle = handleByOwner.get(id)
-    const handle = pickOwnVoyagerHandle(rowHandle, profile?.username)
-    if (!handle) continue
-    // The custom name (claimed handle ≠ derived default), title-cased for display.
-    // Null when unnamed — the fanned reply then stays the flat "Voyager".
-    const custom = voyagerCustomName(rowHandle, profile?.username)
-    out.push({
-      handle,
-      ownerName: profile?.display_name ?? profile?.username ?? 'someone',
-      isOwn: id === callerId,
-      ownerUserId: id, // the identity of record for a cross-owner summon (§6.5)
-      name: custom ? capitalizeName(custom) : null,
-    })
-  }
-  return out
-}
 
 // The caller's own voyager identity: the addressing `handle` (claimed name, else
 // derived `<username>.voyager`, else '') plus the custom `name` for the prompt.
@@ -84,39 +43,6 @@ export const getOwnVoyagerIdentity = async (
   }
 }
 
-// Every room member's voyager handle, own included, each isOwn-tagged for the
-// caller. Solo (no space) still returns the caller's own so `@own` resolves.
-export const listRoomVoyagerHandles = async (
-  sessionId: string,
-  userId: string,
-): Promise<VoyagerHandle[]> => {
-  const memberIds = await getRoomMemberIds(sessionId, userId)
-  if (memberIds.length === 0) return []
-  const [{ data: handleRows }, { data: profileRows }] = await Promise.all([
-    from('handles').select('handle, owner_user_id').in('owner_user_id', memberIds).eq('kind', 'voyager'),
-    from('profiles').select('id, username, display_name').in('id', memberIds),
-  ])
-  return toRoomVoyagerHandles(
-    memberIds,
-    userId,
-    (handleRows as HandleOwnerRow[] | null) ?? [],
-    (profileRows as MemberProfileRow[] | null) ?? [],
-  )
-}
-
-const getRoomMemberIds = async (sessionId: string, callerId: string): Promise<string[]> => {
-  const { data: session } = await from('sessions').select('space_id').eq('id', sessionId).maybeSingle()
-  const spaceId = (session as { space_id: string | null } | null)?.space_id
-  if (!spaceId) return [callerId]
-  const { data: members } = await from('space_members')
-    .select('user_id')
-    .eq('space_id', spaceId)
-    .eq('state', 'active')
-  const ids = ((members as { user_id: string | null }[] | null) ?? [])
-    .map((m) => m.user_id)
-    .filter((id): id is string => Boolean(id))
-  return Array.from(new Set([callerId, ...ids]))
-}
 
 // Claim (or rename in place) the caller's single handle of a kind. The DB's
 // case-insensitive unique index is the uniqueness authority — a 23505 means the

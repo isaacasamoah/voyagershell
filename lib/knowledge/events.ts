@@ -64,7 +64,7 @@ export interface SourceEventMetadata {
   source?: string          // V3 messaging: originating channel/context
   sender_display_name?: string  // V6: human-readable sender name
   sender_user_id?: string       // V6: sender UUID for attribution
-  owner_display_name?: string   // cut ④: the summoned voyager's owner, for "WREN ✦ (Isaac's Voyager)"
+  owner_display_name?: string   // historical public Voyager attribution (read-only compatibility)
 }
 
 // =============================================================================
@@ -223,9 +223,6 @@ export const createMessageEvent = async (
     // V6: inline classification + sender attribution
     senderDisplayName?: string
     senderUserId?: string
-    // cut ④: the summoned voyager's OWNER display name, e.g. "Isaac". Rides
-    // metadata so the room feed renders "WREN ✦ (Isaac's Voyager)".
-    ownerDisplayName?: string
     attentionScore?: number
     contextSnippet?: string
     /** Override event type. Default: 'message'. Use 'conversation' for chat turns. */
@@ -248,7 +245,6 @@ export const createMessageEvent = async (
       source: options?.source,
       sender_display_name: options?.senderDisplayName,
       sender_user_id: options?.senderUserId,
-      owner_display_name: options?.ownerDisplayName,
     },
     sourceType: 'conversation',
     sourceRef: {

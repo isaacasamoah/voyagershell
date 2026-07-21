@@ -94,10 +94,8 @@ export const activateMembers = async (spaceId: string, userIds: Array<string | n
 }
 
 // Every ACTIVE member of the session's room, INCLUDING the session owner —
-// recomputed FRESH at call time. cut ④ fans a public reply to exactly this set,
-// and it must be read at REPLY time (turn-end), never a turn-start snapshot: a
-// stream can run up to 300s and outlive a roster (adversary risk #2). Returns
-// [callerFallback] when the session has no space yet (a solo turn).
+// recomputed fresh for explicit human sends and Share-to-room. Returns the
+// caller when the session has no space yet.
 export const getActiveMemberIds = async (
   sessionId: string,
   callerFallback: string,

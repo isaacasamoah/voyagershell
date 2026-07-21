@@ -449,18 +449,15 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
                     userId: ctx.userId,
                     voyageSlug: ctx.voyageSlug,
                     participants: [ctx.userId],
-                    addressedTo: [ctx.userId],
                     source: 'agent',
-                    senderDisplayName: 'Voyager',
                     attentionScore: 0.85,
-                    eventType: 'message',
+                    eventType: 'conversation',
                     contextSnippet: `Voyager research: ${objective.slice(0, 60)}`,
                   },
                 )
                 if (!eventId) {
                   throw new Error('Failed to create background research message event')
                 }
-                await fanOutDeliveries(eventId, [ctx.userId])
                 await completeTask(taskId, result, Date.now() - startTime)
                 console.log(`[spawn_background_agent] Task ${taskId.slice(0, 8)} completed: ${result.findings.length} findings`)
               },
@@ -753,18 +750,16 @@ export const createVoyagerTools = (ctx: ToolContext): {
   })
 
   // name_voyager — LLM calls this when the user names their own Voyager. The
-  // name becomes a handle in the shared namespace: "@<name>" is a private aside
-  // to their OWN Voyager, "<name>, …" summons it. Same set_username-style
-  // validation (pattern + reserved), uniqueness across the whole namespace.
+  // name becomes an owner-private handle: "@<name>" addresses their own Voyager.
   const name_voyager = tool({
-    description: `Name the user's Voyager — give their agent a personal name they can address ("call you Wren", "name my voyager Sol"). After naming, "@<name>" is a private aside only their own Voyager hears, and "<name>, …" summons it aloud. Lowercase letters/numbers/._- (2-31 chars), unique across everyone's handles.`,
+    description: `Name the user's Voyager — give their agent a personal name they can address ("call you Wren", "name my voyager Sol"). After naming, "@<name>" is a private exchange only they and their Voyager can see. Lowercase letters/numbers/._- (2-31 chars), unique across everyone's handles.`,
     inputSchema: z.object({
       name: z.string().describe('The name to give the Voyager, e.g. "Wren"'),
     }),
     execute: async (input) => {
       const result = await renameVoyagerHandle(ctx.userId, input.name)
       if (!result.ok) return result.error
-      return `Done — I'm ${result.handle} now. Whisper "@${result.handle} …" for a private aside, or say "${result.handle}, …" to summon me.`
+      return `Done — I'm ${result.handle} now. Write "@${result.handle} …" for a private exchange.`
     },
   })
 

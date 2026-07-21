@@ -51,9 +51,8 @@ const getSenderDisplayName = (row: FeedEventRow): string | null => (
   isObject(row.metadata) ? getString(row.metadata, 'sender_display_name') : null
 )
 
-// cut ④: the summoned voyager's OWNER display name, e.g. "Isaac" — drives the
-// "(Isaac's Voyager)" attribution on a fanned public reply. Null on a solo/aside
-// reply, so it renders the flat "Voyager".
+// Historical public Voyager rows retain their owner attribution. New writes do
+// not use this field, but immutable ledger history must remain readable.
 const getOwnerDisplayName = (row: FeedEventRow): string | null => (
   isObject(row.metadata) ? getString(row.metadata, 'owner_display_name') : null
 )
@@ -133,9 +132,7 @@ export const toFeedEvents = (
     const kind = getFeedKind(row)
     const delivery = deliveryByEventId.get(row.id) ?? null
     const isSelfAuthoredMessage = row.event_type === 'message' && role === 'user'
-    // cut ④: the viewer's OWN voyager's public reply has no delivery row (the
-    // owner is excluded from the fan-out) — it is inherently "seen", never an
-    // unread badge on your own voyager's words.
+    // Historical owner-authored public Voyager rows had no self-delivery.
     const isOwnVoyagerMessage =
       row.event_type === 'message' && row.actor_type === 'voyager' && row.user_id === userId
 
@@ -145,8 +142,7 @@ export const toFeedEvents = (
       role,
       kind,
       inviteState: kind === 'invite' ? viewerInviteState : null,
-      // cut ④: a fanned voyager reply carries its voyager name (metadata) so the
-      // room renders "WREN ✦"; a solo/aside reply has none → the flat "Voyager".
+      // Historical public Voyager rows may carry a name; private rows do not.
       senderDisplayName: getSenderDisplayName(row),
       ownerName: role === 'assistant' ? getOwnerDisplayName(row) : null,
       senderUserId: getSenderUserId(row) ?? row.user_id,

@@ -13,21 +13,12 @@ interface RoomTurnInput {
   address: AddressResult
 }
 
-// `@`-ing another member's voyager NEVER opens a private channel (C1). The
-// message already flows through public room semantics above; this gentle line
-// nudges the asker toward the right address without a cross-owner private line.
-const redirectLine = (address: AddressResult): string => {
-  const owner = address.targetOwnerName ?? 'someone else'
-  const name = address.targetHandle ?? 'that voyager'
-  return `${name} is ${owner}'s Voyager — @ only reaches your own. Say "${name}, …" to summon them into the room.`
-}
-
 // The token-less form of the held notice. The resolver always attaches a
 // per-token `address.notice`; this is the generic line used only if a held
 // result ever arrives without one, so the gate never emits an empty message
 // on the confidentiality path.
 const HELD_NOTICE_FALLBACK =
-  'No one by that name is here — say it without the @ to send it to the room.'
+  'Only your Voyager can be invoked here. Remove @ to send ordinary room text.'
 
 const deferUserPersistence = (
   { userId, conversationId, voyageSlug }: TurnContext,
@@ -144,20 +135,10 @@ export const runRoomTurn = async ({
     }
   }
 
-  // `@other-voyager`: public semantics already ran (fan-out above); nudge the
-  // asker toward the right address instead of opening a private channel. A
-  // leading-NAME summon of another member's voyager is a different address (mode
-  // 'summon', handled below) — it now runs on the owner's brain (cut ④).
-  if (address.mode === 'redirect') {
-    return { kind: 'text', text: redirectLine(address) }
-  }
-
-  // The voyager fires for an aside (own) or a summon (own OR another member's
-  // handle); a mid-sentence mention or plain chatter is NOT addressed. An
-  // explicit summon proceeds on the OWNER's terms — naming a voyager aloud
-  // overrides the ambient `+voyager out` toggle, exactly as a knock does.
-  const addressed = isAside || address.mode === 'summon'
-  if (room.roomPeople.length > 0 && !addressed) {
+  // In a populated room only the owner's explicit private aside reaches their
+  // Voyager. Every plain utterance — including a leading Voyager name — remains
+  // human room text. There is no public-generation or cross-owner path.
+  if (room.roomPeople.length > 0 && !isAside) {
     return { kind: 'empty' }
   }
 

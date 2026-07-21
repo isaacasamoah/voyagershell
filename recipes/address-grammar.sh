@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Proving recipe — the deterministic addressing grammar (the riskiest claim C1).
-# @own = aside · @other = redirect (NEVER aside) · leading-name = summon ·
-# mid-sentence = neither · @voyager alias parity · @unknown / @typo / @human =
-# HELD (private notice, never fanned out — the Test Gate confidentiality guard).
+# @own = private · every non-own @ = HELD · every leading name = ordinary room
+# text · client audience and server address resolution share the same function.
 # Emits ADDRESS_GRAMMAR_GREEN.
 set -euo pipefail
 cd "$(dirname "$0")/.."

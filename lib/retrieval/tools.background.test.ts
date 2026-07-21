@@ -112,7 +112,7 @@ describe('spawn_background_agent delivery', () => {
     failTask.mockResolvedValue(undefined)
   })
 
-  it('emits and fans out the final message before completing the audit task', async () => {
+  it('emits a private conversation result before completing the audit task', async () => {
     const result = {
       message: 'I mapped the launch dependencies.',
       findings: [{ content: 'web_search: release details' }],
@@ -131,23 +131,19 @@ describe('spawn_background_agent delivery', () => {
         userId: 'user-1',
         voyageSlug: 'launch',
         participants: ['user-1'],
-        addressedTo: ['user-1'],
         source: 'agent',
-        senderDisplayName: 'Voyager',
         attentionScore: 0.85,
-        eventType: 'message',
+        eventType: 'conversation',
         contextSnippet: 'Voyager research: Map every launch dependency',
       },
     )
-    expect(fanOutDeliveries).toHaveBeenCalledWith('event-1', ['user-1'])
+    expect(fanOutDeliveries).not.toHaveBeenCalled()
     expect(completeTask).toHaveBeenCalledWith(
       'task-12345678',
       result,
       expect.any(Number),
     )
     expect(createMessageEvent.mock.invocationCallOrder[0])
-      .toBeLessThan(completeTask.mock.invocationCallOrder[0])
-    expect(fanOutDeliveries.mock.invocationCallOrder[0])
       .toBeLessThan(completeTask.mock.invocationCallOrder[0])
     expect(failTask).not.toHaveBeenCalled()
   })
