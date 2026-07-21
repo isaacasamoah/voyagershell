@@ -26,6 +26,9 @@ interface AssistantMessageProps {
   // Unset (a solo/unnamed reply) keeps the flat "VOYAGER".
   voyagerName?: string | null;
   ownerName?: string | null;
+  // The reply to a private `@handle` aside. Renders the same quiet mint "private
+  // to you" marker as the whisper, so both halves of an aside read as private.
+  isAside?: boolean;
 }
 
 export const AssistantMessage = ({
@@ -36,6 +39,7 @@ export const AssistantMessage = ({
   onAction,
   voyagerName,
   ownerName,
+  isAside = false,
 }: AssistantMessageProps) => {
   // Normalize to parts array
   const messageParts: MessagePart[] = parts ?? (content ? [{ type: 'text', text: content }] : []);
@@ -64,6 +68,11 @@ export const AssistantMessage = ({
             )}
             {isStreaming && (
               <span className="text-[#59a5ff] text-[10px] animate-pulse">streaming...</span>
+            )}
+            {isAside && (
+              <span className="text-[#5ec98f] text-[10px] font-mono flex items-center gap-1 tracking-wider">
+                <span aria-hidden="true">🔒</span> private to you
+              </span>
             )}
           </div>
 

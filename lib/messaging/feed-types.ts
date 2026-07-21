@@ -25,6 +25,11 @@ export interface FeedEvent {
   createdAt: string
   seen: boolean
   deliveryId: string | null
+  // A private aside — the viewer's own `@handle` whisper or its reply. Never
+  // fanned to the room; render gives it the quiet "private to you" treatment so a
+  // whisper never LOOKS like a room message. Orthogonal to `kind` (an aside still
+  // renders through the user/assistant bubble, just marked private).
+  isAside: boolean
 }
 
 export interface FeedApiEvent {
@@ -40,6 +45,7 @@ export interface FeedApiEvent {
   created_at: string
   seen: boolean
   delivery_id: string | null
+  is_aside: boolean
 }
 
 export interface StreamingReply {
@@ -85,6 +91,7 @@ export const toFeedApiEvent = (event: FeedEvent): FeedApiEvent => ({
   created_at: event.createdAt,
   seen: event.seen,
   delivery_id: event.deliveryId,
+  is_aside: event.isAside,
 })
 
 export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
@@ -100,6 +107,7 @@ export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
   createdAt: event.created_at,
   seen: event.seen,
   deliveryId: event.delivery_id,
+  isAside: event.is_aside ?? false,
 })
 
 // Each assistant turn persists exactly one assistant feed event. Counting them

@@ -67,6 +67,12 @@ const getFeedKind = (row: FeedEventRow): FeedEventKind => {
   return 'message'
 }
 
+// A private aside carries source:'aside' on BOTH the viewer's `@handle` whisper
+// (room-turn.ts) and its reply (public-reply.ts) — the render marks it "private
+// to you" so a whisper never looks like a room message. Orthogonal to kind.
+const getFeedIsAside = (row: FeedEventRow): boolean =>
+  (isObject(row.metadata) ? getString(row.metadata, 'source') : null) === 'aside'
+
 // The viewer's own membership state across this voyage's space(s). Prefer an
 // open invite so a pending knock still shows Join/Decline; fall back to
 // active/left for a resolved knock (so buttons don't reappear after joining).
@@ -154,6 +160,7 @@ export const toFeedEvents = (
       createdAt: row.created_at,
       seen: row.event_type !== 'message' || isSelfAuthoredMessage || isOwnVoyagerMessage || Boolean(delivery?.seen_at),
       deliveryId: delivery?.id ?? null,
+      isAside: getFeedIsAside(row),
     }
   }))
 }
