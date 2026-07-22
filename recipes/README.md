@@ -13,6 +13,7 @@ do not replace them.
 | `./recipes/two-account-bench.sh` | Two accounts, one names "wren": owner can invoke; other account cannot; leading name remains human room text | `TWO_ACCOUNT_BENCH_OK` |
 | `./recipes/private-voyager-trust.sh` | Owner-private turn persistence + content-only human Share-to-room boundary + private background results | `PRIVATE_VOYAGER_TRUST_GREEN` |
 | `./recipes/handles-uniqueness.sh` | `idx_handles_lower` rejects a cross-case dup on dev (non-mutating; requires `~/.supabase/access-token`) | `HANDLES_UNIQUE_OK` |
+| `./recipes/knowledge-graph-poc.sh` | Existing `knowledge_events` ledger · six canonical kinds · immutable audience/provenance · per-hop authorized traversal · rename/replay stability · transaction rollback leaves zero catalogue residue | `KNOWLEDGE_GRAPH_POC_GREEN` |
 | `./recipes/typecheck.sh` | `tsc --noEmit` clean | `TYPECHECK_OK` |
 | `./recipes/full-suite.sh` | the full unit suite | `FULL_SUITE_GREEN` |
 
@@ -33,3 +34,30 @@ Two signed-in accounts (e.g. Isaac + Elisheya) in one room:
 11. Name or rename the owner Voyager. Its live answer and all owner-private historical replies immediately use the current name; the `@name` private address changes without reload. Historical public Voyager messages keep the name stored when they were published.
 
 After migration 053 is installed, `recipes/private-reply-promotion-proof.sql` is the rollback-only database proof for created/replayed idempotency, exact content-only publication, one mapping, and one delivery per recipient.
+
+## Phase 2 knowledge-graph Spec gate
+
+From any directory, run:
+
+```bash
+/Users/isaac/the-workshop/voyagershell-oru-319-memory-kernel/recipes/knowledge-graph-poc.sh
+```
+
+The recipe takes `VOYAGER_SUPABASE_ACCESS_TOKEN` first, then the canonical Mac
+token file, then securely reads the Fedora token. It sends one Management API
+transaction containing the ordered schema and authorization migrations (054 and
+055), two fixed source rows in the existing `knowledge_events` ledger, both
+fixture projections, and every SQL assertion, then rolls the whole transaction
+back. It refuses to start if any target object exists and compares the catalogue
+before and after.
+
+Expected stable observation summary:
+
+```text
+knowledge-graph: existing knowledge_events ledger | 2 fixed sources | participants NULL
+knowledge-graph: 6 kinds | 10 nodes | 17 edges | replay identical
+knowledge-graph: graph on found "Vanessa keeps the amber notebook behind the blue atlas." with immutable source; graph off missed it
+knowledge-graph: root denied | hidden bridge denied | victim private residue 0 | NULL denied
+knowledge-graph: NULL-audience source rejected | Person + Voyager rename stable | catalogue residue 0
+KNOWLEDGE_GRAPH_POC_GREEN
+```

@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "viewerProfileIds": {"a":"10000000-0000-4000-8000-000000000001","b":"10000000-0000-4000-8000-000000000002"},
+  "audiences": [
+    {"key":"voyage-shared","id":"11000000-0000-4000-8000-000000000001","scopeKind":"voyage","scopeAuthorityId":"41000000-0000-4000-8000-000000000001","memberProfileIds":["10000000-0000-4000-8000-000000000001","10000000-0000-4000-8000-000000000002"]},
+    {"key":"space-shared","id":"11000000-0000-4000-8000-000000000002","scopeKind":"space","scopeAuthorityId":"51000000-0000-4000-8000-000000000001","memberProfileIds":["10000000-0000-4000-8000-000000000001","10000000-0000-4000-8000-000000000002"]},
+    {"key":"private-a","id":"11000000-0000-4000-8000-000000000003","scopeKind":"private","scopeAuthorityId":"10000000-0000-4000-8000-000000000001","memberProfileIds":["10000000-0000-4000-8000-000000000001"]},
+    {"key":"private-b","id":"11000000-0000-4000-8000-000000000004","scopeKind":"private","scopeAuthorityId":"10000000-0000-4000-8000-000000000002","memberProfileIds":["10000000-0000-4000-8000-000000000002"]}
+  ],
+  "nodes": [
+    {"id":"20000000-0000-4000-8000-000000000001","kind":"person","authorityId":"10000000-0000-4000-8000-000000000001","identity":"person:10000000-0000-4000-8000-000000000001","label":"Vanessa Hart","audienceKey":"voyage-shared"},
+    {"id":"20000000-0000-4000-8000-000000000002","kind":"person","authorityId":"10000000-0000-4000-8000-000000000002","identity":"person:10000000-0000-4000-8000-000000000002","label":"Isaac","audienceKey":"voyage-shared"},
+    {"id":"30000000-0000-4000-8000-000000000001","kind":"voyager","authorityId":"10000000-0000-4000-8000-000000000001","identity":"voyager:10000000-0000-4000-8000-000000000001","label":"Northstar","audienceKey":"private-a"},
+    {"id":"30000000-0000-4000-8000-000000000002","kind":"voyager","authorityId":"10000000-0000-4000-8000-000000000002","identity":"voyager:10000000-0000-4000-8000-000000000002","label":"Wren","audienceKey":"private-b"},
+    {"id":"40000000-0000-4000-8000-000000000001","kind":"voyage","authorityId":"41000000-0000-4000-8000-000000000001","identity":"voyage:41000000-0000-4000-8000-000000000001","label":"Let us go together","audienceKey":"voyage-shared"},
+    {"id":"50000000-0000-4000-8000-000000000001","kind":"space","authorityId":"51000000-0000-4000-8000-000000000001","identity":"space:51000000-0000-4000-8000-000000000001","label":"Observatory","audienceKey":"space-shared"},
+    {"id":"60000000-0000-4000-8000-000000000001","kind":"message_event","authorityId":"61000000-0000-4000-8000-000000000001","identity":"message_event:61000000-0000-4000-8000-000000000001","label":"Vanessa room message","audienceKey":"space-shared"},
+    {"id":"60000000-0000-4000-8000-000000000002","kind":"message_event","authorityId":"61000000-0000-4000-8000-000000000002","identity":"message_event:61000000-0000-4000-8000-000000000002","label":"Vanessa private sibling","audienceKey":"private-a"},
+    {"id":"70000000-0000-4000-8000-000000000001","kind":"knowledge_unit","authorityId":"71000000-0000-4000-8000-000000000001","identity":"knowledge_unit:71000000-0000-4000-8000-000000000001","label":"Atlas location claim","audienceKey":"space-shared"},
+    {"id":"70000000-0000-4000-8000-000000000002","kind":"knowledge_unit","authorityId":"71000000-0000-4000-8000-000000000002","identity":"knowledge_unit:71000000-0000-4000-8000-000000000002","label":"Private recovery claim","audienceKey":"private-a"}
+  ],
+  "events": [
+    {"id":"61000000-0000-4000-8000-000000000001","nodeId":"60000000-0000-4000-8000-000000000001","content":"I left the amber notebook behind the blue atlas.","audienceKey":"space-shared"},
+    {"id":"61000000-0000-4000-8000-000000000002","nodeId":"60000000-0000-4000-8000-000000000002","content":"My recovery phrase is hidden under the kitchen clock.","audienceKey":"private-a"}
+  ],
+  "negativeSourceEvent": {"id":"61000000-0000-4000-8000-000000000003","attemptedNodeId":"60000000-0000-4000-8000-000000000003","content":"Legacy visibility fields cannot authorize this source."},
+  "units": [
+    {"id":"71000000-0000-4000-8000-000000000001","nodeId":"70000000-0000-4000-8000-000000000001","claim":"Vanessa keeps the amber notebook behind the blue atlas.","sourceEventId":"61000000-0000-4000-8000-000000000001","extractorVersion":"fixture-v1","claimKey":"atlas-location","audienceKey":"space-shared"},
+    {"id":"71000000-0000-4000-8000-000000000002","nodeId":"70000000-0000-4000-8000-000000000002","claim":"Vanessa keeps her recovery phrase under the kitchen clock.","sourceEventId":"61000000-0000-4000-8000-000000000002","extractorVersion":"fixture-v1","claimKey":"recovery-location","audienceKey":"private-a"}
+  ],
+  "edges": [
+    {"sourceNodeId":"60000000-0000-4000-8000-000000000001","targetNodeId":"20000000-0000-4000-8000-000000000001","kind":"authored_by","audienceKey":"space-shared"},
+    {"sourceNodeId":"60000000-0000-4000-8000-000000000001","targetNodeId":"50000000-0000-4000-8000-000000000001","kind":"posted_in","audienceKey":"space-shared"},
+    {"sourceNodeId":"50000000-0000-4000-8000-000000000001","targetNodeId":"40000000-0000-4000-8000-000000000001","kind":"in_voyage","audienceKey":"space-shared"},
+    {"sourceNodeId":"20000000-0000-4000-8000-000000000001","targetNodeId":"50000000-0000-4000-8000-000000000001","kind":"member_of","audienceKey":"space-shared"},
+    {"sourceNodeId":"20000000-0000-4000-8000-000000000002","targetNodeId":"50000000-0000-4000-8000-000000000001","kind":"member_of","audienceKey":"space-shared"},
+    {"sourceNodeId":"20000000-0000-4000-8000-000000000001","targetNodeId":"40000000-0000-4000-8000-000000000001","kind":"member_of","audienceKey":"voyage-shared"},
+    {"sourceNodeId":"20000000-0000-4000-8000-000000000002","targetNodeId":"40000000-0000-4000-8000-000000000001","kind":"member_of","audienceKey":"voyage-shared"},
+    {"sourceNodeId":"30000000-0000-4000-8000-000000000001","targetNodeId":"20000000-0000-4000-8000-000000000001","kind":"companion_of","audienceKey":"private-a"},
+    {"sourceNodeId":"30000000-0000-4000-8000-000000000002","targetNodeId":"20000000-0000-4000-8000-000000000002","kind":"companion_of","audienceKey":"private-b"},
+    {"sourceNodeId":"70000000-0000-4000-8000-000000000001","targetNodeId":"60000000-0000-4000-8000-000000000001","kind":"derived_from","audienceKey":"space-shared"},
+    {"sourceNodeId":"70000000-0000-4000-8000-000000000001","targetNodeId":"20000000-0000-4000-8000-000000000002","kind":"about","audienceKey":"space-shared"},
+    {"sourceNodeId":"60000000-0000-4000-8000-000000000002","targetNodeId":"20000000-0000-4000-8000-000000000001","kind":"authored_by","audienceKey":"private-a"},
+    {"sourceNodeId":"60000000-0000-4000-8000-000000000002","targetNodeId":"50000000-0000-4000-8000-000000000001","kind":"posted_in","audienceKey":"private-a"},
+    {"sourceNodeId":"60000000-0000-4000-8000-000000000002","targetNodeId":"60000000-0000-4000-8000-000000000001","kind":"reply_to","audienceKey":"private-a"},
+    {"sourceNodeId":"60000000-0000-4000-8000-000000000002","targetNodeId":"20000000-0000-4000-8000-000000000002","kind":"about","audienceKey":"private-a"},
+    {"sourceNodeId":"70000000-0000-4000-8000-000000000002","targetNodeId":"60000000-0000-4000-8000-000000000002","kind":"derived_from","audienceKey":"private-a"},
+    {"sourceNodeId":"70000000-0000-4000-8000-000000000002","targetNodeId":"20000000-0000-4000-8000-000000000002","kind":"about","audienceKey":"private-a"}
+  ],
+  "renames": [
+    {"nodeId":"20000000-0000-4000-8000-000000000001","beforeLabel":"Vanessa Vale","afterLabel":"Vanessa Hart"},
+    {"nodeId":"30000000-0000-4000-8000-000000000001","beforeLabel":"Vega","afterLabel":"Northstar"}
+  ],
+  "expected": {
+    "nodeCount": 10,
+    "edgeCount": 17,
+    "audienceCount": 4,
+    "viewerAAllGraphIdentities": ["person:10000000-0000-4000-8000-000000000001","voyager:10000000-0000-4000-8000-000000000001","voyage:41000000-0000-4000-8000-000000000001","space:51000000-0000-4000-8000-000000000001","message_event:61000000-0000-4000-8000-000000000001","message_event:61000000-0000-4000-8000-000000000002","person:10000000-0000-4000-8000-000000000002","knowledge_unit:71000000-0000-4000-8000-000000000001","knowledge_unit:71000000-0000-4000-8000-000000000002"],
+    "viewerBAllGraphIdentities": ["person:10000000-0000-4000-8000-000000000001","voyage:41000000-0000-4000-8000-000000000001","space:51000000-0000-4000-8000-000000000001","message_event:61000000-0000-4000-8000-000000000001","person:10000000-0000-4000-8000-000000000002","knowledge_unit:71000000-0000-4000-8000-000000000001","voyager:10000000-0000-4000-8000-000000000002"],
+    "graphOffIdentities": ["person:10000000-0000-4000-8000-000000000001"],
+    "ownerBridgeIdentities": ["message_event:61000000-0000-4000-8000-000000000001","message_event:61000000-0000-4000-8000-000000000002","person:10000000-0000-4000-8000-000000000002"],
+    "victimBridgeIdentities": ["message_event:61000000-0000-4000-8000-000000000001"],
+    "rootDeniedIdentities": [],
+    "privateNodeIds": ["60000000-0000-4000-8000-000000000002","70000000-0000-4000-8000-000000000002","30000000-0000-4000-8000-000000000001"],
+    "sharedUnitNodeId": "70000000-0000-4000-8000-000000000001",
+    "sharedClaim": "Vanessa keeps the amber notebook behind the blue atlas.",
+    "sharedSourceEventId": "61000000-0000-4000-8000-000000000001",
+    "sharedAudienceKey": "space-shared"
+  }
+}
