@@ -22,6 +22,7 @@ const event = (id: string, createdAt: string, patch: Partial<FeedEvent> = {}): F
   senderUserId: null,
   content: id,
   createdAt,
+  shared: false,
   seen: true,
   deliveryId: null,
   ...patch,

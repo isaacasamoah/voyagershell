@@ -21,12 +21,14 @@ interface AssistantMessageProps {
   timestamp?: string;
   isStreaming?: boolean;
   onAction?: (action: string, data?: unknown) => void;
-  // Historical public Voyager rows can still carry name + owner attribution.
-  // New Voyager output is owner-private and normally uses the flat label.
+  // Private Voyager rows receive the owner's canonical current companion name;
+  // null uses the VOYAGER brand fallback. Historical public rows keep their
+  // immutable name + owner attribution.
   voyagerName?: string | null;
   ownerName?: string | null;
   audienceLabel?: string;
   shareTarget?: string;
+  shared?: boolean;
   onShare?: () => Promise<void>;
 }
 
@@ -40,11 +42,11 @@ export const AssistantMessage = ({
   ownerName,
   audienceLabel,
   shareTarget,
+  shared = false,
   onShare,
 }: AssistantMessageProps) => {
   const [shareOpen, setShareOpen] = React.useState(false);
   const [sharing, setSharing] = React.useState(false);
-  const [shared, setShared] = React.useState(false);
   const [shareError, setShareError] = React.useState<string | null>(null);
   // Normalize to parts array
   const messageParts: MessagePart[] = parts ?? (content ? [{ type: 'text', text: content }] : []);
@@ -55,7 +57,6 @@ export const AssistantMessage = ({
     setShareError(null);
     try {
       await onShare();
-      setShared(true);
       setShareOpen(false);
     } catch {
       setShareError('Share failed. Nothing was posted.');
@@ -71,8 +72,8 @@ export const AssistantMessage = ({
       </div>
       <div className="flex-1 min-w-0 space-y-4">
         <div className="relative pl-2">
-          {/* Label — no astronaut in messages. Historical named public rows keep
-              their non-human and owner attribution; new output is private. */}
+          {/* Label — no astronaut in messages. Private rows use current identity;
+              historical public rows keep their stored name + owner attribution. */}
           <div className="flex items-center gap-2 mb-3">
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ff5f56] via-[#5ec98f] to-[#b07af5] text-xs font-bold">
               {voyagerName ? voyagerName.toUpperCase() : 'VOYAGER'}

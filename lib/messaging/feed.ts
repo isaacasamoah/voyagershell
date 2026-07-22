@@ -1,6 +1,6 @@
-import { getAdminClient } from '@/lib/supabase/admin'
 import type { Json } from '@/lib/supabase/types'
-import { SessionAccessError, resolveSessionVoyage, getVoyageBySlug } from '@/lib/voyage'
+import { SessionAccessError, resolveSessionVoyage } from '@/lib/voyage'
+import { emptyFeedEnrichment, getFeedTableClient, loadPrivateFeedEnrichment, resolveViewerInviteState, type FeedEnrichment } from './feed-enrichment'
 import { sortFeedEvents, type FeedEvent, type FeedEventKind, type FeedEventRole, type FeedEventType, type InviteState } from './feed-types'
 
 export interface FeedEventRow {
@@ -23,10 +23,6 @@ interface DeliveryRow {
 }
 
 type JsonRecord = { [key: string]: Json | undefined }
-
-const typedTable = () => (
-  getAdminClient() as unknown as { from: (table: string) => any }
-)
 
 const isObject = (value: Json | null): value is JsonRecord => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -66,36 +62,6 @@ const getFeedKind = (row: FeedEventRow): FeedEventKind => {
   return 'message'
 }
 
-// The viewer's own membership state across this voyage's space(s). Prefer an
-// open invite so a pending knock still shows Join/Decline; fall back to
-// active/left for a resolved knock (so buttons don't reappear after joining).
-const resolveViewerInviteState = async (
-  supabase: ReturnType<typeof typedTable>,
-  voyageSlug: string,
-  userId: string,
-): Promise<InviteState | null> => {
-  const voyage = await getVoyageBySlug(voyageSlug)
-  if (!voyage) return null
-
-  const { data: spaceRows } = await supabase
-    .from('spaces')
-    .select('id')
-    .eq('voyage_id', voyage.id)
-  const spaceIds = ((spaceRows ?? []) as Array<{ id: string }>).map((row) => row.id)
-  if (spaceIds.length === 0) return null
-
-  const { data: memberRows } = await supabase
-    .from('space_members')
-    .select('state')
-    .eq('user_id', userId)
-    .in('space_id', spaceIds)
-  const states = ((memberRows ?? []) as Array<{ state: InviteState }>).map((row) => row.state)
-  if (states.includes('invited')) return 'invited'
-  if (states.includes('active')) return 'active'
-  if (states.includes('left')) return 'left'
-  return null
-}
-
 const getConversationRole = (row: FeedEventRow): FeedEventRole => {
   const role = isObject(row.source_ref) ? getString(row.source_ref, 'role') : null
   return role === 'assistant' ? 'assistant' : 'user'
@@ -124,6 +90,7 @@ export const toFeedEvents = (
   deliveries: DeliveryRow[],
   userId: string,
   viewerInviteState: InviteState | null = null,
+  enrichment: FeedEnrichment = emptyFeedEnrichment(),
 ): FeedEvent[] => {
   const deliveryByEventId = new Map(deliveries.map((delivery) => [delivery.event_id, delivery]))
 
@@ -135,6 +102,8 @@ export const toFeedEvents = (
     // Historical owner-authored public Voyager rows had no self-delivery.
     const isOwnVoyagerMessage =
       row.event_type === 'message' && row.actor_type === 'voyager' && row.user_id === userId
+    const isOwnerPrivateAssistant =
+      row.event_type === 'conversation' && role === 'assistant' && row.user_id === userId
 
     return {
       id: row.id,
@@ -142,12 +111,17 @@ export const toFeedEvents = (
       role,
       kind,
       inviteState: kind === 'invite' ? viewerInviteState : null,
-      // Historical public Voyager rows may carry a name; private rows do not.
-      senderDisplayName: getSenderDisplayName(row),
+      // Private conversation history always reflects the owner's canonical
+      // current companion identity. Historical public Voyager metadata remains
+      // immutable and continues to render its stored attribution.
+      senderDisplayName: isOwnerPrivateAssistant
+        ? enrichment.currentVoyagerDisplayName
+        : getSenderDisplayName(row),
       ownerName: role === 'assistant' ? getOwnerDisplayName(row) : null,
       senderUserId: getSenderUserId(row) ?? row.user_id,
       content: row.content ?? '',
       createdAt: row.created_at,
+      shared: isOwnerPrivateAssistant && enrichment.sharedSourceEventIds.has(row.id),
       seen: row.event_type !== 'message' || isSelfAuthoredMessage || isOwnVoyagerMessage || Boolean(delivery?.seen_at),
       deliveryId: delivery?.id ?? null,
     }
@@ -163,7 +137,7 @@ export const queryScopedEvents = async (
   const scopedVoyageSlug = voyageSlug === undefined
     ? await resolveSessionVoyage(conversationId, userId)
     : voyageSlug
-  const supabase = typedTable()
+  const supabase = getFeedTableClient()
 
   let query = supabase
     .from('knowledge_events')
@@ -191,7 +165,7 @@ export const queryScopedEventsForConversations = async (
   limit = 10_000,
 ): Promise<FeedEventRow[]> => {
   if (conversationIds.length === 0) return []
-  const supabase = typedTable()
+  const supabase = getFeedTableClient()
   const conversationIdSet = new Set(conversationIds)
 
   let query = supabase
@@ -219,8 +193,15 @@ export const queryScopedEventsForConversations = async (
 
 export const getFeed = async (userId: string, conversationId: string): Promise<FeedEvent[]> => {
   const voyageSlug = await resolveSessionVoyage(conversationId, userId)
-  const supabase = typedTable()
+  const supabase = getFeedTableClient()
   const rows = await queryScopedEvents(userId, conversationId, voyageSlug)
+  const privateAssistantIds = rows
+    .filter((row) => (
+      row.event_type === 'conversation'
+      && getConversationRole(row) === 'assistant'
+      && row.user_id === userId
+    ))
+    .map((row) => row.id)
   const messageIds = rows
     .filter((row) => row.event_type === 'message')
     .map((row) => row.id)
@@ -230,17 +211,25 @@ export const getFeed = async (userId: string, conversationId: string): Promise<F
   const viewerInviteState = hasInvite && voyageSlug
     ? await resolveViewerInviteState(supabase, voyageSlug, userId)
     : null
+  const [enrichment, deliveryResult] = await Promise.all([
+    loadPrivateFeedEnrichment(supabase, userId, conversationId, privateAssistantIds),
+    messageIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : supabase
+        .from('message_deliveries')
+        .select('id,event_id,seen_at')
+        .eq('recipient_user_id', userId)
+        .in('event_id', messageIds),
+  ])
 
-  if (messageIds.length === 0) return toFeedEvents(rows, [], userId, viewerInviteState)
-
-  const { data: deliveries, error: deliveryError } = await supabase
-    .from('message_deliveries')
-    .select('id,event_id,seen_at')
-    .eq('recipient_user_id', userId)
-    .in('event_id', messageIds)
-
-  if (deliveryError) throw new Error(deliveryError.message)
-  return toFeedEvents(rows, (deliveries ?? []) as DeliveryRow[], userId, viewerInviteState)
+  if (deliveryResult.error) throw new Error(deliveryResult.error.message)
+  return toFeedEvents(
+    rows,
+    (deliveryResult.data ?? []) as DeliveryRow[],
+    userId,
+    viewerInviteState,
+    enrichment,
+  )
 }
 
 export { SessionAccessError }

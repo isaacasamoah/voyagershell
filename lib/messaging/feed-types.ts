@@ -22,6 +22,9 @@ export interface FeedEvent {
   senderUserId: string | null
   content: string
   createdAt: string
+  // Server-derived publication state for an owner-private assistant event in
+  // the current destination room. Never inferred from component history.
+  shared: boolean
   seen: boolean
   deliveryId: string | null
 }
@@ -37,6 +40,7 @@ export interface FeedApiEvent {
   sender_user_id: string | null
   content: string
   created_at: string
+  shared: boolean
   seen: boolean
   delivery_id: string | null
 }
@@ -116,6 +120,7 @@ export const toFeedApiEvent = (event: FeedEvent): FeedApiEvent => ({
   sender_user_id: event.senderUserId,
   content: event.content,
   created_at: event.createdAt,
+  shared: event.shared,
   seen: event.seen,
   delivery_id: event.deliveryId,
 })
@@ -131,6 +136,7 @@ export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
   senderUserId: event.sender_user_id,
   content: event.content,
   createdAt: event.created_at,
+  shared: event.shared ?? false,
   seen: event.seen,
   deliveryId: event.delivery_id,
 })

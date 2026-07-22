@@ -24,19 +24,25 @@ describe('getOwnVoyagerIdentity — owner-only lookup fails closed', () => {
   it('does not invent a derived handle when the handles read errors', async () => {
     db.handles = { data: null, error: { message: 'connection reset' } }
     db.profiles = { data: { username: 'isaac' }, error: null }
-    expect(await getOwnVoyagerIdentity('user-isaac')).toEqual({ handle: '', name: null })
+    expect(await getOwnVoyagerIdentity('user-isaac')).toEqual({ handle: '', displayName: null })
   })
 
   it('derives a default only after a successful empty handles read', async () => {
     db.handles = { data: null, error: null }
     db.profiles = { data: { username: 'isaac' }, error: null }
-    expect(await getOwnVoyagerIdentity('user-isaac')).toEqual({ handle: 'isaac.voyager', name: null })
+    expect(await getOwnVoyagerIdentity('user-isaac')).toEqual({
+      handle: 'isaac.voyager',
+      displayName: null,
+    })
   })
 
   it('returns a claimed custom name', async () => {
     db.handles = { data: { handle: 'wren' }, error: null }
     db.profiles = { data: { username: 'isaac' }, error: null }
-    expect(await getOwnVoyagerIdentity('user-isaac')).toEqual({ handle: 'wren', name: 'wren' })
+    expect(await getOwnVoyagerIdentity('user-isaac')).toEqual({
+      handle: 'wren',
+      displayName: 'Wren',
+    })
   })
 })
 

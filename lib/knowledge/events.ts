@@ -84,6 +84,25 @@ const toVectorString = (embedding: number[]): string => {
   return `[${embedding.join(',')}]`
 }
 
+// Best-effort semantic enrichment for an event that already exists on the
+// ledger. Publication never depends on OpenAI or the vector update succeeding;
+// keyword retrieval remains available from the trigger-created current row.
+export const updateEventEmbedding = async (
+  eventId: string,
+  content: string,
+): Promise<void> => {
+  try {
+    const embedding = await generateEmbedding(content)
+    await getAdminSupabase().rpc('update_knowledge_embedding', {
+      p_event_id: eventId,
+      p_embedding: toVectorString(embedding),
+    })
+    console.log('[Knowledge] Embedding updated for:', eventId)
+  } catch (embedError) {
+    console.error('[Knowledge] Failed to generate embedding:', embedError)
+  }
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const updateSessionActivity = async (conversationId: string): Promise<void> => {
@@ -180,21 +199,9 @@ export const createSourceEvent = async (params: CreateSourceEventParams): Promis
     const eventId = data.id as string
     console.log('[Knowledge] Source event created:', eventId)
 
-    // Generate and update embedding (async but inline for v1)
-    // Phase 2: Move to background job
-    try {
-      const embedding = await generateEmbedding(content)
-
-      
-      await supabase.rpc('update_knowledge_embedding', {
-        p_event_id: eventId,
-        p_embedding: toVectorString(embedding),
-      })
-      console.log('[Knowledge] Embedding updated for:', eventId)
-    } catch (embedError) {
-      // Log but don't fail — search will work once embedding is added
-      console.error('[Knowledge] Failed to generate embedding:', embedError)
-    }
+    // Generate and update embedding (async but inline for v1).
+    // Phase 2: move this to a background job.
+    await updateEventEmbedding(eventId, content)
 
     return eventId
   } catch (error) {

@@ -9,7 +9,7 @@ import { log } from '@/lib/debug'
 import { type KnowledgeNode } from '@/lib/knowledge'
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals'
 import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room'
-import { capitalizeName, resolveAddress } from '@/lib/messaging/address'
+import { resolveAddress } from '@/lib/messaging/address'
 import { getOwnVoyagerIdentity } from '@/lib/messaging/handles'
 import { resolveUserModelWithMeta } from '@/lib/models'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
@@ -55,7 +55,7 @@ export const runTurn = async (
   })
   // Strip only the private aside. Names without @ remain ordinary room text.
   const queryText = address.mode === 'aside' ? address.stripped : rawQuery
-  const voyagerName = ownIdentity.name ? capitalizeName(ownIdentity.name) : null
+  const voyagerIdentity = ownIdentity.displayName ? ownIdentity : undefined
 
   const intent = detectActionIntent(queryText)
   host.defer(reapStuckTasks().catch(() => {}))
@@ -153,7 +153,7 @@ export const runTurn = async (
       sessionId: conversationId,
       continuityContext,
       authState,
-      voyagerName: voyagerName ?? undefined,
+      voyagerIdentity,
       ownerName: displayName,
     })
     staticPrefix = `${staticPrompt}\n\n${toolStrategy}`

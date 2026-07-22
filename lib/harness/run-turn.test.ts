@@ -132,7 +132,7 @@ describe('runTurn', () => {
     createMessageEvent.mockResolvedValue('event-1')
     fanOutDeliveries.mockResolvedValue(undefined)
     getRoom.mockResolvedValue({ roomPeople: [], aiPresent: true })
-    getOwnVoyagerIdentity.mockResolvedValue({ handle: '', name: null })
+    getOwnVoyagerIdentity.mockResolvedValue({ handle: '', displayName: null })
     parseRoomCommand.mockReturnValue(null)
     getVoyageBySlug.mockResolvedValue(null)
     getVoyageMembers.mockResolvedValue([])
@@ -300,7 +300,7 @@ describe('runTurn', () => {
       { userId: 'user-1', displayName: 'Isaac' },
       { userId: 'user-2', displayName: 'Elisheya' },
     ])
-    getOwnVoyagerIdentity.mockResolvedValue({ handle: 'hermes', name: 'hermes' })
+    getOwnVoyagerIdentity.mockResolvedValue({ handle: 'hermes', displayName: 'Hermes' })
     const { runTurn } = await loadRunTurn()
 
     const result = await runTurn(context({
@@ -323,7 +323,7 @@ describe('runTurn', () => {
       { userId: 'user-1', displayName: 'Isaac' },
       { userId: 'user-2', displayName: 'Elisheya' },
     ])
-    getOwnVoyagerIdentity.mockResolvedValue({ handle: 'wren', name: 'wren' })
+    getOwnVoyagerIdentity.mockResolvedValue({ handle: 'wren', displayName: 'Wren' })
     const { runTurn } = await loadRunTurn()
 
     await runTurn(context({ voyageSlug: 'launch', newMessage: '@wren think with me' }), stubHost().host)
@@ -348,5 +348,19 @@ describe('runTurn', () => {
       },
     )
     expect(fanOutDeliveries).not.toHaveBeenCalled()
+  })
+
+  it('passes the canonical current handle/display pair into the prompt', async () => {
+    getOwnVoyagerIdentity.mockResolvedValue({ handle: 'wren', displayName: 'Wren' })
+    const { runTurn } = await loadRunTurn()
+
+    await runTurn(context({ newMessage: '@wren think with me' }), stubHost().host)
+
+    expect(composeSystemPrompt).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        voyagerIdentity: { handle: 'wren', displayName: 'Wren' },
+      }),
+    )
   })
 })

@@ -34,6 +34,7 @@ interface VoyagerInterfaceProps {
 
 export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const streamRef = useRef<HTMLDivElement>(null);
+  const refreshedNameToolCalls = useRef(new Set<string>());
   const [inputValue, setInputValue] = useState('');
 
   // Brain connection: null = still checking, false = none resolves (own or
@@ -71,7 +72,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const { height: shellHeight, offsetTop: shellTop, composing } = useVisualViewport();
 
   // Voyage context (fetch voyages, pending invites, URL params)
-  const { currentVoyage, voyageResolved, setCurrentVoyage, voyages, displayName, ownVoyagerHandle, refetchVoyages } = useVoyageContext({
+  const {
+    currentVoyage,
+    voyageResolved,
+    setCurrentVoyage,
+    voyages,
+    displayName,
+    ownVoyagerHandle,
+    ownVoyagerDisplayName,
+    refetchOwnVoyagerIdentity,
+    refetchVoyages,
+  } = useVoyageContext({
     isAuthenticated,
     isAuthLoading,
   });
@@ -107,7 +118,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     userId: feedUserId,
     refreshRoom,
   });
-  const { events: feedEvents, markSeen: markFeedSeen } = useEventFeed({
+  const { events: feedEvents, markSeen: markFeedSeen, reload: reloadFeed } = useEventFeed({
     conversationId,
     userId: feedUserId,
   });
@@ -238,7 +249,11 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       body: JSON.stringify({ sourceEventId, conversationId }),
     });
     if (!response.ok) throw new Error('Share failed');
-  }, [conversationId]);
+    // Publication state belongs to the server mapping. Re-read it before the
+    // share promise resolves so the button survives reload and never relies on
+    // component-local success memory.
+    await reloadFeed();
+  }, [conversationId, reloadFeed]);
 
   // Apply a voyage switch to client state + URL. Invoked by the conversational
   // switch path (switch_voyage tool result) and ask_captain picker — never by
@@ -306,6 +321,31 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       } catch { /* ignore parse errors */ }
     }
   }, [status, messages, refetchVoyages]);
+
+  // A completed name_voyager tool call changes both identity and addressing.
+  // Pull the canonical handle/display pair immediately so the live label and
+  // @aside classifier update without a page reload.
+  useEffect(() => {
+    if (status !== 'ready' || messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role !== 'assistant' || !Array.isArray(lastMsg.parts)) return;
+
+    let completedRenameKey: string | null = null;
+    lastMsg.parts.some((partValue, index) => {
+      const part = partValue as Record<string, unknown>;
+      const isNameVoyager = part.type === 'tool-name_voyager' ||
+        (part.type === 'dynamic-tool' && part.toolName === 'name_voyager');
+      if (!isNameVoyager || part.state !== 'output-available') return false;
+      completedRenameKey = typeof part.toolCallId === 'string'
+        ? part.toolCallId
+        : `${lastMsg.id}:name_voyager:${index}`;
+      return true;
+    });
+    if (completedRenameKey && !refreshedNameToolCalls.current.has(completedRenameKey)) {
+      refreshedNameToolCalls.current.add(completedRenameKey);
+      void Promise.all([refetchOwnVoyagerIdentity(), reloadFeed()]);
+    }
+  }, [status, messages, refetchOwnVoyagerIdentity, reloadFeed]);
 
   // Send a message as the user (used by ask_captain components)
   const sendUserMessage = useCallback((text: string) => {
@@ -511,6 +551,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         voyagerName={event.senderDisplayName}
         ownerName={event.ownerName}
         audienceLabel={event.eventType === 'conversation' ? 'Only you + your Voyager' : 'This room'}
+        shared={event.shared}
         shareTarget={event.eventType === 'conversation' && room.people.length > 0
           ? `this room · you + ${room.people.join(', ')}`
           : undefined}
@@ -552,6 +593,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
         timestamp="LIVE"
         isStreaming={isStreaming}
         onAction={handleComponentAction}
+        voyagerName={ownVoyagerDisplayName}
         audienceLabel="Only you + your Voyager"
       />
     );

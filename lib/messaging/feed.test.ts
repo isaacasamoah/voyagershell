@@ -93,4 +93,69 @@ describe('cut ④ — a fanned voyager reply renders WREN ✦ (Isaac’s Voyager
     expect(event.seen).toBe(true)
     expect(event.deliveryId).toBeNull()
   })
+
+  it('keeps historical public attribution immutable after the owner renames', () => {
+    const [event] = toFeedEvents(
+      [fannedWrenReply(true)],
+      [],
+      'user-isaac',
+      null,
+      {
+        currentVoyagerDisplayName: 'Sol',
+        sharedSourceEventIds: new Set(),
+      },
+    )
+    expect(event.senderDisplayName).toBe('Wren')
+    expect(event.shared).toBe(false)
+  })
+})
+
+describe('private assistant feed enrichment', () => {
+  const privateReply: FeedEventRow = {
+    id: 'private-reply-1',
+    event_type: 'conversation',
+    content: 'A private answer.',
+    created_at: '2026-07-22T00:00:00.000Z',
+    metadata: { session_id: 'conversation-1' },
+    source_ref: { conversation_id: 'conversation-1', role: 'assistant' },
+    actor_type: 'voyager',
+    user_id: 'user-isaac',
+    participants: ['user-isaac'],
+    voyage_slug: null,
+  }
+
+  it('uses the current companion display and current-room share mapping', () => {
+    const [event] = toFeedEvents(
+      [privateReply],
+      [],
+      'user-isaac',
+      null,
+      {
+        currentVoyagerDisplayName: 'Sol',
+        sharedSourceEventIds: new Set(['private-reply-1']),
+      },
+    )
+
+    expect(event).toMatchObject({
+      role: 'assistant',
+      senderDisplayName: 'Sol',
+      shared: true,
+      ownerName: null,
+    })
+  })
+
+  it('falls back to the VOYAGER brand when the current handle is only derived', () => {
+    const [event] = toFeedEvents(
+      [privateReply],
+      [],
+      'user-isaac',
+      null,
+      {
+        currentVoyagerDisplayName: null,
+        sharedSourceEventIds: new Set(),
+      },
+    )
+    expect(event.senderDisplayName).toBeNull()
+    expect(event.shared).toBe(false)
+  })
 })

@@ -56,6 +56,7 @@ const sortRowsLikeFeed = (rows: FeedEventRow[]): FeedEventRow[] => {
     senderUserId: null,
     content: row.content ?? '',
     createdAt: row.created_at,
+    shared: false,
     seen: true,
     deliveryId: null,
   }))).map((event) => byId.get(event.id)!)

@@ -29,3 +29,7 @@ Two signed-in accounts (e.g. Isaac + Elisheya) in one room:
 7. Type `@wrne <secret>` from either account. It is held with the same **Not sent** audience and does not reach the other feed.
 8. Account B removes Account A from the room. Both audience indicators converge to no room audience. A plain message from A becomes a private Voyager turn and never appears for B; A cannot share, invite, remove, or change the old room through its retained session.
 9. Account A asks a private question that needs memory retrieval and causes at least `keyword_grep → get_nodes`. Voyager completes the answer without a UUID lookup error or a Maximum update-depth error; the reply remains private until explicitly shared.
+10. Share the same private Voyager reply twice. Exactly one room message appears; the second call reports a replay, and the original reply remains marked **Shared** after reload. Moving the source session to a different room makes that room a distinct destination and permits one new publication there.
+11. Name or rename the owner Voyager. Its live answer and all owner-private historical replies immediately use the current name; the `@name` private address changes without reload. Historical public Voyager messages keep the name stored when they were published.
+
+After migration 053 is installed, `recipes/private-reply-promotion-proof.sql` is the rollback-only database proof for created/replayed idempotency, exact content-only publication, one mapping, and one delivery per recipient.

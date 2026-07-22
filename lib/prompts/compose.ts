@@ -19,6 +19,7 @@ import { formatVoyage, estimateVoyageTokens } from './format/voyage';
 import { formatUser, estimateUserTokens } from './format/user';
 import { formatContext, estimateContextTokens } from './format/context';
 import { formatTools, formatToolsSummary, estimateToolsTokens } from './format/tools';
+import type { VoyagerIdentity } from '@/lib/messaging/address';
 
 // ============================================================================
 // MAIN COMPOSER
@@ -33,8 +34,8 @@ export interface ComposeInput {
   retrievedContext?: RetrievedContext;
   tools?: ToolDefinition[];
   options?: ComposerOptions;
-  /** The Voyager's own name (custom-claimed handle) — omitted when unnamed. */
-  voyagerName?: string;
+  /** Canonical current Voyager identity — omitted when unnamed. */
+  voyagerIdentity?: VoyagerIdentity;
   /** The human owner's display name, for the identity line. */
   ownerName?: string;
 }
@@ -42,11 +43,11 @@ export interface ComposeInput {
 // The identity line — the Voyager knows its own name + owner. Lives in the
 // cacheable static prefix (right after core, stable across a user's turns) so
 // the model consumes it but never has to decide it. Only rendered when named.
-const formatIdentity = (voyagerName: string, ownerName?: string): string => {
-  const display = voyagerName.charAt(0).toUpperCase() + voyagerName.slice(1);
+const formatIdentity = (identity: VoyagerIdentity, ownerName?: string): string => {
+  const display = identity.displayName ?? 'Voyager';
   const owner = ownerName?.trim() || 'your';
   const owned = ownerName?.trim() ? `${owner}'s` : 'your own';
-  return `## Your Name\n\nYou are ${display}, ${owned} Voyager. When ${owner} writes "@${voyagerName} …", only you and ${owner} can see the exchange. Your name is identity, not permission for anyone else to invoke you.`;
+  return `## Your Name\n\nYou are ${display}, ${owned} Voyager. When ${owner} writes "@${identity.handle} …", only you and ${owner} can see the exchange. Your name is identity, not permission for anyone else to invoke you.`;
 };
 
 /**
@@ -76,8 +77,8 @@ export const composePrompt = (input: ComposeInput): ComposedPrompt => {
   runningTokens += CORE_PROMPT_TOKENS;
 
   // Layer 1b: Identity (if the Voyager is named) — cacheable, stable per user.
-  if (input.voyagerName) {
-    const identityContent = formatIdentity(input.voyagerName, input.ownerName);
+  if (input.voyagerIdentity?.displayName) {
+    const identityContent = formatIdentity(input.voyagerIdentity, input.ownerName);
     const identityTokens = Math.ceil(identityContent.split(/\s+/).length * 0.75);
     layers.push({
       name: 'identity',

@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   composerAsideBadge,
   deriveVoyagerHandle,
-  pickOwnVoyagerHandle,
   resolveAddress,
   resolveComposerAudience,
-  voyagerCustomName,
+  resolveVoyagerIdentity,
   type AddressContext,
 } from './address'
 
@@ -92,16 +91,27 @@ describe('composerAsideBadge', () => {
 })
 
 describe('Voyager handle derivation', () => {
-  it('derives and normalizes the owner handle', () => {
+  it('derives an address-only default with brand display fallback', () => {
     expect(deriveVoyagerHandle('Isaac')).toBe('isaac.voyager')
-    expect(pickOwnVoyagerHandle('Wren', 'isaac')).toBe('wren')
-    expect(pickOwnVoyagerHandle(null, 'isaac')).toBe('isaac.voyager')
-    expect(pickOwnVoyagerHandle(null, null)).toBe('')
+    expect(resolveVoyagerIdentity(null, 'isaac')).toEqual({
+      handle: 'isaac.voyager',
+      displayName: null,
+    })
+    expect(resolveVoyagerIdentity(null, null)).toEqual({ handle: '', displayName: null })
   })
 
-  it('distinguishes a custom name from the derived default by value', () => {
-    expect(voyagerCustomName('wren', 'isaac')).toBe('wren')
-    expect(voyagerCustomName('isaac.voyager', 'isaac')).toBeNull()
-    expect(voyagerCustomName('nova.voyager', 'alice')).toBe('nova.voyager')
+  it('uses one normalized custom handle for both address and display', () => {
+    expect(resolveVoyagerIdentity('Wren', 'isaac')).toEqual({
+      handle: 'wren',
+      displayName: 'Wren',
+    })
+    expect(resolveVoyagerIdentity('isaac.voyager', 'isaac')).toEqual({
+      handle: 'isaac.voyager',
+      displayName: null,
+    })
+    expect(resolveVoyagerIdentity('nova.voyager', 'alice')).toEqual({
+      handle: 'nova.voyager',
+      displayName: 'Nova.voyager',
+    })
   })
 })

@@ -122,18 +122,28 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
 export const deriveVoyagerHandle = (username: string): string =>
   `${username.trim().toLowerCase()}.voyager`
 
-// The caller's own voyager handle from its raw parts: a claimed row wins, else
-// the derived default, else ''. Pure and isomorphic — it lives HERE (not in the
-// server-only handles data layer) so the client composer + optimistic settle
-// resolve the OWN handle through the exact same rule the server does, and the
-// classification can never drift between what you see and what happens.
-export const pickOwnVoyagerHandle = (
+export interface VoyagerIdentity {
+  handle: string
+  displayName: string | null
+}
+
+// The canonical current identity from the two existing sources of truth: the
+// owner's voyager handle row and human username. A claimed custom handle wins;
+// otherwise `<username>.voyager` is the address-only default and the UI/prompt
+// use the VOYAGER brand fallback. Pure + isomorphic so server, client, feed,
+// live stream, and prompt cannot drift.
+export const resolveVoyagerIdentity = (
   rowHandle: string | null | undefined,
   username: string | null | undefined,
-): string => {
-  if (rowHandle) return rowHandle.trim().toLowerCase()
-  if (username) return deriveVoyagerHandle(username)
-  return ''
+): VoyagerIdentity => {
+  const claimedHandle = rowHandle?.trim().toLowerCase() || null
+  const derivedHandle = username ? deriveVoyagerHandle(username) : null
+  const handle = claimedHandle ?? derivedHandle ?? ''
+  const isCustom = Boolean(claimedHandle && claimedHandle !== derivedHandle)
+  return {
+    handle,
+    displayName: isCustom ? capitalizeName(handle) : null,
+  }
 }
 
 // Title-case a voyager handle for display, e.g. `wren` → `Wren`. One rule, so
@@ -141,18 +151,6 @@ export const pickOwnVoyagerHandle = (
 // the same shape from the same lowercase-normalized handle.
 export const capitalizeName = (handle: string): string =>
   handle ? handle.charAt(0).toUpperCase() + handle.slice(1) : handle
-
-// A voyager's CUSTOM name (for the prompt identity) vs its derived default.
-// Provenance by VALUE: a claimed row whose handle differs from `<username>.voyager`
-// is a real name — so `nova.voyager` named by user `alice` counts, which a
-// `.endsWith('.voyager')` suffix test wrongly suppressed. '' / derived → null.
-export const voyagerCustomName = (
-  rowHandle: string | null | undefined,
-  username: string | null | undefined,
-): string | null => {
-  const derived = username ? deriveVoyagerHandle(username) : null
-  return rowHandle && rowHandle !== derived ? rowHandle : null
-}
 
 // The composer badge — the @-inversion mitigation (C5). Typing `@<own-handle>`
 // surfaces "→ private aside to <Name>" at composition time, so the deliberately

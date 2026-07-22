@@ -5,7 +5,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug'
 import { normalizeUsername } from '@/lib/voyage/username'
-import { pickOwnVoyagerHandle, voyagerCustomName } from './address'
+import { resolveVoyagerIdentity, type VoyagerIdentity } from './address'
 
 export type HandleKind = 'human' | 'voyager'
 
@@ -17,7 +17,8 @@ const from = (table: string) =>
   (getAdminClient() as unknown as { from: (t: string) => any }).from(table)
 
 // The caller's own voyager identity: the addressing `handle` (claimed name, else
-// derived `<username>.voyager`, else '') plus the custom `name` for the prompt.
+// derived `<username>.voyager`, else '') plus the custom `displayName` shared by
+// prompt and UI.
 //
 // A CUSTOM name is a claimed row whose handle DIFFERS from the derived default —
 // provenance by value, not by suffix, so a user who names their voyager
@@ -29,18 +30,15 @@ const from = (table: string) =>
 // with NO error is a genuinely unnamed voyager, which legitimately derives.
 export const getOwnVoyagerIdentity = async (
   userId: string,
-): Promise<{ handle: string; name: string | null }> => {
+): Promise<VoyagerIdentity> => {
   const [{ data: row, error: rowError }, { data: profile }] = await Promise.all([
     from('handles').select('handle').eq('owner_user_id', userId).eq('kind', 'voyager').maybeSingle(),
     from('profiles').select('username').eq('id', userId).maybeSingle(),
   ])
-  if (rowError) return { handle: '', name: null }
+  if (rowError) return { handle: '', displayName: null }
   const rowHandle = (row as { handle: string } | null)?.handle ?? null
   const username = (profile as { username: string | null } | null)?.username ?? null
-  return {
-    handle: pickOwnVoyagerHandle(rowHandle, username),
-    name: voyagerCustomName(rowHandle, username),
-  }
+  return resolveVoyagerIdentity(rowHandle, username)
 }
 
 

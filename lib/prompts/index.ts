@@ -5,6 +5,7 @@
 import type { RetrievalResult } from '@/lib/retrieval';
 import { curatePromptWindow, type KnowledgeNode } from '@/lib/knowledge';
 import { loadVoyageContext, formatVoyageContextSection } from '@/lib/voyage';
+import type { VoyagerIdentity } from '@/lib/messaging/address';
 import { formatCuratedWindow } from './format/user';
 
 // Re-export types
@@ -66,7 +67,7 @@ interface ComposeOptions {
   sessionId?: string;  // Current session ID for operational tier recency filtering
   continuityContext?: string | null;  // Retrieved context from conversation history
   authState?: AuthState;
-  voyagerName?: string;  // The Voyager's own name (custom handle) — identity line, omitted when unnamed
+  voyagerIdentity?: VoyagerIdentity;  // Canonical current name + address; omitted when unnamed
   ownerName?: string;  // The human owner's display name, for the identity line
 }
 
@@ -83,7 +84,7 @@ export const composeSystemPrompt = async (
   userId: string,
   options?: ComposeOptions
 ): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult }> => {
-  const { profile, voyageSlug, sessionId, continuityContext, authState, voyagerName, ownerName } = options ?? {};
+  const { profile, voyageSlug, sessionId, continuityContext, authState, voyagerIdentity, ownerName } = options ?? {};
   const startTime = Date.now();
 
   // Load curated knowledge window + voyage context in parallel. Message
@@ -136,7 +137,7 @@ export const composeSystemPrompt = async (
     userProfile,
     pinnedKnowledge: [],
     retrievedContext: { items: [] },
-    voyagerName,
+    voyagerIdentity,
     ownerName,
   });
 
