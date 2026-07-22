@@ -7,10 +7,21 @@ import { log } from '@/lib/debug'
 const sessions = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('sessions')
 const spaces = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('spaces')
 const spaceMembers = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('space_members')
+const profiles = () => (getAdminClient() as unknown as { from: (t: string) => any }).from('profiles')
 
 export interface RoomState {
   roomPeople: string[] // user_ids
   aiPresent: boolean
+}
+
+export interface DisplayRoomState {
+  people: string[]
+  aiPresent: boolean
+}
+
+export interface RemoveRoomPersonResult {
+  removed: boolean
+  room: RoomState
 }
 
 export interface SessionRow {
@@ -45,6 +56,20 @@ const activeMemberRows = (spaceId: string) =>
     .select('user_id')
     .eq('space_id', spaceId)
     .eq('state', 'active')
+
+export const isActiveSpaceMember = async (spaceId: string, userId: string): Promise<boolean> => {
+  const { data, error } = await spaceMembers()
+    .select('user_id')
+    .eq('space_id', spaceId)
+    .eq('user_id', userId)
+    .eq('state', 'active')
+    .maybeSingle()
+  if (error) {
+    log.api('active room membership check failed', { spaceId, userId, error: error.message }, 'error')
+    return false
+  }
+  return Boolean(data)
+}
 
 const createSpaceForSession = async (
   session: SessionRow,
@@ -111,11 +136,13 @@ export const getActiveMemberIds = async (
   const ids = ((members as SpaceMemberRow[] | null) ?? [])
     .map((member) => member.user_id)
     .filter((id): id is string => Boolean(id))
-  // The session owner + caller are always active in their own room even if the
-  // membership row lags; the union guarantees the fan-out set never drops them.
-  return Array.from(
-    new Set([session.user_id, callerFallback, ...ids].filter((id): id is string => Boolean(id))),
-  )
+  // sessions.space_id locates a room; it is never an authorization grant.
+  // A removed member keeps the pointer for history/re-invitation, but cannot
+  // send or share into the room unless their membership row is active now.
+  if (session.user_id !== callerFallback || !ids.includes(callerFallback)) {
+    return [callerFallback]
+  }
+  return ids
 }
 
 export const getRoom = async (sessionId: string): Promise<RoomState> => {
@@ -135,34 +162,82 @@ export const getRoom = async (sessionId: string): Promise<RoomState> => {
     return { roomPeople: [], aiPresent: true }
   }
 
-  const roomPeople = ((members as SpaceMemberRow[] | null) ?? [])
+  const activeIds = ((members as SpaceMemberRow[] | null) ?? [])
     .map((member) => member.user_id)
-    .filter((id): id is string => Boolean(id) && id !== session.user_id)
+    .filter((id): id is string => Boolean(id))
+  // Fail closed when the session owner has left. The stale session pointer is
+  // retained as location/history only and must not preserve room capability.
+  if (!session.user_id || !activeIds.includes(session.user_id)) {
+    return { roomPeople: [], aiPresent: true }
+  }
+
+  const roomPeople = activeIds.filter((id) => id !== session.user_id)
   const aiPresent = ((space as SpaceRow | null)?.ai_present) ?? true
   return { roomPeople, aiPresent }
 }
 
-export const removeRoomPerson = async (sessionId: string, userId: string): Promise<RoomState> => {
-  const session = await getSession(sessionId)
-  if (!session?.space_id) return { roomPeople: [], aiPresent: true }
+export const getDisplayRoom = async (sessionId: string): Promise<DisplayRoomState> => {
+  const room = await getRoom(sessionId)
+  if (room.roomPeople.length === 0) return { people: [], aiPresent: room.aiPresent }
 
-  const { error } = await spaceMembers()
+  const { data, error } = await profiles()
+    .select('id, display_name')
+    .in('id', room.roomPeople)
+  if (error) {
+    log.api('room profile lookup failed', { sessionId, error: error.message }, 'error')
+    return { people: room.roomPeople.map(() => 'someone'), aiPresent: room.aiPresent }
+  }
+  const byId = new Map(((data ?? []) as Array<{ id: string; display_name: string | null }>)
+    .map((profile) => [profile.id, profile.display_name]))
+  return {
+    people: room.roomPeople.map((id) => byId.get(id) ?? 'someone'),
+    aiPresent: room.aiPresent,
+  }
+}
+
+export const removeRoomPerson = async (
+  sessionId: string,
+  userId: string,
+): Promise<RemoveRoomPersonResult> => {
+  const session = await getSession(sessionId)
+  if (!session?.space_id || !session.user_id) {
+    return { removed: false, room: { roomPeople: [], aiPresent: true } }
+  }
+
+  if (!await isActiveSpaceMember(session.space_id, session.user_id)) {
+    return { removed: false, room: { roomPeople: [], aiPresent: true } }
+  }
+
+  const { data: removedRows, error } = await spaceMembers()
     .update({ state: 'left' })
     .eq('space_id', session.space_id)
     .eq('user_id', userId)
+    .eq('state', 'active')
+    .select('user_id')
   if (error) log.api('removeRoomPerson failed', { spaceId: session.space_id, error: error.message }, 'error')
-  return getRoom(sessionId)
+  return {
+    removed: !error && ((removedRows as SpaceMemberRow[] | null) ?? []).length > 0,
+    room: await getRoom(sessionId),
+  }
 }
 
-export const setAiPresent = async (sessionId: string, present: boolean): Promise<void> => {
+export const setAiPresent = async (sessionId: string, present: boolean): Promise<boolean> => {
   const session = await getSession(sessionId)
-  if (!session) return
+  if (!session?.user_id) return false
 
+  if (session.space_id && !await isActiveSpaceMember(session.space_id, session.user_id)) {
+    return false
+  }
+
+  const hadSpace = Boolean(session.space_id)
   const spaceId = await ensureSpace(session, present)
-  if (!spaceId) return
+  if (!spaceId) return false
+  // Creating the space establishes its owner membership synchronously.
+  if (!hadSpace) await activateMembers(spaceId, [session.user_id])
 
   const { error } = await spaces().update({ ai_present: present }).eq('id', spaceId)
   if (error) log.api('setAiPresent failed', { spaceId, error: error.message }, 'error')
+  return !error
 }
 
 export type RoomCommand =
@@ -193,7 +268,9 @@ export interface RoomRoster {
 
 export const getRoomRoster = async (sessionId: string): Promise<RoomRoster> => {
   const session = await getSession(sessionId)
-  if (!session?.space_id) return { active: [], invited: [], aiPresent: true }
+  if (!session?.space_id || !session.user_id) {
+    return { active: [], invited: [], aiPresent: true }
+  }
 
   const [{ data: space }, { data: members, error }] = await Promise.all([
     spaces().select('ai_present').eq('id', session.space_id).maybeSingle(),
@@ -214,6 +291,14 @@ export const getRoomRoster = async (sessionId: string): Promise<RoomRoster> => {
   }>
   const name = (r: (typeof rows)[number]) =>
     r.profiles?.display_name ?? r.profiles?.email ?? 'someone'
+  // Prompt context is a read of room authority too. A stale session pointer
+  // must not let a removed person ask their Voyager to reveal the current
+  // members or pending invites in the room they left.
+  const callerIsActive = rows.some((row) => (
+    row.user_id === session.user_id && row.state === 'active'
+  ))
+  if (!callerIsActive) return { active: [], invited: [], aiPresent: true }
+
   const others = rows.filter((r) => r.user_id && r.user_id !== session.user_id)
   return {
     active: others.filter((r) => r.state === 'active').map(name),
@@ -224,10 +309,12 @@ export const getRoomRoster = async (sessionId: string): Promise<RoomRoster> => {
 
 /** The one honest line the model sees about the room, every turn. */
 export const describeRoomForPrompt = (roster: RoomRoster): string => {
-  if (roster.active.length === 0 && roster.invited.length === 0) return ''
+  if (roster.active.length === 0 && roster.invited.length === 0) {
+    return '\n[Room state (authoritative): no other people are in this room and no invitations are pending. Describe the current room ONLY from this line — never infer current membership from conversation history.]'
+  }
   const parts: string[] = []
   if (roster.active.length > 0) parts.push(`in the room: ${roster.active.join(', ')}`)
   if (roster.invited.length > 0)
     parts.push(`invited but NOT joined (they cannot see these messages): ${roster.invited.join(', ')}`)
-  return `\n[Room state (authoritative): ${parts.join('; ')}. Describe the room ONLY from this line — never from conversation history.]`
+  return `\n[Room state (authoritative): ${parts.join('; ')}. Describe the current room ONLY from this line — never infer current membership from conversation history.]`
 }

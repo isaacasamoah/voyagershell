@@ -91,6 +91,7 @@ export const useConversation = ({
     if (!isAuthenticated) {
       setConversationId(null)
       setConversationTitle(null)
+      setRoom({ people: [], aiPresent: true })
       setIsLoadingConversation(false)
       return
     }
@@ -121,8 +122,7 @@ export const useConversation = ({
 
         setConversationId(data.conversation.id)
         setConversationTitle(data.conversation.title)
-        const roomData = (data as unknown as { room?: { people: string[]; aiPresent: boolean } }).room
-        if (roomData) setRoom(roomData)
+        setRoom(data.room ?? { people: [], aiPresent: true })
 
         if (data.messages.length > 0) {
           const uiMessages = data.messages.map(apiMessageToUIMessage)
@@ -169,6 +169,31 @@ export const useConversation = ({
   // $CTX = server-confirmed DB title only — never echo user input
   // null until the server confirms a title (new session shows 'NEW_SESSION' placeholder in the chip)
   const resolvedTitle = conversationTitle ?? null
+
+  const refreshRoom = useCallback(async (): Promise<void> => {
+    const targetConversationId = conversationIdRef.current
+    if (!targetConversationId) {
+      setRoom({ people: [], aiPresent: true })
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/room?conversationId=${encodeURIComponent(targetConversationId)}`, {
+        cache: 'no-store',
+      })
+      if (!response.ok) throw new Error(`Room refresh failed (${response.status})`)
+      const data = await response.json() as { room: { people: string[]; aiPresent: boolean } }
+      // Ignore a late response after the user has switched conversations.
+      if (conversationIdRef.current === targetConversationId) setRoom(data.room)
+    } catch (error) {
+      log.voyage('Failed to refresh room state', { error: String(error) }, 'error')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated || !conversationId) return
+    void refreshRoom()
+  }, [conversationId, isAuthenticated, refreshRoom])
 
   // Show success astronaut briefly when response completes
   useEffect(() => {
@@ -228,6 +253,7 @@ export const useConversation = ({
       const data: ConversationResponse = await res.json()
       setConversationId(data.conversation.id)
       setConversationTitle(data.conversation.title)
+      setRoom(data.room ?? { people: [], aiPresent: true })
       setMessages([])
       setHasUserTyped(false)
 
@@ -258,6 +284,7 @@ export const useConversation = ({
       const data: ConversationResponse = await res.json()
       setConversationId(data.conversation.id)
       setConversationTitle(data.conversation.title)
+      setRoom(data.room ?? { people: [], aiPresent: true })
 
       if (data.messages.length > 0) {
         setMessages(data.messages.map(apiMessageToUIMessage))
@@ -293,6 +320,7 @@ export const useConversation = ({
     isStreaming,
     showSuccess,
     setShowSuccess,
+    refreshRoom,
     startNewConversation,
     resumeConversation,
   }

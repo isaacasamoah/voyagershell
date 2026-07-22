@@ -29,26 +29,6 @@ import { normalizeUsername } from '@/lib/voyage/username'
 import { claimHandle, renameVoyagerHandle } from '@/lib/messaging/handles'
 import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
 
-// Resolve short ID (8 chars) to full UUID
-const resolveNodeId = async (shortOrFullId: string, ctx: ToolContext): Promise<string | null> => {
-  // If it's already a full UUID (36 chars with dashes), return as-is
-  if (shortOrFullId.length === 36 && shortOrFullId.includes('-')) {
-    return shortOrFullId
-  }
-
-  // Otherwise, look up by prefix
-  const supabase = getAdminClient()
-
-  const { data } = await supabase
-    .from('knowledge_current')
-    .select('event_id')
-    .ilike('event_id', `${shortOrFullId}%`)
-    .limit(1)
-    .single()
-
-  return (data as { event_id: string } | null)?.event_id ?? null
-}
-
 // =============================================================================
 // Tool Context (passed to tool executors)
 // =============================================================================
@@ -88,10 +68,9 @@ const formatKnowledgeResult = (nodes: KnowledgeNode[]): string => {
 
   return nodes
     .map((node, i) => {
-      const shortId = node.eventId.slice(0, 8) // Short ID for readability
       const pinned = node.attentionScore >= 0.9 ? ' [PINNED]' : ''
       const similarity = node.similarity ? ` (${(node.similarity * 100).toFixed(0)}%)` : ''
-      return `[${i + 1}] id:${shortId}${pinned}${similarity}\n${node.content}`
+      return `[${i + 1}] id:${node.eventId}${pinned}${similarity}\n${node.content}`
     })
     .join('\n\n')
 }
@@ -103,12 +82,11 @@ const formatHybridResult = (results: RankedResult[]): string => {
 
   return results
     .map((result, i) => {
-      const shortId = result.eventId.slice(0, 8)
       const sources = result.sources.join('+')
       const score = result.score.toFixed(4)
       const attn = result.metadata.attention_score ?? 0.5
       const pinned = attn >= 0.9 ? ' [PINNED]' : ''
-      return `[${i + 1}] id:${shortId}${pinned} (${sources}, rrf:${score})\n${result.content}`
+      return `[${i + 1}] id:${result.eventId}${pinned} (${sources}, rrf:${score})\n${result.content}`
     })
     .join('\n\n')
 }
@@ -120,9 +98,8 @@ const formatGrepResult = (results: GrepResult[]): string => {
 
   return results
     .map((r, i) => {
-      const shortId = r.eventId.slice(0, 8)
       const pinned = r.attentionScore >= 0.9 ? ' [PINNED]' : ''
-      return `[${i + 1}] id:${shortId}${pinned}\n...${r.highlight}...`
+      return `[${i + 1}] id:${r.eventId}${pinned}\n...${r.highlight}...`
     })
     .join('\n\n')
 }
@@ -144,7 +121,7 @@ const keywordGrepSchema = z.object({
 })
 
 const graphSchema = z.object({
-  nodeId: z.string().describe('The event ID (or first 8 chars) from search results, e.g. "abc12345"'),
+  nodeId: z.string().uuid().describe('The complete event UUID from search results'),
   edge_type: z.string().nullable().optional().describe('Filter by edge type: supersedes, supports, contradicts, elaborates, triggered_by, relates_to, decided_by, raised_by. Null returns all types.'),
   direction: z.enum(['outgoing', 'incoming', 'both']).optional().default('both').describe('Edge direction to traverse'),
   depth: z.number().min(1).max(3).optional().default(1).describe('Traversal depth (1-3 hops)'),
@@ -157,7 +134,7 @@ const anchoredSearchSchema = z.object({
 })
 
 const getNodesSchema = z.object({
-  nodeIds: z.array(z.string()).describe('Array of event IDs to retrieve'),
+  nodeIds: z.array(z.string().uuid()).describe('Array of complete event UUIDs to retrieve'),
 })
 
 const searchByTimeSchema = z.object({
@@ -255,14 +232,9 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
     inputSchema: graphSchema,
     execute: async (input) => {
       const { nodeId, edge_type, direction, depth } = input
-      const fullId = await resolveNodeId(nodeId, ctx)
-      if (!fullId) {
-        return `No node found matching ID "${nodeId}"`
-      }
-
       const supabase = getAdminClient()
       const { data, error } = await (supabase.rpc as Function)('graph_traverse', {
-        p_node_id: fullId,
+        p_node_id: nodeId,
         p_edge_type: edge_type ?? null,
         p_direction: direction,
         p_depth: depth,
@@ -296,10 +268,9 @@ export const createRetrievalTools = (ctx: ToolContext) => ({
         context_snippet: string | null
       }>)
         .map((row, i) => {
-          const shortId = row.event_id.slice(0, 8)
           const edgeLabel = `${row.edge_direction} ${row.edge_type}`
           const hopLabel = row.hop > 1 ? ` (${row.hop} hops)` : ''
-          return `[${i + 1}] id:${shortId} [${edgeLabel}]${hopLabel}\n${row.content}`
+          return `[${i + 1}] id:${row.event_id} [${edgeLabel}]${hopLabel}\n${row.content}`
         })
         .join('\n\n')
     },
@@ -996,7 +967,10 @@ export const createVoyagerTools = (ctx: ToolContext): {
         )
         return `${r.displayName} has been INVITED — they are NOT in the room yet and cannot see these messages. They received a knock and will join only if they accept. Tell the user exactly this; do not claim they were added.`
       }
-      return `${r.displayName} is in the room — they'll receive what's typed here.`
+      if (invite.state === 'active') {
+        return `${r.displayName} is in the room — they'll receive what's typed here.`
+      }
+      return `You can't invite ${r.displayName} because you're no longer active in this room.`
     },
   })
 
@@ -1027,8 +1001,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
       if (!ctx.conversationId) return "I can't manage this room — no active conversation."
       const r = await resolveOneMember(ctx, input.name)
       if ('error' in r) return r.error
-      await removeRoomPerson(ctx.conversationId, r.userId)
-      return JSON.stringify({ status: 'removed', person: r.displayName })
+      const result = await removeRoomPerson(ctx.conversationId, r.userId)
+      return JSON.stringify({
+        status: result.removed ? 'removed' : 'not_active_in_room',
+        person: r.displayName,
+      })
     },
   })
 
@@ -1037,8 +1014,12 @@ export const createVoyagerTools = (ctx: ToolContext): {
     inputSchema: z.object({ present: z.boolean().describe('true = Voyager in the room; false = step out') }),
     execute: async (input) => {
       if (!ctx.conversationId) return "No active conversation."
-      await setAiPresent(ctx.conversationId, input.present)
-      return JSON.stringify({ status: input.present ? 'voyager_present' : 'voyager_stepped_out' })
+      const changed = await setAiPresent(ctx.conversationId, input.present)
+      return JSON.stringify({
+        status: changed
+          ? (input.present ? 'voyager_present' : 'voyager_stepped_out')
+          : 'not_active_in_room',
+      })
     },
   })
 

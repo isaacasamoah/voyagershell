@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const authenticatedRpc = vi.fn()
 const adminRpc = vi.fn()
+const keywordGrepTool = vi.fn()
+const getKnowledgeByIdsTool = vi.fn()
+const hybridSearchTool = vi.fn()
 
 const sampleKnowledgeRow = {
   event_id: 'event-1',
@@ -56,11 +59,12 @@ const loadToolsModule = async () => {
   vi.doMock('ai', () => ({ tool: (definition: unknown) => definition }))
   vi.doMock('@/lib/knowledge', () => ({
     searchKnowledge: vi.fn(),
-    keywordGrep: vi.fn(),
-    getKnowledgeByIds: vi.fn(),
+    keywordGrep: keywordGrepTool,
+    personAnchoredSearch: vi.fn(),
+    getKnowledgeByIds: getKnowledgeByIdsTool,
   }))
   vi.doMock('@/lib/knowledge/hybrid', () => ({
-    hybridSearch: vi.fn(),
+    hybridSearch: hybridSearchTool,
   }))
   vi.doMock('@/lib/messaging/deliveries', () => ({
     fanOutDeliveries: vi.fn(),
@@ -107,6 +111,9 @@ describe('knowledge scope RPC routing', () => {
     vi.clearAllMocks()
     authenticatedRpc.mockResolvedValue({ data: [], error: null })
     adminRpc.mockResolvedValue({ data: [], error: null })
+    keywordGrepTool.mockResolvedValue([])
+    getKnowledgeByIdsTool.mockResolvedValue([])
+    hybridSearchTool.mockResolvedValue([])
   })
 
   it('routes keywordGrep through scoped_knowledge_fetch with grep filters', async () => {
@@ -182,5 +189,47 @@ describe('knowledge scope RPC routing', () => {
       p_min_attention: 0.1,
       p_match_count: 30,
     })
+  })
+
+  it('keeps complete UUIDs across search and get_nodes tool boundaries', async () => {
+    const eventId = '59eec620-1a4e-4c8a-9f57-08e5f8321660'
+    keywordGrepTool.mockResolvedValue([{
+      eventId,
+      content: 'Isaac is the captain.',
+      highlight: 'Isaac is the captain.',
+      attentionScore: 0.8,
+    }])
+    getKnowledgeByIdsTool.mockResolvedValue([{
+      eventId,
+      content: 'Isaac is the captain.',
+      attentionScore: 0.8,
+      similarity: 1,
+    }])
+
+    const { createRetrievalTools } = await loadToolsModule()
+    const tools = createRetrievalTools({ userId: 'user-1', voyageSlug: 'fambam' }) as unknown as {
+      keyword_grep: {
+        execute: (input: { pattern: string; caseSensitive: boolean; limit: number }) => Promise<string>
+      }
+      get_nodes: {
+        inputSchema: { safeParse: (input: unknown) => { success: boolean } }
+        execute: (input: { nodeIds: string[] }) => Promise<string>
+      }
+    }
+
+    const searchResult = await tools.keyword_grep.execute({
+      pattern: 'isaac',
+      caseSensitive: false,
+      limit: 10,
+    })
+    expect(searchResult).toContain(`id:${eventId}`)
+    expect(searchResult).not.toContain('id:59eec620\n')
+
+    expect(tools.get_nodes.inputSchema.safeParse({ nodeIds: ['59eec620'] }).success).toBe(false)
+    expect(tools.get_nodes.inputSchema.safeParse({ nodeIds: [eventId] }).success).toBe(true)
+
+    const hydrated = await tools.get_nodes.execute({ nodeIds: [eventId] })
+    expect(getKnowledgeByIdsTool).toHaveBeenCalledWith([eventId], 'user-1')
+    expect(hydrated).toContain(`id:${eventId}`)
   })
 })

@@ -43,8 +43,6 @@ export interface FeedApiEvent {
 
 export interface StreamingReply {
   id: string
-  content: string
-  startedAt: string
   // How many assistant events were already in the feed when this reply began
   // streaming. The transient is dismissed once the feed holds MORE than this —
   // i.e. this turn's own persisted reply has landed. Count-based reconciliation
@@ -52,6 +50,42 @@ export interface StreamingReply {
   // which broke the old exact-content match and left the reply pinned forever.
   settledCount: number
 }
+
+interface StreamingReplyTransition {
+  assistantId: string | null
+  hasRenderableOutput: boolean
+  isStreaming: boolean
+  assistantEventCount: number
+}
+
+// One explicit state transition for the live assistant lane. This is invoked
+// only from primitive effect dependencies; AI SDK array/object identity is not
+// part of the lifecycle contract.
+export const advanceStreamingReply = (
+  previous: StreamingReply | null,
+  transition: StreamingReplyTransition,
+): StreamingReply | null => {
+  const {
+    assistantId,
+    hasRenderableOutput,
+    isStreaming,
+    assistantEventCount,
+  } = transition
+  if (!assistantId || !hasRenderableOutput) return previous
+  if (!isStreaming && previous?.id !== assistantId) return previous
+  if (previous?.id === assistantId) return previous
+  return {
+    id: assistantId,
+    settledCount: assistantEventCount,
+  }
+}
+
+export const settleStreamingReply = (
+  previous: StreamingReply | null,
+  assistantEventCount: number,
+): StreamingReply | null => (
+  previous && assistantEventCount > previous.settledCount ? null : previous
+)
 
 // Epoch comparison — feed events can mix DB (`+00:00`) and client-optimistic
 // (`Z`) timestamp formats; string compare would mis-order across formats.
@@ -113,7 +147,7 @@ export const shouldShowStreamingReply = (
   reply: StreamingReply | null,
   events: FeedEvent[],
 ): reply is StreamingReply => (
-  Boolean(reply?.content.trim())
+  Boolean(reply)
   && countAssistantEvents(events) <= (reply?.settledCount ?? 0)
 )
 

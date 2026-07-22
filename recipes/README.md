@@ -27,3 +27,5 @@ Two signed-in accounts (e.g. Isaac + Elisheya) in one room:
 5. Account A: ask `@wren …`; on Wren's private reply, choose **Share to this room**, review the exact preview, and confirm. Both people see a new message attributed to A; neither sees A's private prompt or retrieval provenance.
 6. Reload both accounts. The private exchange remains absent from B. The human shared message remains present for both.
 7. Type `@wrne <secret>` from either account. It is held with the same **Not sent** audience and does not reach the other feed.
+8. Account B removes Account A from the room. Both audience indicators converge to no room audience. A plain message from A becomes a private Voyager turn and never appears for B; A cannot share, invite, remove, or change the old room through its retained session.
+9. Account A asks a private question that needs memory retrieval and causes at least `keyword_grep → get_nodes`. Voyager completes the answer without a UUID lookup error or a Maximum update-depth error; the reply remains private until explicitly shared.

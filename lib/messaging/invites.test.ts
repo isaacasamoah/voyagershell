@@ -177,6 +177,29 @@ describe('room invitations', () => {
     expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
   })
 
+  it('does not let a removed member use a stale session pointer to invite or rejoin', async () => {
+    seedVoyage()
+    db.sessions.get('isaac-session')!.space_id = 'space-1'
+    db.spaces.set('space-1', {
+      id: 'space-1',
+      kind: 'room',
+      voyage_id: 'voyage-1',
+      ai_present: true,
+      created_by: 'vanessa',
+      created_at: '2026-07-09T00:00:00.000Z',
+    })
+    db.space_members.set('space-1:isaac', { space_id: 'space-1', user_id: 'isaac', state: 'left' })
+    db.space_members.set('space-1:vanessa', { space_id: 'space-1', user_id: 'vanessa', state: 'active' })
+
+    const { inviteToRoom } = await loadModules()
+    await expect(inviteToRoom('isaac-session', 'vanessa')).resolves.toEqual({
+      state: 'denied',
+      spaceId: 'space-1',
+    })
+    expect(db.space_members.get('space-1:isaac')?.state).toBe('left')
+    expect(db.space_members.get('space-1:vanessa')?.state).toBe('active')
+  })
+
   it('accepts explicitly and links the responding session to the shared space', async () => {
     seedVoyage()
     const { getRoom, inviteToRoom, respondToRoomInvite } = await loadModules()

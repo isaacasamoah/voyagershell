@@ -61,11 +61,13 @@ export const runRoomTurn = async ({
   if (roomCmd && conversationId) {
     let confirmation: string | null = null
     if (roomCmd.op === 'voyager-in') {
-      await setAiPresent(conversationId, true)
-      confirmation = 'Back in the room.'
+      confirmation = await setAiPresent(conversationId, true)
+        ? 'Back in the room.'
+        : "You can't change this room because you're no longer in it."
     } else if (roomCmd.op === 'voyager-out') {
-      await setAiPresent(conversationId, false)
-      confirmation = 'Stepped out — just you and whoever else is here. Say +voyager to bring me back.'
+      confirmation = await setAiPresent(conversationId, false)
+        ? 'Stepped out — just you and whoever else is here. Say +voyager to bring me back.'
+        : "You can't change this room because you're no longer in it."
     } else if (voyageSlug && (roomCmd.op === 'add' || roomCmd.op === 'remove')) {
       const match = resolveMemberByName(voyageMembers, roomCmd.name)
       if (match && match.userId !== userId) {
@@ -81,12 +83,16 @@ export const runRoomTurn = async ({
               voyageSlug,
             )
             confirmation = `Invited ${match.displayName} — they can hop in by replying to the invite.`
-          } else {
+          } else if (invite.state === 'active') {
             confirmation = `Added ${match.displayName} — they'll get what you type here.`
+          } else {
+            confirmation = `Could not invite ${match.displayName} — you're no longer active in this room.`
           }
         } else {
-          await removeRoomPerson(conversationId, match.userId)
-          confirmation = `Removed ${match.displayName} from the room.`
+          const result = await removeRoomPerson(conversationId, match.userId)
+          confirmation = result.removed
+            ? `Removed ${match.displayName} from the room.`
+            : `Could not remove ${match.displayName} — you're no longer active in this room.`
         }
       }
     }

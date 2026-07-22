@@ -8,8 +8,7 @@ import {
   archiveConversation,
 } from '@/lib/conversation'
 import { requireAuthResponse } from '@/lib/auth'
-import { getRoom } from '@/lib/messaging/room'
-import { getAdminClient } from '@/lib/supabase/admin'
+import { getDisplayRoom } from '@/lib/messaging/room'
 
 /**
  * GET /api/conversation
@@ -49,18 +48,10 @@ export const GET = async (req: Request) => {
     )
 
     // Room state for the header indicator (who's in the room + is Voyager present)
-    const roomState = await getRoom(conversation.id)
-    let roomPeopleNames: string[] = []
-    if (roomState.roomPeople.length > 0) {
-      const admin = getAdminClient()
-      const { data: profs } = await (admin as unknown as { from: (t: string) => any })
-        .from('profiles').select('id, display_name').in('id', roomState.roomPeople)
-      const byId = new Map(((profs as Array<{ id: string; display_name: string | null }>) ?? []).map(p => [p.id, p.display_name]))
-      roomPeopleNames = roomState.roomPeople.map(id => byId.get(id) ?? 'someone')
-    }
+    const roomState = await getDisplayRoom(conversation.id)
 
     return NextResponse.json({
-      room: { people: roomPeopleNames, aiPresent: roomState.aiPresent },
+      room: roomState,
       conversation: {
         id: conversation.id,
         title: conversation.title,

@@ -2,7 +2,7 @@
 
 import { log } from '@/lib/debug'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { activateMembers, ensureSpace, type SessionRow } from '@/lib/messaging/room'
+import { activateMembers, ensureSpace, isActiveSpaceMember, type SessionRow } from '@/lib/messaging/room'
 import { resolveSessionVoyage } from '@/lib/voyage'
 
 type MemberState = 'invited' | 'active' | 'left'
@@ -115,9 +115,15 @@ export const deliverRoomInvite = async (
 export const inviteToRoom = async (
   sessionId: string,
   inviteeUserId: string,
-): Promise<{ state: 'invited' | 'active'; spaceId: string | null }> => {
+): Promise<{ state: 'invited' | 'active' | 'denied'; spaceId: string | null }> => {
   const session = await getSession(sessionId)
   if (!session) return { state: 'invited', spaceId: null }
+
+  // A retained sessions.space_id is not permission to mutate its room. Only a
+  // currently active member may invite or re-invite someone into that space.
+  if (session.space_id && (!session.user_id || !await isActiveSpaceMember(session.space_id, session.user_id))) {
+    return { state: 'denied', spaceId: session.space_id }
+  }
 
   const spaceId = await ensureSpace(session, true)
   if (!spaceId) return { state: 'invited', spaceId: null }

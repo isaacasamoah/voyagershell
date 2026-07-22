@@ -12,9 +12,11 @@ import { useConversation } from './hooks/useConversation';
 import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useEventFeed } from '@/lib/messaging/useEventFeed';
-import { shouldShowStreamingReply, shouldShowOptimisticUser, countAssistantEvents, type FeedEvent, type StreamingReply, isHydratedMessage } from '@/lib/messaging/feed-types';
+import { shouldShowStreamingReply, shouldShowOptimisticUser, countAssistantEvents, type FeedEvent, isHydratedMessage } from '@/lib/messaging/feed-types';
 import { resolveComposerAudience } from '@/lib/messaging/address';
 import { useVisualViewport } from './hooks/useVisualViewport';
+import { useRoomMembershipRealtime } from './hooks/useRoomMembershipRealtime';
+import { useStreamingReply } from './hooks/useStreamingReply';
 import { InputArea } from './InputArea';
 import { AskCaptainRenderer } from './AskCaptainRenderer';
 import { VoyagerWordmark } from './VoyagerWordmark';
@@ -82,6 +84,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     messageQueue, setMessageQueue,
     isLoading, isStreaming,
     showSuccess, setShowSuccess,
+    refreshRoom,
     startNewConversation, resumeConversation,
   } = useConversation({
     currentVoyage,
@@ -99,16 +102,15 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     [inputValue, ownVoyagerHandle, room.people],
   );
   const feedUserId = isAuthenticated ? (user?.id ?? null) : null;
+  useRoomMembershipRealtime({
+    conversationId,
+    userId: feedUserId,
+    refreshRoom,
+  });
   const { events: feedEvents, markSeen: markFeedSeen } = useEventFeed({
     conversationId,
     userId: feedUserId,
   });
-  const [streamingReply, setStreamingReply] = useState<StreamingReply | null>(null);
-  // Latest feed events, read at turn-start to snapshot the assistant count
-  // without re-running the streaming effect on every feed change.
-  const feedEventsRef = useRef(feedEvents);
-  useEffect(() => { feedEventsRef.current = feedEvents; }, [feedEvents]);
-
   useEffect(() => {
     if (feedEvents.length > 0) setHasUserTyped(true);
   }, [feedEvents.length, setHasUserTyped]);
@@ -195,20 +197,6 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       return () => clearTimeout(timer);
     }
   }, [status, messages, signOut]);
-
-  // Keep the newest message in view. The stream is the ONLY scroll container,
-  // so this is a single line — no page scroll, no dual anchors. Re-runs when
-  // the keyboard toggles (shell resizes) so nothing hides behind the input.
-  const feedEventCount = feedEvents.length;
-  const streamingReplyId = streamingReply?.id ?? null;
-  useEffect(() => {
-    const el = streamRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    // shellHeight in deps: the keyboard shrinks the stream in several frames
-    // after composing flips — re-anchor on each so the newest line never
-    // slips below the fold (codex review).
-  }, [feedEventCount, streamingReplyId, composing, shellHeight]);
 
   // All messages go to Voyager — no intent detection, no slash commands, no auth gate
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -388,44 +376,38 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     }
   }, [conversationId, isLoading, sendMessage]);
 
+  // useChat owns the live text. Local state tracks only stable turn identity;
+  // mirroring every streamed token through an effect doubles the render work
+  // and can trip React's passive update-depth guard during multi-tool bursts.
+  const lastLiveAssistant = [...messages].reverse()
+    .find((message) => message.role === 'assistant' && !isHydratedMessage(message));
+  const liveAssistantId = lastLiveAssistant?.id ?? null;
+  const liveAssistantContent = lastLiveAssistant ? getMessageText(lastLiveAssistant) : '';
+  const liveAssistantHasCaptainParts = lastLiveAssistant
+    ? getAskCaptainParts(lastLiveAssistant).length > 0
+    : false;
+  const assistantEventCount = countAssistantEvents(feedEvents);
+  const streamingReply = useStreamingReply({
+    assistantId: liveAssistantId,
+    hasRenderableOutput: Boolean(liveAssistantContent || liveAssistantHasCaptainParts),
+    isStreaming,
+    assistantEventCount,
+    conversationId,
+  });
+
+  // Keep the newest message in view. The stream is the ONLY scroll container,
+  // so this is a single line — no page scroll, no dual anchors. Re-runs when
+  // the keyboard toggles (shell resizes) so nothing hides behind the input.
+  const feedEventCount = feedEvents.length;
+  const streamingReplyId = streamingReply?.id ?? null;
   useEffect(() => {
-    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && !isHydratedMessage(message));
-    if (!lastAssistant) return;
-
-    const content = getMessageText(lastAssistant);
-    const hasCaptainParts = getAskCaptainParts(lastAssistant).length > 0;
-    if (!content && !hasCaptainParts) return;
-    if (!isStreaming && streamingReply?.id !== lastAssistant.id) return;
-
-    setStreamingReply((prev) => {
-      // useChat returns a NEW `messages` array reference every render, so this
-      // effect runs every render. When the transient's guard is open (same id),
-      // building a fresh object each render re-renders → this effect runs again
-      // → Maximum update depth (#185). Return the SAME object when content is
-      // unchanged so React bails and the loop can't sustain. (Surfaces in the
-      // aside→room race, where the transient lingers with the guard open.)
-      if (prev?.id === lastAssistant.id) {
-        return prev.content === content ? prev : { ...prev, content };
-      }
-      return {
-        id: lastAssistant.id,
-        content,
-        startedAt: new Date().toISOString(),
-        // Snapshot the assistant-event count at turn start; the transient
-        // clears once the feed holds one more (this turn's own reply).
-        settledCount: countAssistantEvents(feedEventsRef.current),
-      };
-    });
-  }, [getAskCaptainParts, getMessageText, isStreaming, messages, streamingReply?.id]);
-
-  useEffect(() => {
-    if (!streamingReply) return;
-    if (!shouldShowStreamingReply(streamingReply, feedEvents)) setStreamingReply(null);
-  }, [feedEvents, streamingReply]);
-
-  useEffect(() => {
-    setStreamingReply(null);
-  }, [conversationId]);
+    const el = streamRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    // shellHeight in deps: the keyboard shrinks the stream in several frames
+    // after composing flips — re-anchor on each so the newest line never
+    // slips below the fold (codex review).
+  }, [feedEventCount, streamingReplyId, composing, shellHeight]);
 
   const formatEventTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', {
     hour: '2-digit',
@@ -557,8 +539,10 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
   const renderStreamingReply = () => {
     if (!shouldShowStreamingReply(streamingReply, feedEvents)) return null;
     const streamingMessage = messages.find((message) => message.id === streamingReply.id);
-    const content = streamingMessage ? getMessageText(streamingMessage) : streamingReply.content;
-    const parts = streamingMessage ? buildAssistantParts(streamingMessage, content) : null;
+    if (!streamingMessage) return null;
+    const content = getMessageText(streamingMessage);
+    const parts = buildAssistantParts(streamingMessage, content);
+    if (!content && !parts) return null;
 
     return (
       <AssistantMessage

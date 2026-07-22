@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  advanceStreamingReply,
   fromFeedApiEvent,
   mergeFeedEvent,
   shouldShowStreamingReply,
+  settleStreamingReply,
   sortFeedEvents,
   toFeedApiEvent,
   type FeedEvent,
@@ -97,8 +99,6 @@ describe('event-stream feed primitives', () => {
     const olderEvent = event('older', '2026-07-09T10:01:00.000Z')
     const reply = {
       id: 'streaming-assistant',
-      content: 'final answer',
-      startedAt: '2026-07-09T10:02:00.000Z',
       settledCount: 1,
     }
     const settledEvent = event('settled', '2026-07-09T10:03:00.000Z')
@@ -112,8 +112,6 @@ describe('event-stream feed primitives', () => {
     // old exact-content match would never fire and pin the transient forever.
     const reply = {
       id: 'streaming-assistant',
-      content: 'The Sun is ~5,500°C at the surface',
-      startedAt: '2026-07-09T10:02:00.000Z',
       settledCount: 0,
     }
     const persistedDifferently = event('settled', '2026-07-09T10:03:00.000Z', {
@@ -123,6 +121,37 @@ describe('event-stream feed primitives', () => {
     // Count went 0 → 1: the turn settled, so the transient clears regardless of
     // content or clock skew.
     expect(shouldShowStreamingReply(reply, [persistedDifferently])).toBe(false)
+  })
+
+  it('keeps a retrieval-heavy assistant transition referentially stable', () => {
+    const initial = advanceStreamingReply(null, {
+      assistantId: 'assistant-1',
+      hasRenderableOutput: true,
+      isStreaming: true,
+      assistantEventCount: 4,
+    })
+    const repeatedToolRender = advanceStreamingReply(initial, {
+      assistantId: 'assistant-1',
+      hasRenderableOutput: true,
+      isStreaming: true,
+      assistantEventCount: 4,
+    })
+
+    expect(repeatedToolRender).toBe(initial)
+  })
+
+  it('cannot recreate a settled transient from a historical tool rerender', () => {
+    const reply = {
+      id: 'assistant-1',
+      settledCount: 4,
+    }
+    expect(settleStreamingReply(reply, 5)).toBeNull()
+    expect(advanceStreamingReply(null, {
+      assistantId: 'assistant-1',
+      hasRenderableOutput: true,
+      isStreaming: false,
+      assistantEventCount: 5,
+    })).toBeNull()
   })
 })
 

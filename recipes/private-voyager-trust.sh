@@ -7,8 +7,13 @@ npx vitest run \
   lib/messaging/address.test.ts \
   lib/messaging/two-account-bench.test.ts \
   lib/messaging/share.test.ts \
+  lib/messaging/room.test.ts \
+  lib/messaging/invites.test.ts \
+  lib/messaging/feed-types.test.ts \
+  components/ui/hooks/useStreamingReply.test.ts \
   lib/harness/room-turn.test.ts \
   lib/harness/run-turn.test.ts \
+  lib/knowledge/scope.test.ts \
   lib/retrieval/tools.background.test.ts \
   --reporter=dot
 echo "PRIVATE_VOYAGER_TRUST_GREEN"

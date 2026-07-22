@@ -20,4 +20,8 @@ export interface MessageData {
 export interface ConversationResponse {
   conversation: ConversationData
   messages: MessageData[]
+  room?: {
+    people: string[]
+    aiPresent: boolean
+  }
 }

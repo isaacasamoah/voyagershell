@@ -70,6 +70,11 @@ class FakeQuery implements PromiseLike<QueryResult> {
     return this
   }
 
+  in(column: string, values: unknown[]) {
+    this.filters.push({ column, value: values })
+    return this
+  }
+
   insert(payload: unknown) {
     this.action = 'insert'
     this.payload = payload
@@ -104,7 +109,11 @@ class FakeQuery implements PromiseLike<QueryResult> {
   }
 
   private matches(row: Record<string, unknown>) {
-    return this.filters.every((filter) => row[filter.column] === filter.value)
+    return this.filters.every((filter) => (
+      Array.isArray(filter.value)
+        ? filter.value.includes(row[filter.column])
+        : row[filter.column] === filter.value
+    ))
   }
 
   private execute(single = false): Promise<QueryResult> {
@@ -225,20 +234,49 @@ describe('space-backed room API', () => {
 
     const { getRoom, removeRoomPerson, setAiPresent } = await loadRoomModule()
 
-    await removeRoomPerson('session-a', 'user-b')
+    const result = await removeRoomPerson('session-a', 'user-b')
+    expect(result.removed).toBe(true)
     expect(db.space_members.get('space-1:user-b')?.state).toBe('left')
     await expect(getRoom('session-a')).resolves.toEqual({ roomPeople: [], aiPresent: false })
 
     await setAiPresent('session-a', true)
     expect(db.spaces.get('space-1')?.ai_present).toBe(true)
   })
+
+  it('treats a stale session space pointer as history, not room authority', async () => {
+    db.sessions.set('session-a', { id: 'session-a', user_id: 'user-a', voyage_id: 'voyage-1', space_id: 'space-1' })
+    db.sessions.set('session-b', { id: 'session-b', user_id: 'user-b', voyage_id: 'voyage-1', space_id: 'space-1' })
+    db.spaces.set('space-1', { id: 'space-1', kind: 'room', voyage_id: 'voyage-1', ai_present: true, created_by: 'user-a' })
+    db.space_members.set('space-1:user-a', { space_id: 'space-1', user_id: 'user-a', state: 'active' })
+    db.space_members.set('space-1:user-b', { space_id: 'space-1', user_id: 'user-b', state: 'left' })
+
+    const { getActiveMemberIds, getRoom, getRoomRoster, removeRoomPerson, setAiPresent } = await loadRoomModule()
+
+    await expect(getRoom('session-b')).resolves.toEqual({ roomPeople: [], aiPresent: true })
+    await expect(getRoomRoster('session-b')).resolves.toEqual({
+      active: [],
+      invited: [],
+      aiPresent: true,
+    })
+    await expect(getActiveMemberIds('session-b', 'user-b')).resolves.toEqual(['user-b'])
+    await expect(setAiPresent('session-b', false)).resolves.toBe(false)
+
+    const removal = await removeRoomPerson('session-b', 'user-a')
+    expect(removal).toEqual({
+      removed: false,
+      room: { roomPeople: [], aiPresent: true },
+    })
+    expect(db.space_members.get('space-1:user-a')?.state).toBe('active')
+  })
 })
 
 // Room truth (2026-07-11): the model receives the code-attested roster.
 describe('describeRoomForPrompt', () => {
-  it('is empty when nobody else is in or invited', async () => {
+  it('explicitly overrides historical room context when nobody else is in or invited', async () => {
     const { describeRoomForPrompt } = await loadRoomModule()
-    expect(describeRoomForPrompt({ active: [], invited: [], aiPresent: true })).toBe('')
+    const line = describeRoomForPrompt({ active: [], invited: [], aiPresent: true })
+    expect(line).toContain('no other people are in this room')
+    expect(line).toContain('never infer current membership from conversation history')
   })
 
   it('names active and invited distinctly, marking invited as unable to see messages', async () => {

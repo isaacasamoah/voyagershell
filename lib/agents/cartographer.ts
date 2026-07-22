@@ -310,7 +310,7 @@ const runStage2 = async (
   // Build context from stage 1 outputs
   const contextSummary = assessments
     .filter((a) => a.attentionScore >= 0.3) // Only search for non-trivial events
-    .map((a) => `[${a.eventId.slice(0, 8)}] (${a.knowledgeType}, ${a.attentionScore}): ${a.contextSnippet}`)
+    .map((a) => `[${a.eventId}] (${a.knowledgeType}, ${a.attentionScore}): ${a.contextSnippet}`)
     .join('\n')
 
   if (!contextSummary) return []
