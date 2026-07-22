@@ -5,8 +5,8 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug'
 
-// message_deliveries is not in generated Supabase types yet — contain the
-// untyped access here (same pattern as knowledge_edges / brain_connections).
+// message_deliveries is not in generated Supabase types yet — contain its
+// untyped access at this boundary.
 const table = () => (getAdminClient() as unknown as { from: (t: string) => any })
   .from('message_deliveries')
 

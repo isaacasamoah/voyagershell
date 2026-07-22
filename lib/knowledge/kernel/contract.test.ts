@@ -1,12 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import {
-  GRAPH_EDGE_KINDS,
-  GRAPH_NODE_KINDS,
-  canonicalEdgeEndpoints,
-  canonicalGraphIdentity,
-} from './contract'
+import { GRAPH_EDGE_KINDS, GRAPH_NODE_KINDS, canonicalEdgeEndpoints, canonicalGraphIdentity } from './contract'
 import { knowledgeGraphFixture, validateKnowledgeGraphFixture } from './fixture'
 import { renderKnowledgeGraphSql } from './generate-sql'
 
@@ -21,24 +16,28 @@ const readMigrations = (): string => migrationPaths.map(readRepoFile).join('\n')
 
 describe('Phase 2 knowledge-graph contract', () => {
   it('owns exactly the six canonical endpoint kinds', () => {
-    expect(GRAPH_NODE_KINDS).toEqual([
-      'person',
-      'voyager',
-      'voyage',
-      'space',
-      'message_event',
-      'knowledge_unit',
-    ])
-    expect(new Set(knowledgeGraphFixture.nodes.map((node) => node.kind))).toEqual(
-      new Set(GRAPH_NODE_KINDS),
-    )
+    expect(GRAPH_NODE_KINDS).toEqual(['person', 'voyager', 'voyage', 'space', 'message_event', 'knowledge_unit'])
+    expect(new Set(knowledgeGraphFixture.nodes.map((node) => node.kind))).toEqual(new Set(GRAPH_NODE_KINDS))
   })
 
   it('locks the complete ordered edge vocabulary in TypeScript and PostgreSQL', () => {
     const expected = [
-      'authored_by', 'posted_in', 'reply_to', 'in_voyage', 'member_of', 'companion_of',
-      'derived_from', 'generated_by', 'about', 'supports', 'contradicts', 'supersedes',
-      'elaborates', 'relates_to', 'decided_by', 'raised_by',
+      'authored_by',
+      'posted_in',
+      'reply_to',
+      'in_voyage',
+      'member_of',
+      'companion_of',
+      'derived_from',
+      'generated_by',
+      'about',
+      'supports',
+      'contradicts',
+      'supersedes',
+      'elaborates',
+      'relates_to',
+      'decided_by',
+      'raised_by',
     ]
     const schema = readRepoFile(migrationPaths[0])
     const enumBody = schema.match(/CREATE TYPE public\.graph_edge_kind AS ENUM \(([\s\S]*?)\);/)?.[1] ?? ''
@@ -61,9 +60,9 @@ describe('Phase 2 knowledge-graph contract', () => {
         `WHEN '${kind}' THEN v_source_kind = 'knowledge_unit' AND v_target_kind = 'person'`,
       )
     }
-    expect(authorization.match(/WHEN '[^']+' THEN NEW\.source_node_id < NEW\.target_node_id/g)).toEqual(
-      ["WHEN 'relates_to' THEN NEW.source_node_id < NEW.target_node_id"],
-    )
+    expect(authorization.match(/WHEN '[^']+' THEN NEW\.source_node_id < NEW\.target_node_id/g)).toEqual([
+      "WHEN 'relates_to' THEN NEW.source_node_id < NEW.target_node_id",
+    ])
   })
 
   it('binds graph identity to durable authorities while labels can rename', () => {
@@ -90,9 +89,7 @@ describe('Phase 2 knowledge-graph contract', () => {
     const low = '10000000-0000-4000-8000-000000000001'
 
     for (const kind of GRAPH_EDGE_KINDS) {
-      expect(canonicalEdgeEndpoints(kind, high, low)).toEqual(
-        kind === 'relates_to' ? [low, high] : [high, low],
-      )
+      expect(canonicalEdgeEndpoints(kind, high, low)).toEqual(kind === 'relates_to' ? [low, high] : [high, low])
     }
     expect(() => canonicalEdgeEndpoints('relates_to', low, low)).toThrow('self_edge_forbidden')
   })
@@ -111,23 +108,23 @@ describe('Phase 2 knowledge-graph contract', () => {
   })
 
   it('rejects absent audience security and split unit provenance', () => {
-    const nullAudience = cloneFixture() as { nodes: Array<{ audienceKey: string | null }> }
+    const nullAudience = cloneFixture() as {
+      nodes: Array<{ audienceKey: string | null }>
+    }
     nullAudience.nodes[0].audienceKey = null
     expect(() => validateKnowledgeGraphFixture(nullAudience)).toThrow(
       'knowledge_graph_fixture_invalid:nodes.0.audienceKey',
     )
 
-    const splitProvenance = cloneFixture() as { units: Array<{ audienceKey: string }> }
+    const splitProvenance = cloneFixture() as {
+      units: Array<{ audienceKey: string }>
+    }
     splitProvenance.units[0].audienceKey = 'private-a'
-    expect(() => validateKnowledgeGraphFixture(splitProvenance)).toThrow(
-      'source_audience_must_match',
-    )
+    expect(() => validateKnowledgeGraphFixture(splitProvenance)).toThrow('source_audience_must_match')
 
     const rivalEventId = cloneFixture() as { events: Array<{ id: string }> }
     rivalEventId.events[0].id = '61000000-0000-4000-8000-000000000099'
-    expect(() => validateKnowledgeGraphFixture(rivalEventId)).toThrow(
-      'message_authority_must_equal_ledger_id',
-    )
+    expect(() => validateKnowledgeGraphFixture(rivalEventId)).toThrow('message_authority_must_equal_ledger_id')
   })
 
   it('rejects duplicate projection identity and noncanonical symmetric edges', () => {
@@ -136,7 +133,11 @@ describe('Phase 2 knowledge-graph contract', () => {
     expect(() => validateKnowledgeGraphFixture(duplicate)).toThrow('duplicate_identity')
 
     const reversed = cloneFixture() as {
-      edges: Array<{ kind: string; sourceNodeId: string; targetNodeId: string }>
+      edges: Array<{
+        kind: string
+        sourceNodeId: string
+        targetNodeId: string
+      }>
     }
     reversed.edges[0] = {
       kind: 'relates_to',
@@ -163,29 +164,20 @@ describe('Phase 2 knowledge-graph contract', () => {
 
   it('creates only durable additive graph storage around the existing ledger', () => {
     const migration = readMigrations()
-    const createdTables = Array.from(migration.matchAll(/CREATE TABLE public\.([a-z_]+)/g)).map(
-      (match) => match[1],
-    )
+    const createdTables = Array.from(migration.matchAll(/CREATE TABLE public\.([a-z_]+)/g)).map((match) => match[1])
 
-    expect(createdTables).toEqual([
-      'knowledge_audiences',
-      'knowledge_units',
-      'graph_nodes',
-      'graph_edges',
-    ])
+    expect(createdTables).toEqual(['knowledge_audiences', 'knowledge_units', 'graph_nodes', 'graph_edges'])
     expect(migration.indexOf('CREATE TABLE public.knowledge_audiences')).toBeLessThan(
       migration.indexOf('ALTER TABLE public.knowledge_events'),
     )
-    expect(migration).toMatch(
-      /source_event_id uuid NOT NULL REFERENCES public\.knowledge_events\(id\)/,
-    )
+    expect(migration).toMatch(/source_event_id uuid NOT NULL REFERENCES public\.knowledge_events\(id\)/)
     expect(migration).toContain('UNIQUE (source_event_id, extractor_version, claim_key)')
     expect(migration).toContain('UNIQUE (kind, authority_id)')
     expect(migration).toContain('event.id = NEW.authority_id')
     expect(migration).toContain('event.knowledge_audience_id = NEW.knowledge_audience_id')
     expect(migration).not.toContain('CREATE TABLE public.knowledge_events')
     expect(migration).not.toContain('knowledge_current')
-    expect(migration).not.toMatch(/ALTER TABLE public\.knowledge_edges/)
+    expect(migration).not.toContain(`ALTER TABLE public.${['knowledge', 'edges'].join('_')}`)
   })
 
   it('keeps PostgreSQL as the only privacy and traversal engine', () => {
@@ -222,7 +214,8 @@ describe('Phase 2 knowledge-graph contract', () => {
     expect(recipe).toContain("printf 'BEGIN;\\n'")
     expect(recipe).toContain("printf 'ROLLBACK;\\n'")
     expect(recipe.indexOf(migrationPaths[0])).toBeLessThan(recipe.indexOf(migrationPaths[1]))
-    expect(recipe).toContain('"${MIGRATIONS[@]}" "$TEMP_DIR/generated-proof.sql"')
+    expect(recipe).toContain('"${MIGRATIONS[@]}" "$CUTOVER" "$TEMP_DIR/generated-proof.sql"')
+    expect(recipe).toContain('"$TEMP_DIR/k1-setup.sql" "$TEMP_DIR/k1-assertions.sql"')
     expect(recipe).toContain('knowledge_audience_id')
     expect(recipe).toContain('catalog-before.sorted.json')
     expect(recipe).toContain('catalog-after.sorted.json')

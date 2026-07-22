@@ -4,8 +4,8 @@ import { GRAPH_NODE_KINDS, type GraphNodeKind } from "./contract";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const RPC_DEADLINE_MS = 75;
-const RESPONSE_FLOOR_MS = 90;
+const RPC_DEADLINE_MS = 500;
+const RESPONSE_FLOOR_MS = 550;
 
 export interface KnowledgeGraphRoot {
   readonly kind: GraphNodeKind;

@@ -46,7 +46,3 @@ export type { RerankOptions, RerankResult } from './rerank'
 
 // Reformulation (v2)
 export { reformulateQuery } from './reformulate'
-
-// Typed directional edges (v2)
-export { createEdge } from './edges'
-export type { EdgeType } from './edges'

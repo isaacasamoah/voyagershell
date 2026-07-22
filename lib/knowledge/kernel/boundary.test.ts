@@ -43,7 +43,7 @@ const AUTHORIZED_ROW = {
 };
 
 const settle = async <T>(promise: Promise<T>): Promise<T> => {
-  await vi.advanceTimersByTimeAsync(100);
+  await vi.advanceTimersByTimeAsync(600);
   return promise;
 };
 
@@ -142,7 +142,7 @@ describe("knowledge-graph application boundary", () => {
     void denied.then(() => states.push(true));
     void failed.then(() => states.push(true));
 
-    await vi.advanceTimersByTimeAsync(89);
+    await vi.advanceTimersByTimeAsync(549);
     expect(states).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     expect(await denied).toEqual([]);
@@ -153,7 +153,7 @@ describe("knowledge-graph application boundary", () => {
     rpcMock.mockImplementationOnce(
       () =>
         new Promise((resolve) =>
-          setTimeout(() => resolve({ data: [AUTHORIZED_ROW], error: null }), 200),
+          setTimeout(() => resolve({ data: [AUTHORIZED_ROW], error: null }), 800),
         ),
     );
     const result = retrieveKnowledgeGraphClaims({
@@ -165,10 +165,33 @@ describe("knowledge-graph application boundary", () => {
       settled = true;
     });
 
-    await vi.advanceTimersByTimeAsync(89);
+    await vi.advanceTimersByTimeAsync(549);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(await result).toEqual([]);
+  });
+
+  it("accepts a hosted-style RPC response after the database timing floor", async () => {
+    rpcMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ data: [AUTHORIZED_ROW], error: null }), 125),
+        ),
+    );
+    const result = retrieveKnowledgeGraphClaims({
+      kind: "message_event",
+      authorityId: AUTHORITY_ID,
+    });
+
+    await vi.advanceTimersByTimeAsync(600);
+    expect(await result).toEqual([
+      {
+        knowledgeUnitId: AUTHORIZED_ROW.knowledge_unit_id,
+        claim: AUTHORIZED_ROW.claim,
+        sourceEventId: AUTHORIZED_ROW.source_event_id,
+        sourceContent: AUTHORIZED_ROW.source_content,
+      },
+    ]);
   });
 
   it("counts authentication time inside the hard deadline", async () => {
@@ -178,7 +201,7 @@ describe("knowledge-graph application boundary", () => {
     rpcMock.mockImplementationOnce(
       () =>
         new Promise((resolve) =>
-          setTimeout(() => resolve({ data: [AUTHORIZED_ROW], error: null }), 200),
+          setTimeout(() => resolve({ data: [AUTHORIZED_ROW], error: null }), 800),
         ),
     );
     const result = retrieveKnowledgeGraphClaims({
@@ -190,7 +213,7 @@ describe("knowledge-graph application boundary", () => {
       settled = true;
     });
 
-    await vi.advanceTimersByTimeAsync(89);
+    await vi.advanceTimersByTimeAsync(549);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(await result).toEqual([]);

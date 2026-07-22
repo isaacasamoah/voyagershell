@@ -1,22 +1,22 @@
-import type { KnowledgeGraphFixture } from './contract'
-import { hashExpression, quote, textArray, uuid, uuidArray } from './sql'
+import type { KnowledgeGraphFixture } from "./contract";
+import { hashExpression, quote, textArray, uuid, uuidArray } from "./sql";
 
 const graphKinds = (fixture: KnowledgeGraphFixture): string =>
   fixture.nodes
     .map((node) => node.kind)
     .filter((kind, index, kinds) => kinds.indexOf(kind) === index)
     .map(quote)
-    .join(', ')
+    .join(", ");
 
 const renderNegativeAssertions = (
   fixture: KnowledgeGraphFixture,
-  audiences: Map<string, KnowledgeGraphFixture['audiences'][number]>,
-  personA: KnowledgeGraphFixture['nodes'][number],
-  privateMessage: KnowledgeGraphFixture['events'][number],
-  privateUnit: KnowledgeGraphFixture['units'][number],
+  audiences: Map<string, KnowledgeGraphFixture["audiences"][number]>,
+  personA: KnowledgeGraphFixture["nodes"][number],
+  privateMessage: KnowledgeGraphFixture["events"][number],
+  privateUnit: KnowledgeGraphFixture["units"][number],
 ): string => {
-  const expected = fixture.expected
-  const negative = fixture.negativeSourceEvent
+  const expected = fixture.expected;
+  const negative = fixture.negativeSourceEvent;
   return `
 DO $knowledge_graph_negative$
 BEGIN
@@ -24,7 +24,7 @@ BEGIN
     INSERT INTO public.knowledge_audiences
       (id, scope_kind, scope_authority_id, member_profile_ids)
     VALUES ('12000000-0000-4000-8000-000000000001', 'voyage',
-      ${uuid(fixture.nodes.find((node) => node.kind === 'voyage')!.authorityId)}, NULL);
+      ${uuid(fixture.nodes.find((node) => node.kind === "voyage")!.authorityId)}, NULL);
     RAISE EXCEPTION 'knowledge_graph_null_members_accepted';
   EXCEPTION WHEN not_null_violation OR check_violation THEN NULL; END;
   BEGIN
@@ -83,39 +83,60 @@ BEGIN
   END IF;
 END
 $knowledge_graph_negative$;
-`
-}
+`;
+};
 
-export const renderKnowledgeGraphAssertions = (fixture: KnowledgeGraphFixture): string => {
-  const expected = fixture.expected
-  const audiences = new Map(fixture.audiences.map((audience) => [audience.key, audience]))
+export const renderKnowledgeGraphAssertions = (
+  fixture: KnowledgeGraphFixture,
+): string => {
+  const expected = fixture.expected;
+  const audiences = new Map(
+    fixture.audiences.map((audience) => [audience.key, audience]),
+  );
   const personA = fixture.nodes.find(
-    (node) => node.kind === 'person' && node.authorityId === fixture.viewerProfileIds.a,
-  )!
-  const sharedMessage = fixture.events.find((event) => event.id === expected.sharedSourceEventId)!
-  const privateMessage = fixture.events.find((event) => event.id !== expected.sharedSourceEventId)!
-  const privateUnit = fixture.units.find((unit) => unit.nodeId !== expected.sharedUnitNodeId)!
-  const bridgeKinds = `ARRAY['reply_to', 'about']::public.graph_edge_kind[]`
-  const allKinds = `ARRAY[${graphKinds(fixture)}]::public.graph_node_kind[]`
-  const identity = `format('%s:%s', kind, authority_id)`
+    (node) =>
+      node.kind === "person" && node.authorityId === fixture.viewerProfileIds.a,
+  )!;
+  const sharedMessage = fixture.events.find(
+    (event) => event.id === expected.sharedSourceEventId,
+  )!;
+  const privateMessage = fixture.events.find(
+    (event) => event.id !== expected.sharedSourceEventId,
+  )!;
+  const privateUnit = fixture.units.find(
+    (unit) => unit.nodeId !== expected.sharedUnitNodeId,
+  )!;
+  const bridgeKinds = `ARRAY['reply_to', 'about']::public.graph_edge_kind[]`;
+  const allKinds = `ARRAY[${graphKinds(fixture)}]::public.graph_node_kind[]`;
+  const identity = `format('%s:%s', kind, authority_id)`;
+  const fixtureNodeIds = uuidArray(fixture.nodes.map((node) => node.id));
+  const fixtureUnitIds = uuidArray(fixture.units.map((unit) => unit.id));
+  const fixtureAudienceIds = uuidArray(
+    fixture.audiences.map((audience) => audience.id),
+  );
 
   return `
 DO $knowledge_graph_assert$
 DECLARE v_actual text[]; v_source uuid; v_claim text; v_audience uuid;
 BEGIN
-  IF (SELECT count(*) FROM public.graph_nodes) <> ${expected.nodeCount}
-    OR (SELECT count(*) FROM public.graph_edges) <> ${expected.edgeCount}
-    OR (SELECT count(*) FROM public.knowledge_units) <> ${fixture.units.length}
-    OR (SELECT count(*) FROM public.knowledge_audiences) <> ${expected.audienceCount} THEN
+  IF (SELECT count(*) FROM public.graph_nodes WHERE id = ANY(${fixtureNodeIds})) <> ${expected.nodeCount}
+    OR (SELECT count(*) FROM public.graph_edges
+      WHERE source_node_id = ANY(${fixtureNodeIds})
+        AND target_node_id = ANY(${fixtureNodeIds})) <> ${expected.edgeCount}
+    OR (SELECT count(*) FROM public.knowledge_units
+      WHERE id = ANY(${fixtureUnitIds})) <> ${fixture.units.length}
+    OR (SELECT count(*) FROM public.knowledge_audiences
+      WHERE id = ANY(${fixtureAudienceIds})) <> ${expected.audienceCount} THEN
     RAISE EXCEPTION 'knowledge_graph_canonical_counts_failed';
   END IF;
-  IF (SELECT events_hash FROM knowledge_graph_projection_snapshot) IS DISTINCT FROM ${hashExpression('events', fixture)}
-    OR (SELECT units_hash FROM knowledge_graph_projection_snapshot) IS DISTINCT FROM ${hashExpression('units', fixture)}
-    OR (SELECT nodes_hash FROM knowledge_graph_projection_snapshot) IS DISTINCT FROM ${hashExpression('nodes', fixture)}
-    OR (SELECT edges_hash FROM knowledge_graph_projection_snapshot) IS DISTINCT FROM ${hashExpression('edges', fixture)} THEN
+  IF (SELECT events_hash FROM knowledge_graph_projection_snapshot) IS DISTINCT FROM ${hashExpression("events", fixture)}
+    OR (SELECT units_hash FROM knowledge_graph_projection_snapshot) IS DISTINCT FROM ${hashExpression("units", fixture)}
+    OR (SELECT nodes_hash FROM knowledge_graph_projection_snapshot) IS DISTINCT FROM ${hashExpression("nodes", fixture)}
+    OR (SELECT edges_hash FROM knowledge_graph_projection_snapshot) IS DISTINCT FROM ${hashExpression("edges", fixture)} THEN
     RAISE EXCEPTION 'knowledge_graph_idempotent_projection_failed';
   END IF;
-  IF (SELECT array_agg(DISTINCT kind ORDER BY kind) FROM public.graph_nodes)
+  IF (SELECT array_agg(DISTINCT kind ORDER BY kind) FROM public.graph_nodes
+    WHERE id = ANY(${fixtureNodeIds}))
     IS DISTINCT FROM ${allKinds} THEN RAISE EXCEPTION 'knowledge_graph_six_kinds_failed'; END IF;
   IF (SELECT count(*) FROM public.knowledge_events
     WHERE id = ANY(${uuidArray(fixture.events.map((event) => event.id))})
@@ -170,5 +191,5 @@ BEGIN
 END
 $knowledge_graph_assert$;
 ${renderNegativeAssertions(fixture, audiences, personA, privateMessage, privateUnit)}
-`
-}
+`;
+};

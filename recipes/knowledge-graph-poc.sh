@@ -10,8 +10,10 @@ MIGRATIONS=(
   "$REPO_ROOT/supabase/migrations/055_knowledge_graph_authorization.sql"
   "$REPO_ROOT/supabase/migrations/056_knowledge_graph_retrieval.sql"
 )
+CUTOVER="$REPO_ROOT/supabase/migrations/057_knowledge_graph_cutover.sql"
 FIXTURE="$REPO_ROOT/lib/knowledge/kernel/fixtures/v1.json"
 GENERATOR="$REPO_ROOT/lib/knowledge/kernel/generate-sql.ts"
+K1_GENERATOR="$REPO_ROOT/lib/knowledge/kernel/generate-k1-sql.ts"
 VITE_NODE="$REPO_ROOT/node_modules/.bin/vite-node"
 PROJECT_REF="iesprdzzgjypnksoljym"
 API_URL="https://api.supabase.com/v1/projects/$PROJECT_REF/database/query"
@@ -29,7 +31,7 @@ for command_name in curl jq; do
     exit 2
   }
 done
-for required_file in "${MIGRATIONS[@]}" "$FIXTURE" "$GENERATOR"; do
+for required_file in "${MIGRATIONS[@]}" "$CUTOVER" "$FIXTURE" "$GENERATOR" "$K1_GENERATOR"; do
   [ -f "$required_file" ] || {
     printf 'knowledge-graph: missing file: %s\n' "$required_file" >&2
     exit 2
@@ -79,7 +81,9 @@ CATALOG_SQL="WITH targets AS (
   JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public' AND c.relname IN (
     'knowledge_audiences', 'knowledge_units', 'graph_nodes', 'graph_edges',
-    'graph_edges_target_idx')
+    'graph_edges_target_idx', 'knowledge_audiences_canonical_identity_idx',
+    'knowledge_graph_backfill_rejections', 'knowledge_edges',
+    'idx_edges_source', 'idx_edges_target', 'idx_edges_type')
   UNION ALL
   SELECT 'function', p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid)
   FROM pg_catalog.pg_proc p
@@ -90,7 +94,8 @@ CATALOG_SQL="WITH targets AS (
     'validate_knowledge_audience', 'validate_knowledge_unit',
     'validate_graph_node_authority', 'guard_graph_node_identity',
     'validate_graph_edge', 'traverse_knowledge_graph',
-    'guard_knowledge_event_source', 'retrieve_knowledge_graph_claims')
+    'guard_knowledge_event_source', 'retrieve_knowledge_graph_claims',
+    'write_knowledge_graph_edge', 'graph_traverse')
   UNION ALL
   SELECT 'type', t.typname, t.typtype::text
   FROM pg_catalog.pg_type t
@@ -107,7 +112,8 @@ CATALOG_SQL="WITH targets AS (
     'trg_knowledge_event_audience_immutable', 'trg_knowledge_unit_validate',
     'trg_knowledge_unit_immutable', 'trg_graph_node_validate',
     'trg_graph_node_identity', 'trg_graph_edge_validate', 'trg_graph_edge_immutable',
-    'trg_knowledge_event_source_immutable')
+    'trg_knowledge_event_source_immutable',
+    'trg_knowledge_graph_backfill_rejections_immutable')
   UNION ALL
   SELECT 'column', column_name, table_name
   FROM information_schema.columns
@@ -126,26 +132,41 @@ ORDER BY object_type, object_name, detail;"
 printf '%s\n' "$CATALOG_SQL" > "$TEMP_DIR/catalog.sql"
 query_api "$TEMP_DIR/catalog.sql" "$TEMP_DIR/catalog-before.json"
 jq --sort-keys '.' "$TEMP_DIR/catalog-before.json" > "$TEMP_DIR/catalog-before.sorted.json"
-if [ "$(jq 'length' "$TEMP_DIR/catalog-before.sorted.json")" -ne 0 ]; then
-  printf 'knowledge-graph: target catalogue objects already exist; refusing rollback proof\n' >&2
-  jq -r '.[] | "  \(.object_type):\(.object_name)"' "$TEMP_DIR/catalog-before.sorted.json" >&2
+legacy_names='["knowledge_edges","idx_edges_source","idx_edges_target","idx_edges_type","graph_traverse"]'
+new_count="$(jq --argjson legacy "$legacy_names" \
+  '[.[] | select(.object_name as $name | ($legacy | index($name) | not))] | length' \
+  "$TEMP_DIR/catalog-before.sorted.json")"
+if [ "$new_count" -ne 0 ]; then
+  printf 'knowledge-graph: new target catalogue objects already exist; refusing rollback proof\n' >&2
+  jq -r --argjson legacy "$legacy_names" \
+    '.[] | select(.object_name as $name | ($legacy | index($name) | not)) |
+      "  \(.object_type):\(.object_name)"' "$TEMP_DIR/catalog-before.sorted.json" >&2
   exit 3
 fi
 
 "$VITE_NODE" "$GENERATOR" --output "$TEMP_DIR/generated-proof.sql"
+"$VITE_NODE" "$K1_GENERATOR" \
+  --setup-output "$TEMP_DIR/k1-setup.sql" \
+  --assertions-output "$TEMP_DIR/k1-assertions.sql"
 if grep -Eq '^[[:space:]]*(BEGIN|COMMIT|ROLLBACK)[[:space:]]*;' \
-  "${MIGRATIONS[@]}" "$TEMP_DIR/generated-proof.sql"; then
+  "${MIGRATIONS[@]}" "$CUTOVER" "$TEMP_DIR/generated-proof.sql" \
+  "$TEMP_DIR/k1-setup.sql" "$TEMP_DIR/k1-assertions.sql"; then
   printf 'knowledge-graph: nested transaction command refused\n' >&2
   exit 3
 fi
 
 {
   printf 'BEGIN;\n'
-  printf "SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('voyager-knowledge-graph-poc'));\n"
+  printf "SET LOCAL lock_timeout = '3s';\n"
+  printf "SET LOCAL statement_timeout = '30s';\n"
+  printf '%s\n' "DO \$rollback_lock\$ BEGIN IF NOT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtext('voyager-knowledge-graph-poc')) THEN RAISE EXCEPTION 'knowledge_graph_proof_busy'; END IF; END \$rollback_lock\$;"
   for migration in "${MIGRATIONS[@]}"; do
     sed -n '1,$p' "$migration"
   done
+  sed -n '1,$p' "$TEMP_DIR/k1-setup.sql"
+  sed -n '1,$p' "$CUTOVER"
   sed -n '1,$p' "$TEMP_DIR/generated-proof.sql"
+  sed -n '1,$p' "$TEMP_DIR/k1-assertions.sql"
   printf 'ROLLBACK;\n'
   printf "SELECT 'KNOWLEDGE_GRAPH_SQL_GREEN' AS verdict;\n"
 } > "$TEMP_DIR/transaction.sql"
@@ -174,4 +195,6 @@ printf 'knowledge-graph: graph on found "%s" with immutable source; graph off mi
 printf 'knowledge-graph: 16 edge kinds | six-root DB RPC | metadata denied\n'
 printf 'knowledge-graph: root denied | hidden bridge denied | timing class equal | victim private residue 0 | NULL denied\n'
 printf 'knowledge-graph: NULL-audience source rejected | Person + Voyager rename stable | catalogue residue 0\n'
+printf 'knowledge-graph: K1 exact backfill parity | unresolved rows outside graph and reported\n'
+printf 'knowledge-graph: final writer + retrieval green | old graph catalogue absent | rollback identical\n'
 printf 'KNOWLEDGE_GRAPH_POC_GREEN\n'

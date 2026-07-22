@@ -7,15 +7,15 @@ do not replace them.
 
 ## Objective (shell, on the spine)
 
-| Recipe | Asserts | Marker |
-|---|---|---|
-| `./recipes/address-grammar.sh` | @own=private · every other @=held · all leading names=ordinary room text · client/server audience parity | `ADDRESS_GRAMMAR_GREEN` |
-| `./recipes/two-account-bench.sh` | Two accounts, one names "wren": owner can invoke; other account cannot; leading name remains human room text | `TWO_ACCOUNT_BENCH_OK` |
-| `./recipes/private-voyager-trust.sh` | Owner-private turn persistence + content-only human Share-to-room boundary + private background results | `PRIVATE_VOYAGER_TRUST_GREEN` |
-| `./recipes/handles-uniqueness.sh` | `idx_handles_lower` rejects a cross-case dup on dev (non-mutating; requires `~/.supabase/access-token`) | `HANDLES_UNIQUE_OK` |
-| `./recipes/knowledge-graph-poc.sh` | Existing `knowledge_events` ledger · six canonical kinds · all 16 edge kinds · exact claim/source DB retrieval · metadata/timing denial · transaction rollback leaves zero catalogue residue | `KNOWLEDGE_GRAPH_POC_GREEN` |
-| `./recipes/typecheck.sh` | `tsc --noEmit` clean | `TYPECHECK_OK` |
-| `./recipes/full-suite.sh` | the full unit suite | `FULL_SUITE_GREEN` |
+| Recipe                               | Asserts                                                                                                                                                                                                                 | Marker                        |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `./recipes/address-grammar.sh`       | @own=private · every other @=held · all leading names=ordinary room text · client/server audience parity                                                                                                                | `ADDRESS_GRAMMAR_GREEN`       |
+| `./recipes/two-account-bench.sh`     | Two accounts, one names "wren": owner can invoke; other account cannot; leading name remains human room text                                                                                                            | `TWO_ACCOUNT_BENCH_OK`        |
+| `./recipes/private-voyager-trust.sh` | Owner-private turn persistence + content-only human Share-to-room boundary + private background results                                                                                                                 | `PRIVATE_VOYAGER_TRUST_GREEN` |
+| `./recipes/handles-uniqueness.sh`    | `idx_handles_lower` rejects a cross-case dup on dev (non-mutating; requires `~/.supabase/access-token`)                                                                                                                 | `HANDLES_UNIQUE_OK`           |
+| `./recipes/knowledge-graph-poc.sh`   | Existing `knowledge_events` ledger · exact K1 audience/edge backfill and rejection report · final service-only writer/read RPCs · old graph catalogue absent in-transaction · hosted catalogue identical after rollback | `KNOWLEDGE_GRAPH_POC_GREEN`   |
+| `./recipes/typecheck.sh`             | `tsc --noEmit` clean                                                                                                                                                                                                    | `TYPECHECK_OK`                |
+| `./recipes/full-suite.sh`            | the full unit suite                                                                                                                                                                                                     | `FULL_SUITE_GREEN`            |
 
 ## Human residual (browser, two-account fambam — optional for Isaac)
 
@@ -45,11 +45,13 @@ From any directory, run:
 
 The recipe takes `VOYAGER_SUPABASE_ACCESS_TOKEN` first, then the canonical Mac
 token file, then securely reads the Fedora token. It sends one Management API
-transaction containing the ordered schema and authorization migrations (054 and
-055), two fixed source rows in the existing `knowledge_events` ledger, both
-fixture projections, and every SQL assertion, then rolls the whole transaction
-back. It refuses to start if any target object exists and compares the catalogue
-before and after.
+transaction containing migrations 054–056, fixed eligible and deliberately
+unresolved legacy controls, the K1 cutover migration 057, both fixture
+projections, and every SQL assertion, then rolls the whole transaction back.
+It permits the hosted legacy catalogue at entry, refuses any already-installed
+054–057 target, proves the replaced table and both old RPC signatures absent
+inside the transaction, and compares the full old+new target catalogue before
+and after rollback.
 
 Expected stable observation summary:
 
@@ -60,5 +62,7 @@ knowledge-graph: graph on found "Vanessa keeps the amber notebook behind the blu
 knowledge-graph: 16 edge kinds | six-root DB RPC | metadata denied
 knowledge-graph: root denied | hidden bridge denied | timing class equal | victim private residue 0 | NULL denied
 knowledge-graph: NULL-audience source rejected | Person + Voyager rename stable | catalogue residue 0
+knowledge-graph: K1 exact backfill parity | unresolved rows outside graph and reported
+knowledge-graph: final writer + retrieval green | old graph catalogue absent | rollback identical
 KNOWLEDGE_GRAPH_POC_GREEN
 ```
