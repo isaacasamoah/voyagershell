@@ -15,6 +15,7 @@ const readRepoFile = (path: string): string => readFileSync(resolve(process.cwd(
 const migrationPaths = [
   'supabase/migrations/054_knowledge_graph_schema.sql',
   'supabase/migrations/055_knowledge_graph_authorization.sql',
+  'supabase/migrations/056_knowledge_graph_retrieval.sql',
 ] as const
 const readMigrations = (): string => migrationPaths.map(readRepoFile).join('\n')
 
@@ -45,6 +46,7 @@ describe('Phase 2 knowledge-graph contract', () => {
     const authorization = readRepoFile(migrationPaths[1])
 
     expect(GRAPH_EDGE_KINDS).toEqual(expected)
+    expect(new Set(knowledgeGraphFixture.edges.map((edge) => edge.kind))).toEqual(new Set(expected))
     expect(declared).toEqual(expected)
     expect(authorization).toMatch(
       /WHEN 'generated_by' THEN v_source_kind IN \('message_event', 'knowledge_unit'\)\s+AND v_target_kind = 'voyager'/,
@@ -99,7 +101,7 @@ describe('Phase 2 knowledge-graph contract', () => {
     expect(validateKnowledgeGraphFixture(knowledgeGraphFixture)).toBe(knowledgeGraphFixture)
     expect(knowledgeGraphFixture.expected).toMatchObject({
       nodeCount: 10,
-      edgeCount: 17,
+      edgeCount: 25,
       audienceCount: 4,
       sharedClaim: 'Vanessa keeps the amber notebook behind the blue atlas.',
       sharedSourceEventId: knowledgeGraphFixture.events[0].id,

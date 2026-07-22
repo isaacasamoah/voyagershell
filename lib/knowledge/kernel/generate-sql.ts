@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { renderKnowledgeGraphAssertions } from './assertions-sql'
 import type { KnowledgeGraphFixture } from './contract'
 import { knowledgeGraphFixture } from './fixture'
+import { renderKnowledgeGraphRetrievalAssertions } from './retrieval-assertions-sql'
 import { hashExpression, quote, uuid, uuidArray, valuesSql } from './sql'
 
 const renderAuthoritySetup = (fixture: KnowledgeGraphFixture): string => {
@@ -140,7 +141,7 @@ CREATE TEMP TABLE knowledge_graph_projection_snapshot AS SELECT
   ${hashExpression('units', fixture)} AS units_hash,
   ${hashExpression('nodes', fixture)} AS nodes_hash,
   ${hashExpression('edges', fixture)} AS edges_hash;
-${renamed}${renderKnowledgeGraphAssertions(fixture)}`
+${renamed}${renderKnowledgeGraphAssertions(fixture)}${renderKnowledgeGraphRetrievalAssertions(fixture)}`
 }
 
 const outputFlag = process.argv.indexOf('--output')

@@ -162,6 +162,7 @@ export const validateKnowledgeGraphFixture = (value: unknown): KnowledgeGraphFix
   if (unitIds.size !== 2) fail('units', 'shared_and_private_units_required')
 
   const edgeKeys: string[] = []
+  const exercisedEdgeKinds = new Set<string>()
   arrayAt(fixture.edges, 'edges').forEach((rawEdge, index) => {
     const path = `edges.${index}`
     const edge = recordAt(rawEdge, path)
@@ -175,8 +176,12 @@ export const validateKnowledgeGraphFixture = (value: unknown): KnowledgeGraphFix
       fail(`${path}.audienceKey`, 'unknown')
     }
     edgeKeys.push(`${source}:${kind}:${target}`)
+    exercisedEdgeKinds.add(kind)
   })
   unique(edgeKeys, 'edges')
+  if (GRAPH_EDGE_KINDS.some((kind) => !exercisedEdgeKinds.has(kind))) {
+    fail('edges', 'all_edge_kinds_required')
+  }
 
   const renames = arrayAt(fixture.renames, 'renames')
   const renamedKinds = new Set<string>()

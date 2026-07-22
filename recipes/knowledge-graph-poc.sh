@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MIGRATIONS=(
   "$REPO_ROOT/supabase/migrations/054_knowledge_graph_schema.sql"
   "$REPO_ROOT/supabase/migrations/055_knowledge_graph_authorization.sql"
+  "$REPO_ROOT/supabase/migrations/056_knowledge_graph_retrieval.sql"
 )
 FIXTURE="$REPO_ROOT/lib/knowledge/kernel/fixtures/v1.json"
 GENERATOR="$REPO_ROOT/lib/knowledge/kernel/generate-sql.ts"
@@ -88,7 +89,8 @@ CATALOG_SQL="WITH targets AS (
     'reject_immutable_knowledge_graph_row', 'guard_knowledge_event_audience',
     'validate_knowledge_audience', 'validate_knowledge_unit',
     'validate_graph_node_authority', 'guard_graph_node_identity',
-    'validate_graph_edge', 'traverse_knowledge_graph')
+    'validate_graph_edge', 'traverse_knowledge_graph',
+    'guard_knowledge_event_source', 'retrieve_knowledge_graph_claims')
   UNION ALL
   SELECT 'type', t.typname, t.typtype::text
   FROM pg_catalog.pg_type t
@@ -104,7 +106,8 @@ CATALOG_SQL="WITH targets AS (
     'trg_knowledge_audience_validate', 'trg_knowledge_audience_immutable',
     'trg_knowledge_event_audience_immutable', 'trg_knowledge_unit_validate',
     'trg_knowledge_unit_immutable', 'trg_graph_node_validate',
-    'trg_graph_node_identity', 'trg_graph_edge_validate', 'trg_graph_edge_immutable')
+    'trg_graph_node_identity', 'trg_graph_edge_validate', 'trg_graph_edge_immutable',
+    'trg_knowledge_event_source_immutable')
   UNION ALL
   SELECT 'column', column_name, table_name
   FROM information_schema.columns
@@ -168,6 +171,7 @@ SHARED_CLAIM="$(jq -r '.expected.sharedClaim' "$FIXTURE")"
 printf 'knowledge-graph: existing knowledge_events ledger | 2 fixed sources | participants NULL\n'
 printf 'knowledge-graph: 6 kinds | %s nodes | %s edges | replay identical\n' "$NODE_COUNT" "$EDGE_COUNT"
 printf 'knowledge-graph: graph on found "%s" with immutable source; graph off missed it\n' "$SHARED_CLAIM"
-printf 'knowledge-graph: root denied | hidden bridge denied | victim private residue 0 | NULL denied\n'
+printf 'knowledge-graph: 16 edge kinds | six-root DB RPC | metadata denied\n'
+printf 'knowledge-graph: root denied | hidden bridge denied | timing class equal | victim private residue 0 | NULL denied\n'
 printf 'knowledge-graph: NULL-audience source rejected | Person + Voyager rename stable | catalogue residue 0\n'
 printf 'KNOWLEDGE_GRAPH_POC_GREEN\n'
