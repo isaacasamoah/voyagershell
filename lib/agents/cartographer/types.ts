@@ -1,6 +1,5 @@
-import type { KnowledgeType } from '@/lib/knowledge/events'
-import type { GraphEdgeKind } from '@/lib/knowledge/kernel/contract'
-import type { GraphNodeReference } from '@/lib/knowledge/kernel/graph-edge-writer'
+import type { KnowledgeType } from '@/lib/knowledge/event-types'
+import type { CARTOGRAPHER_EDGE_KINDS } from './stage2'
 
 export interface CartographerPayload {
   sessionId: string
@@ -16,9 +15,9 @@ export interface Stage1Assessment {
 }
 
 export interface Stage2Connection {
-  source: GraphNodeReference
-  target: GraphNodeReference
-  kind: GraphEdgeKind
+  fromEventId: string
+  toEventId: string
+  edgeType: (typeof CARTOGRAPHER_EDGE_KINDS)[number]
 }
 
 export interface KnowledgeEventRow {

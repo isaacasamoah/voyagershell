@@ -11,8 +11,8 @@ export {
   emitMessageEvent,
   createMessageEvent,
   createExplicitEvent,
-  updateKnowledgeEnrichment,
 } from './events'
+export { updateKnowledgeEnrichment } from './event-enrichment'
 
 export type {
   SourceEventType,
@@ -20,7 +20,7 @@ export type {
   Classification,
   ActorType,
   SourceType,
-} from './events'
+} from './event-types'
 
 // Curator (token-budgeted prompt window)
 export { curatePromptWindow, DEFAULT_WINDOW_CONFIG } from './curator'
@@ -30,15 +30,20 @@ export type { PromptWindowConfig, CuratedWindow } from './curator'
 export {
   searchKnowledge,
   getKnowledgeByIds,
-  keywordGrep,
-  personAnchoredSearch,
 } from './search'
-
-export type { KnowledgeNode, SearchOptions, GrepOptions, GrepResult } from './search'
+export { keywordGrep, personAnchoredSearch } from './scoped-search'
+export type {
+  KnowledgeNode,
+  SearchOptions,
+  GrepOptions,
+  GrepResult,
+} from './search-types'
 
 // Hybrid search (v2)
-export { hybridSearch, keywordSearch, rrfFuse } from './hybrid'
-export type { RankedResult, HybridSearchOptions } from './hybrid'
+export { hybridSearch } from './hybrid'
+export type { HybridSearchOptions } from './hybrid'
+export { keywordSearch, rrfFuse } from './hybrid-primitives'
+export type { RankedResult } from './hybrid-primitives'
 
 // Reranking (v2)
 export { cohereRerank } from './rerank'

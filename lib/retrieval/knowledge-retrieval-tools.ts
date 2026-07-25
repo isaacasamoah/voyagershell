@@ -7,11 +7,6 @@ import {
 } from '@/lib/knowledge'
 import { hybridSearch } from '@/lib/knowledge/hybrid'
 import {
-  retrieveKnowledgeGraphClaims,
-  type KnowledgeGraphClaim,
-} from '@/lib/knowledge/kernel/boundary'
-import { GRAPH_NODE_KINDS } from '@/lib/knowledge/kernel/contract'
-import {
   formatGrepResult,
   formatHybridResult,
   formatKnowledgeResult,
@@ -31,17 +26,6 @@ const keywordGrepSchema = z.object({
   limit: z.number().optional().default(10).describe('Max results'),
 })
 
-const graphSchema = z.object({
-  root: z.object({
-    kind: z.enum(GRAPH_NODE_KINDS).describe('Canonical graph root kind'),
-    authorityId: z.string().uuid().describe('Authority UUID for the selected root kind'),
-  }),
-  graphEnabled: z.boolean().optional().default(true)
-    .describe('Traverse authorized graph edges when true; resolve only the root when false'),
-  maxDepth: z.number().int().min(0).max(8).optional().default(4)
-    .describe('Maximum authorized traversal depth (0-8)'),
-})
-
 const anchoredSearchSchema = z.object({
   person: z.string().describe('The person to anchor on (name as the user referred to them)'),
   query: z.string().optional().describe('Optional topic to narrow to, e.g. "the almond tree idea"'),
@@ -51,11 +35,6 @@ const anchoredSearchSchema = z.object({
 const getNodesSchema = z.object({
   nodeIds: z.array(z.string().uuid()).describe('Array of complete event UUIDs to retrieve'),
 })
-
-const formatGraphClaims = (claims: readonly KnowledgeGraphClaim[]): string =>
-  claims.map(({ knowledgeUnitId, claim, sourceEventId, sourceContent }) =>
-    `Knowledge unit: ${knowledgeUnitId}\nClaim: ${claim}\nSource event: ${sourceEventId}\nSource: ${sourceContent}`,
-  ).join('\n\n')
 
 export const createKnowledgeRetrievalTools = (ctx: ToolContext) => ({
   semantic_search: tool({
@@ -77,21 +56,6 @@ export const createKnowledgeRetrievalTools = (ctx: ToolContext) => ({
       limit: Math.min(input.limit, 20),
       voyageSlug: ctx.voyageSlug,
     })),
-  }),
-  graph: tool({
-    description: `Retrieve authorized, source-backed claims from the heterogeneous knowledge graph. Root the lookup at a person, voyager, voyage, space, message_event, or knowledge_unit authority UUID. graphEnabled traverses authorized edges; maxDepth bounds traversal. Returns exact claim text and immutable source content only.`,
-    inputSchema: graphSchema,
-    execute: async (input) => {
-      try {
-        const claims = await retrieveKnowledgeGraphClaims(input.root, {
-          graphEnabled: input.graphEnabled,
-          maxDepth: input.maxDepth,
-        })
-        return formatGraphClaims(claims)
-      } catch {
-        return ''
-      }
-    },
   }),
   anchored_search: tool({
     description: `Retrieve what a SPECIFIC PERSON has shared or contributed, optionally about a topic. Anchor-first retrieval: use this the moment the user names a person — "what did Vanessa say about X", "what has Tom contributed", "@vanessa on pricing". Returns that person's contributions that YOU can see (shared + co-participated), ranked by attention. For general topic search with no named person, use semantic_search instead.`,
@@ -115,6 +79,6 @@ export const createKnowledgeRetrievalTools = (ctx: ToolContext) => ({
     description: `Retrieve specific knowledge nodes by their event IDs. Returns full node content and metadata for each requested ID.`,
     inputSchema: getNodesSchema,
     execute: async (input) =>
-      formatKnowledgeResult(await getKnowledgeByIds(input.nodeIds, ctx.userId)),
+      formatKnowledgeResult(await getKnowledgeByIds(input.nodeIds, ctx.userId, ctx.voyageSlug)),
   }),
 })

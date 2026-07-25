@@ -3,7 +3,7 @@
 // contained because the agent is fire-and-forget from the turn path.
 
 import { log } from '@/lib/debug/logger'
-import type { ToolContext } from '@/lib/retrieval/tools'
+import type { ToolContext } from '@/lib/retrieval/tool-types'
 import { applyEnrichments } from './cartographer/apply'
 import { checkPreferenceSuperseding } from './cartographer/preference-superseding'
 import { processRetrievalFeedback } from './cartographer/retrieval-feedback'
@@ -13,9 +13,6 @@ import { runStage1 } from './cartographer/stage1'
 import { runStage2 } from './cartographer/stage2'
 import type { CartographerPayload } from './cartographer/types'
 import { buildEnrichmentWindow } from './cartographer/window'
-
-export { ENRICHMENT_THRESHOLD, shouldRunEnrichment } from './cartographer/source'
-export { buildEnrichmentWindow } from './cartographer/window'
 
 export const runCartographer = async (payload: CartographerPayload): Promise<void> => {
   const { sessionId, userId, voyageSlug } = payload
@@ -49,7 +46,7 @@ export const runCartographer = async (payload: CartographerPayload): Promise<voi
     const connections = await runStage2(assessments, toolContext)
     log.agent('Stage 2 complete', { connectionCount: connections.length })
 
-    await applyEnrichments(assessments, connections, events)
+    await applyEnrichments(assessments, events)
     await upsertSessionIndex(sessionId, userId, events.length)
 
     const decayResult = await applySessionDecay(userId, sessionId)

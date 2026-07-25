@@ -31,11 +31,6 @@ export const createVoyagerTools = (ctx: ToolContext): {
       strategyHint: 'Confirm specifics after semantic search. Exact phrases, names, quotes.',
     },
     {
-      name: 'graph',
-      tool: retrieval.graph,
-      strategyHint: 'Retrieve authorized exact claims and immutable sources from a final graph root: person, voyager, voyage, space, message_event, or knowledge_unit. Toggle graph traversal with graphEnabled and bound it with maxDepth.',
-    },
-    {
       name: 'anchored_search',
       tool: retrieval.anchored_search,
       strategyHint: 'Anchor-first retrieval for named people. Use when the user asks what a specific voyage member shared or contributed, optionally about a topic.',
@@ -111,11 +106,6 @@ export const createVoyagerTools = (ctx: ToolContext): {
       strategyHint: 'Add a person to THIS conversation so the user talks to them directly (no per-line tell). "+vanessa", "add tom".',
     },
     {
-      name: 'respond_to_room_invite',
-      tool: rooms.respond_to_room_invite,
-      strategyHint: 'Accept or decline a pending room invitation when the user responds to it.',
-    },
-    {
       name: 'remove_from_room',
       tool: rooms.remove_from_room,
       strategyHint: 'Remove a person from THIS conversation. "-vanessa", "just us".',
@@ -128,7 +118,7 @@ export const createVoyagerTools = (ctx: ToolContext): {
     {
       name: 'get_messages',
       tool: messageQueries.get_messages,
-      strategyHint: 'Structural message retrieval. Default: direct mentions. With channel: channel activity. "Do I have messages?"',
+      strategyHint: 'Retrieve recent direct mentions from the current voyage. "Do I have messages?"',
     },
     {
       name: 'remember_knowledge',
