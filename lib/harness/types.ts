@@ -8,6 +8,11 @@ export interface TurnContext {
   autoSent?: boolean
   newMessage: string
   displayName?: string
+  // The client's own id for this send. It is the exactly-once key: a retry of
+  // the same message reuses it, so the ingress claim recognises the retry and
+  // refuses to write a second event, delivery set or model call. Absent only
+  // for callers that predate it, which fall back to the session id.
+  clientMessageId?: string
   // Loop guard: the actor_type of the input that OPENED this turn. A turn
   // may begin ONLY on human-authored input ('user'); an actor=voyager event must
   // NEVER trigger another Voyager's turn. Defaults to 'user' (the human POST is

@@ -1,180 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-type DbError = { message: string }
-type QueryResult = { data: unknown; error: DbError | null }
-type TableName = 'sessions' | 'spaces' | 'space_members'
-type Filter = { column: string; value: unknown }
-
-interface SessionRow {
-  id: string
-  user_id: string | null
-  voyage_id: string | null
-  space_id: string | null
-}
-
-interface SpaceRow {
-  id: string
-  kind: string
-  voyage_id: string | null
-  ai_present: boolean
-  created_by: string | null
-}
-
-interface SpaceMemberRow {
-  space_id: string
-  user_id: string
-  state: 'invited' | 'active' | 'left'
-}
-
-const db = {
-  sessions: new Map<string, SessionRow>(),
-  spaces: new Map<string, SpaceRow>(),
-  space_members: new Map<string, SpaceMemberRow>(),
-}
-
-const sessionUpdates: Array<Record<string, unknown>> = []
-let nextSpace = 1
-
-const resetDb = () => {
-  db.sessions.clear()
-  db.spaces.clear()
-  db.space_members.clear()
-  sessionUpdates.length = 0
-  nextSpace = 1
-}
-
-const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
-
-const tableRows = (table: TableName): Array<Record<string, unknown>> => {
-  if (table === 'sessions') return Array.from(db.sessions.values()) as unknown as Array<Record<string, unknown>>
-  if (table === 'spaces') return Array.from(db.spaces.values()) as unknown as Array<Record<string, unknown>>
-  return Array.from(db.space_members.values()) as unknown as Array<Record<string, unknown>>
-}
-
-const memberKey = (row: Pick<SpaceMemberRow, 'space_id' | 'user_id'>) => `${row.space_id}:${row.user_id}`
-
-class FakeQuery implements PromiseLike<QueryResult> {
-  private action: 'select' | 'insert' | 'update' | 'upsert' = 'select'
-  private filters: Filter[] = []
-  private payload: unknown
-
-  constructor(private readonly table: TableName) {}
-
-  select(_columns: string) {
-    if (this.action === 'select') this.action = 'select'
-    return this
-  }
-
-  eq(column: string, value: unknown) {
-    this.filters.push({ column, value })
-    return this
-  }
-
-  in(column: string, values: unknown[]) {
-    this.filters.push({ column, value: values })
-    return this
-  }
-
-  insert(payload: unknown) {
-    this.action = 'insert'
-    this.payload = payload
-    return this
-  }
-
-  update(payload: unknown) {
-    this.action = 'update'
-    this.payload = payload
-    return this
-  }
-
-  upsert(payload: unknown, _options?: unknown) {
-    this.action = 'upsert'
-    this.payload = payload
-    return this
-  }
-
-  maybeSingle(): Promise<QueryResult> {
-    return this.execute(true)
-  }
-
-  single(): Promise<QueryResult> {
-    return this.execute(true)
-  }
-
-  then<TResult1 = QueryResult, TResult2 = never>(
-    onfulfilled?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
-    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-  ): PromiseLike<TResult1 | TResult2> {
-    return this.execute().then(onfulfilled, onrejected)
-  }
-
-  private matches(row: Record<string, unknown>) {
-    return this.filters.every((filter) => (
-      Array.isArray(filter.value)
-        ? filter.value.includes(row[filter.column])
-        : row[filter.column] === filter.value
-    ))
-  }
-
-  private execute(single = false): Promise<QueryResult> {
-    if (this.action === 'insert') return Promise.resolve(this.insertRows(single))
-    if (this.action === 'update') return Promise.resolve(this.updateRows())
-    if (this.action === 'upsert') return Promise.resolve(this.upsertRows())
-
-    const rows = tableRows(this.table).filter((row) => this.matches(row)).map(clone)
-    return Promise.resolve({ data: single ? rows[0] ?? null : rows, error: null })
-  }
-
-  private insertRows(single: boolean): QueryResult {
-    const rows = Array.isArray(this.payload) ? this.payload : [this.payload]
-    const inserted = rows.map((raw) => {
-      const row = raw as Partial<SpaceRow>
-      const id = row.id ?? `space-${nextSpace++}`
-      const space: SpaceRow = {
-        id,
-        kind: row.kind ?? 'room',
-        voyage_id: row.voyage_id ?? null,
-        ai_present: row.ai_present ?? true,
-        created_by: row.created_by ?? null,
-      }
-      db.spaces.set(id, space)
-      return clone(space)
-    })
-    return { data: single ? inserted[0] : inserted, error: null }
-  }
-
-  private updateRows(): QueryResult {
-    const patch = this.payload as Record<string, unknown>
-    const rows = tableRows(this.table).filter((row) => this.matches(row))
-    if (this.table === 'sessions') sessionUpdates.push(clone(patch))
-    rows.forEach((row) => Object.assign(row, patch))
-    return { data: rows.map(clone), error: null }
-  }
-
-  private upsertRows(): QueryResult {
-    const rows = (Array.isArray(this.payload) ? this.payload : [this.payload]) as SpaceMemberRow[]
-    rows.forEach((row) => {
-      const key = memberKey(row)
-      db.space_members.set(key, { ...db.space_members.get(key), ...row })
-    })
-    return { data: rows.map(clone), error: null }
-  }
-}
-
-const fakeAdmin = {
-  from: (table: TableName) => new FakeQuery(table),
-}
-
-const loadRoomModule = async () => {
-  vi.resetModules()
-  vi.doMock('@/lib/supabase/admin', () => ({ getAdminClient: () => fakeAdmin }))
-  vi.doMock('@/lib/debug', () => ({ log: { api: vi.fn() } }))
-  return import('./room')
-}
+import {
+  loadRoomModule,
+  loadRoomContextModule,
+  resetRoomDb,
+  rpcCalls,
+  roomDb as db,
+} from './room-test-fixture'
 
 describe('space-backed room API', () => {
   beforeEach(() => {
-    resetDb()
+    resetRoomDb()
     vi.clearAllMocks()
   })
 
@@ -187,11 +22,11 @@ describe('space-backed room API', () => {
 
     const { getRoom } = await loadRoomModule()
 
-    await expect(getRoom('session-a')).resolves.toEqual({ roomPeople: ['user-b'], aiPresent: false })
-    await expect(getRoom('session-b')).resolves.toEqual({ roomPeople: ['user-a'], aiPresent: false })
+    await expect(getRoom('session-a', 'user-a')).resolves.toEqual({ roomPeople: ['user-b'], aiPresent: false, spaceId: 'space-1' })
+    await expect(getRoom('session-b', 'user-b')).resolves.toEqual({ roomPeople: ['user-a'], aiPresent: false, spaceId: 'space-1' })
   })
 
-  it('activates members through space_members and only links the session to a space', async () => {
+  it('creates a private room through the session authority boundary', async () => {
     db.sessions.set('session-a', {
       id: 'session-a',
       user_id: 'user-a',
@@ -199,19 +34,17 @@ describe('space-backed room API', () => {
       space_id: null,
     })
 
-    const { activateMembers, ensureSpace, getRoom } = await loadRoomModule()
+    const { getRoom, setAiPresent } = await loadRoomModule()
     const session = db.sessions.get('session-a')
     if (!session) throw new Error('missing test session')
-    const spaceId = await ensureSpace(session, true)
-    await activateMembers(spaceId ?? '', ['user-a', 'user-b'])
-    const room = await getRoom('session-a')
+    await setAiPresent('session-a', 'user-a', true)
+    const spaceId = session.space_id
+    const room = await getRoom('session-a', 'user-a')
 
     expect(spaceId).toBe('space-1')
-    expect(sessionUpdates).toEqual([{ space_id: 'space-1' }])
     expect(db.space_members.get(`${spaceId}:user-a`)?.state).toBe('active')
-    expect(db.space_members.get(`${spaceId}:user-b`)?.state).toBe('active')
     expect(db.spaces.get(spaceId ?? '')?.ai_present).toBe(true)
-    expect(room).toEqual({ roomPeople: ['user-b'], aiPresent: true })
+    expect(room).toEqual({ roomPeople: [], aiPresent: true, spaceId: 'space-1' })
   })
 
   it('exposes only active space members as roomPeople for message fan-out', async () => {
@@ -223,7 +56,7 @@ describe('space-backed room API', () => {
 
     const { getRoom } = await loadRoomModule()
 
-    await expect(getRoom('session-a')).resolves.toEqual({ roomPeople: ['user-b'], aiPresent: true })
+    await expect(getRoom('session-a', 'user-a')).resolves.toEqual({ roomPeople: ['user-b'], aiPresent: true, spaceId: 'space-1' })
   })
 
   it('removes members by marking them left and updates Voyager presence on spaces', async () => {
@@ -234,12 +67,12 @@ describe('space-backed room API', () => {
 
     const { getRoom, removeRoomPerson, setAiPresent } = await loadRoomModule()
 
-    const result = await removeRoomPerson('session-a', 'user-b')
+    const result = await removeRoomPerson('session-a', 'user-a', 'user-b')
     expect(result.removed).toBe(true)
     expect(db.space_members.get('space-1:user-b')?.state).toBe('left')
-    await expect(getRoom('session-a')).resolves.toEqual({ roomPeople: [], aiPresent: false })
+    await expect(getRoom('session-a', 'user-a')).resolves.toEqual({ roomPeople: [], aiPresent: false, spaceId: 'space-1' })
 
-    await setAiPresent('session-a', true)
+    await setAiPresent('session-a', 'user-a', true)
     expect(db.spaces.get('space-1')?.ai_present).toBe(true)
   })
 
@@ -250,21 +83,23 @@ describe('space-backed room API', () => {
     db.space_members.set('space-1:user-a', { space_id: 'space-1', user_id: 'user-a', state: 'active' })
     db.space_members.set('space-1:user-b', { space_id: 'space-1', user_id: 'user-b', state: 'left' })
 
-    const { getActiveMemberIds, getRoom, getRoomRoster, removeRoomPerson, setAiPresent } = await loadRoomModule()
+    const { getActiveMemberIds, getRoom, removeRoomPerson, setAiPresent } = await loadRoomModule()
+    const { getRoomRoster } = await loadRoomContextModule()
 
-    await expect(getRoom('session-b')).resolves.toEqual({ roomPeople: [], aiPresent: true })
-    await expect(getRoomRoster('session-b')).resolves.toEqual({
+    await expect(getRoom('session-b', 'user-b')).resolves.toEqual({ roomPeople: [], aiPresent: true, spaceId: null })
+    await expect(getRoomRoster('session-b', 'user-b')).resolves.toEqual({
       active: [],
       invited: [],
       aiPresent: true,
     })
     await expect(getActiveMemberIds('session-b', 'user-b')).resolves.toEqual(['user-b'])
-    await expect(setAiPresent('session-b', false)).resolves.toBe(false)
+    expect(rpcCalls.some((call) => call.name === 'get_effective_space_member_ids')).toBe(true)
+    await expect(setAiPresent('session-b', 'user-b', false)).resolves.toBe(false)
 
-    const removal = await removeRoomPerson('session-b', 'user-a')
+    const removal = await removeRoomPerson('session-b', 'user-b', 'user-a')
     expect(removal).toEqual({
       removed: false,
-      room: { roomPeople: [], aiPresent: true },
+      room: { roomPeople: [], aiPresent: true, spaceId: null },
     })
     expect(db.space_members.get('space-1:user-a')?.state).toBe('active')
   })
@@ -273,14 +108,14 @@ describe('space-backed room API', () => {
 // Room truth (2026-07-11): the model receives the code-attested roster.
 describe('describeRoomForPrompt', () => {
   it('explicitly overrides historical room context when nobody else is in or invited', async () => {
-    const { describeRoomForPrompt } = await loadRoomModule()
+    const { describeRoomForPrompt } = await loadRoomContextModule()
     const line = describeRoomForPrompt({ active: [], invited: [], aiPresent: true })
     expect(line).toContain('no other people are in this room')
     expect(line).toContain('never infer current membership from conversation history')
   })
 
   it('names active and invited distinctly, marking invited as unable to see messages', async () => {
-    const { describeRoomForPrompt } = await loadRoomModule()
+    const { describeRoomForPrompt } = await loadRoomContextModule()
     const line = describeRoomForPrompt({ active: ['elisheya'], invited: ['tom'], aiPresent: true })
     expect(line).toContain('in the room: elisheya')
     expect(line).toContain('invited but NOT joined')

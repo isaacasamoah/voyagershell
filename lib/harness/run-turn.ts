@@ -1,14 +1,14 @@
 import { hasToolCall, stepCountIs, streamText } from 'ai'
 import { reapStuckTasks } from '@/lib/agents/queue'
-import { composeContextFromStream } from '@/lib/conversation'
+import { composeContextFromStream } from '@/lib/conversation/stream-context'
 import { renderMessagesForModel } from '@/lib/conversation/stream-context'
 import { computeWindow, getTruncatedMessages } from '@/lib/conversation/window'
-import type { ConversationMessage } from '@/lib/conversation'
+import type { ConversationMessage } from '@/lib/conversation/stream-context'
 import { detectReferenceSignals, retrieveForContinuity } from '@/lib/conversation/continuity'
 import { log } from '@/lib/debug'
 import { type KnowledgeNode } from '@/lib/knowledge'
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals'
-import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room'
+import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room-context'
 import { resolveAddress } from '@/lib/messaging/address'
 import { getOwnVoyagerIdentity } from '@/lib/messaging/handles'
 import { resolveUserModelWithMeta } from '@/lib/models'
@@ -20,7 +20,9 @@ import {
 } from '@/lib/retrieval'
 import { detectActionIntent } from '@/lib/shell/intent'
 import { finishTurn } from './finish-turn'
-import { runRoomTurn } from './room-turn'
+import { runRoomGate, runRoomTurn } from './room-turn'
+import { composeTurnMessages } from './turn-messages'
+import { claimTurnIngress } from './turn-ingress'
 import type { HarnessHost, TurnContext, TurnResult } from './types'
 
 export const runTurn = async (
@@ -130,7 +132,14 @@ export const runTurn = async (
     content: message.content,
   }))
 
-  const roomResult = await runRoomTurn({ ctx, host, queryText, address })
+  // The room grammar and the held-address gate run first — neither is a message
+  // and neither may reach the ledger. Then the ingress claim, before any effect.
+  const gate = await runRoomGate({ ctx, queryText, address })
+  if (gate.result) return gate.result
+  const refused = await claimTurnIngress(ctx, host, gate, queryText, address)
+  if (refused) return refused
+
+  const roomResult = runRoomTurn(gate.room, address)
   if (roomResult) return roomResult
 
   const { tools, registrations } = createVoyagerTools({
@@ -177,11 +186,11 @@ export const runTurn = async (
     staticPrefix = `${getBasePrompt()}\n\n${toolStrategy}`
   }
 
-  // Room truth: the model NEVER guesses membership — inject the code-attested
-  // roster (active vs invited-not-joined) into the dynamic prompt every turn.
+  // Room truth: the model NEVER guesses membership — the code-attested roster
+  // (active vs invited-not-joined) goes into the dynamic prompt every turn.
   if (ctx.conversationId) {
     try {
-      const roster = await getRoomRoster(ctx.conversationId)
+      const roster = await getRoomRoster(ctx.conversationId, ctx.userId)
       dynamicSuffix += describeRoomForPrompt(roster)
     } catch { /* roster is additive context — never block the turn */ }
   }
@@ -197,37 +206,13 @@ export const runTurn = async (
     }
   }
 
-  const cacheControl = { anthropic: { cacheControl: { type: 'ephemeral' as const } } }
-  const staticSystemMessage = {
-    role: 'system' as const,
-    content: staticPrefix,
-    providerOptions: cacheControl,
-  }
-  // Anthropic rejects system messages separated by user/assistant history.
-  // Keep the cacheable system prefix first and place per-turn context at the
-  // front of the last user message, leaving the raw user text after it.
-  const lastUserIndex = windowedMessages.findLastIndex((message) => message.role === 'user')
-  const cachedPromptItems = windowedMessages.map((message, index) => ({
-    ...message,
-    ...(dynamicSuffix && index === lastUserIndex
-      ? { content: `<context>\n${dynamicSuffix}\n</context>\n\n${message.content}` }
-      : {}),
-    ...(index === windowedMessages.length - 1
-      ? { providerOptions: cacheControl }
-      : {}),
-  }))
-  // Requests without a user message retain the old contiguous-system layout.
-  const dynamicSystemMessages = dynamicSuffix && lastUserIndex === -1
-    ? [{ role: 'system' as const, content: dynamicSuffix }]
-    : []
-
   const { model: chatModel, label: chatModelLabel } = await resolveUserModelWithMeta(
     { task: 'chat', quality: 'balanced', streaming: true, toolUse: true },
     userId,
   )
   const result = streamText({
     model: chatModel,
-    messages: [staticSystemMessage, ...dynamicSystemMessages, ...cachedPromptItems],
+    messages: composeTurnMessages(staticPrefix, dynamicSuffix, windowedMessages),
     tools,
     maxOutputTokens: 4096,
     stopWhen: [stepCountIs(15), hasToolCall('spawn_background_agent')],
@@ -240,6 +225,25 @@ export const runTurn = async (
       retrievedKnowledge,
     }),
   })
+
+  // ── The reply is the server's to finish, not the client's ─────────────────
+  // The response stream advances only while something pulls it, and the browser
+  // was the only puller. A reload, a closed tab or a navigation cancels the body,
+  // the pull stops, and onFinish — where finishTurn writes the assistant event —
+  // never runs: the user's own message lands and the answer disappears silently.
+  //
+  // Draining here removes that dependency, so the turn completes on the server
+  // whether or not anyone is listening and the WHOLE reply is persisted. There
+  // is deliberately no partial-snapshot path — the finish callback is the single
+  // writer, it fires once on the recorded base stream however many consumers
+  // read it, and a stream that dies mid-generation never reaches it at all.
+  // Complete or nothing; never a truncated answer stored as if it were full.
+  //
+  // Deferred through the host so the serverless invocation outlives the response
+  // it already returned.
+  host.defer(Promise.resolve(result.consumeStream({
+    onError: (error) => log.api('Turn stream drain failed', { error: String(error) }, 'error'),
+  })))
 
   return { kind: 'stream', result }
 }

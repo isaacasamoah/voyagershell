@@ -1,164 +1,32 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { HarnessHost, TurnContext } from './types'
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  context,
+  loadRunTurn,
+  resetRunTurnFixture,
+  runTurnMocks,
+  streamResult,
+  stubHost,
+} from './run-turn-test-fixture'
 
-const streamText = vi.fn()
-const reapStuckTasks = vi.fn()
-const composeContextFromStream = vi.fn()
-const renderMessagesForModel = vi.fn((messages) => messages)
-const createMessageEvent = vi.fn()
-const fanOutDeliveries = vi.fn()
-const deliverRoomInvite = vi.fn()
-const inviteToRoom = vi.fn()
-const getRoom = vi.fn()
-const parseRoomCommand = vi.fn()
-const removeRoomPerson = vi.fn()
-const setAiPresent = vi.fn()
-const getVoyageBySlug = vi.fn()
-const getVoyageMembers = vi.fn()
-const resolveMemberByName = vi.fn()
-const getOwnVoyagerIdentity = vi.fn()
-const composeSystemPrompt = vi.fn()
-const createVoyagerTools = vi.fn()
-const composeToolStrategy = vi.fn()
-const logRetrievalEvent = vi.fn()
-const resolveUserModelWithMeta = vi.fn()
-const retrieveForContinuity = vi.fn()
-const emitSignal = vi.fn()
-const creditTrack = vi.fn()
-const estimateCost = vi.fn()
-
-const streamResult = { toUIMessageStreamResponse: vi.fn() }
-
-const loadRunTurn = async () => {
-  vi.resetModules()
-  vi.doMock('ai', () => ({
-    streamText,
-    stepCountIs: vi.fn((count) => ({ count })),
-    hasToolCall: vi.fn((name) => ({ name })),
-  }))
-  vi.doMock('@/lib/agents/queue', () => ({ reapStuckTasks }))
-  vi.doMock('@/lib/agents/cartographer', () => ({
-    shouldRunEnrichment: vi.fn(),
-    runCartographer: vi.fn(),
-  }))
-  vi.doMock('@/lib/conversation', () => ({ composeContextFromStream }))
-  vi.doMock('@/lib/conversation/stream-context', () => ({ renderMessagesForModel }))
-  vi.doMock('@/lib/conversation/window', () => ({
-    computeWindow: vi.fn((messages) => ({ messages, hasMoreHistory: false })),
-    getTruncatedMessages: vi.fn(() => []),
-  }))
-  vi.doMock('@/lib/conversation/continuity', () => ({
-    detectReferenceSignals: vi.fn(() => []),
-    retrieveForContinuity,
-  }))
-  vi.doMock('@/lib/debug', () => ({
-    log: {
-      api: vi.fn(),
-      memory: vi.fn(),
-      message: vi.fn(),
-    },
-  }))
-  vi.doMock('@/lib/knowledge', () => ({ createMessageEvent }))
-  vi.doMock('@/lib/learning/signals', () => ({
-    detectLearningSignal: vi.fn(() => null),
-    emitSignal,
-  }))
-  vi.doMock('@/lib/messaging/deliveries', () => ({ fanOutDeliveries }))
-  vi.doMock('@/lib/messaging/handles', () => ({
-    getOwnVoyagerIdentity,
-  }))
-  vi.doMock('@/lib/messaging/invites', () => ({
-    deliverRoomInvite,
-    inviteToRoom,
-  }))
-  vi.doMock('@/lib/messaging/room', () => ({
-    getRoom,
-    parseRoomCommand,
-    removeRoomPerson,
-    setAiPresent,
-  }))
-  vi.doMock('@/lib/models', () => ({
-    resolveUserModelWithMeta,
-    creditTracker: { track: creditTrack },
-    modelRouter: { estimateCost },
-  }))
-  vi.doMock('@/lib/prompts', () => ({
-    composeSystemPrompt,
-    getBasePrompt: vi.fn(() => 'BASE'),
-  }))
-  vi.doMock('@/lib/retrieval', () => ({
-    createVoyagerTools,
-    composeToolStrategy,
-    logRetrievalEvent,
-    logCitations: vi.fn(),
-  }))
-  vi.doMock('@/lib/shell/intent', () => ({ detectActionIntent: vi.fn(() => null) }))
-  vi.doMock('@/lib/shell/reconciler', () => ({ reconcileActions: vi.fn() }))
-  vi.doMock('@/lib/voyage', () => ({
-    getVoyageBySlug,
-    getVoyageMembers,
-    resolveMemberByName,
-  }))
-  return import('./run-turn')
-}
-
-const context = (overrides: Partial<TurnContext> = {}): TurnContext => ({
-  userId: 'user-1',
-  conversationId: 'conversation-1',
-  voyageSlug: null,
-  authState: 'authenticated',
-  autoSent: false,
-  newMessage: 'Hello Voyager',
-  displayName: 'Isaac',
-  ...overrides,
-})
-
-const stubHost = () => {
-  const deferred: Promise<unknown>[] = []
-  const host: HarnessHost = {
-    defer: (promise) => deferred.push(promise),
-    now: () => new Date('2026-07-11T00:00:00.000Z'),
-  }
-  return { host, deferred }
-}
+const {
+  claimSourceIngress,
+  composeSystemPrompt,
+  createMessageEvent,
+  deliverRoomInvite,
+  estimateCost,
+  getOwnVoyagerIdentity,
+  getRoom,
+  getVoyageBySlug,
+  getVoyageMembers,
+  inviteToRoom,
+  parseRoomCommand,
+  resolveMemberByName,
+  resolveUserModelWithMeta,
+  streamText,
+} = runTurnMocks
 
 describe('runTurn', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    streamText.mockReturnValue(streamResult)
-    reapStuckTasks.mockResolvedValue(undefined)
-    composeContextFromStream.mockResolvedValue([])
-    renderMessagesForModel.mockImplementation((messages) => messages)
-    createMessageEvent.mockResolvedValue('event-1')
-    fanOutDeliveries.mockResolvedValue(undefined)
-    getRoom.mockResolvedValue({ roomPeople: [], aiPresent: true })
-    getOwnVoyagerIdentity.mockResolvedValue({ handle: '', displayName: null })
-    parseRoomCommand.mockReturnValue(null)
-    getVoyageBySlug.mockResolvedValue(null)
-    getVoyageMembers.mockResolvedValue([])
-    composeSystemPrompt.mockResolvedValue({
-      staticPrompt: 'STATIC',
-      dynamicPrompt: 'DYNAMIC',
-      retrieval: {
-        knowledge: [],
-        tokenEstimate: 0,
-        metadata: {
-          threshold: 0,
-          pinnedCount: 0,
-          searchCount: 0,
-          latencyMs: 1,
-        },
-      },
-    })
-    createVoyagerTools.mockReturnValue({ tools: {}, registrations: [] })
-    composeToolStrategy.mockReturnValue('TOOLS')
-    logRetrievalEvent.mockResolvedValue('retrieval-1')
-    resolveUserModelWithMeta.mockResolvedValue({
-      model: { modelId: 'test-model' },
-      label: 'claude-sonnet',
-      viaConnection: false,
-    })
-  })
+  beforeEach(resetRunTurnFixture)
 
   // Loop guard (the hard rule): a turn may begin ONLY on human-authored
   // input. A synthetic voyager-originated turn — the shape a future realtime→turn
@@ -170,10 +38,11 @@ describe('runTurn', () => {
 
     expect(result).toEqual({ kind: 'empty' })
     expect(streamText).not.toHaveBeenCalled()
+    expect(claimSourceIngress).not.toHaveBeenCalled()
     expect(createMessageEvent).not.toHaveBeenCalled()
   })
 
-  it('runs a solo turn headlessly and defers user event emission', async () => {
+  it('claims the ingress before the model runs, then streams', async () => {
     const { runTurn } = await loadRunTurn()
     const { host, deferred } = stubHost()
 
@@ -181,14 +50,26 @@ describe('runTurn', () => {
 
     expect(result).toEqual({ kind: 'stream', result: streamResult })
     expect(streamText).toHaveBeenCalledOnce()
-    expect(createMessageEvent).toHaveBeenCalledWith(
-      'conversation-1',
-      'user',
-      'Hello Voyager',
-      expect.objectContaining({ eventType: 'conversation' }),
-    )
-    expect(deferred).toHaveLength(2)
+    expect(claimSourceIngress).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1', sessionId: 'conversation-1', content: 'Hello Voyager', isAside: false,
+    }))
+    // The claim is taken before the model call, not alongside it.
+    expect(claimSourceIngress.mock.invocationCallOrder[0])
+      .toBeLessThan(streamText.mock.invocationCallOrder[0])
+    // reap + post-claim enrichment + the server-side stream drain
+    expect(deferred).toHaveLength(3)
     await Promise.all(deferred)
+  })
+
+  it('refuses the turn when the same key arrives with different words', async () => {
+    const { runTurn } = await loadRunTurn()
+    const { IngressConflictError } = await import('@/lib/messaging/ingress')
+    claimSourceIngress.mockRejectedValue(new IngressConflictError('source_intent_payload_conflict'))
+
+    const result = await runTurn(context(), stubHost().host)
+
+    expect(result.kind).toBe('text')
+    expect(streamText).not.toHaveBeenCalled()
   })
 
   it('resolves +name as a deterministic room invitation without a model turn', async () => {
@@ -216,13 +97,14 @@ describe('runTurn', () => {
       'conversation-1',
       { userId: 'user-1', displayName: 'Isaac' },
       'user-2',
+      'space-1',
       'launch',
     )
     expect(streamText).not.toHaveBeenCalled()
   })
 
-  it('fans out an unaddressed room message and returns empty', async () => {
-    getRoom.mockResolvedValue({ roomPeople: ['user-2'], aiPresent: true })
+  it('claims an unaddressed room message with its room audience and returns empty', async () => {
+    getRoom.mockResolvedValue({ roomPeople: ['user-2'], aiPresent: true, spaceId: 'space-1' })
     getVoyageBySlug.mockResolvedValue({ id: 'voyage-1' })
     getVoyageMembers.mockResolvedValue([
       { userId: 'user-1', displayName: 'Isaac' },
@@ -236,12 +118,15 @@ describe('runTurn', () => {
     }), stubHost().host)
 
     expect(result).toEqual({ kind: 'empty' })
-    expect(fanOutDeliveries).toHaveBeenCalledWith('event-1', ['user-2'])
+    expect(claimSourceIngress).toHaveBeenCalledWith(expect.objectContaining({
+      content: 'The fix is ready', isAside: false,
+      room: { roomPeople: ['user-2'], aiPresent: true, spaceId: 'space-1' },
+    }))
     expect(streamText).not.toHaveBeenCalled()
   })
 
   it('treats an @voyager room aside as a private model turn', async () => {
-    getRoom.mockResolvedValue({ roomPeople: ['user-2'], aiPresent: false })
+    getRoom.mockResolvedValue({ roomPeople: ['user-2'], aiPresent: false, spaceId: 'space-1' })
     getVoyageBySlug.mockResolvedValue({ id: 'voyage-1' })
     getVoyageMembers.mockResolvedValue([
       { userId: 'user-1', displayName: 'Isaac' },
@@ -256,13 +141,9 @@ describe('runTurn', () => {
 
     expect(result.kind).toBe('stream')
     expect(streamText).toHaveBeenCalledOnce()
-    expect(fanOutDeliveries).not.toHaveBeenCalled()
-    expect(createMessageEvent).toHaveBeenCalledWith(
-      'conversation-1',
-      'user',
-      'help me think',
-      expect.objectContaining({ eventType: 'conversation', source: 'aside' }),
-    )
+    expect(claimSourceIngress).toHaveBeenCalledWith(expect.objectContaining({
+      content: 'help me think', isAside: true,
+    }))
   })
 
   it('does not persist the synthetic auto-sent welcome', async () => {
@@ -274,7 +155,7 @@ describe('runTurn', () => {
     }), stubHost().host)
 
     expect(result.kind).toBe('stream')
-    expect(createMessageEvent).not.toHaveBeenCalled()
+    expect(claimSourceIngress).not.toHaveBeenCalled()
   })
 
   it('uses the resolved default model label for cost estimation', async () => {
@@ -294,7 +175,7 @@ describe('runTurn', () => {
   })
 
   it('a leading Voyager name is ordinary human room text, never an invocation', async () => {
-    getRoom.mockResolvedValue({ roomPeople: ['user-1'], aiPresent: true })
+    getRoom.mockResolvedValue({ roomPeople: ['user-1'], aiPresent: true, spaceId: 'space-1' })
     getVoyageBySlug.mockResolvedValue({ id: 'voyage-1' })
     getVoyageMembers.mockResolvedValue([
       { userId: 'user-1', displayName: 'Isaac' },
@@ -313,11 +194,13 @@ describe('runTurn', () => {
     expect(result).toEqual({ kind: 'empty' })
     expect(streamText).not.toHaveBeenCalled()
     expect(resolveUserModelWithMeta).not.toHaveBeenCalled()
-    expect(fanOutDeliveries).toHaveBeenCalledWith('event-1', ['user-1'])
+    expect(claimSourceIngress).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-2', content: 'wren, what did we decide?', isAside: false,
+    }))
   })
 
   it('persists an owner Voyager reply as private conversation data only', async () => {
-    getRoom.mockResolvedValue({ roomPeople: ['user-2'], aiPresent: true })
+    getRoom.mockResolvedValue({ roomPeople: ['user-2'], aiPresent: true, spaceId: 'space-1' })
     getVoyageBySlug.mockResolvedValue({ id: 'voyage-1' })
     getVoyageMembers.mockResolvedValue([
       { userId: 'user-1', displayName: 'Isaac' },
@@ -347,7 +230,6 @@ describe('runTurn', () => {
         eventType: 'conversation',
       },
     )
-    expect(fanOutDeliveries).not.toHaveBeenCalled()
   })
 
   it('passes the canonical current handle/display pair into the prompt', async () => {
