@@ -4,7 +4,7 @@
 
 import type { RetrievalResult } from '@/lib/retrieval';
 import { curatePromptWindow, type KnowledgeNode } from '@/lib/knowledge';
-import { loadVoyageContext, formatVoyageContextSection } from '@/lib/voyage';
+import { loadVoyageContext, formatVoyageContextSection } from '@/lib/voyage/context';
 import type { VoyagerIdentity } from '@/lib/messaging/address';
 import { formatCuratedWindow } from './format/user';
 

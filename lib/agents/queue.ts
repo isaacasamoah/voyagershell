@@ -1,13 +1,6 @@
-// Agent Task Queue
-// Manages background retrieval tasks
-
 import { getAdminClient } from '@/lib/supabase/admin'
 import { getClientForContext } from '@/lib/supabase/authenticated'
 import type { Json } from '@/lib/supabase/types'
-
-// =============================================================================
-// Types
-// =============================================================================
 
 export interface AgentTask {
   id: string
@@ -44,7 +37,6 @@ export interface EnqueueParams {
   originalQuery?: string
   conversationSnapshot?: object[]
 }
-
 interface GuardedBackgroundTaskOptions<T> {
   taskId: string
   run: (signal: AbortSignal) => Promise<T>
@@ -53,23 +45,15 @@ interface GuardedBackgroundTaskOptions<T> {
   fail?: (taskId: string, errorMessage: string) => Promise<void>
   timeoutMs?: number
 }
-
 const BACKGROUND_TASK_TIMEOUT_MS = 280_000 // fits inside the route's maxDuration=300s
 const STUCK_TASK_TTL_MS = 5 * 60 * 1000
 const REAPED_TASK_ERROR = 'reaped: no terminal state within TTL'
-
-// =============================================================================
-// Queue Operations
-// =============================================================================
-
 /**
  * Enqueue a new agent task.
  * Called by the spawn_background_agent tool.
  */
 export async function enqueueAgentTask(params: EnqueueParams): Promise<string> {
-  // Use authenticated client - user is creating their own task
   const supabase = getClientForContext({ userId: params.userId })
-
   const { data, error } = await supabase
     .from('agent_tasks')
     .insert({
@@ -85,19 +69,14 @@ export async function enqueueAgentTask(params: EnqueueParams): Promise<string> {
     })
     .select('id')
     .single()
-
   if (error) {
     console.error('[AgentQueue] Failed to enqueue task:', error)
     throw new Error(`Failed to enqueue agent task: ${error.message}`)
   }
-
   console.log(`[AgentQueue] Task enqueued: ${(data as { id: string }).id}`)
   return (data as { id: string }).id
 }
 
-/**
- * Task progress shape for realtime updates.
- */
 export interface TaskProgress {
   stage: 'searching' | 'analyzing' | 'reasoning'
   found?: number
@@ -114,7 +93,6 @@ export async function updateTaskProgress(
   progress: TaskProgress
 ): Promise<void> {
   const supabase = getAdminClient()
-
   const { error } = await supabase
     .from('agent_tasks')
     .update({
@@ -129,7 +107,6 @@ export async function updateTaskProgress(
 
   if (error) {
     console.error('[AgentQueue] Failed to update progress:', error)
-    // Don't throw - progress updates are non-critical
   }
 }
 
@@ -143,7 +120,6 @@ export async function completeTask(
   durationMs: number,
 ): Promise<void> {
   const supabase = getAdminClient()
-
   const { error } = await supabase
     .from('agent_tasks')
     .update({
@@ -158,7 +134,6 @@ export async function completeTask(
     console.error('[AgentQueue] Failed to complete task:', error)
     throw new Error(`Failed to complete task: ${error.message}`)
   }
-
   console.log(`[AgentQueue] Task completed: ${taskId} (${durationMs}ms)`)
 }
 
@@ -167,7 +142,6 @@ export async function completeTask(
  */
 export async function failTask(taskId: string, errorMessage: string): Promise<void> {
   const supabase = getAdminClient()
-
   const { error } = await supabase
     .from('agent_tasks')
     .update({
@@ -181,13 +155,9 @@ export async function failTask(taskId: string, errorMessage: string): Promise<vo
     console.error('[AgentQueue] Failed to mark task as failed:', error)
     throw new Error(`Failed to fail task: ${error.message}`)
   }
-
   console.log(`[AgentQueue] Task failed: ${taskId} - ${errorMessage}`)
 }
 
-/**
- * Run a background task with a deadline and guarantee a terminal write attempt.
- */
 export async function runGuardedBackgroundTask<T>({
   taskId,
   run,
@@ -221,17 +191,11 @@ export async function runGuardedBackgroundTask<T>({
   }
 }
 
-/**
- * Fail pending or running tasks that have not written progress within the TTL.
- */
 export async function reapStuckTasks(): Promise<number> {
   try {
-    const tasks = () => (
-      getAdminClient() as unknown as { from: (table: string) => any }
-    ).from('agent_tasks')
+    const tasks = () => getAdminClient().from('agent_tasks')
     const cutoff = new Date(Date.now() - STUCK_TASK_TTL_MS).toISOString()
     const updatedAt = new Date().toISOString()
-
     // PostgREST updates cannot embed SQL expressions, so preserve
     // error=COALESCE(error, fallback) with two disjoint bulk updates.
     const { data: rowsWithoutError, error: nullError } = await tasks()
@@ -244,12 +208,10 @@ export async function reapStuckTasks(): Promise<number> {
       .lt('updated_at', cutoff)
       .is('error', null)
       .select('id')
-
     if (nullError) {
       console.error('[AgentQueue] Failed to reap stuck tasks:', nullError)
       return 0
     }
-
     const { data: rowsWithError, error: existingError } = await tasks()
       .update({
         status: 'failed',
@@ -258,16 +220,13 @@ export async function reapStuckTasks(): Promise<number> {
       .in('status', ['running', 'pending'])
       .lt('updated_at', cutoff)
       .select('id')
-
     if (existingError) {
       console.error('[AgentQueue] Failed to reap stuck tasks:', existingError)
       return 0
     }
-
     return (rowsWithoutError?.length ?? 0) + (rowsWithError?.length ?? 0)
   } catch (error) {
     console.error('[AgentQueue] Failed to reap stuck tasks:', error)
     return 0
   }
 }
-

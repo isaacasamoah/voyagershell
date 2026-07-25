@@ -76,7 +76,7 @@ const loadEventsModule = async () => {
     },
   }))
   vi.doMock('@/lib/supabase/admin', () => ({ getAdminClient: () => fakeAdmin }))
-  return import('./events')
+  return import('./event-storage')
 }
 
 describe('knowledge source events without legacy array linking', () => {

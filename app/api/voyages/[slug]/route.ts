@@ -4,11 +4,8 @@
 
 import { NextResponse } from 'next/server';
 import { requireAuthResponse } from '@/lib/auth';
-import {
-  getVoyageBySlug,
-  getUserRole,
-  updateVoyage,
-} from '@/lib/voyage';
+import { getVoyageBySlug, updateVoyage } from '@/lib/voyage/core';
+import { getUserRole } from '@/lib/voyage/members';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;

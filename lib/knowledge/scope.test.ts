@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
 const authenticatedRpc = vi.fn()
 const adminRpc = vi.fn()
 const keywordGrepTool = vi.fn()
 const getKnowledgeByIdsTool = vi.fn()
 const hybridSearchTool = vi.fn()
-
 const sampleKnowledgeRow = {
   event_id: 'event-1',
   content: 'React 19 was discussed in the pricing thread.',
@@ -22,7 +20,6 @@ const sampleKnowledgeRow = {
   session_id: null,
   promotion_count: 0,
 }
-
 const mockOpenAI = () => {
   vi.doMock('openai', () => ({
     default: class FakeOpenAI {
@@ -30,8 +27,7 @@ const mockOpenAI = () => {
     },
   }))
 }
-
-const loadSearchModule = async () => {
+const installSearchMocks = () => {
   vi.resetModules()
   mockOpenAI()
   vi.doMock('@/lib/supabase/authenticated', () => ({
@@ -40,9 +36,15 @@ const loadSearchModule = async () => {
   vi.doMock('@/lib/supabase/admin', () => ({
     getAdminClient: () => ({ rpc: adminRpc }),
   }))
+}
+const loadScopedSearchModule = async () => {
+  installSearchMocks()
+  return import('./scoped-search')
+}
+const loadSemanticSearchModule = async () => {
+  installSearchMocks()
   return import('./search')
 }
-
 const loadCuratorModule = async () => {
   vi.resetModules()
   vi.doMock('@/lib/supabase/admin', () => ({
@@ -53,7 +55,6 @@ const loadCuratorModule = async () => {
   }))
   return import('./curator')
 }
-
 const loadToolsModule = async () => {
   vi.resetModules()
   vi.doMock('ai', () => ({ tool: (definition: unknown) => definition }))
@@ -88,24 +89,27 @@ const loadToolsModule = async () => {
   vi.doMock('@/lib/tools/captain', () => ({
     createCaptainTools: () => ({}),
   }))
-  vi.doMock('@/lib/voyage', () => ({
+  vi.doMock('@/lib/voyage/core', () => ({
     createVoyage: vi.fn(),
+    getVoyageBySlug: vi.fn(),
+  }))
+  vi.doMock('@/lib/voyage/session', () => ({
     generateSlug: vi.fn(),
     isSlugAvailable: vi.fn(),
-    getVoyageBySlug: vi.fn(),
+  }))
+  vi.doMock('@/lib/voyage/members', () => ({
     getVoyageMembers: vi.fn(),
     isCaptain: vi.fn(),
-    sendVoyageInvite: vi.fn(),
     getUserVoyages: vi.fn(),
     resolveMemberByName: vi.fn(),
   }))
+  vi.doMock('@/lib/voyage/invitations', () => ({ sendVoyageInvite: vi.fn() }))
   vi.doMock('@/lib/knowledge/events', () => ({
     createMessageEvent: vi.fn(),
     createExplicitEvent: vi.fn(),
   }))
-  return import('../retrieval/tools')
+  return import('../retrieval/retrieval-tools')
 }
-
 describe('knowledge scope RPC routing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -115,10 +119,9 @@ describe('knowledge scope RPC routing', () => {
     getKnowledgeByIdsTool.mockResolvedValue([])
     hybridSearchTool.mockResolvedValue([])
   })
-
   it('routes keywordGrep through scoped_knowledge_fetch with grep filters', async () => {
     authenticatedRpc.mockResolvedValue({ data: [sampleKnowledgeRow], error: null })
-    const { keywordGrep } = await loadSearchModule()
+    const { keywordGrep } = await loadScopedSearchModule()
 
     const results = await keywordGrep('user-1', 'React', {
       scope: 'voyage',
@@ -132,12 +135,26 @@ describe('knowledge scope RPC routing', () => {
     expect(authenticatedRpc).toHaveBeenCalledWith('scoped_knowledge_fetch', {
       p_user_id: 'user-1',
       p_voyage_slug: 'fambam',
-      p_participants: ['user-1'],
       p_scope: 'voyage',
       p_content_match: '%React%',
       p_case_sensitive: true,
       p_min_attention: 0.42,
       p_match_count: 7,
+    })
+  })
+  it('hydrates exact IDs only through the mandatory caller-scoped RPC', async () => {
+    adminRpc.mockResolvedValue({ data: [sampleKnowledgeRow], error: null })
+    const { getKnowledgeByIds } = await loadSemanticSearchModule()
+
+    await expect(getKnowledgeByIds(
+      ['59eec620-1a4e-4c8a-9f57-08e5f8321660'],
+      'user-1',
+      'fambam',
+    )).resolves.toHaveLength(1)
+    expect(adminRpc).toHaveBeenCalledWith('get_knowledge_by_ids', {
+      p_event_ids: ['59eec620-1a4e-4c8a-9f57-08e5f8321660'],
+      p_user_id: 'user-1',
+      p_voyage_slug: 'fambam',
     })
   })
 
@@ -148,7 +165,6 @@ describe('knowledge scope RPC routing', () => {
     expect(adminRpc).toHaveBeenLastCalledWith('scoped_knowledge_fetch', {
       p_user_id: 'user-1',
       p_voyage_slug: 'fambam',
-      p_participants: ['user-1'],
       p_scope: 'all',
       p_min_attention: 0.3,
       p_match_count: 500,
@@ -158,7 +174,6 @@ describe('knowledge scope RPC routing', () => {
     expect(adminRpc).toHaveBeenLastCalledWith('scoped_knowledge_fetch', {
       p_user_id: 'user-1',
       p_voyage_slug: undefined,
-      p_participants: ['user-1'],
       p_scope: 'personal',
       p_min_attention: 0.3,
       p_match_count: 500,
@@ -182,7 +197,6 @@ describe('knowledge scope RPC routing', () => {
     expect(adminRpc).toHaveBeenCalledWith('scoped_knowledge_fetch', {
       p_user_id: 'user-1',
       p_voyage_slug: 'fambam',
-      p_participants: ['user-1'],
       p_scope: 'all',
       p_since: '2026-07-01T00:00:00.000Z',
       p_until: '2026-07-09T12:30:00.000Z',
@@ -229,7 +243,7 @@ describe('knowledge scope RPC routing', () => {
     expect(tools.get_nodes.inputSchema.safeParse({ nodeIds: [eventId] }).success).toBe(true)
 
     const hydrated = await tools.get_nodes.execute({ nodeIds: [eventId] })
-    expect(getKnowledgeByIdsTool).toHaveBeenCalledWith([eventId], 'user-1')
+    expect(getKnowledgeByIdsTool).toHaveBeenCalledWith([eventId], 'user-1', 'fambam')
     expect(hydrated).toContain(`id:${eventId}`)
   })
 })

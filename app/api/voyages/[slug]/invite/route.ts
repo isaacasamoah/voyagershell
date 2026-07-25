@@ -3,10 +3,8 @@
 
 import { NextResponse } from 'next/server';
 import { requireAuthResponse } from '@/lib/auth';
-import {
-  getVoyageBySlug,
-  regenerateInviteCode,
-} from '@/lib/voyage';
+import { getVoyageBySlug } from '@/lib/voyage/core';
+import { regenerateInviteCode } from '@/lib/voyage/members';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;

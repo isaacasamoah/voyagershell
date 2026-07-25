@@ -8,8 +8,8 @@ const { requireAuthMock, rpcMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ requireAuth: requireAuthMock }));
-vi.mock("@/lib/supabase/admin", () => ({
-  getAdminClient: () => ({ rpc: rpcMock }),
+vi.mock("./candidate-client", () => ({
+  getKnowledgeGraphCandidateClient: () => ({ rpc: rpcMock }),
 }));
 
 import { retrieveKnowledgeGraphClaims } from "./boundary";
@@ -22,10 +22,16 @@ const PRIVATE_AUTHORITY_ID = knowledgeGraphFixture.events.find(
 )!.id;
 const ROOTS = GRAPH_NODE_KINDS.map((kind) => {
   const node = knowledgeGraphFixture.nodes.find((candidate) => {
-    const audience = knowledgeGraphFixture.audiences.find(
-      (item) => item.key === candidate.audienceKey,
-    );
-    return candidate.kind === kind && audience?.memberProfileIds.includes(OWNER_ID);
+    if (candidate.kind !== kind) return false;
+    if (kind === "person" || kind === "voyager") return candidate.authorityId === OWNER_ID;
+    if (kind === "voyage") {
+      return candidate.authorityId === knowledgeGraphFixture.authorityScenario.redVoyageId;
+    }
+    if (kind === "space") {
+      return candidate.authorityId === knowledgeGraphFixture.authorityScenario.redSpaceId;
+    }
+    if (kind === "message_event") return candidate.authorityId === AUTHORITY_ID;
+    return candidate.id === knowledgeGraphFixture.expected.sharedUnitNodeId;
   });
   if (!node) throw new Error(`missing_test_root:${kind}`);
   return node;
@@ -75,6 +81,8 @@ describe("knowledge-graph application boundary", () => {
           p_viewer_profile_id: OWNER_ID,
           p_graph_enabled: true,
           p_max_depth: 4,
+          p_node_budget: 512,
+          p_frontier_budget: 128,
         },
       ]);
     });
@@ -119,6 +127,8 @@ describe("knowledge-graph application boundary", () => {
       p_viewer_profile_id: OWNER_ID,
       p_graph_enabled: false,
       p_max_depth: 8,
+      p_node_budget: 512,
+      p_frontier_budget: 128,
     });
   });
 

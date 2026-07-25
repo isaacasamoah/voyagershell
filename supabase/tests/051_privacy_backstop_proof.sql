@@ -1,5 +1,5 @@
--- ORU-450 retrieval/search privacy backstop. Active after graph migration 057.
--- Graph privacy is proven by recipes/knowledge-graph-poc.sh against 054-057.
+-- Retrieval/search privacy backstop. Active after installed migrations 054-059.
+-- The rollback-only graph candidate 057-063 is proven separately by the graph recipes.
 BEGIN;
 SET client_min_messages = warning;
 

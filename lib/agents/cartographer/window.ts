@@ -1,4 +1,4 @@
-import { composeContextFromStream, renderMessagesForModel } from '@/lib/conversation'
+import { composeContextFromStream, renderMessagesForModel } from '@/lib/conversation/stream-context'
 import { estimateTokens } from '@/lib/conversation/window'
 
 const CONTEXT_MESSAGES_BEFORE = 5

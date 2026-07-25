@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn() }))
 
-vi.mock('@/lib/supabase/admin', () => ({
-  getAdminClient: () => ({ rpc: mocks.rpc }),
+vi.mock('./candidate-client', () => ({
+  getKnowledgeGraphCandidateClient: () => ({ rpc: mocks.rpc }),
 }))
 
 import { writeKnowledgeGraphEdge } from './graph-edge-writer'

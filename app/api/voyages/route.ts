@@ -4,13 +4,9 @@
 
 import { NextResponse } from 'next/server';
 import { requireAuthResponse } from '@/lib/auth';
-import {
-  getUserVoyages,
-  getLastActiveVoyageSlug,
-  createVoyage,
-  generateSlug,
-  isSlugAvailable,
-} from '@/lib/voyage';
+import { createVoyage } from '@/lib/voyage/core';
+import { getUserVoyages, getLastActiveVoyageSlug } from '@/lib/voyage/members';
+import { generateSlug, isSlugAvailable } from '@/lib/voyage/session';
 
 /**
  * GET /api/voyages

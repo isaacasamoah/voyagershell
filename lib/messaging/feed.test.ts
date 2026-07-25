@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/supabase/admin', () => ({ getAdminClient: vi.fn() }))
-vi.mock('@/lib/voyage', () => ({
-  SessionAccessError: class SessionAccessError extends Error {},
+vi.mock('@/lib/voyage/session', () => ({
   resolveSessionVoyage: vi.fn(),
 }))
 
@@ -58,6 +57,55 @@ describe('delivered Voyager messages in the event feed', () => {
   })
 })
 
+describe('room invite feed identity', () => {
+  it('binds each knock to its own exact room membership state', () => {
+    const row: FeedEventRow = {
+      ...voyagerMessage('launch'),
+      id: 'invite-1',
+      actor_type: 'user',
+      metadata: {
+        source: 'invite',
+        space_id: 'space-older',
+        sender_user_id: 'user-inviter',
+      },
+    }
+    const [event] = toFeedEvents(
+      [row],
+      [],
+      'user-1',
+      new Map([['space-older', 'invited']]),
+    )
+
+    expect(event.inviteState).toEqual({
+      membership: 'invited',
+      spaceId: 'space-older',
+    })
+  })
+
+  it('keeps a legacy knock visible but cannot synthesize a room action', () => {
+    const row: FeedEventRow = {
+      ...voyagerMessage('launch'),
+      id: 'legacy-invite',
+      actor_type: 'user',
+      content: 'Isaac invited you to a room — reply to join.',
+      metadata: {
+        source: 'invite',
+        sender_user_id: 'user-inviter',
+      },
+    }
+    const [event] = toFeedEvents(
+      [row],
+      [],
+      'user-1',
+      new Map([['space-newest', 'invited']]),
+    )
+
+    expect(event.kind).toBe('invite')
+    expect(event.content).toBe('Isaac invited you to a room — reply to join.')
+    expect(event.inviteState).toBeNull()
+  })
+})
+
 // ── cut ④ — attributed render (WREN ✦) + owner-authored seen ─────────────────
 const fannedWrenReply = (viewerIsOwner: boolean): FeedEventRow => ({
   id: 'evt-wren-public',
@@ -99,7 +147,7 @@ describe('cut ④ — a fanned voyager reply renders WREN ✦ (Isaac’s Voyager
       [fannedWrenReply(true)],
       [],
       'user-isaac',
-      null,
+      new Map(),
       {
         currentVoyagerDisplayName: 'Sol',
         sharedSourceEventIds: new Set(),
@@ -129,7 +177,7 @@ describe('private assistant feed enrichment', () => {
       [privateReply],
       [],
       'user-isaac',
-      null,
+      new Map(),
       {
         currentVoyagerDisplayName: 'Sol',
         sharedSourceEventIds: new Set(['private-reply-1']),
@@ -149,7 +197,7 @@ describe('private assistant feed enrichment', () => {
       [privateReply],
       [],
       'user-isaac',
-      null,
+      new Map(),
       {
         currentVoyagerDisplayName: null,
         sharedSourceEventIds: new Set(),

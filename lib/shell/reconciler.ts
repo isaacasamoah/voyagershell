@@ -4,10 +4,8 @@
 // Catches confabulation, executes additive fallbacks for tell/remember commands.
 
 import type { ActionIntent, CommandVerb, ReconciliationOutcome, ReconciliationResult } from './types'
-import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
-import { getVoyageBySlug, getVoyageMembers } from '@/lib/voyage'
 import { log } from '@/lib/debug'
-import { fanOutDeliveries } from '@/lib/messaging/deliveries'
+import { executeFallback, type ReconcileContext } from './reconciliation-fallbacks'
 
 // Verb → expected tool name(s) mapping
 const VERB_TOOL_MAP: Record<CommandVerb, string[]> = {
@@ -29,12 +27,6 @@ const CLAIM_PATTERNS: Partial<Record<CommandVerb, RegExp>> = {
   switch: /\b(switched to|moved to|now in|changed to|you're now in)\b/i,
   summon: /\b(researching|investigating|looking into|I'll dig into|on it|let me research|I'll look into|I'll investigate)\b/i,
   do: /\b(done|created|invited|updated|I've (?:created|invited|updated)|all set)\b/i,
-}
-
-interface ReconcileContext {
-  userId: string
-  voyageSlug?: string
-  conversationId?: string
 }
 
 interface ToolCallInfo {
@@ -124,146 +116,4 @@ export const reconcileActions = async (
   }
   log.shell(`${intent.verb} | expected: ${expectedTools[0]} | actual: [${actualToolNames.join(', ')}] | ${result.outcome} | fallback: ${fallbackAction ?? 'none'} | ${result.latencyMs.toFixed(0)}ms`)
   return result
-}
-
-/**
- * Execute deterministic fallback for a missed command.
- * Returns the action name if executed, null if not possible.
- */
-const executeFallback = async (
-  intent: ActionIntent,
-  ctx: ReconcileContext,
-): Promise<string | null> => {
-  switch (intent.verb) {
-    case 'tell':
-      return executeTellFallback(intent, ctx)
-    case 'remember':
-      return executeRememberFallback(intent, ctx)
-    default:
-      return null
-  }
-}
-
-/**
- * Tell fallback: resolve target name → create message event.
- * Same lookup send_message uses (getVoyageMembers + name match).
- */
-const executeTellFallback = async (
-  intent: ActionIntent,
-  ctx: ReconcileContext,
-): Promise<string | null> => {
-  if (!intent.target || !ctx.voyageSlug) {
-    log.shell(`tell fallback skipped: ${!intent.target ? 'no target' : 'no voyage context'}`)
-    return null
-  }
-
-  try {
-    const voyage = await getVoyageBySlug(ctx.voyageSlug)
-    if (!voyage) {
-      log.shell('[SHELL] tell fallback: voyage not found', undefined, 'warn')
-      return null
-    }
-
-    const members = await getVoyageMembers(voyage.id)
-    const targetLower = intent.target.toLowerCase().trim()
-
-    const usernameMatches = members.filter(m => m.username?.toLowerCase() === targetLower)
-
-    // Same resolution logic as send_message: username, display_name, or nickname match
-    const match = usernameMatches.length === 1 ? usernameMatches[0] : members.find(m => {
-      const dn = m.displayName?.toLowerCase() ?? ''
-      const nn = m.nickname?.toLowerCase() ?? ''
-      return dn === targetLower
-        || dn.startsWith(targetLower + ' ')
-        || dn.split(' ').some(part => part === targetLower)
-        || (nn && nn === targetLower)
-    })
-
-    if (!match) {
-      log.shell(`tell fallback: member "${intent.target}" not found in voyage`)
-      return null
-    }
-
-    // Don't send to self
-    if (match.userId === ctx.userId) {
-      log.shell('[SHELL] tell fallback: target is sender, skipping')
-      return null
-    }
-
-    const senderMember = members.find(m => m.userId === ctx.userId)
-    const senderDisplayName = senderMember?.displayName ?? senderMember?.email ?? 'Unknown'
-    const content = intent.payload ?? intent.source
-
-    const eventId = await createMessageEvent(
-      ctx.conversationId ?? 'shell-reconciler',
-      'user',
-      content,
-      {
-        userId: ctx.userId,
-        voyageSlug: ctx.voyageSlug,
-        participants: [ctx.userId, match.userId],
-        addressedTo: [match.userId],
-        source: 'mention',
-        senderDisplayName,
-        senderUserId: ctx.userId,
-        attentionScore: 0.85,
-        contextSnippet: `${senderDisplayName} to ${match.displayName}: ${content.slice(0, 60)}`,
-      }
-    )
-
-    // Every send path fans out delivery receipts — the ledger is the single
-    // delivery truth, and the repair path is a real send path (omega P1).
-    // Awaited: this runs inside the route's waitUntil'd reconciliation task,
-    // so a dangling void promise here could be dropped at task completion.
-    if (eventId) {
-      await fanOutDeliveries(eventId, [match.userId])
-    }
-
-    log.shell(`tell fallback executed: message to ${match.displayName}`)
-
-    // Note: Sender confirmation is implicit — the LLM's response already contains
-    // the claim ("I'll let Tom know") which triggered confabulation detection.
-    // The reconciler makes that claim true. The user sees confirmation in the
-    // response text itself. Explicit awareness injection deferred — retrieval
-    // filters out self-sent events (.neq('sender_user_id', userId)), so a new
-    // "system notification" mechanism would be needed.
-    return 'createMessageEvent'
-  } catch (error) {
-    log.shell(`tell fallback error: ${String(error)}`, undefined, 'error')
-    return null
-  }
-}
-
-/**
- * Remember fallback: persist the intent payload as explicit knowledge.
- * Same as what remember_knowledge tool does.
- */
-const executeRememberFallback = async (
-  intent: ActionIntent,
-  ctx: ReconcileContext,
-): Promise<string | null> => {
-  if (!intent.payload) {
-    log.shell('remember fallback skipped: no payload to save')
-    return null
-  }
-
-  try {
-    const eventId = await createExplicitEvent(intent.payload, {
-      userId: ctx.userId,
-      voyageSlug: ctx.voyageSlug,
-      classifications: ['preference'],
-      sessionId: ctx.conversationId,
-    })
-
-    if (!eventId) {
-      log.shell('remember fallback: createExplicitEvent returned null', undefined, 'warn')
-      return null
-    }
-
-    log.shell(`remember fallback executed: saved "${intent.payload.slice(0, 40)}"`)
-    return 'createExplicitEvent'
-  } catch (error) {
-    log.shell(`remember fallback error: ${String(error)}`, undefined, 'error')
-    return null
-  }
 }

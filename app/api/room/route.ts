@@ -1,6 +1,7 @@
 import { requireAuthResponse } from '@/lib/auth'
+import { SessionAccessError } from '@/lib/conversation/session-authority'
 import { getDisplayRoom } from '@/lib/messaging/room'
-import { resolveSessionVoyage, SessionAccessError } from '@/lib/voyage'
+import { resolveSessionVoyage } from '@/lib/voyage/session'
 import { log } from '@/lib/debug'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,7 @@ export const GET = async (req: Request) => {
     // may still ask what audience their own session currently has; the answer
     // is an empty room, never another person's roster.
     await resolveSessionVoyage(conversationId, auth)
-    return Response.json({ room: await getDisplayRoom(conversationId) })
+    return Response.json({ room: await getDisplayRoom(conversationId, auth) })
   } catch (error) {
     if (error instanceof SessionAccessError) {
       return Response.json({ error: 'session_access_denied' }, { status: 403 })

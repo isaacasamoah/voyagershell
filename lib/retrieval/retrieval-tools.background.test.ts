@@ -40,7 +40,6 @@ const loadTools = async () => {
     setAiPresent: vi.fn(),
   }))
   vi.doMock('@/lib/messaging/invites', () => ({
-    enterActiveRoom: vi.fn(),
     inviteToRoom: vi.fn(),
     respondToRoomInvite: vi.fn(),
     deliverRoomInvite: vi.fn(),
@@ -53,23 +52,27 @@ const loadTools = async () => {
   }))
   vi.doMock('@/lib/agents/deep-retrieval', () => ({ runBackgroundRetrieval }))
   vi.doMock('@/lib/tools/captain', () => ({ createCaptainTools: () => ({}) }))
-  vi.doMock('@/lib/voyage', () => ({
+  vi.doMock('@/lib/voyage/core', () => ({
     createVoyage: vi.fn(),
+    getVoyageBySlug: vi.fn(),
+  }))
+  vi.doMock('@/lib/voyage/session', () => ({
     generateSlug: vi.fn(),
     isSlugAvailable: vi.fn(),
-    getVoyageBySlug: vi.fn(),
+  }))
+  vi.doMock('@/lib/voyage/members', () => ({
     getVoyageMembers: vi.fn(),
     isCaptain: vi.fn(),
-    sendVoyageInvite: vi.fn(),
     getUserVoyages: vi.fn(),
     resolveMemberByName: vi.fn(),
   }))
+  vi.doMock('@/lib/voyage/invitations', () => ({ sendVoyageInvite: vi.fn() }))
   vi.doMock('@/lib/voyage/username', () => ({ normalizeUsername: vi.fn() }))
   vi.doMock('@/lib/knowledge/events', () => ({
     createMessageEvent,
     createExplicitEvent: vi.fn(),
   }))
-  return import('./tools')
+  return import('./retrieval-tools')
 }
 
 const executeBackgroundTask = async () => {

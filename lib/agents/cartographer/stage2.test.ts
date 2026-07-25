@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { GRAPH_EDGE_KINDS } from '@/lib/knowledge/kernel/contract'
 import {
   CARTOGRAPHER_EDGE_KINDS,
   parseStage2Connections,
@@ -10,59 +9,43 @@ const SOURCE_ID = '71000000-0000-4000-8000-000000000001'
 const TARGET_ID = '71000000-0000-4000-8000-000000000002'
 
 describe('Cartographer Stage 2 graph output', () => {
-  it('parses final graph-node references and edge kind', () => {
+  it('parses the deployed event-edge contract', () => {
     expect(parseStage2Connections(`CONNECTIONS:
       [{
-        "source": { "kind": "knowledge_unit", "authorityId": "${SOURCE_ID}" },
-        "target": { "kind": "knowledge_unit", "authorityId": "${TARGET_ID}" },
-        "kind": "supports"
+        "fromEventId": "${SOURCE_ID}",
+        "toEventId": "${TARGET_ID}",
+        "edgeType": "supports"
       }]
     `)).toEqual([{
-      source: { kind: 'knowledge_unit', authorityId: SOURCE_ID },
-      target: { kind: 'knowledge_unit', authorityId: TARGET_ID },
-      kind: 'supports',
+      fromEventId: SOURCE_ID,
+      toEventId: TARGET_ID,
+      edgeType: 'supports',
     }])
   })
 
-  it('rejects the retired event-edge shape instead of translating it', () => {
+  it('rejects the uninstalled heterogeneous candidate shape', () => {
     expect(parseStage2Connections(`CONNECTIONS:
-      [{ "fromEventId": "event-1", "toEventId": "event-2", "edgeType": "supports" }]
+      [{ "source": { "kind": "message_event", "authorityId": "${SOURCE_ID}" },
+         "target": { "kind": "message_event", "authorityId": "${TARGET_ID}" }, "kind": "supports" }]
     `)).toEqual([])
   })
 
-  it('exposes the complete final vocabulary without triggered_by', () => {
-    for (const kind of GRAPH_EDGE_KINDS) expect(STAGE2_PROMPT).toContain(kind)
+  it('exposes exactly the deployed eight-edge vocabulary', () => {
+    for (const kind of CARTOGRAPHER_EDGE_KINDS) expect(STAGE2_PROMPT).toContain(kind)
     expect(CARTOGRAPHER_EDGE_KINDS).toHaveLength(8)
-    expect(STAGE2_PROMPT).not.toContain('triggered_by')
-    expect(parseStage2Connections(`CONNECTIONS:
-      [{
-        "source": { "kind": "knowledge_unit", "authorityId": "${SOURCE_ID}" },
-        "target": { "kind": "knowledge_unit", "authorityId": "${TARGET_ID}" },
-        "kind": "triggered_by"
-      }]
-    `)).toEqual([])
+    expect(STAGE2_PROMPT).toContain('triggered_by')
+    expect(STAGE2_PROMPT).not.toContain('authored_by')
   })
 
-  it('rejects non-UUID identities, structural edges, and invalid semantic endpoints', () => {
+  it('rejects non-UUID identities, self edges, and candidate-only kinds', () => {
     expect(parseStage2Connections(`CONNECTIONS: [{
-      "source": { "kind": "message_event", "authorityId": "not-a-uuid" },
-      "target": { "kind": "person", "authorityId": "${TARGET_ID}" },
-      "kind": "about"
+      "fromEventId": "not-a-uuid", "toEventId": "${TARGET_ID}", "edgeType": "supports"
     }]`)).toEqual([])
     expect(parseStage2Connections(`CONNECTIONS: [{
-      "source": { "kind": "message_event", "authorityId": "${SOURCE_ID}" },
-      "target": { "kind": "person", "authorityId": "${TARGET_ID}" },
-      "kind": "authored_by"
+      "fromEventId": "${SOURCE_ID}", "toEventId": "${SOURCE_ID}", "edgeType": "relates_to"
     }]`)).toEqual([])
     expect(parseStage2Connections(`CONNECTIONS: [{
-      "source": { "kind": "message_event", "authorityId": "${SOURCE_ID}" },
-      "target": { "kind": "knowledge_unit", "authorityId": "${TARGET_ID}" },
-      "kind": "supports"
-    }]`)).toEqual([])
-    expect(parseStage2Connections(`CONNECTIONS: [{
-      "source": { "kind": "knowledge_unit", "authorityId": "${SOURCE_ID}" },
-      "target": { "kind": "knowledge_unit", "authorityId": "${SOURCE_ID}" },
-      "kind": "relates_to"
+      "fromEventId": "${SOURCE_ID}", "toEventId": "${TARGET_ID}", "edgeType": "about"
     }]`)).toEqual([])
   })
 })

@@ -72,13 +72,13 @@ describe('event-stream feed primitives', () => {
       eventType: 'message',
       role: 'human',
       kind: 'invite',
-      inviteState: 'invited',
+      inviteState: { membership: 'invited', spaceId: 'space-1' },
       senderDisplayName: 'isaac',
     })
 
     const restored = fromFeedApiEvent(toFeedApiEvent(knock))
     expect(restored.kind).toBe('invite')
-    expect(restored.inviteState).toBe('invited')
+    expect(restored.inviteState).toEqual({ membership: 'invited', spaceId: 'space-1' })
     // A plain message defaults cleanly and never carries an invite state.
     const plain = fromFeedApiEvent(toFeedApiEvent(event('m', '2026-07-16T02:23:00.000Z')))
     expect(plain.kind).toBe('message')

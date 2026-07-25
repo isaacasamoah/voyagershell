@@ -1,54 +1,50 @@
 import { getOwnVoyagerIdentity } from '@/lib/messaging/handles'
+import { sessionAuthority } from '@/lib/conversation/session-authority'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { getVoyageBySlug } from '@/lib/voyage'
-import type { InviteState } from './feed-types'
+import type { InviteMembershipState } from './feed-types'
 
 export interface FeedEnrichment {
   sharedSourceEventIds: ReadonlySet<string>
   currentVoyagerDisplayName: string | null
 }
 
-type FeedTableClient = {
-  from: (table: string) => any
-}
+type FeedTableClient = Pick<ReturnType<typeof getAdminClient>, 'from'>
 
-export const getFeedTableClient = (): FeedTableClient => (
-  getAdminClient() as unknown as FeedTableClient
-)
+export const getFeedTableClient = (): FeedTableClient => getAdminClient()
 
 export const emptyFeedEnrichment = (): FeedEnrichment => ({
   sharedSourceEventIds: new Set(),
   currentVoyagerDisplayName: null,
 })
 
-// The viewer's own membership state across this voyage's space(s). Prefer an
-// open invite so a pending knock still shows Join/Decline; fall back to
-// active/left for a resolved knock (so buttons don't reappear after joining).
-export const resolveViewerInviteState = async (
+export const resolveViewerInviteStates = async (
   supabase: FeedTableClient,
-  voyageSlug: string,
+  spaceIds: string[],
   userId: string,
-): Promise<InviteState | null> => {
-  const voyage = await getVoyageBySlug(voyageSlug)
-  if (!voyage) return null
-
-  const { data: spaceRows } = await supabase
-    .from('spaces')
-    .select('id')
-    .eq('voyage_id', voyage.id)
-  const spaceIds = ((spaceRows ?? []) as Array<{ id: string }>).map((row) => row.id)
-  if (spaceIds.length === 0) return null
-
-  const { data: memberRows } = await supabase
+): Promise<ReadonlyMap<string, InviteMembershipState>> => {
+  if (spaceIds.length === 0) return new Map()
+  const { data: memberRows, error } = await supabase
     .from('space_members')
-    .select('state')
+    .select('space_id, state')
     .eq('user_id', userId)
     .in('space_id', spaceIds)
-  const states = ((memberRows ?? []) as Array<{ state: InviteState }>).map((row) => row.state)
-  if (states.includes('invited')) return 'invited'
-  if (states.includes('active')) return 'active'
-  if (states.includes('left')) return 'left'
-  return null
+  if (error) throw new Error(error.message)
+  const rows = (memberRows ?? []) as Array<{ space_id: string; state: InviteMembershipState }>
+  const states = new Map<string, InviteMembershipState>()
+  for (const row of rows) {
+    if (row.state !== 'active') states.set(row.space_id, row.state)
+  }
+  const activeRows = rows.filter((row) => row.state === 'active')
+  if (activeRows.length > 0) {
+    const effective = await Promise.all(activeRows.map((row) => getAdminClient().rpc(
+      'is_effective_space_member',
+      { p_space_id: row.space_id, p_user_id: userId },
+    )))
+    activeRows.forEach((row, index) => {
+      if (effective[index].data === true && !effective[index].error) states.set(row.space_id, 'active')
+    })
+  }
+  return states
 }
 
 export const loadPrivateFeedEnrichment = async (
@@ -59,17 +55,11 @@ export const loadPrivateFeedEnrichment = async (
 ): Promise<FeedEnrichment> => {
   if (privateAssistantIds.length === 0) return emptyFeedEnrichment()
 
-  const [identity, sessionResult] = await Promise.all([
+  const [identity, session] = await Promise.all([
     getOwnVoyagerIdentity(userId),
-    supabase
-      .from('sessions')
-      .select('space_id')
-      .eq('id', conversationId)
-      .eq('user_id', userId)
-      .maybeSingle(),
+    sessionAuthority.getScope(conversationId, userId),
   ])
-  if (sessionResult.error) throw new Error(sessionResult.error.message)
-  const destinationSpaceId = (sessionResult.data as { space_id: string | null } | null)?.space_id ?? null
+  const destinationSpaceId = session.space_id
   if (!destinationSpaceId) {
     return {
       sharedSourceEventIds: new Set(),

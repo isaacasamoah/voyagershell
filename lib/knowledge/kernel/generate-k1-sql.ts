@@ -1,5 +1,16 @@
 import { writeFileSync } from "node:fs";
-import { renderK1CutoverAssertionsSql, renderK1LegacySetupSql } from "./k1-sql";
+import { renderActiveMembershipAssertionsSql } from "./active-membership-assertions-sql";
+import {
+  renderAuthorityBoundaryAssertionsSql,
+  renderAuthorityGapSetupSql,
+} from "./authority-boundary-sql";
+import { createRandomK1FixtureSeed } from "./k1-fixture-seed";
+import {
+  renderK1HistoricalAssertionsSql,
+  renderK1HistoricalSetupSql,
+} from "./k1-historical-sql";
+import { renderK1CutoverAssertionsSql } from "./k1-cutover-assertions-sql";
+import { renderK1LegacySetupSql } from "./k1-legacy-setup-sql";
 
 const outputPath = (flag: string): string => {
   const index = process.argv.indexOf(flag);
@@ -8,15 +19,30 @@ const outputPath = (flag: string): string => {
   return value;
 };
 
-writeFileSync(outputPath("--setup-output"), renderK1LegacySetupSql(), {
+const seed = createRandomK1FixtureSeed();
+
+writeFileSync(outputPath("--legacy-output"), renderK1LegacySetupSql(seed), {
+  encoding: "utf8",
+  mode: 0o600,
+});
+writeFileSync(outputPath("--historical-output"), renderK1HistoricalSetupSql(seed), {
+  encoding: "utf8",
+  mode: 0o600,
+});
+writeFileSync(outputPath("--gap-output"), renderAuthorityGapSetupSql(seed), {
   encoding: "utf8",
   mode: 0o600,
 });
 writeFileSync(
   outputPath("--assertions-output"),
-  renderK1CutoverAssertionsSql(),
+  `${renderActiveMembershipAssertionsSql(seed)}${renderK1CutoverAssertionsSql(seed)}${renderK1HistoricalAssertionsSql(seed)}`,
   {
     encoding: "utf8",
     mode: 0o600,
   },
+);
+writeFileSync(
+  outputPath("--boundary-output"),
+  renderAuthorityBoundaryAssertionsSql(seed),
+  { encoding: "utf8", mode: 0o600 },
 );

@@ -3,11 +3,10 @@
 // POST - Resume a specific conversation
 
 import { NextResponse } from 'next/server'
-import {
-  getResumableConversations,
-  resumeConversation,
-} from '@/lib/conversation'
+import { resumeConversation } from '@/lib/conversation/session-lifecycle'
+import { getResumableConversations } from '@/lib/conversation/session-resumption'
 import { requireAuthResponse } from '@/lib/auth'
+import { SessionAccessError } from '@/lib/conversation/session-authority'
 
 /**
  * GET /api/conversation/resume
@@ -48,6 +47,9 @@ export const GET = async (req: Request) => {
       })),
     })
   } catch (error) {
+    if (error instanceof SessionAccessError) {
+      return NextResponse.json({ error: 'session_access_denied' }, { status: 403 })
+    }
     console.error('[Resume API] GET error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -131,6 +133,9 @@ export const POST = async (req: Request) => {
       })),
     })
   } catch (error) {
+    if (error instanceof SessionAccessError) {
+      return NextResponse.json({ error: 'session_access_denied' }, { status: 403 })
+    }
     // Handle JSON parse errors
     if (error instanceof SyntaxError) {
       console.error('[Resume API] Invalid JSON in request body')

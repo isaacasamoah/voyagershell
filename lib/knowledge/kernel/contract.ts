@@ -1,36 +1,26 @@
 export const GRAPH_NODE_KINDS = [
-  'person',
-  'voyager',
-  'voyage',
-  'space',
-  'message_event',
-  'knowledge_unit',
+  'person', 'voyager', 'voyage', 'space', 'message_event', 'knowledge_unit',
 ] as const
 
 export const GRAPH_EDGE_KINDS = [
-  'authored_by',
-  'posted_in',
-  'reply_to',
-  'in_voyage',
-  'member_of',
-  'companion_of',
-  'derived_from',
-  'generated_by',
-  'about',
-  'supports',
-  'contradicts',
-  'supersedes',
-  'elaborates',
-  'relates_to',
-  'decided_by',
+  'authored_by', 'posted_in', 'reply_to', 'in_voyage', 'member_of',
+  'companion_of', 'derived_from', 'generated_by', 'about', 'supports',
+  'contradicts', 'supersedes', 'elaborates', 'relates_to', 'decided_by',
   'raised_by',
 ] as const
 
+export const AUTHORITY_EDGE_KINDS = ['in_voyage', 'member_of', 'companion_of'] as const
 export const KNOWLEDGE_AUDIENCE_SCOPE_KINDS = ['voyage', 'space', 'private'] as const
+export const KNOWLEDGE_AUDIENCE_PURPOSES = ['source', 'authority'] as const
+export const GRAPH_GRANT_BASIS_KINDS = [
+  'source_event', 'edge_evidence', 'voyage_member', 'space_member', 'profile', 'space',
+] as const
 
 export type GraphNodeKind = (typeof GRAPH_NODE_KINDS)[number]
 export type GraphEdgeKind = (typeof GRAPH_EDGE_KINDS)[number]
 export type KnowledgeAudienceScopeKind = (typeof KNOWLEDGE_AUDIENCE_SCOPE_KINDS)[number]
+export type KnowledgeAudiencePurpose = (typeof KNOWLEDGE_AUDIENCE_PURPOSES)[number]
+export type GraphGrantBasisKind = (typeof GRAPH_GRANT_BASIS_KINDS)[number]
 
 export const canonicalGraphIdentity = (kind: GraphNodeKind, authorityId: string): string => {
   const normalizedId = authorityId.trim().toLowerCase()
@@ -51,6 +41,7 @@ export const canonicalEdgeEndpoints = (
 export interface KnowledgeAudienceFixture {
   readonly key: string
   readonly id: string
+  readonly purpose: KnowledgeAudiencePurpose
   readonly scopeKind: KnowledgeAudienceScopeKind
   readonly scopeAuthorityId: string
   readonly memberProfileIds: readonly string[]
@@ -62,7 +53,6 @@ export interface GraphNodeFixture {
   readonly authorityId: string
   readonly identity: string
   readonly label: string
-  readonly audienceKey: string
 }
 
 export interface KnowledgeEventFixture {
@@ -88,11 +78,21 @@ export interface KnowledgeUnitFixture {
   readonly audienceKey: string
 }
 
+export interface GraphNodeGrantFixture {
+  readonly nodeId: string
+  readonly audienceKey: string
+  readonly basisKind: Extract<GraphGrantBasisKind, 'source_event' | 'edge_evidence'>
+  readonly basisId: string
+  readonly basisEventId?: string
+  readonly labelSnapshot: string
+}
+
 export interface GraphEdgeFixture {
+  readonly id: string
   readonly sourceNodeId: string
   readonly targetNodeId: string
-  readonly kind: GraphEdgeKind
-  readonly audienceKey: string
+  readonly kind: Exclude<GraphEdgeKind, (typeof AUTHORITY_EDGE_KINDS)[number]>
+  readonly evidenceEventIds: readonly string[]
 }
 
 export interface GraphRenameFixture {
@@ -101,16 +101,25 @@ export interface GraphRenameFixture {
   readonly afterLabel: string
 }
 
+export interface AuthorityScenarioFixture {
+  readonly redVoyageId: string
+  readonly redSpaceId: string
+  readonly blueVoyageId: string
+  readonly blueSpaceId: string
+  readonly crossScopePersonId: string
+  readonly formerMemberId: string
+  readonly blueOnlyViewerId: string
+  readonly newMemberId: string
+  readonly absenceEventId: string
+  readonly absenceNodeId: string
+  readonly postRejoinEventId: string
+  readonly postRejoinNodeId: string
+}
+
 export interface KnowledgeGraphExpectedFixture {
   readonly nodeCount: number
-  readonly edgeCount: number
-  readonly audienceCount: number
-  readonly viewerAAllGraphIdentities: readonly string[]
-  readonly viewerBAllGraphIdentities: readonly string[]
-  readonly graphOffIdentities: readonly string[]
-  readonly ownerBridgeIdentities: readonly string[]
-  readonly victimBridgeIdentities: readonly string[]
-  readonly rootDeniedIdentities: readonly string[]
+  readonly historicalEdgeCount: number
+  readonly sourceAudienceCount: number
   readonly privateNodeIds: readonly string[]
   readonly sharedUnitNodeId: string
   readonly sharedClaim: string
@@ -120,13 +129,15 @@ export interface KnowledgeGraphExpectedFixture {
 
 export interface KnowledgeGraphFixture {
   readonly version: number
-  readonly viewerProfileIds: { readonly a: string; readonly b: string }
+  readonly viewerProfileIds: { readonly a: string; readonly b: string; readonly c: string; readonly d: string }
   readonly audiences: readonly KnowledgeAudienceFixture[]
   readonly nodes: readonly GraphNodeFixture[]
   readonly events: readonly KnowledgeEventFixture[]
   readonly negativeSourceEvent: NegativeKnowledgeEventFixture
   readonly units: readonly KnowledgeUnitFixture[]
+  readonly grants: readonly GraphNodeGrantFixture[]
   readonly edges: readonly GraphEdgeFixture[]
   readonly renames: readonly GraphRenameFixture[]
+  readonly authorityScenario: AuthorityScenarioFixture
   readonly expected: KnowledgeGraphExpectedFixture
 }

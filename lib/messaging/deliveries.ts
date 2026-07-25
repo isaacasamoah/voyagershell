@@ -5,10 +5,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug'
 
-// message_deliveries is not in generated Supabase types yet — contain its
-// untyped access at this boundary.
-const table = () => (getAdminClient() as unknown as { from: (t: string) => any })
-  .from('message_deliveries')
+const table = () => getAdminClient().from('message_deliveries')
 
 /**
  * Fan out delivery rows for a message event — one per recipient, at send
@@ -41,7 +38,7 @@ export const stampReceipts = async (
     log.api('Receipt stamp failed', { error: error.message }, 'error')
     throw new Error(error.message)
   }
-  const rows = (data ?? []) as Array<{ id: string; event_id: string }>
+  const rows = data ?? []
   // v2: the wire is the sole delivery lane — no weave to bridge to.
   return { updatedIds: rows.map((row) => row.id) }
 }

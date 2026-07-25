@@ -1,13 +1,10 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import { getAdminClient } from '@/lib/supabase/admin'
-import {
-  createVoyage,
-  generateSlug,
-  isCaptain,
-  isSlugAvailable,
-  sendVoyageInvite,
-} from '@/lib/voyage'
+import { createVoyage } from '@/lib/voyage/core'
+import { sendVoyageInvite } from '@/lib/voyage/invitations'
+import { isCaptain } from '@/lib/voyage/members'
+import { generateSlug, isSlugAvailable } from '@/lib/voyage/session'
 import type { ToolContext } from './tool-types'
 
 export const createVoyagerVoyageTools = (ctx: ToolContext) => ({

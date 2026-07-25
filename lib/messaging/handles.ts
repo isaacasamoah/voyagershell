@@ -13,8 +13,8 @@ export type HandleResult =
   | { ok: true; handle: string }
   | { ok: false; error: string }
 
-const from = (table: string) =>
-  (getAdminClient() as unknown as { from: (t: string) => any }).from(table)
+const handles = () => getAdminClient().from('handles')
+const profiles = () => getAdminClient().from('profiles')
 
 // The caller's own voyager identity: the addressing `handle` (claimed name, else
 // derived `<username>.voyager`, else '') plus the custom `displayName` shared by
@@ -32,12 +32,12 @@ export const getOwnVoyagerIdentity = async (
   userId: string,
 ): Promise<VoyagerIdentity> => {
   const [{ data: row, error: rowError }, { data: profile }] = await Promise.all([
-    from('handles').select('handle').eq('owner_user_id', userId).eq('kind', 'voyager').maybeSingle(),
-    from('profiles').select('username').eq('id', userId).maybeSingle(),
+    handles().select('handle').eq('owner_user_id', userId).eq('kind', 'voyager').maybeSingle(),
+    profiles().select('username').eq('id', userId).maybeSingle(),
   ])
   if (rowError) return { handle: '', displayName: null }
-  const rowHandle = (row as { handle: string } | null)?.handle ?? null
-  const username = (profile as { username: string | null } | null)?.username ?? null
+  const rowHandle = row?.handle ?? null
+  const username = profile?.username ?? null
   return resolveVoyagerIdentity(rowHandle, username)
 }
 
@@ -53,17 +53,17 @@ export const claimHandle = async (
   const norm = handle.trim().toLowerCase()
   if (!norm) return { ok: false, error: 'That handle is empty — try another.' }
 
-  const { data: existing } = await from('handles')
+  const { data: existing } = await handles()
     .select('handle')
     .eq('owner_user_id', userId)
     .eq('kind', kind)
     .maybeSingle()
-  const current = (existing as { handle: string } | null)?.handle
+  const current = existing?.handle
   if (current === norm) return { ok: true, handle: norm }
 
   const { error } = current
-    ? await from('handles').update({ handle: norm }).eq('owner_user_id', userId).eq('kind', kind)
-    : await from('handles').insert({ handle: norm, kind, owner_user_id: userId })
+    ? await handles().update({ handle: norm }).eq('owner_user_id', userId).eq('kind', kind)
+    : await handles().insert({ handle: norm, kind, owner_user_id: userId })
 
   if (error?.code === '23505') return { ok: false, error: `"${norm}" is taken — try another.` }
   if (error) {

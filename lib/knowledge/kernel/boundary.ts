@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/auth";
-import { getAdminClient } from "@/lib/supabase/admin";
+import { getKnowledgeGraphCandidateClient } from "./candidate-client";
 import { GRAPH_NODE_KINDS, type GraphNodeKind } from "./contract";
 
 const UUID_PATTERN =
@@ -72,14 +72,16 @@ export const retrieveKnowledgeGraphClaims = async (
     if (!isRoot(root)) return [];
     const viewerProfileId = await requireAuth();
     if (!isUuid(viewerProfileId)) return [];
-    const admin = getAdminClient();
+    const admin = getKnowledgeGraphCandidateClient();
     const rpcCall = Promise.resolve(
-      (admin.rpc as Function)("retrieve_knowledge_graph_claims", {
+      admin.rpc("retrieve_knowledge_graph_claims", {
         p_root_kind: root.kind,
         p_root_authority_id: root.authorityId,
         p_viewer_profile_id: viewerProfileId,
         p_graph_enabled: options.graphEnabled ?? true,
         p_max_depth: normalizeDepth(options.maxDepth),
+        p_node_budget: 512,
+        p_frontier_budget: 128,
       }),
     ).catch(() => null);
     const remainingRpcBudget = Math.max(

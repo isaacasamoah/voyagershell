@@ -30,6 +30,8 @@ export interface VoyageMember {
   voyageId: string;
   userId: string;
   role: VoyageRole;
+  state: 'active';
+  revision: number;
   nickname?: string;
   notificationsEnabled: boolean;
   joinedAt: Date;
@@ -91,6 +93,9 @@ export interface VoyageMemberRow {
   voyage_id: string;
   user_id: string;
   role: VoyageRole;
+  state: 'active' | 'left';
+  state_changed_at: string;
+  revision: number;
   nickname: string | null;
   notifications_enabled: boolean;
   settings: Record<string, unknown> | null;

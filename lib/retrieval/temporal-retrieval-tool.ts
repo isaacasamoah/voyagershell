@@ -19,10 +19,9 @@ export const createTemporalRetrievalTool = (ctx: ToolContext) => tool({
     const sinceDate = parseRelativeDate(input.since)
     const untilDate = input.until ? parseRelativeDate(input.until) : new Date()
     const supabase = getAdminClient()
-    const { data, error } = await (supabase.rpc as Function)('scoped_knowledge_fetch', {
+    const { data, error } = await supabase.rpc('scoped_knowledge_fetch', {
       p_user_id: ctx.userId,
       p_voyage_slug: ctx.voyageSlug,
-      p_participants: [ctx.userId],
       p_scope: ctx.voyageSlug ? 'all' : 'personal',
       p_since: sinceDate.toISOString(),
       p_until: untilDate.toISOString(),
@@ -34,16 +33,16 @@ export const createTemporalRetrievalTool = (ctx: ToolContext) => tool({
       return `No knowledge found between ${sinceDate.toLocaleDateString()} and ${untilDate.toLocaleDateString()}.`
     }
 
-    const results: KnowledgeNode[] = data.map((row: Record<string, unknown>) => ({
-      eventId: row.event_id as string,
-      content: row.content as string,
-      classifications: (row.classifications as string[]) ?? [],
-      entities: (row.entities as string[]) ?? [],
-      topics: (row.topics as string[]) ?? [],
-      createdAt: new Date(row.source_created_at as string),
-      knowledgeType: (row.knowledge_type as string | null) ?? null,
-      attentionScore: (row.attention_score as number) ?? 0.5,
-      contextSnippet: (row.context_snippet as string | null) ?? null,
+    const results: KnowledgeNode[] = data.map((row) => ({
+      eventId: row.event_id,
+      content: row.content,
+      classifications: row.classifications ?? [],
+      entities: row.entities ?? [],
+      topics: row.topics ?? [],
+      createdAt: new Date(row.source_created_at),
+      knowledgeType: row.knowledge_type ?? null,
+      attentionScore: row.attention_score ?? 0.5,
+      contextSnippet: row.context_snippet ?? null,
     }))
     const filtered = input.query
       ? results.filter((result) => result.content.toLowerCase().includes(input.query!.toLowerCase()))

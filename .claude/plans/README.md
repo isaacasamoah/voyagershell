@@ -45,8 +45,8 @@ What was actually built? What changed from the plan?
 
 | Plan | Status | Description |
 |------|--------|-------------|
-| [retrieval-events-logging](./retrieval-events-logging.md) | Draft | Ground truth logging for DSPy |
-| [agentic-retrieval](./agentic-retrieval.md) | Future | Claude-orchestrated retrieval (deferred) |
+| [retrieval-events-logging](./retrieval-events-logging.md) | Future | Optional agent-selected retrieval telemetry for DSPy study; unbuilt and outside K0/K1 |
+| [agentic-retrieval](./agentic-retrieval.md) | Current | Primary-model tool selection across installed retrieval surfaces |
 
 ## Related
 

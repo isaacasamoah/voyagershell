@@ -6,7 +6,11 @@ export type FeedEventRole = 'user' | 'assistant' | 'human'
 // line (e.g. "X joined the room") is metadata.source === 'join'. Orthogonal to
 // role — the recipient sees them as 'human' events; `kind` marks how to render.
 export type FeedEventKind = 'message' | 'invite' | 'system'
-export type InviteState = 'invited' | 'active' | 'left'
+export type InviteMembershipState = 'invited' | 'active' | 'left'
+export interface InviteState {
+  membership: InviteMembershipState
+  spaceId: string
+}
 
 export interface FeedEvent {
   id: string

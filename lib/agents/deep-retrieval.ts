@@ -7,7 +7,8 @@
 // Replaces the old code-sandbox executor pattern entirely.
 
 import { generateText, stepCountIs } from 'ai'
-import { createRetrievalTools, type ToolContext } from '@/lib/retrieval/tools'
+import { createRetrievalTools } from '@/lib/retrieval/retrieval-tools'
+import type { ToolContext } from '@/lib/retrieval/tool-types'
 import type { BackgroundTaskResult } from './queue'
 import { updateTaskProgress } from './queue'
 import { resolveUserModel } from '@/lib/models'

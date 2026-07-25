@@ -1,7 +1,7 @@
 // Sliding window for conversation context
 // Token-budgeted, no compaction - just smart windowing
 
-import type { ConversationMessage } from './index'
+import type { ConversationMessage } from './stream-context'
 
 export interface WindowConfig {
   maxTokens: number        // Total token budget for messages
@@ -104,4 +104,3 @@ export const getTruncatedMessages = (
   // Return the messages that didn't make it into the window
   return allMessages.slice(0, windowResult.truncatedCount)
 }
-

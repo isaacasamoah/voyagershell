@@ -16,6 +16,7 @@
 # Exit 0 on pass, non-zero on any probe failure.
 # =============================================================================
 set -euo pipefail
+set +x
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,7 +58,7 @@ else
     printf 'privacy-backstop: ssh required for Fedora token fallback\n' >&2
     exit 2
   }
-  if ! ACCESS_TOKEN="$(ssh -o BatchMode=yes fedora '
+  if ! ACCESS_TOKEN="$(ssh -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=1 fedora '
     test -r /home/isaac/.supabase/access-token || exit 1
     token=
     IFS= read -r token < /home/isaac/.supabase/access-token || true
@@ -72,6 +73,12 @@ fi
   printf 'privacy-backstop: Supabase access token unavailable\n' >&2
   exit 2
 }
+case "$ACCESS_TOKEN" in
+  *$'\r'*|*$'\n'*)
+    printf 'privacy-backstop: invalid Supabase access token\n' >&2
+    exit 2
+    ;;
+esac
 printf 'Authorization: Bearer %s\nContent-Type: application/json\n' \
   "$ACCESS_TOKEN" > "$TEMP_DIR/headers.txt"
 unset ACCESS_TOKEN VOYAGER_SUPABASE_ACCESS_TOKEN
@@ -103,7 +110,8 @@ body += "\nSELECT 'ALL PASS' AS verdict;"
 print(json.dumps({"query": body}))
 PY
 
-if ! curl --silent --show-error --fail-with-body \
+if ! curl --disable --silent --show-error --fail-with-body \
+  --connect-timeout 15 --max-time 180 \
   --request POST "$API_URL" \
   --header "@$TEMP_DIR/headers.txt" \
   --data-binary "@$TEMP_DIR/request.json" \

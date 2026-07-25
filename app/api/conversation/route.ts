@@ -6,8 +6,9 @@ import { NextResponse } from 'next/server'
 import {
   getOrCreateActiveConversation,
   archiveConversation,
-} from '@/lib/conversation'
+} from '@/lib/conversation/session-lifecycle'
 import { requireAuthResponse } from '@/lib/auth'
+import { SessionAccessError } from '@/lib/conversation/session-authority'
 import { getDisplayRoom } from '@/lib/messaging/room'
 
 /**
@@ -48,7 +49,7 @@ export const GET = async (req: Request) => {
     )
 
     // Room state for the header indicator (who's in the room + is Voyager present)
-    const roomState = await getDisplayRoom(conversation.id)
+    const roomState = await getDisplayRoom(conversation.id, userId)
 
     return NextResponse.json({
       room: roomState,
@@ -68,6 +69,9 @@ export const GET = async (req: Request) => {
       })),
     })
   } catch (error) {
+    if (error instanceof SessionAccessError) {
+      return NextResponse.json({ error: 'session_access_denied' }, { status: 403 })
+    }
     console.error('[Conversation API] GET error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -112,7 +116,7 @@ export const POST = async (req: Request) => {
         '[Conversation API] Archiving current conversation:',
         currentConversation.id
       )
-      const archived = await archiveConversation(currentConversation.id)
+      const archived = await archiveConversation(currentConversation.id, userId)
 
       if (!archived) {
         console.error('[Conversation API] Failed to archive current conversation')
@@ -149,6 +153,9 @@ export const POST = async (req: Request) => {
       messages: [],
     })
   } catch (error) {
+    if (error instanceof SessionAccessError) {
+      return NextResponse.json({ error: 'session_access_denied' }, { status: 403 })
+    }
     console.error('[Conversation API] POST error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },

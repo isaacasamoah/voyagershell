@@ -1,5 +1,6 @@
 import type { StreamTextOnFinishCallback, ToolSet } from 'ai'
-import { runCartographer, shouldRunEnrichment } from '@/lib/agents/cartographer'
+import { runCartographer } from '@/lib/agents/cartographer'
+import { shouldRunEnrichment } from '@/lib/agents/cartographer/source'
 import { createMessageEvent, type KnowledgeNode } from '@/lib/knowledge'
 import { creditTracker, modelRouter } from '@/lib/models'
 import { logCitations } from '@/lib/retrieval'

@@ -4,7 +4,7 @@
 // D1: Graceful degradation — Cohere unavailable = RRF order preserved
 // D2: Runtime env read — no build-time dependency on COHERE_API_KEY
 
-import type { RankedResult } from './hybrid'
+import type { RankedResult } from './hybrid-primitives'
 
 // =============================================================================
 // Types

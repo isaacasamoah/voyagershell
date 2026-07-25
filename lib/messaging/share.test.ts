@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/supabase/admin', () => ({
   getAdminClient: () => ({ rpc: mocks.rpc }),
 }))
-vi.mock('@/lib/knowledge/events', () => ({
+vi.mock('@/lib/knowledge/event-storage', () => ({
   updateEventEmbedding: mocks.updateEventEmbedding,
 }))
 

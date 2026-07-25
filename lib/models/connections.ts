@@ -37,11 +37,7 @@ interface OAuthPayload {
   id_token?: string
 }
 
-// The admin client is typed to the generated Database (no brain_connections
-// yet) — contain the untyped access here rather than leaking `any` outward.
-const table = () => (getAdminClient() as unknown as {
-  from: (t: string) => any
-}).from(TABLE)
+const table = () => getAdminClient().from(TABLE)
 
 export interface UpsertCodexInput {
   userId: string
@@ -143,7 +139,7 @@ const findConnectionRow = async (userId: string): Promise<ConnectionRow | null> 
     log.api('Failed to read brain connection', { error: error.message }, 'warn')
     return null
   }
-  if (data) return data as ConnectionRow
+  if (data) return data
 
   // Household fallback — TESTING SCOPE ONLY. Gated to the single voyage named
   // by HOUSEHOLD_SHARE_VOYAGE (unset = feature off). Deliberately NOT a
@@ -152,11 +148,11 @@ const findConnectionRow = async (userId: string): Promise<ConnectionRow | null> 
   const householdSlug = process.env.HOUSEHOLD_SHARE_VOYAGE
   if (!householdSlug) return null
 
-  const admin = getAdminClient() as unknown as { from: (t: string) => any }
-  const { data: membership, error: mErr } = await admin
+  const { data: membership, error: mErr } = await getAdminClient()
     .from('voyage_members')
     .select('voyage_id, voyages!inner(slug)')
     .eq('user_id', userId)
+    .eq('state', 'active')
     .eq('voyages.slug', householdSlug)
     .maybeSingle()
   if (mErr || !membership) return null
@@ -174,7 +170,7 @@ const findConnectionRow = async (userId: string): Promise<ConnectionRow | null> 
     log.api('Failed to read household connection', { error: sErr.message }, 'warn')
     return null
   }
-  return (shared as ConnectionRow) ?? null
+  return shared ?? null
 }
 
 /**

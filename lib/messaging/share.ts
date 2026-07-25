@@ -1,4 +1,4 @@
-import { updateEventEmbedding } from '@/lib/knowledge/events'
+import { updateEventEmbedding } from '@/lib/knowledge/event-storage'
 import { getAdminClient } from '@/lib/supabase/admin'
 
 export type SharePublicationStatus = 'created' | 'replayed'
@@ -19,12 +19,6 @@ interface SharePrivateReplyInput {
   sourceEventId: string
   conversationId: string
   userId: string
-}
-
-interface PromotionRow {
-  shared_event_id: string
-  status: SharePublicationStatus
-  shared_content: string
 }
 
 interface RpcError {
@@ -59,20 +53,14 @@ export const sharePrivateVoyagerReply = async ({
   conversationId,
   userId,
 }: SharePrivateReplyInput): Promise<SharePrivateReplyResult> => {
-  const admin = getAdminClient() as unknown as {
-    rpc: (
-      name: string,
-      args: Record<string, string>,
-    ) => Promise<{ data: unknown; error: RpcError | null }>
-  }
-  const { data, error } = await admin.rpc('promote_private_voyager_reply', {
+  const { data, error } = await getAdminClient().rpc('promote_private_voyager_reply', {
     p_source_event_id: sourceEventId,
     p_conversation_id: conversationId,
     p_user_id: userId,
   })
   if (error) return mapPromotionError(error)
 
-  const row = (Array.isArray(data) ? data[0] : data) as PromotionRow | null
+  const row = data?.[0] ?? null
   if (
     !row
     || typeof row.shared_event_id !== 'string'

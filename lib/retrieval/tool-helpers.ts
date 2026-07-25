@@ -1,6 +1,7 @@
 import type { GrepResult, KnowledgeNode } from '@/lib/knowledge'
-import type { RankedResult } from '@/lib/knowledge/hybrid'
-import { getVoyageBySlug, getVoyageMembers, resolveMemberByName } from '@/lib/voyage'
+import type { RankedResult } from '@/lib/knowledge/hybrid-primitives'
+import { getVoyageBySlug } from '@/lib/voyage/core'
+import { getVoyageMembers, resolveMemberByName } from '@/lib/voyage/members'
 import type { ToolContext } from './tool-types'
 
 export const resolveOneMember = async (

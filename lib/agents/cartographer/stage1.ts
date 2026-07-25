@@ -2,7 +2,7 @@ import { generateObject } from 'ai'
 import { z } from 'zod'
 import { log } from '@/lib/debug/logger'
 import { resolveUserModel } from '@/lib/models'
-import type { KnowledgeType } from '@/lib/knowledge/events'
+import type { KnowledgeType } from '@/lib/knowledge/event-types'
 import type { KnowledgeEventRow, Stage1Assessment } from './types'
 
 const STAGE1_PROMPT = `You are the Cartographer for Voyager. You classify knowledge events from an ongoing conversation.

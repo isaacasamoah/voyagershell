@@ -7,7 +7,7 @@ const updateTaskProgress = vi.fn()
 const loadModule = async () => {
   vi.resetModules()
   vi.doMock('ai', () => ({ generateText, stepCountIs }))
-  vi.doMock('@/lib/retrieval/tools', () => ({
+  vi.doMock('@/lib/retrieval/retrieval-tools', () => ({
     createRetrievalTools: () => ({ web_search: {}, semantic_search: {} }),
   }))
   vi.doMock('@/lib/agents/queue', () => ({ updateTaskProgress }))

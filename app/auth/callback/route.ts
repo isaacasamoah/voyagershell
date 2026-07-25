@@ -10,7 +10,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { acceptVoyageInvite } from '@/lib/voyage';
+import { acceptVoyageInvite } from '@/lib/voyage/invitations';
 
 export const GET = async (request: NextRequest) => {
   const requestUrl = new URL(request.url);

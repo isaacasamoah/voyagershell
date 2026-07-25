@@ -32,12 +32,16 @@ export {
 // Export retrieval tools for agentic search
 export {
   createRetrievalTools,
-  createVoyagerTools,
-  type ToolContext,
-  type ToolRegistration,
   type RetrievalTools,
+} from './retrieval-tools';
+export {
+  createVoyagerTools,
   type VoyagerTools,
-} from './tools';
+} from './voyager-tools';
+export type {
+  ToolContext,
+  ToolRegistration,
+} from './tool-types';
 
 // Export strategy composition
 export { composeToolStrategy } from './strategy';

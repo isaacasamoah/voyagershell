@@ -20,7 +20,7 @@ npx vitest run \
   lib/harness/room-turn.test.ts \
   lib/harness/run-turn.test.ts \
   lib/knowledge/scope.test.ts \
-  lib/retrieval/tools.background.test.ts \
+  lib/retrieval/retrieval-tools.background.test.ts \
   --reporter=dot
 
 MIGRATION="supabase/migrations/053_atomic_private_reply_promotions.sql"

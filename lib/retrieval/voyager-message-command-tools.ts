@@ -2,7 +2,8 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import { createExplicitEvent, createMessageEvent } from '@/lib/knowledge/events'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
-import { getVoyageBySlug, getVoyageMembers } from '@/lib/voyage'
+import { getVoyageBySlug } from '@/lib/voyage/core'
+import { getVoyageMembers } from '@/lib/voyage/members'
 import type { ToolContext } from './tool-types'
 
 export const createVoyagerMessageCommandTools = (ctx: ToolContext) => ({

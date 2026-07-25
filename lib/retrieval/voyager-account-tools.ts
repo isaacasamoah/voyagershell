@@ -2,7 +2,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import { claimHandle, renameVoyagerHandle } from '@/lib/messaging/handles'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { getUserVoyages } from '@/lib/voyage'
+import { getUserVoyages } from '@/lib/voyage/members'
 import { normalizeUsername } from '@/lib/voyage/username'
 import type { ToolContext } from './tool-types'
 

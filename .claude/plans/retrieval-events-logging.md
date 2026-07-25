@@ -1,204 +1,101 @@
-# Retrieval Events Logging
+# Agent-selected Retrieval Telemetry
 
-**Status:** Draft
+**Status:** Future proposal — unbuilt and outside K0/K1
 **Created:** 2026-01-06
-**Last Updated:** 2026-01-06
+**Last Updated:** 2026-07-24
 
 ## Goal
 
-Collect ground truth data for future DSPy optimization without changing current retrieval behavior.
+Explore an optional telemetry layer that could support retrieval-quality analysis
+and a later DSPy experiment without changing retrieval behavior or authority.
+This document is not an approved schema or implementation plan.
 
-Every retrieval creates a training example: what we returned vs what was actually useful.
+## Current Context
 
-## Context
+Primary-model, agent-selected retrieval is current. The model chooses among the
+registered semantic, keyword, anchored, temporal, node, graph, web, and
+background retrieval tools according to the question. It can also answer
+without a tool when its current context is sufficient. See
+[agentic-retrieval.md](./agentic-retrieval.md).
 
-**Where we are:**
-- Slice 2 knowledge foundation is ~70% complete
-- Semantic search + pinned + adaptive threshold works
-- No visibility into retrieval quality
+K0/K1 hardens the memory kernel and installed authorized retrieval surfaces.
+Optional retrieval telemetry and DSPy optimization are not K0/K1 deliverables.
+They must not expand that work or become a promotion condition for it.
 
-**Why now:**
-- DSPy optimization needs examples
-- Examples need ground truth (what was cited, what was ignored)
-- Can collect data with simple retrieval, optimize later
-- Foundation doc: "collect learning data from first interaction"
+The repository contains legacy `retrieval_events` logging around knowledge
+prefetched during prompt composition. That path does not observe the primary
+model's ordered tool choices, retries, background work, or tool results. Its
+presence is not evidence that the telemetry proposed here has been built, and
+its old fixed-pipeline shape is not the design baseline.
 
-**Why NOT agentic retrieval now:**
-- No users = no data to show where simple retrieval fails
-- Complexity cost is high (tool orchestration, latency, errors)
-- Current retrieval is "good enough" for early users
-- Agentic is documented as clear future goal (see: agentic-retrieval.md)
+## Requirements for a Future Design
 
-## What We're Capturing
+Before implementation, a new design must:
 
-| Field | Purpose | DSPy Use |
-|-------|---------|----------|
-| `query` | What user asked | Input |
-| `nodes_returned` | What we retrieved | Candidate set |
-| `nodes_cited` | What appeared in response | Positive examples |
-| `follow_up_query_id` | User asked again | Negative signal |
-| `latency_ms` | Performance | Optimization target |
+- model a turn and its ordered retrieval attempts, rather than assume one fixed
+  query-to-node pipeline;
+- distinguish prefetched context, continuity retrieval, primary-model tool
+  calls, and background retrieval;
+- preserve the same user, voyage, conversation, source-audience, and per-hop
+  authorization boundaries as the retrieval being observed;
+- keep denial, empty-result, and inaccessible-content distinctions from
+  becoming an information leak;
+- define explicit retention, access, deletion, consent, and redaction rules
+  before storing queries, results, or responses;
+- treat citations, paraphrase overlap, repeated questions, and later user
+  feedback as separately sourced signals with stated confidence, not automatic
+  ground truth;
+- remain non-blocking so telemetry failure cannot change retrieval or response
+  behavior; and
+- keep dataset export and DSPy optimization as separately approved consumers,
+  not automatic consequences of collection.
 
-**Ground truth signals:**
-- `nodes_cited ∩ nodes_returned` = retrieval success
-- `nodes_cited - nodes_returned` = retrieval missed something
-- `follow_up_query` exists = user wasn't satisfied
-- High latency = need optimization
+## Proposed Data Concepts
+
+These are questions for current-surface design and proof, not field names or an
+approved database schema:
+
+- a scoped turn reference and ordered attempt number;
+- the stable registered tool name, timing, completion state, and bounded error
+  class;
+- privacy-safe input and result references, only where the current audience may
+  still observe them;
+- the retrieval-surface and model versions needed to interpret the observation;
+- response-support or user-feedback labels with their source and confidence;
+  and
+- enough lineage to distinguish direct tool use from prefetched, continuity,
+  and background context.
 
 ## Approach
 
-### Schema
+1. Inspect the then-current harness, tool catalogue, installed database
+   boundary, and background-agent surface on the exact implementation revision.
+2. Choose the product questions and label semantics before choosing storage.
+3. Threat-model raw and derived data across personal, room, and voyage scopes.
+4. Design the schema and instrumentation as one current-shaped change; do not
+   extend the legacy fixed-pipeline record by default.
+5. Prove authorization, redaction, retention, ordering, retries, background
+   completion, logging failure, and response-latency behavior.
+6. Require a separate human decision before enabling collection or exporting a
+   DSPy dataset.
 
-```sql
-CREATE TABLE retrieval_events (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+## Non-Goals
 
-  -- Context
-  user_id UUID NOT NULL REFERENCES profiles(id),
-  conversation_id UUID REFERENCES conversations(id),
-  voyage_slug TEXT REFERENCES voyages(slug),
+- Replacing or deferring current agent-selected retrieval
+- Adding telemetry to K0/K1
+- Registering the proof-only future graph boundary
+- Calling substring overlap or a follow-up question ground truth
+- Retaining unrestricted raw prompts, results, or responses
 
-  -- The query
-  query TEXT NOT NULL,
+## Open Decisions
 
-  -- What we returned
-  nodes_returned UUID[],           -- Event IDs from knowledge_current
-  retrieval_threshold FLOAT,       -- Threshold used
-  retrieval_method TEXT,           -- 'semantic', 'pinned', 'combined'
-  pinned_count INTEGER,            -- How many were pinned
-  search_count INTEGER,            -- How many from search
-
-  -- Ground truth (filled after response)
-  nodes_cited UUID[],              -- Which returned nodes were used
-  citation_confidence FLOAT,       -- How confident in citation detection
-
-  -- Implicit signals
-  follow_up_query_id UUID REFERENCES retrieval_events(id),
-
-  -- Metrics
-  latency_ms INTEGER,
-  tokens_in_context INTEGER,
-
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Index for analysis queries
-CREATE INDEX idx_retrieval_events_user ON retrieval_events(user_id);
-CREATE INDEX idx_retrieval_events_created ON retrieval_events(created_at);
-```
-
-### Citation Detection
-
-Post-response heuristic (not perfect, but gives signal):
-
-```typescript
-const detectCitations = (
-  response: string,
-  returnedNodes: KnowledgeNode[]
-): { cited: string[], confidence: number } => {
-  const cited: string[] = [];
-  let matches = 0;
-
-  for (const node of returnedNodes) {
-    // Split content into meaningful chunks
-    const chunks = node.content.split(/[.!?]+/).filter(c => c.length > 20);
-
-    for (const chunk of chunks) {
-      // Normalize and check for substantial overlap
-      const normalized = chunk.toLowerCase().trim();
-      if (response.toLowerCase().includes(normalized.slice(0, 50))) {
-        cited.push(node.eventId);
-        matches++;
-        break;
-      }
-    }
-  }
-
-  // Confidence based on how clear the signal is
-  const confidence = returnedNodes.length > 0
-    ? matches / returnedNodes.length
-    : 1.0;
-
-  return { cited, confidence };
-};
-```
-
-### Follow-up Detection
-
-Track when user's next query is semantically similar (retry signal):
-
-```typescript
-const isFollowUp = async (
-  currentQuery: string,
-  previousQuery: string
-): Promise<boolean> => {
-  // Simple heuristic: high similarity = follow-up/retry
-  const similarity = await computeSimilarity(currentQuery, previousQuery);
-  return similarity > 0.7;
-};
-```
-
-### Integration Flow
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ 1. User sends query                                     │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────┐
-│ 2. retrieveContext() runs                               │
-│    → Start timing                                       │
-│    → Get pinned + search results                        │
-│    → Create retrieval_event (partial)                   │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────┐
-│ 3. Claude generates response                            │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────┐
-│ 4. onFinish callback                                    │
-│    → detectCitations(response, returnedNodes)           │
-│    → Update retrieval_event with nodes_cited            │
-│    → Check if follow-up to previous query               │
-└─────────────────────────────────────────────────────────┘
-```
-
-## Key Decisions
-
-- **Citation detection is heuristic:** Substring matching, not LLM analysis. Good enough for signal, not perfect ground truth. Can improve later.
-
-- **Log everything, analyze later:** Don't filter events. Let DSPy optimization find patterns.
-
-- **Fire-and-forget logging:** Don't block response for logging. Async insert.
-
-- **No user-facing changes:** This is invisible infrastructure. Retrieval behavior unchanged.
-
-## Files to Create/Modify
-
-| File | Change |
-|------|--------|
-| `supabase/migrations/013_retrieval_events.sql` | New table |
-| `lib/retrieval/logging.ts` | Logging service |
-| `lib/retrieval/citations.ts` | Citation detection |
-| `lib/retrieval/index.ts` | Add logging call |
-| `app/api/chat/route.ts` | Log after response |
-
-## Open Questions
-
-- [ ] Should we store query embedding for future similarity analysis?
-- [ ] How to handle very long responses (citation detection performance)?
-- [ ] Should follow-up detection use embedding similarity or simpler heuristic?
-- [ ] Retention policy for retrieval_events (keep forever for DSPy, or prune)?
-
-## Success Criteria
-
-After 1 week of usage:
-- [ ] Can query: "What % of returned nodes get cited?"
-- [ ] Can identify: "Which queries have high follow-up rate?"
-- [ ] Can see: "Average retrieval latency"
-- [ ] Have enough data for initial DSPy experiment
+- Which product decision would the first dataset support?
+- Which signals are useful enough to justify their privacy and retention cost?
+- What is the minimum safe observation for multi-step and background retrieval?
+- Should the legacy fixed-pipeline logger be removed when a current-shaped
+  design is approved?
 
 ## Outcomes
 
-(To be filled after implementation)
+Unbuilt. No schema, instrumentation, collection, DSPy dataset, or optimizer is
+authorized by this proposal.

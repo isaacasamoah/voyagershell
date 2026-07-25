@@ -1,4 +1,4 @@
--- ORU-450 space, roster and invite privacy backstop. Runs after migration 057.
+-- Space, roster and invite privacy backstop. Runs after installed migrations 054-059.
 BEGIN;
 SET client_min_messages = warning;
 
