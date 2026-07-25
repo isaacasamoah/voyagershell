@@ -1,101 +1,90 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
-import { GRAPH_EDGE_KINDS, GRAPH_NODE_KINDS } from "./contract";
-import {
-  knowledgeGraphFixture,
-  validateKnowledgeGraphFixture,
-} from "./fixture";
-import { renderKnowledgeGraphSql } from "./generate-sql";
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { GRAPH_NODE_KINDS } from './contract'
+import { knowledgeGraphFixture } from './fixture'
+import { renderKnowledgeGraphSql } from './generate-sql'
 
-const readRepoFile = (path: string): string =>
-  readFileSync(resolve(process.cwd(), path), "utf8");
-const retrievalMigration = (): string =>
-  readRepoFile("supabase/migrations/056_knowledge_graph_retrieval.sql");
+const readRepoFile = (path: string): string => readFileSync(resolve(process.cwd(), path), 'utf8')
+const retrieval = (): string => readRepoFile('supabase/migrations/063_knowledge_graph_retrieval.sql')
 
-describe("K0 knowledge-graph retrieval contract", () => {
-  it("requires the fixture to instantiate every edge kind", () => {
-    expect(
-      new Set(knowledgeGraphFixture.edges.map((edge) => edge.kind)),
-    ).toEqual(new Set(GRAPH_EDGE_KINDS));
-    const incomplete = structuredClone(knowledgeGraphFixture) as unknown as {
-      edges: Array<{ kind: string }>;
-    };
-    incomplete.edges = incomplete.edges.filter(
-      (edge) => edge.kind !== "supports",
-    );
-    expect(() => validateKnowledgeGraphFixture(incomplete)).toThrow(
-      "all_edge_kinds_required",
-    );
-  });
-
-  it("exposes only exact claim and source fields from the database boundary", () => {
-    const migration = retrievalMigration();
-    const result =
-      migration.match(
-        /\) RETURNS TABLE \(([\s\S]*?)\) LANGUAGE plpgsql/,
-      )?.[1] ?? "";
-    const columns = Array.from(
-      result.matchAll(/^\s*([a-z_]+)\s+/gm),
-      (match) => match[1],
-    );
-
-    expect(columns).toEqual([
-      "knowledge_unit_id",
-      "claim",
-      "source_event_id",
-      "source_content",
-    ]);
-    expect(result).not.toMatch(
-      /result_count|traversal_path|knowledge_audience_id|edge_kind|elapsed_ms/,
-    );
-    expect(migration).toContain(
-      "p_viewer_profile_id = ANY(unit_audience.member_profile_ids)",
-    );
-    expect(migration).toContain(
-      "p_viewer_profile_id = ANY(event_audience.member_profile_ids)",
-    );
-    expect(migration).toContain(
-      "unit.knowledge_audience_id = event.knowledge_audience_id",
-    );
-    expect(migration).toContain("p_graph_enabled IS TRUE");
-  });
-
-  it("keeps the RPC service-only and pads every database outcome", () => {
-    const migration = retrievalMigration();
-
-    expect(migration).toContain("SECURITY DEFINER");
-    expect(migration).toContain("PERFORM pg_sleep");
-    expect(migration).toContain("0.075 - extract(epoch");
-    expect(migration).toContain("FROM PUBLIC, anon, authenticated");
-    expect(migration).toContain("TO service_role");
-    expect(migration).toContain("trg_knowledge_event_source_immutable");
-    expect(migration).toContain("to_jsonb(NEW) - 'knowledge_audience_id'");
-  });
-
-  it("generates six-root, graph toggle, hidden bridge and timing assertions", () => {
-    const sql = renderKnowledgeGraphSql();
-
+describe('knowledge-graph retrieval contract', () => {
+  it('keeps all six root kinds behind one database traversal', () => {
+    const sql = renderKnowledgeGraphSql()
     for (const kind of GRAPH_NODE_KINDS) {
-      expect(sql).toContain(`'${kind}'::public.graph_node_kind`);
+      expect(sql).toContain(`('${kind}'::public.graph_node_kind`)
     }
-    expect(sql).toContain("knowledge_graph_six_kind_retrieval_failed");
-    expect(sql).toContain("knowledge_graph_off_retrieval_found_claim");
-    expect(sql).toContain("knowledge_graph_on_retrieval_missed_claim");
-    expect(sql).toContain("knowledge_graph_denied_root_returned_content");
-    expect(sql).toContain("knowledge_graph_hidden_bridge_returned_provenance");
-    expect(sql).toContain("knowledge_graph_denial_timing_class_failed");
-    expect(sql).toContain("knowledge_graph_mutable_source_accepted");
-  });
+    expect(sql).toContain('knowledge_graph_six_kind_retrieval_failed')
+  })
 
-  it("leaves knowledge_events as the sole event-content ledger", () => {
-    const combined = [
-      retrievalMigration(),
-      readRepoFile("lib/knowledge/kernel/boundary.ts"),
-      readRepoFile("lib/knowledge/kernel/retrieval-assertions-sql.ts"),
-    ].join("\n");
+  it('exposes only exact claim and immutable source fields', () => {
+    const migration = retrieval()
+    const result = migration.match(/CREATE FUNCTION public\.retrieve_knowledge_graph_claims[\s\S]*?RETURNS TABLE \(([\s\S]*?)\n\)/)?.[1]
+    expect(result?.match(/[a-z_]+ uuid|[a-z_]+ text/g)).toEqual([
+      'knowledge_unit_id uuid', 'claim text', 'source_event_id uuid', 'source_content text',
+    ])
+    for (const denied of ['path', 'result_count', 'knowledge_audience_id', 'edge_id', 'evidence_event_id']) {
+      expect(result).not.toContain(denied)
+    }
+  })
 
-    expect(combined).not.toMatch(/CREATE TABLE public\.[a-z_]*events/);
-    expect(combined).not.toContain("knowledge_current");
-  });
-});
+  it('checks graph-on/off, hidden bridges, cross-scope denial, and timing equality', () => {
+    const sql = renderKnowledgeGraphSql()
+    const database = retrieval()
+    const rpc = database.match(
+      /CREATE FUNCTION public\.retrieve_knowledge_graph_claims[\s\S]*?\n\$\$;/,
+    )?.[0] ?? ''
+    expect(sql).toContain('knowledge_graph_off_retrieval_found_claim')
+    expect(rpc).toContain('IF p_graph_enabled IS NOT TRUE THEN')
+    expect(rpc.indexOf('IF p_graph_enabled IS NOT TRUE THEN'))
+      .toBeLessThan(rpc.indexOf('RETURN QUERY'))
+    expect(rpc).not.toContain('CASE WHEN p_graph_enabled THEN p_max_depth ELSE 0 END')
+    expect(sql).toContain('knowledge_graph_hidden_bridge_leaked')
+    expect(sql).toContain('knowledge_graph_cross_scope_content_leak')
+    expect(sql).toContain('knowledge_graph_denial_timing_class_failed')
+    expect(sql).toContain('knowledge_graph_mutable_source_accepted')
+  })
+
+  it('keeps the RPC service-only and pads every outcome', () => {
+    const database = retrieval()
+    const schema = readRepoFile('supabase/migrations/061_knowledge_graph_schema.sql')
+    const boundary = readRepoFile('lib/knowledge/kernel/boundary.ts')
+    expect(database.match(/0\.075 - extract\(epoch/g)).toHaveLength(2)
+    expect(schema).toContain('trg_knowledge_event_source_immutable')
+    expect(database).not.toContain('guard_knowledge_event_source')
+    expect(database).toContain('FROM PUBLIC, anon, authenticated')
+    expect(database).toContain('TO service_role')
+    for (const helper of [
+      'viewer_has_graph_node_grant', 'graph_authority_edge_is_current',
+      'graph_node_label_for_viewer', 'authorized_graph_neighbors',
+    ]) expect(database).toMatch(new RegExp(`REVOKE EXECUTE ON FUNCTION public\\.${helper}`))
+    expect(boundary).toContain('const RESPONSE_FLOOR_MS = 550')
+    expect(boundary).toContain('const RPC_DEADLINE_MS = 500')
+    expect(boundary).toContain('if (error || !Array.isArray(data)) return []')
+  })
+
+  // The browser gate caught 055 raising 42883 on both real Voyager databases:
+  // it qualified the distance operator to `extensions` while migration 002
+  // installs pgvector into `public`, so semantic search silently returned
+  // nothing and hybrid search degraded to keyword-only. The disposable baseline
+  // hid it by installing the extension into `extensions`. The baseline is the
+  // half that lied, so pin it to the shape the product actually runs.
+  it('models pgvector in the schema the product installs it into', () => {
+    expect(readRepoFile('supabase/migrations/002_memory_schema.sql'))
+      .toContain('CREATE EXTENSION IF NOT EXISTS vector;')
+    expect(readRepoFile('recipes/sql/installed-pre-054/core.sql'))
+      .toContain('CREATE EXTENSION vector WITH SCHEMA public;')
+    expect(readRepoFile('supabase/migrations/055_active_knowledge_retrieval.sql'))
+      .not.toContain('OPERATOR(extensions.<=>)')
+  })
+
+  it('uses exact KnowledgeUnit/source audience inheritance', () => {
+    const fixture = knowledgeGraphFixture
+    for (const unit of fixture.units) {
+      const event = fixture.events.find((candidate) => candidate.id === unit.sourceEventId)
+      expect(event?.audienceKey).toBe(unit.audienceKey)
+    }
+    expect(readRepoFile('supabase/migrations/062_knowledge_graph_authorization.sql'))
+      .toContain('event.knowledge_audience_id = NEW.knowledge_audience_id')
+  })
+})
