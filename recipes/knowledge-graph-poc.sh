@@ -1,137 +1,136 @@
 #!/usr/bin/env bash
 # Rollback-only knowledge-graph proof against Voyager's hosted PostgreSQL.
-set -euo pipefail
+set -euo pipefail; set +x
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MIGRATIONS=(
-  "$REPO_ROOT/supabase/migrations/054_knowledge_graph_schema.sql"
-  "$REPO_ROOT/supabase/migrations/055_knowledge_graph_authorization.sql"
-  "$REPO_ROOT/supabase/migrations/056_knowledge_graph_retrieval.sql"
-)
-CUTOVER="$REPO_ROOT/supabase/migrations/057_knowledge_graph_cutover.sql"
+source "$SCRIPT_DIR/lib/installed-precondition.sh"
+source "$SCRIPT_DIR/lib/knowledge-graph-transaction.sh"
+CANONICAL_REF="iesprdzzgjypnksoljym"
+if [ "$#" -ne 1 ]; then
+  printf 'usage: %s DISPOSABLE_PROJECT_REF\n' "${0##*/}" >&2
+  exit 2
+fi
+PROJECT_REF="$1"
+case "$PROJECT_REF" in *[!a-z0-9]*|'') printf 'knowledge-graph: invalid disposable project ref\n' >&2; exit 2 ;; esac
+if [ "$PROJECT_REF" = "$CANONICAL_REF" ]; then
+  printf 'knowledge-graph: canonical project ref is forbidden\n' >&2
+  exit 3
+fi
+PROOF_SQL="$REPO_ROOT/recipes/sql/knowledge-graph"
+PRODUCT_MIGRATIONS=("$REPO_ROOT/supabase/migrations/054_active_membership_authority.sql"
+  "$REPO_ROOT/supabase/migrations/055_active_knowledge_retrieval.sql"
+  "$REPO_ROOT/supabase/migrations/056_room_invite_authority.sql"
+  "$REPO_ROOT/supabase/migrations/057_room_invite_transition.sql"
+  "$REPO_ROOT/supabase/migrations/058_private_reply_promotion_authority.sql"
+  "$REPO_ROOT/supabase/migrations/059_session_authority_cleanup.sql")
+MIGRATIONS=("$REPO_ROOT/supabase/migrations/061_knowledge_graph_schema.sql"
+  "$REPO_ROOT/supabase/migrations/062_knowledge_graph_authorization.sql"
+  "$REPO_ROOT/supabase/migrations/063_knowledge_graph_retrieval.sql")
+CUTOVER="$REPO_ROOT/supabase/migrations/064_knowledge_graph_cutover.sql"
+PROJECTIONS=("$REPO_ROOT/supabase/migrations/065_knowledge_graph_authority_projection.sql"
+  "$REPO_ROOT/supabase/migrations/066_knowledge_graph_membership_projection.sql")
+ACTIVATION="$REPO_ROOT/supabase/migrations/067_knowledge_graph_projection_activation.sql"
+INGRESS=("$REPO_ROOT/supabase/migrations/068_atomic_source_ingress.sql"
+  "$REPO_ROOT/supabase/migrations/069_deployment_gap_recovery.sql")
 FIXTURE="$REPO_ROOT/lib/knowledge/kernel/fixtures/v1.json"
 GENERATOR="$REPO_ROOT/lib/knowledge/kernel/generate-sql.ts"
 K1_GENERATOR="$REPO_ROOT/lib/knowledge/kernel/generate-k1-sql.ts"
 VITE_NODE="$REPO_ROOT/node_modules/.bin/vite-node"
-PROJECT_REF="iesprdzzgjypnksoljym"
+TARGET_CATALOG="$PROOF_SQL/catalog-targets.sql"
+FULL_CATALOG="$PROOF_SQL/catalog-full.sql"
+INSTALLED_POSTCONDITION="$PROOF_SQL/../installed-post-059-contract.sql"
 API_URL="https://api.supabase.com/v1/projects/$PROJECT_REF/database/query"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/voyager-knowledge-graph.XXXXXX")"
-
-cleanup() {
-  unset ACCESS_TOKEN
-  rm -rf -- "$TEMP_DIR"
-}
+INSTALLED_PRECONDITION="$TEMP_DIR/installed-precondition.sql"
+cleanup() { unset ACCESS_TOKEN VOYAGER_SUPABASE_ACCESS_TOKEN; rm -rf -- "$TEMP_DIR"; }
 trap cleanup EXIT
-
+trap 'exit 130' HUP INT TERM
 for command_name in curl jq; do
   command -v "$command_name" >/dev/null || {
     printf 'knowledge-graph: missing required command: %s\n' "$command_name" >&2
     exit 2
   }
 done
-for required_file in "${MIGRATIONS[@]}" "$CUTOVER" "$FIXTURE" "$GENERATOR" "$K1_GENERATOR"; do
+for required_file in "${MIGRATIONS[@]}" "$CUTOVER" "${PROJECTIONS[@]}" "$ACTIVATION" "${INGRESS[@]}" \
+  "${PRODUCT_MIGRATIONS[@]}" "$TARGET_CATALOG" "$FULL_CATALOG" \
+  "$INSTALLED_POSTCONDITION" "$FIXTURE" "$GENERATOR" "$K1_GENERATOR"; do
   [ -f "$required_file" ] || {
     printf 'knowledge-graph: missing file: %s\n' "$required_file" >&2
     exit 2
   }
 done
+installed_precondition_compose "$REPO_ROOT" > "$INSTALLED_PRECONDITION" || {
+  printf 'knowledge-graph: could not compose installed precondition\n' >&2
+  exit 2
+}
 [ -x "$VITE_NODE" ] || {
   printf 'knowledge-graph: dependencies missing; run npm ci first\n' >&2
   exit 2
 }
-
 if [ -n "${VOYAGER_SUPABASE_ACCESS_TOKEN:-}" ]; then
   ACCESS_TOKEN="$VOYAGER_SUPABASE_ACCESS_TOKEN"
 elif [ -r /Users/isaac/.supabase/access-token ]; then
-  IFS= read -r ACCESS_TOKEN < /Users/isaac/.supabase/access-token
+  ACCESS_TOKEN=
+  if ! IFS= read -r ACCESS_TOKEN < /Users/isaac/.supabase/access-token \
+    && [ -z "$ACCESS_TOKEN" ]; then
+    printf 'knowledge-graph: local Supabase token file is empty or unreadable\n' >&2
+    exit 2
+  fi
 else
   command -v ssh >/dev/null || {
     printf 'knowledge-graph: ssh required for Fedora token fallback\n' >&2
     exit 2
   }
-  ACCESS_TOKEN="$(ssh -o BatchMode=yes fedora \
-    'test -r /home/isaac/.supabase/access-token && IFS= read -r token < /home/isaac/.supabase/access-token && printf %s "$token"')"
+  if ! ACCESS_TOKEN="$(ssh -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=1 fedora '
+      test -r /home/isaac/.supabase/access-token || exit 1
+      token=
+      IFS= read -r token < /home/isaac/.supabase/access-token || test -n "$token"
+      test -n "$token" || exit 1
+      printf %s "$token"
+    ')"; then
+    printf 'knowledge-graph: Fedora Supabase token fallback failed\n' >&2
+    exit 2
+  fi
 fi
 [ -n "$ACCESS_TOKEN" ] || {
   printf 'knowledge-graph: Supabase access token unavailable\n' >&2
   exit 2
 }
-
+case "$ACCESS_TOKEN" in *$'\r'*|*$'\n'*) printf 'knowledge-graph: invalid Supabase access token\n' >&2; exit 2 ;; esac
+printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$ACCESS_TOKEN" > "$TEMP_DIR/headers.txt"
+chmod 600 "$TEMP_DIR/headers.txt"
+unset ACCESS_TOKEN VOYAGER_SUPABASE_ACCESS_TOKEN
 query_api() {
   local sql_file="$1"
   local response_file="$2"
   local payload_file="$TEMP_DIR/request.json"
   jq -Rs '{query: .}' "$sql_file" > "$payload_file"
-  if ! curl --silent --show-error --fail-with-body \
+  if ! curl --disable --silent --show-error --fail-with-body \
+    --connect-timeout 15 --max-time 180 \
     --request POST "$API_URL" \
-    --header "Authorization: Bearer $ACCESS_TOKEN" \
-    --header 'Content-Type: application/json' \
+    --header "@$TEMP_DIR/headers.txt" \
     --data-binary "@$payload_file" > "$response_file"; then
-    jq -r '.message // .error // "Management API query failed"' "$response_file" >&2 2>/dev/null \
-      || printf 'knowledge-graph: Management API query failed\n' >&2
+    printf 'knowledge-graph: Management API query failed\n' >&2
     return 1
   fi
 }
-
-CATALOG_SQL="WITH targets AS (
-  SELECT 'relation' AS object_type, c.relname AS object_name, c.relkind::text AS detail
-  FROM pg_catalog.pg_class c
-  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'public' AND c.relname IN (
-    'knowledge_audiences', 'knowledge_units', 'graph_nodes', 'graph_edges',
-    'graph_edges_target_idx', 'knowledge_audiences_canonical_identity_idx',
-    'knowledge_graph_backfill_rejections', 'knowledge_edges',
-    'idx_edges_source', 'idx_edges_target', 'idx_edges_type')
-  UNION ALL
-  SELECT 'function', p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid)
-  FROM pg_catalog.pg_proc p
-  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-  WHERE n.nspname = 'public' AND p.proname IN (
-    'normalize_knowledge_audience_members', 'intersect_knowledge_audience_members',
-    'reject_immutable_knowledge_graph_row', 'guard_knowledge_event_audience',
-    'validate_knowledge_audience', 'validate_knowledge_unit',
-    'validate_graph_node_authority', 'guard_graph_node_identity',
-    'validate_graph_edge', 'traverse_knowledge_graph',
-    'guard_knowledge_event_source', 'retrieve_knowledge_graph_claims',
-    'write_knowledge_graph_edge', 'graph_traverse')
-  UNION ALL
-  SELECT 'type', t.typname, t.typtype::text
-  FROM pg_catalog.pg_type t
-  JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-  WHERE n.nspname = 'public' AND t.typname IN (
-    'graph_node_kind', 'graph_edge_kind', 'knowledge_audience_scope_kind')
-  UNION ALL
-  SELECT 'trigger', t.tgname, c.relname
-  FROM pg_catalog.pg_trigger t
-  JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
-  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'public' AND t.tgname IN (
-    'trg_knowledge_audience_validate', 'trg_knowledge_audience_immutable',
-    'trg_knowledge_event_audience_immutable', 'trg_knowledge_unit_validate',
-    'trg_knowledge_unit_immutable', 'trg_graph_node_validate',
-    'trg_graph_node_identity', 'trg_graph_edge_validate', 'trg_graph_edge_immutable',
-    'trg_knowledge_event_source_immutable',
-    'trg_knowledge_graph_backfill_rejections_immutable')
-  UNION ALL
-  SELECT 'column', column_name, table_name
-  FROM information_schema.columns
-  WHERE table_schema = 'public' AND table_name = 'knowledge_events'
-    AND column_name = 'knowledge_audience_id'
-  UNION ALL
-  SELECT 'constraint', con.conname, c.relname
-  FROM pg_catalog.pg_constraint con
-  JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
-  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'public' AND c.relname = 'knowledge_events'
-    AND con.conname = 'knowledge_events_knowledge_audience_id_fkey'
-)
-SELECT object_type, object_name, detail FROM targets
-ORDER BY object_type, object_name, detail;"
-printf '%s\n' "$CATALOG_SQL" > "$TEMP_DIR/catalog.sql"
-query_api "$TEMP_DIR/catalog.sql" "$TEMP_DIR/catalog-before.json"
+query_api "$TARGET_CATALOG" "$TEMP_DIR/catalog-before.json"
 jq --sort-keys '.' "$TEMP_DIR/catalog-before.json" > "$TEMP_DIR/catalog-before.sorted.json"
+query_api "$FULL_CATALOG" "$TEMP_DIR/full-catalog-before.json"
+jq --sort-keys '.' "$TEMP_DIR/full-catalog-before.json" > "$TEMP_DIR/full-catalog-before.sorted.json"
+query_api "$INSTALLED_PRECONDITION" "$TEMP_DIR/precondition-response.json"
+if ! jq -e '
+    type == "array"
+    and length == 1
+    and .[0] == {
+      "precondition_marker": "INSTALLED_PRE_054_PRECONDITION_GREEN"
+    }
+  ' "$TEMP_DIR/precondition-response.json" >/dev/null; then
+  printf 'knowledge-graph: installed pre-054 precondition failed\n' >&2
+  exit 3
+fi
 legacy_names='["knowledge_edges","idx_edges_source","idx_edges_target","idx_edges_type","graph_traverse"]'
 new_count="$(jq --argjson legacy "$legacy_names" \
   '[.[] | select(.object_name as $name | ($legacy | index($name) | not))] | length' \
@@ -143,58 +142,61 @@ if [ "$new_count" -ne 0 ]; then
       "  \(.object_type):\(.object_name)"' "$TEMP_DIR/catalog-before.sorted.json" >&2
   exit 3
 fi
-
 "$VITE_NODE" "$GENERATOR" --output "$TEMP_DIR/generated-proof.sql"
 "$VITE_NODE" "$K1_GENERATOR" \
-  --setup-output "$TEMP_DIR/k1-setup.sql" \
-  --assertions-output "$TEMP_DIR/k1-assertions.sql"
+  --legacy-output "$TEMP_DIR/k1-legacy.sql" \
+  --historical-output "$TEMP_DIR/k1-historical.sql" \
+  --gap-output "$TEMP_DIR/gap-setup.sql" \
+  --assertions-output "$TEMP_DIR/k1-assertions.sql" \
+  --boundary-output "$TEMP_DIR/boundary-assertions.sql"
 if grep -Eq '^[[:space:]]*(BEGIN|COMMIT|ROLLBACK)[[:space:]]*;' \
-  "${MIGRATIONS[@]}" "$CUTOVER" "$TEMP_DIR/generated-proof.sql" \
-  "$TEMP_DIR/k1-setup.sql" "$TEMP_DIR/k1-assertions.sql"; then
+  "${PRODUCT_MIGRATIONS[@]}" "${MIGRATIONS[@]}" "$CUTOVER" \
+  "${PROJECTIONS[@]}" "$ACTIVATION" "${INGRESS[@]}" "$TEMP_DIR/generated-proof.sql" "$TEMP_DIR/k1-legacy.sql" \
+  "$TEMP_DIR/k1-historical.sql" \
+  "$TEMP_DIR/gap-setup.sql" "$TEMP_DIR/k1-assertions.sql" \
+  "$TEMP_DIR/boundary-assertions.sql"; then
   printf 'knowledge-graph: nested transaction command refused\n' >&2
   exit 3
 fi
-
-{
-  printf 'BEGIN;\n'
-  printf "SET LOCAL lock_timeout = '3s';\n"
-  printf "SET LOCAL statement_timeout = '30s';\n"
-  printf '%s\n' "DO \$rollback_lock\$ BEGIN IF NOT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtext('voyager-knowledge-graph-poc')) THEN RAISE EXCEPTION 'knowledge_graph_proof_busy'; END IF; END \$rollback_lock\$;"
-  for migration in "${MIGRATIONS[@]}"; do
-    sed -n '1,$p' "$migration"
-  done
-  sed -n '1,$p' "$TEMP_DIR/k1-setup.sql"
-  sed -n '1,$p' "$CUTOVER"
-  sed -n '1,$p' "$TEMP_DIR/generated-proof.sql"
-  sed -n '1,$p' "$TEMP_DIR/k1-assertions.sql"
-  printf 'ROLLBACK;\n'
-  printf "SELECT 'KNOWLEDGE_GRAPH_SQL_GREEN' AS verdict;\n"
-} > "$TEMP_DIR/transaction.sql"
+compose_knowledge_graph_transaction
 query_api "$TEMP_DIR/transaction.sql" "$TEMP_DIR/transaction-response.json"
-if ! jq -e 'any(.[]; .verdict == "KNOWLEDGE_GRAPH_SQL_GREEN")' \
-  "$TEMP_DIR/transaction-response.json" >/dev/null; then
-  printf 'knowledge-graph: transactional SQL proof returned no green verdict\n' >&2
-  jq -c '.' "$TEMP_DIR/transaction-response.json" >&2
+if ! jq -e '
+    . == [
+      {
+        "postcondition_marker": "INSTALLED_POST_059_CONTRACT_GREEN"
+      },
+      {
+        "verdict": "KNOWLEDGE_GRAPH_SQL_GREEN"
+      }
+    ]
+  ' "$TEMP_DIR/transaction-response.json" >/dev/null; then
+  printf 'knowledge-graph: transaction returned no exact green verdict\n' >&2
   exit 4
 fi
-
-query_api "$TEMP_DIR/catalog.sql" "$TEMP_DIR/catalog-after.json"
+query_api "$TARGET_CATALOG" "$TEMP_DIR/catalog-after.json"
 jq --sort-keys '.' "$TEMP_DIR/catalog-after.json" > "$TEMP_DIR/catalog-after.sorted.json"
 if ! cmp -s "$TEMP_DIR/catalog-before.sorted.json" "$TEMP_DIR/catalog-after.sorted.json"; then
   printf 'knowledge-graph: post-run catalogue residue differs from pre-run\n' >&2
   diff -u "$TEMP_DIR/catalog-before.sorted.json" "$TEMP_DIR/catalog-after.sorted.json" >&2 || true
   exit 5
 fi
-
+query_api "$FULL_CATALOG" "$TEMP_DIR/full-catalog-after.json"
+jq --sort-keys '.' "$TEMP_DIR/full-catalog-after.json" > "$TEMP_DIR/full-catalog-after.sorted.json"
+if ! cmp -s "$TEMP_DIR/full-catalog-before.sorted.json" "$TEMP_DIR/full-catalog-after.sorted.json"; then
+  printf 'knowledge-graph: full public catalogue differs after rollback\n' >&2
+  diff -u "$TEMP_DIR/full-catalog-before.sorted.json" "$TEMP_DIR/full-catalog-after.sorted.json" >&2 || true
+  exit 6
+fi
 NODE_COUNT="$(jq -r '.expected.nodeCount' "$FIXTURE")"
-EDGE_COUNT="$(jq -r '.expected.edgeCount' "$FIXTURE")"
+EDGE_COUNT="$(jq -r '.expected.historicalEdgeCount' "$FIXTURE")"
 SHARED_CLAIM="$(jq -r '.expected.sharedClaim' "$FIXTURE")"
-printf 'knowledge-graph: existing knowledge_events ledger | 2 fixed sources | participants NULL\n'
-printf 'knowledge-graph: 6 kinds | %s nodes | %s edges | replay identical\n' "$NODE_COUNT" "$EDGE_COUNT"
+printf 'knowledge-graph: existing knowledge_events ledger | 3 fixed sources | participants NULL\n'
+printf 'knowledge-graph: 6 kinds | %s nodes | %s historical edges | replay identical\n' "$NODE_COUNT" "$EDGE_COUNT"
 printf 'knowledge-graph: graph on found "%s" with immutable source; graph off missed it\n' "$SHARED_CLAIM"
 printf 'knowledge-graph: 16 edge kinds | six-root DB RPC | metadata denied\n'
 printf 'knowledge-graph: root denied | hidden bridge denied | timing class equal | victim private residue 0 | NULL denied\n'
-printf 'knowledge-graph: NULL-audience source rejected | Person + Voyager rename stable | catalogue residue 0\n'
+printf 'knowledge-graph: NULL source excluded then assigned once | Person + Voyager rename stable | residue 0\n'
 printf 'knowledge-graph: K1 exact backfill parity | unresolved rows outside graph and reported\n'
+printf 'knowledge-graph: multi-scope identity | locked catch-up | leave/rejoin | cascade-safe history\n'
 printf 'knowledge-graph: final writer + retrieval green | old graph catalogue absent | rollback identical\n'
 printf 'KNOWLEDGE_GRAPH_POC_GREEN\n'
