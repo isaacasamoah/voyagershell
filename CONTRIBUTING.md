@@ -1,280 +1,101 @@
 # Contributing to Voyager
 
-Thank you for your interest in contributing to Voyager! This document provides guidelines for contributing to the project.
+Read [CLAUDE.md](./CLAUDE.md) and [ARCHITECTURE.md](./ARCHITECTURE.md) before
+changing the application. `feature/*` branches flow to `dev` for preview;
+`main` is production and is promoted only through the documented release
+ritual.
 
-## Getting Started
+## Local setup
 
-### Prerequisites
-
-- Node.js 20+
-- npm 10+
-- Supabase account (or local Supabase CLI)
-- API keys: Anthropic, OpenAI, Google
-
-### Development Setup
+Requirements: Node.js 20, npm, Supabase access for database work, and a local
+`.env.local` derived from [.env.example](./.env.example).
 
 ```bash
-# Clone the repository
-git clone https://github.com/isaacasamoah/voyagershell.git
-cd voyagershell
-
-# Install dependencies
-npm install
-
-# Copy environment template
-cp .env.example .env.local
-
-# Edit .env.local with your API keys
-# See Environment Variables section in README.md
-
-# Apply database migrations
-npx supabase db push
-
-# Start development server
+npm ci
 npm run dev
 ```
 
-### Verify Setup
+Run before review:
 
 ```bash
-npm run type-check  # TypeScript
-npm run lint        # ESLint
-npm run test        # Vitest
-npm run build       # Production build
+npm run type-check
+npm run test:run
 ```
 
----
+Use the focused test nearest your change while iterating. Database proof recipes
+are documented in [recipes/README.md](./recipes/README.md).
 
-## Development Workflow
+## Code standards
 
-### Branch Strategy
+- TypeScript is strict.
+- Use named exports and arrow components.
+- Keep source, SQL, recipe, and contributor-document files below 250 lines;
+  split coherent modules instead of compressing unrelated responsibilities.
+- Co-locate focused `*.test.ts` files with the contract they protect.
+- Preserve user work in dirty worktrees and keep changes task-scoped.
+- Update documentation in the same clean transition as code.
 
-```
-main              # Stable, deployable
-├── feature/*     # New features
-├── fix/*         # Bug fixes
-└── refactor/*    # Code improvements
-```
+Use `lib/debug/logger.ts` for structured application logging. Select models
+through `lib/models/router.ts`; do not hardcode model IDs.
 
-### Pull Request Process
+## Clean transitions
 
-1. **Create a branch** from `main`
-2. **Make your changes** with clear, atomic commits
-3. **Run quality checks** (`npm run type-check && npm run lint && npm run test`)
-4. **Open a PR** with a clear description
-5. **Wait for review** - all PRs require review before merging
+When replacing a function, table, tool, vocabulary, or runtime path, inventory
+every live caller and delete the old definition and references in the same
+change. Do not add compatibility wrappers, duplicate registries, or deferred
+cleanup. Historical migrations remain history; active tests, docs, and scripts
+must describe the current contract.
 
-### Commit Messages
+## Knowledge and graph changes
 
-Follow conventional commits:
+`knowledge_events` is the sole event-content ledger. Do not add another content
+table or make the graph authoritative for product membership.
 
-```
-feat: Add keyword_grep retrieval tool
-fix: Resolve session resume race condition
-refactor: Extract prompt composition to lib/prompts
-docs: Update README with architecture diagram
-test: Add integration tests for chat API
-```
+The candidate graph contract is:
 
----
+- one canonical scope-neutral `graph_nodes` row per kind and authority;
+- immutable canonical source/authority audience snapshots;
+- typed immutable node grants;
+- immutable canonical historical edges with exact event evidence;
+- rebuildable current authority edges projected from product rows; and
+- root and per-hop authorization behind the future graph retrieval boundary.
 
-## Code Standards
+MessageEvent and KnowledgeUnit visibility must exactly inherit the source
+audience. Structural historical visibility requires the exact edge-evidence
+basis. A link never creates endpoint grants. Current membership checks must use
+`state = 'active'`; retained `left` rows grant nothing.
 
-### TypeScript
+The K2 cutover removed the event-only `graph` tool, so nothing traverses the
+graph today. Code may extend `lib/knowledge/kernel/boundary.ts` and its privacy
+contract, but it stays isolated from UI, chat, tools and live writers until K3
+gives it claims to return.
 
-- **Strict mode enabled** - No `any` types without justification
-- **Named exports only** - No default exports
-- **Explicit return types** for public functions
-- **Interface Props** above components
+## Migration safety
 
-```typescript
-// Good
-export const MyComponent = (props: MyComponentProps): JSX.Element => { ... }
+- Never rewrite deployed migrations 001–053.
+- Do not apply a migration permanently unless the task and release protocol
+  explicitly authorize it.
+- Hosted proof fixtures must be isolated from arbitrary rows, use deterministic
+  negative `knowledge_events.sequence_num` values, never call `setval`, and run
+  entirely inside `BEGIN`/`ROLLBACK`.
+- Preserve token secrecy and use `curl --fail-with-body` plus an exact verdict.
+- Prove the public catalogue is unchanged after rollback.
 
-// Bad
-export default function MyComponent(props) { ... }
-```
+Product migration files currently end at the K2 cutover, 069. File numbering and
+the hosted migration ledger are not installed-state authority: run the shared
+pre-054 catalogue contract before applying 054–059. Migrations 060–069 are ONE
+release boundary — source intent, graph substrate, cutover with backfill and
+rejection evidence, authority projections, atomic ingress and deployment-gap
+recovery — and must never be applied in part.
+K2 must atomically create the canonical source audience, event, MessageEvent
+node, grants, historical edges/evidence, and fan-out; backfill deployment-gap
+events; and only then make the event audience non-null. The earlier once-only
+`NULL -> UUID` audience assignment remains until that release dependency is
+satisfied.
 
-### React Components
+## Pull requests
 
-- **Arrow functions** for all components
-- **Props interface** defined above component
-- **Files under 250 lines** (split if larger)
-
-```typescript
-interface UserMessageProps {
-  content: string;
-  timestamp: Date;
-}
-
-export const UserMessage = ({ content, timestamp }: UserMessageProps) => {
-  return (
-    <div className="...">
-      {content}
-    </div>
-  );
-};
-```
-
-### File Organization
-
-```
-lib/
-  feature/
-    index.ts         # Public exports
-    types.ts         # Type definitions
-    utils.ts         # Helper functions
-    feature.test.ts  # Tests co-located
-```
-
-### Error Handling
-
-```typescript
-// Pattern: Log with context prefix, fallback gracefully
-try {
-  const result = await riskyOperation();
-  return result;
-} catch (error) {
-  console.error('[FeatureName] Operation failed:', error);
-  return fallbackValue;
-}
-```
-
----
-
-## Key Areas for Contribution
-
-### 1. Knowledge System (`lib/knowledge/`)
-
-The heart of Voyager. Contributions welcome in:
-- Graph algorithms (better `get_connected` traversal)
-- Search optimization (query strategies)
-- Event processing (classification, entity extraction)
-
-### 2. Retrieval Tools (`lib/retrieval/`)
-
-Claude's toolbox. Ideas:
-- New retrieval strategies
-- Better threshold tuning
-- Multi-step retrieval chains
-
-### 3. Integrations
-
-Connectors for external tools (all future work):
-- Slack (highest priority)
-- Jira
-- Google Drive
-- GitHub
-
-### 4. UI/UX (`components/`)
-
-Terminal aesthetic improvements:
-- Accessibility (keyboard navigation, screen readers)
-- Animation polish
-- Mobile responsiveness
-
-### 5. Testing
-
-Coverage improvements:
-- Integration tests for API routes
-- Unit tests for services
-- E2E tests with Playwright
-
----
-
-## Architecture Guidelines
-
-### Adding a New API Route
-
-```typescript
-// app/api/feature/route.ts
-import { getAuthenticatedUserId } from '@/lib/auth';
-import { NextRequest, NextResponse } from 'next/server';
-
-export const POST = async (req: NextRequest) => {
-  try {
-    const userId = await getAuthenticatedUserId();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const data = await req.json();
-    // ... implementation
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('[Feature] Error:', error);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
-  }
-};
-```
-
-### Adding a New Retrieval Tool
-
-```typescript
-// In lib/retrieval/tools.ts
-const myNewTool = tool({
-  description: 'What this tool does and when to use it',
-  parameters: z.object({
-    param: z.string().describe('Parameter description'),
-  }),
-  execute: async ({ param }) => {
-    // Implementation
-    return results;
-  },
-});
-```
-
-### Adding a Knowledge Event Type
-
-1. Update migration in `supabase/migrations/`
-2. Add type to `lib/knowledge/types.ts`
-3. Add creation function to `lib/knowledge/events.ts`
-4. Update `knowledge_current` trigger if needed
-
----
-
-## Testing
-
-### Running Tests
-
-```bash
-npm run test              # Watch mode
-npm run test:run          # Single run
-npm run test:coverage     # With coverage
-npm run test:ui           # Vitest UI
-```
-
-### Writing Tests
-
-```typescript
-// feature.test.ts
-import { describe, it, expect } from 'vitest';
-import { myFunction } from './index';
-
-describe('myFunction', () => {
-  it('should handle normal case', () => {
-    const result = myFunction('input');
-    expect(result).toBe('expected');
-  });
-
-  it('should handle edge case', () => {
-    const result = myFunction('');
-    expect(result).toBe('fallback');
-  });
-});
-```
-
----
-
-## Questions?
-
-- **Architecture decisions**: Check `.claude/research/voyager-v2/foundation.md`
-- **Roadmap**: See `.claude/research/voyager-v2/slices.md`
-- **Implementation details**: Read the code - it's documented
-
-For questions not covered here, open a GitHub issue or discussion.
-
----
-
-*Welcome aboard. Let's build something beautiful.*
+Keep commits atomic and explain the user-visible or architectural outcome, the
+proof run, and any residual release gate. Never claim a hosted, preview, or
+production result you did not observe. Review must be clean before preview;
+production requires the separate human Test Gate and release instruction.

@@ -1,170 +1,109 @@
 ---
 name: patterns
-description: Voyager codebase patterns and conventions. Reference before implementing new features. Agent primitives, tools, prompts, debug logging.
+description: Voyager codebase patterns for agents, tools, knowledge, privacy, logging, and models.
 ---
 
-# Voyager Patterns
+# Voyager patterns
 
-Reference this before implementing new features.
+Read this before implementing a feature. Full shared patterns live at
+`~/.claude/modules/patterns/voyager/PATTERNS.md`; repository truth wins when the
+two differ.
 
-**Full patterns:** `~/.claude/modules/patterns/voyager/PATTERNS.md` — primitives, compositions, anti-patterns, architecture decisions.
+## Quick reference
 
----
+| Pattern | Location |
+|---|---|
+| Agent primitives and registry | `lib/agents/primitives.ts` |
+| Final tool registry | `lib/retrieval/voyager-tools.ts` |
+| Knowledge retrieval tools | `lib/retrieval/knowledge-retrieval-tools.ts` |
+| Future graph proof boundary | `lib/knowledge/kernel/boundary.ts` |
+| Knowledge event writer | `lib/knowledge/events.ts` |
+| Prompt composition | `lib/prompts/` |
+| Tool types | `lib/retrieval/tool-types.ts` |
+| Debug logging | `lib/debug/logger.ts` |
+| Model selection | `lib/models/router.ts` |
+| Background queue | `lib/agents/queue.ts` |
 
-## Quick Reference
+## Agents and retrieval
 
-| Pattern | Location | Purpose |
-|---------|----------|---------|
-| Agent Primitives | `lib/agents/primitives.ts` | Declarative agent definitions (4 types: primary, background, event, scheduled) |
-| Agent Registry | `lib/agents/primitives.ts` | All agents declared as data. Implementation files import from here. |
-| Retrieval Functions | `lib/knowledge/search.ts` | `searchKnowledge`, `keywordGrep`, `getConnectedKnowledge`, `getRecentKnowledge`, `getKnowledgeByIds` |
-| Knowledge Events | `lib/knowledge/events.ts` | Event-sourced knowledge creation. Append-only. |
-| Debug Logging | `lib/debug/logger.ts` | Toggleable structured logging by domain |
-| Model Router | `lib/models/router.ts` | Model selection by task/quality. Never hardcode model IDs. |
-| Prompt Composition | `lib/prompts/` | Modular prompt layers. `composeSystemPrompt()` is the entry point. |
-| Tool Definitions | `lib/prompts/types.ts` | Standard `ToolDefinition` interface for all tools |
-| Agent Queue | `lib/agents/queue.ts` | `agent_tasks` table. Enqueue, claim, complete, fail. Realtime-enabled. |
+The primary Voyager owns the conversation and decides whether and how to
+retrieve. Background work returns findings to the same primary voice. Avoid
+heuristics that compete with the model for query-depth decisions.
 
----
+`createVoyagerTools()` is the single registered catalogue. Knowledge tools are
+`semantic_search`, `keyword_grep`, `anchored_search` and `get_nodes`. The K2
+cutover removed the legacy `graph` tool with the `graph_traverse` RPC and
+`knowledge_edges` table it read, so nothing traverses the graph today. The
+six-kind kernel boundary is still an isolated proof client; when K3 gives it a
+live caller, never expose paths, counts, grants, evidence, labels, edge
+metadata, or provenance through it.
 
-## Agent Architecture
+## Knowledge contract
 
-Four agent types with clear boundaries:
-
-```
-primary     — Voyager. Owns conversation. Has retrieval tools + spawn.
-background  — Retrieval agent. Heavy lifting. Reports to primary via Realtime.
-event       — Post-session agent. Triggered by system events. No user interaction.
-scheduled   — Quartermaster. Cron-triggered. No user interaction.
-```
-
-**Primary Voyager has tools:**
-- `semantic_search`, `keyword_grep` — inline retrieval for light queries
-- `spawn_background_agent` — spawns retrieval agent for heavy work
-- `canSpawn: ['retrieval']`
-
-**One brain, one decision.** Voyager decides when to search, not a heuristic or Gemini gate.
-
-**One voice.** Background findings feed back into primary Voyager's context via the followup route. Same prompt, same model, full conversation history.
-
----
-
-## Knowledge System
-
-Append-only event-sourced knowledge with post-session enrichment.
-
-```
-knowledge_events (source of truth, append-only)
-    ↓ trigger
-knowledge_current (computed state + embeddings)
+```text
+knowledge_events       sole append-only event-content ledger
+knowledge_current      derived search and embedding projection
+knowledge_units        immutable claims with exact source provenance
+graph_nodes            scope-neutral canonical identities
+knowledge_audiences    immutable source/authority snapshots
+graph_node_grants      typed identity-discovery evidence
+graph_edges            immutable historical/source/semantic relations
+graph_edge_evidence    exact evidence events for historical edges
+graph_authority_edges  rebuildable current product-authority projection
 ```
 
-### Knowledge Types
+One Person, Voyager, Voyage, or Space has one node across every scope. Never
+duplicate an identity to represent visibility and never put an audience on the
+node. Source content is authorized only by its immutable source audience; a
+KnowledgeUnit inherits that audience exactly.
 
-| Type | What | Always Loaded |
-|------|------|---------------|
-| `domain` | Deep expertise, insights | No — retrieved by similarity |
-| `operational` | Decisions, facts, roles, dates | No — retrieved by similarity + recency |
-| `preference` | How to be treated | **Yes — every session** |
+Grant bases are typed. `source_event` may bind only a MessageEvent to itself or
+a KnowledgeUnit to its exact source. Structural endpoints require
+`edge_evidence` for the exact edge, event, audience, and endpoint. Product bases
+carry exact IDs, versions, and effective times. A link does not create grants.
 
-### Attention Score
+Current `member_of`, `in_voyage`, and `companion_of` relations come only from
+product triggers. Traversal rechecks the live product row, state, revision, and
+time. Only `state = 'active'` is membership; `left` rows are retained historical
+authority and grant no current product access.
 
-Continuous 0.0-1.0 replacing `isPinned` + `isActive` booleans.
+Profile and voyage triggers are the sole writers of current Person/Voyager and
+Voyage labels. Membership and space projectors may ensure canonical nodes but
+must not overwrite those labels. Historical-only discovery uses the immutable
+grant label snapshot.
 
-- 0.9-1.0: Always surface (pinned equivalent)
-- 0.3-0.5: Quiet — focused queries only
-- 0.0-0.3: Deep search only (noise)
+## K2 release boundary
 
-### Context Snippet
+Migrations 060–069 are ONE release boundary and were applied as one transaction:
+the source-intent claim, the graph substrate, the cutover with its backfill and
+rejection evidence, the authority projections, the atomic ingress and the
+deployment-gap recovery. There is no partial cutover and no dual runtime.
+Deployable 054–059 hardens membership, retrieval, invites, promotion, and
+session authority cleanup but does not install graph tables.
+Do not replace `lib/knowledge/events.ts` with partial graph writes before the K2
+Human Spec Gate. K2 must make source audience, event, MessageEvent node, grants,
+structural edges/evidence, and fan-out one transaction; backfill deployment-gap
+events; then enforce a non-null event audience. Until then, one canonical
+`NULL -> UUID` audience assignment remains recoverable and all later changes are
+rejected.
 
-One-line contextualisation prepended to content before re-embedding.
-"Yeah go with option B" → "[Pricing tier discussion for enterprise] Yeah go with option B"
+## Logging and models
 
----
+Use `log.message`, `log.voyage`, `log.memory`, `log.agent`, `log.api`, and the
+other domains exported by `lib/debug/logger.ts`. Enable with `VOYAGER_DEBUG=*`
+or a comma-separated domain list.
 
-## Retrieval
+Select models through `modelRouter`; never hardcode provider model IDs. Use the
+chat task for user-facing primary and follow-up responses so Voyager keeps one
+voice.
 
-### Agentic Retrieval (replaces code sandbox)
+## Code rules
 
-The retrieval agent calls tools directly and reasons between calls:
-
-```
-Objective → semantic_search → reason → keyword_grep → reason → get_connected → return findings
-```
-
-Tools are thin Vercel AI SDK wrappers around `lib/knowledge/search.ts` functions.
-
-### Pre-Retrieval
-
-Three-stage funnel on every user message:
-
-```
-All knowledge → filter by knowledge_type → filter by attention_score → semantic similarity → system prompt
-```
-
-Preferences bypass the funnel — loaded unconditionally.
-
-### Background Surfacing
-
-```
-Background agent completes → agent_tasks Realtime → client → /api/chat/followup
-  → Primary Voyager's prompt + model + real messages + findings → stream response
-```
-
----
-
-## Debug Logging
-
-```typescript
-import { log } from '@/lib/debug'
-
-log.message('User sent', { conversationId, length })
-log.memory('Search complete', { count, ms })
-log.agent('Task queued', { taskId })
-log.api('Request received', { path })
-```
-
-**Domains:** message, voyage, memory, ui, intent, auth, api, agent
-
-**Enable:** `VOYAGER_DEBUG=*` (all) or `VOYAGER_DEBUG=api,memory` (specific)
-
----
-
-## Model Router
-
-```typescript
-import { modelRouter } from '@/lib/models'
-
-const model = modelRouter.select({
-  task: 'chat',        // chat | decision | embedding
-  quality: 'balanced', // fast | balanced | best
-  streaming: true,
-  toolUse: true,
-})
-```
-
-Never hardcode model IDs. Never use `task: 'synthesis'` for user-facing responses — use `task: 'chat'`.
-
----
-
-## Code Standards
-
-- TypeScript strict
-- Named exports only
-- Arrow function components
-- Files under 250 lines (except VoyagerInterface)
-- Pure functions preferred (data in, result out)
-
----
-
-## Anti-Patterns
-
-| Don't | Do Instead |
-|-------|------------|
-| Multiple systems deciding query depth | Voyager decides via tool calls |
-| LLM generates JS for sandbox execution | LLM calls tools directly (agentic) |
-| Separate synthesis agent/prompt/voice | Primary Voyager speaks with findings in context |
-| Boolean attention flags | Continuous 0-1 attention score |
-| Mandatory clustering/synthesis pipeline | Agent decides what's needed per query |
-| In-memory debounce in serverless | DB timestamp check |
-| `task: 'synthesis'` for followup | `task: 'chat'` — same model as primary |
+- TypeScript strict, named exports, arrow components.
+- Files below 250 lines; split by coherent responsibility.
+- One canonical owner for each fact or runtime path.
+- Database privacy at the database boundary plus the application boundary.
+- Clean transitions delete the replaced definition and every live caller in the
+  same change; no compatibility wrappers.
+- Hosted proof data is rollback-only, sequence-neutral, isolated, and secret
+  safe.
