@@ -32,18 +32,11 @@ class FakeQuery implements PromiseLike<QueryResult> {
   select(_columns: string) { return this }
   in(column: string, values: unknown[]) { this.filters[column] = values; return this }
   contains(column: string, value: unknown) { this.filters[column] = value; return this }
+  or(expression: string) { this.filters.or = expression; return this }
   order(_column: string, _options?: unknown) { return this }
   limit(_limit: number) { return this }
   is(column: string, value: unknown) { this.filters[column] = value; return this }
   eq(column: string, value: unknown) { this.filters[column] = value; return this }
-
-  maybeSingle(): Promise<QueryResult> {
-    state.queries.push({ table: this.table, filters: { ...this.filters } })
-    if (this.table === 'sessions') {
-      return Promise.resolve({ data: { space_id: state.destinationSpaceId }, error: null })
-    }
-    return Promise.resolve({ data: null, error: null })
-  }
 
   then<TResult1 = QueryResult, TResult2 = never>(
     onfulfilled?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
@@ -65,12 +58,22 @@ class FakeQuery implements PromiseLike<QueryResult> {
 }
 
 vi.mock('@/lib/supabase/admin', () => ({
-  getAdminClient: () => ({ from: (table: string) => new FakeQuery(table) }),
+  getAdminClient: () => ({
+    from: (table: string) => new FakeQuery(table),
+    rpc: (name: string) => name === 'get_session_scope'
+      ? Promise.resolve({ data: [{
+          id: 'conversation-1',
+          user_id: 'user-isaac',
+          voyage_id: null,
+          voyage_slug: null,
+          space_id: state.destinationSpaceId,
+          status: 'active',
+        }], error: null })
+      : Promise.resolve({ data: null, error: { message: `unexpected RPC: ${name}` } }),
+  }),
 }))
-vi.mock('@/lib/voyage', () => ({
-  SessionAccessError: class SessionAccessError extends Error {},
+vi.mock('@/lib/voyage/session', () => ({
   resolveSessionVoyage: vi.fn().mockResolvedValue(null),
-  getVoyageBySlug: vi.fn(),
 }))
 vi.mock('@/lib/messaging/handles', () => ({
   getOwnVoyagerIdentity: vi.fn().mockResolvedValue({

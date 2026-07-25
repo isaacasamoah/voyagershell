@@ -13,7 +13,7 @@ import { useVoyageContext } from './hooks/useVoyageContext';
 import { useAstronautState } from './hooks/useAstronautState';
 import { useEventFeed } from '@/lib/messaging/useEventFeed';
 import { shouldShowStreamingReply, shouldShowOptimisticUser, countAssistantEvents, type FeedEvent, isHydratedMessage } from '@/lib/messaging/feed-types';
-import { resolveComposerAudience } from '@/lib/messaging/address';
+import { composerAsideBadge, resolveComposerAudience } from '@/lib/messaging/address';
 import { useVisualViewport } from './hooks/useVisualViewport';
 import { useRoomMembershipRealtime } from './hooks/useRoomMembershipRealtime';
 import { useStreamingReply } from './hooks/useStreamingReply';
@@ -111,6 +111,15 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
       room.people,
     ),
     [inputValue, ownVoyagerHandle, room.people],
+  );
+  // The @-inversion cue (C5). An own-aside names its private destination while
+  // you type, so the inverted convention (`@` = whisper, not public mention) is
+  // visible BEFORE send. Same resolver as the audience contract above — the cue
+  // is a refinement of the `private` destination, never a second classifier, so
+  // what you read and what the server does cannot drift.
+  const composerAsideCue = useMemo(
+    () => composerAsideBadge(inputValue, { ownVoyagerHandle, ownVoyagerAliases: ['voyager'] }),
+    [inputValue, ownVoyagerHandle],
   );
   const feedUserId = isAuthenticated ? (user?.id ?? null) : null;
   useRoomMembershipRealtime({
@@ -787,14 +796,17 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
             </div>
           )}
 
-          <div className={`text-xs font-mono mb-1 pl-8 ${
-            composerAudience.kind === 'private'
-              ? 'text-[#5ec98f]'
-              : composerAudience.kind === 'held'
-                ? 'text-[#ff8b84]'
-                : 'text-[#59a5ff]'
-          }`}>
-            {composerAudience.label}
+          <div
+            data-testid="composer-audience"
+            className={`text-xs font-mono mb-1 pl-8 ${
+              composerAudience.kind === 'private'
+                ? 'text-[#5ec98f]'
+                : composerAudience.kind === 'held'
+                  ? 'text-[#ff8b84]'
+                  : 'text-[#59a5ff]'
+            }`}
+          >
+            {composerAsideCue ?? composerAudience.label}
           </div>
           <form onSubmit={handleSubmit}>
             <InputArea

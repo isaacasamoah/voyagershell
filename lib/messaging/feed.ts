@@ -1,7 +1,7 @@
 import type { Json } from '@/lib/supabase/types'
-import { SessionAccessError, resolveSessionVoyage } from '@/lib/voyage'
-import { emptyFeedEnrichment, getFeedTableClient, loadPrivateFeedEnrichment, resolveViewerInviteState, type FeedEnrichment } from './feed-enrichment'
-import { sortFeedEvents, type FeedEvent, type FeedEventKind, type FeedEventRole, type FeedEventType, type InviteState } from './feed-types'
+import { resolveSessionVoyage } from '@/lib/voyage/session'
+import { emptyFeedEnrichment, getFeedTableClient, loadPrivateFeedEnrichment, resolveViewerInviteStates, type FeedEnrichment } from './feed-enrichment'
+import { sortFeedEvents, type FeedEvent, type FeedEventKind, type FeedEventRole, type FeedEventType, type InviteMembershipState } from './feed-types'
 
 export interface FeedEventRow {
   id: string
@@ -47,6 +47,10 @@ const getSenderDisplayName = (row: FeedEventRow): string | null => (
   isObject(row.metadata) ? getString(row.metadata, 'sender_display_name') : null
 )
 
+const getInviteSpaceId = (row: FeedEventRow): string | null => (
+  isObject(row.metadata) ? getString(row.metadata, 'space_id') : null
+)
+
 // Historical public Voyager rows retain their owner attribution. New writes do
 // not use this field, but immutable ledger history must remain readable.
 const getOwnerDisplayName = (row: FeedEventRow): string | null => (
@@ -85,11 +89,28 @@ export const isInFeedContext = (
   return voyageSlug ? row.voyage_slug === voyageSlug : row.voyage_slug === null
 }
 
+// The session-binding half of isInFeedContext, expressed for the database.
+// Everything else the predicate asks for (participant membership, event type,
+// voyage) the query already states as its own filters; this is the one clause
+// that used to be left to JavaScript. It has to run in the query because the
+// recent-N cap runs in the query — a row filtered out afterwards has already
+// spent a slot, and the feed comes back short of a cap it never reached.
+//
+// Mirrors getFeedEventSessionId exactly: metadata.session_id is the answer when
+// it is there, source_ref.conversation_id only when it is not. createMessageEvent
+// has always stamped the metadata key, so the fallback is for older rows.
+// `message` rows carry no session binding and pass on their type alone.
+const inSessionOrMessage = (conversationId: string): string => [
+  'event_type.eq.message',
+  `metadata->>session_id.eq.${conversationId}`,
+  `and(metadata->>session_id.is.null,source_ref->>conversation_id.eq.${conversationId})`,
+].join(',')
+
 export const toFeedEvents = (
   rows: FeedEventRow[],
   deliveries: DeliveryRow[],
   userId: string,
-  viewerInviteState: InviteState | null = null,
+  viewerInviteStates: ReadonlyMap<string, InviteMembershipState> = new Map(),
   enrichment: FeedEnrichment = emptyFeedEnrichment(),
 ): FeedEvent[] => {
   const deliveryByEventId = new Map(deliveries.map((delivery) => [delivery.event_id, delivery]))
@@ -97,6 +118,8 @@ export const toFeedEvents = (
   return sortFeedEvents(rows.map((row) => {
     const role = getFeedRole(row, userId)
     const kind = getFeedKind(row)
+    const inviteSpaceId = kind === 'invite' ? getInviteSpaceId(row) : null
+    const inviteMembership = inviteSpaceId ? viewerInviteStates.get(inviteSpaceId) ?? null : null
     const delivery = deliveryByEventId.get(row.id) ?? null
     const isSelfAuthoredMessage = row.event_type === 'message' && role === 'user'
     // Historical owner-authored public Voyager rows had no self-delivery.
@@ -110,7 +133,9 @@ export const toFeedEvents = (
       eventType: row.event_type as FeedEventType,
       role,
       kind,
-      inviteState: kind === 'invite' ? viewerInviteState : null,
+      inviteState: inviteSpaceId && inviteMembership
+        ? { membership: inviteMembership, spaceId: inviteSpaceId }
+        : null,
       // Private conversation history always reflects the owner's canonical
       // current companion identity. Historical public Voyager metadata remains
       // immutable and continues to render its stored attribution.
@@ -144,8 +169,11 @@ export const queryScopedEvents = async (
     .select('id,event_type,content,created_at,metadata,source_ref,actor_type,user_id,participants,voyage_slug')
     .in('event_type', ['conversation', 'message'])
     .contains('participants', [userId])
+    .or(inSessionOrMessage(conversationId))
     // Recent-N cap: fetch newest N, client sorts ascending. Bounds a long
-    // history + the per-Realtime-insert refetch.
+    // history + the per-Realtime-insert refetch. Every filter the feed applies
+    // is stated ABOVE this line, so the N rows counted here are N rows the user
+    // actually sees — the cap means what it says.
     .order('created_at', { ascending: false })
     .limit(limit)
 
@@ -154,6 +182,9 @@ export const queryScopedEvents = async (
   const { data, error } = await query
   if (error) throw new Error(error.message)
 
+  // The query now selects exactly the in-context set, so this is an assertion
+  // rather than a filter: it holds the predicate as the last word on what the
+  // feed may contain, and any disagreement with the query fails closed.
   return ((data ?? []) as FeedEventRow[])
     .filter((row) => isInFeedContext(row, userId, conversationId, scopedVoyageSlug))
 }
@@ -206,11 +237,11 @@ export const getFeed = async (userId: string, conversationId: string): Promise<F
     .filter((row) => row.event_type === 'message')
     .map((row) => row.id)
 
-  // Only pay the membership lookup when a knock is actually on screen.
-  const hasInvite = rows.some((row) => getFeedKind(row) === 'invite')
-  const viewerInviteState = hasInvite && voyageSlug
-    ? await resolveViewerInviteState(supabase, voyageSlug, userId)
-    : null
+  const inviteSpaceIds = Array.from(new Set(rows
+    .filter((row) => getFeedKind(row) === 'invite')
+    .map(getInviteSpaceId)
+    .filter((spaceId): spaceId is string => Boolean(spaceId))))
+  const viewerInviteStates = await resolveViewerInviteStates(supabase, inviteSpaceIds, userId)
   const [enrichment, deliveryResult] = await Promise.all([
     loadPrivateFeedEnrichment(supabase, userId, conversationId, privateAssistantIds),
     messageIds.length === 0
@@ -227,9 +258,7 @@ export const getFeed = async (userId: string, conversationId: string): Promise<F
     rows,
     (deliveryResult.data ?? []) as DeliveryRow[],
     userId,
-    viewerInviteState,
+    viewerInviteStates,
     enrichment,
   )
 }
-
-export { SessionAccessError }
