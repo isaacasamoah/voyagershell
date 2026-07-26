@@ -122,19 +122,37 @@ npm run build    # production build
 
 ### Supabase Migrations
 
-Run migrations via the Management API (no CLI needed):
+The staging database is the Supabase branch `voyager-dev`, project ref
+`hpotfrfdigzmhyibihst`. It is the only writable database for feature, Spec and
+preview work.
+
+The primary project ref `iesprdzzgjypnksoljym` serves production. Never use it
+as a default or write to it during development. Production migration is a
+separate, explicitly approved release action after preview proof.
+
+Run a reviewed migration against `voyager-dev` through the Management API:
 
 ```bash
-ACCESS_TOKEN=$(cat ~/.supabase/access-token)
-PROJECT_REF="iesprdzzgjypnksoljym"
-SQL=$(cat supabase/migrations/NNN_name.sql)
+SUPABASE_ACCESS_TOKEN="${SUPABASE_ACCESS_TOKEN:?Set the Supabase Management API token}"
+PROJECT_REF="hpotfrfdigzmhyibihst"
+PRIMARY_PROJECT_REF="iesprdzzgjypnksoljym"
+MIGRATION_FILE="${MIGRATION_FILE:?Set the reviewed migration path}"
+
+if [[ "$PROJECT_REF" == "$PRIMARY_PROJECT_REF" ]]; then
+  echo "Refusing a production database write" >&2
+  exit 1
+fi
+
+SQL=$(< "$MIGRATION_FILE")
 curl -s -X POST "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"query\": $(echo "$SQL" | jq -Rs .)}"
 ```
 
-Empty `[]` response = success. Verify with a `SELECT` query if needed.
+An empty `[]` response means the API accepted the query. Verify the expected
+catalog change with a separate read against the same `PROJECT_REF`; never infer
+database identity from the app URL or worktree path.
 
 ## Code Standards
 
