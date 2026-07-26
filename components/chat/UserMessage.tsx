@@ -6,12 +6,14 @@ interface UserMessageProps {
   content: string;
   timestamp?: string;
   username?: string;
+  audienceLabel?: string;
 }
 
 export const UserMessage = ({
   content,
   timestamp = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-  username = 'you'
+  username = 'you',
+  audienceLabel,
 }: UserMessageProps) => {
   return (
     <div className="flex gap-4 opacity-80 hover:opacity-100 transition-opacity">
@@ -19,8 +21,15 @@ export const UserMessage = ({
         {timestamp}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[#f7a34b] text-[10px] uppercase tracking-wider mb-1 font-bold">
-          {username}
+        <div className="flex items-center gap-2 mb-1">
+          <div className="text-[#f7a34b] text-[10px] uppercase tracking-wider font-bold">
+            {username}
+          </div>
+          {audienceLabel && (
+            <div className="text-slate-500 text-[9px] tracking-wide normal-case">
+              {audienceLabel}
+            </div>
+          )}
         </div>
         <div className="text-slate-200 leading-relaxed border-l-2 border-[#f7a34b]/35 pl-4 break-words">
           {content}

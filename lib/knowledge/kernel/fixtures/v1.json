@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "viewerProfileIds": {
+    "a": "10000000-0000-4000-8000-000000000001",
+    "b": "10000000-0000-4000-8000-000000000002",
+    "c": "10000000-0000-4000-8000-000000000003",
+    "d": "10000000-0000-4000-8000-000000000004"
+  },
+  "audiences": [
+    {"key":"red-source","id":"bd27c894-b241-3acc-703e-fc150e706efe","purpose":"source","scopeKind":"space","scopeAuthorityId":"51000000-0000-4000-8000-000000000001","memberProfileIds":["10000000-0000-4000-8000-000000000001","10000000-0000-4000-8000-000000000002"]},
+    {"key":"private-a","id":"ad6e8a7f-f857-3e79-e3f9-82c35baec95e","purpose":"source","scopeKind":"private","scopeAuthorityId":"10000000-0000-4000-8000-000000000001","memberProfileIds":["10000000-0000-4000-8000-000000000001"]},
+    {"key":"blue-source","id":"3fb4a654-a787-17cd-39a6-e8843d87ef2c","purpose":"source","scopeKind":"space","scopeAuthorityId":"51000000-0000-4000-8000-000000000002","memberProfileIds":["10000000-0000-4000-8000-000000000001","10000000-0000-4000-8000-000000000003"]}
+  ],
+  "nodes": [
+    {"id":"b084999c-0128-0e4b-0e91-32406d203bb9","kind":"person","authorityId":"10000000-0000-4000-8000-000000000001","identity":"person:10000000-0000-4000-8000-000000000001","label":"Vanessa Hart"},
+    {"id":"8a984d16-2260-7650-db0a-dbd8f4786988","kind":"person","authorityId":"10000000-0000-4000-8000-000000000002","identity":"person:10000000-0000-4000-8000-000000000002","label":"Isaac"},
+    {"id":"6e35508d-f600-2244-db88-b93904b5fddb","kind":"person","authorityId":"10000000-0000-4000-8000-000000000003","identity":"person:10000000-0000-4000-8000-000000000003","label":"Mae"},
+    {"id":"9feebf58-3949-8f8f-d406-31a9ebf0a3a7","kind":"person","authorityId":"10000000-0000-4000-8000-000000000004","identity":"person:10000000-0000-4000-8000-000000000004","label":"Rafi"},
+    {"id":"65758f0f-4a9b-e09f-26f7-a408dfe353f1","kind":"voyager","authorityId":"10000000-0000-4000-8000-000000000001","identity":"voyager:10000000-0000-4000-8000-000000000001","label":"northstar"},
+    {"id":"e3cf6096-a501-fff3-3fb4-55a884cbe9cf","kind":"voyager","authorityId":"10000000-0000-4000-8000-000000000002","identity":"voyager:10000000-0000-4000-8000-000000000002","label":"Wren"},
+    {"id":"4022c8bd-7098-62a2-e16c-56e8d9caf203","kind":"voyager","authorityId":"10000000-0000-4000-8000-000000000003","identity":"voyager:10000000-0000-4000-8000-000000000003","label":"Lumen"},
+    {"id":"4b9e8877-08d7-e5f9-076d-eadd6e3c8c36","kind":"voyager","authorityId":"10000000-0000-4000-8000-000000000004","identity":"voyager:10000000-0000-4000-8000-000000000004","label":"Kepler"},
+    {"id":"c51adf6a-dfc5-3e8f-0ecc-0cc5fec32142","kind":"voyage","authorityId":"41000000-0000-4000-8000-000000000001","identity":"voyage:41000000-0000-4000-8000-000000000001","label":"Red Voyage"},
+    {"id":"2bab7d8f-45fa-d24f-dca1-e93bfde3e89f","kind":"voyage","authorityId":"41000000-0000-4000-8000-000000000002","identity":"voyage:41000000-0000-4000-8000-000000000002","label":"Blue Voyage"},
+    {"id":"2f767f86-81f7-a451-cc48-9939627f253b","kind":"space","authorityId":"51000000-0000-4000-8000-000000000001","identity":"space:51000000-0000-4000-8000-000000000001","label":"space:51000000-0000-4000-8000-000000000001"},
+    {"id":"db466d25-5ea5-be45-6d73-758573ddd956","kind":"space","authorityId":"51000000-0000-4000-8000-000000000002","identity":"space:51000000-0000-4000-8000-000000000002","label":"space:51000000-0000-4000-8000-000000000002"},
+    {"id":"0b71db8e-ac27-dad0-68dd-c25978050636","kind":"message_event","authorityId":"61000000-0000-4000-8000-000000000001","identity":"message_event:61000000-0000-4000-8000-000000000001","label":"Red pre-leave source"},
+    {"id":"f07b24c6-4430-b255-a3fe-b439d4650f3c","kind":"message_event","authorityId":"61000000-0000-4000-8000-000000000002","identity":"message_event:61000000-0000-4000-8000-000000000002","label":"Private sibling"},
+    {"id":"e6086e7e-756a-aa12-c8e7-79aa321fad4a","kind":"message_event","authorityId":"61000000-0000-4000-8000-000000000004","identity":"message_event:61000000-0000-4000-8000-000000000004","label":"Blue source"},
+    {"id":"29b1a3a1-c242-76c1-4d42-7832aab264f6","kind":"knowledge_unit","authorityId":"71000000-0000-4000-8000-000000000001","identity":"knowledge_unit:71000000-0000-4000-8000-000000000001","label":"Atlas location claim"},
+    {"id":"5d399226-e9b1-33a5-0cf7-ce0878645e26","kind":"knowledge_unit","authorityId":"71000000-0000-4000-8000-000000000002","identity":"knowledge_unit:71000000-0000-4000-8000-000000000002","label":"Private recovery claim"},
+    {"id":"a473104c-f34d-4386-2fcd-4211033d7a65","kind":"knowledge_unit","authorityId":"71000000-0000-4000-8000-000000000003","identity":"knowledge_unit:71000000-0000-4000-8000-000000000003","label":"Blue-only claim"}
+  ],
+  "events": [
+    {"id":"61000000-0000-4000-8000-000000000001","nodeId":"0b71db8e-ac27-dad0-68dd-c25978050636","content":"I left the amber notebook behind the blue atlas.","audienceKey":"red-source"},
+    {"id":"61000000-0000-4000-8000-000000000002","nodeId":"f07b24c6-4430-b255-a3fe-b439d4650f3c","content":"My recovery phrase is hidden under the kitchen clock.","audienceKey":"private-a"},
+    {"id":"61000000-0000-4000-8000-000000000004","nodeId":"e6086e7e-756a-aa12-c8e7-79aa321fad4a","content":"The blue voyage keeps its own sealed map.","audienceKey":"blue-source"}
+  ],
+  "negativeSourceEvent": {"id":"61000000-0000-4000-8000-000000000003","attemptedNodeId":"93b5ba09-7920-5ea7-f2cc-52cc288c391f","content":"Legacy visibility fields cannot authorize this source."},
+  "units": [
+    {"id":"71000000-0000-4000-8000-000000000001","nodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","claim":"Vanessa keeps the amber notebook behind the blue atlas.","sourceEventId":"61000000-0000-4000-8000-000000000001","extractorVersion":"fixture-v2","claimKey":"atlas-location","audienceKey":"red-source"},
+    {"id":"71000000-0000-4000-8000-000000000002","nodeId":"5d399226-e9b1-33a5-0cf7-ce0878645e26","claim":"Vanessa keeps her recovery phrase under the kitchen clock.","sourceEventId":"61000000-0000-4000-8000-000000000002","extractorVersion":"fixture-v2","claimKey":"recovery-location","audienceKey":"private-a"},
+    {"id":"71000000-0000-4000-8000-000000000003","nodeId":"a473104c-f34d-4386-2fcd-4211033d7a65","claim":"Blue keeps a sealed map.","sourceEventId":"61000000-0000-4000-8000-000000000004","extractorVersion":"fixture-v2","claimKey":"blue-map","audienceKey":"blue-source"}
+  ],
+  "grants": [
+    {"nodeId":"0b71db8e-ac27-dad0-68dd-c25978050636","audienceKey":"red-source","basisKind":"source_event","basisId":"61000000-0000-4000-8000-000000000001","labelSnapshot":"Red pre-leave source"},
+    {"nodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","audienceKey":"red-source","basisKind":"source_event","basisId":"61000000-0000-4000-8000-000000000001","labelSnapshot":"Atlas location claim"},
+    {"nodeId":"b084999c-0128-0e4b-0e91-32406d203bb9","audienceKey":"red-source","basisKind":"edge_evidence","basisId":"8007c889-39d2-1535-5e13-4d8e01afc3cf","basisEventId":"61000000-0000-4000-8000-000000000001","labelSnapshot":"Vanessa Vale"},
+    {"nodeId":"8a984d16-2260-7650-db0a-dbd8f4786988","audienceKey":"red-source","basisKind":"edge_evidence","basisId":"18603135-633d-8dac-9df9-a83b3bbe86a2","basisEventId":"61000000-0000-4000-8000-000000000001","labelSnapshot":"Isaac"},
+    {"nodeId":"2f767f86-81f7-a451-cc48-9939627f253b","audienceKey":"red-source","basisKind":"edge_evidence","basisId":"e6b82d1f-0005-1945-bf4b-b6c61be2bcfc","basisEventId":"61000000-0000-4000-8000-000000000001","labelSnapshot":"space:51000000-0000-4000-8000-000000000001"},
+    {"nodeId":"65758f0f-4a9b-e09f-26f7-a408dfe353f1","audienceKey":"red-source","basisKind":"edge_evidence","basisId":"5b23a5bc-c212-6059-54c7-e4b4b0f916e1","basisEventId":"61000000-0000-4000-8000-000000000001","labelSnapshot":"vega"},
+    {"nodeId":"f07b24c6-4430-b255-a3fe-b439d4650f3c","audienceKey":"private-a","basisKind":"source_event","basisId":"61000000-0000-4000-8000-000000000002","labelSnapshot":"Private sibling"},
+    {"nodeId":"5d399226-e9b1-33a5-0cf7-ce0878645e26","audienceKey":"private-a","basisKind":"source_event","basisId":"61000000-0000-4000-8000-000000000002","labelSnapshot":"Private recovery claim"},
+    {"nodeId":"b084999c-0128-0e4b-0e91-32406d203bb9","audienceKey":"private-a","basisKind":"edge_evidence","basisId":"587c22de-f42d-8f6a-7e48-10408d8a36b3","basisEventId":"61000000-0000-4000-8000-000000000002","labelSnapshot":"Vanessa Vale"},
+    {"nodeId":"e6086e7e-756a-aa12-c8e7-79aa321fad4a","audienceKey":"blue-source","basisKind":"source_event","basisId":"61000000-0000-4000-8000-000000000004","labelSnapshot":"Blue source"},
+    {"nodeId":"a473104c-f34d-4386-2fcd-4211033d7a65","audienceKey":"blue-source","basisKind":"source_event","basisId":"61000000-0000-4000-8000-000000000004","labelSnapshot":"Blue-only claim"},
+    {"nodeId":"b084999c-0128-0e4b-0e91-32406d203bb9","audienceKey":"blue-source","basisKind":"edge_evidence","basisId":"b763d50b-f054-bcc7-12c2-687ea079b015","basisEventId":"61000000-0000-4000-8000-000000000004","labelSnapshot":"Vanessa Vale"},
+    {"nodeId":"6e35508d-f600-2244-db88-b93904b5fddb","audienceKey":"blue-source","basisKind":"edge_evidence","basisId":"03045033-81c2-482f-936d-627b36ed39dc","basisEventId":"61000000-0000-4000-8000-000000000004","labelSnapshot":"Mae"},
+    {"nodeId":"db466d25-5ea5-be45-6d73-758573ddd956","audienceKey":"blue-source","basisKind":"edge_evidence","basisId":"e30eb2fd-6a24-61f8-be9f-f21caaeca4f6","basisEventId":"61000000-0000-4000-8000-000000000004","labelSnapshot":"space:51000000-0000-4000-8000-000000000002"},
+    {"nodeId":"65758f0f-4a9b-e09f-26f7-a408dfe353f1","audienceKey":"blue-source","basisKind":"edge_evidence","basisId":"86b45d48-4def-bf71-58da-d171e2ae2765","basisEventId":"61000000-0000-4000-8000-000000000004","labelSnapshot":"vega"}
+  ],
+  "edges": [
+    {"id":"8007c889-39d2-1535-5e13-4d8e01afc3cf","sourceNodeId":"0b71db8e-ac27-dad0-68dd-c25978050636","targetNodeId":"b084999c-0128-0e4b-0e91-32406d203bb9","kind":"authored_by","evidenceEventIds":["61000000-0000-4000-8000-000000000001"]},
+    {"id":"e6b82d1f-0005-1945-bf4b-b6c61be2bcfc","sourceNodeId":"0b71db8e-ac27-dad0-68dd-c25978050636","targetNodeId":"2f767f86-81f7-a451-cc48-9939627f253b","kind":"posted_in","evidenceEventIds":["61000000-0000-4000-8000-000000000001"]},
+    {"id":"fd35b92b-c6bd-7292-7d13-46eca6fc7dba","sourceNodeId":"f07b24c6-4430-b255-a3fe-b439d4650f3c","targetNodeId":"0b71db8e-ac27-dad0-68dd-c25978050636","kind":"reply_to","evidenceEventIds":["61000000-0000-4000-8000-000000000002"]},
+    {"id":"4e95ca79-ee8f-47b7-7fa4-b6d387f529f6","sourceNodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","targetNodeId":"0b71db8e-ac27-dad0-68dd-c25978050636","kind":"derived_from","evidenceEventIds":["61000000-0000-4000-8000-000000000001"]},
+    {"id":"5b23a5bc-c212-6059-54c7-e4b4b0f916e1","sourceNodeId":"0b71db8e-ac27-dad0-68dd-c25978050636","targetNodeId":"65758f0f-4a9b-e09f-26f7-a408dfe353f1","kind":"generated_by","evidenceEventIds":["61000000-0000-4000-8000-000000000001"]},
+    {"id":"18603135-633d-8dac-9df9-a83b3bbe86a2","sourceNodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","targetNodeId":"8a984d16-2260-7650-db0a-dbd8f4786988","kind":"about","evidenceEventIds":["61000000-0000-4000-8000-000000000001"]},
+    {"id":"72a2ff45-86e4-e521-9421-d144cfda6dc7","sourceNodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","targetNodeId":"5d399226-e9b1-33a5-0cf7-ce0878645e26","kind":"supports","evidenceEventIds":["61000000-0000-4000-8000-000000000002"]},
+    {"id":"4e657ed8-ec0a-730b-a8fc-612a24d171e7","sourceNodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","targetNodeId":"5d399226-e9b1-33a5-0cf7-ce0878645e26","kind":"contradicts","evidenceEventIds":["61000000-0000-4000-8000-000000000002"]},
+    {"id":"c8fef5df-fddf-0882-68c8-8e7232db37ee","sourceNodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","targetNodeId":"5d399226-e9b1-33a5-0cf7-ce0878645e26","kind":"supersedes","evidenceEventIds":["61000000-0000-4000-8000-000000000002"]},
+    {"id":"6ee222bd-e7a9-9355-e2f3-0f415e272536","sourceNodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","targetNodeId":"5d399226-e9b1-33a5-0cf7-ce0878645e26","kind":"elaborates","evidenceEventIds":["61000000-0000-4000-8000-000000000002"]},
+    {"id":"fb55241b-d84f-7b95-e5ac-73b9b15bcb76","sourceNodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","targetNodeId":"5d399226-e9b1-33a5-0cf7-ce0878645e26","kind":"relates_to","evidenceEventIds":["61000000-0000-4000-8000-000000000002"]},
+    {"id":"7c795406-f59f-2cea-dbf2-397f197dd017","sourceNodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6","targetNodeId":"8a984d16-2260-7650-db0a-dbd8f4786988","kind":"decided_by","evidenceEventIds":["61000000-0000-4000-8000-000000000001"]},
+    {"id":"587c22de-f42d-8f6a-7e48-10408d8a36b3","sourceNodeId":"5d399226-e9b1-33a5-0cf7-ce0878645e26","targetNodeId":"b084999c-0128-0e4b-0e91-32406d203bb9","kind":"raised_by","evidenceEventIds":["61000000-0000-4000-8000-000000000002"]},
+    {"id":"b763d50b-f054-bcc7-12c2-687ea079b015","sourceNodeId":"e6086e7e-756a-aa12-c8e7-79aa321fad4a","targetNodeId":"b084999c-0128-0e4b-0e91-32406d203bb9","kind":"authored_by","evidenceEventIds":["61000000-0000-4000-8000-000000000004"]},
+    {"id":"e30eb2fd-6a24-61f8-be9f-f21caaeca4f6","sourceNodeId":"e6086e7e-756a-aa12-c8e7-79aa321fad4a","targetNodeId":"db466d25-5ea5-be45-6d73-758573ddd956","kind":"posted_in","evidenceEventIds":["61000000-0000-4000-8000-000000000004"]},
+    {"id":"59f2b129-c1e2-a370-aec2-17a73a46bea7","sourceNodeId":"a473104c-f34d-4386-2fcd-4211033d7a65","targetNodeId":"e6086e7e-756a-aa12-c8e7-79aa321fad4a","kind":"derived_from","evidenceEventIds":["61000000-0000-4000-8000-000000000004"]},
+    {"id":"86b45d48-4def-bf71-58da-d171e2ae2765","sourceNodeId":"e6086e7e-756a-aa12-c8e7-79aa321fad4a","targetNodeId":"65758f0f-4a9b-e09f-26f7-a408dfe353f1","kind":"generated_by","evidenceEventIds":["61000000-0000-4000-8000-000000000004"]},
+    {"id":"03045033-81c2-482f-936d-627b36ed39dc","sourceNodeId":"a473104c-f34d-4386-2fcd-4211033d7a65","targetNodeId":"6e35508d-f600-2244-db88-b93904b5fddb","kind":"raised_by","evidenceEventIds":["61000000-0000-4000-8000-000000000004"]}
+  ],
+  "renames": [
+    {"nodeId":"b084999c-0128-0e4b-0e91-32406d203bb9","beforeLabel":"Vanessa Vale","afterLabel":"Vanessa Hart"},
+    {"nodeId":"65758f0f-4a9b-e09f-26f7-a408dfe353f1","beforeLabel":"vega","afterLabel":"northstar"}
+  ],
+  "authorityScenario": {
+    "redVoyageId":"41000000-0000-4000-8000-000000000001","redSpaceId":"51000000-0000-4000-8000-000000000001",
+    "blueVoyageId":"41000000-0000-4000-8000-000000000002","blueSpaceId":"51000000-0000-4000-8000-000000000002",
+    "crossScopePersonId":"10000000-0000-4000-8000-000000000001","formerMemberId":"10000000-0000-4000-8000-000000000002",
+    "blueOnlyViewerId":"10000000-0000-4000-8000-000000000003","newMemberId":"10000000-0000-4000-8000-000000000004",
+    "absenceEventId":"61000000-0000-4000-8000-000000000005","absenceNodeId":"4ff5eec1-cf89-7963-4229-c885ae60c78d",
+    "postRejoinEventId":"61000000-0000-4000-8000-000000000006","postRejoinNodeId":"6acb2584-4b2b-df04-1490-361d663e02a5"
+  },
+  "expected": {
+    "nodeCount":18,"historicalEdgeCount":18,"sourceAudienceCount":3,
+    "privateNodeIds":["f07b24c6-4430-b255-a3fe-b439d4650f3c","5d399226-e9b1-33a5-0cf7-ce0878645e26"],
+    "sharedUnitNodeId":"29b1a3a1-c242-76c1-4d42-7832aab264f6",
+    "sharedClaim":"Vanessa keeps the amber notebook behind the blue atlas.",
+    "sharedSourceEventId":"61000000-0000-4000-8000-000000000001","sharedAudienceKey":"red-source"
+  }
+}

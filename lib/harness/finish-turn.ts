@@ -1,15 +1,17 @@
 import type { StreamTextOnFinishCallback, ToolSet } from 'ai'
-import { runCartographer, shouldRunEnrichment } from '@/lib/agents/cartographer'
-import { createMessageEvent, type KnowledgeNode } from '@/lib/knowledge'
+import { runCartographer } from '@/lib/agents/cartographer'
+import { shouldRunEnrichment } from '@/lib/agents/cartographer/source'
+import type { KnowledgeNode } from '@/lib/knowledge'
+import {
+  claimVoyagerResponseIngress,
+  enrichVoyagerResponseIngress,
+} from '@/lib/messaging/voyager-response-ingress'
 import { creditTracker, modelRouter } from '@/lib/models'
-import { planPublicReply } from '@/lib/messaging/public-reply'
-import { fanOutDeliveries } from '@/lib/messaging/deliveries'
-import { getActiveMemberIds } from '@/lib/messaging/room'
 import { logCitations } from '@/lib/retrieval'
 import { reconcileActions } from '@/lib/shell/reconciler'
 import type { ActionIntent } from '@/lib/shell/types'
 import { log } from '@/lib/debug'
-import type { HarnessHost, SummonResolution, TurnContext } from './types'
+import type { HarnessHost, TurnContext } from './types'
 
 interface FinishTurnContext {
   ctx: TurnContext
@@ -18,10 +20,7 @@ interface FinishTurnContext {
   chatModelLabel: string
   retrievalEventId: () => string | null
   retrievedKnowledge: KnowledgeNode[]
-  // cut ④ — how this turn was addressed + whose voyager answered. finishTurn
-  // plans the reply's persistence/fan-out from it (public summon → the room;
-  // aside/solo → private to the asker, unchanged).
-  summon: SummonResolution
+  sourceEventId: string | null
 }
 
 type FinishEvent = Parameters<StreamTextOnFinishCallback<ToolSet>>[0]
@@ -83,32 +82,27 @@ export const finishTurn = async (
 
   if (conversationId && text) {
     try {
-      // Recompute the active roster FRESH at reply time (turn-end), never a
-      // turn-start snapshot — the stream may have outlived a join/leave.
-      const activeMemberIds = await getActiveMemberIds(conversationId, userId)
-      const { summon } = options
-      // The public-voice decision: a leading-name summon in a populated room
-      // fans the reply under the OWNER as a `message` event (§6.5); everything
-      // else (aside, solo, plain) stays the private per-asker `conversation`.
-      const plan = planPublicReply({
-        mode: summon.mode,
-        summonerUserId: summon.summonerUserId,
-        voyagerOwnerUserId: summon.voyagerOwnerUserId,
-        voyagerName: summon.voyagerName ?? '',
-        voyagerOwnerName: summon.voyagerOwnerName,
-        activeMemberIds,
-      })
-      const eventId = await createMessageEvent(conversationId, plan.role, text, {
-        userId: plan.userId,
-        voyageSlug: voyageSlug ?? undefined,
-        participants: plan.participants,
-        eventType: plan.eventType,
-        addressedTo: plan.recipients.length > 0 ? plan.recipients : undefined,
-        source: plan.source,
-        senderDisplayName: plan.senderDisplayName,
-        ownerDisplayName: plan.ownerDisplayName,
-      })
-      if (plan.fanOut && eventId) await fanOutDeliveries(eventId, plan.recipients)
+      // A Voyager reply is always an owner-private conversation event. The only
+      // boundary into a room is the explicit Share command, which creates a new
+      // human-authored message after revalidating source + fresh membership.
+      // Ordinary replies inherit the source event's immutable audience in the
+      // atomic ingress writer; auto-sent welcomes have no human source and use
+      // its owner-private fallback.
+      const responseInput = {
+        userId,
+        sessionId: conversationId,
+        voyageSlug,
+        sourceEventId: options.sourceEventId,
+        content: text,
+      }
+      const response = await claimVoyagerResponseIngress(responseInput)
+      if (response.status !== 'created') return
+      await enrichVoyagerResponseIngress({
+        userId,
+        sessionId: conversationId,
+        sourceEventId: options.sourceEventId,
+        content: text,
+      }, response)
       logCitations(options.retrievalEventId(), text, retrievedKnowledge)
 
       if (await shouldRunEnrichment(conversationId, userId)) {

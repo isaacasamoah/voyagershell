@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from 'react';
-import type { InviteState } from '@/lib/messaging/feed-types';
+import React, { useState } from 'react';
+import type { InviteMembershipState, InviteState } from '@/lib/messaging/feed-types';
 
 // The inline room knock — one Join, one Decline. The click IS the accept
 // (deterministic, server-authoritative via /api/room/invite/respond) — no LLM
@@ -16,24 +16,24 @@ interface InviteKnockProps {
 }
 
 export const InviteKnock = ({ content, senderName, timestamp, inviteState, conversationId }: InviteKnockProps) => {
-  // null (couldn't resolve) is treated as pending — a knock in your feed means
-  // you were invited, so never strand the invitee behind a missing state.
-  const [state, setState] = useState<InviteState | null>(inviteState);
+  const [state, setState] = useState<InviteMembershipState | null>(inviteState?.membership ?? null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const unavailable = inviteState === null;
 
   const respond = async (accept: boolean) => {
-    if (!conversationId || busy) return;
+    if (!conversationId || !inviteState?.spaceId || busy) return;
     setBusy(true);
     setFailed(false);
     try {
       const res = await fetch('/api/room/invite/respond', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ conversationId, accept }),
+        body: JSON.stringify({ conversationId, spaceId: inviteState.spaceId, accept }),
       });
-      if (res.ok) setState(accept ? 'active' : 'left');
+      const result = await res.json() as { responded?: boolean };
+      if (res.ok && result.responded === true) setState(accept ? 'active' : 'left');
       else setFailed(true);
     } catch {
       setFailed(true);
@@ -42,7 +42,7 @@ export const InviteKnock = ({ content, senderName, timestamp, inviteState, conve
     }
   };
 
-  const pending = state === 'invited' || state === null;
+  const pending = state === 'invited';
 
   return (
     <div className="flex gap-4">
@@ -54,7 +54,11 @@ export const InviteKnock = ({ content, senderName, timestamp, inviteState, conve
           {senderName}
         </div>
         <div className="relative pl-2 border-l-2 border-[#f7a34b]/40">
-          <div className="text-slate-200 leading-relaxed break-words">{content}</div>
+          <div className="text-slate-200 leading-relaxed break-words">
+            {unavailable
+              ? `This older invitation can’t be joined. Ask ${senderName} to send it again.`
+              : content}
+          </div>
 
           {pending && (
             <div className="mt-2 flex items-center gap-2">

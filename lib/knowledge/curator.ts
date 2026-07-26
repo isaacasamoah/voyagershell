@@ -12,7 +12,7 @@
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { estimateTokens } from '@/lib/conversation/window'
-import type { KnowledgeNode } from './search'
+import type { KnowledgeNode } from './search-types'
 
 // =============================================================================
 // Types
@@ -138,9 +138,7 @@ const getRecentSessionIds = async (
 
   const supabase = getAdminClient()
 
-  // session_index not in generated Supabase types yet — cast through
-  const { data, error } = await (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> })
-    .from('session_index')
+  const { data, error } = await supabase.from('session_index')
     .select('session_id')
     .eq('user_id', userId)
     .order('started_at', { ascending: false })
@@ -150,7 +148,7 @@ const getRecentSessionIds = async (
 
   const sessionIds = new Set<string>()
   for (const row of data) {
-    sessionIds.add((row as Record<string, unknown>).session_id as string)
+    sessionIds.add(row.session_id)
   }
   // Ensure current session is always included
   sessionIds.add(currentSessionId)
@@ -174,10 +172,9 @@ export const curatePromptWindow = async (
 
   // Parallel: fetch knowledge candidates + recent session IDs for operational filtering
   const [knowledgeResult, recentSessions] = await Promise.all([
-    (supabase.rpc as Function)('scoped_knowledge_fetch', {
+    supabase.rpc('scoped_knowledge_fetch', {
       p_user_id: userId,
       p_voyage_slug: voyageSlug,
-      p_participants: [userId],
       p_scope: voyageSlug ? 'all' : 'personal',
       p_min_attention: 0.3,
       p_match_count: 500,
@@ -190,8 +187,7 @@ export const curatePromptWindow = async (
     return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 }
   }
 
-  // Cast through unknown: promotion_count + session_id not in generated Supabase types yet
-  const rawRows = knowledgeResult.data as unknown as (CuratorRow & { session_id?: string | null })[]
+  const rawRows: Array<CuratorRow & { session_id?: string | null }> = knowledgeResult.data
 
   // Sort by effective attention (includes promotion boost) then recency (F4.4)
   const rows = rawRows.sort((a, b) => {

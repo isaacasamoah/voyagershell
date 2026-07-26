@@ -6,7 +6,11 @@ export type FeedEventRole = 'user' | 'assistant' | 'human'
 // line (e.g. "X joined the room") is metadata.source === 'join'. Orthogonal to
 // role — the recipient sees them as 'human' events; `kind` marks how to render.
 export type FeedEventKind = 'message' | 'invite' | 'system'
-export type InviteState = 'invited' | 'active' | 'left'
+export type InviteMembershipState = 'invited' | 'active' | 'left'
+export interface InviteState {
+  membership: InviteMembershipState
+  spaceId: string
+}
 
 export interface FeedEvent {
   id: string
@@ -17,12 +21,14 @@ export interface FeedEvent {
   // when kind === 'invite'; drives whether the Join/Decline buttons show.
   inviteState: InviteState | null
   senderDisplayName: string | null
-  // cut ④: the owner behind a fanned voyager reply, e.g. "Isaac" — renders
-  // "WREN ✦ (Isaac's Voyager)". Null for human/solo/unnamed events.
+  // Historical public Voyager attribution. New Voyager output is private.
   ownerName: string | null
   senderUserId: string | null
   content: string
   createdAt: string
+  // Server-derived publication state for an owner-private assistant event in
+  // the current destination room. Never inferred from component history.
+  shared: boolean
   seen: boolean
   deliveryId: string | null
 }
@@ -38,14 +44,13 @@ export interface FeedApiEvent {
   sender_user_id: string | null
   content: string
   created_at: string
+  shared: boolean
   seen: boolean
   delivery_id: string | null
 }
 
 export interface StreamingReply {
   id: string
-  content: string
-  startedAt: string
   // How many assistant events were already in the feed when this reply began
   // streaming. The transient is dismissed once the feed holds MORE than this —
   // i.e. this turn's own persisted reply has landed. Count-based reconciliation
@@ -53,6 +58,42 @@ export interface StreamingReply {
   // which broke the old exact-content match and left the reply pinned forever.
   settledCount: number
 }
+
+interface StreamingReplyTransition {
+  assistantId: string | null
+  hasRenderableOutput: boolean
+  isStreaming: boolean
+  assistantEventCount: number
+}
+
+// One explicit state transition for the live assistant lane. This is invoked
+// only from primitive effect dependencies; AI SDK array/object identity is not
+// part of the lifecycle contract.
+export const advanceStreamingReply = (
+  previous: StreamingReply | null,
+  transition: StreamingReplyTransition,
+): StreamingReply | null => {
+  const {
+    assistantId,
+    hasRenderableOutput,
+    isStreaming,
+    assistantEventCount,
+  } = transition
+  if (!assistantId || !hasRenderableOutput) return previous
+  if (!isStreaming && previous?.id !== assistantId) return previous
+  if (previous?.id === assistantId) return previous
+  return {
+    id: assistantId,
+    settledCount: assistantEventCount,
+  }
+}
+
+export const settleStreamingReply = (
+  previous: StreamingReply | null,
+  assistantEventCount: number,
+): StreamingReply | null => (
+  previous && assistantEventCount > previous.settledCount ? null : previous
+)
 
 // Epoch comparison — feed events can mix DB (`+00:00`) and client-optimistic
 // (`Z`) timestamp formats; string compare would mis-order across formats.
@@ -83,6 +124,7 @@ export const toFeedApiEvent = (event: FeedEvent): FeedApiEvent => ({
   sender_user_id: event.senderUserId,
   content: event.content,
   created_at: event.createdAt,
+  shared: event.shared,
   seen: event.seen,
   delivery_id: event.deliveryId,
 })
@@ -98,6 +140,7 @@ export const fromFeedApiEvent = (event: FeedApiEvent): FeedEvent => ({
   senderUserId: event.sender_user_id,
   content: event.content,
   createdAt: event.created_at,
+  shared: event.shared ?? false,
   seen: event.seen,
   deliveryId: event.delivery_id,
 })
@@ -114,7 +157,7 @@ export const shouldShowStreamingReply = (
   reply: StreamingReply | null,
   events: FeedEvent[],
 ): reply is StreamingReply => (
-  Boolean(reply?.content.trim())
+  Boolean(reply)
   && countAssistantEvents(events) <= (reply?.settledCount ?? 0)
 )
 

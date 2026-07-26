@@ -19,6 +19,18 @@ feature/* → dev (Vercel preview) → main (Vercel production)
 
 Test on **preview** (built from `dev`). Never test on production. `main` only updates when Isaac explicitly says "release to prod" — that involves user testing and client communication.
 
+**Committed is not released. Pushed is not released. Released means merged to `dev`.**
+That is the only line that matters. Commit work in logical slices as it
+completes and push it to the remote — a feature branch on the remote ships
+nothing. Never withhold a commit as a safety or gating mechanism; gate at the
+merge, where the gate actually belongs.
+
+A brief or spec that says "no commit" should be read as "no release" and
+challenged, not silently obeyed. ORU-319 accumulated roughly 220 uncommitted
+paths across five days by reading it the other way — no rollback points, an
+unreviewable single change, and one stray `git checkout .` from losing the lot.
+A commit SHA is a real seal; an ad-hoc content digest is not.
+
 Mental model: `dev` is our staging app, `main` is the owner's production app. Forge ship phase always ships to `dev`; production promotion is a separate manual ritual.
 
 Sister projects on the same pattern: `scout-dashboard`, `scout`. Single-trunk projects (no dev): `claude-has-hands`, `slipstream`.
@@ -46,7 +58,7 @@ Voyager IS the community platform. Symbol grammar (`@tom #channel !voyage`) is n
 | System | Status | Key Files |
 |--------|--------|-----------|
 | Chat + Streaming | Working | `app/api/chat/route.ts` |
-| Agentic Retrieval (8 tools) | Working | `lib/retrieval/tools.ts` |
+| Agentic Retrieval (8 tools) | Working | `lib/retrieval/retrieval-tools.ts` |
 | Background Agents | Working | `lib/agents/deep-retrieval.ts` |
 | Knowledge (event-sourced) | Working | `lib/knowledge/` |
 | Auth (magic link) | Working | `lib/auth/` |
@@ -84,7 +96,9 @@ lib/agents/deep-retrieval.ts  # Background agent (agentic retrieval)
 lib/agents/cartographer.ts    # Tidal enrichment (knowledge quality)
 lib/prompts/core.ts           # Voyager personality
 lib/knowledge/                # Event-sourced knowledge system
-lib/retrieval/tools.ts        # 8 retrieval + UI tools
+lib/retrieval/retrieval-tools.ts # 8 retrieval tools
+lib/retrieval/voyager-tools.ts   # Primary Voyager tool registry
+lib/retrieval/tool-types.ts      # Shared tool context and registrations
 lib/tools/captain.ts          # ask_captain presentation tool
 components/ui/VoyagerInterface.tsx  # Terminal UI
 ```
@@ -127,7 +141,7 @@ Empty `[]` response = success. Verify with a `SELECT` query if needed.
 - TypeScript strict
 - Named exports only
 - Arrow function components
-- Files under 250 lines (except VoyagerInterface)
+- Files under 250 lines
 
 ## Established Patterns
 

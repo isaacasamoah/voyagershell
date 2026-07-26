@@ -7,56 +7,29 @@
 // the server (reply gate) both resolve through this same function, so the
 // privacy classification can never drift between what you see and what happens.
 //
-// Generalizes what shipped as two literal-`voyager` sites: the `@voyager` aside
-// (feed-types) and the leading-`voyager` summon regex (room-turn). `voyager`
-// survives only as an alias for "your own".
+// `voyager` survives as an alias for your own Voyager. There is deliberately no
+// public or cross-owner invocation mode: naming a Voyager without `@` is room
+// text, while any `@` token other than your own handle is held before send.
 
-export type AddressMode = 'aside' | 'summon' | 'redirect' | 'held' | 'plain'
-
-// A voyager handle visible to the speaker in the current room. `isOwn` is the
-// trust boundary — the ONLY thing that authorizes a private aside.
-export interface VoyagerHandle {
-  handle: string     // normalized, e.g. 'wren' or 'isaac.voyager'
-  ownerName: string  // owner's display name, for the redirect line
-  isOwn: boolean
-  // The owner's user id — the identity of record for a cross-owner summon (cut ④).
-  // A summon resolves this so the reply persists + runs under the OWNER, not the
-  // summoner (§6.5). Optional so callers that only need the aside/summon
-  // CLASSIFICATION (composer badge) need not fetch it.
-  ownerUserId?: string
-  // The voyager's CUSTOM name (e.g. "Wren"), or null when unnamed (a derived
-  // `<username>.voyager` handle). Rides the fanned reply's sender_display_name so
-  // the room renders WREN ✦; null keeps the flat "Voyager".
-  name?: string | null
-}
+export type AddressMode = 'aside' | 'held' | 'plain'
 
 export interface AddressContext {
   // The speaker's own voyager handle (claimed name or derived `<username>.voyager`).
   // Empty string when the user has no username yet — the `voyager` alias still carries it.
   ownVoyagerHandle: string
-  ownVoyagerAliases?: string[]         // legacy aliases for your own voyager, e.g. ['voyager']
-  roomVoyagerHandles?: VoyagerHandle[] // every voyager handle in the room, own included
+  ownVoyagerAliases?: string[] // aliases for your own voyager, e.g. ['voyager']
 }
 
 export interface AddressResult {
   mode: AddressMode
-  targetHandle?: string        // summon / redirect target
-  targetOwnerName?: string     // redirect line: "Wren is <ownerName>'s…"
-  targetOwnerUserId?: string   // cut ④: the summoned voyager's OWNER user id — the
-                               // identity the reply persists + runs under (§6.5).
-                               // Set only for a CROSS-owner summon/redirect; a
-                               // self-summon leaves it undefined (owner = summoner).
-  targetVoyagerName?: string | null // the summoned voyager's custom name, for the
-                               // WREN ✦ attribution; null/undefined ⇒ flat "Voyager".
-  notice?: string              // held: the private line the SENDER alone sees
-  stripped: string             // message with the leading address token removed
+  notice?: string  // held: the private line the sender alone sees
+  stripped: string // message with the leading own-address token removed
 }
 
 // Greedy handle-token read: consumes the WHOLE leading run of handle chars, so
 // `wrench` never matches `wren` — the substring footgun dies at tokenization,
 // not at a fragile per-handle regex. Returns the lowercased token, or null.
 const HANDLE_TOKEN = /^[a-z0-9_.-]+/i
-const GREETING = /^(hey|hi|ok|okay)\s+/i
 const LEADING_SEP = /^[\s,:;!.?…—-]+/
 
 const readHandleToken = (s: string): string | null => {
@@ -102,7 +75,7 @@ const normalize = (s: string): string => s.trim().toLowerCase()
 // the message stops here, but the user is told why and how to actually send it
 // (drop the `@` and the same words go to the room).
 const heldNotice = (token: string): string =>
-  `No one called "${token}" is here — say it without the @ to send it to the room.`
+  `Only your Voyager can be invoked here. Remove @ from "${token}" to send it as ordinary room text.`
 
 export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult => {
   const text = raw.trim()
@@ -112,23 +85,15 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
       .map(normalize)
       .filter((h) => h.length > 0),
   )
-  const roomVoyagers = new Map(
-    (ctx.roomVoyagerHandles ?? []).map((v) => [normalize(v.handle), v]),
-  )
   const isOwn = (handle: string): boolean => ownSet.has(handle)
-  const otherVoyager = (handle: string): VoyagerHandle | undefined => {
-    const v = roomVoyagers.get(handle)
-    return v && !v.isOwn ? v : undefined
-  }
 
   // ── `@handle …` — the private-aside path ──────────────────────────────────
   if (text.startsWith('@')) {
     const token = readHandleToken(text.slice(1))
     if (!token) return { mode: 'plain', stripped: text }
 
-    // Longest known handle first: a full-token match (own or another's) wins
-    // over a shorter separator-boundary prefix, so an explicit `@other.voyager`
-    // still redirects rather than aside-matching a `@other` prefix.
+    // Longest own-handle match first. A separator-terminated suffix remains
+    // private (`@wren.actually`), while a substring (`@wrench`) cannot match.
     for (const cand of handleCandidates(token)) {
       if (isOwn(cand)) {
         // Aside to your own voyager — the whisper. Only you ever see it. The
@@ -136,60 +101,18 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
         // voyager, so `@voyager` and `@wren` stay identical results (C3).
         return { mode: 'aside', stripped: stripLeading(text, 1 + cand.length) }
       }
-      const other = otherVoyager(cand)
-      if (other) {
-        // `@` another person's voyager NEVER opens a private channel — the whole
-        // point of C1. Redirect, keep the text intact for public fall-through.
-        return {
-          mode: 'redirect',
-          targetHandle: cand,
-          targetOwnerName: other.ownerName,
-          targetOwnerUserId: other.ownerUserId,
-          targetVoyagerName: other.name ?? null,
-          stripped: text,
-        }
-      }
     }
-    // A leading `@token` that resolves to NO reachable voyager — an unknown
-    // handle, a typo of your own, or a human's handle — must NEVER fan out to
-    // the room. `@wren <secret>` typed before `wren` existed once fell through
-    // as a published `plain` and reached the other member (the confidentiality
-    // regression the Test Gate caught). HOLD it: the caller returns the private
-    // notice to the sender alone and delivers nothing. Only the `@` path holds —
-    // a bare leading word that matches nothing (summon path below) stays
-    // ordinary chatter, never withheld.
+    // A different Voyager, a human handle, a typo, and an unknown token are all
+    // indistinguishable here. HOLD every non-own `@` attempt before persistence
+    // so it cannot become either a cross-owner invocation or an accidental room
+    // disclosure. This also avoids using the room namespace as a discovery side
+    // channel.
     const rawToken = text.slice(1, 1 + token.length)
     return { mode: 'held', notice: heldNotice(rawToken), stripped: text }
   }
 
-  // ── `<handle>, …` — the public-summon path (leading name, vocative) ────────
-  const greetLen = GREETING.exec(text)?.[0].length ?? 0
-  const token = readHandleToken(text.slice(greetLen))
-  if (token) {
-    for (const cand of handleCandidates(token)) {
-      if (isOwn(cand)) {
-        return {
-          mode: 'summon',
-          targetHandle: cand,
-          stripped: stripLeading(text, greetLen + cand.length),
-        }
-      }
-      const other = otherVoyager(cand)
-      if (other) {
-        return {
-          mode: 'summon',
-          targetHandle: cand,
-          targetOwnerName: other.ownerName,
-          targetOwnerUserId: other.ownerUserId,
-          targetVoyagerName: other.name ?? null,
-          stripped: stripLeading(text, greetLen + cand.length),
-        }
-      }
-    }
-  }
-
-  // Mid-sentence mentions, plain chatter, and unregistered leading words all
-  // land here — NOT a summon.
+  // Names are identity, not an execution grammar. Leading names, mid-sentence
+  // mentions, and ordinary chatter all remain ordinary human text.
   return { mode: 'plain', stripped: text }
 }
 
@@ -199,18 +122,28 @@ export const resolveAddress = (raw: string, ctx: AddressContext): AddressResult 
 export const deriveVoyagerHandle = (username: string): string =>
   `${username.trim().toLowerCase()}.voyager`
 
-// The caller's own voyager handle from its raw parts: a claimed row wins, else
-// the derived default, else ''. Pure and isomorphic — it lives HERE (not in the
-// server-only handles data layer) so the client composer + optimistic settle
-// resolve the OWN handle through the exact same rule the server does, and the
-// classification can never drift between what you see and what happens.
-export const pickOwnVoyagerHandle = (
+export interface VoyagerIdentity {
+  handle: string
+  displayName: string | null
+}
+
+// The canonical current identity from the two existing sources of truth: the
+// owner's voyager handle row and human username. A claimed custom handle wins;
+// otherwise `<username>.voyager` is the address-only default and the UI/prompt
+// use the VOYAGER brand fallback. Pure + isomorphic so server, client, feed,
+// live stream, and prompt cannot drift.
+export const resolveVoyagerIdentity = (
   rowHandle: string | null | undefined,
   username: string | null | undefined,
-): string => {
-  if (rowHandle) return rowHandle.trim().toLowerCase()
-  if (username) return deriveVoyagerHandle(username)
-  return ''
+): VoyagerIdentity => {
+  const claimedHandle = rowHandle?.trim().toLowerCase() || null
+  const derivedHandle = username ? deriveVoyagerHandle(username) : null
+  const handle = claimedHandle ?? derivedHandle ?? ''
+  const isCustom = Boolean(claimedHandle && claimedHandle !== derivedHandle)
+  return {
+    handle,
+    displayName: isCustom ? capitalizeName(handle) : null,
+  }
 }
 
 // Title-case a voyager handle for display, e.g. `wren` → `Wren`. One rule, so
@@ -218,18 +151,6 @@ export const pickOwnVoyagerHandle = (
 // the same shape from the same lowercase-normalized handle.
 export const capitalizeName = (handle: string): string =>
   handle ? handle.charAt(0).toUpperCase() + handle.slice(1) : handle
-
-// A voyager's CUSTOM name (for the prompt identity) vs its derived default.
-// Provenance by VALUE: a claimed row whose handle differs from `<username>.voyager`
-// is a real name — so `nova.voyager` named by user `alice` counts, which a
-// `.endsWith('.voyager')` suffix test wrongly suppressed. '' / derived → null.
-export const voyagerCustomName = (
-  rowHandle: string | null | undefined,
-  username: string | null | undefined,
-): string | null => {
-  const derived = username ? deriveVoyagerHandle(username) : null
-  return rowHandle && rowHandle !== derived ? rowHandle : null
-}
 
 // The composer badge — the @-inversion mitigation (C5). Typing `@<own-handle>`
 // surfaces "→ private aside to <Name>" at composition time, so the deliberately
@@ -242,4 +163,31 @@ export const composerAsideBadge = (raw: string, ctx: AddressContext): string | n
   const token = readHandleToken(raw.trim().slice(1))
   const name = token ? token.charAt(0).toUpperCase() + token.slice(1) : 'your Voyager'
   return `→ private aside to ${name}`
+}
+
+export interface ComposerAudience {
+  kind: 'private' | 'room' | 'held'
+  label: string
+}
+
+// The always-visible audience contract. This is intentionally narrow rather
+// than a generalized permission framework: the composer has exactly two valid
+// destinations in this slice — the owner's private Voyager or the current room.
+// The held state is not a destination; it tells the user the text will not send.
+export const resolveComposerAudience = (
+  raw: string,
+  ctx: AddressContext,
+  roomPeople: string[],
+): ComposerAudience => {
+  const address = resolveAddress(raw, ctx)
+  if (address.mode === 'held') {
+    return { kind: 'held', label: 'Not sent · only your Voyager can be invoked' }
+  }
+  if (address.mode === 'aside' || roomPeople.length === 0) {
+    return { kind: 'private', label: 'Only you + your Voyager' }
+  }
+  return {
+    kind: 'room',
+    label: `This room · you + ${roomPeople.join(', ')}`,
+  }
 }

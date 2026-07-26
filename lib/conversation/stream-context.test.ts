@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FeedEventRow } from '@/lib/messaging/feed'
+import type { FeedEventRow } from '@/lib/messaging/feed-rows'
 
 const mocks = vi.hoisted(() => ({
   queryScopedEvents: vi.fn(),
 }))
 
-vi.mock('@/lib/messaging/feed', () => ({
+vi.mock('@/lib/messaging/feed-queries', () => ({
   queryScopedEvents: mocks.queryScopedEvents,
 }))
 

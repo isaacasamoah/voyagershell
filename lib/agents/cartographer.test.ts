@@ -18,12 +18,12 @@ const mocks = vi.hoisted(() => ({
   )),
 }))
 
-vi.mock('@/lib/conversation', () => ({
+vi.mock('@/lib/conversation/stream-context', () => ({
   composeContextFromStream: mocks.composeContextFromStream,
   renderMessagesForModel: mocks.renderMessagesForModel,
 }))
 
-import { buildEnrichmentWindow } from './cartographer'
+import { buildEnrichmentWindow } from './cartographer/window'
 
 describe('buildEnrichmentWindow', () => {
   beforeEach(() => {

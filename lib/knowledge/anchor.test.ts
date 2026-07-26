@@ -20,7 +20,7 @@ const loadSearchModule = async () => {
   vi.doMock('@/lib/supabase/admin', () => ({
     getAdminClient: () => ({ rpc: adminRpc }),
   }))
-  return import('./search')
+  return import('./scoped-search')
 }
 
 describe('personAnchoredSearch RPC routing', () => {
@@ -41,7 +41,6 @@ describe('personAnchoredSearch RPC routing', () => {
     expect(authenticatedRpc).toHaveBeenCalledWith('scoped_knowledge_fetch', {
       p_user_id: 'caller-user',
       p_voyage_slug: 'fambam',
-      p_participants: ['caller-user'],
       p_scope: 'all',
       p_content_match: '%almond%',
       p_case_sensitive: false,
@@ -61,7 +60,6 @@ describe('personAnchoredSearch RPC routing', () => {
     expect(authenticatedRpc).toHaveBeenCalledWith('scoped_knowledge_fetch', {
       p_user_id: 'caller-user',
       p_voyage_slug: 'fambam',
-      p_participants: ['caller-user'],
       p_scope: 'all',
       p_content_match: null,
       p_case_sensitive: false,
@@ -81,7 +79,6 @@ describe('personAnchoredSearch RPC routing', () => {
     expect(authenticatedRpc).toHaveBeenCalledWith('scoped_knowledge_fetch', {
       p_user_id: 'caller-user',
       p_voyage_slug: null,
-      p_participants: ['caller-user'],
       p_scope: 'personal',
       p_content_match: null,
       p_case_sensitive: false,

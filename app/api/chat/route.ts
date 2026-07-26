@@ -1,15 +1,21 @@
 import { APICallError, createUIMessageStream, createUIMessageStreamResponse } from 'ai'
 import { requireAuthResponse } from '@/lib/auth'
+import { SessionAccessError } from '@/lib/conversation/session-authority'
 import { createVercelHost, runTurn, type TurnContext, type TurnResult } from '@/lib/harness'
 import type { AuthState } from '@/lib/prompts'
-import { resolveSessionVoyage, SessionAccessError } from '@/lib/voyage'
+import { resolveSessionVoyage } from '@/lib/voyage/session'
 import { log } from '@/lib/debug'
 
 export const maxDuration = 300
 
 type IncomingRole = 'user' | 'assistant' | 'system'
 
-interface IncomingMessage { role: IncomingRole; parts?: Array<{ type: string; text?: string }>; content?: string }
+interface IncomingMessage {
+  id?: string
+  role: IncomingRole
+  parts?: Array<{ type: string; text?: string }>
+  content?: string
+}
 
 interface ChatBody { messages?: IncomingMessage[]; conversationId?: string; authState?: AuthState; autoSent?: boolean }
 
@@ -22,14 +28,20 @@ const getMessageText = (message: IncomingMessage): string => (
     : typeof message.content === 'string' ? message.content : ''
 )
 
-const getNewestUserMessage = (items: IncomingMessage[]): string => {
+// The newest human message and the client's own id for it. That id is the
+// exactly-once key the ingress claim is taken on: a retry of the same send
+// carries the same id, so the server recognises it as one intent rather than
+// two. Its absence is honest — the claim then falls back to the session.
+const getNewestUserMessage = (
+  items: IncomingMessage[],
+): { text: string; clientMessageId?: string } => {
   for (let index = items.length - 1; index >= 0; index--) {
     const message = items[index]
     if (message.role !== 'user') continue
     const text = getMessageText(message)
-    if (text.trim() !== '') return text
+    if (text.trim() !== '') return { text, clientMessageId: message.id }
   }
-  return ''
+  return { text: '' }
 }
 
 const jsonResponse = (status: number, body: Record<string, string>) => new Response(
@@ -84,13 +96,15 @@ export const POST = async (req: Request) => {
       .eq('id', userId)
       .maybeSingle()
     const displayName = (userProfile as { display_name: string | null } | null)?.display_name ?? undefined
+    const newest = getNewestUserMessage(messages)
     const ctx: TurnContext = {
       userId,
       conversationId,
       voyageSlug,
       authState,
       autoSent,
-      newMessage: getNewestUserMessage(messages),
+      newMessage: newest.text,
+      clientMessageId: newest.clientMessageId,
       displayName,
       // This endpoint only ever carries a human's typed message — the loop guard
       // asserts it (a turn may begin ONLY on human-authored input).

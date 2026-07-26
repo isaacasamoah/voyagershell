@@ -21,16 +21,19 @@ class FakeQuery {
   }
 }
 
-const fakeAdmin = { from: () => new FakeQuery() }
+const fakeAdmin = {
+  from: () => new FakeQuery(),
+  rpc: () => Promise.resolve({ data: activeMembers, error: null }),
+}
 
 const loadModule = async () => {
   vi.resetModules()
   vi.doMock('@/lib/supabase/admin', () => ({ getAdminClient: () => fakeAdmin }))
   vi.doMock('@/lib/debug', () => ({ log: { api: vi.fn() } }))
-  vi.doMock('@/lib/voyage', () => ({ resolveSessionVoyage: vi.fn(async () => 'fambam') }))
+  vi.doMock('@/lib/voyage/session', () => ({ resolveSessionVoyage: vi.fn(async () => 'fambam') }))
   vi.doMock('@/lib/knowledge/events', () => ({ createMessageEvent }))
   vi.doMock('@/lib/messaging/deliveries', () => ({ fanOutDeliveries }))
-  return await import('./invites')
+  return await import('./announce-join')
 }
 
 describe('announceJoin — realtime accepted notification', () => {
@@ -62,6 +65,16 @@ describe('announceJoin — realtime accepted notification', () => {
 
   it('stays silent when the joiner is the only active member (no one to notify)', async () => {
     activeMembers = [{ user_id: 'vanessa' }]
+    const { announceJoin } = await loadModule()
+
+    await announceJoin('conv-1', 'space-1', 'vanessa')
+
+    expect(createMessageEvent).not.toHaveBeenCalled()
+    expect(fanOutDeliveries).not.toHaveBeenCalled()
+  })
+
+  it('stays silent when authority no longer contains the claimed joiner', async () => {
+    activeMembers = [{ user_id: 'isaac' }, { user_id: 'tom' }]
     const { announceJoin } = await loadModule()
 
     await announceJoin('conv-1', 'space-1', 'vanessa')

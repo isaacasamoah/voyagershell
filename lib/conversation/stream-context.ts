@@ -1,4 +1,5 @@
-import { queryScopedEvents, type FeedEventRow } from '@/lib/messaging/feed'
+import { queryScopedEvents } from '@/lib/messaging/feed-queries'
+import type { FeedEventRow } from '@/lib/messaging/feed-rows'
 import { sortFeedEvents, type FeedEvent } from '@/lib/messaging/feed-types'
 import type { Json, MessageRole } from '@/lib/supabase/types'
 
@@ -56,6 +57,7 @@ const sortRowsLikeFeed = (rows: FeedEventRow[]): FeedEventRow[] => {
     senderUserId: null,
     content: row.content ?? '',
     createdAt: row.created_at,
+    shared: false,
     seen: true,
     deliveryId: null,
   }))).map((event) => byId.get(event.id)!)

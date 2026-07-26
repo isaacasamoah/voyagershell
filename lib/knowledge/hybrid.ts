@@ -4,36 +4,15 @@
 // D1: Fusion in TypeScript, not SQL — each primitive stays pure and testable
 // D2: RRF over learned weights — parameter-free beyond k, no training data needed
 
-import { searchKnowledge, type SearchOptions, type KnowledgeNode } from './search'
-import { getAdminClient } from '@/lib/supabase/admin'
-import { cohereRerank, type RerankResult } from './rerank'
+import { searchKnowledge } from './search'
+import type { SearchOptions } from './search-types'
+import { cohereRerank } from './rerank'
 import { reformulateQuery } from './reformulate'
+import { keywordSearch, rrfFuse, type RankedResult } from './hybrid-primitives'
 
 // =============================================================================
 // Types
 // =============================================================================
-
-export interface RankedResult {
-  eventId: string
-  content: string
-  score: number       // RRF score (higher = better)
-  sources: ('semantic' | 'keyword')[]
-  metadata: {
-    event_id: string
-    content: string
-    source_created_at: string
-    classifications?: string[] | null
-    entities?: string[] | null
-    topics?: string[] | null
-    knowledge_type?: string | null
-    attention_score?: number | null
-    context_snippet?: string | null
-    sender_display_name?: string | null
-    sender_user_id?: string | null
-    event_type?: string | null
-    similarity?: number
-  }
-}
 
 export interface HybridSearchOptions {
   limit?: number              // final result count (default 50 pre-rerank)
@@ -45,156 +24,6 @@ export interface HybridSearchOptions {
   minAttention?: number
   knowledgeType?: string
   reformulate?: boolean       // multi-query reformulation (default false — ships disabled)
-}
-
-interface KeywordResult {
-  event_id: string
-  content: string
-  source_created_at: string
-  rank_score: number
-  classifications?: string[] | null
-  entities?: string[] | null
-  topics?: string[] | null
-  knowledge_type?: string | null
-  attention_score?: number | null
-  context_snippet?: string | null
-  sender_display_name?: string | null
-  sender_user_id?: string | null
-  event_type?: string | null
-}
-
-// =============================================================================
-// Keyword Search (tsvector-based, separate from keywordGrep)
-// =============================================================================
-
-/**
- * Full-text keyword search using tsvector + ts_rank.
- * Returns results ranked by ts_rank score for RRF fusion.
- * Respects the same scope filters as semantic search.
- */
-export const keywordSearch = async (
-  userId: string,
-  query: string,
-  options: {
-    limit?: number
-    voyageSlug?: string
-    knowledgeType?: string
-    minAttention?: number
-  } = {}
-): Promise<KeywordResult[]> => {
-  const {
-    limit = 50,
-    voyageSlug,
-    knowledgeType,
-    minAttention = 0.0,
-  } = options
-
-  try {
-    const supabase = getAdminClient()
-
-    // 'operational' type filter is client-side (includes null knowledge_type rows)
-    const rpcKnowledgeType = (knowledgeType && knowledgeType !== 'operational') ? knowledgeType : undefined
-
-    // Use admin client — keyword_search RPC is not in generated types yet
-    const { data, error } = await (supabase.rpc as Function)('keyword_search', {
-      p_query: query,
-      p_user_id: userId,
-      p_voyage_slug: voyageSlug,
-      p_knowledge_type: rpcKnowledgeType,
-      p_min_attention: minAttention,
-      p_match_count: limit,
-      p_participants: [userId],
-    })
-
-    if (error) {
-      console.error('[Knowledge] keywordSearch error:', error)
-      return []
-    }
-
-    if (!data || data.length === 0) return []
-
-    // Client-side filter for 'operational' — includes unclassified (null) rows
-    let results = (data ?? []) as KeywordResult[]
-    if (knowledgeType === 'operational') {
-      results = results.filter(
-        (r) => r.knowledge_type === null || r.knowledge_type === 'operational'
-      )
-    }
-
-    return results
-  } catch (error) {
-    console.error('[Knowledge] keywordSearch error:', error)
-    return []
-  }
-}
-
-// =============================================================================
-// RRF Fusion
-// =============================================================================
-
-/**
- * Reciprocal Rank Fusion — merges results from multiple ranked lists.
- * score(d) = sum( weight / (k + rank_in_list) ) for each list containing d
- *
- * Deduplicates by eventId — a result in both lists gets contributions from both.
- */
-export const rrfFuse = (
-  semanticResults: { eventId: string; rank: number; metadata: RankedResult['metadata'] }[],
-  keywordResults: { eventId: string; rank: number; metadata: RankedResult['metadata'] }[],
-  options: { k?: number; semanticWeight?: number; keywordWeight?: number } = {}
-): RankedResult[] => {
-  const { k = 60, semanticWeight = 1.0, keywordWeight = 1.0 } = options
-
-  const scoreMap = new Map<string, {
-    score: number
-    sources: Set<'semantic' | 'keyword'>
-    metadata: RankedResult['metadata']
-  }>()
-
-  // Score semantic results
-  for (const result of semanticResults) {
-    const existing = scoreMap.get(result.eventId)
-    const contribution = semanticWeight / (k + result.rank)
-
-    if (existing) {
-      existing.score += contribution
-      existing.sources.add('semantic')
-    } else {
-      scoreMap.set(result.eventId, {
-        score: contribution,
-        sources: new Set<'semantic' | 'keyword'>(['semantic']),
-        metadata: result.metadata,
-      })
-    }
-  }
-
-  // Score keyword results
-  for (const result of keywordResults) {
-    const existing = scoreMap.get(result.eventId)
-    const contribution = keywordWeight / (k + result.rank)
-
-    if (existing) {
-      existing.score += contribution
-      existing.sources.add('keyword')
-    } else {
-      scoreMap.set(result.eventId, {
-        score: contribution,
-        sources: new Set<'semantic' | 'keyword'>(['keyword']),
-        metadata: result.metadata,
-      })
-    }
-  }
-
-  // Convert to sorted array
-  return Array.from(scoreMap.entries())
-    .map(([eventId, { score, sources, metadata }]) => ({
-      eventId,
-      content: metadata.content,
-      score,
-      sources: Array.from(sources),
-      metadata,
-    }))
-    .sort((a, b) => b.score - a.score)
 }
 
 // =============================================================================

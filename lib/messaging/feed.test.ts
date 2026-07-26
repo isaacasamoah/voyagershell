@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/supabase/admin', () => ({ getAdminClient: vi.fn() }))
-vi.mock('@/lib/voyage', () => ({
-  SessionAccessError: class SessionAccessError extends Error {},
+vi.mock('@/lib/voyage/session', () => ({
   resolveSessionVoyage: vi.fn(),
 }))
 
@@ -10,7 +9,7 @@ import {
   isInFeedContext,
   toFeedEvents,
   type FeedEventRow,
-} from './feed'
+} from './feed-rows'
 
 const voyagerMessage = (voyageSlug: string | null): FeedEventRow => ({
   id: `voyager-${voyageSlug ?? 'personal'}`,
@@ -58,6 +57,55 @@ describe('delivered Voyager messages in the event feed', () => {
   })
 })
 
+describe('room invite feed identity', () => {
+  it('binds each knock to its own exact room membership state', () => {
+    const row: FeedEventRow = {
+      ...voyagerMessage('launch'),
+      id: 'invite-1',
+      actor_type: 'user',
+      metadata: {
+        source: 'invite',
+        space_id: 'space-older',
+        sender_user_id: 'user-inviter',
+      },
+    }
+    const [event] = toFeedEvents(
+      [row],
+      [],
+      'user-1',
+      new Map([['space-older', 'invited']]),
+    )
+
+    expect(event.inviteState).toEqual({
+      membership: 'invited',
+      spaceId: 'space-older',
+    })
+  })
+
+  it('keeps a legacy knock visible but cannot synthesize a room action', () => {
+    const row: FeedEventRow = {
+      ...voyagerMessage('launch'),
+      id: 'legacy-invite',
+      actor_type: 'user',
+      content: 'Isaac invited you to a room — reply to join.',
+      metadata: {
+        source: 'invite',
+        sender_user_id: 'user-inviter',
+      },
+    }
+    const [event] = toFeedEvents(
+      [row],
+      [],
+      'user-1',
+      new Map([['space-newest', 'invited']]),
+    )
+
+    expect(event.kind).toBe('invite')
+    expect(event.content).toBe('Isaac invited you to a room — reply to join.')
+    expect(event.inviteState).toBeNull()
+  })
+})
+
 // ── cut ④ — attributed render (WREN ✦) + owner-authored seen ─────────────────
 const fannedWrenReply = (viewerIsOwner: boolean): FeedEventRow => ({
   id: 'evt-wren-public',
@@ -92,5 +140,70 @@ describe('cut ④ — a fanned voyager reply renders WREN ✦ (Isaac’s Voyager
     const [event] = toFeedEvents([fannedWrenReply(true)], [], 'user-isaac')
     expect(event.seen).toBe(true)
     expect(event.deliveryId).toBeNull()
+  })
+
+  it('keeps historical public attribution immutable after the owner renames', () => {
+    const [event] = toFeedEvents(
+      [fannedWrenReply(true)],
+      [],
+      'user-isaac',
+      new Map(),
+      {
+        currentVoyagerDisplayName: 'Sol',
+        sharedSourceEventIds: new Set(),
+      },
+    )
+    expect(event.senderDisplayName).toBe('Wren')
+    expect(event.shared).toBe(false)
+  })
+})
+
+describe('private assistant feed enrichment', () => {
+  const privateReply: FeedEventRow = {
+    id: 'private-reply-1',
+    event_type: 'conversation',
+    content: 'A private answer.',
+    created_at: '2026-07-22T00:00:00.000Z',
+    metadata: { session_id: 'conversation-1' },
+    source_ref: { conversation_id: 'conversation-1', role: 'assistant' },
+    actor_type: 'voyager',
+    user_id: 'user-isaac',
+    participants: ['user-isaac'],
+    voyage_slug: null,
+  }
+
+  it('uses the current companion display and current-room share mapping', () => {
+    const [event] = toFeedEvents(
+      [privateReply],
+      [],
+      'user-isaac',
+      new Map(),
+      {
+        currentVoyagerDisplayName: 'Sol',
+        sharedSourceEventIds: new Set(['private-reply-1']),
+      },
+    )
+
+    expect(event).toMatchObject({
+      role: 'assistant',
+      senderDisplayName: 'Sol',
+      shared: true,
+      ownerName: null,
+    })
+  })
+
+  it('falls back to the VOYAGER brand when the current handle is only derived', () => {
+    const [event] = toFeedEvents(
+      [privateReply],
+      [],
+      'user-isaac',
+      new Map(),
+      {
+        currentVoyagerDisplayName: null,
+        sharedSourceEventIds: new Set(),
+      },
+    )
+    expect(event.senderDisplayName).toBeNull()
+    expect(event.shared).toBe(false)
   })
 })

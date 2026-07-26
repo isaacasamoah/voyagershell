@@ -202,5 +202,9 @@ export const useEventFeed = ({ conversationId, userId }: UseEventFeedParams) => 
     }
   }, [conversationId, loadFeed, userId])
 
-  return { events, isLoading, markSeen, reload: loadFeed }
+  const reload = useCallback(async (): Promise<void> => {
+    await loadFeed(true)
+  }, [loadFeed])
+
+  return { events, isLoading, markSeen, reload }
 }

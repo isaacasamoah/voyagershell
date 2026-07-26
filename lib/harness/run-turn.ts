@@ -1,17 +1,14 @@
 import { hasToolCall, stepCountIs, streamText } from 'ai'
 import { reapStuckTasks } from '@/lib/agents/queue'
-import { composeContextFromStream } from '@/lib/conversation'
-import { renderMessagesForModel } from '@/lib/conversation/stream-context'
+import { composeContextFromStream, renderMessagesForModel, type ConversationMessage } from '@/lib/conversation/stream-context'
 import { computeWindow, getTruncatedMessages } from '@/lib/conversation/window'
-import type { ConversationMessage } from '@/lib/conversation'
 import { detectReferenceSignals, retrieveForContinuity } from '@/lib/conversation/continuity'
 import { log } from '@/lib/debug'
 import { type KnowledgeNode } from '@/lib/knowledge'
 import { detectLearningSignal, emitSignal } from '@/lib/learning/signals'
-import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room'
-import { capitalizeName, resolveAddress } from '@/lib/messaging/address'
-import { getOwnVoyagerIdentity, listRoomVoyagerHandles } from '@/lib/messaging/handles'
-import { isHumanTurnInput } from '@/lib/messaging/public-reply'
+import { getRoomRoster, describeRoomForPrompt } from '@/lib/messaging/room-context'
+import { resolveAddress } from '@/lib/messaging/address'
+import { getOwnVoyagerIdentity } from '@/lib/messaging/handles'
 import { resolveUserModelWithMeta } from '@/lib/models'
 import { composeSystemPrompt, getBasePrompt } from '@/lib/prompts'
 import {
@@ -21,9 +18,10 @@ import {
 } from '@/lib/retrieval'
 import { detectActionIntent } from '@/lib/shell/intent'
 import { finishTurn } from './finish-turn'
-import { runRoomTurn } from './room-turn'
-import type { HarnessHost, SummonResolution, TurnContext, TurnResult } from './types'
-
+import { runRoomGate, runRoomTurn } from './room-turn'
+import { composeTurnMessages } from './turn-messages'
+import { claimTurnIngress } from './turn-ingress'
+import type { HarnessHost, TurnContext, TurnResult } from './types'
 export const runTurn = async (
   ctx: TurnContext,
   host: HarnessHost,
@@ -37,7 +35,7 @@ export const runTurn = async (
   // other unbidden (§4). This holds by architecture today (the only caller is a
   // human POST /api/chat), but the invariant lives HERE so a future realtime→turn
   // bridge that forwards a voyager-authored event is caught, not silently looped.
-  if (!isHumanTurnInput(ctx.originatorActorType ?? 'user')) {
+  if ((ctx.originatorActorType ?? 'user') !== 'user') {
     log.api('runTurn refused a non-human-originated turn (loop guard)', {
       originatorActorType: ctx.originatorActorType,
       conversationId,
@@ -48,47 +46,23 @@ export const runTurn = async (
   // Resolve the address ONCE, server-side, from the real handle set — the same
   // pure resolver the composer badge uses (Principle 1: privacy is computed,
   // never model-guessed). `voyager` survives only as an alias for your own.
-  const [ownIdentity, roomVoyagerHandles] = await Promise.all([
-    getOwnVoyagerIdentity(userId),
-    conversationId ? listRoomVoyagerHandles(conversationId, userId) : Promise.resolve([]),
-  ])
+  const ownIdentity = await getOwnVoyagerIdentity(userId)
   const ownVoyagerHandle = ownIdentity.handle
   const address = resolveAddress(rawQuery, {
     ownVoyagerHandle,
     ownVoyagerAliases: ['voyager'],
-    roomVoyagerHandles,
   })
-  // Strip only the private aside — a summon keeps its raw text so the room
-  // fan-out preserves the vocative humans see.
+  // Strip only the private aside. Names without @ remain ordinary room text.
   const queryText = address.mode === 'aside' ? address.stripped : rawQuery
-
-  // cut ④ — resolve WHOSE voyager answers. A cross-owner summon (Elisheya says
-  // "wren, …") runs on Isaac's brain + identity + context and persists under
-  // Isaac; a self-summon / aside / plain turn collapses to the summoner. The
-  // owner is the identity of record for the reply (§6.5).
-  const isCrossOwnerSummon = address.mode === 'summon' && Boolean(address.targetOwnerUserId)
-  const brainUserId = isCrossOwnerSummon ? (address.targetOwnerUserId as string) : userId
-  const summonedVoyagerName = address.mode === 'summon'
-    ? (isCrossOwnerSummon
-        ? (address.targetVoyagerName ?? null)
-        : (ownIdentity.name ? capitalizeName(ownIdentity.name) : null))
-    : (ownIdentity.name ? capitalizeName(ownIdentity.name) : null)
-  const summon: SummonResolution = {
-    mode: address.mode,
-    summonerUserId: userId,
-    voyagerOwnerUserId: brainUserId,
-    voyagerName: summonedVoyagerName,
-    voyagerOwnerName: isCrossOwnerSummon ? (address.targetOwnerName ?? 'someone') : (displayName ?? 'someone'),
-  }
-
+  // An empty @own is not a message; auto-sent welcomes are the sole source-less turn.
+  if (!queryText && !ctx.autoSent) return { kind: 'empty' }
+  const voyagerIdentity = ownIdentity.displayName ? ownIdentity : undefined
   const intent = detectActionIntent(queryText)
   host.defer(reapStuckTasks().catch(() => {}))
 
-  // Compose the turn context for the BRAIN user — the owner on a cross-owner
-  // summon. Privacy is enforced structurally by the participants-gated read:
-  // the owner only ever sees rows they are a participant of.
+  // The caller's own Voyager is the only brain this endpoint can execute.
   const streamContext = conversationId
-    ? await composeContextFromStream(brainUserId, conversationId, voyageSlug)
+    ? await composeContextFromStream(userId, conversationId, voyageSlug)
     : []
   const rawConversationMessages: ConversationMessage[] = [...streamContext]
   if (queryText) {
@@ -98,10 +72,9 @@ export const runTurn = async (
       role: 'user',
       content: queryText,
       createdAt: host.now(),
-      // On a cross-owner summon the in-flight utterance is ANOTHER human's — the
-      // owner's brain must read it as "[Elisheya]: …", never as its own words.
-      authorDisplayName: isCrossOwnerSummon ? (displayName ?? null) : null,
+      authorDisplayName: null,
       authorUserId: userId,
+      isPrivate: address.mode === 'aside',
     })
   }
   const conversationMessages: ConversationMessage[] = renderMessagesForModel(rawConversationMessages)
@@ -124,12 +97,7 @@ export const runTurn = async (
       queryText,
       truncatedMessages,
       {
-        // Cross-session continuity searches the BRAIN user's past conversations —
-        // Isaac's Wren recalls Isaac's history, never the summoner's. Anchoring on
-        // the summoner would inject THEIR private "[From previous conversations]"
-        // into the owner's publicly-fanned reply (the same §6.5 leak the prompt
-        // composition below closes). Self-summon: brainUserId === userId, unchanged.
-        userId: brainUserId,
+        userId,
         voyageSlug: voyageSlug ?? undefined,
         conversationId: conversationId ?? '',
       },
@@ -163,16 +131,16 @@ export const runTurn = async (
     content: message.content,
   }))
 
-  const roomResult = await runRoomTurn({ ctx, host, queryText, address })
+  // The room grammar and the held-address gate run first — neither is a message
+  // and neither may reach the ledger. Then the ingress claim, before any effect.
+  const gate = await runRoomGate({ ctx, queryText, address })
+  if (gate.result) return gate.result
+  const ingress = await claimTurnIngress(ctx, host, gate, queryText, address)
+  if (ingress.result) return ingress.result
+
+  const roomResult = runRoomTurn(gate.room, address)
   if (roomResult) return roomResult
 
-  // In-turn tools stay bound to the SUMMONER (userId), NOT the brain owner — a
-  // cross-owner summon must never let a bystander's words drive WRITES (add to
-  // room, set display name, actions) against the owner's account. Read tools
-  // therefore read the summoner's own data; the reply's grounding (persona,
-  // knowledge, continuity) is the owner's. Whether a summoned voyager should act
-  // on the owner's account at all is a deferred design question (owner-summon
-  // toggle, out of scope) — left summoner-scoped as the safe default.
   const { tools, registrations } = createVoyagerTools({
     userId,
     voyageSlug: voyageSlug ?? undefined,
@@ -187,26 +155,14 @@ export const runTurn = async (
   let retrievedKnowledge: KnowledgeNode[] = []
   let retrievalEventId: string | null = null
   try {
-    // The Voyager speaks as the SUMMONED voyager — its owner's identity. On a
-    // cross-owner summon that is Isaac's Wren (name + owner from the resolved
-    // summon), not the summoner's own. The derived default (`<username>.voyager`)
-    // is an addressing fallback, not a name — provenance is decided in the data
-    // layer, so `summonedVoyagerName` is already null when unnamed.
-    const voyagerName = summonedVoyagerName ?? undefined
-    // Compose the prompt on the BRAIN user — a cross-owner summon runs Isaac's
-    // Wren on ISAAC's persona + curated knowledge + retrieval, never the
-    // summoner's. Anchoring on `userId` here would ground a publicly-fanned reply
-    // in the SUMMONER's private "What I Know About You" while attributing it to
-    // the owner — leaking the summoner's data under someone else's name. The
-    // model + context already resolve on brainUserId; identity must too (C2).
-    const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(brainUserId, {
-      profile: { id: brainUserId, displayName: isCrossOwnerSummon ? summon.voyagerOwnerName : displayName },
+    const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(userId, {
+      profile: { id: userId, displayName },
       voyageSlug: voyageSlug ?? undefined,
       sessionId: conversationId,
       continuityContext,
       authState,
-      voyagerName,
-      ownerName: summon.voyagerOwnerName,
+      voyagerIdentity,
+      ownerName: displayName,
     })
     staticPrefix = `${staticPrompt}\n\n${toolStrategy}`
     dynamicSuffix = dynamicPrompt
@@ -229,12 +185,14 @@ export const runTurn = async (
     staticPrefix = `${getBasePrompt()}\n\n${toolStrategy}`
   }
 
-  // Room truth: the model NEVER guesses membership — inject the code-attested
-  // roster (active vs invited-not-joined) into the dynamic prompt every turn.
+  // Room truth: the model NEVER guesses membership — the code-attested roster
+  // (active vs invited-not-joined) goes into the dynamic prompt every turn.
   if (ctx.conversationId) {
     try {
-      const roster = await getRoomRoster(ctx.conversationId)
-      dynamicSuffix += describeRoomForPrompt(roster)
+      const roster = await getRoomRoster(ctx.conversationId, ctx.userId)
+      dynamicSuffix += describeRoomForPrompt(roster, {
+        currentTurnPrivate: address.mode === 'aside',
+      })
     } catch { /* roster is additive context — never block the turn */ }
   }
 
@@ -249,39 +207,13 @@ export const runTurn = async (
     }
   }
 
-  const cacheControl = { anthropic: { cacheControl: { type: 'ephemeral' as const } } }
-  const staticSystemMessage = {
-    role: 'system' as const,
-    content: staticPrefix,
-    providerOptions: cacheControl,
-  }
-  // Anthropic rejects system messages separated by user/assistant history.
-  // Keep the cacheable system prefix first and place per-turn context at the
-  // front of the last user message, leaving the raw user text after it.
-  const lastUserIndex = windowedMessages.findLastIndex((message) => message.role === 'user')
-  const cachedPromptItems = windowedMessages.map((message, index) => ({
-    ...message,
-    ...(dynamicSuffix && index === lastUserIndex
-      ? { content: `<context>\n${dynamicSuffix}\n</context>\n\n${message.content}` }
-      : {}),
-    ...(index === windowedMessages.length - 1
-      ? { providerOptions: cacheControl }
-      : {}),
-  }))
-  // Requests without a user message retain the old contiguous-system layout.
-  const dynamicSystemMessages = dynamicSuffix && lastUserIndex === -1
-    ? [{ role: 'system' as const, content: dynamicSuffix }]
-    : []
-
-  // Resolve the model on the BRAIN user — a cross-owner summon runs on the
-  // owner's brain (their model choice / BYO key), not the summoner's.
   const { model: chatModel, label: chatModelLabel } = await resolveUserModelWithMeta(
     { task: 'chat', quality: 'balanced', streaming: true, toolUse: true },
-    brainUserId,
+    userId,
   )
   const result = streamText({
     model: chatModel,
-    messages: [staticSystemMessage, ...dynamicSystemMessages, ...cachedPromptItems],
+    messages: composeTurnMessages(staticPrefix, dynamicSuffix, windowedMessages),
     tools,
     maxOutputTokens: 4096,
     stopWhen: [stepCountIs(15), hasToolCall('spawn_background_agent')],
@@ -292,9 +224,26 @@ export const runTurn = async (
       chatModelLabel,
       retrievalEventId: () => retrievalEventId,
       retrievedKnowledge,
-      summon,
+      sourceEventId: ingress.outcome?.eventId ?? null,
     }),
   })
+
+  // ── The reply is the server's to finish, not the client's ─────────────────
+  // The response stream advances only while something pulls it, and the browser
+  // was the only puller. A reload, a closed tab or a navigation cancels the body,
+  // the pull stops, and onFinish — where finishTurn writes the assistant event —
+  // never runs: the user's own message lands and the answer disappears silently.
+  // Draining here removes that dependency, so the turn completes on the server
+  // whether or not anyone is listening and the WHOLE reply is persisted. There
+  // is deliberately no partial-snapshot path — the finish callback is the single
+  // writer, it fires once on the recorded base stream however many consumers
+  // read it, and a stream that dies mid-generation never reaches it at all.
+  // Complete or nothing; never a truncated answer stored as if it were full.
+  // Deferred through the host so the serverless invocation outlives the response
+  // it already returned.
+  host.defer(Promise.resolve(result.consumeStream({
+    onError: (error) => log.api('Turn stream drain failed', { error: String(error) }, 'error'),
+  })))
 
   return { kind: 'stream', result }
 }

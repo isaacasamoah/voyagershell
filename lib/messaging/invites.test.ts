@@ -1,155 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  emptyRpcResults,
+  loadRoomAndInvites as loadModules,
+  resetRoomDb,
+  roomDb as db,
+  rpcCalls,
+  rpcErrors,
+  seedVoyageRoom as seedVoyage,
+} from './room-test-fixture'
 
-type DbError = { message: string }
-type QueryResult = { data: unknown; error: DbError | null }
-type TableName = 'sessions' | 'spaces' | 'space_members' | 'voyages'
-type Filter = { column: string; value: unknown; op: 'eq' | 'in' }
-
-interface SessionRow { id: string; user_id: string | null; voyage_id: string | null; space_id: string | null; updated_at: string | null }
-interface SpaceRow { id: string; kind: string; voyage_id: string | null; ai_present: boolean; created_by: string | null; created_at: string | null }
-interface SpaceMemberRow { space_id: string; user_id: string; state: 'invited' | 'active' | 'left' }
-interface VoyageRow { id: string; slug: string }
-
-const db = {
-  sessions: new Map<string, SessionRow>(),
-  spaces: new Map<string, SpaceRow>(),
-  space_members: new Map<string, SpaceMemberRow>(),
-  voyages: new Map<string, VoyageRow>(),
-}
-
-let nextSpace = 1
 const originalHousehold = process.env.HOUSEHOLD_SHARE_VOYAGE
-
-const resetDb = () => {
-  db.sessions.clear()
-  db.spaces.clear()
-  db.space_members.clear()
-  db.voyages.clear()
-  nextSpace = 1
-  delete process.env.HOUSEHOLD_SHARE_VOYAGE
-}
-
-const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
-
-const tableRows = (table: TableName): Array<Record<string, unknown>> => {
-  if (table === 'sessions') return Array.from(db.sessions.values()) as unknown as Array<Record<string, unknown>>
-  if (table === 'spaces') return Array.from(db.spaces.values()) as unknown as Array<Record<string, unknown>>
-  if (table === 'voyages') return Array.from(db.voyages.values()) as unknown as Array<Record<string, unknown>>
-  return Array.from(db.space_members.values()) as unknown as Array<Record<string, unknown>>
-}
-
-const memberKey = (row: Pick<SpaceMemberRow, 'space_id' | 'user_id'>) => `${row.space_id}:${row.user_id}`
-
-class FakeQuery implements PromiseLike<QueryResult> {
-  private action: 'select' | 'insert' | 'update' | 'upsert' = 'select'
-  private filters: Filter[] = []
-  private payload: unknown
-  private orderBy: { column: string; ascending: boolean } | null = null
-  private rowLimit: number | null = null
-
-  constructor(private readonly table: TableName) {}
-
-  select(_columns: string) { return this }
-  eq(column: string, value: unknown) { this.filters.push({ column, value, op: 'eq' }); return this }
-  in(column: string, value: unknown[]) { this.filters.push({ column, value, op: 'in' }); return this }
-  order(column: string, options?: { ascending?: boolean }) {
-    this.orderBy = { column, ascending: options?.ascending ?? true }; return this
-  }
-  limit(count: number) { this.rowLimit = count; return this }
-  insert(payload: unknown) { this.action = 'insert'; this.payload = payload; return this }
-  update(payload: unknown) { this.action = 'update'; this.payload = payload; return this }
-  upsert(payload: unknown, _options?: unknown) { this.action = 'upsert'; this.payload = payload; return this }
-  maybeSingle(): Promise<QueryResult> { return this.execute(true) }
-  single(): Promise<QueryResult> { return this.execute(true) }
-
-  then<TResult1 = QueryResult, TResult2 = never>(
-    onfulfilled?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
-    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-  ): PromiseLike<TResult1 | TResult2> {
-    return this.execute().then(onfulfilled, onrejected)
-  }
-
-  private matches(row: Record<string, unknown>) {
-    return this.filters.every((filter) => {
-      if (filter.op === 'in') return (filter.value as unknown[]).includes(row[filter.column])
-      return row[filter.column] === filter.value
-    })
-  }
-
-  private execute(single = false): Promise<QueryResult> {
-    if (this.action === 'insert') return Promise.resolve(this.insertRows(single))
-    if (this.action === 'update') return Promise.resolve(this.updateRows())
-    if (this.action === 'upsert') return Promise.resolve(this.upsertRows())
-
-    let rows = tableRows(this.table).filter((row) => this.matches(row))
-    if (this.orderBy) {
-      const { column, ascending } = this.orderBy
-      rows = rows.sort((a, b) => String(a[column] ?? '').localeCompare(String(b[column] ?? '')))
-      if (!ascending) rows.reverse()
-    }
-    if (this.rowLimit !== null) rows = rows.slice(0, this.rowLimit)
-    const data = rows.map(clone)
-    return Promise.resolve({ data: single ? data[0] ?? null : data, error: null })
-  }
-
-  private insertRows(single: boolean): QueryResult {
-    const rows = Array.isArray(this.payload) ? this.payload : [this.payload]
-    const inserted = rows.map((raw) => {
-      const row = raw as Partial<SpaceRow>
-      const id = row.id ?? `space-${nextSpace++}`
-      const space: SpaceRow = {
-        id,
-        kind: row.kind ?? 'room',
-        voyage_id: row.voyage_id ?? null,
-        ai_present: row.ai_present ?? true,
-        created_by: row.created_by ?? null,
-        created_at: row.created_at ?? `2026-07-09T00:00:0${nextSpace}.000Z`,
-      }
-      db.spaces.set(id, space)
-      return clone(space)
-    })
-    return { data: single ? inserted[0] : inserted, error: null }
-  }
-
-  private updateRows(): QueryResult {
-    const patch = this.payload as Record<string, unknown>
-    const rows = tableRows(this.table).filter((row) => this.matches(row))
-    rows.forEach((row) => Object.assign(row, patch))
-    return { data: rows.map(clone), error: null }
-  }
-
-  private upsertRows(): QueryResult {
-    const rows = (Array.isArray(this.payload) ? this.payload : [this.payload]) as SpaceMemberRow[]
-    rows.forEach((row) => {
-      const key = memberKey(row)
-      db.space_members.set(key, { ...db.space_members.get(key), ...row })
-    })
-    return { data: rows.map(clone), error: null }
-  }
-}
-
-const fakeAdmin = {
-  from: (table: TableName) => new FakeQuery(table),
-}
-
-const loadModules = async () => {
-  vi.resetModules()
-  vi.doMock('@/lib/supabase/admin', () => ({ getAdminClient: () => fakeAdmin }))
-  vi.doMock('@/lib/debug', () => ({ log: { api: vi.fn() } }))
-  const room = await import('./room')
-  const invites = await import('./invites')
-  return { ...room, ...invites }
-}
-
-const seedVoyage = () => {
-  db.voyages.set('voyage-1', { id: 'voyage-1', slug: 'fambam' })
-  db.sessions.set('isaac-session', { id: 'isaac-session', user_id: 'isaac', voyage_id: 'voyage-1', space_id: null, updated_at: '2026-07-09T00:00:01.000Z' })
-  db.sessions.set('vanessa-session', { id: 'vanessa-session', user_id: 'vanessa', voyage_id: 'voyage-1', space_id: null, updated_at: '2026-07-09T00:00:02.000Z' })
+const exactSpaceId = (invite: { spaceId: string | null }) => {
+  if (!invite.spaceId) throw new Error('test invite did not return an exact room')
+  return invite.spaceId
 }
 
 describe('room invitations', () => {
   beforeEach(() => {
-    resetDb()
+    resetRoomDb()
+    delete process.env.HOUSEHOLD_SHARE_VOYAGE
     vi.clearAllMocks()
   })
 
@@ -162,41 +31,111 @@ describe('room invitations', () => {
     seedVoyage()
     const { getRoom, inviteToRoom } = await loadModules()
 
-    const invite = await inviteToRoom('isaac-session', 'vanessa')
+    const invite = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
     const spaceId = invite.spaceId ?? ''
 
     expect(invite).toEqual({ state: 'invited', spaceId: 'space-1' })
     expect(db.space_members.get(`${spaceId}:isaac`)?.state).toBe('active')
     expect(db.space_members.get(`${spaceId}:vanessa`)?.state).toBe('invited')
-    await expect(getRoom('isaac-session')).resolves.toEqual({ roomPeople: [], aiPresent: true })
+    await expect(getRoom('isaac-session', 'isaac')).resolves.toEqual({ roomPeople: [], aiPresent: true, spaceId: 'space-1' })
 
     // Room reads and ordinary message handling do not invoke the explicit
     // response transition, so neither membership nor audience can change.
-    await expect(getRoom('vanessa-session')).resolves.toEqual({ roomPeople: [], aiPresent: true })
+    await expect(getRoom('vanessa-session', 'vanessa')).resolves.toEqual({ roomPeople: [], aiPresent: true, spaceId: null })
     expect(db.space_members.get(`${spaceId}:vanessa`)?.state).toBe('invited')
     expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
+    expect(rpcCalls).toContainEqual({ name: 'create_room_invite', args: {
+      p_session_id: 'isaac-session', p_inviter_user_id: 'isaac', p_invitee_user_id: 'vanessa',
+    } })
+  })
+
+  it('fails closed when the atomic invite transition errors or returns no committed row', async () => {
+    seedVoyage()
+    const { inviteToRoom } = await loadModules()
+    rpcErrors.set('create_room_invite', 'forced failure')
+    await expect(inviteToRoom('isaac-session', 'isaac', 'vanessa'))
+      .rejects.toThrow('room_invite_create_failed:forced failure')
+    expect(db.spaces).toHaveLength(0)
+    rpcErrors.clear(); emptyRpcResults.add('create_room_invite')
+    await expect(inviteToRoom('isaac-session', 'isaac', 'vanessa'))
+      .rejects.toThrow('room_invite_create_empty_result')
+    expect(db.spaces).toHaveLength(0)
+  })
+
+  it('keeps invited and active re-invites idempotent in the same room', async () => {
+    seedVoyage()
+    const { inviteToRoom } = await loadModules()
+
+    const first = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
+    const repeated = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
+    expect(repeated).toEqual(first)
+    expect(db.spaces).toHaveLength(1)
+
+    db.space_members.get(`${first.spaceId}:vanessa`)!.state = 'active'
+    await expect(inviteToRoom('isaac-session', 'isaac', 'vanessa')).resolves.toEqual({
+      state: 'active',
+      spaceId: first.spaceId,
+    })
+    expect(db.spaces).toHaveLength(1)
+  })
+
+  it('fails closed when an invite response has no committed result row', async () => {
+    seedVoyage()
+    const { respondToRoomInvite } = await loadModules()
+    emptyRpcResults.add('transition_room_invite')
+
+    await expect(respondToRoomInvite('vanessa-session', 'vanessa', true, 'space-1'))
+      .rejects.toThrow('room_invite_transition_empty_result')
+  })
+
+  it('does not let a removed member use a stale session pointer to invite or rejoin', async () => {
+    seedVoyage()
+    db.sessions.get('isaac-session')!.space_id = 'space-1'
+    db.spaces.set('space-1', {
+      id: 'space-1',
+      kind: 'room',
+      voyage_id: 'voyage-1',
+      ai_present: true,
+      created_by: 'vanessa',
+      created_at: '2026-07-09T00:00:00.000Z',
+    })
+    db.space_members.set('space-1:isaac', { space_id: 'space-1', user_id: 'isaac', state: 'left' })
+    db.space_members.set('space-1:vanessa', { space_id: 'space-1', user_id: 'vanessa', state: 'active' })
+
+    const { inviteToRoom } = await loadModules()
+    await expect(inviteToRoom('isaac-session', 'isaac', 'vanessa')).resolves.toEqual({
+      state: 'denied',
+      spaceId: 'space-1',
+    })
+    expect(db.space_members.get('space-1:isaac')?.state).toBe('left')
+    expect(db.space_members.get('space-1:vanessa')?.state).toBe('active')
   })
 
   it('accepts explicitly and links the responding session to the shared space', async () => {
     seedVoyage()
     const { getRoom, inviteToRoom, respondToRoomInvite } = await loadModules()
 
-    const invite = await inviteToRoom('isaac-session', 'vanessa')
-    const response = await respondToRoomInvite('vanessa-session', 'vanessa', true)
+    const invite = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
+    const response = await respondToRoomInvite(
+      'vanessa-session', 'vanessa', true, exactSpaceId(invite),
+    )
 
-    expect(response).toEqual({ responded: true, accepted: true, spaceId: invite.spaceId })
+    expect(response).toEqual({ responded: true, accepted: true, spaceId: invite.spaceId,
+      transition: 'accepted' })
     expect(db.space_members.get(`${invite.spaceId}:vanessa`)?.state).toBe('active')
     expect(db.sessions.get('vanessa-session')?.space_id).toBe(invite.spaceId)
-    await expect(getRoom('vanessa-session')).resolves.toEqual({ roomPeople: ['isaac'], aiPresent: true })
-    await expect(getRoom('isaac-session')).resolves.toEqual({ roomPeople: ['vanessa'], aiPresent: true })
+    await expect(getRoom('vanessa-session', 'vanessa')).resolves.toEqual({ roomPeople: ['isaac'], aiPresent: true, spaceId: invite.spaceId })
+    await expect(getRoom('isaac-session', 'isaac')).resolves.toEqual({ roomPeople: ['vanessa'], aiPresent: true, spaceId: invite.spaceId })
   })
 
   it('declines explicitly without linking the responding session', async () => {
     seedVoyage()
     const { inviteToRoom, respondToRoomInvite } = await loadModules()
 
-    const invite = await inviteToRoom('isaac-session', 'vanessa')
-    const response = await respondToRoomInvite('vanessa-session', 'vanessa', false)
+    const invite = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
+    const response = await respondToRoomInvite(
+      'vanessa-session', 'vanessa', false, exactSpaceId(invite),
+    )
 
     expect(response).toEqual({ responded: true, accepted: false })
     expect(db.space_members.get(`${invite.spaceId}:vanessa`)?.state).toBe('left')
@@ -207,7 +146,9 @@ describe('room invitations', () => {
     seedVoyage()
     const { respondToRoomInvite } = await loadModules()
 
-    await expect(respondToRoomInvite('vanessa-session', 'vanessa', true)).resolves.toEqual({
+    await expect(
+      respondToRoomInvite('vanessa-session', 'vanessa', true, 'space-missing'),
+    ).resolves.toEqual({
       responded: false,
       reason: 'no_pending_invite',
     })
@@ -218,47 +159,54 @@ describe('room invitations', () => {
     seedVoyage()
     const { inviteToRoom, respondToRoomInvite } = await loadModules()
 
-    const firstInvite = await inviteToRoom('isaac-session', 'vanessa')
-    await respondToRoomInvite('vanessa-session', 'vanessa', false)
+    const firstInvite = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
+    await respondToRoomInvite(
+      'vanessa-session', 'vanessa', false, exactSpaceId(firstInvite),
+    )
     expect(db.space_members.get(`${firstInvite.spaceId}:vanessa`)?.state).toBe('left')
-    const secondInvite = await inviteToRoom('isaac-session', 'vanessa')
+    const secondInvite = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
 
     expect(secondInvite).toEqual({ state: 'invited', spaceId: firstInvite.spaceId })
     expect(db.space_members.get(`${firstInvite.spaceId}:vanessa`)?.state).toBe('invited')
     expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
   })
 
-  it('responds to the newest pending room in the session voyage', async () => {
+  it('does not synthesize a room identity from other pending invitations', async () => {
     seedVoyage()
     const { inviteToRoom, respondToRoomInvite } = await loadModules()
 
-    const older = await inviteToRoom('isaac-session', 'vanessa')
+    const older = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
     const isaacSession = db.sessions.get('isaac-session')
     if (isaacSession) isaacSession.space_id = null
-    const newer = await inviteToRoom('isaac-session', 'vanessa')
-    const response = await respondToRoomInvite('vanessa-session', 'vanessa', true)
+    const newer = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
+    const response = await respondToRoomInvite(
+      'vanessa-session', 'vanessa', true, 'space-missing',
+    )
 
-    expect(response).toEqual({ responded: true, accepted: true, spaceId: newer.spaceId })
+    expect(response).toEqual({ responded: false, reason: 'no_pending_invite' })
     expect(db.space_members.get(`${older.spaceId}:vanessa`)?.state).toBe('invited')
-    expect(db.space_members.get(`${newer.spaceId}:vanessa`)?.state).toBe('active')
-    expect(db.sessions.get('vanessa-session')?.space_id).toBe(newer.spaceId)
+    expect(db.space_members.get(`${newer.spaceId}:vanessa`)?.state).toBe('invited')
+    expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
   })
 
   it('accepts an invite on the responding session\'s own space (self-space not excluded)', async () => {
     seedVoyage()
     const { getRoom, inviteToRoom, respondToRoomInvite } = await loadModules()
 
-    const invite = await inviteToRoom('isaac-session', 'vanessa')
+    const invite = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
     // Vanessa's session is already linked to the invited space while she is
     // still 'invited' — the click must still promote her, not strand her.
     const vanessaSession = db.sessions.get('vanessa-session')
     if (vanessaSession) vanessaSession.space_id = invite.spaceId ?? null
 
-    const response = await respondToRoomInvite('vanessa-session', 'vanessa', true)
+    const response = await respondToRoomInvite(
+      'vanessa-session', 'vanessa', true, exactSpaceId(invite),
+    )
 
-    expect(response).toEqual({ responded: true, accepted: true, spaceId: invite.spaceId })
+    expect(response).toEqual({ responded: true, accepted: true, spaceId: invite.spaceId,
+      transition: 'accepted' })
     expect(db.space_members.get(`${invite.spaceId}:vanessa`)?.state).toBe('active')
-    await expect(getRoom('vanessa-session')).resolves.toEqual({ roomPeople: ['isaac'], aiPresent: true })
+    await expect(getRoom('vanessa-session', 'vanessa')).resolves.toEqual({ roomPeople: ['isaac'], aiPresent: true, spaceId: invite.spaceId })
   })
 
   it('knocks even in a household voyage — HOUSEHOLD_SHARE_VOYAGE grants no social auto-accept', async () => {
@@ -266,26 +214,34 @@ describe('room invitations', () => {
     process.env.HOUSEHOLD_SHARE_VOYAGE = 'fambam'
     const { inviteToRoom } = await loadModules()
 
-    const invite = await inviteToRoom('isaac-session', 'vanessa')
+    const invite = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
 
     expect(invite).toEqual({ state: 'invited', spaceId: 'space-1' })
     expect(db.space_members.get('space-1:vanessa')?.state).toBe('invited')
     expect(db.sessions.get('vanessa-session')?.space_id).toBeNull()
   })
 
-  it('re-enters an already-active room from a new session via enterActiveRoom', async () => {
+  it('re-enters an already-active room through the canonical invite response', async () => {
     seedVoyage()
-    const { enterActiveRoom, inviteToRoom, respondToRoomInvite } = await loadModules()
+    const { inviteToRoom, respondToRoomInvite } = await loadModules()
 
-    await inviteToRoom('isaac-session', 'vanessa')
-    await respondToRoomInvite('vanessa-session', 'vanessa', true)
+    const invite = await inviteToRoom('isaac-session', 'isaac', 'vanessa')
+    await respondToRoomInvite(
+      'vanessa-session', 'vanessa', true, exactSpaceId(invite),
+    )
     const spaceId = db.sessions.get('vanessa-session')?.space_id
     // a fresh session in the same voyage re-enters by choice
     db.sessions.set('vanessa-session-2', { id: 'vanessa-session-2', user_id: 'vanessa', voyage_id: 'voyage-1', space_id: null, updated_at: '2026-07-10T00:00:03.000Z' })
 
-    await expect(enterActiveRoom('vanessa-session-2', 'vanessa')).resolves.toEqual({
-      entered: true,
+    await expect(
+      respondToRoomInvite(
+        'vanessa-session-2', 'vanessa', true, exactSpaceId(invite),
+      ),
+    ).resolves.toEqual({
+      responded: true,
+      accepted: true,
       spaceId,
+      transition: 'entered',
     })
     expect(db.sessions.get('vanessa-session-2')?.space_id).toBe(spaceId)
   })

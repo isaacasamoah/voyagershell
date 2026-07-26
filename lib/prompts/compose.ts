@@ -19,6 +19,7 @@ import { formatVoyage, estimateVoyageTokens } from './format/voyage';
 import { formatUser, estimateUserTokens } from './format/user';
 import { formatContext, estimateContextTokens } from './format/context';
 import { formatTools, formatToolsSummary, estimateToolsTokens } from './format/tools';
+import type { VoyagerIdentity } from '@/lib/messaging/address';
 
 // ============================================================================
 // MAIN COMPOSER
@@ -33,8 +34,8 @@ export interface ComposeInput {
   retrievedContext?: RetrievedContext;
   tools?: ToolDefinition[];
   options?: ComposerOptions;
-  /** The Voyager's own name (custom-claimed handle) — omitted when unnamed. */
-  voyagerName?: string;
+  /** Canonical current Voyager identity — omitted when unnamed. */
+  voyagerIdentity?: VoyagerIdentity;
   /** The human owner's display name, for the identity line. */
   ownerName?: string;
 }
@@ -42,11 +43,11 @@ export interface ComposeInput {
 // The identity line — the Voyager knows its own name + owner. Lives in the
 // cacheable static prefix (right after core, stable across a user's turns) so
 // the model consumes it but never has to decide it. Only rendered when named.
-const formatIdentity = (voyagerName: string, ownerName?: string): string => {
-  const display = voyagerName.charAt(0).toUpperCase() + voyagerName.slice(1);
+const formatIdentity = (identity: VoyagerIdentity, ownerName?: string): string => {
+  const display = identity.displayName ?? 'Voyager';
   const owner = ownerName?.trim() || 'your';
   const owned = ownerName?.trim() ? `${owner}'s` : 'your own';
-  return `## Your Name\n\nYou are ${display}, ${owned} Voyager. When ${owner} whispers "@${voyagerName} …", only you hear it — a private aside. When they say "${voyagerName}, …", they're summoning you into the room.`;
+  return `## Your Name\n\nYou are ${display}, ${owned} Voyager. When ${owner} writes "@${identity.handle} …", only you and ${owner} can see the exchange. Your name is identity, not permission for anyone else to invoke you.`;
 };
 
 /**
@@ -76,8 +77,8 @@ export const composePrompt = (input: ComposeInput): ComposedPrompt => {
   runningTokens += CORE_PROMPT_TOKENS;
 
   // Layer 1b: Identity (if the Voyager is named) — cacheable, stable per user.
-  if (input.voyagerName) {
-    const identityContent = formatIdentity(input.voyagerName, input.ownerName);
+  if (input.voyagerIdentity?.displayName) {
+    const identityContent = formatIdentity(input.voyagerIdentity, input.ownerName);
     const identityTokens = Math.ceil(identityContent.split(/\s+/).length * 0.75);
     layers.push({
       name: 'identity',
@@ -167,111 +168,4 @@ export const composePrompt = (input: ComposeInput): ComposedPrompt => {
       timestamp: new Date().toISOString(),
     },
   };
-};
-
-// ============================================================================
-// CONVENIENCE FUNCTIONS
-// ============================================================================
-
-/**
- * Composes a minimal prompt with just core + context.
- * Useful for quick interactions or fallback scenarios.
- */
-export const composeMinimalPrompt = (
-  userId: string,
-  context?: RetrievedContext
-): ComposedPrompt => {
-  return composePrompt({
-    userId,
-    retrievedContext: context,
-    options: { includeTools: false },
-  });
-};
-
-/**
- * Composes a prompt from database-stored configurations.
- * This is the primary entry point for the chat route.
- */
-export interface ComposeFromDbInput {
-  userId: string;
-  voyageSlug?: string;
-  voyageSettings?: Record<string, unknown>; // Raw JSON from voyages.settings
-  userSettings?: Record<string, unknown>; // Raw JSON from profiles.settings
-  pinnedKnowledge?: KnowledgeItem[];
-  retrievedContext?: RetrievedContext;
-  tools?: ToolDefinition[];
-  options?: ComposerOptions;
-}
-
-export const composeFromDb = (input: ComposeFromDbInput): ComposedPrompt => {
-  // Parse voyage config from raw settings
-  const voyageConfig = input.voyageSettings
-    ? parseVoyageConfig(input.voyageSettings)
-    : undefined;
-
-  // Parse user profile from raw settings
-  const userProfile = input.userSettings
-    ? parseUserProfile(input.userId, input.userSettings)
-    : undefined;
-
-  return composePrompt({
-    userId: input.userId,
-    voyageName: input.voyageSlug,
-    voyageConfig,
-    userProfile,
-    pinnedKnowledge: input.pinnedKnowledge,
-    retrievedContext: input.retrievedContext,
-    tools: input.tools,
-    options: input.options,
-  });
-};
-
-// ============================================================================
-// CONFIG PARSERS (from raw DB JSON)
-// ============================================================================
-
-import { mergeVoyageConfig, mergeUserProfile } from './defaults';
-
-const parseVoyageConfig = (settings: Record<string, unknown>): VoyageConfig => {
-  // Merge with defaults to ensure all fields are present
-  return mergeVoyageConfig(settings as Partial<VoyageConfig>);
-};
-
-const parseUserProfile = (
-  userId: string,
-  settings: Record<string, unknown>
-): UserProfile => {
-  const displayName = typeof settings.displayName === 'string'
-    ? settings.displayName
-    : undefined;
-
-  return mergeUserProfile(userId, {
-    displayName,
-    ...(settings as Partial<Omit<UserProfile, 'id'>>),
-  });
-};
-
-// ============================================================================
-// DEBUG UTILITIES
-// ============================================================================
-
-/**
- * Returns a debug view of the composed prompt with token breakdowns.
- */
-export const debugPrompt = (composed: ComposedPrompt): string => {
-  const lines: string[] = [
-    '=== PROMPT DEBUG ===',
-    `Total tokens: ${composed.totalTokens}`,
-    `Timestamp: ${composed.metadata.timestamp}`,
-    '',
-    '=== LAYER BREAKDOWN ===',
-  ];
-
-  composed.layers.forEach((layer) => {
-    lines.push(`${layer.name}: ${layer.tokenEstimate} tokens`);
-  });
-
-  lines.push('', '=== FULL PROMPT ===', composed.systemPrompt);
-
-  return lines.join('\n');
 };

@@ -17,11 +17,15 @@ const loadRunTurn = async () => {
     reapStuckTasks: vi.fn().mockResolvedValue(undefined),
   }))
   vi.doMock('@/lib/agents/cartographer', () => ({
-    shouldRunEnrichment: vi.fn(),
     runCartographer: vi.fn(),
   }))
-  vi.doMock('@/lib/conversation', () => ({ composeContextFromStream }))
-  vi.doMock('@/lib/conversation/stream-context', () => ({ renderMessagesForModel }))
+  vi.doMock('@/lib/agents/cartographer/source', () => ({
+    shouldRunEnrichment: vi.fn(),
+  }))
+  vi.doMock('@/lib/conversation/stream-context', () => ({
+    composeContextFromStream,
+    renderMessagesForModel,
+  }))
   vi.doMock('@/lib/conversation/window', () => ({
     computeWindow: vi.fn((messages) => ({ messages, hasMoreHistory: false })),
     getTruncatedMessages: vi.fn(() => []),
@@ -33,27 +37,37 @@ const loadRunTurn = async () => {
   vi.doMock('@/lib/debug', () => ({
     log: { api: vi.fn(), memory: vi.fn(), message: vi.fn() },
   }))
-  vi.doMock('@/lib/knowledge', () => ({
-    createMessageEvent: vi.fn().mockResolvedValue('event-1'),
-  }))
   vi.doMock('@/lib/learning/signals', () => ({
     detectLearningSignal: vi.fn(() => null),
     emitSignal: vi.fn(),
   }))
-  vi.doMock('@/lib/messaging/deliveries', () => ({ fanOutDeliveries: vi.fn() }))
+  vi.doMock('@/lib/messaging/ingress', () => ({
+    claimSourceIngress: vi.fn().mockResolvedValue({
+      eventId: 'event-1', status: 'created', recipients: [],
+    }),
+    enrichNewIngress: vi.fn().mockResolvedValue(undefined),
+    IngressConflictError: class IngressConflictError extends Error {},
+  }))
+  vi.doMock('@/lib/messaging/voyager-response-ingress', () => ({
+    claimVoyagerResponseIngress: vi.fn().mockResolvedValue({
+      eventId: 'assistant-event-1', status: 'created', recipients: [],
+    }),
+    enrichVoyagerResponseIngress: vi.fn().mockResolvedValue(undefined),
+  }))
   vi.doMock('@/lib/messaging/handles', () => ({
-    getOwnVoyagerIdentity: vi.fn().mockResolvedValue({ handle: '', name: null }),
-    listRoomVoyagerHandles: vi.fn().mockResolvedValue([]),
+    getOwnVoyagerIdentity: vi.fn().mockResolvedValue({ handle: '', displayName: null }),
   }))
   vi.doMock('@/lib/messaging/invites', () => ({
     deliverRoomInvite: vi.fn(),
     inviteToRoom: vi.fn(),
   }))
   vi.doMock('@/lib/messaging/room', () => ({
-    getRoom: vi.fn().mockResolvedValue({ roomPeople: [], aiPresent: true }),
-    parseRoomCommand: vi.fn(() => null),
+    getRoom: vi.fn().mockResolvedValue({ roomPeople: [], aiPresent: true, spaceId: null }),
     removeRoomPerson: vi.fn(),
     setAiPresent: vi.fn(),
+  }))
+  vi.doMock('@/lib/messaging/room-command', () => ({
+    parseRoomCommand: vi.fn(() => null),
   }))
   vi.doMock('@/lib/models', () => ({
     resolveUserModelWithMeta: vi.fn().mockResolvedValue({
@@ -76,8 +90,10 @@ const loadRunTurn = async () => {
   }))
   vi.doMock('@/lib/shell/intent', () => ({ detectActionIntent: vi.fn(() => null) }))
   vi.doMock('@/lib/shell/reconciler', () => ({ reconcileActions: vi.fn() }))
-  vi.doMock('@/lib/voyage', () => ({
+  vi.doMock('@/lib/voyage/core', () => ({
     getVoyageBySlug: vi.fn().mockResolvedValue(null),
+  }))
+  vi.doMock('@/lib/voyage/members', () => ({
     getVoyageMembers: vi.fn().mockResolvedValue([]),
     resolveMemberByName: vi.fn(),
   }))
@@ -87,7 +103,10 @@ const loadRunTurn = async () => {
 describe('harness prompt cache order', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    streamText.mockReturnValue({ toUIMessageStreamResponse: vi.fn() })
+    streamText.mockReturnValue({
+      toUIMessageStreamResponse: vi.fn(),
+      consumeStream: vi.fn(),
+    })
     composeContextFromStream.mockResolvedValue([])
     renderMessagesForModel.mockImplementation((messages) => messages)
     composeSystemPrompt.mockResolvedValue({

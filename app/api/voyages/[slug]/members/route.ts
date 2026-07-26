@@ -3,11 +3,8 @@
 
 import { NextResponse } from 'next/server';
 import { requireAuthResponse } from '@/lib/auth';
-import {
-  getVoyageBySlug,
-  getUserRole,
-  getVoyageMembers,
-} from '@/lib/voyage';
+import { getVoyageBySlug } from '@/lib/voyage/core';
+import { getUserRole, getVoyageMembers } from '@/lib/voyage/members';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;

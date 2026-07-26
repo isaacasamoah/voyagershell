@@ -1,375 +1,196 @@
-# Voyager Architecture
+# Voyager architecture
 
-Deep dive for contributors. Start here if you want to understand how Voyager thinks.
+Voyager is a Next.js application backed by Supabase PostgreSQL. The primary
+model decides when to retrieve, which tool to call, and whether deeper
+background work is useful. Memory is event-sourced; graph structure is an
+authorized retrieval index, never a second content ledger or membership oracle.
 
-## The Core Insight
+## Runtime shape
 
-Most AI assistants retrieve context through fixed pipelines: embed query → vector search → stuff into prompt. This works for simple lookups but fails for real collaboration where context is messy, interconnected, and evolves.
-
-**Voyager's approach**: Give the AI retrieval *tools* and let it decide the strategy.
-
-```
-User: "What did we decide about pricing?"
-
-Fixed Pipeline:
-  → embed("pricing decisions") → top 5 vectors → hope for the best
-
-Voyager:
-  → Claude thinks: "pricing decision" is conceptual, start semantic
-  → semantic_search("pricing decisions") → finds cluster about pricing
-  → get_connected(node_id) → follows graph to related decisions
-  → keyword_grep("$79") → pinpoints exact price mentioned
-  → Claude: "On Nov 12, you decided $79/mo after comparing to Competitor Y..."
-```
-
-The AI chains strategies based on what it finds. This is the "beating heart."
-
----
-
-## System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Client (Next.js App Router)                                        │
-│  └── VoyagerInterface.tsx                                           │
-│      ├── Terminal UI with streaming                                 │
-│      ├── Command handling (/new, /resume, /voyages, etc.)          │
-│      └── Message queue (type while AI thinks)                       │
-└─────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  API Layer                                                          │
-│  └── /api/chat/route.ts                                             │
-│      ├── Compose system prompt (core + voyage + user + context)     │
-│      ├── Attach retrieval tools                                     │
-│      ├── Stream response with tool calling                          │
-│      └── Emit knowledge events (real-time capture)                  │
-└─────────────────────────────────────────────────────────────────────┘
-                                    │
-                    ┌───────────────┼───────────────┐
-                    ▼               ▼               ▼
-┌──────────────────────┐ ┌──────────────────┐ ┌──────────────────────┐
-│  Retrieval Tools     │ │  Knowledge Layer │ │  Prompt Composition  │
-│  (lib/retrieval/)    │ │  (lib/knowledge/)│ │  (lib/prompts/)      │
-│                      │ │                  │ │                      │
-│  • semantic_search   │ │  • Event-sourced │ │  • Core personality  │
-│  • keyword_grep      │ │  • Graph edges   │ │  • Voyage context    │
-│  • get_connected     │ │  • Embeddings    │ │  • User preferences  │
-│  • search_by_time    │ │  • Scoped by     │ │  • Retrieved context │
-│                      │ │    user/voyage   │ │                      │
-└──────────────────────┘ └──────────────────┘ └──────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  Supabase (PostgreSQL + pgvector)                                   │
-│  ├── knowledge_events (append-only, immutable source of truth)      │
-│  ├── knowledge_current (computed state with embeddings)             │
-│  ├── conversations / messages                                       │
-│  ├── voyages / voyage_members                                       │
-│  └── users / profiles                                               │
-└─────────────────────────────────────────────────────────────────────┘
+```text
+VoyagerInterface
+      |
+app/api/chat/route.ts -- resolveSessionVoyage -- active voyage authority
+      |
+createVoyagerTools
+      +-- semantic_search / keyword_grep / anchored_search / get_nodes
+      +-- room, message, voyage, account, captain and background tools
+      |
+Supabase
+      +-- knowledge_events      append-only source content
+      +-- knowledge_current     derived search and embedding state
+      +-- voyages / spaces      product authority
+      +-- message_deliveries    destination delivery state
+      +-- graph_nodes / graph_edges / graph_authority_edges   the one graph
+      +-- knowledge_audiences   immutable scope carried by every source event
+      +-- knowledge_source_intents   the exactly-once ingress claim
 ```
 
----
+`lib/retrieval/voyager-tools.ts` is the registered tool catalogue.
+`lib/retrieval/knowledge-retrieval-tools.ts` defines the knowledge retrieval
+tools. The K2 cutover removed the legacy `knowledge_edges` table, its
+`graph_traverse` RPC and every caller, so no registered tool traverses the graph
+today; the six-kind boundary in `lib/knowledge/kernel/boundary.ts` still uses an
+isolated candidate client and gains its live caller in K3.
 
-## Knowledge System (Event-Sourced)
+`lib/messaging/ingress.ts` is the only harness path by which a person's message
+or their Voyager's response becomes a fact. For human input it resolves the
+audience, then calls one database function that claims actor + transport +
+client message id + payload hash BEFORE writing the audience, event, graph
+identity, structural edges, and delivery outbox in one transaction. A normal
+Voyager response names its claimed human source event; PostgreSQL validates the
+private conversation shape and inherits that source's exact audience. The
+response receives a `generated_by` edge to the owner's Voyager, not an
+`authored_by` edge to the owner.
 
-### Philosophy
+Every registered service-role knowledge read crosses a caller-scoped RPC.
+Exact-ID hydration uses `get_knowledge_by_ids`; direct mentions use
+`get_voyage_messages`; neither registered path reads `knowledge_current`
+through the admin client. PostgreSQL rechecks active voyage membership when the
+query executes, including graph roots and every traversal frontier.
 
-Everything is an event. Nothing is deleted. Curation is subtraction.
+## Event-sourced knowledge
 
-```sql
--- Source of truth (append-only)
-knowledge_events:
-  id              UUID PRIMARY KEY
-  event_type      TEXT  -- 'message', 'decision', 'fact', 'preference', etc.
-  content         TEXT  -- The actual knowledge
-  source_type     TEXT  -- 'conversation', 'import', 'manual'
-  source_id       TEXT  -- Reference to source (conversation_id, etc.)
-  user_id         UUID  -- Owner
-  voyage_slug     TEXT  -- NULL = personal, otherwise voyage-scoped
-  metadata        JSONB -- Flexible structured data
-  created_at      TIMESTAMPTZ
+`knowledge_events` is the sole ledger containing event content. Events are
+append-only apart from the deliberately bounded audience transition described
+below. `knowledge_current` is a derived projection used by semantic and keyword
+retrieval. `knowledge_units` contains extracted claims and immutable provenance;
+each unit has exactly the same audience as its source event.
 
--- Computed state (materialized for fast queries)
-knowledge_current:
-  event_id        UUID REFERENCES knowledge_events
-  content         TEXT
-  embedding       vector(1536)  -- OpenAI text-embedding-3-small
-  is_active       BOOLEAN       -- FALSE = "quieted" (soft delete)
-  is_pinned       BOOLEAN       -- TRUE = always include in context
-  connected_to    UUID[]        -- Graph edges to related knowledge
-  user_id         UUID
-  voyage_slug     TEXT
+Source visibility is represented by an immutable `knowledge_audiences` row:
+
+```text
+id = canonical(purpose, scope kind, scope authority, sorted members)
+purpose = source | authority
+scope = private | voyage | space
+members = exact immutable profile-id snapshot
 ```
 
-### Why Event-Sourced?
-
-1. **Audit trail**: Every change is traceable
-2. **Time travel**: Reconstruct state at any point
-3. **Conflict-free**: Append-only = no merge conflicts in collaborative contexts
-4. **Curation without loss**: "Quiet" nodes instead of deleting
-
-### Graph Edges
-
-Knowledge nodes connect to related nodes via `connected_to`. Edges are created:
-- **Explicitly**: User says "this relates to X"
-- **Automatically**: Entity extraction finds shared entities (people, projects, concepts)
-
-The `get_connected` tool traverses these edges to find related context.
-
----
-
-## Retrieval Tools
-
-Located in `lib/retrieval/tools.ts`. Claude decides when and how to use these.
-
-### semantic_search
-
-```typescript
-semantic_search({
-  query: "pricing discussions",
-  scope: "all",      // "personal" | "community" | "all"
-  limit: 10,
-  threshold: 0.5     // Similarity threshold
-})
-```
-
-Best for: Conceptual queries, don't know exact terms, exploring a topic.
-
-### keyword_grep
-
-```typescript
-keyword_grep({
-  pattern: "$79",     // Exact string or regex
-  caseSensitive: false,
-  limit: 20
-})
-```
-
-Best for: Exact terms, names, numbers, quotes. Precision over recall.
-
-### get_connected
-
-```typescript
-get_connected({
-  nodeId: "abc12345",  // Short ID from previous result
-  depth: 1             // How many hops to traverse
-})
-```
-
-Best for: Following relationships from a found node. "What else relates to this?"
-
-### search_by_time
-
-```typescript
-search_by_time({
-  start: "2024-01-01",
-  end: "2024-01-31",
-  limit: 20
-})
-```
-
-Best for: Temporal queries. "What did we discuss last week?"
-
-### Strategy Chains
-
-The prompt guides Claude to chain strategies:
-
-```
-semantic → get_connected → keyword_grep
-(concept → context → precision)
-
-search_by_time → semantic
-(when → what)
-```
-
----
-
-## Voyage Scoping
-
-Voyages are collaborative spaces. Knowledge is scoped:
-
-- **Personal** (`voyage_slug = NULL`): Only you see it
-- **Voyage** (`voyage_slug = 'sophiie'`): Everyone in the voyage sees it
-
-When you're in a voyage context:
-- Messages are tagged with the voyage
-- Retrieval searches both personal AND voyage knowledge
-- Decisions and facts become shared team memory
-
-```typescript
-// In chat route
-const { systemPrompt } = await composeSystemPrompt(
-  userId,
-  queryText,
-  { voyageSlug: 'sophiie' }  // Scopes retrieval
-)
-
-// In retrieval tools
-const retrievalTools = createRetrievalTools({
-  userId,
-  voyageSlug: 'sophiie',  // Scopes all tool calls
-})
-```
-
----
-
-## Prompt Architecture
-
-Located in `lib/prompts/`. Modular composition with token budgeting.
-
-```
-┌─────────────────────────────────────────┐
-│  Core Prompt (~450 tokens)              │  ← Identity, capabilities, principles
-│  └── lib/prompts/core.ts                │     Never changes
-└─────────────────────────────────────────┘
-                    +
-┌─────────────────────────────────────────┐
-│  Voyage Context (variable)              │  ← Team name, shared norms
-│  └── lib/prompts/voyage.ts              │     Loaded from DB
-└─────────────────────────────────────────┘
-                    +
-┌─────────────────────────────────────────┐
-│  User Preferences (variable)            │  ← Communication style, expertise
-│  └── lib/prompts/user.ts                │     Loaded from profile
-└─────────────────────────────────────────┘
-                    +
-┌─────────────────────────────────────────┐
-│  Retrieved Context (variable)           │  ← Pinned knowledge, semantic matches
-│  └── lib/prompts/compose.ts             │     Dynamic per query
-└─────────────────────────────────────────┘
-                    =
-┌─────────────────────────────────────────┐
-│  Final System Prompt                    │  ← Sent to Claude
-│  (Token budget ~4000)                   │
-└─────────────────────────────────────────┘
-```
-
----
-
-## Key Design Decisions
-
-### Why Claude + Vercel AI SDK?
-
-- **Tool calling**: Native support for letting AI use tools mid-response
-- **Streaming**: Real-time response rendering
-- **`stepCountIs(5)`**: Limits tool-calling loops to prevent runaway
-
-### Why Supabase + pgvector?
-
-- **Auth built-in**: Magic link, RLS policies
-- **Realtime**: Future: live updates when teammates add knowledge
-- **pgvector**: Native vector similarity search, no separate service
-
-### Why Event-Sourced Knowledge?
-
-- Collaboration requires conflict-free data structures
-- "Remember that..." and "Forget that..." are both events
-- Enables future features: undo, time travel, audit
-
-### Why Agentic Retrieval?
-
-Fixed pipelines are brittle. "What was that thing about pricing?" could mean:
-- Recent discussion (temporal)
-- A specific decision (semantic + graph)
-- An exact number mentioned (keyword)
-
-The AI knows what it's looking for. Let it choose.
-
----
-
-## What's Working (v0.1)
-
-- [x] Streaming chat with Claude
-- [x] Agentic retrieval (4 tools, strategy chaining)
-- [x] Event-sourced knowledge with embeddings
-- [x] Graph edges (manual + auto entity linking)
-- [x] Voyage scoping (shared team knowledge)
-- [x] Magic link auth
-- [x] Conversation persistence and resume
-- [x] Message queue (type while AI thinks)
-
-## What's Next (v0.2+)
-
-- [ ] Background agents (continue searching after response)
-- [ ] Realtime surfacing ("I found something relevant...")
-- [ ] Knowledge curation UI (pin, quiet, connect)
-- [ ] Structured extraction (decisions, action items, entities)
-- [ ] Voyage permissions (captain, navigator, crew roles)
-- [ ] Import sources (docs, Notion, Slack)
-
----
-
-## File Map
-
-```
-lib/
-├── knowledge/
-│   ├── events.ts       # Event creation, auto-linking
-│   ├── search.ts       # Semantic search, keyword grep, graph traversal
-│   └── index.ts        # Public exports
-│
-├── retrieval/
-│   ├── tools.ts        # Claude's retrieval tools (semantic, keyword, graph, time)
-│   └── index.ts
-│
-├── prompts/
-│   ├── core.ts         # Base personality + retrieval instructions
-│   ├── compose.ts      # Assembles full system prompt
-│   └── index.ts
-│
-├── conversation/       # Session management
-├── voyage/             # Team spaces
-├── auth/               # Magic link auth context
-└── supabase/           # DB clients (browser, server, admin)
-
-app/api/
-├── chat/route.ts       # Main chat endpoint with tool calling
-├── conversation/       # CRUD for conversations
-├── voyages/            # Team space management
-└── extract/            # (Deprecated) Old extraction system
-```
-
----
-
-## Running Locally
-
-```bash
-# Install
-npm install
-
-# Environment (copy .env.example)
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
-ANTHROPIC_API_KEY=...
-OPENAI_API_KEY=...          # For embeddings
-
-# Run
-npm run dev
-```
-
----
-
-## Questions for Contributors
-
-1. **Retrieval strategy**: Should we add a "confidence" signal so Claude knows when to dig deeper vs. give up?
-
-2. **Graph density**: Auto-linking by entities creates many edges. Too noisy? Should we threshold by entity salience?
-
-3. **Background agents**: When Claude hits `stepCountIs(5)`, should we spawn a background agent to continue searching and surface results later?
-
-4. **Knowledge decay**: Should old, unused knowledge gradually "fade" in relevance? Or is all history equally valuable?
-
-5. **Collaborative conflicts**: Two users pin contradictory facts. How should retrieval handle this?
-
----
-
-## Contact
-
-- **Isaac** - Product & Architecture
-- **Tom** - AI Engineering & Retrieval
-
-PRs welcome. Start with an issue to discuss approach.
+Source audiences authorize content. Authority audiences describe a current
+product snapshot used to validate the graph projection; they do not authorize
+historical source content.
+
+## Canonical graph substrate
+
+Migrations `061`–`071` are the installed graph and atomic-ingress shape. Numeric
+discovery is not installed-state authority: the pre-054 catalogue contract
+remains the explicit boundary for applying product migrations `054`–`059`, and
+the local proof then applies the entire `060`–`071` release boundary in order.
+
+### Stable identities
+
+`graph_nodes` contains one scope-neutral row for each `(kind, authority_id)`.
+The six kinds are Person, Voyager, Voyage, Space, MessageEvent, and
+KnowledgeUnit. The physical UUID is canonical and checked by PostgreSQL. A
+Person participating in many disjoint scopes still has one node.
+
+`graph_node_grants` is immutable evidence that an audience may discover a
+stable identity. A grant stores basis kind/id/version, optional evidence event,
+the label at grant time, and grant time. It never grants source content or
+current membership.
+
+Grant bases are typed:
+
+- `source_event` is valid only for a MessageEvent bound to itself or a
+  KnowledgeUnit bound to its exact source.
+- `edge_evidence` is valid only for a structural endpoint of the exact immutable
+  edge/evidence event/audience tuple.
+- `profile`, `voyage_member`, `space_member`, and `space` mirror exact product
+  authority rows and revisions.
+
+### Historical relations
+
+`graph_edges` stores canonical immutable semantic, source, and provenance
+relations. Its stable edge ID derives from canonical endpoints and kind;
+`relates_to` canonicalizes endpoint order. Every usable edge has one or more
+`graph_edge_evidence` rows pointing to exact source events. An edge has no
+synthetic intersection audience and cannot manufacture endpoint grants.
+
+### Current authority projection
+
+`graph_authority_edges` is rebuildable current state for only `member_of`,
+`in_voyage`, and `companion_of`. Product triggers project the authoritative row
+ID, exact revision, state, effective time, authority audience, and projection
+time. Traversal rechecks the live product row and exact revision/state/time, so
+the graph cannot grant membership.
+
+Voyage and space membership rows are retained across leave/rejoin. Only
+`state = 'active'` is current membership. Space-member physical IDs are derived
+from `(space_id, user_id)`; ordinary inserts omit the generated ID. Legitimate
+parent deletion and cascade remove current authority edges while immutable
+grants remain as historical evidence.
+
+For a voyage-backed room, effective authority requires both an active child
+space membership and an active parent voyage membership. Leaving a voyage
+atomically retires child-room memberships; rejoining the voyage does not revive
+them. A fresh room invitation is required. Standalone spaces remain valid.
+
+Every fresh invitation event carries its exact `space_id`, and the response
+transition requires that identity. Migration `057` retires every pending
+pre-cutover membership because older immutable invitation events cannot identify
+which room they meant. The feed keeps those events as honest, non-actionable
+history and asks for a resend; it never guesses from a newer membership.
+
+Accepting an exact room invite commits the membership and responding-session
+link in one database transition. The join announcement is a separate, best-effort
+post-commit effect: immediately before creating the event, the application
+rechecks that the joiner is still in the effective room roster. A joiner who
+has already lost authority produces no event or delivery. Membership may still
+change after that check, so the announcement is a presence signal, not an
+atomic audit record of continued membership.
+
+Profile and voyage source triggers are the sole writers of their current node
+labels. Membership and space projectors may reference canonical nodes but must
+not refresh those labels from stale row snapshots.
+
+## Traversal privacy
+
+The database authorizes the root before returning it. Each historical hop then
+requires all of:
+
+1. an evidence event visible to the viewer;
+2. endpoint grants in that exact evidence audience;
+3. exact edge/evidence bases for structural endpoints; and
+4. exact source-audience checks for MessageEvent and KnowledgeUnit endpoints.
+
+Authority hops require a current, exact product projection plus endpoint grants
+in its authority audience. Historical-only roots return `label_snapshot`; a
+current authorized root may return `graph_nodes.label`.
+
+Denied traversal and graph-off retrieval expose no content, count, path,
+placeholder, evidence, edge metadata, or provenance and share a padded response
+class at the database boundary. The application boundary returns only exact
+claim and immutable source fields.
+
+## Migration and release boundary
+
+Migrations 001–053 are deployed history and are immutable. Migrations `054`–
+`059` harden active membership, installed retrieval, exact-room invites and
+responses, private-reply promotion, and session authority cleanup. Migrations
+`060`–`071` are one graph-and-ingress release boundary: source intent, canonical
+graph substrate, clean cutover, authority projection, atomic human ingress,
+deployment-gap recovery, and source-audience inheritance for Voyager replies.
+Projection functions are defined before activation; activation takes
+transaction-held writer locks, installs triggers, and performs a complete
+idempotent catch-up so writes before the lock are not lost.
+
+The atomic writer creates the canonical source audience, event, MessageEvent
+node, grants, structural edges, evidence, and delivery fan-out before returning.
+Deployment-gap recovery binds the only permitted null-audience rows, after
+which the event audience is immutable. Voyager responses cross that same writer:
+normal replies inherit the exact source audience, and synthetic welcomes are
+accepted only with one owner member and no recipients.
+
+Event `user_id` and `actor_id` references deliberately restrict account
+deletion while immutable ledger rows exist. K5 must define an explicit
+erasure/anonymization contract before that terminal state can change; deletion
+must never occur as an accidental cascade around the immutable ledger.
+
+## Proof boundary
+
+The kernel fixture exercises all six node kinds and all sixteen edge kinds,
+cross-scope identity, red/blue denial symmetry, historical labels, leave,
+late join, absence, rejoin, post-rejoin sources, deterministic replay, parent
+cascades, and direct-write rejection. The hosted recipe adds K1 canonical
+backfill parity, unresolved-row reporting, activation-gap catch-up, sequence
+non-consumption, old-catalogue absence, and catalogue equality after rollback.

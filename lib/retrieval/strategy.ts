@@ -3,7 +3,7 @@
 // for the system prompt. Module-ready: new tools register with hints.
 
 import { TOOL_STRATEGY_PREAMBLE } from '@/lib/prompts/core'
-import type { ToolRegistration } from './tools'
+import type { ToolRegistration } from './tool-types'
 
 /**
  * Compose tool strategy from static preamble + dynamic tool registrations.

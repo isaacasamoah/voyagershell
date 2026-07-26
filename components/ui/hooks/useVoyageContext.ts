@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { log } from '@/lib/debug'
-import { pickOwnVoyagerHandle } from '@/lib/messaging/address'
+import { resolveVoyagerIdentity, type VoyagerIdentity } from '@/lib/messaging/address'
 import { createClient } from '@/lib/supabase/client'
 import type { VoyageMembership } from '@/lib/types'
 
@@ -19,10 +19,34 @@ export const useVoyageContext = ({
   const [voyageResolved, setVoyageResolved] = useState(false)
   const [voyages, setVoyages] = useState<VoyageMembership[]>([])
   const [displayName, setDisplayName] = useState<string | null>(null)
-  // The user's OWN voyager handle — powers the composer badge. RLS scopes the
-  // read to the caller's own row; '' when unnamed (the `voyager` alias carries
-  // the badge regardless).
-  const [ownVoyagerHandle, setOwnVoyagerHandle] = useState<string>('')
+  const [ownVoyagerIdentity, setOwnVoyagerIdentity] = useState<VoyagerIdentity>({
+    handle: '',
+    displayName: null,
+  })
+
+  const loadOwnIdentity = useCallback(async (): Promise<{
+    humanDisplayName: string | null
+    voyagerIdentity: VoyagerIdentity
+  }> => {
+    const supabase = createClient()
+    const [profileResult, handleResult] = await Promise.all([
+      supabase.from('profiles').select('display_name, username').maybeSingle(),
+      supabase.from('handles').select('handle').eq('kind', 'voyager').maybeSingle(),
+    ])
+    const profile = profileResult.data as {
+      display_name: string | null
+      username: string | null
+    } | null
+    const rowHandle = (handleResult.data as { handle: string } | null)?.handle ?? null
+    return {
+      humanDisplayName: profileResult.error ? null : (profile?.display_name ?? null),
+      // Match the server's fail-closed behavior: a handles read error must not
+      // invent a derived address that could reclassify a message.
+      voyagerIdentity: handleResult.error
+        ? { handle: '', displayName: null }
+        : resolveVoyagerIdentity(rowHandle, profile?.username ?? null),
+    }
+  }, [])
 
   const fetchVoyages = useCallback(async () => {
     try {
@@ -63,40 +87,40 @@ export const useVoyageContext = ({
     fetchVoyages()
   }, [isAuthenticated, isAuthLoading, fetchVoyages])
 
-  // Fetch display name from profiles when authenticated.
+  // Fetch human + Voyager identity when authenticated.
   // Stale-closure guard (`cancelled`) prevents a slow fetch from overwriting null
   // after sign-out when two effect firings race.
   useEffect(() => {
     if (!isAuthenticated || isAuthLoading) {
       setDisplayName(null)
-      setOwnVoyagerHandle('')
+      setOwnVoyagerIdentity({ handle: '', displayName: null })
       return
     }
     let cancelled = false
-    const supabase = createClient()
-    void (async () => {
-      let username: string | null = null
-      try {
-        const { data } = await supabase.from('profiles').select('display_name, username').maybeSingle()
-        const profile = data as { display_name: string | null; username: string | null } | null
-        username = profile?.username ?? null
-        if (!cancelled) setDisplayName(profile?.display_name ?? null)
-      } catch {
-        if (!cancelled) setDisplayName(null)
-      }
-      try {
-        const { data } = await supabase.from('handles').select('handle').eq('kind', 'voyager').maybeSingle()
-        const rowHandle = (data as { handle: string } | null)?.handle ?? null
-        // Derive the own handle through the SAME pure rule the server uses, so the
-        // composer badge and the optimistic settle see the handle the reply gate
-        // stripped — a derived `<username>.voyager` default included, not just ''.
-        if (!cancelled) setOwnVoyagerHandle(pickOwnVoyagerHandle(rowHandle, username))
-      } catch {
-        if (!cancelled) setOwnVoyagerHandle('')
-      }
-    })()
+    void loadOwnIdentity()
+      .then((identity) => {
+        if (cancelled) return
+        setDisplayName(identity.humanDisplayName)
+        setOwnVoyagerIdentity(identity.voyagerIdentity)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setDisplayName(null)
+        setOwnVoyagerIdentity({ handle: '', displayName: null })
+      })
     return () => { cancelled = true }
-  }, [isAuthenticated, isAuthLoading])
+  }, [isAuthenticated, isAuthLoading, loadOwnIdentity])
+
+  const refetchOwnVoyagerIdentity = useCallback(async (): Promise<void> => {
+    if (!isAuthenticated || isAuthLoading) return
+    try {
+      const identity = await loadOwnIdentity()
+      setDisplayName(identity.humanDisplayName)
+      setOwnVoyagerIdentity(identity.voyagerIdentity)
+    } catch {
+      setOwnVoyagerIdentity({ handle: '', displayName: null })
+    }
+  }, [isAuthenticated, isAuthLoading, loadOwnIdentity])
 
   /**
    * Refetch the voyages list from the server.
@@ -113,7 +137,9 @@ export const useVoyageContext = ({
     setCurrentVoyage,
     voyages,
     displayName,
-    ownVoyagerHandle,
+    ownVoyagerHandle: ownVoyagerIdentity.handle,
+    ownVoyagerDisplayName: ownVoyagerIdentity.displayName,
+    refetchOwnVoyagerIdentity,
     refetchVoyages,
   }
 }

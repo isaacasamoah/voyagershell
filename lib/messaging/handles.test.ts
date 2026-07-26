@@ -1,136 +1,54 @@
 import { describe, expect, it, vi } from 'vitest'
 
-// Mutable per-test results for the mocked admin client, one slot per table.
 const db = vi.hoisted(() => ({
   handles: { data: null as unknown, error: null as unknown },
   profiles: { data: null as unknown, error: null as unknown },
 }))
 
-// A minimal chainable Supabase builder — every filter returns itself; the
-// terminal maybeSingle() resolves the table's configured { data, error }.
 vi.mock('@/lib/supabase/admin', () => ({
   getAdminClient: () => ({
     from: (table: string) => {
       const result = table === 'handles' ? db.handles : db.profiles
-      const b: Record<string, unknown> = {}
-      b.select = () => b
-      b.eq = () => b
-      b.in = () => b
-      b.maybeSingle = () => Promise.resolve(result)
-      return b
+      const builder: Record<string, unknown> = {}
+      builder.select = () => builder
+      builder.eq = () => builder
+      builder.maybeSingle = () => Promise.resolve(result)
+      return builder
     },
   }),
 }))
 
-import { getOwnVoyagerIdentity, renameVoyagerHandle, toRoomVoyagerHandles } from './handles'
+import { getOwnVoyagerIdentity, renameVoyagerHandle } from './handles'
 
-describe('toRoomVoyagerHandles — isOwn is true ONLY for the caller', () => {
-  const caller = 'user-isaac'
-  const other = 'user-elisheya'
-  const members = [caller, other]
-
-  it('tags each member voyager with isOwn correct for the caller', () => {
-    const result = toRoomVoyagerHandles(
-      members,
-      caller,
-      [
-        { handle: 'wren', owner_user_id: caller },
-        { handle: 'elisheya.voyager', owner_user_id: other },
-      ],
-      [
-        { id: caller, username: 'isaac', display_name: 'Isaac' },
-        { id: other, username: 'elisheya', display_name: 'Elisheya' },
-      ],
-    )
-    expect(result).toEqual([
-      // cut ④: the handle set now carries owner_user_id (the identity a summon
-      // persists + runs under) and the voyager's title-cased custom name.
-      { handle: 'wren', ownerName: 'Isaac', isOwn: true, ownerUserId: caller, name: 'Wren' },
-      // 'elisheya.voyager' is a DERIVED default → unnamed → name: null.
-      { handle: 'elisheya.voyager', ownerName: 'Elisheya', isOwn: false, ownerUserId: other, name: null },
-    ])
-  })
-
-  it('derives the default handle for a member with no claimed row', () => {
-    const result = toRoomVoyagerHandles(
-      members,
-      caller,
-      [{ handle: 'wren', owner_user_id: caller }],
-      [
-        { id: caller, username: 'isaac', display_name: 'Isaac' },
-        { id: other, username: 'elisheya', display_name: 'Elisheya' },
-      ],
-    )
-    expect(result.find((v) => !v.isOwn)?.handle).toBe('elisheya.voyager')
-  })
-
-  it('skips members with neither a handle nor a username', () => {
-    const result = toRoomVoyagerHandles(
-      members,
-      caller,
-      [{ handle: 'wren', owner_user_id: caller }],
-      [
-        { id: caller, username: 'isaac', display_name: 'Isaac' },
-        { id: other, username: null, display_name: 'Elisheya' },
-      ],
-    )
-    expect(result).toHaveLength(1)
-    expect(result[0].isOwn).toBe(true)
-  })
-
-  it('falls back to username then "someone" for the redirect ownerName', () => {
-    const result = toRoomVoyagerHandles(
-      [other],
-      caller,
-      [],
-      [{ id: other, username: 'elisheya', display_name: null }],
-    )
-    expect(result[0].ownerName).toBe('elisheya')
-  })
-})
-
-// The security-critical discrimination (C1): a handles-read ERROR must fail
-// CLOSED — never invent a derived handle from an errored read, because that
-// would silently reclassify an aside. A null row with NO error is a genuinely
-// unnamed voyager, which legitimately derives its default.
-describe('getOwnVoyagerIdentity — fails CLOSED on a read error', () => {
-  it('errored handles read → handle "" (does NOT invent the derived default)', async () => {
+describe('getOwnVoyagerIdentity — owner-only lookup fails closed', () => {
+  it('does not invent a derived handle when the handles read errors', async () => {
     db.handles = { data: null, error: { message: 'connection reset' } }
     db.profiles = { data: { username: 'isaac' }, error: null }
-    const id = await getOwnVoyagerIdentity('user-isaac')
-    // Even though the username would derive `isaac.voyager`, the errored read
-    // must NOT produce it — an aside can only ever match a real own handle.
-    expect(id.handle).toBe('')
-    expect(id.name).toBeNull()
+    expect(await getOwnVoyagerIdentity('user-isaac')).toEqual({ handle: '', displayName: null })
   })
 
-  it('null row with NO error → derives <username>.voyager (genuinely unnamed)', async () => {
+  it('derives a default only after a successful empty handles read', async () => {
     db.handles = { data: null, error: null }
     db.profiles = { data: { username: 'isaac' }, error: null }
-    const id = await getOwnVoyagerIdentity('user-isaac')
-    expect(id.handle).toBe('isaac.voyager')
-    expect(id.name).toBeNull()
+    expect(await getOwnVoyagerIdentity('user-isaac')).toEqual({
+      handle: 'isaac.voyager',
+      displayName: null,
+    })
   })
 
-  it('a claimed custom name → handle + name both surface', async () => {
+  it('returns a claimed custom name', async () => {
     db.handles = { data: { handle: 'wren' }, error: null }
     db.profiles = { data: { username: 'isaac' }, error: null }
-    const id = await getOwnVoyagerIdentity('user-isaac')
-    expect(id.handle).toBe('wren')
-    expect(id.name).toBe('wren')
+    expect(await getOwnVoyagerIdentity('user-isaac')).toEqual({
+      handle: 'wren',
+      displayName: 'Wren',
+    })
   })
 })
 
-// The naming ritual rides set_username-style validation. Reserved words and
-// pattern violations are rejected BEFORE any namespace write — no DB needed.
-describe('renameVoyagerHandle — validation gate (no DB)', () => {
-  it('rejects a reserved word', async () => {
-    const result = await renameVoyagerHandle('user-1', 'voyager')
-    expect(result.ok).toBe(false)
-  })
-
-  it('rejects a pattern violation', async () => {
-    const result = await renameVoyagerHandle('user-1', 'A!')
-    expect(result.ok).toBe(false)
+describe('renameVoyagerHandle', () => {
+  it('rejects reserved words and invalid patterns before writing', async () => {
+    expect((await renameVoyagerHandle('user-1', 'voyager')).ok).toBe(false)
+    expect((await renameVoyagerHandle('user-1', 'A!')).ok).toBe(false)
   })
 })

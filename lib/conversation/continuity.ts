@@ -1,7 +1,7 @@
 // Continuity retrieval for conversation context
 // Detect implicit references, retrieve silently
 
-import type { ConversationMessage } from './index'
+import type { ConversationMessage } from './stream-context'
 import { searchKnowledge } from '@/lib/knowledge/search'
 
 export type ReferenceType = 'implicit' | 'temporal' | 'cross-session'

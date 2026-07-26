@@ -11,8 +11,8 @@
 
 import { tool } from 'ai'
 import { z } from 'zod'
-import type { ToolContext } from '@/lib/retrieval/tools'
-import { getUserVoyages } from '@/lib/voyage'
+import type { ToolContext } from '@/lib/retrieval/tool-types'
+import { getUserVoyages } from '@/lib/voyage/members'
 
 // =============================================================================
 // Schemas — Discriminated union on `type`

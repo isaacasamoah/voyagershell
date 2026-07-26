@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveMemberByName } from './index'
+import { resolveMemberByName } from './members'
 import { normalizeUsername } from './username'
 
 describe('resolveMemberByName username addressing', () => {

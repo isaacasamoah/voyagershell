@@ -1,5 +1,6 @@
 import { requireAuthResponse } from '@/lib/auth'
-import { getFeed, SessionAccessError } from '@/lib/messaging/feed'
+import { SessionAccessError } from '@/lib/conversation/session-authority'
+import { getFeed } from '@/lib/messaging/feed'
 import { toFeedApiEvent } from '@/lib/messaging/feed-types'
 import { log } from '@/lib/debug'
 

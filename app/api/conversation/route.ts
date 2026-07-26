@@ -6,10 +6,10 @@ import { NextResponse } from 'next/server'
 import {
   getOrCreateActiveConversation,
   archiveConversation,
-} from '@/lib/conversation'
+} from '@/lib/conversation/session-lifecycle'
 import { requireAuthResponse } from '@/lib/auth'
-import { getRoom } from '@/lib/messaging/room'
-import { getAdminClient } from '@/lib/supabase/admin'
+import { SessionAccessError } from '@/lib/conversation/session-authority'
+import { getDisplayRoom } from '@/lib/messaging/room'
 
 /**
  * GET /api/conversation
@@ -49,18 +49,10 @@ export const GET = async (req: Request) => {
     )
 
     // Room state for the header indicator (who's in the room + is Voyager present)
-    const roomState = await getRoom(conversation.id)
-    let roomPeopleNames: string[] = []
-    if (roomState.roomPeople.length > 0) {
-      const admin = getAdminClient()
-      const { data: profs } = await (admin as unknown as { from: (t: string) => any })
-        .from('profiles').select('id, display_name').in('id', roomState.roomPeople)
-      const byId = new Map(((profs as Array<{ id: string; display_name: string | null }>) ?? []).map(p => [p.id, p.display_name]))
-      roomPeopleNames = roomState.roomPeople.map(id => byId.get(id) ?? 'someone')
-    }
+    const roomState = await getDisplayRoom(conversation.id, userId)
 
     return NextResponse.json({
-      room: { people: roomPeopleNames, aiPresent: roomState.aiPresent },
+      room: roomState,
       conversation: {
         id: conversation.id,
         title: conversation.title,
@@ -77,6 +69,9 @@ export const GET = async (req: Request) => {
       })),
     })
   } catch (error) {
+    if (error instanceof SessionAccessError) {
+      return NextResponse.json({ error: 'session_access_denied' }, { status: 403 })
+    }
     console.error('[Conversation API] GET error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -121,7 +116,7 @@ export const POST = async (req: Request) => {
         '[Conversation API] Archiving current conversation:',
         currentConversation.id
       )
-      const archived = await archiveConversation(currentConversation.id)
+      const archived = await archiveConversation(currentConversation.id, userId)
 
       if (!archived) {
         console.error('[Conversation API] Failed to archive current conversation')
@@ -158,6 +153,9 @@ export const POST = async (req: Request) => {
       messages: [],
     })
   } catch (error) {
+    if (error instanceof SessionAccessError) {
+      return NextResponse.json({ error: 'session_access_denied' }, { status: 403 })
+    }
     console.error('[Conversation API] POST error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
