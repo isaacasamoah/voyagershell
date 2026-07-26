@@ -11,7 +11,6 @@ import {
 const {
   claimSourceIngress,
   composeSystemPrompt,
-  createMessageEvent,
   deliverRoomInvite,
   estimateCost,
   getOwnVoyagerIdentity,
@@ -39,7 +38,6 @@ describe('runTurn', () => {
     expect(result).toEqual({ kind: 'empty' })
     expect(streamText).not.toHaveBeenCalled()
     expect(claimSourceIngress).not.toHaveBeenCalled()
-    expect(createMessageEvent).not.toHaveBeenCalled()
   })
 
   it('claims the ingress before the model runs, then streams', async () => {
@@ -69,6 +67,18 @@ describe('runTurn', () => {
     const result = await runTurn(context(), stubHost().host)
 
     expect(result.kind).toBe('text')
+    expect(streamText).not.toHaveBeenCalled()
+  })
+
+  it('does not run the model again when the source ingress is a replay', async () => {
+    claimSourceIngress.mockResolvedValue({
+      eventId: 'event-1', status: 'replayed', recipients: [],
+    })
+    const { runTurn } = await loadRunTurn()
+
+    const result = await runTurn(context(), stubHost().host)
+
+    expect(result).toEqual({ kind: 'empty' })
     expect(streamText).not.toHaveBeenCalled()
   })
 
@@ -144,18 +154,15 @@ describe('runTurn', () => {
     expect(claimSourceIngress).toHaveBeenCalledWith(expect.objectContaining({
       content: 'help me think', isAside: true,
     }))
-  })
-
-  it('does not persist the synthetic auto-sent welcome', async () => {
-    const { runTurn } = await loadRunTurn()
-
-    const result = await runTurn(context({
-      autoSent: true,
-      newMessage: 'good morning',
-    }), stubHost().host)
-
-    expect(result.kind).toBe('stream')
-    expect(claimSourceIngress).not.toHaveBeenCalled()
+    expect(runTurnMocks.renderMessagesForModel).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'in-flight-user-message',
+          content: 'help me think',
+          isPrivate: true,
+        }),
+      ]),
+    )
   })
 
   it('uses the resolved default model label for cost estimation', async () => {
@@ -197,39 +204,6 @@ describe('runTurn', () => {
     expect(claimSourceIngress).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-2', content: 'wren, what did we decide?', isAside: false,
     }))
-  })
-
-  it('persists an owner Voyager reply as private conversation data only', async () => {
-    getRoom.mockResolvedValue({ roomPeople: ['user-2'], aiPresent: true, spaceId: 'space-1' })
-    getVoyageBySlug.mockResolvedValue({ id: 'voyage-1' })
-    getVoyageMembers.mockResolvedValue([
-      { userId: 'user-1', displayName: 'Isaac' },
-      { userId: 'user-2', displayName: 'Elisheya' },
-    ])
-    getOwnVoyagerIdentity.mockResolvedValue({ handle: 'wren', displayName: 'Wren' })
-    const { runTurn } = await loadRunTurn()
-
-    await runTurn(context({ voyageSlug: 'launch', newMessage: '@wren think with me' }), stubHost().host)
-    const onFinish = streamText.mock.calls[0][0].onFinish
-    await onFinish({
-      text: 'A private answer.',
-      steps: [],
-      finishReason: 'stop',
-      usage: null,
-      providerMetadata: {},
-    })
-
-    expect(createMessageEvent).toHaveBeenCalledWith(
-      'conversation-1',
-      'assistant',
-      'A private answer.',
-      {
-        userId: 'user-1',
-        voyageSlug: 'launch',
-        participants: ['user-1'],
-        eventType: 'conversation',
-      },
-    )
   })
 
   it('passes the canonical current handle/display pair into the prompt', async () => {

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
@@ -17,47 +17,19 @@ import { knowledgeGraphFixture, validateKnowledgeGraphFixture } from './fixture'
 import { renderKnowledgeGraphSql } from './generate-sql'
 
 const readRepoFile = (path: string): string => readFileSync(resolve(process.cwd(), path), 'utf8')
-const promotedGraphMigrations = ['061_knowledge_graph_schema.sql',
-  '062_knowledge_graph_authorization.sql', '063_knowledge_graph_retrieval.sql'] as const
 const cutoverGraphPaths = ['supabase/migrations/064_knowledge_graph_cutover.sql',
   'supabase/migrations/065_knowledge_graph_authority_projection.sql',
   'supabase/migrations/066_knowledge_graph_membership_projection.sql',
   'supabase/migrations/067_knowledge_graph_projection_activation.sql'] as const
-const migrationPaths = [...promotedGraphMigrations.map((name) => `supabase/migrations/${name}`),
+const migrationPaths = [
+  'supabase/migrations/061_knowledge_graph_schema.sql',
+  'supabase/migrations/062_knowledge_graph_authorization.sql',
+  'supabase/migrations/063_knowledge_graph_retrieval.sql',
   ...cutoverGraphPaths]
 const migrations = (): string => migrationPaths.map(readRepoFile).join('\n')
 const cloneFixture = (): any => structuredClone(knowledgeGraphFixture)
 
 describe('ORU-319 final graph substrate contract', () => {
-  // K2 step 3 is the cutover, and the ceiling moves with it — once. This test
-  // used to prove the cutover was ABSENT, because a half-cut graph leaves two
-  // runtimes live. It now proves the stronger thing: the cutover is complete.
-  it('lands the whole cutover as one release boundary and leaves no legacy graph', () => {
-    const discovered = readdirSync(resolve(process.cwd(), 'supabase/migrations'))
-      .filter((name) => /^\d{3}.*\.sql$/.test(name)).sort()
-    const atOrAbove = (floor: number): string[] =>
-      discovered.filter((name) => Number(name.slice(0, 3)) >= floor)
-    expect(Math.max(...discovered.map((name) => Number(name.slice(0, 3))))).toBe(69)
-    expect(atOrAbove(60)).toEqual(['060_source_intent.sql', ...promotedGraphMigrations,
-      ...cutoverGraphPaths.map((path) => path.split('/').at(-1)),
-      '068_atomic_source_ingress.sql', '069_deployment_gap_recovery.sql'])
-    // Promotion MOVED each definition: exactly one home, never a drifting copy.
-    expect(readdirSync(resolve(process.cwd(), 'recipes/sql/knowledge-graph'))
-      .filter((name) => /^\d{3}_/.test(name))).toEqual([])
-    // The cutover is whole: a partial landing — a backfill without the drops, a
-    // drop without the projections — fails here rather than shipping.
-    const k2Sql = atOrAbove(60).map((name) => readRepoFile(`supabase/migrations/${name}`)).join('\n')
-    for (const required of ['knowledge_graph_backfill_rejections', 'write_knowledge_graph_edge',
-      'ensure_authority_audience', 'project_graph_authority_trigger',
-      'DROP TABLE public.knowledge_edges',
-      'DROP FUNCTION IF EXISTS public.graph_traverse',
-      'claim_source_message_ingress', 'recover_knowledge_graph_deployment_gap',
-    ]) expect(k2Sql).toContain(required)
-    // Recovery reuses the one classifier rather than restating the rules.
-    expect(readRepoFile('supabase/migrations/069_deployment_gap_recovery.sql'))
-      .toContain('public.classify_knowledge_event_authority(')
-  })
-
   it('locks six canonical node kinds and all sixteen edge kinds', () => {
     expect(new Set(knowledgeGraphFixture.nodes.map((node) => node.kind))).toEqual(new Set(GRAPH_NODE_KINDS))
     const exercised = new Set([

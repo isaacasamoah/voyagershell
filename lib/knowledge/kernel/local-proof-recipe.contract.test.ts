@@ -37,20 +37,20 @@ describe('exact local graph candidate recipe', () => {
     expect(recipe).not.toContain('docker pull')
   })
 
-  // The candidate is now the product, so the whole set 054-069 applies in one
+  // The candidate is now the product, so the whole set 054-071 applies in one
   // order: legacy history, the migrations up to the additive substrate, the K1
   // historical fixture, then the cutover, its projections, the deployment gap
   // written BEFORE activation, activation, and the ingress that replaces the
   // old writer. That order is the release boundary; pin it.
-  it('applies 054-069 in cutover order, with the deployment gap before activation', () => {
+  it('applies 054-071 in cutover order, with the deployment gap before activation', () => {
     for (const number of ['054', '055', '056', '057', '058', '059', '060', '061', '062',
-      '063', '064', '065', '066', '067', '068', '069']) {
+      '063', '064', '065', '066', '067', '068', '069', '070', '071']) {
       expect(recipe).toContain(number)
     }
     const transaction = recipe.slice(recipe.indexOf("cat <<'SQL'\nBEGIN;"))
     const productLoop = 'for number in 054 055 056 057 058 059 060 061 062 063'
     const order = ['k1-legacy.sql', productLoop, 'k1-historical.sql', '064_', '065_',
-      'gap.sql', '067_', '068_', '069_', 'generated.sql']
+      'gap.sql', '067_', '068_', '069_', '070_', '071_', 'generated.sql']
     for (let step = 1; step < order.length; step++) {
       expect(transaction.indexOf(order[step - 1]))
         .toBeLessThan(transaction.indexOf(order[step]))

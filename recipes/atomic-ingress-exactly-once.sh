@@ -7,13 +7,14 @@
 # ONE delivery set; the same key carrying a different payload fails and commits
 # nothing; and an event written during the deployment gap is recovered.
 #
-# It runs the real cutover — every migration through 069 — against a disposable
+# It runs the real cutover — every migration through 071 — against a disposable
 # local PostgreSQL, so it exercises the same functions the dev branch carries.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/lib/docker-proof.sh"
 source "$SCRIPT_DIR/lib/installed-precondition.sh"
+source "$SCRIPT_DIR/lib/private-voyager-response-proof.sh"
 IMAGE=pgvector/pgvector@sha256:18d16372b8406bb38a9f94cbff15d125c463d71fde2770aa8b5c64bfcc1578ee
 DATABASE=voyager_atomic_ingress
 CONTAINER_NAME="voyager-atomic-ingress-$(date +%s)-$$"
@@ -33,7 +34,9 @@ MIGRATIONS=(supabase/migrations/054_active_membership_authority.sql
   supabase/migrations/066_knowledge_graph_membership_projection.sql
   supabase/migrations/067_knowledge_graph_projection_activation.sql
   supabase/migrations/068_atomic_source_ingress.sql
-  supabase/migrations/069_deployment_gap_recovery.sql)
+  supabase/migrations/069_deployment_gap_recovery.sql
+  supabase/migrations/070_private_voyager_response_ingress.sql
+  supabase/migrations/071_voyager_response_gap_recovery.sql)
 ACTOR='10000000-0000-4000-8000-0000000000c7'
 OTHER='10000000-0000-4000-8000-0000000000c8'
 VOYAGE='20000000-0000-4000-8000-0000000000c7'
@@ -169,6 +172,8 @@ after="$(psql_run -v ON_ERROR_STOP=1 -c "
          (SELECT count(*) FROM public.message_deliveries)::text")"
 [ "$after" = '1/1/1' ] || fail "conflict left residue; observed $after"
 
+prove_private_voyager_response "$ACTOR" "$SESSION"
+
 # The deployment gap: an event the OLD ingress wrote after the cutover landed
 # and before the new ingress went live. It has no audience, so nothing can see
 # it, and recovery must give it the same shape a claimed ingress would have.
@@ -210,6 +215,7 @@ printf 'atomic-ingress: %s concurrent identical requests | 1 created | %s replay
   "$CONCURRENCY" "$replayed"
 printf 'atomic-ingress: one event, audience, node, grant, structural pair and delivery\n'
 printf 'atomic-ingress: same key + different payload rejected | no residue\n'
+printf 'atomic-ingress: Voyager response inherited source audience | generated_by | no delivery | replayed once\n'
 printf 'atomic-ingress: deployment-gap event recovered | rerun recovers nothing\n'
 printf 'atomic-ingress: legacy table and traversal RPC both absent\n'
 printf 'ATOMIC_INGRESS_EXACTLY_ONCE_GREEN\n'

@@ -20,7 +20,7 @@ do not replace them.
 | `./recipes/private-reply-promotion-integrity.sh` | Session-authority mismatch denial, authenticated tamper denial, exact 053 FK actions, and both promotion/space-delete orders | `PRIVATE_REPLY_PROMOTION_INTEGRITY_GREEN` |
 | `./recipes/room-invite-authority-concurrency.sh` | Exact-room first invite, missing-room denial, invited/active idempotency, re-invite, atomic accept/decline, parent-leave orders, and effective-authority re-entry | `ROOM_INVITE_AUTHORITY_CONCURRENCY_GREEN` |
 | `./recipes/session-authority-concurrency.sh` | Session-RPC-first and voyage/space-revocation-first serialization through current membership locks | `SESSION_AUTHORITY_CONCURRENCY_GREEN` |
-| `./recipes/knowledge-graph-local-proof.sh` | Installed 054–069 in cutover order, with the deployment gap written before activation, plus generated K0/K1 assertions | `KNOWLEDGE_GRAPH_LOCAL_GREEN` |
+| `./recipes/knowledge-graph-local-proof.sh` | Installed 054–071 in cutover order, with the deployment gap written before activation, plus generated K0/K1 assertions | `KNOWLEDGE_GRAPH_LOCAL_GREEN` |
 | `./recipes/installed-schema-authority.sh` | Sealed 001–053 source bytes, one pre-054 installed-state contract, legacy-invite retirement with immutable ledger proof, ordered 054–059 application, post-migration catalogue/type/ACL evidence, retrieval leave/rejoin, session denial, and bounded graph traversal | `INSTALLED_SCHEMA_AUTHORITY_GREEN` |
 | `./recipes/source-intent-exactly-once.sh` | K2/C7: 25 concurrent identical ingress requests yield exactly one claim, one event and one binding; same key + different payload is rejected with no residue; an identical retry replays the winner | `SOURCE_INTENT_EXACTLY_ONCE_GREEN` |
 | `./recipes/atomic-ingress-exactly-once.sh` | K2/C7: 25 concurrent identical requests through the real cutover yield exactly one event, audience, node, grant, structural pair and delivery; same key + different payload is rejected with no residue; a deployment-gap event is recovered and a rerun recovers nothing; the legacy table and traversal RPC are both absent | `ATOMIC_INGRESS_EXACTLY_ONCE_GREEN` |
@@ -153,7 +153,8 @@ transaction containing deployable product authority hardening 054–059,
 graph schema/authorization/retrieval 061–063, fixed eligible and deliberately
 unresolved legacy scenarios in a fresh run-scoped UUID namespace, the cutover
 064, an explicit between-file write, projection definition/activation in
-065–067, and atomic ingress plus deployment-gap recovery in 068–069. It then
+065–067, atomic ingress plus deployment-gap recovery in 068–069, and private
+Voyager response audience inheritance and recovery alignment in 070–071. It then
 runs the expanded fixture and every SQL assertion before rolling the whole
 transaction back. It permits the hosted legacy catalogue at entry, refuses any
 already-installed target, proves the replaced table and both old RPC signatures absent
@@ -183,10 +184,12 @@ source behavior. Historical-only discovery returns the immutable grant label;
 current authorized viewers receive the current registry label. Direct grant,
 evidence and authority-projection writes are denied to `service_role`.
 
-Migrations 060–069 are one release boundary. They create the source audience,
+Migrations 060–071 are one release boundary. They create the source audience,
 event, MessageEvent node, grants, historical edges/evidence and fan-out inside a
 single claiming transaction, and recover any deployment-gap events written by
-the old ingress before the application deployed. The rollback proof verifies one
+the old ingress before the application deployed. Voyager responses use the same
+claiming transaction, inherit their human source audience exactly, and create a
+`generated_by` edge to the canonical Voyager node. The rollback proof verifies one
 ordinary null-audience event can receive its canonical audience once and enter
 the graph, while a second audience change fails.
 

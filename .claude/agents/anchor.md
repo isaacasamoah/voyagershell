@@ -35,7 +35,7 @@ never query graph tables directly.
 ## Change discipline
 
 Keep source and SQL files below 250 lines. Deployed migrations 001–053 are
-immutable. Standard migrations 054–059 are deployable authority hardening. Migrations 060–069 are the
+immutable. Standard migrations 054–059 are deployable authority hardening. Migrations 060–071 are the
 K2 release boundary and land together or not at all. Replace old shapes cleanly: delete the old
 definition and every live caller in the same change, with no compatibility
 field, wrapper, or parallel vocabulary.

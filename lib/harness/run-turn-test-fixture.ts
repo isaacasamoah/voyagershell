@@ -5,9 +5,10 @@ const streamText = vi.fn()
 const reapStuckTasks = vi.fn()
 const composeContextFromStream = vi.fn()
 const renderMessagesForModel = vi.fn((messages) => messages)
-const createMessageEvent = vi.fn()
 const claimSourceIngress = vi.fn()
+const claimVoyagerResponseIngress = vi.fn()
 const enrichNewIngress = vi.fn()
+const enrichVoyagerResponseIngress = vi.fn()
 const deliverRoomInvite = vi.fn()
 const inviteToRoom = vi.fn()
 const getRoom = vi.fn()
@@ -35,9 +36,10 @@ export const streamResult = {
 
 export const runTurnMocks = {
   claimSourceIngress,
+  claimVoyagerResponseIngress,
   composeSystemPrompt,
-  createMessageEvent,
   deliverRoomInvite,
+  enrichVoyagerResponseIngress,
   estimateCost,
   getOwnVoyagerIdentity,
   getRoom,
@@ -47,6 +49,7 @@ export const runTurnMocks = {
   parseRoomCommand,
   resolveMemberByName,
   resolveUserModelWithMeta,
+  renderMessagesForModel,
   streamText,
 }
 
@@ -73,7 +76,6 @@ const applyHarnessMocks = () => {
   vi.doMock('@/lib/debug', () => ({
     log: { api: vi.fn(), memory: vi.fn(), message: vi.fn() },
   }))
-  vi.doMock('@/lib/knowledge', () => ({ createMessageEvent }))
   vi.doMock('@/lib/learning/signals', () => ({
     detectLearningSignal: vi.fn(() => null),
     emitSignal,
@@ -85,6 +87,10 @@ const applyHarnessMocks = () => {
     claimSourceIngress,
     enrichNewIngress,
     IngressConflictError: class IngressConflictError extends Error {},
+  }))
+  vi.doMock('@/lib/messaging/voyager-response-ingress', () => ({
+    claimVoyagerResponseIngress,
+    enrichVoyagerResponseIngress,
   }))
   vi.doMock('@/lib/messaging/invites', () => ({
     deliverRoomInvite,
@@ -174,11 +180,14 @@ export const resetRunTurnFixture = () => {
   reapStuckTasks.mockResolvedValue(undefined)
   composeContextFromStream.mockResolvedValue([])
   renderMessagesForModel.mockImplementation((messages) => messages)
-  createMessageEvent.mockResolvedValue('event-1')
   claimSourceIngress.mockResolvedValue({
     eventId: 'event-1', status: 'created', recipients: [],
   })
+  claimVoyagerResponseIngress.mockResolvedValue({
+    eventId: 'assistant-event-1', status: 'created', recipients: [],
+  })
   enrichNewIngress.mockResolvedValue(undefined)
+  enrichVoyagerResponseIngress.mockResolvedValue(undefined)
   getRoom.mockResolvedValue({ roomPeople: [], aiPresent: true, spaceId: null })
   getOwnVoyagerIdentity.mockResolvedValue({ handle: '', displayName: null })
   parseRoomCommand.mockReturnValue(null)

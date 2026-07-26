@@ -18,22 +18,29 @@ import type { AddressResult } from '@/lib/messaging/address'
 import type { RoomGate } from './room-turn'
 import type { HarnessHost, TurnContext, TurnResult } from './types'
 
+export interface TurnIngressDecision {
+  result: TurnResult | null
+  outcome: Awaited<ReturnType<typeof claimSourceIngress>> | null
+}
+
 // What a person sees when the same send arrives carrying different words. The
 // claim rejected it and wrote nothing, so the honest thing to say is that this
 // one did not land — not to quietly show them the earlier message as if it had.
 const CONFLICT_NOTICE =
   "That didn't send — the same message id arrived with different text. Try sending it again."
 
-/** A terminal reply when the claim refused, or null when the turn may continue. */
+/** The claimed source event, or a terminal result when the turn must stop. */
 export const claimTurnIngress = async (
   ctx: TurnContext,
   host: HarnessHost,
   gate: RoomGate,
   queryText: string,
   address: AddressResult,
-): Promise<TurnResult | null> => {
+): Promise<TurnIngressDecision> => {
   const { userId, conversationId, voyageSlug } = ctx
-  if (!conversationId || !queryText || ctx.autoSent) return null
+  if (!conversationId || !queryText || ctx.autoSent) {
+    return { result: null, outcome: null }
+  }
 
   const request = {
     userId,
@@ -52,14 +59,20 @@ export const claimTurnIngress = async (
 
   try {
     const ingress = await claimSourceIngress(request)
+    if (ingress.status === 'replayed') {
+      return { result: { kind: 'empty' }, outcome: ingress }
+    }
     host.defer(enrichNewIngress(request, ingress))
-    return null
+    return { result: null, outcome: ingress }
   } catch (error) {
     if (error instanceof IngressConflictError) {
       log.api('Ingress claim conflict — same key, different payload', {
         conversationId,
       }, 'warn')
-      return { kind: 'text', text: CONFLICT_NOTICE }
+      return {
+        result: { kind: 'text', text: CONFLICT_NOTICE },
+        outcome: null,
+      }
     }
     throw error
   }

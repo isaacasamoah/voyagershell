@@ -1,7 +1,11 @@
 import type { StreamTextOnFinishCallback, ToolSet } from 'ai'
 import { runCartographer } from '@/lib/agents/cartographer'
 import { shouldRunEnrichment } from '@/lib/agents/cartographer/source'
-import { createMessageEvent, type KnowledgeNode } from '@/lib/knowledge'
+import type { KnowledgeNode } from '@/lib/knowledge'
+import {
+  claimVoyagerResponseIngress,
+  enrichVoyagerResponseIngress,
+} from '@/lib/messaging/voyager-response-ingress'
 import { creditTracker, modelRouter } from '@/lib/models'
 import { logCitations } from '@/lib/retrieval'
 import { reconcileActions } from '@/lib/shell/reconciler'
@@ -16,6 +20,7 @@ interface FinishTurnContext {
   chatModelLabel: string
   retrievalEventId: () => string | null
   retrievedKnowledge: KnowledgeNode[]
+  sourceEventId: string | null
 }
 
 type FinishEvent = Parameters<StreamTextOnFinishCallback<ToolSet>>[0]
@@ -80,12 +85,24 @@ export const finishTurn = async (
       // A Voyager reply is always an owner-private conversation event. The only
       // boundary into a room is the explicit Share command, which creates a new
       // human-authored message after revalidating source + fresh membership.
-      await createMessageEvent(conversationId, 'assistant', text, {
+      // Ordinary replies inherit the source event's immutable audience in the
+      // atomic ingress writer; auto-sent welcomes have no human source and use
+      // its owner-private fallback.
+      const responseInput = {
         userId,
-        voyageSlug: voyageSlug ?? undefined,
-        participants: [userId],
-        eventType: 'conversation',
-      })
+        sessionId: conversationId,
+        voyageSlug,
+        sourceEventId: options.sourceEventId,
+        content: text,
+      }
+      const response = await claimVoyagerResponseIngress(responseInput)
+      if (response.status !== 'created') return
+      await enrichVoyagerResponseIngress({
+        userId,
+        sessionId: conversationId,
+        sourceEventId: options.sourceEventId,
+        content: text,
+      }, response)
       logCitations(options.retrievalEventId(), text, retrievedKnowledge)
 
       if (await shouldRunEnrichment(conversationId, userId)) {

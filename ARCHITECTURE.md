@@ -33,11 +33,15 @@ tools. The K2 cutover removed the legacy `knowledge_edges` table, its
 today; the six-kind boundary in `lib/knowledge/kernel/boundary.ts` still uses an
 isolated candidate client and gains its live caller in K3.
 
-`lib/messaging/ingress.ts` is the only path by which a person's message becomes
-a fact. It resolves the audience, then calls one database function that claims
-actor + transport + client message id + payload hash BEFORE writing the
-audience, the event, its graph identity, its structural edges and the delivery
-outbox in a single transaction.
+`lib/messaging/ingress.ts` is the only harness path by which a person's message
+or their Voyager's response becomes a fact. For human input it resolves the
+audience, then calls one database function that claims actor + transport +
+client message id + payload hash BEFORE writing the audience, event, graph
+identity, structural edges, and delivery outbox in one transaction. A normal
+Voyager response names its claimed human source event; PostgreSQL validates the
+private conversation shape and inherits that source's exact audience. The
+response receives a `generated_by` edge to the owner's Voyager, not an
+`authored_by` edge to the owner.
 
 Every registered service-role knowledge read crosses a caller-scoped RPC.
 Exact-ID hydration uses `get_knowledge_by_ids`; direct mentions use
@@ -68,11 +72,10 @@ historical source content.
 
 ## Canonical graph substrate
 
-The candidate schema in `recipes/sql/knowledge-graph/057`–`063` is final-shaped
-but not installed. Product migration files currently end at `059`, but numeric
-discovery is not installed-state authority. The pre-054 catalogue contract is
-the explicit boundary for applying product migrations 054–059; no live caller
-depends on candidate SQL.
+Migrations `061`–`071` are the installed graph and atomic-ingress shape. Numeric
+discovery is not installed-state authority: the pre-054 catalogue contract
+remains the explicit boundary for applying product migrations `054`–`059`, and
+the local proof then applies the entire `060`–`071` release boundary in order.
 
 ### Stable identities
 
@@ -161,27 +164,22 @@ claim and immutable source fields.
 
 ## Migration and release boundary
 
-Migrations 001–053 are deployed history and are immutable. Deployable `054`–
+Migrations 001–053 are deployed history and are immutable. Migrations `054`–
 `059` harden active membership, installed retrieval, exact-room invites and
-responses (including retirement of ambiguous pending rows), private-reply
-promotion, and session authority cleanup without
-creating graph tables. The proof-owned graph `057`–`063` is exercised only
-inside `recipes/knowledge-graph-poc.sh` and rolled back.
-Candidate migration 060 removes the old event-only graph runtime only inside
-that future clean-cut transaction.
-The installed Supabase contract contains only tables/functions discovered
-through 059. Candidate graph tables and RPCs use a separate proof client, so a
-future type cannot make an absent production object appear live.
+responses, private-reply promotion, and session authority cleanup. Migrations
+`060`–`071` are one graph-and-ingress release boundary: source intent, canonical
+graph substrate, clean cutover, authority projection, atomic human ingress,
+deployment-gap recovery, and source-audience inheritance for Voyager replies.
 Projection functions are defined before activation; activation takes
 transaction-held writer locks, installs triggers, and performs a complete
 idempotent catch-up so writes before the lock are not lost.
 
-The candidate must not release before K2. Current production ingress still
-writes an event before best-effort downstream work. K2 must atomically create
-the canonical source audience, event, MessageEvent node, grants, structural
-edges, evidence, and delivery fan-out; backfill deployment-gap events; then set
-the audience column `NOT NULL`. Until then, a null event audience may be assigned
-one canonical audience once, after which it is immutable.
+The atomic writer creates the canonical source audience, event, MessageEvent
+node, grants, structural edges, evidence, and delivery fan-out before returning.
+Deployment-gap recovery binds the only permitted null-audience rows, after
+which the event audience is immutable. Voyager responses cross that same writer:
+normal replies inherit the exact source audience, and synthetic welcomes are
+accepted only with one owner member and no recipients.
 
 Event `user_id` and `actor_id` references deliberately restrict account
 deletion while immutable ledger rows exist. K5 must define an explicit

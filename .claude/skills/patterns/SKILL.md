@@ -74,18 +74,20 @@ grant label snapshot.
 
 ## K2 release boundary
 
-Migrations 060–069 are ONE release boundary and were applied as one transaction:
+Migrations 060–071 are ONE release boundary and were applied as one transaction:
 the source-intent claim, the graph substrate, the cutover with its backfill and
 rejection evidence, the authority projections, the atomic ingress and the
-deployment-gap recovery. There is no partial cutover and no dual runtime.
+deployment-gap recovery, and private Voyager response audience inheritance.
+There is no partial cutover and no dual runtime.
 Deployable 054–059 hardens membership, retrieval, invites, promotion, and
 session authority cleanup but does not install graph tables.
-Do not replace `lib/knowledge/events.ts` with partial graph writes before the K2
-Human Spec Gate. K2 must make source audience, event, MessageEvent node, grants,
-structural edges/evidence, and fan-out one transaction; backfill deployment-gap
-events; then enforce a non-null event audience. Until then, one canonical
-`NULL -> UUID` audience assignment remains recoverable and all later changes are
-rejected.
+The harness uses `lib/messaging/ingress.ts` for both human source messages and
+Voyager responses. It writes source audience, event, MessageEvent node, grants,
+structural edges/evidence, and fan-out in one transaction; recovers deployment-
+gap events; and enforces a non-null event audience. A response inherits its
+human source audience and uses `generated_by`; never recompute it from room
+presence. The bounded canonical `NULL -> UUID` transition exists only inside
+deployment-gap recovery and all later changes are rejected.
 
 ## Logging and models
 

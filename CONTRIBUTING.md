@@ -51,7 +51,7 @@ must describe the current contract.
 `knowledge_events` is the sole event-content ledger. Do not add another content
 table or make the graph authoritative for product membership.
 
-The candidate graph contract is:
+The canonical graph contract is:
 
 - one canonical scope-neutral `graph_nodes` row per kind and authority;
 - immutable canonical source/authority audience snapshots;
@@ -81,17 +81,17 @@ gives it claims to return.
 - Preserve token secrecy and use `curl --fail-with-body` plus an exact verdict.
 - Prove the public catalogue is unchanged after rollback.
 
-Product migration files currently end at the K2 cutover, 069. File numbering and
+Product migration files currently end at the K2 response recovery, 071. File numbering and
 the hosted migration ledger are not installed-state authority: run the shared
-pre-054 catalogue contract before applying 054–059. Migrations 060–069 are ONE
+pre-054 catalogue contract before applying 054–059. Migrations 060–071 are ONE
 release boundary — source intent, graph substrate, cutover with backfill and
-rejection evidence, authority projections, atomic ingress and deployment-gap
-recovery — and must never be applied in part.
-K2 must atomically create the canonical source audience, event, MessageEvent
-node, grants, historical edges/evidence, and fan-out; backfill deployment-gap
-events; and only then make the event audience non-null. The earlier once-only
-`NULL -> UUID` audience assignment remains until that release dependency is
-satisfied.
+rejection evidence, authority projections, atomic ingress, deployment-gap
+recovery, and exact source-audience inheritance for Voyager responses — and must
+never be applied in part. K2 atomically creates the canonical source audience,
+event, MessageEvent node, grants, historical edges/evidence, and fan-out.
+Voyager replies use that same writer and inherit the claimed human source
+audience; never recompute it from the current room. The bounded `NULL -> UUID`
+transition exists only for deployment-gap recovery.
 
 ## Pull requests
 

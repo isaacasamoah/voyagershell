@@ -16,7 +16,7 @@ Next.js chat and room APIs
         +-- knowledge_events: sole event-content ledger
         |     knowledge_current: derived search projection
         |
-        +-- the canonical graph (migrations 061-069)
+        +-- the canonical graph (migrations 061-071)
               scope-neutral identities, immutable audiences and grants
               evidence-bound historical edges and current authority projections
 ```
@@ -24,9 +24,11 @@ Next.js chat and room APIs
 There is one graph. The K2 cutover replaced the event-only legacy graph with the
 canonical substrate and removed the old table, its traversal RPC and every
 caller in the same change; no tool traverses the graph until K3 gives it claims
-worth traversing. Every message enters through one database function that claims
-the intent before it writes anything, so a retry cannot produce a second event,
-a second graph fragment or a second delivery.
+worth traversing. Every human message and Voyager response enters through one
+database function that claims the intent before it writes anything, so a retry
+cannot produce a second event, graph fragment, response, or delivery. A Voyager
+reply inherits the exact immutable audience of its claimed human source and is
+linked to the canonical Voyager node with `generated_by`.
 Service-role tool code never hydrates `knowledge_current` directly:
 `get_knowledge_by_ids` and `get_voyage_messages` require the caller identity and
 recheck current membership inside PostgreSQL at execution time.
@@ -39,6 +41,8 @@ and increments its authority revision.
 
 - `knowledge_events` remains the only event-content ledger.
 - A KnowledgeUnit inherits its source event audience exactly.
+- A Voyager response inherits its human source event audience exactly; a room
+  roster never widens a private aside or its answer.
 - Graph node IDs, edge IDs, audience IDs, and space-member IDs are canonical and
   enforced at the database boundary.
 - A source audience is immutable. Membership changes create authority snapshots;
@@ -63,22 +67,23 @@ retires ambiguous pending memberships and installs exact-room invite responses,
 `058` promotes private replies, and `059` removes obsolete session mutation
 paths. Existing invite events remain immutable history; their senders must issue
 a fresh exact-room knock before the recipient can act.
-The migration-shaped graph candidate `057`–`063` lives only under
-`recipes/sql/knowledge-graph/` and must not be released independently.
 `lib/supabase/types.ts` remains the application database contract. The local
 installed-authority proof constructs a deterministic pre-054 subset, runs the
 precondition, applies only 054–059, and derives the scoped post-migration
 catalogue/type/ACL contract from real `pg_catalog`; it does not claim to
-reproduce unrelated hosted objects. The future graph shape remains separate in
-`lib/knowledge/kernel/candidate-schema.ts`.
+reproduce unrelated hosted objects. The graph proof then applies the complete
+060–071 boundary to a disposable database in release order.
 
-K2 must first make ordinary message ingress atomic: create the canonical source
+K2 makes ordinary message ingress atomic: it creates the canonical source
 audience, event, message node, endpoint grants, historical edges, evidence, and
-fan-out in one transaction. It must then backfill any events written during a
-deployment gap and enforce `knowledge_events.knowledge_audience_id NOT NULL`.
-Until that cut exists, the once-only `NULL -> canonical audience` assignment is
-deliberately retained so a gap event is recoverable; any second audience change
-is rejected.
+fan-out in one transaction. It recovers deployment-gap events and enforces
+`knowledge_events.knowledge_audience_id NOT NULL`. The bounded
+`NULL -> canonical audience` transition exists only inside that recovery; any
+second audience change is rejected. Migration `070` cleanly replaces the old
+assistant writer: a real reply inherits its human source audience in the same
+atomic ingress, while a source-less synthetic welcome is restricted to the
+owner-private conversation shape. Migration `071` aligns deployment-gap
+assistant graph structure with that writer.
 
 ## Setup
 
@@ -111,13 +116,13 @@ identical afterward. See [recipes/README.md](./recipes/README.md).
 
 ```text
 app/api/chat/route.ts                     streaming chat boundary
-lib/knowledge/events.ts                   current event writer
+lib/messaging/ingress.ts                  atomic human and Voyager event writer
 lib/knowledge/kernel/                     graph contract, fixture, SQL proofs
 lib/retrieval/knowledge-retrieval-tools.ts registered graph tool
 lib/retrieval/voyager-tools.ts            final tool registry
 lib/voyage/                               voyage membership and sessions
-supabase/migrations/                      immutable 001-053 plus hardening 054-059
-recipes/sql/knowledge-graph/              uninstalled graph candidate 057-063
+supabase/migrations/                      immutable history plus current graph boundary
+recipes/sql/knowledge-graph/              proof fixtures and catalogue assertions
 recipes/                                  rollback-only proving recipes
 ```
 

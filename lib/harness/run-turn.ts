@@ -1,9 +1,7 @@
 import { hasToolCall, stepCountIs, streamText } from 'ai'
 import { reapStuckTasks } from '@/lib/agents/queue'
-import { composeContextFromStream } from '@/lib/conversation/stream-context'
-import { renderMessagesForModel } from '@/lib/conversation/stream-context'
+import { composeContextFromStream, renderMessagesForModel, type ConversationMessage } from '@/lib/conversation/stream-context'
 import { computeWindow, getTruncatedMessages } from '@/lib/conversation/window'
-import type { ConversationMessage } from '@/lib/conversation/stream-context'
 import { detectReferenceSignals, retrieveForContinuity } from '@/lib/conversation/continuity'
 import { log } from '@/lib/debug'
 import { type KnowledgeNode } from '@/lib/knowledge'
@@ -76,6 +74,7 @@ export const runTurn = async (
       createdAt: host.now(),
       authorDisplayName: null,
       authorUserId: userId,
+      isPrivate: address.mode === 'aside',
     })
   }
   const conversationMessages: ConversationMessage[] = renderMessagesForModel(rawConversationMessages)
@@ -136,8 +135,8 @@ export const runTurn = async (
   // and neither may reach the ledger. Then the ingress claim, before any effect.
   const gate = await runRoomGate({ ctx, queryText, address })
   if (gate.result) return gate.result
-  const refused = await claimTurnIngress(ctx, host, gate, queryText, address)
-  if (refused) return refused
+  const ingress = await claimTurnIngress(ctx, host, gate, queryText, address)
+  if (ingress.result) return ingress.result
 
   const roomResult = runRoomTurn(gate.room, address)
   if (roomResult) return roomResult
@@ -191,7 +190,9 @@ export const runTurn = async (
   if (ctx.conversationId) {
     try {
       const roster = await getRoomRoster(ctx.conversationId, ctx.userId)
-      dynamicSuffix += describeRoomForPrompt(roster)
+      dynamicSuffix += describeRoomForPrompt(roster, {
+        currentTurnPrivate: address.mode === 'aside',
+      })
     } catch { /* roster is additive context — never block the turn */ }
   }
 
@@ -223,6 +224,7 @@ export const runTurn = async (
       chatModelLabel,
       retrievalEventId: () => retrievalEventId,
       retrievedKnowledge,
+      sourceEventId: ingress.outcome?.eventId ?? null,
     }),
   })
 
@@ -231,14 +233,12 @@ export const runTurn = async (
   // was the only puller. A reload, a closed tab or a navigation cancels the body,
   // the pull stops, and onFinish — where finishTurn writes the assistant event —
   // never runs: the user's own message lands and the answer disappears silently.
-  //
   // Draining here removes that dependency, so the turn completes on the server
   // whether or not anyone is listening and the WHOLE reply is persisted. There
   // is deliberately no partial-snapshot path — the finish callback is the single
   // writer, it fires once on the recorded base stream however many consumers
   // read it, and a stream that dies mid-generation never reaches it at all.
   // Complete or nothing; never a truncated answer stored as if it were full.
-  //
   // Deferred through the host so the serverless invocation outlives the response
   // it already returned.
   host.defer(Promise.resolve(result.consumeStream({

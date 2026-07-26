@@ -37,9 +37,6 @@ const loadRunTurn = async () => {
   vi.doMock('@/lib/debug', () => ({
     log: { api: vi.fn(), memory: vi.fn(), message: vi.fn() },
   }))
-  vi.doMock('@/lib/knowledge', () => ({
-    createMessageEvent: vi.fn().mockResolvedValue('event-1'),
-  }))
   vi.doMock('@/lib/learning/signals', () => ({
     detectLearningSignal: vi.fn(() => null),
     emitSignal: vi.fn(),
@@ -50,6 +47,12 @@ const loadRunTurn = async () => {
     }),
     enrichNewIngress: vi.fn().mockResolvedValue(undefined),
     IngressConflictError: class IngressConflictError extends Error {},
+  }))
+  vi.doMock('@/lib/messaging/voyager-response-ingress', () => ({
+    claimVoyagerResponseIngress: vi.fn().mockResolvedValue({
+      eventId: 'assistant-event-1', status: 'created', recipients: [],
+    }),
+    enrichVoyagerResponseIngress: vi.fn().mockResolvedValue(undefined),
   }))
   vi.doMock('@/lib/messaging/handles', () => ({
     getOwnVoyagerIdentity: vi.fn().mockResolvedValue({ handle: '', displayName: null }),

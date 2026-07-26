@@ -26,6 +26,8 @@ edge/evidence grant. Current membership hops recheck the authoritative product
 row, revision, state, and time.
 
 Source intent, audience, event, graph projection and fan-out are now atomic:
-migrations 060–069 landed as one release boundary, and `lib/messaging/ingress.ts`
-is the only path a message takes into the ledger. Never add a second ingress
-writer, and never write part of that set outside the one claiming transaction.
+migrations 060–071 landed as one release boundary, and `lib/messaging/ingress.ts`
+is the only harness path a human message or Voyager response takes into the
+ledger. Voyager replies inherit their claimed human source audience. Never add
+a second ingress writer, and never write part of that set outside the one
+claiming transaction.

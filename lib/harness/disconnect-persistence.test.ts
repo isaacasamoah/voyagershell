@@ -8,7 +8,7 @@ import {
   stubHost,
 } from './run-turn-test-fixture'
 
-const { createMessageEvent, resolveUserModelWithMeta } = runTurnMocks
+const { claimVoyagerResponseIngress, resolveUserModelWithMeta } = runTurnMocks
 
 // The provider stream-part union, taken from the SDK rather than restated.
 type StreamPart = Awaited<ReturnType<MockLanguageModelV3['doStream']>> extends
@@ -56,7 +56,7 @@ const failingModel = () => new MockLanguageModelV3({
   }),
 })
 
-const assistantWrites = () => createMessageEvent.mock.calls.filter((call) => call[1] === 'assistant')
+const assistantWrites = () => claimVoyagerResponseIngress.mock.calls
 
 const startTurn = async (model: MockLanguageModelV3) => {
   resolveUserModelWithMeta.mockResolvedValue({
@@ -86,12 +86,13 @@ describe('a turn interrupted by the client', () => {
     await Promise.all(deferred)
 
     expect(assistantWrites()).toHaveLength(1)
-    expect(createMessageEvent).toHaveBeenCalledWith(
-      'conversation-1',
-      'assistant',
-      REPLY,
-      expect.objectContaining({ eventType: 'conversation', participants: ['user-1'] }),
-    )
+    expect(claimVoyagerResponseIngress).toHaveBeenCalledWith({
+      content: REPLY,
+      sessionId: 'conversation-1',
+      sourceEventId: 'event-1',
+      userId: 'user-1',
+      voyageSlug: null,
+    })
   })
 
   it('persists the whole reply when the response body is never read at all', async () => {
@@ -103,7 +104,7 @@ describe('a turn interrupted by the client', () => {
     await Promise.all(deferred)
 
     expect(assistantWrites()).toHaveLength(1)
-    expect(assistantWrites()[0][2]).toBe(REPLY)
+    expect(assistantWrites()[0][0].content).toBe(REPLY)
   })
 
   it('writes the assistant row exactly once when the client reads to the end', async () => {
@@ -116,7 +117,7 @@ describe('a turn interrupted by the client', () => {
     await Promise.all(deferred)
 
     expect(assistantWrites()).toHaveLength(1)
-    expect(assistantWrites()[0][2]).toBe(REPLY)
+    expect(assistantWrites()[0][0].content).toBe(REPLY)
   })
 
   it('stores nothing when the generation itself fails partway through', async () => {

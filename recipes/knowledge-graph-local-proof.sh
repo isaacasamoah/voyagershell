@@ -25,7 +25,7 @@ docker image inspect "$IMAGE" >/dev/null 2>&1 \
   || fail 'the pinned pgvector image must already exist locally; pulling is forbidden'
 [ -x "$VITE_NODE" ] || fail 'dependencies missing; run npm ci first'
 for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql \
-  "$REPO_ROOT"/supabase/migrations/{061,062,063,064,065,066,067,068,069}_*.sql \
+  "$REPO_ROOT"/supabase/migrations/{061,062,063,064,065,066,067,068,069,070,071}_*.sql \
   "$REPO_ROOT/$DOCKER_PROOF_PRE054_BASELINE"; do
   [ -f "$file" ] || fail "missing SQL: $file"
 done
@@ -77,7 +77,9 @@ SQL
   sed -n '1,$p' "$TEMP_DIR/gap.sql"
   sed -n '1,$p' "$REPO_ROOT/supabase/migrations/067_"*.sql
   sed -n '1,$p' "$REPO_ROOT/supabase/migrations/068_"*.sql \
-    "$REPO_ROOT/supabase/migrations/069_"*.sql
+    "$REPO_ROOT/supabase/migrations/069_"*.sql \
+    "$REPO_ROOT/supabase/migrations/070_"*.sql \
+    "$REPO_ROOT/supabase/migrations/071_"*.sql
   sed -n '1,$p' "$TEMP_DIR/generated.sql" "$TEMP_DIR/k1-assertions.sql" "$TEMP_DIR/boundary.sql"
   cat <<'SQL'
 DO $sequence$

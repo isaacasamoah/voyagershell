@@ -8,6 +8,10 @@ export interface RoomRoster {
   aiPresent: boolean
 }
 
+interface RoomPromptContext {
+  currentTurnPrivate?: boolean
+}
+
 interface EffectiveMemberRow { user_id: string | null }
 interface ProfileRow { id: string; display_name: string | null; email: string | null }
 
@@ -55,15 +59,23 @@ export const getRoomRoster = async (
   }
 }
 
-/** The one honest line the model sees about the room, every turn. */
-export const describeRoomForPrompt = (roster: RoomRoster): string => {
+/** The one honest line the model sees about the room and current audience. */
+export const describeRoomForPrompt = (
+  roster: RoomRoster,
+  context: RoomPromptContext = {},
+): string => {
+  const privateTurn = context.currentTurnPrivate
+    ? roster.active.length > 0
+      ? ` The current turn is private to the owner and their Voyager; ${roster.active.join(', ')} cannot see it unless the owner explicitly shares it.`
+      : ' The current turn is private to the owner and their Voyager; no other person can see it unless the owner explicitly shares it.'
+    : ''
   if (roster.active.length === 0 && roster.invited.length === 0) {
-    return '\n[Room state (authoritative): no other people are in this room and no invitations are pending. Describe the current room ONLY from this line — never infer current membership from conversation history.]'
+    return `\n[Room state (authoritative): no other people are in this room and no invitations are pending.${privateTurn} Describe the current room ONLY from this line — never infer current membership from conversation history.]`
   }
   const parts: string[] = []
   if (roster.active.length > 0) parts.push(`in the room: ${roster.active.join(', ')}`)
   if (roster.invited.length > 0) {
     parts.push(`invited but NOT joined (they cannot see these messages): ${roster.invited.join(', ')}`)
   }
-  return `\n[Room state (authoritative): ${parts.join('; ')}. Describe the current room ONLY from this line — never infer current membership from conversation history.]`
+  return `\n[Room state (authoritative): ${parts.join('; ')}.${privateTurn} Describe the current room ONLY from this line — never infer current membership from conversation history.]`
 }

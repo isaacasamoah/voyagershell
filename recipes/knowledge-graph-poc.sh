@@ -33,7 +33,9 @@ PROJECTIONS=("$REPO_ROOT/supabase/migrations/065_knowledge_graph_authority_proje
   "$REPO_ROOT/supabase/migrations/066_knowledge_graph_membership_projection.sql")
 ACTIVATION="$REPO_ROOT/supabase/migrations/067_knowledge_graph_projection_activation.sql"
 INGRESS=("$REPO_ROOT/supabase/migrations/068_atomic_source_ingress.sql"
-  "$REPO_ROOT/supabase/migrations/069_deployment_gap_recovery.sql")
+  "$REPO_ROOT/supabase/migrations/069_deployment_gap_recovery.sql"
+  "$REPO_ROOT/supabase/migrations/070_private_voyager_response_ingress.sql"
+  "$REPO_ROOT/supabase/migrations/071_voyager_response_gap_recovery.sql")
 FIXTURE="$REPO_ROOT/lib/knowledge/kernel/fixtures/v1.json"
 GENERATOR="$REPO_ROOT/lib/knowledge/kernel/generate-sql.ts"
 K1_GENERATOR="$REPO_ROOT/lib/knowledge/kernel/generate-k1-sql.ts"

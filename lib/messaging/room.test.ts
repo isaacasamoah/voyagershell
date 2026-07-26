@@ -122,4 +122,16 @@ describe('describeRoomForPrompt', () => {
     expect(line).toContain('tom')
     expect(line).toContain('cannot see these messages')
   })
+
+  it('separates room presence from the current private-aside audience', async () => {
+    const { describeRoomForPrompt } = await loadRoomContextModule()
+    const line = describeRoomForPrompt(
+      { active: ['elisheya'], invited: [], aiPresent: true },
+      { currentTurnPrivate: true },
+    )
+    expect(line).toContain('in the room: elisheya')
+    expect(line).toContain('current turn is private')
+    expect(line).toContain('elisheya cannot see it')
+    expect(line).toContain('unless the owner explicitly shares')
+  })
 })
