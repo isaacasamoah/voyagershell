@@ -1,4 +1,5 @@
-import { queryScopedEvents, type FeedEventRow } from '@/lib/messaging/feed'
+import { queryScopedEvents } from '@/lib/messaging/feed-queries'
+import type { FeedEventRow } from '@/lib/messaging/feed-rows'
 import { sortFeedEvents, type FeedEvent } from '@/lib/messaging/feed-types'
 import type { Json, MessageRole } from '@/lib/supabase/types'
 

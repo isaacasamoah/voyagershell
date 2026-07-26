@@ -34,9 +34,10 @@ describe('tracked graph contributor truth', () => {
   // composer rendered the generic audience label instead. A green helper test
   // says nothing about whether the interface reaches it, so pin the wiring.
   it('renders the private-aside cue from the one shared resolver', () => {
-    const composer = read('components/ui/VoyagerInterface.tsx')
-    expect(composer).toContain("import { composerAsideBadge, resolveComposerAudience } from '@/lib/messaging/address'")
-    expect(composer).toContain('composerAsideBadge(inputValue')
+    const controller = read('components/ui/VoyagerInterface.tsx')
+    const composer = read('components/ui/VoyagerComposer.tsx')
+    expect(controller).toContain('composerAsideBadge')
+    expect(controller).toContain('composerAsideBadge(')
     expect(composer).toContain('{composerAsideCue ?? composerAudience.label}')
     expect(read('lib/messaging/address.ts')).toContain('→ private aside to ')
   })

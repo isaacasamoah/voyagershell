@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FeedEventRow } from './feed'
+import type { FeedEventRow } from './feed-rows'
 
 const { getFeedTableClient } = vi.hoisted(() => ({ getFeedTableClient: vi.fn() }))
 
@@ -13,7 +13,7 @@ vi.mock('@/lib/voyage/session', () => ({
   resolveSessionVoyage: vi.fn(async () => null),
 }))
 
-import { queryScopedEvents } from './feed'
+import { queryScopedEvents } from './feed-queries'
 
 // ── A Postgres that actually answers ────────────────────────────────────────
 // The bug this file exists for is an ordering bug between the database and the

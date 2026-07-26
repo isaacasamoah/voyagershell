@@ -32,12 +32,14 @@ export * from './format';
 // Re-export composer
 export {
   composePrompt,
+  type ComposeInput,
+} from './compose';
+export {
   composeMinimalPrompt,
   composeFromDb,
   debugPrompt,
-  type ComposeInput,
   type ComposeFromDbInput,
-} from './compose';
+} from './compose-support';
 
 // Imports for main prompt composition
 import { composePrompt } from './compose';

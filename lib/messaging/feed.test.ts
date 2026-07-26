@@ -9,7 +9,7 @@ import {
   isInFeedContext,
   toFeedEvents,
   type FeedEventRow,
-} from './feed'
+} from './feed-rows'
 
 const voyagerMessage = (voyageSlug: string | null): FeedEventRow => ({
   id: `voyager-${voyageSlug ?? 'personal'}`,

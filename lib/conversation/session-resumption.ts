@@ -2,8 +2,8 @@
 
 import {
   getFeedEventSessionId,
-  queryScopedEventsForConversations,
-} from '@/lib/messaging/feed'
+} from '@/lib/messaging/feed-rows'
+import { queryScopedEventsForConversations } from '@/lib/messaging/feed-queries'
 import {
   composeContextRows,
   type ConversationMessage,

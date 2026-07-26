@@ -2,19 +2,11 @@ import { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, type UIMessage } from 'ai'
 import { log } from '@/lib/debug'
-import type { ConversationResponse, MessageData } from '@/lib/types'
-
-// Convert API message to UIMessage format for useChat
-// Messages restored from the stream are settled history — they must NEVER
-// enter the optimistic LIVE lane (that lane is only for text typed in THIS
-// client since load). Without this flag, another person's message (or their
-// Voyager's reply, role-flattened to 'user' for the model) renders as "YOU".
-const apiMessageToUIMessage = (msg: MessageData): UIMessage => ({
-  id: msg.id,
-  role: msg.role,
-  parts: [{ type: 'text' as const, text: msg.content }],
-  metadata: { hydrated: true },
-})
+import type { ConversationResponse } from '@/lib/types'
+import {
+  apiMessageToUIMessage,
+  useConversationActions,
+} from './useConversationActions'
 
 interface UseConversationParams {
   currentVoyage: { slug: string; name: string } | null
@@ -31,27 +23,17 @@ export const useConversation = ({
   isAuthenticated,
   isAuthLoading,
 }: UseConversationParams) => {
-  // Conversation state
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [room, setRoom] = useState<{ people: string[]; aiPresent: boolean }>({ people: [], aiPresent: true })
   const [conversationTitle, setConversationTitle] = useState<string | null>(null)
   const [isLoadingConversation, setIsLoadingConversation] = useState(true)
 
-  // Message queue - type while Voyager is thinking
   const [messageQueue, setMessageQueue] = useState<string[]>([])
-
-  // Celebration state — drives singleton astronaut to 'celebrating' briefly
   const [showSuccess, setShowSuccess] = useState(false)
-
-  // Hero → conversation mode tracking
   const [hasUserTyped, setHasUserTyped] = useState(false)
   // Set true right before the hidden welcome send; consumed (reset) by the
   // transport body so the route knows NOT to persist that synthetic turn.
   const autoSentRef = useRef(false)
-
-  // Side-channel for message timestamps (UIMessage type doesn't include createdAt)
-
-  // Refs for transport (read dynamically, avoid re-creating transport)
   const conversationIdRef = useRef<string | null>(null)
   conversationIdRef.current = conversationId
   const voyageSlugRef = useRef<string | null>(null)
@@ -75,12 +57,10 @@ export const useConversation = ({
     },
   }), [])
 
-  // useChat with transport
   const { messages, sendMessage, setMessages, status, error } = useChat({
     transport,
   })
 
-  // Derived state
   const isLoading = status === 'submitted' || status === 'streaming'
   const isStreaming = status === 'streaming'
   const prevStatusRef = useRef(status)
@@ -233,74 +213,14 @@ export const useConversation = ({
     }
   }, [isLoadingConversation, sendMessage])
 
-  // Start new conversation — calls POST /api/conversation, archives current, resets UI state
-  const startNewConversation = useCallback(async (): Promise<boolean> => {
-    const voyageSlug = voyageSlugRef.current
-    log.voyage('Starting new conversation', { voyageSlug: voyageSlug ?? 'personal' })
-
-    try {
-      const res = await fetch('/api/conversation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(voyageSlug ? { voyageSlug } : {}),
-      })
-
-      if (!res.ok) {
-        log.voyage('Failed to start new conversation', { status: res.status }, 'error')
-        return false
-      }
-
-      const data: ConversationResponse = await res.json()
-      setConversationId(data.conversation.id)
-      setConversationTitle(data.conversation.title)
-      setRoom(data.room ?? { people: [], aiPresent: true })
-      setMessages([])
-      setHasUserTyped(false)
-
-      log.voyage('New conversation started', { conversationId: data.conversation.id })
-      return true
-    } catch (error) {
-      log.voyage('startNewConversation error', { error: String(error) }, 'error')
-      return false
-    }
-  }, [setMessages, setHasUserTyped])
-
-  // Resume an existing conversation — calls POST /api/conversation/resume, reloads UI state
-  const resumeConversation = useCallback(async (targetConversationId: string): Promise<boolean> => {
-    log.voyage('Resuming conversation via API', { targetConversationId })
-
-    try {
-      const res = await fetch('/api/conversation/resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId: targetConversationId }),
-      })
-
-      if (!res.ok) {
-        log.voyage('Failed to resume conversation', { status: res.status }, 'error')
-        return false
-      }
-
-      const data: ConversationResponse = await res.json()
-      setConversationId(data.conversation.id)
-      setConversationTitle(data.conversation.title)
-      setRoom(data.room ?? { people: [], aiPresent: true })
-
-      if (data.messages.length > 0) {
-        setMessages(data.messages.map(apiMessageToUIMessage))
-        setHasUserTyped(true)
-      } else {
-        setMessages([])
-        setHasUserTyped(false)
-      }
-
-      log.voyage('Conversation resumed', { conversationId: data.conversation.id })
-      return true
-    } catch (error) {
-      log.voyage('resumeConversation error', { error: String(error) }, 'error')
-      return false
-    }
-  }, [setMessages, setHasUserTyped])
+  const { startNewConversation, resumeConversation } = useConversationActions({
+    voyageSlugRef,
+    setConversationId,
+    setConversationTitle,
+    setRoom,
+    setMessages,
+    setHasUserTyped,
+  })
 
   return {
     conversationId,
