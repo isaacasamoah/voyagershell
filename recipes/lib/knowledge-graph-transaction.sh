@@ -51,6 +51,7 @@ SQL
     for migration in "${INGRESS[@]}"; do
       sed -n '1,$p' "$migration"
     done
+    sed -n '1,$p' "$CARTOGRAPHER"
     sed -n '1,$p' "$TEMP_DIR/generated-proof.sql"
     sed -n '1,$p' "$TEMP_DIR/k1-assertions.sql"
     sed -n '1,$p' "$TEMP_DIR/boundary-assertions.sql"

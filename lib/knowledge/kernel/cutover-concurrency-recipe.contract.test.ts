@@ -32,9 +32,8 @@ describe('legacy graph cutover concurrency recipe', () => {
     expect(recipe).not.toMatch(/source_(?:payload|content|metadata)/)
   })
 
-  it('creates the only accepted proving edge through the final service RPC', () => {
-    expect(recipe).toContain('SET ROLE service_role')
-    expect(recipe).toContain('public.write_knowledge_graph_edge')
+  it('creates the proving edge as isolated proof data after the cutover', () => {
+    expect(recipe).toContain('INSERT INTO public.graph_edge_evidence')
     expect(recipe).toContain('KNOWLEDGE_GRAPH_CUTOVER_CONCURRENCY_GREEN')
     expect(recipe).not.toContain('docker pull')
   })

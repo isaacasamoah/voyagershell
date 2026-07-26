@@ -36,6 +36,7 @@ INGRESS=("$REPO_ROOT/supabase/migrations/068_atomic_source_ingress.sql"
   "$REPO_ROOT/supabase/migrations/069_deployment_gap_recovery.sql"
   "$REPO_ROOT/supabase/migrations/070_private_voyager_response_ingress.sql"
   "$REPO_ROOT/supabase/migrations/071_voyager_response_gap_recovery.sql")
+CARTOGRAPHER="$REPO_ROOT/supabase/migrations/072_event_driven_cartographer.sql"
 FIXTURE="$REPO_ROOT/lib/knowledge/kernel/fixtures/v1.json"
 GENERATOR="$REPO_ROOT/lib/knowledge/kernel/generate-sql.ts"
 K1_GENERATOR="$REPO_ROOT/lib/knowledge/kernel/generate-k1-sql.ts"
@@ -55,7 +56,7 @@ for command_name in curl jq; do
     exit 2
   }
 done
-for required_file in "${MIGRATIONS[@]}" "$CUTOVER" "${PROJECTIONS[@]}" "$ACTIVATION" "${INGRESS[@]}" \
+for required_file in "${MIGRATIONS[@]}" "$CUTOVER" "${PROJECTIONS[@]}" "$ACTIVATION" "${INGRESS[@]}" "$CARTOGRAPHER" \
   "${PRODUCT_MIGRATIONS[@]}" "$TARGET_CATALOG" "$FULL_CATALOG" \
   "$INSTALLED_POSTCONDITION" "$FIXTURE" "$GENERATOR" "$K1_GENERATOR"; do
   [ -f "$required_file" ] || {
@@ -153,7 +154,7 @@ fi
   --boundary-output "$TEMP_DIR/boundary-assertions.sql"
 if grep -Eq '^[[:space:]]*(BEGIN|COMMIT|ROLLBACK)[[:space:]]*;' \
   "${PRODUCT_MIGRATIONS[@]}" "${MIGRATIONS[@]}" "$CUTOVER" \
-  "${PROJECTIONS[@]}" "$ACTIVATION" "${INGRESS[@]}" "$TEMP_DIR/generated-proof.sql" "$TEMP_DIR/k1-legacy.sql" \
+  "${PROJECTIONS[@]}" "$ACTIVATION" "${INGRESS[@]}" "$CARTOGRAPHER" "$TEMP_DIR/generated-proof.sql" "$TEMP_DIR/k1-legacy.sql" \
   "$TEMP_DIR/k1-historical.sql" \
   "$TEMP_DIR/gap-setup.sql" "$TEMP_DIR/k1-assertions.sql" \
   "$TEMP_DIR/boundary-assertions.sql"; then
@@ -200,5 +201,5 @@ printf 'knowledge-graph: root denied | hidden bridge denied | timing class equal
 printf 'knowledge-graph: NULL source excluded then assigned once | Person + Voyager rename stable | residue 0\n'
 printf 'knowledge-graph: K1 exact backfill parity | unresolved rows outside graph and reported\n'
 printf 'knowledge-graph: multi-scope identity | locked catch-up | leave/rejoin | cascade-safe history\n'
-printf 'knowledge-graph: final writer + retrieval green | old graph catalogue absent | rollback identical\n'
+printf 'knowledge-graph: K3 owns graph commits | retrieval green | old writer absent | rollback identical\n'
 printf 'KNOWLEDGE_GRAPH_POC_GREEN\n'

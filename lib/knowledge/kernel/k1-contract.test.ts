@@ -77,15 +77,13 @@ describe('K1 final-shape backfill contract', () => {
     expect(sql).not.toContain('common_members')
     expect(assertionSql()).toContain('knowledge_graph_k1_rejection_report_failed')
     expect(assertionSql()).toContain('JOIN public.knowledge_events event ON event.id = rejection.source_id')
-    expect(assertionSql()).toContain('write_knowledge_graph_edge')
+    expect(assertionSql()).toContain('INSERT INTO public.graph_edge_evidence')
   })
 
-  it('keeps one evidence-derived writer and rejects authority kinds', () => {
+  it('keeps graph storage sealed behind evidence-validating boundaries', () => {
     const sql = migration()
-    expect(sql).toContain('CREATE FUNCTION public.write_knowledge_graph_edge')
     expect(sql).toContain("p_kind IN ('member_of', 'in_voyage', 'companion_of')")
     expect(sql).toContain('edge_evidence_source_required')
-    expect(sql).toContain('v_edge := public.canonical_graph_edge_id(v_source.id, p_kind, v_target.id)')
     expect(sql).not.toContain("md5(format('voyager-edge:v2")
     expect(sql).toContain('INSERT INTO public.graph_edge_evidence')
     expect(sql).toContain('REVOKE ALL ON public.knowledge_audiences, public.knowledge_units, public.graph_nodes')

@@ -1,6 +1,4 @@
 import type { StreamTextOnFinishCallback, ToolSet } from 'ai'
-import { runCartographer } from '@/lib/agents/cartographer'
-import { shouldRunEnrichment } from '@/lib/agents/cartographer/source'
 import type { KnowledgeNode } from '@/lib/knowledge'
 import {
   claimVoyagerResponseIngress,
@@ -104,14 +102,6 @@ export const finishTurn = async (
         content: text,
       }, response)
       logCitations(options.retrievalEventId(), text, retrievedKnowledge)
-
-      if (await shouldRunEnrichment(conversationId, userId)) {
-        host.defer(runCartographer({
-          sessionId: conversationId,
-          userId,
-          voyageSlug: voyageSlug ?? undefined,
-        }))
-      }
     } catch (error) {
       console.error('[Chat] Failed to persist assistant event:', error)
     }

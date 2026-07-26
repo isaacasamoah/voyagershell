@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 // live runtime could still reach the graph the cutover removed.
 const liveRuntimePaths = ['lib/retrieval/knowledge-retrieval-tools.ts',
   'lib/retrieval/voyager-tools.ts', 'lib/agents/cartographer/apply.ts',
-  'lib/agents/cartographer/stage2.ts', 'lib/knowledge/index.ts',
+  'lib/knowledge/index.ts',
   'lib/supabase/schema/functions.ts', 'lib/supabase/schema/knowledge-tables.ts',
   'lib/supabase/schema/base.ts'] as const
 const readRepoFile = (path: string): string => readFileSync(resolve(process.cwd(), path), 'utf8')

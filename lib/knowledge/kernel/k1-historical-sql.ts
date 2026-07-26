@@ -85,10 +85,26 @@ BEGIN
     (public.canonical_graph_node_id('knowledge_unit', ${uuid(seed.parentHistoricalUnitId)}),
       v_parent_audience, 'source_event', ${uuid(seed.parentHistoricalEventId)}, 1,
       'K1 parent-left historical claim', v_parent_created);
-  PERFORM public.write_knowledge_graph_edge('knowledge_unit', ${uuid(seed.childHistoricalUnitId)},
-    'message_event', ${uuid(seed.childHistoricalEventId)}, 'derived_from');
-  PERFORM public.write_knowledge_graph_edge('knowledge_unit', ${uuid(seed.parentHistoricalUnitId)},
-    'message_event', ${uuid(seed.parentHistoricalEventId)}, 'derived_from');
+  INSERT INTO public.graph_edges(id, source_node_id, target_node_id, kind)
+  SELECT public.canonical_graph_edge_id(unit_node, 'derived_from', event_node),
+    unit_node, event_node, 'derived_from'::public.graph_edge_kind
+  FROM (VALUES
+    (public.canonical_graph_node_id('knowledge_unit', ${uuid(seed.childHistoricalUnitId)}),
+      public.canonical_graph_node_id('message_event', ${uuid(seed.childHistoricalEventId)})),
+    (public.canonical_graph_node_id('knowledge_unit', ${uuid(seed.parentHistoricalUnitId)}),
+      public.canonical_graph_node_id('message_event', ${uuid(seed.parentHistoricalEventId)}))
+  ) pair(unit_node, event_node);
+  INSERT INTO public.graph_edge_evidence(edge_id, evidence_event_id) VALUES
+    (public.canonical_graph_edge_id(
+      public.canonical_graph_node_id('knowledge_unit', ${uuid(seed.childHistoricalUnitId)}),
+      'derived_from',
+      public.canonical_graph_node_id('message_event', ${uuid(seed.childHistoricalEventId)})),
+      ${uuid(seed.childHistoricalEventId)}),
+    (public.canonical_graph_edge_id(
+      public.canonical_graph_node_id('knowledge_unit', ${uuid(seed.parentHistoricalUnitId)}),
+      'derived_from',
+      public.canonical_graph_node_id('message_event', ${uuid(seed.parentHistoricalEventId)})),
+      ${uuid(seed.parentHistoricalEventId)});
   IF NOT EXISTS (SELECT 1 FROM public.retrieve_knowledge_graph_claims('message_event',
       ${uuid(seed.childHistoricalEventId)}, ${uuid(seed.childFormerId)}, true, 2)
       WHERE knowledge_unit_id = ${uuid(seed.childHistoricalUnitId)})

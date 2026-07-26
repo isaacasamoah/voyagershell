@@ -200,11 +200,11 @@ describe('ORU-319 final graph substrate contract', () => {
     expect(sql).not.toMatch(/^BEGIN;|^ROLLBACK;/m)
   })
 
-  it('keeps the allowed service writer assertion output-free and failure-explicit', () => {
+  it('keeps service mutation denial output-free and failure-explicit', () => {
     const sql = renderKnowledgeGraphSql()
-    expect(sql).toContain('DO $allowed_writer$')
-    expect(sql).toContain('knowledge_graph_service_writer_returned_false')
-    expect(sql).not.toMatch(/^SELECT public\.write_knowledge_graph_edge/m)
+    expect(sql).toContain('DO $authority_tamper$')
+    expect(sql).toContain('knowledge_graph_service_mutation_privilege')
+    expect(sql).not.toMatch(/^SELECT public\./m)
   })
 
   it('runs the uninstalled graph and active-membership cut in one rollback recipe', () => {

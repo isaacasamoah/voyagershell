@@ -35,7 +35,7 @@ describe('K1 immutable event-time space audiences', () => {
   it('proves former-member retrieval and later-member denial through final RPCs', () => {
     expect(assertions).toContain('knowledge_graph_former_member_historical_source_missing')
     expect(assertions).toContain('knowledge_graph_later_member_gained_historical_source')
-    expect(assertions).toContain("public.write_knowledge_graph_edge('knowledge_unit'")
+    expect(assertions).toContain('INSERT INTO public.graph_edge_evidence')
     expect(assertions).toContain('public.retrieve_knowledge_graph_claims')
     expect(assertions).toContain('normalize_knowledge_audience_members')
   })

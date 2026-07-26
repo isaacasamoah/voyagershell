@@ -1,4 +1,5 @@
 import { hasToolCall, stepCountIs, streamText } from 'ai'
+import { runCartographer } from '@/lib/agents/cartographer'
 import { reapStuckTasks } from '@/lib/agents/queue'
 import { composeContextFromStream, renderMessagesForModel, type ConversationMessage } from '@/lib/conversation/stream-context'
 import { computeWindow, getTruncatedMessages } from '@/lib/conversation/window'
@@ -41,6 +42,13 @@ export const runTurn = async (
       conversationId,
     }, 'warn')
     return { kind: 'empty' }
+  }
+
+  // The previous request's waitUntil is only a fast path. A later authorized
+  // human turn drains one audience-visible pending or expired job before the
+  // future K4 memory-read boundary can depend on it.
+  if (!ctx.autoSent && rawQuery) {
+    await runCartographer({ userId })
   }
 
   // Resolve the address ONCE, server-side, from the real handle set — the same

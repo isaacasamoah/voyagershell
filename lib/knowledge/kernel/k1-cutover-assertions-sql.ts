@@ -14,7 +14,7 @@ export const renderK1CutoverAssertionsSql = (seed: K1FixtureSeed): string => {
 DO $knowledge_graph_k1$
 DECLARE v_source_node uuid := public.canonical_graph_node_id('message_event', ${quote(seed.eligibleSourceId)}::uuid);
   v_target_node uuid := public.canonical_graph_node_id('message_event', ${quote(seed.eligibleTargetId)}::uuid);
-  v_audience uuid;
+  v_audience uuid; v_edge uuid;
   v_claim text;
   v_grant_count bigint;
 BEGIN
@@ -115,8 +115,13 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.graph_edges edge WHERE edge.id = ${quote(seed.eligibleEdgeId)}::uuid) THEN
     RAISE EXCEPTION 'knowledge_graph_k1_legacy_edge_canonized';
   END IF;
-  PERFORM public.write_knowledge_graph_edge('message_event', ${quote(seed.eligibleSourceId)}::uuid,
-    'message_event', ${quote(seed.eligibleTargetId)}::uuid, 'relates_to');
+  v_edge := public.canonical_graph_edge_id(
+    least(v_source_node, v_target_node), 'relates_to', greatest(v_source_node, v_target_node));
+  INSERT INTO public.graph_edges(id, source_node_id, target_node_id, kind)
+  VALUES (v_edge, least(v_source_node, v_target_node),
+    greatest(v_source_node, v_target_node), 'relates_to');
+  INSERT INTO public.graph_edge_evidence(edge_id, evidence_event_id)
+  VALUES (v_edge, ${quote(seed.eligibleSourceId)}::uuid);
   IF NOT EXISTS (SELECT 1 FROM public.graph_edges edge
       JOIN public.graph_edge_evidence evidence ON evidence.edge_id = edge.id
       WHERE edge.id = public.canonical_graph_edge_id(least(v_source_node, v_target_node),
@@ -159,11 +164,7 @@ BEGIN
     RAISE EXCEPTION 'knowledge_graph_k1_old_catalogue_present';
   END IF;
   IF has_table_privilege('service_role', 'public.graph_edges', 'INSERT')
-    OR has_table_privilege('service_role', 'public.graph_edge_evidence', 'INSERT')
-    OR NOT has_function_privilege('service_role',
-      'public.write_knowledge_graph_edge(public.graph_node_kind,uuid,public.graph_node_kind,uuid,public.graph_edge_kind)',
-      'EXECUTE')
-  THEN
+    OR has_table_privilege('service_role', 'public.graph_edge_evidence', 'INSERT') THEN
     RAISE EXCEPTION 'knowledge_graph_k1_writer_acl_failed';
   END IF;
 
@@ -178,8 +179,12 @@ BEGIN
     (${quote(seed.unitNodeId)}::uuid, v_audience, 'source_event',
       ${quote(seed.eligibleSourceId)}::uuid, 1, 'K1 writer unit', now());
   SELECT count(*) INTO v_grant_count FROM public.graph_node_grants;
-  PERFORM public.write_knowledge_graph_edge('knowledge_unit', ${quote(seed.unitId)}::uuid,
-    'message_event', ${quote(seed.eligibleSourceId)}::uuid, 'derived_from');
+  v_edge := public.canonical_graph_edge_id(${quote(seed.unitNodeId)}::uuid,
+    'derived_from', v_source_node);
+  INSERT INTO public.graph_edges(id, source_node_id, target_node_id, kind)
+    VALUES (v_edge, ${quote(seed.unitNodeId)}::uuid, v_source_node, 'derived_from');
+  INSERT INTO public.graph_edge_evidence(edge_id, evidence_event_id)
+    VALUES (v_edge, ${quote(seed.eligibleSourceId)}::uuid);
   IF v_grant_count <> (SELECT count(*) FROM public.graph_node_grants) THEN
     RAISE EXCEPTION 'knowledge_graph_link_created_grant';
   END IF;

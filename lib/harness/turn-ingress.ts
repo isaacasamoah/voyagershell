@@ -13,6 +13,7 @@ import {
   enrichNewIngress,
   IngressConflictError,
 } from '@/lib/messaging/ingress'
+import { runCartographer } from '@/lib/agents/cartographer'
 import { log } from '@/lib/debug'
 import type { AddressResult } from '@/lib/messaging/address'
 import type { RoomGate } from './room-turn'
@@ -62,6 +63,10 @@ export const claimTurnIngress = async (
     if (ingress.status === 'replayed') {
       return { result: { kind: 'empty' }, outcome: ingress }
     }
+    host.defer(runCartographer({
+      userId,
+      sourceEventId: ingress.eventId,
+    }))
     host.defer(enrichNewIngress(request, ingress))
     return { result: null, outcome: ingress }
   } catch (error) {

@@ -26,10 +26,6 @@ type CandidateFunctions = Omit<InstalledPublic['Functions'], 'graph_traverse'> &
     p_edge_kinds?: GraphEdgeKind[] | null; p_node_budget?: number; p_frontier_budget?: number
   }; Returns: { node_id: string; kind: GraphNodeKind; authority_id: string;
     label: string; depth: number }[] }
-  write_knowledge_graph_edge: { Args: {
-    p_source_kind: GraphNodeKind; p_source_authority_id: string;
-    p_target_kind: GraphNodeKind; p_target_authority_id: string; p_kind: GraphEdgeKind
-  }; Returns: boolean }
 }
 
 export type CandidateDatabase = {

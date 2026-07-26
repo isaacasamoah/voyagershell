@@ -117,11 +117,18 @@ BEGIN
     OR EXISTS (SELECT 1 FROM public.graph_edges) THEN
     RAISE EXCEPTION 'cutover_legacy_evidence_failed'; END IF;
 END $proof$;
-SET ROLE service_role;
-SELECT public.write_knowledge_graph_edge('message_event',
-  '61000000-0000-4000-8000-000000000011', 'message_event',
-  '61000000-0000-4000-8000-000000000012', 'relates_to');
-RESET ROLE;
+INSERT INTO public.graph_edges(id, source_node_id, target_node_id, kind)
+SELECT public.canonical_graph_edge_id(least(source.id, target.id), 'relates_to',
+    greatest(source.id, target.id)), least(source.id, target.id),
+  greatest(source.id, target.id), 'relates_to'
+FROM public.graph_nodes source, public.graph_nodes target
+WHERE source.kind = 'message_event'
+  AND source.authority_id = '61000000-0000-4000-8000-000000000011'
+  AND target.kind = 'message_event'
+  AND target.authority_id = '61000000-0000-4000-8000-000000000012';
+INSERT INTO public.graph_edge_evidence(edge_id, evidence_event_id)
+SELECT edge.id, '61000000-0000-4000-8000-000000000011'
+FROM public.graph_edges edge WHERE edge.kind = 'relates_to';
 DO $writer$
 BEGIN
   IF (SELECT count(*) FROM public.graph_edges) <> 1

@@ -195,10 +195,13 @@ BEGIN
       AND authority_id = ${uuid(scenario.crossScopePersonId)}) <> ${uuid(personNode.id)} THEN
     RAISE EXCEPTION 'knowledge_graph_person_id_changed'; END IF;
   BEGIN
-    PERFORM public.write_knowledge_graph_edge('person', ${uuid(scenario.crossScopePersonId)},
-      'voyage', ${uuid(scenario.redVoyageId)}, 'member_of');
-    RAISE EXCEPTION 'knowledge_graph_authority_link_writer_accepted';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+    INSERT INTO public.graph_edges(id, source_node_id, target_node_id, kind) VALUES
+      (public.canonical_graph_edge_id(${uuid(personNode.id)}, 'member_of',
+        public.canonical_graph_node_id('voyage', ${uuid(scenario.redVoyageId)})),
+        ${uuid(personNode.id)},
+        public.canonical_graph_node_id('voyage', ${uuid(scenario.redVoyageId)}), 'member_of');
+    RAISE EXCEPTION 'knowledge_graph_authority_link_insert_accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
   BEGIN
     INSERT INTO public.graph_node_grants(node_id, knowledge_audience_id, basis_kind,
       basis_id, basis_version, label_snapshot, granted_at)

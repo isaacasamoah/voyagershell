@@ -1,5 +1,7 @@
 import type {
   Json,
+  KnowledgeExtractionJobState,
+  KnowledgeExtractionOutcomeKind,
   MemoryType,
   SessionStatus,
   VoyageRole,
@@ -17,6 +19,8 @@ type PublicEnums = {
   memory_type: MemoryType
   session_status: SessionStatus
   voyage_role: VoyageRole
+  knowledge_extraction_job_state: KnowledgeExtractionJobState
+  knowledge_extraction_outcome_kind: KnowledgeExtractionOutcomeKind
 }
 
 export type Database = {
@@ -176,6 +180,15 @@ export const Constants = {
       memory_type: ['fact', 'preference', 'entity', 'decision', 'event', 'insight', 'concept'],
       session_status: ['active', 'historical', 'archived'],
       voyage_role: ['captain', 'crew'],
+      knowledge_extraction_job_state: ['pending', 'leased', 'succeeded', 'no_claim'],
+      knowledge_extraction_outcome_kind: [
+        'succeeded',
+        'no_claim',
+        'provider_failed',
+        'malformed_output',
+        'commit_rejected',
+        'expired',
+      ],
     },
   },
 } as const

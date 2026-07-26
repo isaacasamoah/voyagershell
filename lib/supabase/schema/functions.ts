@@ -1,4 +1,4 @@
-import type { Json, VoyageRole } from './base'
+import type { Json, KnowledgeExtractionOutcomeKind, VoyageRole } from './base'
 import type { SessionStatus } from './base'
 
 export type KnowledgeSearchRow = {
@@ -14,6 +14,15 @@ export type ScopedKnowledgeRow = Omit<KnowledgeSearchRow, 'participants' | 'simi
 }
 export type SourceIngressRow = { event_id: string; status: 'created' | 'replayed' }
 export type DeploymentGapRecoveryRow = { recovered: number; rejected: number }
+export type KnowledgeExtractionAttemptRow = {
+  attempt_id: string; lease_token: string; source_event_id: string;
+  extractor_version: string; knowledge_audience_id: string; source_content: string;
+  source_event_type: string; source_actor_id: string; source_session_id: string | null;
+  candidate_person_ids: string[]; attempt_number: number
+}
+export type KnowledgeExtractionCompletionRow = {
+  outcome: KnowledgeExtractionOutcomeKind; unit_id: string | null; replayed: boolean
+}
 export type KnowledgeByIdRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'>
 export type VoyageMessageRow = Pick<KnowledgeSearchRow,
   'event_id' | 'content' | 'source_created_at' | 'sender_display_name' | 'sender_user_id'>
@@ -33,12 +42,23 @@ export type PublicFunctions = {
   archive_session: { Args: { p_session_id: string; p_user_id: string }; Returns: boolean }
   authorize_knowledge_scope: { Args: { p_surface: string; p_user_id: string; p_voyage_slug: string | null };
     Returns: string }
+  begin_knowledge_extraction_attempt: { Args: {
+    p_requesting_user_id: string; p_model_provider: string; p_model_id: string;
+    p_resolver_label?: string | null; p_source_event_id?: string | null;
+    p_lease_seconds?: number
+  }; Returns: KnowledgeExtractionAttemptRow[] }
   canonical_space_member_id: { Args: { p_space_id: string; p_user_id: string }; Returns: string }
   claim_source_message_ingress: { Args: { p_actor_id: string; p_transport: string;
     p_client_message_id: string; p_space_id: string | null; p_voyage_slug: string | null;
     p_content: string; p_event_type: string; p_source_type: string; p_actor_type: string;
     p_audience_member_ids: string[]; p_recipient_ids: string[];
     p_metadata: Json; p_source_ref: Json }; Returns: SourceIngressRow[] }
+  complete_knowledge_extraction_attempt: { Args: {
+    p_attempt_id: string; p_lease_token: string; p_result: KnowledgeExtractionOutcomeKind;
+    p_raw_output?: Json | null; p_claim?: string | null; p_about_person_id?: string | null;
+    p_error_class?: string | null; p_input_tokens?: number | null;
+    p_output_tokens?: number | null
+  }; Returns: KnowledgeExtractionCompletionRow[] }
   create_room_invite: { Args: { p_session_id: string; p_inviter_user_id: string;
     p_invitee_user_id: string }; Returns: {
       invite_status: string; invite_space_id: string | null

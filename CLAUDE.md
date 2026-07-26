@@ -93,7 +93,7 @@ Tool decisions: Claude decides if/when/what to search. One brain, one decision.
 ```
 app/api/chat/route.ts         # Main chat route (streaming + tools)
 lib/agents/deep-retrieval.ts  # Background agent (agentic retrieval)
-lib/agents/cartographer.ts    # Tidal enrichment (knowledge quality)
+lib/agents/cartographer.ts    # Event-owned, leased knowledge extraction
 lib/prompts/core.ts           # Voyager personality
 lib/knowledge/                # Event-sourced knowledge system
 lib/retrieval/retrieval-tools.ts # 8 retrieval tools
@@ -108,6 +108,9 @@ components/ui/VoyagerInterface.tsx  # Terminal UI
 - Supabase PostgreSQL + pgvector
 - `knowledge_events` → append-only source of truth
 - `knowledge_current` → computed state + embeddings
+- `knowledge_extraction_jobs` → mutable source-event work and leases
+- `knowledge_extraction_attempts` / `_outcomes` → immutable model provenance
+- `knowledge_units` → immutable source-derived claims
 - `agent_tasks` → background task queue
 - Realtime enabled on `agent_tasks`
 
@@ -174,7 +177,9 @@ database identity from the app URL or worktree path.
 
 **Three Agent Classes:**
 - **Primary (conversational)** — Full tool access, streaming, generous step budget. Decides what to search.
-- **Event-driven (enrichment)** — Cartographer. Tidal enrichment triggered by unenriched event count.
+- **Event-driven (enrichment)** — Cartographer. Every new human conversation/message
+  atomically owns one extraction job; source ingress wakes it and the next
+  audience-authorized human turn recovers one interrupted job.
 - **Async background** — Deep retrieval. Spawned by primary via `spawn_background_agent`. Results surface via Realtime.
 
 ## Specs

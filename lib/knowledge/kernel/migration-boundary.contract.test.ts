@@ -17,12 +17,13 @@ describe('the complete graph migration boundary', () => {
       .filter((name) => /^\d{3}.*\.sql$/.test(name)).sort()
     const atOrAbove = (floor: number): string[] =>
       discovered.filter((name) => Number(name.slice(0, 3)) >= floor)
-    expect(Math.max(...discovered.map((name) => Number(name.slice(0, 3))))).toBe(71)
+    expect(Math.max(...discovered.map((name) => Number(name.slice(0, 3))))).toBe(72)
     expect(atOrAbove(60)).toEqual(['060_source_intent.sql', ...promoted,
       ...cutover, '068_atomic_source_ingress.sql',
       '069_deployment_gap_recovery.sql',
       '070_private_voyager_response_ingress.sql',
-      '071_voyager_response_gap_recovery.sql'])
+      '071_voyager_response_gap_recovery.sql',
+      '072_event_driven_cartographer.sql'])
     expect(readdirSync(resolve(process.cwd(), 'recipes/sql/knowledge-graph'))
       .filter((name) => /^\d{3}_/.test(name))).toEqual([])
 
@@ -30,7 +31,9 @@ describe('the complete graph migration boundary', () => {
       .map((name) => read(`supabase/migrations/${name}`)).join('\n')
     for (const required of [
       'knowledge_graph_backfill_rejections',
-      'write_knowledge_graph_edge',
+      'knowledge_extraction_attempt_outcomes',
+      'begin_knowledge_extraction_attempt',
+      'complete_knowledge_extraction_attempt',
       'ensure_authority_audience',
       'project_graph_authority_trigger',
       'DROP TABLE public.knowledge_edges',
@@ -51,5 +54,7 @@ describe('the complete graph migration boundary', () => {
     expect(response).toContain("format('welcome:%s', p_metadata->>'session_id')")
     expect(read('supabase/migrations/071_voyager_response_gap_recovery.sql'))
       .toContain("v_row.actor_type = 'voyager'")
+    expect(read('supabase/migrations/072_event_driven_cartographer.sql'))
+      .toContain('DROP FUNCTION public.')
   })
 })

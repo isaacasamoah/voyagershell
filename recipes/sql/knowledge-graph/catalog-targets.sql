@@ -7,6 +7,9 @@ WITH targets AS (
     'graph_edges', 'graph_edge_evidence', 'graph_authority_edges',
     'graph_edges_target_idx', 'graph_authority_edges_endpoint_idx',
     'graph_authority_edges_target_idx',
+    'knowledge_extractor_contracts', 'knowledge_extractor_contracts_one_active',
+    'knowledge_extraction_jobs', 'knowledge_extraction_jobs_due',
+    'knowledge_extraction_attempts', 'knowledge_extraction_attempt_outcomes',
     'knowledge_graph_backfill_rejections', 'knowledge_edges',
     'idx_edges_source', 'idx_edges_target', 'idx_edges_type')
   UNION ALL
@@ -25,7 +28,7 @@ WITH targets AS (
     'viewer_has_current_graph_node', 'graph_node_label_for_viewer',
     'authorized_graph_neighbors', 'traverse_knowledge_graph',
     'guard_knowledge_event_source', 'retrieve_knowledge_graph_claims',
-    'write_knowledge_graph_edge', 'is_effective_space_member',
+    'is_effective_space_member',
     'get_effective_space_member_ids', 'guard_membership_authority_transition',
     'guard_space_authority_identity', 'ensure_authority_audience',
     'grant_current_authority_node', 'project_profile_graph_authority',
@@ -34,6 +37,8 @@ WITH targets AS (
     'project_graph_authority_trigger', 'is_active_voyage_member_by_id',
     'authorize_knowledge_scope', 'transition_room_invite',
     'guard_session_authority_columns', 'deactivate_child_space_memberships',
+    'validate_knowledge_extraction_job', 'enqueue_human_knowledge_extraction',
+    'begin_knowledge_extraction_attempt', 'complete_knowledge_extraction_attempt',
     'graph_traverse')
   UNION ALL
   SELECT 'type', t.typname, t.typtype::text
@@ -41,7 +46,8 @@ WITH targets AS (
   JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
   WHERE n.nspname = 'public' AND t.typname IN (
     'graph_node_kind', 'graph_edge_kind', 'knowledge_audience_scope_kind',
-    'knowledge_audience_purpose')
+    'knowledge_audience_purpose', 'knowledge_extraction_job_state',
+    'knowledge_extraction_outcome_kind')
   UNION ALL
   SELECT 'trigger', t.tgname, c.relname
   FROM pg_catalog.pg_trigger t
@@ -63,7 +69,11 @@ WITH targets AS (
     'trg_voyage_members_graph_authority_state', 'trg_spaces_graph_authority',
     'trg_space_members_graph_authority_insert', 'trg_space_members_graph_authority_delete',
     'trg_space_members_graph_authority_state', 'trg_voyage_member_deactivate_children',
-    'trg_sessions_authority_guard')
+    'trg_sessions_authority_guard', 'trg_knowledge_extraction_job_validate',
+    'trg_knowledge_extractor_contract_immutable',
+    'trg_knowledge_extraction_attempt_immutable',
+    'trg_knowledge_extraction_outcome_immutable',
+    'trg_enqueue_human_knowledge_extraction')
   UNION ALL
   SELECT 'column', column_name, table_name
   FROM information_schema.columns
