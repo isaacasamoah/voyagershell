@@ -5,7 +5,7 @@
 prove_private_voyager_response() {
   local actor="$1"
   local session="$2"
-  local private_source response_status response_shape response_replay
+  local private_source response_status response_shape response_replay invalid_key
 
   private_source="$(psql_run -v ON_ERROR_STOP=1 -c "
     SELECT event_id FROM public.claim_source_message_ingress(
@@ -64,4 +64,17 @@ prove_private_voyager_response() {
       jsonb_build_object('conversation_id', '$session', 'role', 'assistant'))")"
   [ "$response_replay" = 'replayed' ] \
     || fail "Voyager response replay was not exactly-once; observed $response_replay"
+
+  invalid_key="$(psql_run -v ON_ERROR_STOP=1 -c "
+    SELECT status FROM public.claim_source_message_ingress(
+      '$actor', 'agent', 'arbitrary-response-key', NULL, 'c7-voyage',
+      'second private answer', 'conversation', 'conversation', 'voyager',
+      ARRAY['$actor']::uuid[], '{}'::uuid[],
+      jsonb_build_object('session_id', '$session',
+        'reply_to_event_id', '$private_source'),
+      jsonb_build_object('conversation_id', '$session', 'role', 'assistant'))" 2>&1 || true)"
+  case "$invalid_key" in
+    *voyager_response_key_invalid*) : ;;
+    *) fail "non-canonical Voyager response key was not rejected" ;;
+  esac
 }

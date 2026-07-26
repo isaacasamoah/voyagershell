@@ -20,6 +20,18 @@ const {
 describe('Voyager response ingress', () => {
   beforeEach(resetRunTurnFixture)
 
+  it('does not run or persist an empty private aside', async () => {
+    getOwnVoyagerIdentity.mockResolvedValue({ handle: 'wren', displayName: 'Wren' })
+    const { runTurn } = await loadRunTurn()
+
+    const result = await runTurn(context({ newMessage: '@wren' }), stubHost().host)
+
+    expect(result).toEqual({ kind: 'empty' })
+    expect(streamText).not.toHaveBeenCalled()
+    expect(claimSourceIngress).not.toHaveBeenCalled()
+    expect(claimVoyagerResponseIngress).not.toHaveBeenCalled()
+  })
+
   it('stores a synthetic welcome privately without a synthetic human source', async () => {
     const { runTurn } = await loadRunTurn()
     const result = await runTurn(context({

@@ -22,7 +22,6 @@ import { runRoomGate, runRoomTurn } from './room-turn'
 import { composeTurnMessages } from './turn-messages'
 import { claimTurnIngress } from './turn-ingress'
 import type { HarnessHost, TurnContext, TurnResult } from './types'
-
 export const runTurn = async (
   ctx: TurnContext,
   host: HarnessHost,
@@ -55,8 +54,9 @@ export const runTurn = async (
   })
   // Strip only the private aside. Names without @ remain ordinary room text.
   const queryText = address.mode === 'aside' ? address.stripped : rawQuery
+  // An empty @own is not a message; auto-sent welcomes are the sole source-less turn.
+  if (!queryText && !ctx.autoSent) return { kind: 'empty' }
   const voyagerIdentity = ownIdentity.displayName ? ownIdentity : undefined
-
   const intent = detectActionIntent(queryText)
   host.defer(reapStuckTasks().catch(() => {}))
 

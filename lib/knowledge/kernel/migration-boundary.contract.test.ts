@@ -47,6 +47,8 @@ describe('the complete graph migration boundary', () => {
     expect(response).toContain("p_metadata->>'reply_to_event_id'")
     expect(response).toContain("event.actor_type = 'user'")
     expect(response).toContain("'generated_by'")
+    expect(response).toContain("format('reply:%s', v_reply_to)")
+    expect(response).toContain("format('welcome:%s', p_metadata->>'session_id')")
     expect(read('supabase/migrations/071_voyager_response_gap_recovery.sql'))
       .toContain("v_row.actor_type = 'voyager'")
   })

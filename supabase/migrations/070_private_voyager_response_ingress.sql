@@ -55,6 +55,7 @@ BEGIN
       OR p_event_type IS DISTINCT FROM 'conversation'
       OR p_source_type IS DISTINCT FROM 'conversation'
       OR coalesce(p_source_ref->>'role', '') IS DISTINCT FROM 'assistant'
+      OR p_transport IS DISTINCT FROM 'agent'
       OR coalesce(p_metadata->>'session_id', '') = ''
       OR coalesce(p_source_ref->>'conversation_id', '')
         IS DISTINCT FROM coalesce(p_metadata->>'session_id', '')
@@ -73,6 +74,9 @@ BEGIN
         RAISE EXCEPTION 'voyager_response_source_malformed' USING ERRCODE = '22023';
       END IF;
       v_reply_to := (p_metadata->>'reply_to_event_id')::uuid;
+      IF p_client_message_id IS DISTINCT FROM format('reply:%s', v_reply_to) THEN
+        RAISE EXCEPTION 'voyager_response_key_invalid' USING ERRCODE = '23514';
+      END IF;
 
       SELECT event.id, event.user_id, event.actor_id, event.actor_type,
         event.event_type, event.source_type, event.voyage_slug,
@@ -115,6 +119,11 @@ BEGIN
     ELSE
       -- Synthetic welcomes have no source event to inherit. Preserve their old
       -- one-member voyage/private scope, but never accept a wider audience.
+      IF p_client_message_id IS DISTINCT FROM
+        format('welcome:%s', p_metadata->>'session_id')
+      THEN
+        RAISE EXCEPTION 'voyager_welcome_key_invalid' USING ERRCODE = '23514';
+      END IF;
       v_members := ARRAY[p_actor_id]::uuid[];
       IF p_voyage_slug IS NOT NULL THEN
         v_scope := 'voyage';

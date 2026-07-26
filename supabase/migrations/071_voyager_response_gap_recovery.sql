@@ -64,7 +64,9 @@ BEGIN
       v_label, v_created_at)
     ON CONFLICT DO NOTHING;
 
-    IF v_row.actor_type = 'voyager' THEN
+    IF v_row.actor_type = 'voyager'
+      AND coalesce(v_row.actor_id, v_row.user_id) IS NOT NULL
+    THEN
       PERFORM public.attest_ingress_structural_edge(v_row.node_id,
         public.canonical_graph_node_id('voyager',
           coalesce(v_row.actor_id, v_row.user_id)),
