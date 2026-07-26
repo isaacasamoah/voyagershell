@@ -34,12 +34,6 @@ export {
   composePrompt,
   type ComposeInput,
 } from './compose';
-export {
-  composeMinimalPrompt,
-  composeFromDb,
-  debugPrompt,
-  type ComposeFromDbInput,
-} from './compose-support';
 
 // Imports for main prompt composition
 import { composePrompt } from './compose';
