@@ -37,8 +37,11 @@ export type ExtractionRun =
   | {
       kind: 'structured'
       object: import('./contract').ExtractionObject
-      inputTokens: number
-      outputTokens: number
+      // Undefined when the provider reported no usage. Recording an unknown
+      // count as 0 would assert the call consumed nothing, which is a
+      // different fact from not knowing.
+      inputTokens: number | undefined
+      outputTokens: number | undefined
     }
   | { kind: 'failed'; failure: ExtractionFailureKind; errorClass: string }
 

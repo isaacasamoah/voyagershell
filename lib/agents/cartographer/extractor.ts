@@ -42,8 +42,8 @@ Return the structured Cartographer result.`
     return {
       kind: 'structured',
       object: result.object as ExtractionObject,
-      inputTokens: result.usage.inputTokens ?? 0,
-      outputTokens: result.usage.outputTokens ?? 0,
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
     }
   } catch (error) {
     return {

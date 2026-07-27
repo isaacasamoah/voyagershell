@@ -17,13 +17,16 @@ export type CartographerRunResult =
   | { kind: 'completed'; outcome: string; sourceEventId: string; unitId: string | null }
   | { kind: 'failed'; error: string }
 
+// Null means "not priced here", never "free". Only Anthropic rates are known
+// to this build, and a provider that reports no usage cannot be costed at all.
 const meteredCost = (
   provider: string,
-  inputTokens: number,
-  outputTokens: number,
-): number => provider === 'anthropic'
+  inputTokens: number | undefined,
+  outputTokens: number | undefined,
+): number | null => provider === 'anthropic'
+    && inputTokens !== undefined && outputTokens !== undefined
   ? (inputTokens * 3 + outputTokens * 15) / 1_000_000
-  : 0
+  : null
 
 export const runCartographer = async (
   payload: CartographerPayload,

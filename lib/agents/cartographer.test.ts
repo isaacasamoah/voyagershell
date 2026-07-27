@@ -116,6 +116,30 @@ describe('event-owned Cartographer extraction', () => {
     })
   })
 
+  it('records unknown provider usage as unknown, never as zero tokens', async () => {
+    mocks.extractKnowledge.mockResolvedValue({
+      kind: 'structured',
+      object: {
+        claim: 'Elisheya keeps the amber notebook.',
+        aboutPersonId: attempt.candidates[0].personId,
+        knowledgeType: 'domain',
+        attentionScore: 0.8,
+        contextSnippet: 'Elisheya keeps the amber notebook.',
+      },
+      inputTokens: undefined,
+      outputTokens: undefined,
+    })
+
+    await runCartographer({
+      userId: attempt.sourceActorId,
+      sourceEventId: attempt.sourceEventId,
+    })
+
+    const completion = mocks.completeExtractionAttempt.mock.calls[0][0]
+    expect(completion.inputTokens).toBeUndefined()
+    expect(completion.outputTokens).toBeUndefined()
+  })
+
   it('fails closed before leasing when concrete model identity is absent', async () => {
     mocks.resolveUserModelWithMeta.mockResolvedValue({
       model: { provider: '', modelId: '' },
