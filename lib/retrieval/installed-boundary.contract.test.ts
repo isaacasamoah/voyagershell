@@ -23,15 +23,14 @@ describe('registered installed retrieval boundary', () => {
       .toContain("rpc('get_voyage_messages'")
   })
 
-  // The legacy edge traversal is gone with the table it read. Nothing registers
-  // a graph tool until the new substrate has claims worth traversing (K3).
-  it('registers no graph traversal tool at all after the cutover', () => {
+  it('registers only the authorized graph-memory product reader', () => {
     const catalogue = [
       read('lib/retrieval/voyager-tools.ts'),
       read('lib/retrieval/knowledge-retrieval-tools.ts'),
       read('lib/retrieval/voyager-message-query-tools.ts'),
     ].join('\n')
-    expect(catalogue).not.toMatch(/six-kind|graphEnabled|maxDepth|channel activity|With channel/)
+    expect(catalogue).toContain("name: 'graph_memory'")
+    expect(catalogue).toContain('retrieveKnowledgeGraphClaims')
     expect(catalogue).not.toContain('graph_traverse')
     expect(catalogue).not.toContain("name: 'graph'")
     expect(catalogue).not.toContain('edge_type')

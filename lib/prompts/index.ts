@@ -7,6 +7,7 @@ import { curatePromptWindow, type KnowledgeNode } from '@/lib/knowledge';
 import { loadVoyageContext, formatVoyageContextSection } from '@/lib/voyage/context';
 import type { VoyagerIdentity } from '@/lib/messaging/address';
 import { formatCuratedWindow } from './format/user';
+import { retrieveKnowledgeGraphClaims } from '@/lib/knowledge/kernel/boundary';
 
 // Re-export types
 export * from './types';
@@ -79,14 +80,15 @@ interface ComposeOptions {
 export const composeSystemPrompt = async (
   userId: string,
   options?: ComposeOptions
-): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult }> => {
+): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult;
+  workingMemoryUnitIds: string[] }> => {
   const { profile, voyageSlug, sessionId, continuityContext, authState, voyagerIdentity, ownerName } = options ?? {};
   const startTime = Date.now();
 
   // Load curated knowledge window + voyage context in parallel. Message
   // awareness is no longer woven into the prompt (v2) — messages are
   // delivered on the wire and retrieved on demand, not re-narrated here.
-  const [curatedWindow, voyageContext] = await Promise.all([
+  const [curatedWindow, voyageContext, graphMemory] = await Promise.all([
     curatePromptWindow(userId, voyageSlug, undefined, sessionId).catch((error) => {
       console.warn('[Prompts] Failed to curate prompt window:', error);
       return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 };
@@ -97,7 +99,26 @@ export const composeSystemPrompt = async (
           return null;
         })
       : Promise.resolve(null),
+    retrieveKnowledgeGraphClaims({ kind: 'person', authorityId: userId }).catch(() => ({
+      claims: [], truncated: false,
+    })),
   ]);
+  const projectedEventIds = new Set(curatedWindow.preferences.map((item) => item.eventId));
+  const graphPreferences: KnowledgeNode[] = graphMemory.claims
+    .filter((claim) => claim.knowledgeType === 'preference'
+      && claim.attentionScore >= 0.5 && !projectedEventIds.has(claim.sourceEventId))
+    .map((claim) => ({
+      eventId: claim.sourceEventId,
+      content: claim.claim,
+      classifications: [],
+      entities: [],
+      topics: [],
+      createdAt: new Date(),
+      knowledgeType: claim.knowledgeType,
+      attentionScore: claim.attentionScore,
+      contextSnippet: claim.claim,
+    }));
+  curatedWindow.preferences = [...curatedWindow.preferences, ...graphPreferences];
 
   // Preferences render exactly once, via formatCuratedWindow below ("What I
   // Know About You"). composePrompt no longer re-renders them (the old shim
@@ -193,6 +214,9 @@ export const composeSystemPrompt = async (
     staticPrompt,
     dynamicPrompt,
     retrieval,
+    workingMemoryUnitIds: graphMemory.claims
+      .filter((claim) => claim.knowledgeType === 'preference' && claim.attentionScore >= 0.5)
+      .map((claim) => claim.knowledgeUnitId),
   };
 };
 

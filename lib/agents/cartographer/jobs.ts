@@ -65,6 +65,9 @@ export const completeExtractionAttempt = async (input: {
   rawOutput?: Json
   claim?: string
   aboutPersonId?: string
+  knowledgeType?: 'domain' | 'operational' | 'preference'
+  attentionScore?: number
+  embedding?: string
   errorClass?: string
   inputTokens?: number
   outputTokens?: number
@@ -78,6 +81,9 @@ export const completeExtractionAttempt = async (input: {
       p_raw_output: input.rawOutput ?? null,
       p_claim: input.claim ?? null,
       p_about_person_id: input.aboutPersonId ?? null,
+      p_knowledge_type: input.knowledgeType ?? null,
+      p_attention_score: input.attentionScore ?? null,
+      p_embedding: input.embedding ?? null,
       p_error_class: input.errorClass ?? null,
       p_input_tokens: input.inputTokens ?? null,
       p_output_tokens: input.outputTokens ?? null,

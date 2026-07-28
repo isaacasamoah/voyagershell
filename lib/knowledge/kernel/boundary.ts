@@ -17,18 +17,30 @@ export interface KnowledgeGraphClaim {
   readonly claim: string;
   readonly sourceEventId: string;
   readonly sourceContent: string;
+  readonly knowledgeType: "domain" | "operational" | "preference";
+  readonly attentionScore: number;
 }
 
 export interface KnowledgeGraphRetrievalOptions {
   readonly graphEnabled?: boolean;
   readonly maxDepth?: number;
+  readonly excludeUnitIds?: readonly string[];
+  readonly nodeBudget?: number;
+  readonly frontierBudget?: number;
+}
+
+export interface KnowledgeGraphResult {
+  readonly claims: readonly KnowledgeGraphClaim[];
+  readonly truncated: boolean;
 }
 
 interface ClaimRow {
-  readonly knowledge_unit_id: unknown;
+  readonly knowledgeUnitId: unknown;
   readonly claim: unknown;
-  readonly source_event_id: unknown;
-  readonly source_content: unknown;
+  readonly sourceEventId: unknown;
+  readonly sourceContent: unknown;
+  readonly knowledgeType: unknown;
+  readonly attentionScore: unknown;
 }
 
 const wait = async (milliseconds: number): Promise<void> => {
@@ -50,38 +62,44 @@ const toClaim = (value: unknown): KnowledgeGraphClaim | null => {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     return null;
   const row = value as ClaimRow;
-  if (!isUuid(row.knowledge_unit_id) || !isUuid(row.source_event_id))
+  if (!isUuid(row.knowledgeUnitId) || !isUuid(row.sourceEventId))
     return null;
   if (typeof row.claim !== "string" || row.claim.length === 0) return null;
-  if (typeof row.source_content !== "string" || row.source_content.length === 0)
+  if (typeof row.sourceContent !== "string" || row.sourceContent.length === 0)
+    return null;
+  if (!["domain", "operational", "preference"].includes(String(row.knowledgeType)))
+    return null;
+  if (typeof row.attentionScore !== "number" || row.attentionScore < 0 || row.attentionScore > 1)
     return null;
   return {
-    knowledgeUnitId: row.knowledge_unit_id,
+    knowledgeUnitId: row.knowledgeUnitId,
     claim: row.claim,
-    sourceEventId: row.source_event_id,
-    sourceContent: row.source_content,
+    sourceEventId: row.sourceEventId,
+    sourceContent: row.sourceContent,
+    knowledgeType: row.knowledgeType as KnowledgeGraphClaim["knowledgeType"],
+    attentionScore: row.attentionScore,
   };
 };
 
 export const retrieveKnowledgeGraphClaims = async (
   root: KnowledgeGraphRoot,
   options: KnowledgeGraphRetrievalOptions = {},
-): Promise<readonly KnowledgeGraphClaim[]> => {
+): Promise<KnowledgeGraphResult> => {
   const startedAt = performance.now();
+  const empty = { claims: [], truncated: false } as const;
   try {
-    if (!isRoot(root)) return [];
+    if (!isRoot(root) || root.kind !== "person") return empty;
     const viewerProfileId = await requireAuth();
-    if (!isUuid(viewerProfileId)) return [];
+    if (!isUuid(viewerProfileId)) return empty;
     const admin = getKnowledgeGraphCandidateClient();
     const rpcCall = Promise.resolve(
-      admin.rpc("retrieve_knowledge_graph_claims", {
-        p_root_kind: root.kind,
+      admin.rpc("retrieve_knowledge_graph_claims_v2", {
         p_root_authority_id: root.authorityId,
         p_viewer_profile_id: viewerProfileId,
-        p_graph_enabled: options.graphEnabled ?? true,
+        p_exclude_unit_ids: (options.excludeUnitIds ?? []).filter(isUuid),
         p_max_depth: normalizeDepth(options.maxDepth),
-        p_node_budget: 512,
-        p_frontier_budget: 128,
+        p_node_budget: options.nodeBudget ?? 512,
+        p_frontier_budget: options.frontierBudget ?? 128,
       }),
     ).catch(() => null);
     const remainingRpcBudget = Math.max(
@@ -92,15 +110,18 @@ export const retrieveKnowledgeGraphClaims = async (
       rpcCall,
       wait(remainingRpcBudget).then(() => null),
     ]);
-    if (!outcome) return [];
+    if (!outcome) return empty;
     const { data, error } = outcome;
-    if (error || !Array.isArray(data)) return [];
-    return data.flatMap((row) => {
+    if (error || data === null || typeof data !== "object" || Array.isArray(data)) return empty;
+    const envelope = data as { claims?: unknown; truncated?: unknown };
+    if (!Array.isArray(envelope.claims) || typeof envelope.truncated !== "boolean") return empty;
+    const claims = envelope.claims.flatMap((row) => {
       const claim = toClaim(row);
       return claim ? [claim] : [];
     });
+    return { claims, truncated: envelope.truncated };
   } catch {
-    return [];
+    return empty;
   } finally {
     const remaining = RESPONSE_FLOOR_MS - (performance.now() - startedAt);
     if (remaining > 0) await wait(remaining);

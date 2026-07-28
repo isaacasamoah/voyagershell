@@ -13,6 +13,11 @@ import {
   resolveOneMember,
 } from './tool-helpers'
 import type { ToolContext } from './tool-types'
+import { retrieveKnowledgeGraphClaims } from '@/lib/knowledge/kernel/boundary'
+
+const graphMemorySchema = z.object({
+  maxDepth: z.number().int().min(0).max(8).optional().default(4),
+})
 
 const semanticSearchSchema = z.object({
   query: z.string().describe('The semantic search query'),
@@ -37,6 +42,28 @@ const getNodesSchema = z.object({
 })
 
 export const createKnowledgeRetrievalTools = (ctx: ToolContext) => ({
+  graph_memory: tool({
+    description: 'Walk authorized memory from the speaking Person. Returns typed claims with immutable source attribution and reports when budget limits truncate reach.',
+    inputSchema: graphMemorySchema,
+    execute: async (input) => {
+      const result = await retrieveKnowledgeGraphClaims(
+        { kind: 'person', authorityId: ctx.userId },
+        { maxDepth: input.maxDepth, excludeUnitIds: ctx.workingMemoryUnitIds ?? [] },
+      )
+      return {
+        claims: result.claims.map((claim) => ({
+          unitId: claim.knowledgeUnitId,
+          claim: claim.claim,
+          type: claim.knowledgeType,
+          source: { eventId: claim.sourceEventId, content: claim.sourceContent },
+        })),
+        truncated: result.truncated,
+        presentation: result.truncated
+          ? 'Partial graph reach: do not present this as a complete memory search.'
+          : 'Complete within the requested graph budgets.',
+      }
+    },
+  }),
   semantic_search: tool({
     description: `Semantic search across the knowledge base. Finds content by conceptual similarity to the query. Uses hybrid retrieval (semantic + keyword) with reciprocal rank fusion for higher quality results. Example queries: "pricing discussions", "onboarding decisions", "what we know about React performance".`,
     inputSchema: semanticSearchSchema,

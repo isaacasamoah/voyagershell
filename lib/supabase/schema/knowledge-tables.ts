@@ -70,8 +70,13 @@ export type KnowledgeTables = {
         'source_event_id', 'knowledge_events', 'id'>,
     ]>
   knowledge_extractor_contracts: TableShape<{
-    extractor_version: string; active: boolean; activated_at: string
-  }, { extractor_version: string; active?: boolean; activated_at?: string }>
+    extractor_version: string; activated_at: string; embedding_model: string | null;
+    embedding_dimensions: number | null
+  }, { extractor_version: string; activated_at?: string; embedding_model?: string | null;
+    embedding_dimensions?: number | null }>
+  knowledge_extractor_contract_active: TableShape<{
+    singleton: boolean; extractor_version: string; activated_at: string
+  }, { singleton?: boolean; extractor_version: string; activated_at?: string }>
   knowledge_extraction_jobs: TableShape<{
     source_event_id: string; extractor_version: string; knowledge_audience_id: string;
     state: KnowledgeExtractionJobState; next_attempt_number: number;

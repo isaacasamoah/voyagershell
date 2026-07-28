@@ -56,6 +56,8 @@ export type PublicFunctions = {
   complete_knowledge_extraction_attempt: { Args: {
     p_attempt_id: string; p_lease_token: string; p_result: KnowledgeExtractionOutcomeKind;
     p_raw_output?: Json | null; p_claim?: string | null; p_about_person_id?: string | null;
+    p_knowledge_type?: string | null; p_attention_score?: number | null;
+    p_embedding?: string | null;
     p_error_class?: string | null; p_input_tokens?: number | null;
     p_output_tokens?: number | null
   }; Returns: KnowledgeExtractionCompletionRow[] }

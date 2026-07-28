@@ -6,6 +6,8 @@ export interface ToolContext {
   waitUntil?: (promise: Promise<unknown>) => void
   /** Conversation messages captured by spawn_background_agent. */
   messages?: Array<{ role: string; content: string }>
+  /** KnowledgeUnit IDs already present in the composed working-memory window. */
+  workingMemoryUnitIds?: string[]
 }
 
 export interface ToolRegistration {

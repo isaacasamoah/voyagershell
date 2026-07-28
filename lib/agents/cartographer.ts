@@ -10,23 +10,14 @@ import {
   completeExtractionAttempt,
 } from './cartographer/jobs'
 import type { CartographerPayload } from './cartographer/types'
+import { getOpenAI, toVectorString } from './cartographer/embeddings'
+import { CARTOGRAPHER_EXTRACTOR_VERSION } from './cartographer/contract'
 
 export type CartographerRunResult =
   | { kind: 'no_job' }
   | { kind: 'model_identity_unavailable' }
   | { kind: 'completed'; outcome: string; sourceEventId: string; unitId: string | null }
   | { kind: 'failed'; error: string }
-
-// Null means "not priced here", never "free". Only Anthropic rates are known
-// to this build, and a provider that reports no usage cannot be costed at all.
-const meteredCost = (
-  provider: string,
-  inputTokens: number | undefined,
-  outputTokens: number | undefined,
-): number | null => provider === 'anthropic'
-    && inputTokens !== undefined && outputTokens !== undefined
-  ? (inputTokens * 3 + outputTokens * 15) / 1_000_000
-  : null
 
 export const runCartographer = async (
   payload: CartographerPayload,
@@ -84,12 +75,36 @@ export const runCartographer = async (
     }
 
     const object = extracted.object
+    let embedding: string | undefined
+    if (object.claim !== null && attempt.extractorVersion === CARTOGRAPHER_EXTRACTOR_VERSION) {
+      try {
+        const response = await getOpenAI().embeddings.create({
+          model: 'text-embedding-3-small',
+          input: object.claim,
+          dimensions: 1536,
+        })
+        embedding = toVectorString(response.data[0].embedding)
+      } catch (error) {
+        const completion = await completeExtractionAttempt({
+          attempt,
+          result: 'provider_failed',
+          errorClass: error instanceof Error ? error.name.slice(0, 80) : 'embedding_provider_error',
+        })
+        return {
+          kind: 'completed', outcome: completion.outcome,
+          sourceEventId: attempt.sourceEventId, unitId: completion.unitId,
+        }
+      }
+    }
     const completion = await completeExtractionAttempt({
       attempt,
       result: object.claim === null ? 'no_claim' : 'succeeded',
       rawOutput: object,
       claim: object.claim ?? undefined,
       aboutPersonId: object.aboutPersonId ?? undefined,
+      knowledgeType: object.knowledgeType,
+      attentionScore: object.attentionScore,
+      embedding,
       inputTokens: extracted.inputTokens,
       outputTokens: extracted.outputTokens,
     })
@@ -122,7 +137,6 @@ export const runCartographer = async (
       modelId,
       inputTokens: extracted.inputTokens,
       outputTokens: extracted.outputTokens,
-      meteredCostUsd: meteredCost(provider, extracted.inputTokens, extracted.outputTokens),
       durationMs: Date.now() - startTime,
     })
     return {

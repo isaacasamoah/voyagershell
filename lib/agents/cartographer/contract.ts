@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v1'
+export const CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v2'
 
 export const extractionSchema = z.object({
   claim: z.string().trim().min(1).nullable(),

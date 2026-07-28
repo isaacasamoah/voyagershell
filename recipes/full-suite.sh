@@ -4,5 +4,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ./recipes/cartographer-k3-local-proof.sh
+./recipes/cartographer-k4a-local-proof.sh
 npx vitest run --reporter=dot
 echo "FULL_SUITE_GREEN"

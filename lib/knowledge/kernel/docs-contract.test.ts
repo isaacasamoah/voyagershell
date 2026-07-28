@@ -26,7 +26,8 @@ describe('tracked graph contributor truth', () => {
     expect(knowledgeTools).not.toContain("rpc('graph_traverse'")
     expect(read('lib/knowledge/kernel/boundary.ts')).toContain('getKnowledgeGraphCandidateClient')
     expect(registry).not.toContain("name: 'graph'")
-    expect(registry).not.toContain('tool: retrieval.graph')
+    expect(registry).not.toContain('tool: retrieval.graph,')
+    expect(registry).toContain('tool: retrieval.graph_memory')
   })
 
   // The first browser run failed on a helper that was unit-tested and simply

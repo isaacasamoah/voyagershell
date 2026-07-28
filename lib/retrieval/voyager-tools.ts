@@ -21,6 +21,11 @@ export const createVoyagerTools = (ctx: ToolContext): {
 
   const registrations: ToolRegistration[] = [
     {
+      name: 'graph_memory',
+      tool: retrieval.graph_memory,
+      strategyHint: 'Authorized derived memory reach. Use when an answer may depend on connected prior knowledge; treat truncated results as partial.',
+    },
+    {
       name: 'semantic_search',
       tool: retrieval.semantic_search,
       strategyHint: 'First tool for exploration. Finds the neighbourhood around a topic by meaning.',
