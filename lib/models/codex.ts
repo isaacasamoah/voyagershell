@@ -141,29 +141,63 @@ export const createResilientCodexModel = (
   recovery: CodexRecovery,
 ): LanguageModel => {
   const createModel = recovery.createModel ?? createCodexModel
+  type RecoveryState =
+    | { kind: 'initial' }
+    | { kind: 'recovering' }
+    | { kind: 'refreshed'; model: V3Model }
+    | { kind: 'fallback' }
+  let state: RecoveryState = { kind: 'initial' }
+  const invokeFallback = <T>(
+    invoke: (model: V3Model) => PromiseLike<T>,
+  ): PromiseLike<T> => invoke(asV3(recovery.fallback))
+  const markAndFallback = async <T>(
+    error: unknown,
+    invoke: (model: V3Model) => PromiseLike<T>,
+  ): Promise<T> => {
+    state = { kind: 'fallback' }
+    try {
+      await recovery.onFailure(error)
+    } catch {
+      // State persistence must not prevent the user's fallback turn.
+    }
+    return invokeFallback(invoke)
+  }
   const recover = async <T>(
     initial: () => PromiseLike<T>,
     invoke: (model: V3Model) => PromiseLike<T>,
   ): Promise<T> => {
+    const attemptedState = state
+    if (attemptedState.kind === 'fallback' || attemptedState.kind === 'recovering') {
+      return invokeFallback(invoke)
+    }
     try {
-      return await initial()
+      return await (attemptedState.kind === 'refreshed'
+        ? invoke(attemptedState.model)
+        : initial())
     } catch (error) {
       if (!isCodexAuthError(error)) throw error
+      if (attemptedState.kind === 'refreshed') {
+        return markAndFallback(error, invoke)
+      }
+      if (state.kind !== 'initial') {
+        // A concurrent operation already latched this failed credential.
+        return invokeFallback(invoke)
+      }
+      state = { kind: 'recovering' }
       let refreshed: LanguageModel
       try {
         refreshed = createModel(await recovery.refresh())
       } catch {
+        state = { kind: 'fallback' }
         return invoke(asV3(recovery.fallback))
       }
       try {
-        return await invoke(asV3(refreshed))
+        const refreshedModel = asV3(refreshed)
+        const result = await invoke(refreshedModel)
+        state = { kind: 'refreshed', model: refreshedModel }
+        return result
       } catch (retryError) {
-        try {
-          await recovery.onFailure(retryError)
-        } catch {
-          // State persistence must not prevent the user's fallback turn.
-        }
-        return invoke(asV3(recovery.fallback))
+        return markAndFallback(retryError, invoke)
       }
     }
   }

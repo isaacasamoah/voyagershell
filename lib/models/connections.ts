@@ -1,15 +1,9 @@
-// Brain-connections data layer.
-// Reads/writes encrypted subscription credentials, refreshes proactively near
-// expiry with optimistic concurrency (safe under concurrent serverless calls).
+// Encrypted brain connections with proactive, concurrency-safe refresh.
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug'
 import { seal, open } from './encryption'
-import {
-  createResilientCodexModel,
-  readCodexMetadata,
-  type CodexCredential,
-} from './codex'
+import { createResilientCodexModel, readCodexMetadata, type CodexCredential } from './codex'
 import { classifyCodexError } from './codex-auth'
 import { refreshCodexToken } from './codex-device-auth'
 import type { LanguageModel } from 'ai'
@@ -38,11 +32,8 @@ interface OAuthPayload {
   refresh_token: string
   id_token?: string
 }
-
 class CodexAccountMismatchError extends Error {}
-
 const table = () => getAdminClient().from(TABLE)
-
 export interface UpsertCodexInput {
   userId: string
   accessToken: string
@@ -208,8 +199,12 @@ export const getActiveCodexConnection = async (
   userId: string,
 ): Promise<CodexCredential | null> => {
   const row = await findConnectionRow(userId)
-  if (!row) return null
+  return row ? activateConnectionRow(row) : null
+}
 
+const activateConnectionRow = async (
+  row: ConnectionRow,
+): Promise<CodexCredential | null> => {
   const payload = decodePayload(row)
   const initialCredential = credentialFor(row, payload)
   if (!initialCredential) {
@@ -234,13 +229,17 @@ export const getUserCodexModel = async (
 ): Promise<LanguageModel | null> => {
   const row = await findConnectionRow(userId)
   if (!row) return null
-  const cred = await getActiveCodexConnection(userId)
+  const cred = await activateConnectionRow(row)
   if (!cred) return null
   return createResilientCodexModel(cred, {
     fallback,
     refresh: async () => {
-      const current = await findConnectionRow(userId)
-      if (!current) throw new Error('Codex connection is not active')
+      const { data: current, error } = await table()
+        .select('*')
+        .eq('id', row.id)
+        .eq('status', 'active')
+        .maybeSingle()
+      if (error || !current) throw new Error('Codex connection is not active')
       return refreshRow(current, decodePayload(current))
     },
     onFailure: async (error) => {

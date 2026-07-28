@@ -58,10 +58,11 @@ vi.mock('./codex-device-auth', () => ({ refreshCodexToken }))
 
 describe('Codex connection identity', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     updates.splice(0)
-    refreshCodexToken.mockReset()
     row.account_id = 'unmistakably-fake-account-stored'
     row.last_refresh_at = new Date().toISOString()
+    builder.maybeSingle.mockResolvedValue({ data: row, error: null })
     payload = {
       access_token: jwt('unmistakably-fake-account-live'),
       refresh_token: 'unmistakably-fake-refresh',
@@ -92,5 +93,17 @@ describe('Codex connection identity', () => {
       accountId: 'unmistakably-fake-account-current',
     })
     expect(refreshCodexToken).toHaveBeenCalledOnce()
+  })
+
+  it('builds recovery from the same selected row during a concurrent change', async () => {
+    row.account_id = 'unmistakably-fake-account-live'
+    builder.maybeSingle
+      .mockResolvedValueOnce({ data: row, error: null })
+      .mockResolvedValueOnce({ data: null, error: null })
+
+    const { getUserCodexModel } = await import('./connections')
+    await expect(getUserCodexModel('fixture-user', {} as never))
+      .resolves.not.toBeNull()
+    expect(builder.maybeSingle).toHaveBeenCalledOnce()
   })
 })
