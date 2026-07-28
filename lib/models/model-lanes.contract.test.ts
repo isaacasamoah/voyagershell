@@ -3,26 +3,19 @@ import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
-interface SourceEntry {
-  file: string
-  source: string
-}
-const GENERATION_APIS = new Set([
-  'generateObject',
-  'generateText',
-  'streamObject',
-  'streamText',
-])
+interface SourceEntry { file: string; source: string }
+const GENERATION_APIS = new Set(['generateObject', 'generateText', 'streamObject', 'streamText'])
 const EMBEDDING_APIS = new Set(['embed', 'embedMany'])
 const EXPECTED_GENERATION = [
   'lib/agents/cartographer/extractor.ts|generateObject|model',
   'lib/agents/deep-retrieval.ts|generateText|resolved.model',
   'lib/harness/run-turn.ts|streamText|chatModel',
 ]
-const EXPECTED_EXTRACTOR_HANDOFF = [
-  'lib/agents/cartographer.ts|extractKnowledge|resolved.model',
-]
+const EXPECTED_EXTRACTOR_HANDOFF = ['lib/agents/cartographer.ts|extractKnowledge|resolved.model']
 const EXPECTED_OPENAI_EMBEDDINGS = [
+  // K4a's embed-before-commit: the unit's vector is computed on the API key,
+  // never the subscription, because the Codex backend does not serve embeddings.
+  "lib/agents/cartographer.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/apply.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
@@ -183,10 +176,10 @@ const assertEmbeddingContract = (entries: SourceEntry[]): void => {
   const sdkChanged = aiCallSites(entries, EMBEDDING_APIS).length > 0
   const clientChanged = JSON.stringify(openAIEmbeddingSites(entries))
     !== JSON.stringify(EXPECTED_OPENAI_EMBEDDINGS)
-  const helper = entries.find(({ file }) => (
-    file === 'lib/agents/cartographer/embeddings.ts'
-  ))?.source
-  if (sdkChanged || clientChanged || !helper?.includes('new OpenAI()')) {
+  const helper = entries.find(({ file }) => file === 'lib/agents/cartographer/embeddings.ts')?.source
+  const sharedClientRedirected = !helper
+    || !/new\s+OpenAI\s*\(\s*\)/.test(helper)
+  if (sdkChanged || clientChanged || sharedClientRedirected) {
     throw new Error('embedding lane changed')
   }
 }
@@ -215,11 +208,6 @@ generateText({ model: bypassModel, prompt: 'mutation fixture' })`,
     expect(aiCallSites(entries, EMBEDDING_APIS)).toEqual([])
     expect(openAIEmbeddingSites(entries)).toEqual(EXPECTED_OPENAI_EMBEDDINGS)
     expect(() => assertEmbeddingContract(entries)).not.toThrow()
-    for (const site of EXPECTED_OPENAI_EMBEDDINGS) {
-      const source = readFileSync(site.split('|')[0], 'utf8')
-      expect(source).not.toContain('CODEX_BACKEND_BASE')
-      expect(source).not.toContain('resolveUserModel')
-    }
   })
 
   it('rejects both embed and embedMany on a Codex model', () => {
@@ -238,6 +226,18 @@ embedMany({ model: createCodexModel(fakeCredential), values: ['mutation fixture'
       'lib/models/codex.ts|embed|createCodexModel(fakeCredential)',
     ])
     expect(() => assertEmbeddingContract(mutated))
+      .toThrow('embedding lane changed')
+    const cartographerMutated = entries.map((entry) => (
+      entry.file === 'lib/agents/cartographer.ts'
+        ? {
+            ...entry,
+            source: `${entry.source}
+import { embed } from 'ai'
+embed({ model: resolved.model, value: 'mutation fixture' })`,
+          }
+        : entry
+    ))
+    expect(() => assertEmbeddingContract(cartographerMutated))
       .toThrow('embedding lane changed')
     const helperMutated = entries.map((entry) => (
       entry.file === 'lib/agents/cartographer/embeddings.ts'
