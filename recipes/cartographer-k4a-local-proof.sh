@@ -45,15 +45,38 @@ docker_proof_install_pre054 "$CONTAINER_NAME" "$DATABASE" \
   done
   sed -n '1,$p' "$TEMP_DIR/generated.sql" "$TEMP_DIR/k1-assertions.sql" \
     "$TEMP_DIR/boundary.sql" "$REPO_ROOT/supabase/migrations/072_"*.sql \
-    "$REPO_ROOT/recipes/sql/cartographer-k3-setup.sql" \
-    "$REPO_ROOT/supabase/migrations/073_"*.sql
+    "$REPO_ROOT/recipes/sql/cartographer-k3-setup.sql"
   printf 'COMMIT;\n'
 } > "$TEMP_DIR/setup.sql"
 docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" < "$TEMP_DIR/setup.sql" >/dev/null \
-  || fail 'candidate migration or setup failed'
+  || fail 'pre-073 setup failed'
+cat > "$TEMP_DIR/denial.sql" <<'SQL'
+\set ON_ERROR_STOP off
+SET ROLE authenticated;
+SELECT count(*) FROM public.knowledge_units;
+SELECT count(*) FROM public.knowledge_extraction_attempts;
+RESET ROLE;
+SQL
+docker exec -i "$CONTAINER_NAME" psql -X -q -U postgres -d "$DATABASE" \
+  < "$TEMP_DIR/denial.sql" > "$TEMP_DIR/denial-before.txt" 2>&1
+grep -q 'permission denied for table knowledge_units' "$TEMP_DIR/denial-before.txt" \
+  || fail 'pre-073 unauthorized unit denial missing'
+docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+  -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/supabase/migrations/073_graph_memory_read.sql" >/dev/null \
+  || fail 'candidate migration failed'
+docker exec -i "$CONTAINER_NAME" psql -X -q -U postgres -d "$DATABASE" \
+  < "$TEMP_DIR/denial.sql" > "$TEMP_DIR/denial-after.txt" 2>&1
+cmp -s "$TEMP_DIR/denial-before.txt" "$TEMP_DIR/denial-after.txt" \
+  || fail 'pre/post-073 unauthorized denial bytes differ'
 verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" < "$REPO_ROOT/recipes/sql/cartographer-k4a-assertions.sql")"
 [ "$verdict" = CARTOGRAPHER_K4A_ASSERTIONS_GREEN ] \
   || fail 'exact K4a assertion verdict missing'
+K4A_POSTGRES_CONTAINER="$CONTAINER_NAME" K4A_POSTGRES_DATABASE="$DATABASE" \
+  "$VITE_NODE" --config "$REPO_ROOT/vitest.config.ts" \
+  "$REPO_ROOT/recipes/cartographer-k4a-product-proof.ts" \
+  | grep -qx CARTOGRAPHER_K4A_PRODUCT_GREEN \
+  || fail 'registered graph_memory product proof failed'
 printf '%s\n' CARTOGRAPHER_K4A_LOCAL_GREEN
