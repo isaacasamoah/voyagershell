@@ -89,6 +89,26 @@ describe('Codex connection recovery', () => {
     expect(fallback.doGenerate).not.toHaveBeenCalled()
   })
 
+  it('falls back without a duplicate attention write when refresh fails', async () => {
+    const initial = model(vi.fn().mockRejectedValue({ statusCode: 401 }))
+    const fallback = model(vi.fn().mockResolvedValue(result('fallback completed')))
+    const refresh = vi.fn().mockRejectedValue(new Error('refresh already marked attention'))
+    const onFailure = vi.fn()
+
+    const resilient = createResilientCodexModel(credential('initial'), {
+      refresh,
+      fallback: fallback as never,
+      onFailure,
+      createModel: vi.fn().mockReturnValue(initial as never),
+    })
+    const generated = await generateText({ model: resilient, prompt: 'fixture prompt' })
+
+    expect(generated.text).toBe('fallback completed')
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(onFailure).not.toHaveBeenCalled()
+    expect(fallback.doGenerate).toHaveBeenCalledOnce()
+  })
+
   it('classifies errors without copying their payload', () => {
     const secretPayload = 'unmistakably-fake-secret-payload'
     const error = { statusCode: 401, message: secretPayload }

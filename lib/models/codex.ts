@@ -149,11 +149,20 @@ export const createResilientCodexModel = (
       return await initial()
     } catch (error) {
       if (!isCodexAuthError(error)) throw error
+      let refreshed: LanguageModel
       try {
-        const refreshed = createModel(await recovery.refresh())
+        refreshed = createModel(await recovery.refresh())
+      } catch {
+        return invoke(asV3(recovery.fallback))
+      }
+      try {
         return await invoke(asV3(refreshed))
       } catch (retryError) {
-        await recovery.onFailure(retryError)
+        try {
+          await recovery.onFailure(retryError)
+        } catch {
+          // State persistence must not prevent the user's fallback turn.
+        }
         return invoke(asV3(recovery.fallback))
       }
     }
