@@ -11,7 +11,7 @@ import { createRetrievalTools } from '@/lib/retrieval/retrieval-tools'
 import type { ToolContext } from '@/lib/retrieval/tool-types'
 import type { BackgroundTaskResult } from './queue'
 import { updateTaskProgress } from './queue'
-import { resolveUserModel } from '@/lib/models'
+import { resolveUserModelWithMeta } from '@/lib/models'
 import { log } from '@/lib/debug'
 
 // =============================================================================
@@ -104,9 +104,13 @@ export async function runBackgroundRetrieval(
     : `Objective: ${objective}`
 
   const findings: BackgroundTaskResult['findings'] = []
+  const resolved = await resolveUserModelWithMeta(
+    { task: 'chat', quality: 'balanced' },
+    userId,
+  )
   const result = await generateText({
     abortSignal: signal,
-    model: await resolveUserModel({ task: 'chat', quality: 'balanced' }, userId),
+    model: resolved.model,
     system: AGENTIC_RETRIEVAL_PROMPT,
     prompt,
     tools,
