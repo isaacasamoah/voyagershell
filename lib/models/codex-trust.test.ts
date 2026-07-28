@@ -1,0 +1,99 @@
+import { generateText } from 'ai'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  classifyCodexError,
+  createResilientCodexModel,
+  isCodexAuthError,
+  type CodexCredential,
+} from '@/lib/models'
+
+const credential = (suffix: string): CodexCredential => ({
+  accessToken: `unmistakably-fake-access-${suffix}`,
+  accountId: `unmistakably-fake-account-${suffix}`,
+})
+
+const result = (text: string) => ({
+  content: [{ type: 'text' as const, text }],
+  finishReason: { unified: 'stop' as const, raw: undefined },
+  usage: {
+    inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+    outputTokens: { total: 1, text: 1, reasoning: undefined },
+  },
+  warnings: [],
+})
+
+interface FakeModel {
+  specificationVersion: 'v3'
+  provider: string
+  modelId: string
+  supportedUrls: Record<string, never>
+  doGenerate: ReturnType<typeof vi.fn>
+  doStream: ReturnType<typeof vi.fn>
+}
+
+const model = (
+  invoke: () => Promise<ReturnType<typeof result>>,
+): FakeModel => ({
+  specificationVersion: 'v3',
+  provider: 'fixture',
+  modelId: 'fixture-model',
+  supportedUrls: {},
+  doGenerate: vi.fn(invoke),
+  doStream: vi.fn(),
+})
+
+describe('Codex connection recovery', () => {
+  it('refreshes once, retries once, then falls back and marks attention', async () => {
+    const initial = model(vi.fn().mockRejectedValue({ statusCode: 401 }))
+    const retry = model(vi.fn().mockRejectedValue({ status: 401 }))
+    const fallback = model(vi.fn().mockResolvedValue(result('fallback completed')))
+    const refresh = vi.fn().mockResolvedValue(credential('refreshed'))
+    const onFailure = vi.fn()
+
+    const createModel = vi.fn()
+      .mockReturnValueOnce(initial as never)
+      .mockReturnValueOnce(retry as never)
+
+    const resilient = createResilientCodexModel(credential('initial'), {
+      refresh,
+      fallback: fallback as never,
+      onFailure,
+      createModel,
+    })
+    const generated = await generateText({ model: resilient, prompt: 'fixture prompt' })
+
+    expect(generated.text).toBe('fallback completed')
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(retry.doGenerate).toHaveBeenCalledOnce()
+    expect(fallback.doGenerate).toHaveBeenCalledOnce()
+    expect(onFailure).toHaveBeenCalledOnce()
+  })
+
+  it('does not refresh or fall back for a non-authentication failure', async () => {
+    const initial = model(vi.fn().mockRejectedValue(new Error('fixture network failure')))
+    const refresh = vi.fn()
+    const fallback = model(vi.fn().mockResolvedValue(result('should not run')))
+    const createModel = vi.fn()
+      .mockReturnValueOnce(initial as never)
+
+    const resilient = createResilientCodexModel(credential('initial'), {
+      refresh,
+      fallback: fallback as never,
+      onFailure: vi.fn(),
+      createModel,
+    })
+
+    await expect(generateText({ model: resilient, prompt: 'fixture prompt' }))
+      .rejects.toThrow('fixture network failure')
+    expect(refresh).not.toHaveBeenCalled()
+    expect(fallback.doGenerate).not.toHaveBeenCalled()
+  })
+
+  it('classifies errors without copying their payload', () => {
+    const secretPayload = 'unmistakably-fake-secret-payload'
+    const error = { statusCode: 401, message: secretPayload }
+    expect(isCodexAuthError(error)).toBe(true)
+    expect(classifyCodexError(error)).toBe('authentication_failed')
+    expect(classifyCodexError(error)).not.toContain(secretPayload)
+  })
+})
