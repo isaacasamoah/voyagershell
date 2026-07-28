@@ -11,7 +11,13 @@ const loadModule = async () => {
     createRetrievalTools: () => ({ web_search: {}, semantic_search: {} }),
   }))
   vi.doMock('@/lib/agents/queue', () => ({ updateTaskProgress }))
-  vi.doMock('@/lib/models', () => ({ resolveUserModel: vi.fn().mockResolvedValue('model') }))
+  vi.doMock('@/lib/models', () => ({
+    resolveUserModelWithMeta: vi.fn().mockResolvedValue({
+      model: 'model',
+      label: 'fixture',
+      viaConnection: false,
+    }),
+  }))
   vi.doMock('@/lib/debug', () => ({ log: { agent: vi.fn() } }))
   return import('./deep-retrieval')
 }

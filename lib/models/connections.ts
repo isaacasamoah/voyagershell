@@ -6,16 +6,17 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug'
 import { seal, open } from './encryption'
 import {
-  createCodexModel,
-  refreshCodexToken,
+  createResilientCodexModel,
   readCodexMetadata,
   type CodexCredential,
 } from './codex'
+import { classifyCodexError } from './codex-auth'
+import { refreshCodexToken } from './codex-device-auth'
 import type { LanguageModel } from 'ai'
 
 const TABLE = 'brain_connections'
 const REFRESH_SKEW_MS = 2 * 60 * 1000 // refresh if within 2 min of expiry
-
+const REFRESH_STALE_MS = 24 * 60 * 60 * 1000
 interface ConnectionRow {
   id: string
   user_id: string
@@ -28,6 +29,7 @@ interface ConnectionRow {
   plan_type: string | null
   token_expires_at: string | null
   status: string
+  last_refresh_at: string | null
   updated_at: string
 }
 
@@ -36,6 +38,8 @@ interface OAuthPayload {
   refresh_token: string
   id_token?: string
 }
+
+class CodexAccountMismatchError extends Error {}
 
 const table = () => getAdminClient().from(TABLE)
 
@@ -79,15 +83,38 @@ export const upsertCodexConnection = async (input: UpsertCodexInput): Promise<vo
 const decodePayload = (row: ConnectionRow): OAuthPayload =>
   JSON.parse(open({ ciphertext: row.encrypted_payload, iv: row.iv, authTag: row.auth_tag }))
 
-/**
- * Refresh a row's tokens and write them back under optimistic concurrency
- * (guarded on updated_at). Returns the fresh access token, or the existing one
- * if another writer won the race. Marks status=needs_attention on hard failure.
- */
-const refreshRow = async (row: ConnectionRow, payload: OAuthPayload): Promise<string> => {
+const markNeedsAttention = async (row: ConnectionRow, reason: string): Promise<void> => {
+  log.api('Codex connection needs attention', {
+    connectionId: row.id,
+    reason,
+  }, 'warn')
+  const { error } = await table().update({ status: 'needs_attention' }).eq('id', row.id)
+  if (error) throw new Error('Failed to update Codex connection status')
+}
+
+const credentialFor = (
+  row: ConnectionRow,
+  payload: OAuthPayload,
+): CodexCredential | null => {
+  const liveAccountId = readCodexMetadata(
+    payload.access_token,
+    payload.id_token,
+  ).accountId
+  if (!liveAccountId || !row.account_id) return null
+  if (liveAccountId !== row.account_id) return null
+  return { accessToken: payload.access_token, accountId: liveAccountId }
+}
+
+const refreshRow = async (
+  row: ConnectionRow,
+  payload: OAuthPayload,
+): Promise<CodexCredential> => {
   try {
     const fresh = await refreshCodexToken(payload.refresh_token)
     const meta = readCodexMetadata(fresh.accessToken, fresh.idToken ?? payload.id_token)
+    if (!meta.accountId || meta.accountId !== row.account_id) {
+      throw new CodexAccountMismatchError('Codex connection account mismatch')
+    }
     const sealed = seal(
       JSON.stringify({
         access_token: fresh.accessToken,
@@ -100,7 +127,7 @@ const refreshRow = async (row: ConnectionRow, payload: OAuthPayload): Promise<st
         encrypted_payload: sealed.ciphertext,
         iv: sealed.iv,
         auth_tag: sealed.authTag,
-        account_id: meta.accountId ?? row.account_id,
+        account_id: meta.accountId,
         plan_type: meta.planType ?? row.plan_type,
         token_expires_at: meta.expiresAt?.toISOString() ?? null,
         status: 'active',
@@ -114,12 +141,16 @@ const refreshRow = async (row: ConnectionRow, payload: OAuthPayload): Promise<st
     if (!data || data.length === 0) {
       // Another writer refreshed first — re-read and use whatever is current.
       const current = await getActiveCodexConnection(row.user_id)
-      return current?.accessToken ?? fresh.accessToken
+      if (!current) throw new Error('Codex connection unavailable after refresh race')
+      return current
     }
-    return fresh.accessToken
+    return { accessToken: fresh.accessToken, accountId: meta.accountId }
   } catch (err) {
-    log.api('Codex refresh failed', { error: String(err) }, 'error')
-    await table().update({ status: 'needs_attention' }).eq('id', row.id)
+    log.api('Codex refresh failed', { errorClass: classifyCodexError(err) }, 'error')
+    const reason = err instanceof CodexAccountMismatchError
+      ? 'account_mismatch'
+      : classifyCodexError(err)
+    await markNeedsAttention(row, reason)
     throw err
   }
 }
@@ -173,11 +204,6 @@ const findConnectionRow = async (userId: string): Promise<ConnectionRow | null> 
   return shared ?? null
 }
 
-/**
- * Get a usable codex credential for a user — their own connection, else the
- * household voyage's shared one — refreshing if near expiry.
- * Returns null when nothing resolves.
- */
 export const getActiveCodexConnection = async (
   userId: string,
 ): Promise<CodexCredential | null> => {
@@ -185,22 +211,40 @@ export const getActiveCodexConnection = async (
   if (!row) return null
 
   const payload = decodePayload(row)
-
-  const expMs = row.token_expires_at ? Date.parse(row.token_expires_at) : 0
-  const needsRefresh = !expMs || expMs - Date.now() < REFRESH_SKEW_MS
-
-  const accessToken = needsRefresh ? await refreshRow(row, payload) : payload.access_token
-  const meta = readCodexMetadata(accessToken, payload.id_token)
-  const accountId = meta.accountId ?? row.account_id
-  if (!accountId) {
-    log.api('Codex connection missing account id', {}, 'warn')
+  const initialCredential = credentialFor(row, payload)
+  if (!initialCredential) {
+    await markNeedsAttention(row, 'account_mismatch')
     return null
   }
-  return { accessToken, accountId }
+
+  const expMs = row.token_expires_at ? Date.parse(row.token_expires_at) : 0
+  const refreshedMs = row.last_refresh_at ? Date.parse(row.last_refresh_at) : 0
+  const needsRefresh = !expMs
+    || expMs - Date.now() < REFRESH_SKEW_MS
+    || !refreshedMs
+    || Date.now() - refreshedMs >= REFRESH_STALE_MS
+
+  return needsRefresh ? refreshRow(row, payload) : initialCredential
 }
 
 /** Build a codex LanguageModel for a user, or null if unconnected. */
-export const getUserCodexModel = async (userId: string): Promise<LanguageModel | null> => {
+export const getUserCodexModel = async (
+  userId: string,
+  fallback: LanguageModel,
+): Promise<LanguageModel | null> => {
+  const row = await findConnectionRow(userId)
+  if (!row) return null
   const cred = await getActiveCodexConnection(userId)
-  return cred ? createCodexModel(cred) : null
+  if (!cred) return null
+  return createResilientCodexModel(cred, {
+    fallback,
+    refresh: async () => {
+      const current = await findConnectionRow(userId)
+      if (!current) throw new Error('Codex connection is not active')
+      return refreshRow(current, decodePayload(current))
+    },
+    onFailure: async (error) => {
+      await markNeedsAttention(row, classifyCodexError(error))
+    },
+  })
 }
