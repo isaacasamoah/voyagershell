@@ -17,7 +17,8 @@ const OWNER_ID = knowledgeGraphFixture.viewerProfileIds.a;
 const VICTIM_ID = knowledgeGraphFixture.viewerProfileIds.b;
 const AUTHORITY_ID = knowledgeGraphFixture.expected.sharedSourceEventId;
 const AUTHORIZED_ROW = {
-  knowledgeUnitId: "71000000-0000-4000-8000-000000000001",
+  // PostgreSQL accepts UUID-shaped identifiers without RFC version/variant bits.
+  knowledgeUnitId: "71000000-0000-7000-6000-000000000001",
   claim: "Vanessa keeps the amber notebook behind the blue atlas.",
   sourceEventId: AUTHORITY_ID,
   sourceContent: "I left the amber notebook behind the blue atlas.",

@@ -137,19 +137,11 @@ export const runTurn = async (
   if (ingress.result) return ingress.result
   const roomResult = runRoomTurn(gate.room, address)
   if (roomResult) return roomResult
-  const workingMemoryUnitIds: string[] = []
-  const toolContext = {
-    userId,
-    voyageSlug: voyageSlug ?? undefined,
-    conversationId,
-    waitUntil: (promise: Promise<unknown>) => host.defer(promise),
-    messages: windowedMessages,
-    workingMemoryUnitIds,
-  }
   let staticPrefix: string
   let dynamicSuffix = ''
   let retrievedKnowledge: KnowledgeNode[] = []
   let retrievalEventId: string | null = null
+  let workingMemoryUnitIds: string[] = []
   try {
     const composed = await composeSystemPrompt(userId, {
       profile: { id: userId, displayName },
@@ -160,7 +152,7 @@ export const runTurn = async (
       voyagerIdentity,
       ownerName: displayName,
     })
-    workingMemoryUnitIds.push(...(composed.workingMemoryUnitIds ?? []))
+    workingMemoryUnitIds = composed.workingMemoryUnitIds
     staticPrefix = composed.staticPrompt
     dynamicSuffix = composed.dynamicPrompt
     retrievedKnowledge = composed.retrieval.knowledge
@@ -180,6 +172,14 @@ export const runTurn = async (
   } catch (error) {
     log.api('Prompt composition failed, using base prompt', { error: String(error) }, 'warn')
     staticPrefix = getBasePrompt()
+  }
+  const toolContext = {
+    userId,
+    voyageSlug: voyageSlug ?? undefined,
+    conversationId,
+    waitUntil: (promise: Promise<unknown>) => host.defer(promise),
+    messages: windowedMessages,
+    workingMemoryUnitIds,
   }
   const { tools, registrations } = createVoyagerTools(toolContext)
   const toolStrategy = composeToolStrategy(registrations)

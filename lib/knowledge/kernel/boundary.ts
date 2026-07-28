@@ -3,7 +3,7 @@ import { getKnowledgeGraphCandidateClient } from "./candidate-client";
 import { GRAPH_NODE_KINDS, type GraphNodeKind } from "./contract";
 
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // The walk is capped at eight hops and 512 nodes. Eight seconds leaves more
 // than fifteen times the observed 516 ms small-walk latency while keeping a
 // resumed turn bounded even when every permitted hop needs authorization.
