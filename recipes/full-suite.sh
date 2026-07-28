@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Proving recipe — the full unit suite (handles derivation/isOwn, grammar, gate
-# wiring, prompt identity, badge, + all pre-existing tests). Emits FULL_SUITE_GREEN.
+# Cumulative local proof: exact disposable K3 PostgreSQL plus every unit and
+# contract test. Emits FULL_SUITE_GREEN only after both boundaries pass.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+./recipes/cartographer-k3-local-proof.sh
 npx vitest run --reporter=dot
 echo "FULL_SUITE_GREEN"

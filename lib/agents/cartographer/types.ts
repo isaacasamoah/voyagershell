@@ -1,10 +1,8 @@
 import type { KnowledgeType } from '@/lib/knowledge/event-types'
-import type { CARTOGRAPHER_EDGE_KINDS } from './stage2'
 
 export interface CartographerPayload {
-  sessionId: string
   userId: string
-  voyageSlug?: string
+  sourceEventId?: string
 }
 
 export interface Stage1Assessment {
@@ -14,10 +12,49 @@ export interface Stage1Assessment {
   contextSnippet: string
 }
 
-export interface Stage2Connection {
-  fromEventId: string
-  toEventId: string
-  edgeType: (typeof CARTOGRAPHER_EDGE_KINDS)[number]
+export interface PersonCandidate {
+  personId: string
+  displayName: string
+}
+
+export interface ExtractionAttempt {
+  attemptId: string
+  leaseToken: string
+  sourceEventId: string
+  extractorVersion: string
+  knowledgeAudienceId: string
+  sourceContent: string
+  sourceEventType: string
+  sourceActorId: string
+  sourceSessionId: string | null
+  attemptNumber: number
+  candidates: PersonCandidate[]
+}
+
+export type ExtractionFailureKind = 'provider_failed' | 'malformed_output'
+
+export type ExtractionRun =
+  | {
+      kind: 'structured'
+      object: import('./contract').ExtractionObject
+      // Undefined when the provider reported no usage. Recording an unknown
+      // count as 0 would assert the call consumed nothing, which is a
+      // different fact from not knowing.
+      inputTokens: number | undefined
+      outputTokens: number | undefined
+    }
+  | { kind: 'failed'; failure: ExtractionFailureKind; errorClass: string }
+
+export interface ExtractionCompletion {
+  outcome:
+    | 'succeeded'
+    | 'no_claim'
+    | 'provider_failed'
+    | 'malformed_output'
+    | 'commit_rejected'
+    | 'expired'
+  unitId: string | null
+  replayed: boolean
 }
 
 export interface KnowledgeEventRow {

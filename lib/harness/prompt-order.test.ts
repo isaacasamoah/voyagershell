@@ -17,10 +17,7 @@ const loadRunTurn = async () => {
     reapStuckTasks: vi.fn().mockResolvedValue(undefined),
   }))
   vi.doMock('@/lib/agents/cartographer', () => ({
-    runCartographer: vi.fn(),
-  }))
-  vi.doMock('@/lib/agents/cartographer/source', () => ({
-    shouldRunEnrichment: vi.fn(),
+    runCartographer: vi.fn().mockResolvedValue({ kind: 'no_job' }),
   }))
   vi.doMock('@/lib/conversation/stream-context', () => ({
     composeContextFromStream,
@@ -71,7 +68,7 @@ const loadRunTurn = async () => {
   }))
   vi.doMock('@/lib/models', () => ({
     resolveUserModelWithMeta: vi.fn().mockResolvedValue({
-      model: { modelId: 'test-model' },
+      model: { provider: 'test-provider', modelId: 'test-model' },
       label: 'claude-sonnet',
       viaConnection: false,
     }),

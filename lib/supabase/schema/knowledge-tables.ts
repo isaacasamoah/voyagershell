@@ -1,10 +1,17 @@
-import type { NullableJson, NullableUnknown, Relationship, TableShape } from './base'
+import type {
+  KnowledgeExtractionJobState,
+  KnowledgeExtractionOutcomeKind,
+  NullableJson,
+  NullableUnknown,
+  Relationship,
+  TableShape,
+} from './base'
 
 type EventRow = {
   id: string; sequence_num: number; user_id: string | null; voyage_slug: string | null;
   event_type: string; content: string | null; metadata: NullableJson; source_type: string | null;
   source_ref: NullableJson; actor_id: string | null; actor_type: string; created_at: string;
-  participants: string[] | null
+  participants: string[] | null; knowledge_audience_id: string | null
 }
 type CurrentRow = {
   event_id: string; user_id: string | null; voyage_slug: string | null; content: string;
@@ -22,7 +29,7 @@ export type KnowledgeTables = {
     id?: string; sequence_num?: number; user_id?: string | null; voyage_slug?: string | null;
     event_type: string; content?: string | null; metadata?: NullableJson; source_type?: string | null;
     source_ref?: NullableJson; actor_id?: string | null; actor_type?: string; created_at?: string;
-    participants?: string[] | null
+    participants?: string[] | null; knowledge_audience_id?: string | null
   }>
   knowledge_current: TableShape<CurrentRow,
     Partial<CurrentRow> & { event_id: string; content: string; source_created_at: string },
@@ -62,6 +69,40 @@ export type KnowledgeTables = {
       Relationship<'private_reply_promotions_source_event_id_fkey',
         'source_event_id', 'knowledge_events', 'id'>,
     ]>
+  knowledge_extractor_contracts: TableShape<{
+    extractor_version: string; active: boolean; activated_at: string
+  }, { extractor_version: string; active?: boolean; activated_at?: string }>
+  knowledge_extraction_jobs: TableShape<{
+    source_event_id: string; extractor_version: string; knowledge_audience_id: string;
+    state: KnowledgeExtractionJobState; next_attempt_number: number;
+    active_attempt_id: string | null; lease_token: string | null;
+    lease_expires_at: string | null; created_at: string; updated_at: string
+  }, {
+    source_event_id: string; extractor_version: string; knowledge_audience_id: string;
+    state?: KnowledgeExtractionJobState; next_attempt_number?: number;
+    active_attempt_id?: string | null; lease_token?: string | null;
+    lease_expires_at?: string | null; created_at?: string; updated_at?: string
+  }>
+  knowledge_extraction_attempts: TableShape<{
+    id: string; source_event_id: string; extractor_version: string;
+    attempt_number: number; knowledge_audience_id: string; model_provider: string;
+    model_id: string; resolver_label: string | null; lease_token: string; started_at: string
+  }, {
+    id: string; source_event_id: string; extractor_version: string;
+    attempt_number: number; knowledge_audience_id: string; model_provider: string;
+    model_id: string; resolver_label?: string | null; lease_token: string; started_at?: string
+  }>
+  knowledge_extraction_attempt_outcomes: TableShape<{
+    attempt_id: string; source_event_id: string; extractor_version: string;
+    knowledge_audience_id: string; outcome: KnowledgeExtractionOutcomeKind;
+    raw_output: NullableJson; error_class: string | null; input_tokens: number | null;
+    output_tokens: number | null; recorded_at: string
+  }, {
+    attempt_id: string; source_event_id: string; extractor_version: string;
+    knowledge_audience_id: string; outcome: KnowledgeExtractionOutcomeKind;
+    raw_output?: NullableJson; error_class?: string | null; input_tokens?: number | null;
+    output_tokens?: number | null; recorded_at?: string
+  }>
   learning_signals: TableShape<{
     id: string; user_id: string | null; voyage_slug: string | null; type: string;
     context: string | null; conversation_id: string | null; message_id: string | null; created_at: string

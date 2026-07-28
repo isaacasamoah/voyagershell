@@ -26,8 +26,25 @@ BEGIN
   END LOOP;
   FOR v_i IN 1..11 LOOP
     FOR v_j IN (v_i + 1)..12 LOOP
-      PERFORM public.write_knowledge_graph_edge('knowledge_unit', v_units[v_i],
-        'knowledge_unit', v_units[v_j], 'relates_to');
+      INSERT INTO public.graph_edges(id, source_node_id, target_node_id, kind)
+      VALUES (public.canonical_graph_edge_id(
+          least(public.canonical_graph_node_id('knowledge_unit', v_units[v_i]),
+            public.canonical_graph_node_id('knowledge_unit', v_units[v_j])),
+          'relates_to',
+          greatest(public.canonical_graph_node_id('knowledge_unit', v_units[v_i]),
+            public.canonical_graph_node_id('knowledge_unit', v_units[v_j]))),
+        least(public.canonical_graph_node_id('knowledge_unit', v_units[v_i]),
+          public.canonical_graph_node_id('knowledge_unit', v_units[v_j])),
+        greatest(public.canonical_graph_node_id('knowledge_unit', v_units[v_i]),
+          public.canonical_graph_node_id('knowledge_unit', v_units[v_j])), 'relates_to');
+      INSERT INTO public.graph_edge_evidence(edge_id, evidence_event_id)
+      VALUES (public.canonical_graph_edge_id(
+          least(public.canonical_graph_node_id('knowledge_unit', v_units[v_i]),
+            public.canonical_graph_node_id('knowledge_unit', v_units[v_j])),
+          'relates_to',
+          greatest(public.canonical_graph_node_id('knowledge_unit', v_units[v_i]),
+            public.canonical_graph_node_id('knowledge_unit', v_units[v_j]))),
+        v_event);
     END LOOP;
   END LOOP;
   v_root := public.canonical_graph_node_id('knowledge_unit', v_units[1]);

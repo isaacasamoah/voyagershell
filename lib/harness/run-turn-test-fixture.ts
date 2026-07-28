@@ -3,6 +3,7 @@ import type { HarnessHost, TurnContext } from './types'
 
 const streamText = vi.fn()
 const reapStuckTasks = vi.fn()
+const runCartographer = vi.fn()
 const composeContextFromStream = vi.fn()
 const renderMessagesForModel = vi.fn((messages) => messages)
 const claimSourceIngress = vi.fn()
@@ -50,16 +51,14 @@ export const runTurnMocks = {
   resolveMemberByName,
   resolveUserModelWithMeta,
   renderMessagesForModel,
+  runCartographer,
   streamText,
 }
 
 const applyHarnessMocks = () => {
   vi.doMock('@/lib/agents/queue', () => ({ reapStuckTasks }))
   vi.doMock('@/lib/agents/cartographer', () => ({
-    runCartographer: vi.fn(),
-  }))
-  vi.doMock('@/lib/agents/cartographer/source', () => ({
-    shouldRunEnrichment: vi.fn(),
+    runCartographer,
   }))
   vi.doMock('@/lib/conversation/stream-context', () => ({
     composeContextFromStream,
@@ -178,6 +177,7 @@ export const resetRunTurnFixture = () => {
   vi.clearAllMocks()
   streamText.mockReturnValue(streamResult)
   reapStuckTasks.mockResolvedValue(undefined)
+  runCartographer.mockResolvedValue({ kind: 'no_job' })
   composeContextFromStream.mockResolvedValue([])
   renderMessagesForModel.mockImplementation((messages) => messages)
   claimSourceIngress.mockResolvedValue({
@@ -211,7 +211,7 @@ export const resetRunTurnFixture = () => {
   composeToolStrategy.mockReturnValue('TOOLS')
   logRetrievalEvent.mockResolvedValue('retrieval-1')
   resolveUserModelWithMeta.mockResolvedValue({
-    model: { modelId: 'test-model' },
+    model: { provider: 'test-provider', modelId: 'test-model' },
     label: 'claude-sonnet',
     viaConnection: false,
   })

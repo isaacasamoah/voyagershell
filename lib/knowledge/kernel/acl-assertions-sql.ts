@@ -11,16 +11,6 @@ export const renderGraphAclAssertionsSql = (fixture: KnowledgeGraphFixture): str
     [ids.a, ids.b, ids.d])
   return `
 SET LOCAL ROLE service_role;
-DO $allowed_writer$
-DECLARE v_written boolean;
-BEGIN
-  v_written := public.write_knowledge_graph_edge('message_event',
-    ${uuid(fixture.expected.sharedSourceEventId)}, 'person',
-    ${uuid(scenario.crossScopePersonId)}, 'authored_by');
-  IF v_written IS DISTINCT FROM true THEN
-    RAISE EXCEPTION 'knowledge_graph_service_writer_returned_false'; END IF;
-END
-$allowed_writer$;
 DO $authority_tamper$
 DECLARE v_table text; v_privilege text;
 BEGIN

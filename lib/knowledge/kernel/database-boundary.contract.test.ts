@@ -54,7 +54,7 @@ describe('K1 database boundaries', () => {
       'knowledge_audiences:', 'knowledge_units:', 'graph_nodes:', 'graph_node_grants:',
       'graph_edges:', 'graph_edge_evidence:', 'graph_authority_edges:',
       'knowledge_graph_backfill_rejections:', 'retrieve_knowledge_graph_claims:',
-      'traverse_knowledge_graph:', 'write_knowledge_graph_edge:', 'knowledge_audience_id:',
+      'traverse_knowledge_graph:', 'knowledge_audience_id:',
     ]) expect(source).toContain(name)
     expect(source).toContain('CANDIDATE_SCHEMA_FILES = [57, 58, 59, 60, 61, 62, 63]')
   })
@@ -74,7 +74,9 @@ describe('K1 database boundaries', () => {
     expect(types).not.toMatch(/rpc as Function|as unknown as \{ rpc/)
     expect(types).not.toContain('knowledge_edges:')
     expect(types).not.toContain('graph_traverse:')
+    expect(types).not.toContain('writeKnowledgeGraphEdge')
     expect(types).toContain('claim_source_message_ingress:')
+    expect(types).toContain('complete_knowledge_extraction_attempt:')
   })
 
   it('does not expose a numeric migration range as installed-state authority', () => {

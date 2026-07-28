@@ -21,6 +21,7 @@ const {
   parseRoomCommand,
   resolveMemberByName,
   resolveUserModelWithMeta,
+  runCartographer,
   streamText,
 } = runTurnMocks
 
@@ -54,8 +55,15 @@ describe('runTurn', () => {
     // The claim is taken before the model call, not alongside it.
     expect(claimSourceIngress.mock.invocationCallOrder[0])
       .toBeLessThan(streamText.mock.invocationCallOrder[0])
-    // reap + post-claim enrichment + the server-side stream drain
-    expect(deferred).toHaveLength(3)
+    expect(runCartographer).toHaveBeenNthCalledWith(1, { userId: 'user-1' })
+    expect(runCartographer).toHaveBeenNthCalledWith(2, {
+      userId: 'user-1',
+      sourceEventId: 'event-1',
+    })
+    expect(runCartographer.mock.invocationCallOrder[0])
+      .toBeLessThan(claimSourceIngress.mock.invocationCallOrder[0])
+    // reap + exact-job wake + post-claim enrichment + server-side stream drain
+    expect(deferred).toHaveLength(4)
     await Promise.all(deferred)
   })
 
@@ -132,6 +140,10 @@ describe('runTurn', () => {
       content: 'The fix is ready', isAside: false,
       room: { roomPeople: ['user-2'], aiPresent: true, spaceId: 'space-1' },
     }))
+    expect(runCartographer).toHaveBeenNthCalledWith(2, {
+      userId: 'user-1',
+      sourceEventId: 'event-1',
+    })
     expect(streamText).not.toHaveBeenCalled()
   })
 
