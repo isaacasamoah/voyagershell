@@ -4,7 +4,7 @@
 --
 -- Identity (magic link) is separate from COMPUTE. A person attaches one or more
 -- "brain connections" — whose intelligence runs their Voyager. The first kind
--- is a ChatGPT/Codex subscription (OAuth tokens reused from `codex login`),
+-- is a ChatGPT/Codex subscription (OAuth tokens issued by the device flow),
 -- billed to the user's own plan, never to a metered API key.
 --
 -- Design (master plan Step 1.5, 2026-07-05):
