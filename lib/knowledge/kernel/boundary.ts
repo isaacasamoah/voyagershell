@@ -4,7 +4,10 @@ import { GRAPH_NODE_KINDS, type GraphNodeKind } from "./contract";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const RPC_DEADLINE_MS = 500;
+// The walk is capped at eight hops and 512 nodes. Eight seconds leaves more
+// than fifteen times the observed 516 ms small-walk latency while keeping a
+// resumed turn bounded even when every permitted hop needs authorization.
+const RPC_DEADLINE_MS = 8_000;
 const RESPONSE_FLOOR_MS = 550;
 
 export interface KnowledgeGraphRoot {
@@ -22,17 +25,33 @@ export interface KnowledgeGraphClaim {
 }
 
 export interface KnowledgeGraphRetrievalOptions {
-  readonly graphEnabled?: boolean;
   readonly maxDepth?: number;
   readonly excludeUnitIds?: readonly string[];
   readonly nodeBudget?: number;
   readonly frontierBudget?: number;
 }
 
-export interface KnowledgeGraphResult {
+export interface KnowledgeGraphSuccess {
+  readonly outcome: "success";
   readonly claims: readonly KnowledgeGraphClaim[];
   readonly truncated: boolean;
 }
+
+export type KnowledgeGraphFailureOutcome =
+  | "invalid_request"
+  | "deadline_exceeded"
+  | "rpc_error"
+  | "exception";
+
+export interface KnowledgeGraphFailure {
+  readonly outcome: KnowledgeGraphFailureOutcome;
+  readonly claims: readonly [];
+  readonly truncated: false;
+}
+
+export type KnowledgeGraphResult =
+  | KnowledgeGraphSuccess
+  | KnowledgeGraphFailure;
 
 interface ClaimRow {
   readonly knowledgeUnitId: unknown;
@@ -46,6 +65,10 @@ interface ClaimRow {
 const wait = async (milliseconds: number): Promise<void> => {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 };
+
+const failure = (
+  outcome: KnowledgeGraphFailureOutcome,
+): KnowledgeGraphFailure => ({ outcome, claims: [], truncated: false });
 
 const isUuid = (value: unknown): value is string =>
   typeof value === "string" && UUID_PATTERN.test(value);
@@ -86,11 +109,11 @@ export const retrieveKnowledgeGraphClaims = async (
   options: KnowledgeGraphRetrievalOptions = {},
 ): Promise<KnowledgeGraphResult> => {
   const startedAt = performance.now();
-  const empty = { claims: [], truncated: false } as const;
   try {
-    if (!isRoot(root) || root.kind !== "person") return empty;
+    if (!isRoot(root) || root.kind !== "person")
+      return failure("invalid_request");
     const viewerProfileId = await requireAuth();
-    if (!isUuid(viewerProfileId)) return empty;
+    if (!isUuid(viewerProfileId)) return failure("invalid_request");
     const admin = getKnowledgeGraphCandidateClient();
     const rpcCall = Promise.resolve(
       admin.rpc("retrieve_knowledge_graph_claims_v2", {
@@ -101,27 +124,41 @@ export const retrieveKnowledgeGraphClaims = async (
         p_node_budget: options.nodeBudget ?? 512,
         p_frontier_budget: options.frontierBudget ?? 128,
       }),
-    ).catch(() => null);
+    ).then(
+      (value) => ({ kind: "rpc" as const, value }),
+      () => ({ kind: "exception" as const }),
+    );
     const remainingRpcBudget = Math.max(
       0,
       RPC_DEADLINE_MS - (performance.now() - startedAt),
     );
     const outcome = await Promise.race([
       rpcCall,
-      wait(remainingRpcBudget).then(() => null),
+      wait(remainingRpcBudget).then(() => ({ kind: "deadline" as const })),
     ]);
-    if (!outcome) return empty;
-    const { data, error } = outcome;
-    if (error || data === null || typeof data !== "object" || Array.isArray(data)) return empty;
+    if (outcome.kind === "deadline") return failure("deadline_exceeded");
+    if (outcome.kind === "exception") return failure("exception");
+    const { data, error } = outcome.value;
+    if (
+      error ||
+      data === null ||
+      typeof data !== "object" ||
+      Array.isArray(data)
+    )
+      return failure("rpc_error");
     const envelope = data as { claims?: unknown; truncated?: unknown };
-    if (!Array.isArray(envelope.claims) || typeof envelope.truncated !== "boolean") return empty;
+    if (
+      !Array.isArray(envelope.claims) ||
+      typeof envelope.truncated !== "boolean"
+    )
+      return failure("rpc_error");
     const claims = envelope.claims.flatMap((row) => {
       const claim = toClaim(row);
       return claim ? [claim] : [];
     });
-    return { claims, truncated: envelope.truncated };
+    return { outcome: "success", claims, truncated: envelope.truncated };
   } catch {
-    return empty;
+    return failure("exception");
   } finally {
     const remaining = RESPONSE_FLOOR_MS - (performance.now() - startedAt);
     if (remaining > 0) await wait(remaining);

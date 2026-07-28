@@ -16,6 +16,7 @@ if (!container || !database)
   throw new Error("missing disposable PostgreSQL identity");
 
 interface GraphToolResult {
+  outcome: KnowledgeGraphResult["outcome"];
   claims: Array<{ unitId: string; claim: string; type: string }>;
   truncated: boolean;
   presentation: string;
@@ -54,7 +55,8 @@ const retrieve = async (
     ],
     { encoding: "utf8" },
   ).trim();
-  return JSON.parse(output) as KnowledgeGraphResult;
+  const result = JSON.parse(output) as Omit<KnowledgeGraphResult, "outcome">;
+  return { outcome: "success", ...result };
 };
 
 const executeGraphMemory = async (

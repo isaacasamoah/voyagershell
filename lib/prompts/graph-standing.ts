@@ -1,6 +1,15 @@
 import type { CuratedWindow, KnowledgeNode } from "@/lib/knowledge";
 import type { KnowledgeGraphResult } from "@/lib/knowledge/kernel/boundary";
 
+export const graphMemoryReachWarning = (
+  graphMemory: KnowledgeGraphResult,
+): string | null =>
+  graphMemory.outcome !== "success"
+    ? `# Memory reach\nGraph memory reach was cut short (${graphMemory.outcome}). Do not infer that no graph memory exists.`
+    : graphMemory.truncated
+      ? "# Memory reach\nGraph memory reach was partial because a traversal budget was reached. Do not treat it as a complete memory search."
+      : null;
+
 export const mergeGraphStandingPreferences = (
   curatedWindow: CuratedWindow,
   graphMemory: KnowledgeGraphResult,

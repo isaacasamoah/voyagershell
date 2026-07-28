@@ -59,9 +59,11 @@ describe('knowledge-graph retrieval contract', () => {
       'graph_node_label_for_viewer', 'authorized_graph_neighbors',
     ]) expect(database).toMatch(new RegExp(`REVOKE EXECUTE ON FUNCTION public\\.${helper}`))
     expect(boundary).toContain('const RESPONSE_FLOOR_MS = 550')
-    expect(boundary).toContain('const RPC_DEADLINE_MS = 500')
+    expect(boundary).toContain('const RPC_DEADLINE_MS = 8_000')
     expect(boundary).toContain('typeof envelope.truncated !== "boolean"')
-    expect(boundary).toContain('return { claims, truncated: envelope.truncated }')
+    expect(boundary).toContain(
+      'return { outcome: "success", claims, truncated: envelope.truncated }',
+    )
   })
 
   // The browser gate caught 055 raising 42883 on both real Voyager databases:

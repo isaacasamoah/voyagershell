@@ -87,6 +87,7 @@ export const createKnowledgeRetrievalTools = (
         },
       );
       return {
+        outcome: result.outcome,
         claims: result.claims.map((claim) => ({
           unitId: claim.knowledgeUnitId,
           claim: claim.claim,
@@ -97,9 +98,12 @@ export const createKnowledgeRetrievalTools = (
           },
         })),
         truncated: result.truncated,
-        presentation: result.truncated
-          ? "Partial graph reach: do not present this as a complete memory search."
-          : "Complete within the requested graph budgets.",
+        presentation:
+          result.outcome !== "success"
+            ? `Graph reach was cut short (${result.outcome}); do not infer that no memory exists.`
+            : result.truncated
+              ? "Partial graph reach: do not present this as a complete memory search."
+              : "Complete within the requested graph budgets.",
       };
     },
   }),

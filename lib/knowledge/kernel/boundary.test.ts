@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { GRAPH_NODE_KINDS } from "./contract";
 import { knowledgeGraphFixture } from "./fixture";
 
 const { requireAuthMock, rpcMock } = vi.hoisted(() => ({
@@ -17,25 +16,6 @@ import { retrieveKnowledgeGraphClaims } from "./boundary";
 const OWNER_ID = knowledgeGraphFixture.viewerProfileIds.a;
 const VICTIM_ID = knowledgeGraphFixture.viewerProfileIds.b;
 const AUTHORITY_ID = knowledgeGraphFixture.expected.sharedSourceEventId;
-const PRIVATE_AUTHORITY_ID = knowledgeGraphFixture.events.find(
-  (event) => event.id !== AUTHORITY_ID,
-)!.id;
-const ROOTS = GRAPH_NODE_KINDS.map((kind) => {
-  const node = knowledgeGraphFixture.nodes.find((candidate) => {
-    if (candidate.kind !== kind) return false;
-    if (kind === "person" || kind === "voyager") return candidate.authorityId === OWNER_ID;
-    if (kind === "voyage") {
-      return candidate.authorityId === knowledgeGraphFixture.authorityScenario.redVoyageId;
-    }
-    if (kind === "space") {
-      return candidate.authorityId === knowledgeGraphFixture.authorityScenario.redSpaceId;
-    }
-    if (kind === "message_event") return candidate.authorityId === AUTHORITY_ID;
-    return candidate.id === knowledgeGraphFixture.expected.sharedUnitNodeId;
-  });
-  if (!node) throw new Error(`missing_test_root:${kind}`);
-  return node;
-});
 const AUTHORIZED_ROW = {
   knowledgeUnitId: "71000000-0000-4000-8000-000000000001",
   claim: "Vanessa keeps the amber notebook behind the blue atlas.",
@@ -83,10 +63,14 @@ describe("knowledge-graph application boundary", () => {
       }),
     );
 
-    expect(result).toEqual({ claims: [AUTHORIZED_ROW], truncated: false });
+    expect(result).toEqual({
+      outcome: "success",
+      claims: [AUTHORIZED_ROW],
+      truncated: false,
+    });
   });
 
-  it("collapses denied, absent and database-error outcomes to one padded empty shape", async () => {
+  it("keeps genuine authorized empty distinct from an RPC error", async () => {
     requireAuthMock.mockResolvedValue(VICTIM_ID);
     rpcMock
       .mockResolvedValueOnce({ data: { claims: [], truncated: false }, error: null })
@@ -109,17 +93,25 @@ describe("knowledge-graph application boundary", () => {
     await vi.advanceTimersByTimeAsync(549);
     expect(states).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await denied).toEqual({ claims: [], truncated: false });
-    expect(await failed).toEqual({ claims: [], truncated: false });
+    expect(await denied).toEqual({
+      outcome: "success",
+      claims: [],
+      truncated: false,
+    });
+    expect(await failed).toEqual({
+      outcome: "rpc_error",
+      claims: [],
+      truncated: false,
+    });
   });
 
-  it("returns the same empty shape at the hard deadline when the RPC runs long", async () => {
+  it("reports deadline expiry instead of successful empty", async () => {
     rpcMock.mockImplementationOnce(
       () =>
         new Promise((resolve) =>
           setTimeout(() => resolve({
             data: { claims: [AUTHORIZED_ROW], truncated: false }, error: null,
-          }), 800),
+          }), 8_500),
         ),
     );
     const result = retrieveKnowledgeGraphClaims({
@@ -131,10 +123,14 @@ describe("knowledge-graph application boundary", () => {
       settled = true;
     });
 
-    await vi.advanceTimersByTimeAsync(549);
+    await vi.advanceTimersByTimeAsync(7_999);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await result).toEqual({ claims: [], truncated: false });
+    expect(await result).toEqual({
+      outcome: "deadline_exceeded",
+      claims: [],
+      truncated: false,
+    });
   });
 
   it("accepts a hosted-style RPC response after the database timing floor", async () => {
@@ -152,7 +148,11 @@ describe("knowledge-graph application boundary", () => {
     });
 
     await vi.advanceTimersByTimeAsync(600);
-    expect(await result).toEqual({ claims: [AUTHORIZED_ROW], truncated: true });
+    expect(await result).toEqual({
+      outcome: "success",
+      claims: [AUTHORIZED_ROW],
+      truncated: true,
+    });
   });
 
   it("counts authentication time inside the hard deadline", async () => {
@@ -164,7 +164,7 @@ describe("knowledge-graph application boundary", () => {
         new Promise((resolve) =>
           setTimeout(() => resolve({
             data: { claims: [AUTHORIZED_ROW], truncated: false }, error: null,
-          }), 800),
+          }), 8_500),
         ),
     );
     const result = retrieveKnowledgeGraphClaims({
@@ -176,13 +176,17 @@ describe("knowledge-graph application boundary", () => {
       settled = true;
     });
 
-    await vi.advanceTimersByTimeAsync(549);
+    await vi.advanceTimersByTimeAsync(7_999);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await result).toEqual({ claims: [], truncated: false });
+    expect(await result).toEqual({
+      outcome: "deadline_exceeded",
+      claims: [],
+      truncated: false,
+    });
   });
 
-  it("fails closed before the RPC for an invalid root without changing the response shape", async () => {
+  it("reports invalid input before calling the RPC", async () => {
     const result = await settle(
       retrieveKnowledgeGraphClaims({
         kind: "person",
@@ -190,7 +194,47 @@ describe("knowledge-graph application boundary", () => {
       }),
     );
 
-    expect(result).toEqual({ claims: [], truncated: false });
+    expect(result).toEqual({
+      outcome: "invalid_request",
+      claims: [],
+      truncated: false,
+    });
     expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("reports a rejected RPC as an exception", async () => {
+    rpcMock.mockRejectedValueOnce(new Error("private detail"));
+
+    const result = await settle(
+      retrieveKnowledgeGraphClaims({
+        kind: "person",
+        authorityId: OWNER_ID,
+      }),
+    );
+
+    expect(result).toEqual({
+      outcome: "exception",
+      claims: [],
+      truncated: false,
+    });
+  });
+
+  it("reports a synchronously thrown RPC as an exception", async () => {
+    rpcMock.mockImplementationOnce(() => {
+      throw new Error("private detail");
+    });
+
+    const result = await settle(
+      retrieveKnowledgeGraphClaims({
+        kind: "person",
+        authorityId: OWNER_ID,
+      }),
+    );
+
+    expect(result).toEqual({
+      outcome: "exception",
+      claims: [],
+      truncated: false,
+    });
   });
 });

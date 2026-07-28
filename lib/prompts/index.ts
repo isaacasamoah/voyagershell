@@ -11,7 +11,7 @@ import {
 import type { VoyagerIdentity } from "@/lib/messaging/address";
 import { formatCuratedWindow } from "./format/user";
 import { retrieveKnowledgeGraphClaims } from "@/lib/knowledge/kernel/boundary";
-import { mergeGraphStandingPreferences } from "./graph-standing";
+import { graphMemoryReachWarning, mergeGraphStandingPreferences } from "./graph-standing";
 
 export * from "./types";
 export { CORE_PROMPT, CORE_PROMPT_TOKENS } from "./core";
@@ -116,8 +116,9 @@ export const composeSystemPrompt = async (
       : Promise.resolve(null),
     retrieveKnowledgeGraphClaims({ kind: "person", authorityId: userId }).catch(
       () => ({
-        claims: [],
-        truncated: false,
+        outcome: "exception" as const,
+        claims: [] as const,
+        truncated: false as const,
       }),
     ),
   ]);
@@ -177,6 +178,8 @@ export const composeSystemPrompt = async (
 
   // Dynamic prompt: per-turn data that changes every request (not cached)
   const dynamicParts: string[] = [];
+  const graphWarning = graphMemoryReachWarning(graphMemory);
+  if (graphWarning) dynamicParts.push(graphWarning);
 
   // Auth state flag — identity handles the behavior (see First Contact in core.ts)
   if (authState === "unauthenticated") {
