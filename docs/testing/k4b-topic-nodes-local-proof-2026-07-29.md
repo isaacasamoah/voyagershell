@@ -49,3 +49,38 @@ change whether this revision is structurally ready to enter that pass.
 
 No browser was driven, no live migration or backfill was run, and no K4c,
 Forge, pull request, merge, preview, or production action occurred.
+
+---
+
+## Live pass, 2026-07-29 — K4-C2 falsified on real embeddings
+
+Migration `074` was applied to `voyager-dev` and the backfill run against it:
+contract v3 activated, 6 units re-derived, assertions clean (0 non-terminal
+pre-v3 jobs, 0 units missing physics, 0 units missing topic derivation).
+
+**What worked.** Both physio units — separate source events — resolved to the
+same `physio appointment` topic. Convergence across events is real. Types
+re-derived sensibly (marathon → domain, physio → operational, preferences →
+preference), and `about → person` edges were preserved.
+
+**What failed.** Measured `text-embedding-3-small` cosine similarity on the
+actual labels, against the 0.7 threshold:
+
+| Must merge | | Must stay separate | |
+|---|---|---|---|
+| `quantum engines` ~ `the qe work` | 0.447 | `coffee consumption` ~ `coffee shops` | 0.611 |
+| `the qe work` ~ `quantum propulsion` | 0.380 | `marathon training` ~ `trail running` | 0.601 |
+| `coffee consumption` ~ `caffeine habits` | 0.646 | `melbourne half marathon` ~ `running training` | 0.424 |
+
+Must-merge runs as low as **0.380**; must-split runs as high as **0.611**. The
+bands overlap, so no single threshold satisfies both directions. This is a
+design falsification, not a calibration gap — and it reproduced on real data,
+not only the contrived example: the backfill minted both `coffee consumption`
+and `caffeine habits` for one claim.
+
+The structural proof passed because it used synthetic vectors. That is the
+limitation the build report named honestly, and it was the right one to name.
+
+**Residue on `voyager-dev`:** 8 topics minted under the falsified rule, usable
+but knowingly over-split. Topic rows are immutable, so re-derivation is part of
+whichever design replaces this one.
