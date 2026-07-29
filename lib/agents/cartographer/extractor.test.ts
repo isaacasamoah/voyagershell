@@ -5,8 +5,12 @@ const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
 
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 
-import { extractKnowledge } from './extractor'
-import type { ExtractionAttempt, TopicCandidate } from './types'
+import { extractKnowledge, rederiveKnowledgeUnit } from './extractor'
+import type {
+  ExtractionAttempt,
+  TopicBackfillUnit,
+  TopicCandidate,
+} from './types'
 
 const attempt: ExtractionAttempt = {
   attemptId: '72000000-0000-4000-8000-000000000001',
@@ -68,7 +72,7 @@ describe('Cartographer extractor prompt versioning', () => {
     }))
   })
 
-  it('adds topic candidates only to the complete v3 user prompt', async () => {
+  it('keeps the pinned v3 candidate prompt exact while it drains', async () => {
     await extractKnowledge({} as LanguageModel, {
       ...attempt,
       extractorVersion: 'cartographer-single-claim-v3',
@@ -82,5 +86,35 @@ describe('Cartographer extractor prompt versioning', () => {
         `\n\n## Existing topic candidates\n${JSON.stringify(topics)}`,
       )}\n\nReturn the structured Cartographer result.`,
     }])
+  })
+
+  it('extracts the v4 claim before any topic candidates exist', async () => {
+    await extractKnowledge({} as LanguageModel, {
+      ...attempt,
+      extractorVersion: 'cartographer-single-claim-v4',
+    }, topics)
+
+    expect(mocks.generateObject.mock.calls[0][0].messages).toEqual([{
+      role: 'user',
+      content: historicalPrompt,
+    }])
+  })
+
+  it('re-derives immutable unit physics without reopening topic labels', async () => {
+    const unit: TopicBackfillUnit = {
+      unitId: '72000000-0000-4000-8000-000000000010',
+      sourceEventId: attempt.sourceEventId,
+      sourceContent: attempt.sourceContent,
+      sourceActorId: attempt.sourceActorId,
+      claim: 'Elisheya keeps the amber notebook.',
+      knowledgeAudienceId: attempt.knowledgeAudienceId,
+      embedding: null,
+    }
+
+    await rederiveKnowledgeUnit({} as LanguageModel, unit)
+
+    const prompt = mocks.generateObject.mock.calls[0][0].messages[0].content
+    expect(prompt).not.toMatch(/topic/i)
+    expect(prompt).toContain(unit.claim)
   })
 })

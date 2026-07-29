@@ -60,9 +60,10 @@ cat > "$TEMP_DIR/denial.sql" <<'SQL'
 SET ROLE authenticated;
 SELECT count(*) FROM public.knowledge_topics;
 SELECT count(*) FROM public.knowledge_topic_backfill_outcomes;
+SELECT count(*) FROM public.knowledge_topic_identity_outcomes;
 SELECT public.activate_knowledge_topic_contract();
-SELECT * FROM public.find_knowledge_topic_candidates(
-  '72000000-0000-4000-8000-000000000001', array_fill(0::real, ARRAY[1536])::vector);
+SELECT * FROM public.resolve_knowledge_topic('cartographer-single-claim-v4',
+  '72000000-0000-4000-8000-000000000001', array_fill(0::real, ARRAY[1536])::vector, NULL);
 RESET ROLE;
 SQL
 K4B_MIGRATION_PAYLOAD=''
@@ -72,10 +73,16 @@ if ! IFS= read -r -d '' K4B_MIGRATION_PAYLOAD \
 fi
 docker exec "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
   -c "$K4B_MIGRATION_PAYLOAD" >/dev/null \
-  || fail 'candidate migration failed'
+  || fail 'migration 074 failed'
+docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-k4b-v3-residue.sql" >/dev/null \
+  || fail 'v3 residue fixture failed'
+docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/supabase/migrations/075_topic_identity_matcher.sql" >/dev/null \
+  || fail 'migration 075 failed'
 docker exec -i "$CONTAINER_NAME" psql -X -q -U postgres -d "$DATABASE" \
   < "$TEMP_DIR/denial.sql" > "$TEMP_DIR/denial.txt" 2>&1
-[ "$(rg -c 'permission denied' "$TEMP_DIR/denial.txt")" = 4 ] \
+[ "$(rg -c 'permission denied' "$TEMP_DIR/denial.txt")" = 5 ] \
   || fail 'new authority surfaces were not denied to authenticated'
 
 audience_id="$(docker exec "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
@@ -106,11 +113,11 @@ wait "$activation_waiter" || fail 'enqueue-first activation failed'
 [ "$(docker exec "$CONTAINER_NAME" psql -X -Atq -U postgres -d "$DATABASE" -c \
   "SELECT extractor_version FROM public.knowledge_extraction_jobs
    WHERE source_event_id='78000000-0000-4000-8000-000000000001'")" \
-  = cartographer-single-claim-v2 ] || fail 'enqueue-first did not stamp v2 before activation'
+  = cartographer-single-claim-v3 ] || fail 'enqueue-first did not stamp v3 before activation'
 
 docker exec "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
   -c "UPDATE public.knowledge_extractor_contract_active SET
-    extractor_version='cartographer-single-claim-v2', activated_at=clock_timestamp()" >/dev/null
+    extractor_version='cartographer-single-claim-v3', activated_at=clock_timestamp()" >/dev/null
 cat > "$TEMP_DIR/activation-first.sql" <<'SQL'
 BEGIN;
 SELECT public.activate_knowledge_topic_contract();
@@ -134,7 +141,7 @@ wait "$enqueue_waiter" || fail 'activation-first enqueue failed'
 [ "$(docker exec "$CONTAINER_NAME" psql -X -Atq -U postgres -d "$DATABASE" -c \
   "SELECT extractor_version FROM public.knowledge_extraction_jobs
    WHERE source_event_id='78000000-0000-4000-8000-000000000002'")" \
-  = cartographer-single-claim-v3 ] || fail 'activation-first enqueue did not resume on v3'
+  = cartographer-single-claim-v4 ] || fail 'activation-first enqueue did not resume on v4'
 
 docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/recipes/sql/cartographer-k4b-assertions.sql" >/dev/null \
@@ -173,23 +180,61 @@ $row
 ROW
   docker exec "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
     -U postgres -d "$DATABASE" -c \
-    "SELECT outcome FROM public.complete_knowledge_extraction_attempt(
+    "SELECT outcome FROM public.complete_v4_knowledge_extraction_attempt(
       '$attempt','$token','succeeded',
       jsonb_build_object('claim','$claim','aboutPersonId',NULL,'knowledgeType','domain',
-        'attentionScore',0.8,'contextSnippet','$claim','topics',jsonb_build_array('$label')),
+        'attentionScore',0.8,'contextSnippet','$claim','topics',jsonb_build_array(
+          jsonb_build_object('kind','new','label','$label'))),
       '$claim',NULL,'domain',0.8,public.k4b_vector($vector_index),jsonb_build_array(
-        jsonb_build_object('label','$label','embedding',public.k4b_vector($vector_index)::text)),
-      NULL,10,5)" > "$TEMP_DIR/race-$index.out" &
+        jsonb_build_object('kind','new','label','$label')),'{}'::uuid[],NULL,10,5)" \
+      > "$TEMP_DIR/race-$index.out" 2>&1 &
+  eval "race_pid_$index=$!"
   PIDS="$PIDS $!"
 done
 sleep 0.5
 waiters="$(docker exec "$CONTAINER_NAME" psql -X -Atq -U postgres -d "$DATABASE" -c \
   "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database()
-   AND wait_event_type='Lock' AND query LIKE 'SELECT outcome FROM public.complete_%'")"
+   AND wait_event_type='Lock' AND query LIKE 'SELECT outcome FROM public.complete_v4_%'")"
 [ "$waiters" = 2 ] || fail 'paraphrase commits were not concurrently blocked at the mint lock'
 wait "$lock_holder" || fail 'topic lock holder failed'
-for pid in $PIDS; do wait "$pid" || fail 'concurrent paraphrase completion failed'; done
+race_success=0
+race_stale=0
+for index in 1 2; do
+  eval "pid=\$race_pid_$index"
+  if wait "$pid"; then
+    race_success=$((race_success + 1))
+  elif rg -q 'knowledge_topic_candidates_stale' "$TEMP_DIR/race-$index.out"; then
+    race_stale=$((race_stale + 1))
+  else
+    fail 'concurrent paraphrase completion failed unexpectedly'
+  fi
+done
 PIDS=""
+[ "$race_success" = 1 ] && [ "$race_stale" = 1 ] \
+  || fail 'concurrent paraphrases did not produce one success and one stale re-match'
+loser="$(docker exec "$CONTAINER_NAME" psql -X -Atq -F '|' -v ON_ERROR_STOP=1 \
+  -U postgres -d "$DATABASE" -c \
+  "SELECT attempt.id,attempt.lease_token,event.content FROM public.knowledge_extraction_attempts attempt
+   JOIN public.knowledge_events event ON event.id=attempt.source_event_id
+   LEFT JOIN public.knowledge_extraction_attempt_outcomes outcome ON outcome.attempt_id=attempt.id
+   WHERE attempt.model_id='race-model' AND outcome.attempt_id IS NULL")"
+IFS='|' read -r loser_attempt loser_token loser_claim <<ROW
+$loser
+ROW
+winner_topic="$(docker exec "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
+  -U postgres -d "$DATABASE" -c \
+  "SELECT id FROM public.knowledge_topics WHERE normalized_label IN
+   ('orbital ceramics','spacecraft ceramic shields')")"
+docker exec "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" -c \
+  "SELECT outcome FROM public.complete_v4_knowledge_extraction_attempt(
+    '$loser_attempt','$loser_token','succeeded',
+    jsonb_build_object('claim','$loser_claim','aboutPersonId',NULL,'knowledgeType','domain',
+      'attentionScore',0.8,'contextSnippet','$loser_claim','topics',jsonb_build_array(
+        jsonb_build_object('kind','existing','topicId','$winner_topic'))),
+    '$loser_claim',NULL,'domain',0.8,public.k4b_vector(7),jsonb_build_array(
+      jsonb_build_object('kind','existing','topicId','$winner_topic')),
+    ARRAY['$winner_topic']::uuid[],NULL,10,5)" > "$TEMP_DIR/race-retry.out" \
+  || fail 'stale paraphrase did not complete after model-style candidate reuse'
 [ "$(docker exec "$CONTAINER_NAME" psql -X -Atq -U postgres -d "$DATABASE" -c \
   "SELECT count(*) FROM public.knowledge_topics WHERE normalized_label IN
     ('orbital ceramics','spacecraft ceramic shields')")" = 1 ] \

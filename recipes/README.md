@@ -201,19 +201,29 @@ the same evidence on a disposable database.
 
 ## K4b topic nodes and backfill
 
-`cartographer-k4b-local-proof.sh` installs the exact through-073 baseline and
-migration 074 in one disposable, no-network pgvector container. It proves topic
-convergence, a real concurrent paraphrase mint race, adjacent-subject
-separation, shared-hub audience visibility, both pointer cutover orderings,
-the ordered old-job drain and unified unit backfill, and role denial. Expected
+`cartographer-k4b-local-proof.sh` installs the exact through-073 baseline,
+migration 074, a falsified-v3 residue fixture, and migration 075 in one
+disposable, no-network pgvector container. It proves model-selected topic
+execution, a real stale concurrent-mint retry, adjacent-subject separation,
+shared-hub audience visibility, both pointer cutover orderings, the ordered
+old-job drain and zero-residue unit re-derivation, and role denial. Expected
 verdict:
 
 ```text
 CARTOGRAPHER_K4B_LOCAL_GREEN
 ```
 
+The real-vector/model harness uses `OPENAI_API_KEY` and the exact checked-in
+matcher contract:
+
+```bash
+python3 recipes/experiments/topic-exp1.py
+python3 recipes/experiments/topic-exp2.py
+python3 recipes/experiments/topic-exp3.py
+```
+
 `npm run memory:k4b-backfill` is the explicit live operation, not part of the
-local proof. It activates v3, drains pre-v3 jobs through the normal
-Cartographer path, re-derives every pre-v3 unit, then runs the zero-residue
-assertion. Run it only against an explicitly authorized target after migration
-074 has been reviewed and applied.
+local proof. It activates v4, drains pre-v4 jobs through their pinned
+Cartographer contracts, re-derives every pre-v4 unit, then runs the
+zero-residue assertion. Run it only against an explicitly authorized target
+after migrations 074 and 075 have been reviewed and applied.

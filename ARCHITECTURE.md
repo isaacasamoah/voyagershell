@@ -74,7 +74,7 @@ historical source content.
 
 ## Canonical graph substrate
 
-Migrations `061`–`074` are the current graph and memory-kernel shape. Numeric
+Migrations `061`–`075` are the current graph and memory-kernel shape. Numeric
 discovery is not installed-state authority: the pre-054 catalogue contract
 remains the explicit boundary for applying product migrations `054`–`059`, and
 the local proofs then apply each later migration in order.
@@ -88,7 +88,10 @@ participating in many disjoint scopes still has one node.
 
 `knowledge_topics` is the immutable authority table for Topic nodes. It owns
 the normalized label and 1536-dimensional embedding; every Topic graph node
-must reference one exact authority row.
+must reference one exact authority row. Active topic identity does not classify
+against that vector: migration `075` blocks over the claim embeddings of
+authorized units already filed under each topic and returns the nearest claim
+as matcher context.
 
 `graph_node_grants` is immutable evidence that an audience may discover a
 stable identity. A grant stores basis kind/id/version, optional evidence event,
@@ -186,10 +189,14 @@ Projection functions are defined before activation; activation takes
 transaction-held writer locks, installs triggers, and performs a complete
 idempotent catch-up so writes before the lock are not lost.
 
-Migrations `072`–`074` add the event-owned Cartographer, the registered graph
-memory read, Topic authority nodes, and the ordered v3 activation/backfill.
-Migration 074 remains one migration payload; activation drains pinned older
-jobs before re-deriving pre-v3 units and asserting complete physics and topics.
+Migrations `072`–`075` add the event-owned Cartographer, the registered graph
+memory read, Topic authority nodes, and the re-derived v4 topic matcher.
+Migration `074` remains the structural topic migration. Migration `075`
+separates claim-vector blocking from identity: a versioned model instruction
+reuses an authorized candidate or proposes a new label, and only the server
+writes. Activation drains pinned older jobs before re-deriving pre-v4 units,
+removing falsified topic assignments, and asserting complete physics, topics,
+and zero orphan authority rows.
 
 The atomic writer creates the canonical source audience, event, MessageEvent
 node, grants, structural edges, evidence, and delivery fan-out before returning.
@@ -212,4 +219,6 @@ cascades, and direct-write rejection. The hosted recipe adds K1 canonical
 backfill parity, unresolved-row reporting, activation-gap catch-up, sequence
 non-consumption, old-catalogue absence, and catalogue equality after rollback.
 The disposable K4b recipe separately proves the seventh Topic kind, canonical
-topic authority, shared-hub privacy, convergent minting, and ordered backfill.
+topic authority, shared-hub privacy, stale-mint re-matching, adjacent-subject
+separation, and ordered zero-residue backfill. The committed model harness
+measures the exact matcher contract over real OpenAI claim embeddings.

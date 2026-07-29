@@ -3,13 +3,16 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import type { Json } from '@/lib/supabase/types'
 import { runCartographer } from '@/lib/agents/cartographer'
 import { rederiveKnowledgeUnit } from './extractor'
+import { CARTOGRAPHER_EXTRACTOR_VERSION } from './contract'
 import {
   embedCartographerText,
-  embedTopicInputs,
   findTopicCandidates,
+  parseVectorString,
+  toTopicWriteInputs,
 } from './topics'
 import type { ExtractionObject } from './contract'
 import type { TopicBackfillUnit } from './types'
+import { matchKnowledgeTopics } from './topic-matcher'
 
 export interface TopicBackfillResult {
   activatedVersion: string
@@ -18,10 +21,10 @@ export interface TopicBackfillResult {
   assertion: Json
 }
 
-const activateV3 = async (): Promise<string> => {
+const activateCurrentContract = async (): Promise<string> => {
   const { data, error } = await getAdminClient().rpc('activate_knowledge_topic_contract')
   if (error) throw new Error(error.message)
-  if (data !== 'cartographer-single-claim-v3') {
+  if (data !== CARTOGRAPHER_EXTRACTOR_VERSION) {
     throw new Error('knowledge_topic_activation_returned_wrong_version')
   }
   return data
@@ -46,6 +49,7 @@ const listUnits = async (): Promise<TopicBackfillUnit[]> => {
     sourceActorId: unit.source_actor_id,
     claim: unit.claim,
     knowledgeAudienceId: unit.knowledge_audience_id,
+    embedding: unit.embedding,
   }))
 }
 
@@ -54,33 +58,49 @@ const rederiveUnit = async (unit: TopicBackfillUnit): Promise<void> => {
     { task: 'classification', quality: 'balanced' },
     unit.sourceActorId,
   )
-  const embedding = await embedCartographerText(unit.claim)
-  const candidates = await findTopicCandidates(unit.knowledgeAudienceId, embedding)
-  const extracted = await rederiveKnowledgeUnit(resolved.model, unit, candidates)
+  const embedding = unit.embedding
+    ? parseVectorString(unit.embedding)
+    : await embedCartographerText(unit.claim)
+  const extracted = await rederiveKnowledgeUnit(resolved.model, unit)
   if (extracted.kind === 'failed') {
     throw new Error(`knowledge_topic_backfill_${extracted.failure}:${extracted.errorClass}`)
-  }
-  if (!('topics' in extracted.object)) {
-    throw new Error('knowledge_topic_backfill_contract_not_v3')
   }
   const object = extracted.object as ExtractionObject
   if (object.claim !== unit.claim || object.aboutPersonId !== null) {
     throw new Error('knowledge_topic_backfill_changed_immutable_claim')
   }
-  const topicInputs = await embedTopicInputs(object.topics)
-  const { error } = await getAdminClient().rpc('write_knowledge_topic_backfill', {
-    p_unit_id: unit.unitId,
-    p_raw_output: object,
-    p_knowledge_type: object.knowledgeType,
-    p_attention_score: object.attentionScore,
-    p_embedding: `[${embedding.join(',')}]`,
-    p_topic_inputs: topicInputs,
-  })
-  if (error) throw new Error(error.message)
+  for (;;) {
+    const candidates = await findTopicCandidates(
+      CARTOGRAPHER_EXTRACTOR_VERSION,
+      unit.knowledgeAudienceId,
+      embedding,
+      unit.unitId,
+    )
+    const matched = await matchKnowledgeTopics(resolved.model, unit.claim, candidates)
+    if (matched.kind === 'failed') {
+      throw new Error(`knowledge_topic_backfill_${matched.failure}:${matched.errorClass}`)
+    }
+    const rawOutput = { ...object, topics: matched.topics }
+    const { error } = await getAdminClient().rpc(
+      'write_knowledge_topic_identity_backfill',
+      {
+        p_unit_id: unit.unitId,
+        p_raw_output: rawOutput,
+        p_knowledge_type: object.knowledgeType,
+        p_attention_score: object.attentionScore,
+        p_embedding: `[${embedding.join(',')}]`,
+        p_topic_candidate_ids: candidates.map(({ topicId }) => topicId),
+        p_topic_inputs: toTopicWriteInputs(matched.topics),
+      },
+    )
+    if (error?.message.includes('knowledge_topic_candidates_stale')) continue
+    if (error) throw new Error(error.message)
+    return
+  }
 }
 
 export const runTopicBackfill = async (): Promise<TopicBackfillResult> => {
-  const activatedVersion = await activateV3()
+  const activatedVersion = await activateCurrentContract()
   let drainedJobs = 0
   for (;;) {
     const jobs = await listOldJobs()

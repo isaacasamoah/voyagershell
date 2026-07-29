@@ -11,8 +11,9 @@ const mocks = vi.hoisted(() => ({
   checkPreferenceSuperseding: vi.fn(),
   processRetrievalFeedback: vi.fn(),
   embedCartographerText: vi.fn(),
-  embedTopicInputs: vi.fn(),
+  embedLegacyTopicInputs: vi.fn(),
   findTopicCandidates: vi.fn(),
+  completeMatchedExtraction: vi.fn(),
 }))
 
 vi.mock('@/lib/models', () => ({
@@ -40,8 +41,11 @@ vi.mock('./cartographer/retrieval-feedback', () => ({
 }))
 vi.mock('./cartographer/topics', () => ({
   embedCartographerText: mocks.embedCartographerText,
-  embedTopicInputs: mocks.embedTopicInputs,
+  embedLegacyTopicInputs: mocks.embedLegacyTopicInputs,
   findTopicCandidates: mocks.findTopicCandidates,
+}))
+vi.mock('./cartographer/topic-pipeline', () => ({
+  completeMatchedExtraction: mocks.completeMatchedExtraction,
 }))
 
 import { runCartographer } from './cartographer'
@@ -92,11 +96,20 @@ describe('event-owned Cartographer extraction', () => {
     mocks.applySessionDecay.mockResolvedValue({ decayed: 0, skipped: 0 })
     mocks.processRetrievalFeedback.mockResolvedValue({ promoted: 0 })
     mocks.embedCartographerText.mockResolvedValue([1, 0])
-    mocks.embedTopicInputs.mockResolvedValue([{
+    mocks.embedLegacyTopicInputs.mockResolvedValue([{
       label: 'amber notebook',
       embedding: '[1,0]',
     }])
     mocks.findTopicCandidates.mockResolvedValue([])
+    mocks.completeMatchedExtraction.mockResolvedValue({
+      kind: 'completed',
+      completion: {
+        outcome: 'succeeded',
+        unitId: '72000000-0000-4000-8000-000000000008',
+        replayed: false,
+      },
+      usage: { inputTokens: 140, outputTokens: 35 },
+    })
   })
 
   it('records concrete model identity and completes one exact source job', async () => {
@@ -193,34 +206,4 @@ describe('event-owned Cartographer extraction', () => {
     }))
   })
 
-  it('embeds and resolves bounded topic proposals only for v3 jobs', async () => {
-    mocks.beginExtractionAttempt.mockResolvedValue({
-      ...attempt,
-      extractorVersion: 'cartographer-single-claim-v3',
-    })
-    mocks.extractKnowledge.mockResolvedValue({
-      kind: 'structured',
-      object: {
-        claim: 'Elisheya keeps the amber notebook.',
-        aboutPersonId: null,
-        knowledgeType: 'domain',
-        attentionScore: 0.8,
-        contextSnippet: 'Elisheya keeps the amber notebook.',
-        topics: ['amber notebook'],
-      },
-      inputTokens: 120,
-      outputTokens: 30,
-    })
-
-    await runCartographer({ userId: attempt.sourceActorId })
-
-    expect(mocks.findTopicCandidates).toHaveBeenCalledOnce()
-    expect(mocks.embedTopicInputs).toHaveBeenCalledWith(['amber notebook'])
-    expect(mocks.completeExtractionAttempt).toHaveBeenCalledWith(expect.objectContaining({
-      knowledgeType: 'domain',
-      attentionScore: 0.8,
-      embedding: '[1,0]',
-      topicInputs: [{ label: 'amber notebook', embedding: '[1,0]' }],
-    }))
-  })
 })

@@ -5,7 +5,15 @@ import type {
   ExtractionCompletion,
   ExtractionFailureKind,
 } from './types'
-import type { TopicInput } from './topics'
+import { isCurrentContract } from './contract'
+import type { LegacyTopicInput } from './topics'
+
+export class TopicCandidatesStaleError extends Error {
+  constructor() {
+    super('knowledge_topic_candidates_stale')
+    this.name = 'TopicCandidatesStaleError'
+  }
+}
 
 export const beginExtractionAttempt = async (input: {
   userId: string
@@ -69,14 +77,13 @@ export const completeExtractionAttempt = async (input: {
   knowledgeType?: 'domain' | 'operational' | 'preference'
   attentionScore?: number
   embedding?: string
-  topicInputs?: TopicInput[]
+  topicInputs?: LegacyTopicInput[] | Json
+  topicCandidateIds?: string[]
   errorClass?: string
   inputTokens?: number
   outputTokens?: number
 }): Promise<ExtractionCompletion> => {
-  const { data, error } = await getAdminClient().rpc(
-    'complete_knowledge_extraction_attempt',
-    {
+  const args = {
       p_attempt_id: input.attempt.attemptId,
       p_lease_token: input.attempt.leaseToken,
       p_result: input.result,
@@ -90,8 +97,17 @@ export const completeExtractionAttempt = async (input: {
       p_error_class: input.errorClass ?? null,
       p_input_tokens: input.inputTokens ?? null,
       p_output_tokens: input.outputTokens ?? null,
-    },
-  )
+  }
+  const current = isCurrentContract(input.attempt.extractorVersion)
+  const { data, error } = current
+    ? await getAdminClient().rpc('complete_v4_knowledge_extraction_attempt', {
+      ...args,
+      p_topic_candidate_ids: input.topicCandidateIds ?? null,
+    })
+    : await getAdminClient().rpc('complete_knowledge_extraction_attempt', args)
+  if (error?.message.includes('knowledge_topic_candidates_stale')) {
+    throw new TopicCandidatesStaleError()
+  }
   if (error) throw new Error(error.message)
   const row = data?.[0]
   if (!row) throw new Error('knowledge_extraction_completion_returned_no_row')

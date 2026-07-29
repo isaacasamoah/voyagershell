@@ -20,7 +20,19 @@ export interface PersonCandidate {
 export interface TopicCandidate {
   topicId: string
   label: string
+  representativeClaim?: string
   similarity: number
+}
+
+export type TopicMatchDecision =
+  | { kind: 'existing'; topicId: string }
+  | { kind: 'new'; label: string }
+
+export interface TopicMatcherRun {
+  kind: 'structured'
+  topics: TopicMatchDecision[]
+  inputTokens: number | undefined
+  outputTokens: number | undefined
 }
 
 export interface ExtractionAttempt {
@@ -76,4 +88,5 @@ export interface TopicBackfillUnit {
   sourceActorId: string
   claim: string
   knowledgeAudienceId: string
+  embedding: string | null
 }

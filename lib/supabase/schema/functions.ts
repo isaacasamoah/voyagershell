@@ -24,14 +24,15 @@ export type KnowledgeExtractionCompletionRow = {
   outcome: KnowledgeExtractionOutcomeKind; unit_id: string | null; replayed: boolean
 }
 export type KnowledgeTopicCandidateRow = {
-  topic_id: string; label: string; similarity: number
+  topic_id: string; label: string; representative_claim: string | null; similarity: number
 }
 export type KnowledgeTopicBackfillJobRow = {
   source_event_id: string; requesting_user_id: string
 }
 export type KnowledgeTopicBackfillUnitRow = {
   unit_id: string; source_event_id: string; source_content: string;
-  source_actor_id: string; claim: string; knowledge_audience_id: string
+  source_actor_id: string; claim: string; knowledge_audience_id: string;
+  embedding: string | null
 }
 export type KnowledgeByIdRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'>
 export type VoyageMessageRow = Pick<KnowledgeSearchRow,
@@ -78,6 +79,14 @@ export type PublicFunctions = {
     p_error_class?: string | null; p_input_tokens?: number | null;
     p_output_tokens?: number | null
   }; Returns: KnowledgeExtractionCompletionRow[] }
+  complete_v4_knowledge_extraction_attempt: { Args: {
+    p_attempt_id: string; p_lease_token: string; p_result: KnowledgeExtractionOutcomeKind;
+    p_raw_output?: Json | null; p_claim?: string | null; p_about_person_id?: string | null;
+    p_knowledge_type?: string | null; p_attention_score?: number | null;
+    p_embedding?: string | null; p_topic_inputs?: Json | null;
+    p_topic_candidate_ids?: string[] | null; p_error_class?: string | null;
+    p_input_tokens?: number | null; p_output_tokens?: number | null
+  }; Returns: KnowledgeExtractionCompletionRow[] }
   create_room_invite: { Args: { p_session_id: string; p_inviter_user_id: string;
     p_invitee_user_id: string }; Returns: {
       invite_status: string; invite_space_id: string | null
@@ -85,9 +94,6 @@ export type PublicFunctions = {
   create_voyage_with_captain: { Args: { p_description: string; p_name: string; p_slug: string;
     p_user_id: string }; Returns: string }
   generate_invite_code: { Args: Record<PropertyKey, never>; Returns: string }
-  find_knowledge_topic_candidates: { Args: {
-    p_knowledge_audience_id: string; p_embedding: string
-  }; Returns: KnowledgeTopicCandidateRow[] }
   get_effective_space_member_ids: { Args: { p_space_id: string }; Returns: { user_id: string }[] }
   get_last_active_voyage_slug: { Args: { p_user_id: string }; Returns: string | null }
   get_or_create_active_session: { Args: { p_user_id: string; p_voyage_slug: string | null };
@@ -118,6 +124,10 @@ export type PublicFunctions = {
   list_knowledge_topic_backfill_units: {
     Args: Record<PropertyKey, never>; Returns: KnowledgeTopicBackfillUnitRow[]
   }
+  resolve_knowledge_topic: { Args: {
+    p_extractor_version: string; p_knowledge_audience_id: string;
+    p_embedding: string; p_exclude_unit_id?: string | null
+  }; Returns: KnowledgeTopicCandidateRow[] }
   keyword_search: { Args: { p_query: string; p_user_id: string; p_voyage_slug?: string | null;
     p_knowledge_type?: string | null; p_min_attention?: number; p_match_count?: number;
   }; Returns: KeywordSearchRow[] }
@@ -153,5 +163,10 @@ export type PublicFunctions = {
   write_knowledge_topic_backfill: { Args: {
     p_unit_id: string; p_raw_output: Json; p_knowledge_type: string;
     p_attention_score: number; p_embedding: string; p_topic_inputs: Json
+  }; Returns: boolean }
+  write_knowledge_topic_identity_backfill: { Args: {
+    p_unit_id: string; p_raw_output: Json; p_knowledge_type: string;
+    p_attention_score: number; p_embedding: string; p_topic_inputs: Json;
+    p_topic_candidate_ids: string[]
   }; Returns: boolean }
 }

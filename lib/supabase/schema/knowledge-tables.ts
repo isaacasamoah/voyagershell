@@ -79,10 +79,15 @@ export type KnowledgeTables = {
   knowledge_extractor_contracts: TableShape<{
     extractor_version: string; activated_at: string; embedding_model: string | null;
     embedding_dimensions: number | null; topic_similarity_threshold: number | null;
-    topic_candidate_limit: number | null
+    topic_candidate_limit: number | null; topic_matcher_version: string | null
   }, { extractor_version: string; activated_at?: string; embedding_model?: string | null;
     embedding_dimensions?: number | null; topic_similarity_threshold?: number | null;
-    topic_candidate_limit?: number | null }>
+    topic_candidate_limit?: number | null; topic_matcher_version?: string | null }>
+  knowledge_topic_identity_outcomes: TableShape<{
+    unit_id: string; extractor_version: string; raw_output: Json; recorded_at: string
+  }, {
+    unit_id: string; extractor_version: string; raw_output: Json; recorded_at?: string
+  }>
   knowledge_extractor_contract_active: TableShape<{
     singleton: boolean; extractor_version: string; activated_at: string
   }, { singleton?: boolean; extractor_version: string; activated_at?: string }>

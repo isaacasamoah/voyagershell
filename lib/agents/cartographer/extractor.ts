@@ -2,9 +2,12 @@ import { generateObject, type LanguageModel } from 'ai'
 import {
   CARTOGRAPHER_PROMPT,
   HISTORICAL_CARTOGRAPHER_PROMPT,
+  V3_CARTOGRAPHER_PROMPT,
   extractionSchema,
   historicalExtractionSchema,
+  isCurrentContract,
   isV3Contract,
+  v3ExtractionSchema,
   type AnyExtractionObject,
 } from './contract'
 import type {
@@ -33,6 +36,7 @@ export const extractKnowledge = async (
     content: attempt.sourceContent,
   }
   const v3 = isV3Contract(attempt.extractorVersion)
+  const current = isCurrentContract(attempt.extractorVersion)
   const historicalPrompt = `## Immutable source event
 ${JSON.stringify(source)}
 
@@ -54,9 +58,13 @@ Return the structured Cartographer result.` : historicalPrompt
   try {
     const result = await generateObject({
       model,
-      system: v3 ? CARTOGRAPHER_PROMPT : HISTORICAL_CARTOGRAPHER_PROMPT,
+      system: v3
+        ? V3_CARTOGRAPHER_PROMPT
+        : current ? CARTOGRAPHER_PROMPT : HISTORICAL_CARTOGRAPHER_PROMPT,
       messages: [{ role: 'user', content: prompt }],
-      schema: v3 ? extractionSchema : historicalExtractionSchema,
+      schema: v3
+        ? v3ExtractionSchema
+        : current ? extractionSchema : historicalExtractionSchema,
       maxOutputTokens: 1024,
     })
     return {
@@ -79,16 +87,12 @@ Return the structured Cartographer result.` : historicalPrompt
 export const rederiveKnowledgeUnit = async (
   model: LanguageModel,
   unit: TopicBackfillUnit,
-  topicCandidates: TopicCandidate[],
 ): Promise<ExtractionRun> => {
   const prompt = `## Existing immutable KnowledgeUnit claim
 ${JSON.stringify({ claim: unit.claim, sourceContent: unit.sourceContent })}
 
-## Existing topic candidates
-${JSON.stringify(topicCandidates)}
-
 Copy the existing claim exactly into claim, set aboutPersonId to null, classify
-it, and return its topic labels.`
+it, and return the structured Cartographer result.`
   try {
     const result = await generateObject({
       model,
