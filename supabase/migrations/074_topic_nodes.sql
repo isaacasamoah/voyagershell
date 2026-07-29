@@ -132,7 +132,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$ BEG
 END $$; CREATE FUNCTION public.find_knowledge_topic_candidates(
   p_knowledge_audience_id uuid, p_embedding vector(1536)) RETURNS TABLE(topic_id uuid, label text, similarity real)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$   SELECT topic.id, topic.normalized_label, (1 - (topic.embedding <=> p_embedding))::real
-  FROM public.knowledge_topics topic JOIN public.graph_nodes node     ON node.kind = 'topic' AND node.authority_id = topic.id
+  FROM public.knowledge_topics topic JOIN public.graph_nodes node     ON node.kind::text = 'topic' AND node.authority_id = topic.id
   JOIN public.graph_node_grants grant_row ON grant_row.node_id = node.id     AND grant_row.knowledge_audience_id = p_knowledge_audience_id
   CROSS JOIN public.knowledge_extractor_contracts contract   WHERE contract.extractor_version = 'cartographer-single-claim-v3'
     AND 1 - (topic.embedding <=> p_embedding) >= contract.topic_similarity_threshold   ORDER BY topic.embedding <=> p_embedding, topic.id LIMIT (SELECT topic_candidate_limit FROM

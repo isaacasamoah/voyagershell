@@ -65,8 +65,13 @@ SELECT * FROM public.find_knowledge_topic_candidates(
   '72000000-0000-4000-8000-000000000001', array_fill(0::real, ARRAY[1536])::vector);
 RESET ROLE;
 SQL
-docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/supabase/migrations/074_topic_nodes.sql" >/dev/null \
+K4B_MIGRATION_PAYLOAD=''
+if ! IFS= read -r -d '' K4B_MIGRATION_PAYLOAD \
+    < "$REPO_ROOT/supabase/migrations/074_topic_nodes.sql"; then
+  [ -n "$K4B_MIGRATION_PAYLOAD" ] || fail 'migration 074 payload is empty'
+fi
+docker exec "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
+  -c "$K4B_MIGRATION_PAYLOAD" >/dev/null \
   || fail 'candidate migration failed'
 docker exec -i "$CONTAINER_NAME" psql -X -q -U postgres -d "$DATABASE" \
   < "$TEMP_DIR/denial.sql" > "$TEMP_DIR/denial.txt" 2>&1
@@ -134,6 +139,17 @@ wait "$enqueue_waiter" || fail 'activation-first enqueue failed'
 docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/recipes/sql/cartographer-k4b-assertions.sql" >/dev/null \
   || fail 'sequential topic/backfill assertions failed'
+cat > "$TEMP_DIR/private-topic-denial.sql" <<'SQL'
+\set ON_ERROR_STOP off
+SET request.jwt.claim.sub='72000000-0000-4000-8000-000000000003';
+SET ROLE authenticated;
+SELECT count(*) FROM public.knowledge_topics WHERE normalized_label = 'private telescope';
+RESET ROLE;
+SQL
+docker exec -i "$CONTAINER_NAME" psql -X -q -U postgres -d "$DATABASE" \
+  < "$TEMP_DIR/private-topic-denial.sql" > "$TEMP_DIR/private-topic-denial.txt" 2>&1
+[ "$(rg -c 'permission denied' "$TEMP_DIR/private-topic-denial.txt")" = 1 ] \
+  || fail 'outsider could inspect the private-only topic table count'
 docker exec "$CONTAINER_NAME" psql -X -Atq -F '|' \
   -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" -c \
   "SELECT attempt_id,lease_token,label,claim,vector_index FROM public.k4b_prepare_race()" \

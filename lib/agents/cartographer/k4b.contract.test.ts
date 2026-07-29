@@ -12,7 +12,9 @@ const read = (path: string): string => readFileSync(resolve(process.cwd(), path)
 const migration = read('supabase/migrations/074_topic_nodes.sql')
 const enqueueMigration = read('supabase/migrations/073_graph_memory_read.sql')
 const proof = read('recipes/cartographer-k4b-local-proof.sh')
+const assertions = read('recipes/sql/cartographer-k4b-assertions.sql')
 const backfill = read('lib/agents/cartographer/backfill.ts')
+const architecture = read('ARCHITECTURE.md')
 
 describe('K4b topic contract', () => {
   it('mints v3 with bounded topic proposals and keeps pinned history explicit', () => {
@@ -65,6 +67,10 @@ describe('K4b topic contract', () => {
     expect(resolver).not.toMatch(/hashtext|p_label.*lock|advisory.*v_label/i)
     expect(migration).toContain('topic_similarity_threshold')
     expect(migration).toContain("'cartographer-single-claim-v3', 'text-embedding-3-small', 1536, 0.7")
+    expect(migration).toContain("node.kind::text = 'topic'")
+    expect(migration).not.toContain("node.kind = 'topic'")
+    expect(proof).toContain("read -r -d '' K4B_MIGRATION_PAYLOAD")
+    expect(proof).toContain('-c "$K4B_MIGRATION_PAYLOAD"')
   })
 
   it('binds topic authority, evidence, and one exact source-audience grant', () => {
@@ -99,5 +105,13 @@ describe('K4b topic contract', () => {
     for (const source of [migration, proof, backfill]) {
       expect(source).not.toMatch(/knowledge_relationship|relationship_(jobs|attempts|assertions)/)
     }
+  })
+
+  it('keeps private-only and mixed topic proof distinct in current architecture', () => {
+    expect(assertions).toContain('k4b_private_only_topic_leaked')
+    expect(proof).toContain('outsider could inspect the private-only topic table count')
+    expect(architecture).toContain('The seven kinds are Person, Voyager, Voyage, Space')
+    expect(architecture).toContain('`knowledge_topics` is the immutable authority table')
+    expect(architecture).toContain('Topic nodes are shared hubs.')
   })
 })

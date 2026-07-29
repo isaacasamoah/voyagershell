@@ -110,6 +110,9 @@ INSERT INTO k4b_units VALUES
     'Marathon training starts Monday.', ARRAY['marathon training'], ARRAY[3], true)),
   ('trail', public.k4b_commit('k4b-trail', 'Trail running needs grippy shoes.',
     'Trail running needs grippy shoes.', ARRAY['trail running'], ARRAY[4], true)),
+  ('private-only', public.k4b_commit('k4b-private-only',
+    'My private telescope plan starts after midnight.',
+    'The telescope plan starts after midnight.', ARRAY['private telescope'], ARRAY[8], false)),
   ('recovery-private', public.k4b_commit('k4b-recovery-private',
     'My private recovery plan uses Friday rest.',
     'The recovery plan uses Friday rest.', ARRAY['recovery planning'], ARRAY[5], false)),
@@ -118,7 +121,7 @@ INSERT INTO k4b_units VALUES
     'The recovery plan uses Sunday rest.', ARRAY['recovery planning'], ARRAY[5], true));
 
 DO $k4b_topics$
-DECLARE v_quantum uuid; v_recovery uuid; v_private uuid; v_room uuid;
+DECLARE v_quantum uuid; v_private_only uuid; v_recovery uuid; v_private uuid; v_room uuid;
   v_owner uuid := '72000000-0000-4000-8000-000000000001';
   v_member uuid := '72000000-0000-4000-8000-000000000002';
   v_outsider uuid := '72000000-0000-4000-8000-000000000003';
@@ -135,6 +138,24 @@ BEGIN
   IF (SELECT count(*) FROM public.knowledge_topics WHERE normalized_label IN
       ('marathon training','trail running')) <> 2 THEN
     RAISE EXCEPTION 'k4b_adjacent_subjects_false_merged'; END IF;
+  SELECT node.id INTO STRICT v_private_only FROM public.graph_nodes node
+    JOIN public.knowledge_topics topic ON topic.id = node.authority_id
+    WHERE node.kind = 'topic' AND topic.normalized_label = 'private telescope';
+  IF (SELECT count(*) FROM public.graph_edges
+      WHERE target_node_id = v_private_only AND kind = 'about') <> 1
+    OR (SELECT count(*) FROM public.graph_node_grants grant_row
+      JOIN public.knowledge_audiences audience
+        ON audience.id = grant_row.knowledge_audience_id
+      WHERE grant_row.node_id = v_private_only
+        AND audience.member_profile_ids = ARRAY[v_owner]::uuid[]) <> 1 THEN
+    RAISE EXCEPTION 'k4b_private_only_topic_shape_failed'; END IF;
+  IF public.viewer_has_graph_node_grant(v_private_only, v_outsider)
+    OR public.graph_node_label_for_viewer(v_private_only, v_outsider) IS NOT NULL
+    OR (SELECT count(*) FROM public.traverse_knowledge_graph(
+      v_private_only, v_outsider, 2)) <> 0
+    OR (SELECT count(*) FROM public.authorized_graph_neighbors(
+      v_private_only, v_outsider, ARRAY['about']::public.graph_edge_kind[])) <> 0 THEN
+    RAISE EXCEPTION 'k4b_private_only_topic_leaked'; END IF;
   SELECT node.id INTO STRICT v_recovery FROM public.graph_nodes node
     JOIN public.knowledge_topics topic ON topic.id = node.authority_id
     WHERE node.kind = 'topic' AND topic.normalized_label = 'recovery planning';

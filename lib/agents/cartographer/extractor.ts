@@ -32,7 +32,15 @@ export const extractKnowledge = async (
     actorPersonId: attempt.sourceActorId,
     content: attempt.sourceContent,
   }
-  const prompt = `## Immutable source event
+  const v3 = isV3Contract(attempt.extractorVersion)
+  const historicalPrompt = `## Immutable source event
+${JSON.stringify(source)}
+
+## Allowed Person candidates
+${JSON.stringify(attempt.candidates)}
+
+Return the structured Cartographer result.`
+  const prompt = v3 ? `## Immutable source event
 ${JSON.stringify(source)}
 
 ## Allowed Person candidates
@@ -41,8 +49,7 @@ ${JSON.stringify(attempt.candidates)}
 ## Existing topic candidates
 ${JSON.stringify(topicCandidates)}
 
-Return the structured Cartographer result.`
-  const v3 = isV3Contract(attempt.extractorVersion)
+Return the structured Cartographer result.` : historicalPrompt
 
   try {
     const result = await generateObject({

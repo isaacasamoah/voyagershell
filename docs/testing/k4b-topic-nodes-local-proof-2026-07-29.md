@@ -22,11 +22,13 @@ evidence.
 
 | Falsification | Observed result |
 |---|---|
+| One-payload migration | After the exact through-073 baseline, the complete migration 074 body was sent in one `psql -c` simple-query payload and installed successfully. The candidate query avoids consuming the newly added enum value before the payload commits. |
 | Three phrasings, one subject | `quantum engines`, `QE systems`, and `quantum propulsion` resolved to one authority/topic node with exactly three inbound `about` edges. |
 | Genuinely new subject | `sourdough fermentation` minted exactly one new authority/topic node. |
 | Concurrent paraphrase race | Two independent completion transactions for `orbital ceramics` and `spacecraft ceramic shields` were started together behind the production global advisory key. PostgreSQL reported exactly two lock-waiting completion queries before release. Both committed; one topic node and two inbound `about` edges remained. |
 | Adjacent but distinct | Orthogonal fixtures for `marathon training` and `trail running` produced exactly two topic nodes. |
-| Private and mixed visibility | The unrelated viewer received no grant, label, root traversal, or authorized degree for the mixed topic. The room member saw the topic label and exactly the room unit/degree `1`; the private unit was absent. The private author saw both units/degree `2`. Direct table and function probes as `authenticated` produced four permission denials. |
+| Private-only visibility | A separate `private telescope` topic had one private unit, one private-audience grant, and no room evidence. The outside viewer received no existence grant, label, root traversal, or authorized neighbor/degree count. With that viewer's authenticated identity installed, an exact table-count probe for the topic was permission-denied. |
+| Mixed visibility | The unrelated viewer received no grant, label, root traversal, or authorized degree for the mixed `recovery planning` topic. The room member saw the topic label and exactly the room unit/degree `1`; the private unit was absent. The private author saw both units/degree `2`. Four general authority-surface probes as `authenticated` were also permission-denied. |
 | Enqueue-first cutover | An open event transaction held the active-pointer `FOR SHARE` lock. Activation was still waiting when probed. The event committed first with v2, after which activation completed; the v2 job was drained before re-derivation. |
 | Activation-first cutover | Activation held the pointer row. A new event transaction was still waiting when probed, then resumed after activation and stamped v3. |
 | Backfill terminal assertion | The unified pass left `oldNonTerminalJobs=0`, `unitsMissingPhysics=0`, and `oldUnitsMissingTopicDerivation=0`. |
