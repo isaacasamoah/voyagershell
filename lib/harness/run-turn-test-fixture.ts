@@ -39,6 +39,7 @@ export const runTurnMocks = {
   claimSourceIngress,
   claimVoyagerResponseIngress,
   composeSystemPrompt,
+  createVoyagerTools,
   deliverRoomInvite,
   enrichVoyagerResponseIngress,
   estimateCost,
@@ -196,6 +197,7 @@ export const resetRunTurnFixture = () => {
   composeSystemPrompt.mockResolvedValue({
     staticPrompt: 'STATIC',
     dynamicPrompt: 'DYNAMIC',
+    workingMemoryUnitIds: [],
     retrieval: {
       knowledge: [],
       tokenEstimate: 0,

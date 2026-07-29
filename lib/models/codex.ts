@@ -11,7 +11,16 @@
 // this quirk is handled for free). See spike 2026-07-05.
 
 import { createOpenAI } from '@ai-sdk/openai'
-import { wrapLanguageModel, type LanguageModel, type LanguageModelMiddleware } from 'ai'
+import {
+  wrapLanguageModel,
+  type LanguageModel,
+  type LanguageModelMiddleware,
+} from 'ai'
+import { isCodexAuthError } from './codex-auth'
+
+type V3Model = Parameters<
+  NonNullable<LanguageModelMiddleware['wrapGenerate']>
+>[0]['model']
 
 // Public OAuth client (no secret) — the same client id the official codex CLI uses.
 export const CODEX_OAUTH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
@@ -24,6 +33,13 @@ export const CODEX_MODEL = 'gpt-5.5'
 export interface CodexCredential {
   accessToken: string
   accountId: string
+}
+
+export interface CodexRecovery {
+  refresh: () => Promise<CodexCredential>
+  fallback: LanguageModel
+  onFailure: (error: unknown) => Promise<void>
+  createModel?: (credential: CodexCredential) => LanguageModel
 }
 
 /**
@@ -118,148 +134,86 @@ export const createCodexModel = (cred: CodexCredential): LanguageModel => {
   return wrapped as unknown as LanguageModel
 }
 
-// =============================================================================
-// Device-code connect flow (the self-serve path — /connect)
-// Wire protocol verified against openai/codex device_code_auth.rs + the
-// tumf/opencode-openai-device-auth implementation, 2026-07-06. See
-// ~/obsidian/Projects/voyager/research/device-auth-flow-2026-07-06.md
-// PREREQ per user: ChatGPT → Settings → Security → "Allow device code login".
-// =============================================================================
+const asV3 = (model: LanguageModel): V3Model => model as V3Model
 
-const DEVICE_AUTH_BASE = 'https://auth.openai.com/api/accounts/deviceauth'
-export const DEVICE_VERIFICATION_URL = 'https://auth.openai.com/codex/device'
-
-export interface DeviceAuthStart {
-  deviceAuthId: string
-  userCode: string
-  /** Poll interval in seconds. */
-  interval: number
-  verificationUrl: string
-}
-
-/** Begin a device-code login: returns the code the user enters at the
- *  verification URL. */
-export const startDeviceAuth = async (): Promise<DeviceAuthStart> => {
-  const res = await fetch(`${DEVICE_AUTH_BASE}/usercode`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ client_id: CODEX_OAUTH_CLIENT_ID }),
-  })
-  if (!res.ok) {
-    throw new Error(`Device auth start failed: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`)
+export const createResilientCodexModel = (
+  credential: CodexCredential,
+  recovery: CodexRecovery,
+): LanguageModel => {
+  const createModel = recovery.createModel ?? createCodexModel
+  type RecoveryState =
+    | { kind: 'initial' }
+    | { kind: 'recovering' }
+    | { kind: 'refreshed'; model: V3Model }
+    | { kind: 'fallback' }
+  let state: RecoveryState = { kind: 'initial' }
+  const invokeFallback = <T>(
+    invoke: (model: V3Model) => PromiseLike<T>,
+  ): PromiseLike<T> => invoke(asV3(recovery.fallback))
+  const markAndFallback = async <T>(
+    error: unknown,
+    invoke: (model: V3Model) => PromiseLike<T>,
+  ): Promise<T> => {
+    state = { kind: 'fallback' }
+    try {
+      await recovery.onFailure(error)
+    } catch {
+      // State persistence must not prevent the user's fallback turn.
+    }
+    return invokeFallback(invoke)
   }
-  const json = (await res.json()) as {
-    device_auth_id: string
-    user_code?: string
-    usercode?: string
-    interval?: number | string
+  const recover = async <T>(
+    initial: () => PromiseLike<T>,
+    invoke: (model: V3Model) => PromiseLike<T>,
+  ): Promise<T> => {
+    const attemptedState = state
+    if (attemptedState.kind === 'fallback' || attemptedState.kind === 'recovering') {
+      return invokeFallback(invoke)
+    }
+    try {
+      return await (attemptedState.kind === 'refreshed'
+        ? invoke(attemptedState.model)
+        : initial())
+    } catch (error) {
+      if (!isCodexAuthError(error)) throw error
+      if (attemptedState.kind === 'refreshed') {
+        return markAndFallback(error, invoke)
+      }
+      if (state.kind !== 'initial') {
+        // A concurrent operation already latched this failed credential.
+        return invokeFallback(invoke)
+      }
+      state = { kind: 'recovering' }
+      let refreshed: LanguageModel
+      try {
+        refreshed = createModel(await recovery.refresh())
+      } catch {
+        state = { kind: 'fallback' }
+        return invoke(asV3(recovery.fallback))
+      }
+      try {
+        const refreshedModel = asV3(refreshed)
+        const result = await invoke(refreshedModel)
+        state = { kind: 'refreshed', model: refreshedModel }
+        return result
+      } catch (retryError) {
+        return markAndFallback(retryError, invoke)
+      }
+    }
   }
-  const userCode = json.user_code ?? json.usercode
-  if (!json.device_auth_id || !userCode) {
-    throw new Error('Device auth start returned an unexpected shape')
+  const middleware: LanguageModelMiddleware = {
+    specificationVersion: 'v3',
+    wrapGenerate: ({ doGenerate, params }) => (
+      recover(doGenerate, (model) => model.doGenerate(params))
+    ),
+    wrapStream: ({ doStream, params }) => (
+      recover(doStream, (model) => model.doStream(params))
+    ),
   }
-  const interval = typeof json.interval === 'string' ? parseInt(json.interval, 10) : (json.interval ?? 5)
-  return {
-    deviceAuthId: json.device_auth_id,
-    userCode,
-    interval: Number.isFinite(interval) && interval > 0 ? interval : 5,
-    verificationUrl: DEVICE_VERIFICATION_URL,
-  }
-}
-
-export type DevicePollResult =
-  | { status: 'pending' }
-  | { status: 'complete'; tokens: RefreshedTokens }
-
-/** One poll attempt. 403/404 = user hasn't approved yet. On success the
- *  backend hands us a server-minted PKCE pair + authorization code, which we
- *  immediately exchange for tokens. */
-export const pollDeviceAuth = async (
-  deviceAuthId: string,
-  userCode: string,
-): Promise<DevicePollResult> => {
-  const res = await fetch(`${DEVICE_AUTH_BASE}/token`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ device_auth_id: deviceAuthId, user_code: userCode }),
-  })
-  if (res.status === 403 || res.status === 404) return { status: 'pending' }
-  if (!res.ok) {
-    throw new Error(`openai device-auth hiccup (poll) — usually temporary, grab a fresh code. HTTP ${res.status} ${(await res.text()).slice(0, 200)}`)
-  }
-  const json = (await res.json()) as { authorization_code: string; code_verifier: string }
-  if (!json.authorization_code || !json.code_verifier) {
-    throw new Error('Device auth poll returned an unexpected shape')
-  }
-
-  const exchange = await fetch(CODEX_TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: CODEX_OAUTH_CLIENT_ID,
-      code: json.authorization_code,
-      code_verifier: json.code_verifier,
-      redirect_uri: 'https://auth.openai.com/deviceauth/callback',
-    }),
-  })
-  if (!exchange.ok) {
-    throw new Error(`openai device-auth hiccup (exchange) — usually temporary, grab a fresh code. HTTP ${exchange.status} ${(await exchange.text()).slice(0, 200)}`)
-  }
-  const tokens = (await exchange.json()) as {
-    access_token: string
-    refresh_token: string
-    id_token?: string
-    expires_in?: number
-  }
-  return {
-    status: 'complete',
-    tokens: {
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      idToken: tokens.id_token,
-      expiresInSec: tokens.expires_in,
-    },
-  }
-}
-
-export interface RefreshedTokens {
-  accessToken: string
-  refreshToken: string
-  idToken?: string
-  expiresInSec?: number
-}
-
-/**
- * Exchange a refresh token for a fresh access token at the OpenAI OAuth
- * endpoint (grant_type=refresh_token, public client, no secret).
- */
-export const refreshCodexToken = async (refreshToken: string): Promise<RefreshedTokens> => {
-  const res = await fetch(CODEX_TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'refresh_token',
-      client_id: CODEX_OAUTH_CLIENT_ID,
-      refresh_token: refreshToken,
-    }),
-  })
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`Codex token refresh failed: HTTP ${res.status} ${body.slice(0, 200)}`)
-  }
-  const json = (await res.json()) as {
-    access_token: string
-    refresh_token?: string
-    id_token?: string
-    expires_in?: number
-  }
-  return {
-    accessToken: json.access_token,
-    refreshToken: json.refresh_token ?? refreshToken, // reuse if not rotated
-    idToken: json.id_token,
-    expiresInSec: json.expires_in,
-  }
+  return wrapLanguageModel({
+    model: createModel(credential) as never,
+    middleware,
+  }) as unknown as LanguageModel
 }
 
 /** Decode a JWT payload without verifying (we only read non-secret claims). */

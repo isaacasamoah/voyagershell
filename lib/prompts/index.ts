@@ -2,19 +2,19 @@
 // Layered system: Core → Voyage → User → Tools → Context
 // DSPy-compatible: pure functions, structured data
 
-import type { RetrievalResult } from '@/lib/retrieval';
-import { curatePromptWindow, type KnowledgeNode } from '@/lib/knowledge';
-import { loadVoyageContext, formatVoyageContextSection } from '@/lib/voyage/context';
-import type { VoyagerIdentity } from '@/lib/messaging/address';
-import { formatCuratedWindow } from './format/user';
+import type { RetrievalResult } from "@/lib/retrieval";
+import { curatePromptWindow } from "@/lib/knowledge";
+import {
+  loadVoyageContext,
+  formatVoyageContextSection,
+} from "@/lib/voyage/context";
+import type { VoyagerIdentity } from "@/lib/messaging/address";
+import { formatCuratedWindow } from "./format/user";
+import { retrieveKnowledgeGraphClaims } from "@/lib/knowledge/kernel/boundary";
+import { graphMemoryReachWarning, mergeGraphStandingPreferences } from "./graph-standing";
 
-// Re-export types
-export * from './types';
-
-// Re-export core prompt
-export { CORE_PROMPT, CORE_PROMPT_TOKENS } from './core';
-
-// Re-export defaults
+export * from "./types";
+export { CORE_PROMPT, CORE_PROMPT_TOKENS } from "./core";
 export {
   DEFAULT_VOYAGE_CONFIG,
   DEFAULT_USER_PROFILE,
@@ -24,21 +24,15 @@ export {
   VOYAGE_PRESET_ENTERPRISE,
   mergeVoyageConfig,
   mergeUserProfile,
-} from './defaults';
-
-// Re-export formatters
-export * from './format';
-
-// Re-export composer
-export {
-  composePrompt,
-  type ComposeInput,
-} from './compose';
+} from "./defaults";
+export * from "./format";
+export { mergeGraphStandingPreferences } from "./graph-standing";
+export { composePrompt, type ComposeInput } from "./compose";
 
 // Imports for main prompt composition
-import { composePrompt } from './compose';
-import { CORE_PROMPT } from './core';
-import { mergeUserProfile } from './defaults';
+import { composePrompt } from "./compose";
+import { CORE_PROMPT } from "./core";
+import { mergeUserProfile } from "./defaults";
 
 // ============================================================================
 // PROMPT COMPOSITION — Main entry point for chat routes
@@ -50,23 +44,25 @@ export interface ChatUserProfile {
   id: string;
   displayName?: string;
   personalization?: {
-    tone?: 'concise' | 'detailed' | 'casual';
-    density?: 'minimal' | 'balanced' | 'comprehensive';
+    tone?: "concise" | "detailed" | "casual";
+    density?: "minimal" | "balanced" | "comprehensive";
   };
 }
 
-export type AuthState = 'unauthenticated' | 'authenticated' | 'just-authenticated';
+export type AuthState =
+  | "unauthenticated"
+  | "authenticated"
+  | "just-authenticated";
 
 interface ComposeOptions {
   profile?: ChatUserProfile;
   voyageSlug?: string;
-  sessionId?: string;  // Current session ID for operational tier recency filtering
-  continuityContext?: string | null;  // Retrieved context from conversation history
+  sessionId?: string; // Current session ID for operational tier recency filtering
+  continuityContext?: string | null; // Retrieved context from conversation history
   authState?: AuthState;
-  voyagerIdentity?: VoyagerIdentity;  // Canonical current name + address; omitted when unnamed
-  ownerName?: string;  // The human owner's display name, for the identity line
+  voyagerIdentity?: VoyagerIdentity; // Canonical current name + address; omitted when unnamed
+  ownerName?: string; // The human owner's display name, for the identity line
 }
-
 
 /**
  * Compose a full system prompt with preferences and pinned knowledge.
@@ -78,26 +74,58 @@ interface ComposeOptions {
  */
 export const composeSystemPrompt = async (
   userId: string,
-  options?: ComposeOptions
-): Promise<{ staticPrompt: string; dynamicPrompt: string; retrieval: RetrievalResult }> => {
-  const { profile, voyageSlug, sessionId, continuityContext, authState, voyagerIdentity, ownerName } = options ?? {};
+  options?: ComposeOptions,
+): Promise<{
+  staticPrompt: string;
+  dynamicPrompt: string;
+  retrieval: RetrievalResult;
+  workingMemoryUnitIds: string[];
+}> => {
+  const {
+    profile,
+    voyageSlug,
+    sessionId,
+    continuityContext,
+    authState,
+    voyagerIdentity,
+    ownerName,
+  } = options ?? {};
   const startTime = Date.now();
 
   // Load curated knowledge window + voyage context in parallel. Message
   // awareness is no longer woven into the prompt (v2) — messages are
   // delivered on the wire and retrieved on demand, not re-narrated here.
-  const [curatedWindow, voyageContext] = await Promise.all([
-    curatePromptWindow(userId, voyageSlug, undefined, sessionId).catch((error) => {
-      console.warn('[Prompts] Failed to curate prompt window:', error);
-      return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 };
-    }),
+  const [projectedWindow, voyageContext, graphMemory] = await Promise.all([
+    curatePromptWindow(userId, voyageSlug, undefined, sessionId).catch(
+      (error) => {
+        console.warn("[Prompts] Failed to curate prompt window:", error);
+        return {
+          preferences: [],
+          operational: [],
+          domainHeadlines: [],
+          totalTokens: 0,
+          evictedCount: 0,
+        };
+      },
+    ),
     voyageSlug
       ? loadVoyageContext(voyageSlug, userId).catch((error) => {
-          console.warn('[Prompts] Failed to load voyage context:', error);
+          console.warn("[Prompts] Failed to load voyage context:", error);
           return null;
         })
       : Promise.resolve(null),
+    retrieveKnowledgeGraphClaims({ kind: "person", authorityId: userId }).catch(
+      () => ({
+        outcome: "exception" as const,
+        claims: [] as const,
+        truncated: false as const,
+      }),
+    ),
   ]);
+  const curatedWindow = mergeGraphStandingPreferences(
+    projectedWindow,
+    graphMemory,
+  );
 
   // Preferences render exactly once, via formatCuratedWindow below ("What I
   // Know About You"). composePrompt no longer re-renders them (the old shim
@@ -110,13 +138,14 @@ export const composeSystemPrompt = async (
     ? mergeUserProfile(profile.id, {
         displayName: profile.displayName,
         communication: {
-          verbosity: profile.personalization?.tone === 'concise'
-            ? 'terse'
-            : profile.personalization?.tone === 'detailed'
-              ? 'detailed'
-              : 'balanced',
-          directness: 'balanced',
-          technicalLevel: 'intermediate',
+          verbosity:
+            profile.personalization?.tone === "concise"
+              ? "terse"
+              : profile.personalization?.tone === "detailed"
+                ? "detailed"
+                : "balanced",
+          directness: "balanced",
+          technicalLevel: "intermediate",
         },
         interaction: {
           confirmActions: true,
@@ -140,24 +169,32 @@ export const composeSystemPrompt = async (
   // Build curated knowledge section (stable across turns — cacheable)
   // Three tiers: "What I Know About You", "What's Happening Now", "Domain Context"
   const knowledgeSection = formatCuratedWindow(curatedWindow);
-  const knowledgeSuffix = knowledgeSection ? `\n\n---\n\n${knowledgeSection}` : '';
+  const knowledgeSuffix = knowledgeSection
+    ? `\n\n---\n\n${knowledgeSection}`
+    : "";
 
   // Static prompt: identity + curated knowledge (cacheable)
   const staticPrompt = composed.systemPrompt + knowledgeSuffix;
 
   // Dynamic prompt: per-turn data that changes every request (not cached)
   const dynamicParts: string[] = [];
+  const graphWarning = graphMemoryReachWarning(graphMemory);
+  if (graphWarning) dynamicParts.push(graphWarning);
 
   // Auth state flag — identity handles the behavior (see First Contact in core.ts)
-  if (authState === 'unauthenticated') {
-    dynamicParts.push('# Auth: Not signed in — sign-in UI is rendered by the client. Do not offer sign-in or mention email.');
-  } else if (authState === 'just-authenticated') {
-    dynamicParts.push('# Auth: Just signed in');
+  if (authState === "unauthenticated") {
+    dynamicParts.push(
+      "# Auth: Not signed in — sign-in UI is rendered by the client. Do not offer sign-in or mention email.",
+    );
+  } else if (authState === "just-authenticated") {
+    dynamicParts.push("# Auth: Just signed in");
   }
 
   // First-turn display name capture — only when user has no display name
   if (profile && !profile.displayName) {
-    dynamicParts.push('# Display Name\nThis user has no display name yet. On your first response, naturally ask what you should call them. When they tell you, use the set_display_name tool. Keep it conversational — "What should I call you?" not a form.');
+    dynamicParts.push(
+      '# Display Name\nThis user has no display name yet. On your first response, naturally ask what you should call them. When they tell you, use the set_display_name tool. Keep it conversational — "What should I call you?" not a form.',
+    );
   }
 
   // Voyage context (membership, roles, activity pulse)
@@ -167,19 +204,20 @@ export const composeSystemPrompt = async (
 
   // Continuity context (changes per turn based on reference signals)
   if (continuityContext) {
-    dynamicParts.push(`# Conversation Context (from earlier)\n${continuityContext}`);
+    dynamicParts.push(
+      `# Conversation Context (from earlier)\n${continuityContext}`,
+    );
   }
 
-  const dynamicPrompt = dynamicParts.length > 0
-    ? dynamicParts.join('\n\n---\n\n')
-    : '';
+  const dynamicPrompt =
+    dynamicParts.length > 0 ? dynamicParts.join("\n\n---\n\n") : "";
 
   const latencyMs = Date.now() - startTime;
 
   // Return metadata for logging (derived from pinned + preferences only)
   const retrieval: RetrievalResult = {
     knowledge: pinned,
-    context: '',
+    context: "",
     tokenEstimate: 0,
     metadata: {
       threshold: 0,
@@ -193,6 +231,12 @@ export const composeSystemPrompt = async (
     staticPrompt,
     dynamicPrompt,
     retrieval,
+    workingMemoryUnitIds: graphMemory.claims
+      .filter(
+        (claim) =>
+          claim.knowledgeType === "preference" && claim.attentionScore >= 0.5,
+      )
+      .map((claim) => claim.knowledgeUnitId),
   };
 };
 

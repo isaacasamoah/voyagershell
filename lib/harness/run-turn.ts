@@ -29,7 +29,6 @@ export const runTurn = async (
 ): Promise<TurnResult> => {
   const { userId, conversationId, voyageSlug, authState, newMessage, displayName } = ctx
   const rawQuery = newMessage
-
   // ── The loop guard (the hard rule, code-attested) ─────────────────────────
   // A Voyager turn may begin ONLY on human-authored input. actor=voyager events
   // NEVER trigger another Voyager's turn — two named Voyagers cannot answer each
@@ -43,14 +42,12 @@ export const runTurn = async (
     }, 'warn')
     return { kind: 'empty' }
   }
-
   // The previous request's waitUntil is only a fast path. A later authorized
   // human turn drains one audience-visible pending or expired job before the
   // future K4 memory-read boundary can depend on it.
   if (!ctx.autoSent && rawQuery) {
     await runCartographer({ userId })
   }
-
   // Resolve the address ONCE, server-side, from the real handle set — the same
   // pure resolver the composer badge uses (Principle 1: privacy is computed,
   // never model-guessed). `voyager` survives only as an alias for your own.
@@ -67,7 +64,6 @@ export const runTurn = async (
   const voyagerIdentity = ownIdentity.displayName ? ownIdentity : undefined
   const intent = detectActionIntent(queryText)
   host.defer(reapStuckTasks().catch(() => {}))
-
   // The caller's own Voyager is the only brain this endpoint can execute.
   const streamContext = conversationId
     ? await composeContextFromStream(userId, conversationId, voyageSlug)
@@ -86,18 +82,15 @@ export const runTurn = async (
     })
   }
   const conversationMessages: ConversationMessage[] = renderMessagesForModel(rawConversationMessages)
-
   log.message('Processing user message', {
     conversationId,
     voyageSlug,
     messageCount: conversationMessages.length,
     queryLength: queryText.length,
   })
-
   const windowResult = computeWindow(conversationMessages)
   const truncatedMessages = getTruncatedMessages(conversationMessages, windowResult)
   const referenceSignals = queryText ? detectReferenceSignals(queryText) : []
-
   let continuityContext: string | null = null
   if (referenceSignals.length > 0 || windowResult.hasMoreHistory) {
     continuityContext = await retrieveForContinuity(
@@ -117,7 +110,6 @@ export const runTurn = async (
       })
     }
   }
-
   if (queryText && conversationId) {
     const learningSignal = detectLearningSignal(queryText)
     if (learningSignal) {
@@ -132,38 +124,26 @@ export const runTurn = async (
       })
     }
   }
-
   const { messages: selectedWindowMessages } = windowResult
   const windowedMessages = selectedWindowMessages.map((message) => ({
     role: message.role,
     content: message.content,
   }))
-
   // The room grammar and the held-address gate run first — neither is a message
   // and neither may reach the ledger. Then the ingress claim, before any effect.
   const gate = await runRoomGate({ ctx, queryText, address })
   if (gate.result) return gate.result
   const ingress = await claimTurnIngress(ctx, host, gate, queryText, address)
   if (ingress.result) return ingress.result
-
   const roomResult = runRoomTurn(gate.room, address)
   if (roomResult) return roomResult
-
-  const { tools, registrations } = createVoyagerTools({
-    userId,
-    voyageSlug: voyageSlug ?? undefined,
-    conversationId,
-    waitUntil: (promise) => host.defer(promise),
-    messages: windowedMessages,
-  })
-  const toolStrategy = composeToolStrategy(registrations)
-
   let staticPrefix: string
   let dynamicSuffix = ''
   let retrievedKnowledge: KnowledgeNode[] = []
   let retrievalEventId: string | null = null
+  let workingMemoryUnitIds: string[] = []
   try {
-    const { staticPrompt, dynamicPrompt, retrieval } = await composeSystemPrompt(userId, {
+    const composed = await composeSystemPrompt(userId, {
       profile: { id: userId, displayName },
       voyageSlug: voyageSlug ?? undefined,
       sessionId: conversationId,
@@ -172,26 +152,38 @@ export const runTurn = async (
       voyagerIdentity,
       ownerName: displayName,
     })
-    staticPrefix = `${staticPrompt}\n\n${toolStrategy}`
-    dynamicSuffix = dynamicPrompt
-    retrievedKnowledge = retrieval.knowledge
+    workingMemoryUnitIds = composed.workingMemoryUnitIds
+    staticPrefix = composed.staticPrompt
+    dynamicSuffix = composed.dynamicPrompt
+    retrievedKnowledge = composed.retrieval.knowledge
     logRetrievalEvent({
       userId,
       conversationId,
       query: queryText,
-      nodesReturned: retrieval.knowledge,
-      threshold: retrieval.metadata.threshold,
-      pinnedCount: retrieval.metadata.pinnedCount,
-      searchCount: retrieval.metadata.searchCount,
-      latencyMs: retrieval.metadata.latencyMs,
-      tokensInContext: retrieval.tokenEstimate,
+      nodesReturned: composed.retrieval.knowledge,
+      threshold: composed.retrieval.metadata.threshold,
+      pinnedCount: composed.retrieval.metadata.pinnedCount,
+      searchCount: composed.retrieval.metadata.searchCount,
+      latencyMs: composed.retrieval.metadata.latencyMs,
+      tokensInContext: composed.retrieval.tokenEstimate,
     }).then((id) => {
       retrievalEventId = id
     })
   } catch (error) {
     log.api('Prompt composition failed, using base prompt', { error: String(error) }, 'warn')
-    staticPrefix = `${getBasePrompt()}\n\n${toolStrategy}`
+    staticPrefix = getBasePrompt()
   }
+  const toolContext = {
+    userId,
+    voyageSlug: voyageSlug ?? undefined,
+    conversationId,
+    waitUntil: (promise: Promise<unknown>) => host.defer(promise),
+    messages: windowedMessages,
+    workingMemoryUnitIds,
+  }
+  const { tools, registrations } = createVoyagerTools(toolContext)
+  const toolStrategy = composeToolStrategy(registrations)
+  staticPrefix = `${staticPrefix}\n\n${toolStrategy}`
 
   // Room truth: the model NEVER guesses membership — the code-attested roster
   // (active vs invited-not-joined) goes into the dynamic prompt every turn.

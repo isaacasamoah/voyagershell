@@ -11,9 +11,11 @@ export type GraphTables = {
     scope_authority_id: string; member_profile_ids: string[]; created_at?: string }>
   knowledge_units: TableShape<{
     id: string; claim: string; source_event_id: string; extractor_version: string;
-    claim_key: string; knowledge_audience_id: string
+    claim_key: string; knowledge_audience_id: string; knowledge_type: string | null;
+    attention_score: number | null; embedding: string | null
   }, { id: string; claim: string; source_event_id: string; extractor_version: string;
-    claim_key: string; knowledge_audience_id: string }>
+    claim_key: string; knowledge_audience_id: string; knowledge_type?: string | null;
+    attention_score?: number | null; embedding?: string | null }>
   graph_nodes: TableShape<{
     id: string; kind: GraphNodeKind; authority_id: string; label: string
   }, { id: string; kind: GraphNodeKind; authority_id: string; label: string }>
