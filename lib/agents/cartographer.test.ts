@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { extractionSchema } from './cartographer/contract'
 
 const mocks = vi.hoisted(() => ({
   resolveUserModelWithMeta: vi.fn(),
@@ -11,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   applySessionDecay: vi.fn(),
   checkPreferenceSuperseding: vi.fn(),
   processRetrievalFeedback: vi.fn(),
+  embedCartographerText: vi.fn(),
+  embedTopicInputs: vi.fn(),
+  findTopicCandidates: vi.fn(),
 }))
 
 vi.mock('@/lib/models', () => ({
@@ -35,6 +37,11 @@ vi.mock('./cartographer/preference-superseding', () => ({
 }))
 vi.mock('./cartographer/retrieval-feedback', () => ({
   processRetrievalFeedback: mocks.processRetrievalFeedback,
+}))
+vi.mock('./cartographer/topics', () => ({
+  embedCartographerText: mocks.embedCartographerText,
+  embedTopicInputs: mocks.embedTopicInputs,
+  findTopicCandidates: mocks.findTopicCandidates,
 }))
 
 import { runCartographer } from './cartographer'
@@ -84,6 +91,12 @@ describe('event-owned Cartographer extraction', () => {
     })
     mocks.applySessionDecay.mockResolvedValue({ decayed: 0, skipped: 0 })
     mocks.processRetrievalFeedback.mockResolvedValue({ promoted: 0 })
+    mocks.embedCartographerText.mockResolvedValue([1, 0])
+    mocks.embedTopicInputs.mockResolvedValue([{
+      label: 'amber notebook',
+      embedding: '[1,0]',
+    }])
+    mocks.findTopicCandidates.mockResolvedValue([])
   })
 
   it('records concrete model identity and completes one exact source job', async () => {
@@ -107,6 +120,8 @@ describe('event-owned Cartographer extraction', () => {
       inputTokens: 120,
       outputTokens: 30,
     }))
+    expect(mocks.completeExtractionAttempt.mock.calls[0][0].knowledgeType).toBeUndefined()
+    expect(mocks.completeExtractionAttempt.mock.calls[0][0].embedding).toBeUndefined()
     expect(mocks.applyEnrichments).toHaveBeenCalledOnce()
     expect(result).toEqual({
       kind: 'completed',
@@ -177,29 +192,35 @@ describe('event-owned Cartographer extraction', () => {
       outcome: 'provider_failed',
     }))
   })
-})
 
-describe('single structured extraction contract', () => {
-  it('accepts one claim and one supplied-person slot', () => {
-    expect(extractionSchema.safeParse({
-      claim: 'Elisheya keeps the amber notebook.',
-      aboutPersonId: attempt.candidates[0].personId,
+  it('embeds and resolves bounded topic proposals only for v3 jobs', async () => {
+    mocks.beginExtractionAttempt.mockResolvedValue({
+      ...attempt,
+      extractorVersion: 'cartographer-single-claim-v3',
+    })
+    mocks.extractKnowledge.mockResolvedValue({
+      kind: 'structured',
+      object: {
+        claim: 'Elisheya keeps the amber notebook.',
+        aboutPersonId: null,
+        knowledgeType: 'domain',
+        attentionScore: 0.8,
+        contextSnippet: 'Elisheya keeps the amber notebook.',
+        topics: ['amber notebook'],
+      },
+      inputTokens: 120,
+      outputTokens: 30,
+    })
+
+    await runCartographer({ userId: attempt.sourceActorId })
+
+    expect(mocks.findTopicCandidates).toHaveBeenCalledOnce()
+    expect(mocks.embedTopicInputs).toHaveBeenCalledWith(['amber notebook'])
+    expect(mocks.completeExtractionAttempt).toHaveBeenCalledWith(expect.objectContaining({
       knowledgeType: 'domain',
       attentionScore: 0.8,
-      contextSnippet: 'Elisheya keeps the amber notebook.',
-    }).success).toBe(true)
-  })
-
-  it('rejects about-without-claim, extra fields, and multiple claims', () => {
-    const base = {
-      aboutPersonId: attempt.candidates[0].personId,
-      knowledgeType: 'domain',
-      attentionScore: 0.8,
-      contextSnippet: 'Notebook fact.',
-    }
-    expect(extractionSchema.safeParse({ ...base, claim: null }).success).toBe(false)
-    expect(extractionSchema.safeParse({ ...base, claim: 'Fact', secondClaim: 'Other' }).success)
-      .toBe(false)
-    expect(extractionSchema.safeParse({ ...base, claim: ['Fact', 'Other'] }).success).toBe(false)
+      embedding: '[1,0]',
+      topicInputs: [{ label: 'amber notebook', embedding: '[1,0]' }],
+    }))
   })
 })

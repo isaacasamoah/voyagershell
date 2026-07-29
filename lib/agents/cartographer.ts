@@ -9,9 +9,19 @@ import {
   beginExtractionAttempt,
   completeExtractionAttempt,
 } from './cartographer/jobs'
-import type { CartographerPayload } from './cartographer/types'
-import { getOpenAI, toVectorString } from './cartographer/embeddings'
-import { CARTOGRAPHER_EXTRACTOR_VERSION } from './cartographer/contract'
+import type { CartographerPayload, TopicCandidate } from './cartographer/types'
+import { toVectorString } from './cartographer/embeddings'
+import {
+  isV3Contract,
+  requiresUnitPhysics,
+  type ExtractionObject,
+} from './cartographer/contract'
+import {
+  embedCartographerText,
+  embedTopicInputs,
+  findTopicCandidates,
+  type TopicInput,
+} from './cartographer/topics'
 
 export type CartographerRunResult =
   | { kind: 'no_job' }
@@ -59,7 +69,27 @@ export const runCartographer = async (
       return { kind: 'no_job' }
     }
 
-    const extracted = await extractKnowledge(resolved.model, attempt)
+    let topicCandidates: TopicCandidate[] = []
+    if (isV3Contract(attempt.extractorVersion)) {
+      try {
+        const sourceEmbedding = await embedCartographerText(attempt.sourceContent)
+        topicCandidates = await findTopicCandidates(
+          attempt.knowledgeAudienceId,
+          sourceEmbedding,
+        )
+      } catch (error) {
+        const completion = await completeExtractionAttempt({
+          attempt,
+          result: 'provider_failed',
+          errorClass: error instanceof Error ? error.name.slice(0, 80) : 'embedding_provider_error',
+        })
+        return {
+          kind: 'completed', outcome: completion.outcome,
+          sourceEventId: attempt.sourceEventId, unitId: completion.unitId,
+        }
+      }
+    }
+    const extracted = await extractKnowledge(resolved.model, attempt, topicCandidates)
     if (extracted.kind === 'failed') {
       const completion = await completeExtractionAttempt({
         attempt,
@@ -76,14 +106,13 @@ export const runCartographer = async (
 
     const object = extracted.object
     let embedding: string | undefined
-    if (object.claim !== null && attempt.extractorVersion === CARTOGRAPHER_EXTRACTOR_VERSION) {
+    let topicInputs: TopicInput[] | undefined
+    if (object.claim !== null && requiresUnitPhysics(attempt.extractorVersion)) {
       try {
-        const response = await getOpenAI().embeddings.create({
-          model: 'text-embedding-3-small',
-          input: object.claim,
-          dimensions: 1536,
-        })
-        embedding = toVectorString(response.data[0].embedding)
+        embedding = toVectorString(await embedCartographerText(object.claim))
+        if (isV3Contract(attempt.extractorVersion)) {
+          topicInputs = await embedTopicInputs((object as ExtractionObject).topics)
+        }
       } catch (error) {
         const completion = await completeExtractionAttempt({
           attempt,
@@ -102,9 +131,14 @@ export const runCartographer = async (
       rawOutput: object,
       claim: object.claim ?? undefined,
       aboutPersonId: object.aboutPersonId ?? undefined,
-      knowledgeType: object.knowledgeType,
-      attentionScore: object.attentionScore,
+      knowledgeType: requiresUnitPhysics(attempt.extractorVersion)
+        ? object.knowledgeType
+        : undefined,
+      attentionScore: requiresUnitPhysics(attempt.extractorVersion)
+        ? object.attentionScore
+        : undefined,
       embedding,
+      topicInputs,
       inputTokens: extracted.inputTokens,
       outputTokens: extracted.outputTokens,
     })

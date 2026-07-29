@@ -8,17 +8,17 @@ const GENERATION_APIS = new Set(['generateObject', 'generateText', 'streamObject
 const EMBEDDING_APIS = new Set(['embed', 'embedMany'])
 const EXPECTED_GENERATION = [
   'lib/agents/cartographer/extractor.ts|generateObject|model',
+  'lib/agents/cartographer/extractor.ts|generateObject|model',
   'lib/agents/deep-retrieval.ts|generateText|resolved.model',
   'lib/harness/run-turn.ts|streamText|chatModel',
 ]
 const EXPECTED_EXTRACTOR_HANDOFF = ['lib/agents/cartographer.ts|extractKnowledge|resolved.model']
 const EXPECTED_OPENAI_EMBEDDINGS = [
-  // K4a's embed-before-commit: the unit's vector is computed on the API key,
-  // never the subscription, because the Codex backend does not serve embeddings.
-  "lib/agents/cartographer.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/apply.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
+  "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
+  "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/knowledge/event-storage.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/knowledge/search.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
 ]

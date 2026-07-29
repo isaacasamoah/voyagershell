@@ -5,6 +5,7 @@ import type {
   ExtractionCompletion,
   ExtractionFailureKind,
 } from './types'
+import type { TopicInput } from './topics'
 
 export const beginExtractionAttempt = async (input: {
   userId: string
@@ -68,6 +69,7 @@ export const completeExtractionAttempt = async (input: {
   knowledgeType?: 'domain' | 'operational' | 'preference'
   attentionScore?: number
   embedding?: string
+  topicInputs?: TopicInput[]
   errorClass?: string
   inputTokens?: number
   outputTokens?: number
@@ -84,6 +86,7 @@ export const completeExtractionAttempt = async (input: {
       p_knowledge_type: input.knowledgeType ?? null,
       p_attention_score: input.attentionScore ?? null,
       p_embedding: input.embedding ?? null,
+      p_topic_inputs: input.topicInputs ?? null,
       p_error_class: input.errorClass ?? null,
       p_input_tokens: input.inputTokens ?? null,
       p_output_tokens: input.outputTokens ?? null,

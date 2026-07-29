@@ -9,7 +9,7 @@ import {
 import {
   AUTHORITY_EDGE_KINDS,
   GRAPH_EDGE_KINDS,
-  GRAPH_NODE_KINDS,
+  K2_GRAPH_NODE_KINDS,
   canonicalEdgeEndpoints,
   canonicalGraphIdentity,
 } from './contract'
@@ -31,7 +31,8 @@ const cloneFixture = (): any => structuredClone(knowledgeGraphFixture)
 
 describe('ORU-319 final graph substrate contract', () => {
   it('locks six canonical node kinds and all sixteen edge kinds', () => {
-    expect(new Set(knowledgeGraphFixture.nodes.map((node) => node.kind))).toEqual(new Set(GRAPH_NODE_KINDS))
+    expect(new Set(knowledgeGraphFixture.nodes.map((node) => node.kind)))
+      .toEqual(new Set(K2_GRAPH_NODE_KINDS))
     const exercised = new Set([
       ...knowledgeGraphFixture.edges.map((edge) => edge.kind),
       ...AUTHORITY_EDGE_KINDS,

@@ -1,4 +1,5 @@
 import type {
+  Json,
   KnowledgeExtractionJobState,
   KnowledgeExtractionOutcomeKind,
   NullableJson,
@@ -25,6 +26,12 @@ type CurrentRow = {
   delivery_status: string | null
 }
 export type KnowledgeTables = {
+  knowledge_topics: TableShape<{
+    id: string; normalized_label: string; embedding: string; created_at: string
+  }, { id: string; normalized_label: string; embedding: string; created_at?: string }>
+  knowledge_topic_backfill_outcomes: TableShape<{
+    unit_id: string; extractor_version: string; raw_output: Json; recorded_at: string
+  }, { unit_id: string; extractor_version: string; raw_output: Json; recorded_at?: string }>
   knowledge_events: TableShape<EventRow, {
     id?: string; sequence_num?: number; user_id?: string | null; voyage_slug?: string | null;
     event_type: string; content?: string | null; metadata?: NullableJson; source_type?: string | null;
@@ -71,9 +78,11 @@ export type KnowledgeTables = {
     ]>
   knowledge_extractor_contracts: TableShape<{
     extractor_version: string; activated_at: string; embedding_model: string | null;
-    embedding_dimensions: number | null
+    embedding_dimensions: number | null; topic_similarity_threshold: number | null;
+    topic_candidate_limit: number | null
   }, { extractor_version: string; activated_at?: string; embedding_model?: string | null;
-    embedding_dimensions?: number | null }>
+    embedding_dimensions?: number | null; topic_similarity_threshold?: number | null;
+    topic_candidate_limit?: number | null }>
   knowledge_extractor_contract_active: TableShape<{
     singleton: boolean; extractor_version: string; activated_at: string
   }, { singleton?: boolean; extractor_version: string; activated_at?: string }>

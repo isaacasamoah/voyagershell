@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { GRAPH_NODE_KINDS } from './contract'
+import { K2_GRAPH_NODE_KINDS } from './contract'
 import { knowledgeGraphFixture } from './fixture'
 import { renderKnowledgeGraphSql } from './generate-sql'
 
@@ -11,7 +11,7 @@ const retrieval = (): string => readRepoFile('supabase/migrations/063_knowledge_
 describe('knowledge-graph retrieval contract', () => {
   it('keeps all six root kinds behind one database traversal', () => {
     const sql = renderKnowledgeGraphSql()
-    for (const kind of GRAPH_NODE_KINDS) {
+    for (const kind of K2_GRAPH_NODE_KINDS) {
       expect(sql).toContain(`('${kind}'::public.graph_node_kind`)
     }
     expect(sql).toContain('knowledge_graph_six_kind_retrieval_failed')

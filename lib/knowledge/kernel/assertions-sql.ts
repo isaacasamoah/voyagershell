@@ -1,4 +1,4 @@
-import { GRAPH_EDGE_KINDS, GRAPH_NODE_KINDS, type KnowledgeGraphFixture } from './contract'
+import { GRAPH_EDGE_KINDS, K2_GRAPH_NODE_KINDS, type KnowledgeGraphFixture } from './contract'
 import { hashExpression, quote, uuid, uuidArray } from './sql'
 
 export const renderKnowledgeGraphAssertions = (fixture: KnowledgeGraphFixture): string => {
@@ -14,7 +14,7 @@ export const renderKnowledgeGraphAssertions = (fixture: KnowledgeGraphFixture): 
   const blueMessage = fixture.events.find((event) => event.audienceKey === 'blue-source')!
   const privateUnit = fixture.units.find((unit) => unit.audienceKey === 'private-a')!
   const negative = fixture.negativeSourceEvent
-  const allNodeKinds = GRAPH_NODE_KINDS.map(quote).join(', ')
+  const allNodeKinds = K2_GRAPH_NODE_KINDS.map(quote).join(', ')
   const allEdgeKinds = GRAPH_EDGE_KINDS.map(quote).join(', ')
   return `
 DO $knowledge_graph_base$

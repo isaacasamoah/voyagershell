@@ -7,7 +7,7 @@ import {
 import {
   AUTHORITY_EDGE_KINDS,
   GRAPH_EDGE_KINDS,
-  GRAPH_NODE_KINDS,
+  K2_GRAPH_NODE_KINDS,
   GRAPH_GRANT_BASIS_KINDS,
   KNOWLEDGE_AUDIENCE_PURPOSES,
   KNOWLEDGE_AUDIENCE_SCOPE_KINDS,
@@ -86,7 +86,7 @@ export const validateKnowledgeGraphFixture = (value: unknown): KnowledgeGraphFix
     const path = `nodes.${index}`
     const node = recordAt(raw, path)
     const id = uuidAt(node.id, `${path}.id`)
-    const kind = enumAt(node.kind, GRAPH_NODE_KINDS, `${path}.kind`)
+    const kind = enumAt(node.kind, K2_GRAPH_NODE_KINDS, `${path}.kind`)
     const authorityId = uuidAt(node.authorityId, `${path}.authorityId`)
     if (node.identity !== canonicalGraphIdentity(kind, authorityId)) fail(`${path}.identity`, 'not_canonical')
     if (id !== canonicalGraphNodeId(kind, authorityId)) fail(`${path}.id`, 'not_canonical')
@@ -95,7 +95,9 @@ export const validateKnowledgeGraphFixture = (value: unknown): KnowledgeGraphFix
     kindCounts.set(kind, (kindCounts.get(kind) ?? 0) + 1)
     stringAt(node.label, `${path}.label`)
   })
-  if (GRAPH_NODE_KINDS.some((kind) => !kindCounts.has(kind))) fail('nodes', 'all_six_kinds_required')
+  if (K2_GRAPH_NODE_KINDS.some((kind) => !kindCounts.has(kind))) {
+    fail('nodes', 'all_six_kinds_required')
+  }
   if (kindCounts.get('person') !== 4 || kindCounts.get('voyager') !== 4) {
     fail('nodes', 'four_identity_pairs_required')
   }
