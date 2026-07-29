@@ -198,3 +198,22 @@ Note that `knowledge-graph-poc.sh` runs against the shared dev branch and
 deliberately refuses when the cutover is already installed there. Since the
 boundary was applied to `voyager-dev`, use `knowledge-graph-local-proof.sh` for
 the same evidence on a disposable database.
+
+## K4b topic nodes and backfill
+
+`cartographer-k4b-local-proof.sh` installs the exact through-073 baseline and
+migration 074 in one disposable, no-network pgvector container. It proves topic
+convergence, a real concurrent paraphrase mint race, adjacent-subject
+separation, shared-hub audience visibility, both pointer cutover orderings,
+the ordered old-job drain and unified unit backfill, and role denial. Expected
+verdict:
+
+```text
+CARTOGRAPHER_K4B_LOCAL_GREEN
+```
+
+`npm run memory:k4b-backfill` is the explicit live operation, not part of the
+local proof. It activates v3, drains pre-v3 jobs through the normal
+Cartographer path, re-derives every pre-v3 unit, then runs the zero-residue
+assertion. Run it only against an explicitly authorized target after migration
+074 has been reviewed and applied.
