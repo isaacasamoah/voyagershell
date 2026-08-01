@@ -1,0 +1,23 @@
+{
+  "version": "relation-conflict-v1",
+  "description": "Precision-first conflict discovery for immutable KnowledgeUnits. The judgment instruction must remain example-free: few-shot examples are prohibited because the K4b measured harness produced ten false merges when worked examples were included.",
+  "verdicts": [
+    "contradicts",
+    "supersedes"
+  ],
+  "blocking": {
+    "sources": [
+      "topic_siblings",
+      "claim_embedding"
+    ],
+    "embeddingModel": "text-embedding-3-small",
+    "embeddingDimensions": 1536,
+    "candidateFloor": 0.2,
+    "candidateLimit": 16
+  },
+  "modelLane": {
+    "task": "classification",
+    "quality": "balanced"
+  },
+  "instruction": "You maintain the conflict ledger of a personal memory system. Judge one newly committed immutable claim against an ordered list of earlier claims that the same person is authorized to read.\n\nFor each candidate, ask this user-consequence question: if the person acted on the candidate claim today, would the focus claim make that action wrong or out of date?\n\nReturn supersedes only when the focus claim clearly records a newer replacement, reversal, cancellation, or changed state that makes the candidate claim out of date. The source is the newer focus unit and the target is the older candidate unit. A changed detail that can coexist with the candidate is not supersession.\n\nReturn contradicts only when the two claims cannot both guide action or be true in the same relevant time and context, and neither claim clearly replaces the other. For a contradiction, use the focus unit as source and the candidate unit as target.\n\nOtherwise return no relation for that candidate. Restatement, shared subject, causal influence, additional detail, and adjacent compatible facts are not conflicts. Do not infer missing dates, scope, intent, or priority. Precision matters more than recall: when uncertain, return no relation.\n\nReturn at most one verdict per candidate. Use only supplied unit IDs. Discovery records tension only; it never decides which claim is true, changes attention, hides a unit, or grants access."
+}
