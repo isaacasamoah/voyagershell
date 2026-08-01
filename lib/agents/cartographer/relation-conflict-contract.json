@@ -1,15 +1,9 @@
 {
-  "version": "relation-conflict-v1",
-  "description": "Precision-first conflict discovery for immutable KnowledgeUnits. The judgment instruction must remain example-free: few-shot examples are prohibited because the K4b measured harness produced ten false merges when worked examples were included.",
-  "verdicts": [
-    "contradicts",
-    "supersedes"
-  ],
+  "version": "relation-conflict-v2",
+  "description": "Precision-first two-stage conflict discovery for immutable KnowledgeUnits. The judgment instruction must remain example-free: few-shot examples are prohibited because the K4b measured harness produced ten false merges when worked examples were included. Stage 2 defaults to contradicts because a false supersedes can retire a true fact in K5 while contradicts only preserves a tension for retrieval.",
+  "verdicts": ["contradicts", "supersedes"],
   "blocking": {
-    "sources": [
-      "topic_siblings",
-      "claim_embedding"
-    ],
+    "sources": ["topic_siblings", "claim_embedding"],
     "embeddingModel": "text-embedding-3-small",
     "embeddingDimensions": 1536,
     "candidateFloor": 0.2,
@@ -19,5 +13,14 @@
     "task": "classification",
     "quality": "balanced"
   },
-  "instruction": "You maintain the conflict ledger of a personal memory system. Judge one newly committed immutable claim against an ordered list of earlier claims that the same person is authorized to read.\n\nFor each candidate, ask this user-consequence question: if the person acted on the candidate claim today, would the focus claim make that action wrong or out of date?\n\nReturn supersedes only when the focus claim clearly records a newer replacement, reversal, cancellation, or changed state that makes the candidate claim out of date. The source is the newer focus unit and the target is the older candidate unit. A changed detail that can coexist with the candidate is not supersession.\n\nReturn contradicts only when the two claims cannot both guide action or be true in the same relevant time and context, and neither claim clearly replaces the other. For a contradiction, use the focus unit as source and the candidate unit as target.\n\nOtherwise return no relation for that candidate. Restatement, shared subject, causal influence, additional detail, and adjacent compatible facts are not conflicts. Do not infer missing dates, scope, intent, or priority. Precision matters more than recall: when uncertain, return no relation.\n\nReturn at most one verdict per candidate. Use only supplied unit IDs. Discovery records tension only; it never decides which claim is true, changes attention, hides a unit, or grants access."
+  "judgment": {
+    "providerCallsPerJob": 2,
+    "stage1Verdicts": ["conflict", "none"],
+    "stage2Verdicts": ["contradicts", "supersedes"],
+    "stage2CallCondition": "stage1_conflict_present",
+    "stage2Default": "contradicts",
+    "supersedesRequiresExplicitReplacement": true
+  },
+  "stage1Instruction": "You detect conflicts for a personal memory ledger. Judge one newly committed immutable focus claim against every ordered earlier candidate claim that the same person is authorized to read. Return exactly one conflict or none decision for every candidate.\n\nAsk only this user-consequence question: if the person acted on the candidate claim today, would the focus claim make that action wrong or out of date? Emit conflict when it would; otherwise emit none. Restatement, shared subject, causal influence, additional detail, and adjacent compatible facts are none. Do not infer missing dates, scope, intent, priority, replacement, or truth. When uncertain whether there is any conflict, emit none. Use only supplied candidate unit IDs.",
+  "stage2Instruction": "You classify only claim pairs already judged to conflict for a personal memory ledger. Return exactly one directed verdict for every candidate.\n\nSupersedes has an asymmetric, higher bar. Emit supersedes only when the focus claim contains explicit replacement evidence and states the newer current state of the same operative commitment, decision, or fact expressed by the candidate, so that keeping both as current is incoherent. Compare the claims' referent and operative meaning, not identical wording: an earlier required action or plan is the same commitment when the focus explicitly cancels, ends, completes, or replaces the state that made it current.\n\nA constraint, exception, obstacle, countervailing instruction, incompatible plan, or different fact that merely makes acting on the candidate unsafe or impossible is not replacement evidence. Those conflicts are contradicts.\n\nDEFAULT TO CONTRADICTS. Every conflict that does not meet every supersedes requirement is contradicts. When uncertain between the two verdicts, emit contradicts. This default is mandatory because contradicts preserves both claims for retrieval while supersedes can feed later truth machinery that retires a true fact.\n\nUse the focus unit as source and the candidate unit as target. Use only supplied unit IDs. Discovery records tension only; it never decides truth, changes attention, hides a unit, or grants access."
 }
