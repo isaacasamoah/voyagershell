@@ -13,7 +13,6 @@ import type {
 
 export const beginRelationAttempt = async (input: {
   userId: string
-  unitId?: string
   modelProvider: string
   modelId: string
   resolverLabel: string
@@ -23,7 +22,6 @@ export const beginRelationAttempt = async (input: {
     p_model_provider: input.modelProvider,
     p_model_id: input.modelId,
     p_resolver_label: input.resolverLabel,
-    p_unit_id: input.unitId ?? null,
     p_lease_seconds: 120,
   })
   if (error) throw new Error(error.message)
@@ -35,9 +33,12 @@ export const beginRelationAttempt = async (input: {
     unitId: row.unit_id,
     personId: row.person_id,
     contractVersion: row.contract_version,
+    candidateLimit: row.candidate_limit,
+    stage1Instruction: row.stage1_instruction,
+    stage2Instruction: row.stage2_instruction,
+    verdicts: row.verdicts,
     focusClaim: row.focus_claim,
     candidates: row.candidates,
-    attemptNumber: row.attempt_number,
   }
 }
 
@@ -46,7 +47,6 @@ export const completeRelationAttempt = async (input: {
   result: 'succeeded' | ExtractionFailureKind
   rawOutput?: Json
   relations?: RelationWrite[]
-  grantRequests?: Json[]
   errorClass?: string
   inputTokens?: number
   outputTokens?: number
@@ -59,7 +59,7 @@ export const completeRelationAttempt = async (input: {
       p_result: input.result,
       p_raw_output: input.rawOutput ?? null,
       p_relations: (input.relations ?? []) as unknown as Json,
-      p_grant_requests: input.grantRequests ?? [],
+      p_grant_requests: [],
       p_error_class: input.errorClass ?? null,
       p_input_tokens: input.inputTokens ?? null,
       p_output_tokens: input.outputTokens ?? null,

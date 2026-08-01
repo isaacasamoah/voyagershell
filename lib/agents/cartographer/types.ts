@@ -107,9 +107,12 @@ export interface RelationAttempt {
   unitId: string
   personId: string
   contractVersion: string
+  candidateLimit: number
+  stage1Instruction: string
+  stage2Instruction: string
+  verdicts: RelationVerdict[]
   focusClaim: string
   candidates: RelationCandidate[]
-  attemptNumber: number
 }
 
 export interface RelationWrite {

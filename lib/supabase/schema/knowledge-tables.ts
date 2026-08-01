@@ -39,6 +39,11 @@ export type KnowledgeTables = {
   knowledge_relation_contract_active: TableShape<{
     singleton: boolean; contract_version: string; activated_at: string
   }, { singleton?: boolean; contract_version: string; activated_at?: string }>
+  knowledge_relation_backfill_runs: TableShape<{
+    contract_version: string; eligible_job_count: number; job_limit: number;
+    status: string; recorded_at: string
+  }, { contract_version: string; eligible_job_count: number; job_limit: number;
+    status: string; recorded_at?: string }>
   knowledge_relation_jobs: TableShape<{
     unit_id: string; person_id: string; contract_version: string;
     state: KnowledgeRelationJobState; next_attempt_number: number;
@@ -57,10 +62,12 @@ export type KnowledgeTables = {
     model_id: string; resolver_label?: string | null; lease_token: string; started_at?: string }>
   knowledge_relation_outcomes: TableShape<{
     attempt_id: string; unit_id: string; person_id: string; contract_version: string;
+    submitted_result: KnowledgeExtractionOutcomeKind; submitted_error_class: string | null;
     outcome: KnowledgeExtractionOutcomeKind; raw_output: Json | null;
     relations: Json; grant_requests: Json; error_class: string | null;
     input_tokens: number | null; output_tokens: number | null; recorded_at: string
   }, { attempt_id: string; unit_id: string; person_id: string; contract_version: string;
+    submitted_result: KnowledgeExtractionOutcomeKind; submitted_error_class?: string | null;
     outcome: KnowledgeExtractionOutcomeKind; raw_output?: Json | null;
     relations?: Json; grant_requests?: Json; error_class?: string | null;
     input_tokens?: number | null; output_tokens?: number | null; recorded_at?: string }>

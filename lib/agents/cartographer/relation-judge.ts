@@ -1,16 +1,17 @@
 import { generateObject, type LanguageModel } from 'ai'
 import type { Json } from '@/lib/supabase/types'
 import {
-  RELATION_STAGE1_PROMPT,
-  RELATION_STAGE2_PROMPT,
-  relationStage1Schema,
-  relationStage2Schema,
+  buildRelationPrompt,
+  createRelationStage1Schema,
+  createRelationStage2Schema,
+  relationMaxOutputTokens,
 } from './relation-contract'
 import type {
   ExtractionFailureKind,
   RelationAttempt,
   RelationWrite,
 } from './types'
+import { classifyProviderFailure } from './provider-failure'
 
 type RelationJudgment =
   | {
@@ -53,15 +54,6 @@ const assertExactCoverage = (
   }
 }
 
-const classifyFailure = (error: unknown): ExtractionFailureKind => {
-  const name = error instanceof Error ? error.name : ''
-  return name.includes('NoObjectGenerated') ||
-    name.includes('TypeValidation') ||
-    name === 'RelationOutputIncompleteError'
-    ? 'malformed_output'
-    : 'provider_failed'
-}
-
 const promptFor = (
   attempt: RelationAttempt,
   candidateIds?: Set<string>,
@@ -69,13 +61,11 @@ const promptFor = (
   const candidates = candidateIds
     ? attempt.candidates.filter(({ unitId }) => candidateIds.has(unitId))
     : attempt.candidates
-  return `## Focus KnowledgeUnit
-${JSON.stringify({ unitId: attempt.unitId, claim: attempt.focusClaim })}
-
-## Ordered authorized candidate KnowledgeUnits, nearest first
-${JSON.stringify(candidates)}
-
-Return the structured decisions.`
+  return buildRelationPrompt(
+    { unitId: attempt.unitId, claim: attempt.focusClaim },
+    candidates,
+    attempt.candidateLimit,
+  )
 }
 
 export const judgeRelationConflicts = async (
@@ -96,12 +86,18 @@ export const judgeRelationConflicts = async (
     }
   }
   try {
+    const stage1Schema = createRelationStage1Schema(attempt.candidateLimit)
+    const stage2Schema = createRelationStage2Schema(
+      attempt.candidateLimit,
+      attempt.verdicts,
+    )
+    const maxOutputTokens = relationMaxOutputTokens(attempt.candidateLimit)
     const stage1 = await generateObject({
       model,
-      system: RELATION_STAGE1_PROMPT,
+      system: attempt.stage1Instruction,
       messages: [{ role: 'user', content: promptFor(attempt) }],
-      schema: relationStage1Schema,
-      maxOutputTokens: 1024,
+      schema: stage1Schema,
+      maxOutputTokens,
     })
     assertExactCoverage(
       attempt.candidates.map(({ unitId }) => unitId),
@@ -118,12 +114,12 @@ export const judgeRelationConflicts = async (
         ? null
         : await generateObject({
             model,
-            system: RELATION_STAGE2_PROMPT,
+            system: attempt.stage2Instruction,
             messages: [
               { role: 'user', content: promptFor(attempt, conflictIds) },
             ],
-            schema: relationStage2Schema,
-            maxOutputTokens: 1024,
+            schema: stage2Schema,
+            maxOutputTokens,
           })
     assertExactCoverage(
       Array.from(conflictIds),
@@ -161,7 +157,9 @@ export const judgeRelationConflicts = async (
   } catch (error) {
     return {
       kind: 'failed',
-      failure: classifyFailure(error),
+      failure: classifyProviderFailure(error, {
+        malformedErrorNames: ['RelationOutputIncompleteError'],
+      }),
       errorClass:
         error instanceof Error && error.name
           ? error.name.slice(0, 80)

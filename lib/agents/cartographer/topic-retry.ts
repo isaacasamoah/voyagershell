@@ -19,7 +19,3 @@ export class TopicCandidatesRetryableError extends Error {
 export const isRetryableTopicError = (message: string): boolean => (
   RETRYABLE_TOPIC_ERRORS.some((errorClass) => message.includes(errorClass))
 )
-
-export const waitForTopicRetry = async (attemptNumber: number): Promise<void> => {
-  await new Promise((resolve) => setTimeout(resolve, attemptNumber * 10))
-}

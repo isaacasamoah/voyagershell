@@ -18,8 +18,9 @@ import {
   isRetryableTopicError,
   TOPIC_BACKFILL_RETRY_EXHAUSTED,
   TOPIC_WRITE_MAX_ATTEMPTS,
-  waitForTopicRetry,
+  TopicCandidatesRetryableError,
 } from './topic-retry'
+import { runCartographerRetry, waitForCartographerRetry } from './retry'
 
 export interface TopicBackfillResult {
   activatedVersion: string
@@ -97,45 +98,43 @@ const rederiveUnit = async (unit: TopicBackfillUnit): Promise<void> => {
   if (object.claim !== unit.claim || object.aboutPersonId !== null) {
     throw new Error('knowledge_topic_backfill_changed_immutable_claim')
   }
-  for (
-    let attemptNumber = 1;
-    attemptNumber <= TOPIC_WRITE_MAX_ATTEMPTS;
-    attemptNumber++
-  ) {
-    const candidates = await findTopicCandidates(
-      CARTOGRAPHER_EXTRACTOR_VERSION,
-      unit.knowledgeAudienceId,
-      embedding,
-      unit.unitId,
-    )
-    const matched = await matchKnowledgeTopics(resolved.model, unit.claim, candidates)
-    if (matched.kind === 'failed') {
-      throw new Error(`knowledge_topic_backfill_${matched.failure}:${matched.errorClass}`)
-    }
-    const rawOutput = { ...object, topics: matched.topics }
-    const { error } = await getAdminClient().rpc(
-      'write_knowledge_topic_identity_backfill',
-      {
-        p_unit_id: unit.unitId,
-        p_raw_output: rawOutput,
-        p_knowledge_type: object.knowledgeType,
-        p_attention_score: object.attentionScore,
-        p_embedding: `[${embedding.join(',')}]`,
-        p_topic_candidate_snapshot: toTopicCandidateSnapshot(candidates),
-        p_topic_inputs: toTopicWriteInputs(matched.topics),
-      },
-    )
-    if (error && isRetryableTopicError(error.message)) {
-      if (attemptNumber === TOPIC_WRITE_MAX_ATTEMPTS) {
-        throw new Error(TOPIC_BACKFILL_RETRY_EXHAUSTED)
+  await runCartographerRetry({
+    maxAttempts: TOPIC_WRITE_MAX_ATTEMPTS,
+    run: async () => {
+      const candidates = await findTopicCandidates(
+        CARTOGRAPHER_EXTRACTOR_VERSION,
+        unit.knowledgeAudienceId,
+        embedding,
+        unit.unitId,
+      )
+      const matched = await matchKnowledgeTopics(resolved.model, unit.claim, candidates)
+      if (matched.kind === 'failed') {
+        throw new Error(`knowledge_topic_backfill_${matched.failure}:${matched.errorClass}`)
       }
-      await waitForTopicRetry(attemptNumber)
-      continue
-    }
-    if (error) throw new Error(error.message)
-    return
-  }
-  throw new Error('knowledge_topic_backfill_retry_loop_unreachable')
+      const rawOutput = { ...object, topics: matched.topics }
+      const { error } = await getAdminClient().rpc(
+        'write_knowledge_topic_identity_backfill',
+        {
+          p_unit_id: unit.unitId,
+          p_raw_output: rawOutput,
+          p_knowledge_type: object.knowledgeType,
+          p_attention_score: object.attentionScore,
+          p_embedding: `[${embedding.join(',')}]`,
+          p_topic_candidate_snapshot: toTopicCandidateSnapshot(candidates),
+          p_topic_inputs: toTopicWriteInputs(matched.topics),
+        },
+      )
+      if (error && isRetryableTopicError(error.message)) {
+        throw new TopicCandidatesRetryableError()
+      }
+      if (error) throw new Error(error.message)
+    },
+    isRetryable: (error) => error instanceof TopicCandidatesRetryableError,
+    wait: waitForCartographerRetry,
+    onExhausted: async () => {
+      throw new Error(TOPIC_BACKFILL_RETRY_EXHAUSTED)
+    },
+  })
 }
 
 export const runTopicBackfill = async (): Promise<TopicBackfillResult> => {
@@ -149,11 +148,11 @@ export const runTopicBackfill = async (): Promise<TopicBackfillResult> => {
         userId: job.requesting_user_id,
         sourceEventId: job.source_event_id,
       })
-      if (result.kind === 'no_job') {
+      if (result.kind === 'no_job' || result.kind === 'relation_completed') {
         const state = await recheckOldJob(job.source_event_id)
         if (state === 'terminal') continue
         if (state === 'lease_held') {
-          await waitForTopicRetry(5)
+          await waitForCartographerRetry(5)
           continue
         }
       }

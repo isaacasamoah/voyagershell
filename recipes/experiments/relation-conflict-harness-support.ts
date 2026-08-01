@@ -1,9 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { z } from 'zod'
 import { getOpenAI } from '../../lib/agents/cartographer/embeddings'
 import relationContract from '../../lib/agents/cartographer/relation-conflict-contract.json'
+import {
+  buildRelationPrompt,
+  createRelationStage1Schema,
+  createRelationStage2Schema,
+  RELATION_VERDICTS,
+  relationMaxOutputTokens,
+} from '../../lib/agents/cartographer/relation-contract'
 import { CODEX_MODEL, createCodexModel } from '../../lib/models/codex'
 import type { ModelRequirements } from '../../lib/models/router'
 import corpusDocument from './relation-conflict-corpus.json'
@@ -51,48 +57,16 @@ export const requiredShapes = new Set([
   'negation',
   'adjacent_compatible',
 ])
-export const stage1Schema = z
-  .object({
-    decisions: z
-      .array(
-        z
-          .object({
-            candidateUnitId: z.string().uuid(),
-            conflict: z.enum(['conflict', 'none']),
-          })
-          .strict(),
-      )
-      .max(relationContract.blocking.candidateLimit),
-  })
-  .strict()
-export const stage2Schema = z
-  .object({
-    relations: z
-      .array(
-        z
-          .object({
-            candidateUnitId: z.string().uuid(),
-            verdict: z.enum(['contradicts', 'supersedes']),
-            sourceUnitId: z.string().uuid(),
-            targetUnitId: z.string().uuid(),
-          })
-          .strict(),
-      )
-      .max(relationContract.blocking.candidateLimit),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    const candidateIds = value.relations.map(
-      (relation) => relation.candidateUnitId,
-    )
-    if (new Set(candidateIds).size !== candidateIds.length) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'relation_candidates_must_be_unique',
-        path: ['relations'],
-      })
-    }
-  })
+export const stage1Schema = createRelationStage1Schema(
+  relationContract.blocking.candidateLimit,
+)
+export const stage2Schema = createRelationStage2Schema(
+  relationContract.blocking.candidateLimit,
+  RELATION_VERDICTS,
+)
+export const maxOutputTokens = relationMaxOutputTokens(
+  relationContract.blocking.candidateLimit,
+)
 
 const normalizeTopic = (label: string): string =>
   label.toLowerCase().replace(/\s+/g, ' ').trim()
@@ -125,10 +99,11 @@ export const hasSharedTopic = (left: string[], right: string[]): boolean => {
 export const promptFor = (
   focus: CorpusUnit,
   candidates: PromptCandidate[],
-): string =>
-  `## Focus KnowledgeUnit\n${JSON.stringify(focus)}\n\n` +
-  '## Ordered authorized candidate KnowledgeUnits, nearest first\n' +
-  `${JSON.stringify(candidates)}\n\nReturn the structured decisions.`
+): string => buildRelationPrompt(
+  { unitId: focus.unitId, claim: focus.claim },
+  candidates,
+  relationContract.blocking.candidateLimit,
+)
 
 export const assertExactCoverage = (
   expectedIds: string[],

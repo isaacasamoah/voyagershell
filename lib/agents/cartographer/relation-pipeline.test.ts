@@ -14,7 +14,16 @@ vi.mock('./relation-judge', () => ({
   judgeRelationConflicts: mocks.judgeRelationConflicts,
 }))
 
-import { runRelationPipeline } from './relation-pipeline'
+import {
+  RELATION_CONTRACT_MISMATCH_ERROR_CLASS,
+  runRelationPipeline,
+} from './relation-pipeline'
+import {
+  RELATION_CANDIDATE_LIMIT,
+  RELATION_STAGE1_PROMPT,
+  RELATION_STAGE2_PROMPT,
+  RELATION_VERDICTS,
+} from './relation-contract'
 import {
   RELATION_WRITE_RETRY_EXHAUSTED_ERROR_CLASS,
   RelationWriteRetryableError,
@@ -26,6 +35,10 @@ const attempt = {
   unitId: '73000000-0000-4000-8000-000000000003',
   personId: '73000000-0000-4000-8000-000000000004',
   contractVersion: 'relation-conflict-v2',
+  candidateLimit: RELATION_CANDIDATE_LIMIT,
+  stage1Instruction: RELATION_STAGE1_PROMPT,
+  stage2Instruction: RELATION_STAGE2_PROMPT,
+  verdicts: RELATION_VERDICTS,
   focusClaim: 'The physio said no running for eight weeks.',
   candidates: [
     {
@@ -35,7 +48,6 @@ const attempt = {
       similarity: 0.47,
     },
   ],
-  attemptNumber: 1,
 }
 const input = {
   userId: attempt.personId,
@@ -116,6 +128,55 @@ describe('per-person relation pipeline', () => {
       result: 'provider_failed',
       errorClass: 'APICallError',
     })
+  })
+
+  it('retries failure completion races through the shared bounded writer path', async () => {
+    mocks.judgeRelationConflicts.mockResolvedValue({
+      kind: 'failed',
+      failure: 'provider_failed',
+      errorClass: 'APICallError',
+    })
+    mocks.completeRelationAttempt
+      .mockRejectedValueOnce(new RelationWriteRetryableError())
+      .mockResolvedValueOnce({
+        outcome: 'provider_failed',
+        edgeIds: [],
+        replayed: false,
+      })
+
+    await runRelationPipeline(input)
+
+    expect(mocks.completeRelationAttempt).toHaveBeenCalledTimes(2)
+    expect(mocks.completeRelationAttempt).toHaveBeenLastCalledWith({
+      attempt,
+      result: 'provider_failed',
+      errorClass: 'APICallError',
+    })
+  })
+
+  it('fails a mismatched database contract attempt cleanly without judging it', async () => {
+    mocks.beginRelationAttempt.mockResolvedValue({
+      ...attempt,
+      contractVersion: 'relation-conflict-v3',
+    })
+    mocks.completeRelationAttempt.mockResolvedValue({
+      outcome: 'provider_failed',
+      edgeIds: [],
+      replayed: false,
+    })
+
+    const result = await runRelationPipeline(input)
+
+    expect(mocks.judgeRelationConflicts).not.toHaveBeenCalled()
+    expect(mocks.completeRelationAttempt).toHaveBeenCalledWith({
+      attempt: expect.objectContaining({ contractVersion: 'relation-conflict-v3' }),
+      result: 'provider_failed',
+      errorClass: RELATION_CONTRACT_MISMATCH_ERROR_CLASS,
+    })
+    expect(result).toEqual(expect.objectContaining({
+      kind: 'completed',
+      outcome: 'provider_failed',
+    }))
   })
 
   it('bounds retryable writer races and completes the leased attempt on exhaustion', async () => {

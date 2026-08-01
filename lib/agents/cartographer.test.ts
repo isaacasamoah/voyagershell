@@ -200,6 +200,19 @@ describe('event-owned Cartographer extraction', () => {
     expect(mocks.extractKnowledge).not.toHaveBeenCalled()
   })
 
+  it('returns the relation failure when no extraction attempt can make progress', async () => {
+    mocks.runRelationPipeline.mockRejectedValue(new Error('relation_contract_unavailable'))
+    mocks.beginExtractionAttempt.mockResolvedValue(null)
+
+    const result = await runCartographer({ userId: attempt.sourceActorId })
+
+    expect(result).toEqual({
+      kind: 'failed',
+      error: 'relation_contract_unavailable',
+    })
+    expect(mocks.extractKnowledge).not.toHaveBeenCalled()
+  })
+
   it('fails closed before leasing when concrete model identity is absent', async () => {
     mocks.resolveUserModelWithMeta.mockResolvedValue({
       model: { provider: '', modelId: '' },

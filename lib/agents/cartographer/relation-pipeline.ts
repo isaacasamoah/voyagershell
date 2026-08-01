@@ -5,13 +5,10 @@ import {
   RELATION_WRITE_MAX_ATTEMPTS,
   RELATION_WRITE_RETRY_EXHAUSTED_ERROR_CLASS,
   RelationWriteRetryableError,
-  waitForRelationRetry,
 } from './relation-retry'
-import type {
-  RelationAttempt,
-  RelationCompletion,
-  RelationWrite,
-} from './types'
+import { RELATION_CONTRACT_VERSION } from './relation-contract'
+import { runCartographerRetry, waitForCartographerRetry } from './retry'
+import type { RelationCompletion } from './types'
 
 export type RelationPipelineResult =
   | { kind: 'no_job' }
@@ -22,38 +19,24 @@ export type RelationPipelineResult =
       edgeIds: string[]
     }
 
-const completeWithRetry = async (input: {
-  attempt: RelationAttempt
-  rawOutput: Parameters<typeof completeRelationAttempt>[0]['rawOutput']
-  relations: RelationWrite[]
-  inputTokens: number | undefined
-  outputTokens: number | undefined
-}): Promise<RelationCompletion> => {
-  for (
-    let attemptNumber = 1;
-    attemptNumber <= RELATION_WRITE_MAX_ATTEMPTS;
-    attemptNumber++
-  ) {
-    try {
-      return await completeRelationAttempt({
-        ...input,
-        result: 'succeeded',
-      })
-    } catch (error) {
-      if (!(error instanceof RelationWriteRetryableError)) throw error
-      if (attemptNumber < RELATION_WRITE_MAX_ATTEMPTS) {
-        await waitForRelationRetry(attemptNumber)
-        continue
-      }
-      return completeRelationAttempt({
-        attempt: input.attempt,
-        result: 'provider_failed',
-        errorClass: RELATION_WRITE_RETRY_EXHAUSTED_ERROR_CLASS,
-      })
-    }
-  }
-  throw new Error('knowledge_relation_write_retry_loop_unreachable')
-}
+type RelationCompletionInput = Parameters<typeof completeRelationAttempt>[0]
+
+export const RELATION_CONTRACT_MISMATCH_ERROR_CLASS =
+  'knowledge_relation_contract_version_mismatch'
+
+const completeWithRetry = async (
+  input: RelationCompletionInput,
+): Promise<RelationCompletion> => runCartographerRetry({
+  maxAttempts: RELATION_WRITE_MAX_ATTEMPTS,
+  run: () => completeRelationAttempt(input),
+  isRetryable: (error) => error instanceof RelationWriteRetryableError,
+  wait: waitForCartographerRetry,
+  onExhausted: () => completeRelationAttempt({
+    attempt: input.attempt,
+    result: 'provider_failed',
+    errorClass: RELATION_WRITE_RETRY_EXHAUSTED_ERROR_CLASS,
+  }),
+})
 
 export const runRelationPipeline = async (input: {
   userId: string
@@ -64,16 +47,23 @@ export const runRelationPipeline = async (input: {
 }): Promise<RelationPipelineResult> => {
   const attempt = await beginRelationAttempt(input)
   if (!attempt) return { kind: 'no_job' }
-  const judged = await judgeRelationConflicts(input.model, attempt)
+  const judged = attempt.contractVersion === RELATION_CONTRACT_VERSION
+    ? await judgeRelationConflicts(input.model, attempt)
+    : {
+        kind: 'failed' as const,
+        failure: 'provider_failed' as const,
+        errorClass: RELATION_CONTRACT_MISMATCH_ERROR_CLASS,
+      }
   const completion =
     judged.kind === 'failed'
-      ? await completeRelationAttempt({
+      ? await completeWithRetry({
           attempt,
           result: judged.failure,
           errorClass: judged.errorClass,
         })
       : await completeWithRetry({
           attempt,
+          result: 'succeeded',
           rawOutput: judged.rawOutput,
           relations: judged.relations,
           inputTokens: judged.inputTokens,

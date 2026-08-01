@@ -15,6 +15,8 @@ const read = (path: string): string =>
 const migration = read('supabase/migrations/077_relation_conflict_ledger.sql')
 const hardening = read('supabase/migrations/076_topic_identity_hardening.sql')
 const pipeline = read('lib/agents/cartographer/relation-pipeline.ts')
+const judge = read('lib/agents/cartographer/relation-judge.ts')
+const relationJobs = read('lib/agents/cartographer/relation-jobs.ts')
 const recipe = read('recipes/cartographer-k4c-local-proof.sh')
 const assertions = read('recipes/sql/cartographer-k4c-assertions.sql')
 const fullSuite = read('recipes/full-suite.sh')
@@ -59,13 +61,26 @@ describe('K4c relation conflict contract', () => {
     expect(attempt).toBeLessThan(returned)
     expect(begin).toContain('candidate_unit_ids')
     expect(begin).toContain('public.viewer_has_graph_node_grant')
+    expect(begin).toContain("v_contract.blocking_spec->>'candidateLimit'")
+    expect(begin).toContain('v_contract.stage1_instruction')
+    expect(begin).toContain('v_contract.stage2_instruction')
+    expect(begin).toContain('v_contract.verdicts')
+    expect(relationJobs).toContain('candidateLimit: row.candidate_limit')
+    expect(judge).toContain('system: attempt.stage1Instruction')
+    expect(judge).toContain('system: attempt.stage2Instruction')
+    expect(pipeline).toContain(
+      'attempt.contractVersion === RELATION_CONTRACT_VERSION',
+    )
   })
 
   it('keeps attempts and outcomes immutable and exhausts jobs without a lease', () => {
     expect(migration).toContain('trg_knowledge_relation_attempt_immutable')
     expect(migration).toContain('trg_knowledge_relation_outcome_immutable')
     expect(migration).toContain(
-      "WHEN v_final IN ('provider_failed', 'malformed_output', 'expired')",
+      "v_final IN ('provider_failed', 'malformed_output', 'expired')",
+    )
+    expect(migration).toContain(
+      "v_error = 'relation_candidate_authorization_changed'",
     )
     expect(migration).toContain("ELSE 'completed'")
     expect(migration).toContain('active_attempt_id = NULL')
@@ -74,6 +89,12 @@ describe('K4c relation conflict contract', () => {
     expect(pipeline).toContain("result: 'provider_failed'")
     expect(migration).toContain(
       'v_existing.input_tokens IS DISTINCT FROM p_input_tokens',
+    )
+    expect(migration).toContain(
+      'v_existing.submitted_result IS DISTINCT FROM p_result',
+    )
+    expect(migration).toContain(
+      'v_existing.submitted_error_class IS DISTINCT FROM p_error_class',
     )
   })
 
@@ -127,6 +148,29 @@ describe('K4c relation conflict contract', () => {
     expect(migration).not.toMatch(
       /INSERT INTO public\.graph_edges[\s\S]{0,300}'(?:supports|elaborates|relates_to)'/,
     )
+    expect(migration).not.toContain('CREATE INDEX knowledge_relation_assertions_edge')
+  })
+
+  it('hardens the install before a bounded backfill that records over-cap skips', () => {
+    const acl = migration.indexOf(
+      'REVOKE ALL ON public.knowledge_relation_contracts',
+    )
+    const backfill = migration.indexOf('DO $relation_backfill$')
+    expect(acl).toBeGreaterThan(-1)
+    expect(backfill).toBeGreaterThan(acl)
+    expect(migration).toContain('knowledge_relation_backfill_runs')
+    expect(migration).toContain("'skipped_over_limit'")
+    expect(migration).toContain(
+      "RAISE WARNING 'knowledge_relation_backfill_skipped_over_limit:%:%'",
+    )
+    expect(migration).not.toContain(
+      "RAISE EXCEPTION 'knowledge_relation_backfill_limit_exceeded:%:%'",
+    )
+    const serviceGrants = migration.slice(
+      migration.indexOf('GRANT EXECUTE ON FUNCTION public.begin_relation_attempt'),
+      backfill,
+    )
+    expect(serviceGrants).not.toContain('authorized_graph_neighbors')
   })
 
   it('runs the disposable structural battery in the cumulative suite', () => {

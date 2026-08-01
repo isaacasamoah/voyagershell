@@ -33,6 +33,15 @@ CREATE TABLE public.knowledge_relation_contract_active (
   activated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
+CREATE TABLE public.knowledge_relation_backfill_runs (
+  contract_version text PRIMARY KEY
+    REFERENCES public.knowledge_relation_contracts(contract_version),
+  eligible_job_count integer NOT NULL CHECK (eligible_job_count >= 0),
+  job_limit integer NOT NULL CHECK (job_limit > 0),
+  status text NOT NULL CHECK (status IN ('completed', 'skipped_over_limit')),
+  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
 CREATE TABLE public.knowledge_relation_jobs (
   unit_id uuid NOT NULL REFERENCES public.knowledge_units(id) ON DELETE RESTRICT,
   person_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
@@ -85,6 +94,11 @@ CREATE TABLE public.knowledge_relation_outcomes (
   unit_id uuid NOT NULL,
   person_id uuid NOT NULL,
   contract_version text NOT NULL,
+  submitted_result public.knowledge_extraction_outcome_kind NOT NULL,
+  submitted_error_class text CHECK (
+    submitted_error_class IS NULL
+    OR length(btrim(submitted_error_class)) BETWEEN 1 AND 80
+  ),
   outcome public.knowledge_extraction_outcome_kind NOT NULL,
   raw_output jsonb,
   relations jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -115,14 +129,15 @@ CREATE TABLE public.knowledge_relation_assertions (
   recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (edge_id, attempt_id)
 );
-CREATE INDEX knowledge_relation_assertions_edge
-  ON public.knowledge_relation_assertions(edge_id);
 
 CREATE TRIGGER trg_knowledge_relation_contract_immutable
   BEFORE UPDATE OR DELETE ON public.knowledge_relation_contracts
   FOR EACH ROW EXECUTE FUNCTION public.reject_immutable_knowledge_graph_row();
 CREATE TRIGGER trg_knowledge_relation_contract_active_no_delete
   BEFORE DELETE ON public.knowledge_relation_contract_active
+  FOR EACH ROW EXECUTE FUNCTION public.reject_immutable_knowledge_graph_row();
+CREATE TRIGGER trg_knowledge_relation_backfill_run_immutable
+  BEFORE UPDATE OR DELETE ON public.knowledge_relation_backfill_runs
   FOR EACH ROW EXECUTE FUNCTION public.reject_immutable_knowledge_graph_row();
 CREATE TRIGGER trg_knowledge_relation_attempt_immutable
   BEFORE UPDATE OR DELETE ON public.knowledge_relation_attempts
@@ -338,9 +353,12 @@ CREATE FUNCTION public.begin_relation_attempt(
   unit_id uuid,
   person_id uuid,
   contract_version text,
+  candidate_limit integer,
+  stage1_instruction text,
+  stage2_instruction text,
+  verdicts public.graph_edge_kind[],
   focus_claim text,
-  candidates jsonb,
-  attempt_number integer
+  candidates jsonb
 )
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = pg_catalog, public AS $$
@@ -392,11 +410,13 @@ BEGIN
       FROM public.knowledge_relation_attempts relation_attempt
       WHERE relation_attempt.id = v_job.active_attempt_id;
       INSERT INTO public.knowledge_relation_outcomes(
-        attempt_id, unit_id, person_id, contract_version, outcome,
+        attempt_id, unit_id, person_id, contract_version,
+        submitted_result, submitted_error_class, outcome,
         relations, grant_requests, error_class
       ) VALUES (
         v_job.active_attempt_id, v_job.unit_id, v_job.person_id,
-        v_job.contract_version, 'expired', '[]', '[]', 'lease_expired'
+        v_job.contract_version, 'expired', 'lease_expired',
+        'expired', '[]', '[]', 'lease_expired'
       );
       IF v_expired_number >= v_contract.max_attempts THEN
         UPDATE public.knowledge_relation_jobs
@@ -447,8 +467,10 @@ BEGIN
     AND knowledge_relation_jobs.contract_version = v_job.contract_version;
 
   RETURN QUERY SELECT v_attempt_id, v_token, v_job.unit_id, v_job.person_id,
-    v_job.contract_version, v_focus_claim, v_candidates,
-    v_job.next_attempt_number;
+    v_job.contract_version,
+    (v_contract.blocking_spec->>'candidateLimit')::integer,
+    v_contract.stage1_instruction, v_contract.stage2_instruction,
+    v_contract.verdicts, v_focus_claim, v_candidates;
 END
 $$;
 
@@ -506,12 +528,12 @@ BEGIN
   SELECT * INTO v_existing
   FROM public.knowledge_relation_outcomes WHERE attempt_id = p_attempt_id;
   IF v_existing.attempt_id IS NOT NULL THEN
-    IF v_existing.outcome IS DISTINCT FROM p_result
+    IF v_existing.submitted_result IS DISTINCT FROM p_result
       OR v_existing.raw_output IS DISTINCT FROM p_raw_output
       OR v_existing.relations IS DISTINCT FROM coalesce(p_relations, '[]'::jsonb)
       OR v_existing.grant_requests
         IS DISTINCT FROM coalesce(p_grant_requests, '[]'::jsonb)
-      OR v_existing.error_class IS DISTINCT FROM p_error_class
+      OR v_existing.submitted_error_class IS DISTINCT FROM p_error_class
       OR v_existing.input_tokens IS DISTINCT FROM p_input_tokens
       OR v_existing.output_tokens IS DISTINCT FROM p_output_tokens THEN
       RAISE EXCEPTION 'knowledge_relation_outcome_payload_conflict'
@@ -657,19 +679,26 @@ BEGIN
   END IF;
 
   INSERT INTO public.knowledge_relation_outcomes(
-    attempt_id, unit_id, person_id, contract_version, outcome,
+    attempt_id, unit_id, person_id, contract_version,
+    submitted_result, submitted_error_class, outcome,
     raw_output, relations, grant_requests, error_class,
     input_tokens, output_tokens
   ) VALUES (
     p_attempt_id, v_attempt.unit_id, v_attempt.person_id,
-    v_attempt.contract_version, v_final, p_raw_output,
+    v_attempt.contract_version, p_result, p_error_class, v_final, p_raw_output,
     coalesce(p_relations, '[]'::jsonb),
     coalesce(p_grant_requests, '[]'::jsonb), v_error,
     p_input_tokens, p_output_tokens
   );
   UPDATE public.knowledge_relation_jobs
   SET state = CASE
-      WHEN v_final IN ('provider_failed', 'malformed_output', 'expired')
+      WHEN (
+          v_final IN ('provider_failed', 'malformed_output', 'expired')
+          OR (
+            v_final = 'commit_rejected'
+            AND v_error = 'relation_candidate_authorization_changed'
+          )
+        )
         AND v_attempt.attempt_number < v_contract.max_attempts
         THEN 'pending'
       ELSE 'completed'
@@ -762,39 +791,9 @@ SET search_path = pg_catalog, public AS $$
         AND source_grant.knowledge_audience_id = edge.knowledge_audience_id)
 $$;
 
--- The migration-time pass is intentionally bounded. It covers the small dev
--- corpus; a production-scale pass must be priced and explicitly approved.
-DO $relation_backfill$
-DECLARE v_eligible integer; v_limit integer := 256; v_version text;
-BEGIN
-  SELECT contract_version INTO STRICT v_version
-  FROM public.knowledge_relation_contract_active
-  WHERE singleton
-  FOR SHARE;
-  SELECT count(*) INTO v_eligible
-  FROM public.knowledge_units unit
-  JOIN public.knowledge_audiences audience
-    ON audience.id = unit.knowledge_audience_id
-  CROSS JOIN LATERAL unnest(audience.member_profile_ids) member_id;
-  IF v_eligible > v_limit THEN
-    RAISE EXCEPTION 'knowledge_relation_backfill_limit_exceeded:%:%',
-      v_eligible, v_limit USING ERRCODE = '54000';
-  END IF;
-  INSERT INTO public.knowledge_relation_jobs(
-    unit_id, person_id, contract_version, created_at, updated_at
-  )
-  SELECT unit.id, member_id, v_version, event.created_at, clock_timestamp()
-  FROM public.knowledge_units unit
-  JOIN public.knowledge_events event ON event.id = unit.source_event_id
-  JOIN public.knowledge_audiences audience
-    ON audience.id = unit.knowledge_audience_id
-  CROSS JOIN LATERAL unnest(audience.member_profile_ids) member_id
-  ON CONFLICT (unit_id, person_id, contract_version) DO NOTHING;
-END
-$relation_backfill$;
-
 ALTER TABLE public.knowledge_relation_contracts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_relation_contract_active ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.knowledge_relation_backfill_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_relation_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_relation_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.knowledge_relation_outcomes ENABLE ROW LEVEL SECURITY;
@@ -802,6 +801,7 @@ ALTER TABLE public.knowledge_relation_assertions ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON public.knowledge_relation_contracts,
   public.knowledge_relation_contract_active,
+  public.knowledge_relation_backfill_runs,
   public.knowledge_relation_jobs,
   public.knowledge_relation_attempts,
   public.knowledge_relation_outcomes,
@@ -809,6 +809,7 @@ REVOKE ALL ON public.knowledge_relation_contracts,
 FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.knowledge_relation_contracts,
   public.knowledge_relation_contract_active,
+  public.knowledge_relation_backfill_runs,
   public.knowledge_relation_jobs,
   public.knowledge_relation_attempts,
   public.knowledge_relation_outcomes,
@@ -825,8 +826,6 @@ REVOKE EXECUTE ON FUNCTION public.begin_relation_attempt(
 ), public.complete_relation_attempt(
   uuid, uuid, public.knowledge_extraction_outcome_kind,
   jsonb, jsonb, jsonb, text, integer, integer
-), public.authorized_graph_neighbors(
-  uuid, uuid, public.graph_edge_kind[]
 )
 FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.begin_relation_attempt(
@@ -834,7 +833,44 @@ GRANT EXECUTE ON FUNCTION public.begin_relation_attempt(
 ), public.complete_relation_attempt(
   uuid, uuid, public.knowledge_extraction_outcome_kind,
   jsonb, jsonb, jsonb, text, integer, integer
-), public.authorized_graph_neighbors(
-  uuid, uuid, public.graph_edge_kind[]
 )
 TO service_role;
+
+-- The migration-time pass is intentionally bounded. The schema and its ACLs
+-- remain installable when the existing corpus is too large for this pass; the
+-- recorded marker makes the skipped work explicit for a separately approved run.
+DO $relation_backfill$
+DECLARE v_eligible integer; v_limit integer := 256; v_version text;
+BEGIN
+  SELECT contract_version INTO STRICT v_version
+  FROM public.knowledge_relation_contract_active
+  WHERE singleton
+  FOR SHARE;
+  SELECT count(*) INTO v_eligible
+  FROM public.knowledge_units unit
+  JOIN public.knowledge_audiences audience
+    ON audience.id = unit.knowledge_audience_id
+  CROSS JOIN LATERAL unnest(audience.member_profile_ids) member_id;
+  IF v_eligible > v_limit THEN
+    INSERT INTO public.knowledge_relation_backfill_runs(
+      contract_version, eligible_job_count, job_limit, status
+    ) VALUES (v_version, v_eligible, v_limit, 'skipped_over_limit');
+    RAISE WARNING 'knowledge_relation_backfill_skipped_over_limit:%:%',
+      v_eligible, v_limit;
+    RETURN;
+  END IF;
+  INSERT INTO public.knowledge_relation_jobs(
+    unit_id, person_id, contract_version, created_at, updated_at
+  )
+  SELECT unit.id, member_id, v_version, event.created_at, clock_timestamp()
+  FROM public.knowledge_units unit
+  JOIN public.knowledge_events event ON event.id = unit.source_event_id
+  JOIN public.knowledge_audiences audience
+    ON audience.id = unit.knowledge_audience_id
+  CROSS JOIN LATERAL unnest(audience.member_profile_ids) member_id
+  ON CONFLICT (unit_id, person_id, contract_version) DO NOTHING;
+  INSERT INTO public.knowledge_relation_backfill_runs(
+    contract_version, eligible_job_count, job_limit, status
+  ) VALUES (v_version, v_eligible, v_limit, 'completed');
+END
+$relation_backfill$;

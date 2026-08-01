@@ -40,8 +40,9 @@ export type KnowledgeRelationCandidate = {
 }
 export type KnowledgeRelationAttemptRow = {
   attempt_id: string; lease_token: string; unit_id: string; person_id: string;
-  contract_version: string; focus_claim: string;
-  candidates: KnowledgeRelationCandidate[]; attempt_number: number
+  contract_version: string; candidate_limit: number; stage1_instruction: string;
+  stage2_instruction: string; verdicts: ('contradicts' | 'supersedes')[];
+  focus_claim: string; candidates: KnowledgeRelationCandidate[]
 }
 export type KnowledgeRelationCompletionRow = {
   outcome: KnowledgeExtractionOutcomeKind; edge_ids: string[]; replayed: boolean

@@ -17,9 +17,3 @@ export class RelationWriteRetryableError extends Error {
 
 export const isRetryableRelationError = (message: string): boolean =>
   RETRYABLE_RELATION_ERRORS.some((errorClass) => message.includes(errorClass))
-
-export const waitForRelationRetry = async (
-  attemptNumber: number,
-): Promise<void> => {
-  await new Promise((resolve) => setTimeout(resolve, attemptNumber * 10))
-}

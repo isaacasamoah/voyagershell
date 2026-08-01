@@ -20,6 +20,15 @@ BEGIN
   IF (SELECT count(*) FROM public.knowledge_relation_jobs) <> v_expected THEN
     RAISE EXCEPTION 'k4c_backfill_job_count_failed';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.knowledge_relation_backfill_runs
+    WHERE contract_version = 'relation-conflict-v2'
+      AND eligible_job_count = v_expected
+      AND job_limit = 256
+      AND status = 'completed'
+  ) THEN
+    RAISE EXCEPTION 'k4c_backfill_marker_failed';
+  END IF;
 END
 $k4c_contract_and_backfill$;
 
@@ -31,6 +40,8 @@ DECLARE
   v_attempt uuid; v_token uuid; v_candidates jsonb; v_candidate_ids uuid[];
   v_relation jsonb; v_raw jsonb; v_outcome text; v_replayed boolean;
   v_edge uuid; v_focus_node uuid; v_old_node uuid; v_kind public.graph_edge_kind;
+  v_candidate_limit integer; v_stage1 text; v_stage2 text;
+  v_verdicts public.graph_edge_kind[];
   v_forbidden public.graph_edge_kind[] := ARRAY[
     'authored_by','posted_in','reply_to','in_voyage','member_of',
     'companion_of','derived_from','generated_by','about','supports',
@@ -59,11 +70,20 @@ BEGIN
     RAISE EXCEPTION 'k4c_per_person_fanout_failed';
   END IF;
 
-  SELECT begun.attempt_id, begun.lease_token, begun.candidates
-  INTO STRICT v_attempt, v_token, v_candidates
+  SELECT begun.attempt_id, begun.lease_token, begun.candidates,
+    begun.candidate_limit, begun.stage1_instruction,
+    begun.stage2_instruction, begun.verdicts
+  INTO STRICT v_attempt, v_token, v_candidates,
+    v_candidate_limit, v_stage1, v_stage2, v_verdicts
   FROM public.begin_relation_attempt(
     v_owner, 'openai', 'classification-model', 'balanced', v_focus, 120
   ) begun;
+  IF v_candidate_limit <> 16
+    OR v_stage1 NOT LIKE '%user-consequence question%'
+    OR v_stage2 NOT LIKE '%DEFAULT TO CONTRADICTS%'
+    OR v_verdicts <> ARRAY['contradicts','supersedes']::public.graph_edge_kind[] THEN
+    RAISE EXCEPTION 'k4c_runtime_contract_row_missing';
+  END IF;
   SELECT candidate_unit_ids INTO STRICT v_candidate_ids
   FROM public.knowledge_relation_attempts WHERE id = v_attempt;
   IF NOT (v_room_old = ANY(v_candidate_ids))
@@ -196,6 +216,141 @@ BEGIN
   END IF;
 END
 $k4c_relation_writer$;
+
+DO $k4c_normalized_replay$
+DECLARE
+  v_owner uuid := '72000000-0000-4000-8000-000000000001';
+  v_unit uuid; v_attempt uuid; v_token uuid; v_outcome text;
+  v_replayed boolean;
+BEGIN
+  v_unit := public.k4b_commit(
+    'k4c-commit-rejected-replay', 'K4c rejected replay focus.',
+    '[{"kind":"new","label":"rejected replay"}]', 20, false
+  );
+  SELECT attempt_id, lease_token INTO STRICT v_attempt, v_token
+  FROM public.begin_relation_attempt(
+    v_owner, 'openai', 'replay-model', 'balanced', v_unit, 120
+  );
+  SELECT outcome::text, replayed INTO STRICT v_outcome, v_replayed
+  FROM public.complete_relation_attempt(
+    v_attempt, v_token, 'no_claim', NULL, '[]', '[]', NULL, 3, 1
+  );
+  IF v_outcome <> 'commit_rejected' OR v_replayed THEN
+    RAISE EXCEPTION 'k4c_commit_rejected_normalization_failed';
+  END IF;
+  SELECT outcome::text, replayed INTO STRICT v_outcome, v_replayed
+  FROM public.complete_relation_attempt(
+    v_attempt, v_token, 'no_claim', NULL, '[]', '[]', NULL, 3, 1
+  );
+  IF v_outcome <> 'commit_rejected' OR NOT v_replayed THEN
+    RAISE EXCEPTION 'k4c_commit_rejected_replay_failed';
+  END IF;
+  BEGIN
+    PERFORM public.complete_relation_attempt(
+      v_attempt, v_token, 'no_claim', NULL, '[]', '[]', NULL, 4, 1
+    );
+    RAISE EXCEPTION 'k4c_commit_rejected_payload_drift_accepted';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+
+  v_unit := public.k4b_commit(
+    'k4c-expired-replay', 'K4c expired replay focus.',
+    '[{"kind":"new","label":"expired replay"}]', 21, false
+  );
+  SELECT attempt_id, lease_token INTO STRICT v_attempt, v_token
+  FROM public.begin_relation_attempt(
+    v_owner, 'openai', 'replay-model', 'balanced', v_unit, 1
+  );
+  PERFORM pg_sleep(1.1);
+  SELECT outcome::text, replayed INTO STRICT v_outcome, v_replayed
+  FROM public.complete_relation_attempt(
+    v_attempt, v_token, 'succeeded',
+    '{"stage1":{"decisions":[]},"stage2":{"relations":[]},"relations":[]}',
+    '[]', '[]', NULL, 0, 0
+  );
+  IF v_outcome <> 'expired' OR v_replayed THEN
+    RAISE EXCEPTION 'k4c_expired_normalization_failed';
+  END IF;
+  SELECT outcome::text, replayed INTO STRICT v_outcome, v_replayed
+  FROM public.complete_relation_attempt(
+    v_attempt, v_token, 'succeeded',
+    '{"stage1":{"decisions":[]},"stage2":{"relations":[]},"relations":[]}',
+    '[]', '[]', NULL, 0, 0
+  );
+  IF v_outcome <> 'expired' OR NOT v_replayed THEN
+    RAISE EXCEPTION 'k4c_expired_replay_failed';
+  END IF;
+END
+$k4c_normalized_replay$;
+
+DO $k4c_authorization_requeue$
+DECLARE
+  v_owner uuid := '72000000-0000-4000-8000-000000000001';
+  v_candidate uuid; v_focus uuid; v_topic uuid; v_attempt uuid; v_token uuid;
+  v_candidate_node uuid; v_outcome text; v_candidate_ids uuid[];
+BEGIN
+  v_candidate := public.k4b_commit(
+    'k4c-auth-candidate', 'The amber route remains active.',
+    '[{"kind":"new","label":"authorization requeue"}]', 22, false
+  );
+  SELECT id INTO STRICT v_topic FROM public.knowledge_topics
+  WHERE normalized_label = 'authorization requeue';
+  v_focus := public.k4b_commit(
+    'k4c-auth-focus', 'The amber route is closed.',
+    jsonb_build_array(jsonb_build_object(
+      'kind','existing','topicId',v_topic)), 22, false
+  );
+  SELECT attempt_id, lease_token INTO STRICT v_attempt, v_token
+  FROM public.begin_relation_attempt(
+    v_owner, 'openai', 'auth-model', 'balanced', v_focus, 120
+  );
+  SELECT candidate_unit_ids INTO STRICT v_candidate_ids
+  FROM public.knowledge_relation_attempts WHERE id = v_attempt;
+  IF NOT (v_candidate = ANY(v_candidate_ids)) THEN
+    RAISE EXCEPTION 'k4c_authorization_candidate_not_snapshotted';
+  END IF;
+  v_candidate_node := public.canonical_graph_node_id(
+    'knowledge_unit', v_candidate
+  );
+  PERFORM set_config('session_replication_role', 'replica', true);
+  DELETE FROM public.graph_node_grants WHERE node_id = v_candidate_node;
+  PERFORM set_config('session_replication_role', 'origin', true);
+  SELECT outcome::text INTO STRICT v_outcome
+  FROM public.complete_relation_attempt(
+    v_attempt, v_token, 'succeeded',
+    '{"stage1":{"decisions":[]},"stage2":{"relations":[]},"relations":[]}',
+    '[]', '[]', NULL, 0, 0
+  );
+  IF v_outcome <> 'commit_rejected'
+    OR (SELECT state FROM public.knowledge_relation_jobs
+      WHERE unit_id = v_focus AND person_id = v_owner) <> 'pending'
+    OR NOT EXISTS (
+      SELECT 1 FROM public.knowledge_relation_outcomes
+      WHERE attempt_id = v_attempt
+        AND error_class = 'relation_candidate_authorization_changed'
+    ) THEN
+    RAISE EXCEPTION 'k4c_authorization_change_not_requeued';
+  END IF;
+  SELECT attempt_id, lease_token INTO STRICT v_attempt, v_token
+  FROM public.begin_relation_attempt(
+    v_owner, 'openai', 'auth-model', 'balanced', v_focus, 120
+  );
+  SELECT candidate_unit_ids INTO STRICT v_candidate_ids
+  FROM public.knowledge_relation_attempts WHERE id = v_attempt;
+  IF v_candidate = ANY(v_candidate_ids) THEN
+    RAISE EXCEPTION 'k4c_authorization_requeue_kept_revoked_candidate';
+  END IF;
+  SELECT outcome::text INTO STRICT v_outcome
+  FROM public.complete_relation_attempt(
+    v_attempt, v_token, 'succeeded',
+    '{"stage1":{"decisions":[]},"stage2":{"relations":[]},"relations":[]}',
+    '[]', '[]', NULL, 0, 0
+  );
+  IF v_outcome <> 'succeeded' THEN
+    RAISE EXCEPTION 'k4c_authorization_requeue_did_not_complete';
+  END IF;
+END
+$k4c_authorization_requeue$;
 
 DO $k4c_zero_overlap$
 DECLARE v_owner uuid := '72000000-0000-4000-8000-000000000001';
