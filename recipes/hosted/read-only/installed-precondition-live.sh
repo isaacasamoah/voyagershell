@@ -5,8 +5,10 @@ umask 077
 set +x
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-source "$SCRIPT_DIR/lib/installed-precondition.sh"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$REPO_ROOT/recipes/lib/hosted-target.sh"
+source "$REPO_ROOT/recipes/lib/installed-precondition.sh"
+hosted_target_require installed-precondition-live || exit $?
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/voyager-installed-live.XXXXXX")"
 
 fail() {
@@ -14,25 +16,14 @@ fail() {
   exit 1
 }
 cleanup() {
-  unset ACCESS_TOKEN PROJECT_REF VOYAGER_SUPABASE_ACCESS_TOKEN \
-    VOYAGER_SUPABASE_PROJECT_REF
+  unset ACCESS_TOKEN PROJECT_REF VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF \
+    VOYAGER_SUPABASE_ACCESS_TOKEN VOYAGER_SUPABASE_PROJECT_REF
   rm -rf -- "$TEMP_DIR"
 }
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 
-[ -n "${VOYAGER_SUPABASE_ACCESS_TOKEN:-}" ] \
-  || fail 'VOYAGER_SUPABASE_ACCESS_TOKEN is required'
-[ -n "${VOYAGER_SUPABASE_PROJECT_REF:-}" ] \
-  || fail 'VOYAGER_SUPABASE_PROJECT_REF is required'
-ACCESS_TOKEN="$VOYAGER_SUPABASE_ACCESS_TOKEN"
-PROJECT_REF="$VOYAGER_SUPABASE_PROJECT_REF"
-case "$ACCESS_TOKEN" in
-  *$'\r'*|*$'\n'*) fail 'VOYAGER_SUPABASE_ACCESS_TOKEN is invalid' ;;
-esac
-case "$PROJECT_REF" in
-  *[!A-Za-z0-9_-]*) fail 'VOYAGER_SUPABASE_PROJECT_REF is invalid' ;;
-esac
+hosted_access_token_require installed-precondition-live || exit $?
 installed_precondition_assert_fragments "$REPO_ROOT" \
   || fail 'precondition SQL fragments are incomplete'
 for command_name in curl jq; do
@@ -44,7 +35,7 @@ printf 'Authorization: Bearer %s\nContent-Type: application/json\n' \
   "$ACCESS_TOKEN" > "$TEMP_DIR/headers.txt"
 chmod 600 "$TEMP_DIR/headers.txt"
 API_URL="https://api.supabase.com/v1/projects/$PROJECT_REF/database/query/read-only"
-unset ACCESS_TOKEN PROJECT_REF VOYAGER_SUPABASE_ACCESS_TOKEN \
+unset ACCESS_TOKEN PROJECT_REF VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF \
   VOYAGER_SUPABASE_PROJECT_REF
 installed_precondition_compose "$REPO_ROOT" |
   jq -Rs '{query: .}' > "$TEMP_DIR/request.json" \

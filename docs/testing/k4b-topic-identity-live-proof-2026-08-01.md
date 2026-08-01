@@ -40,7 +40,7 @@ Separate catalog verification after commit:
 
 ## Re-derivation of the falsified-rule topics
 
-`npx tsx recipes/cartographer-k4b-backfill.ts` from this worktree, `.env.local`
+`npm run memory:k4b-backfill` from this worktree, `.env.local`
 sourced. One run, no retries:
 
 ```json

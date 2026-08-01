@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ORU-450 privacy-backstop proof — cold runner (the Test-gate instrument)
+# Privacy-backstop rollback proof
 # =============================================================================
 # Runs the two supabase/tests/051_* privacy proofs against the Supabase preview
-# db via the Management API (the repo's canonical SQL path — no
-# psql/CLI; see CLAUDE.md "Supabase Migrations"). Pattern: ORU-453's
-# scripts/poc/run-052-proof.sh.
+# database via the Management API (the repository's hosted SQL path; no
+# psql/CLI).
 #
 # The proof files use psql `\set` variables. This runner inlines every constant
 # and refuses to send unresolved variables. Each proof owns a transaction that
@@ -20,17 +19,22 @@ set +x
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$REPO_ROOT/recipes/lib/hosted-target.sh"
+hosted_target_require privacy-backstop || exit $?
+hosted_confirmation_require privacy-backstop \
+  VOYAGER_ALLOW_HOSTED_ROLLBACK || exit $?
 PROOF_SQLS=(
   "$REPO_ROOT/supabase/tests/051_privacy_backstop_proof.sql"
   "$REPO_ROOT/supabase/tests/051_space_privacy_proof.sql"
 )
-PROJECT_REF="iesprdzzgjypnksoljym"   # voyager preview (per CLAUDE.md)
 API_URL="https://api.supabase.com/v1/projects/$PROJECT_REF/database/query"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/voyager-privacy-backstop.XXXXXX")"
 
 cleanup() {
-  unset ACCESS_TOKEN VOYAGER_SUPABASE_ACCESS_TOKEN
+  unset ACCESS_TOKEN VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF \
+    VOYAGER_ALLOW_HOSTED_ROLLBACK VOYAGER_SUPABASE_ACCESS_TOKEN \
+    VOYAGER_SUPABASE_PROJECT_REF
   rm -rf -- "$TEMP_DIR"
 }
 trap cleanup EXIT
@@ -49,39 +53,11 @@ for proof_sql in "${PROOF_SQLS[@]}"; do
   }
 done
 
-if [ -n "${VOYAGER_SUPABASE_ACCESS_TOKEN:-}" ]; then
-  ACCESS_TOKEN="$VOYAGER_SUPABASE_ACCESS_TOKEN"
-elif [ -r /Users/isaac/.supabase/access-token ]; then
-  IFS= read -r ACCESS_TOKEN < /Users/isaac/.supabase/access-token || true
-else
-  command -v ssh >/dev/null || {
-    printf 'privacy-backstop: ssh required for Fedora token fallback\n' >&2
-    exit 2
-  }
-  if ! ACCESS_TOKEN="$(ssh -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=1 fedora '
-    test -r /home/isaac/.supabase/access-token || exit 1
-    token=
-    IFS= read -r token < /home/isaac/.supabase/access-token || true
-    test -n "$token" || exit 1
-    printf %s "$token"
-  ')"; then
-    printf 'privacy-backstop: Fedora Supabase token fallback failed\n' >&2
-    exit 2
-  fi
-fi
-[ -n "$ACCESS_TOKEN" ] || {
-  printf 'privacy-backstop: Supabase access token unavailable\n' >&2
-  exit 2
-}
-case "$ACCESS_TOKEN" in
-  *$'\r'*|*$'\n'*)
-    printf 'privacy-backstop: invalid Supabase access token\n' >&2
-    exit 2
-    ;;
-esac
+hosted_access_token_require privacy-backstop || exit $?
 printf 'Authorization: Bearer %s\nContent-Type: application/json\n' \
   "$ACCESS_TOKEN" > "$TEMP_DIR/headers.txt"
-unset ACCESS_TOKEN VOYAGER_SUPABASE_ACCESS_TOKEN
+unset ACCESS_TOKEN VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF \
+  VOYAGER_ALLOW_HOSTED_ROLLBACK VOYAGER_SUPABASE_PROJECT_REF
 
 python3 - "${PROOF_SQLS[@]}" > "$TEMP_DIR/request.json" <<'PY'
 import json, re, sys

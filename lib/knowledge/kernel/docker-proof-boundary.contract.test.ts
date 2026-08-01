@@ -205,7 +205,7 @@ describe('disposable Docker proof boundary', () => {
       resolve(process.cwd(), 'recipes/knowledge-graph-local-proof.sh'),
     ).mode & 0o777
     const liveMode = statSync(
-      resolve(process.cwd(), 'recipes/installed-precondition-live.sh'),
+      resolve(process.cwd(), 'recipes/hosted/read-only/installed-precondition-live.sh'),
     ).mode & 0o777
 
     expect(installedMode).toBe(peerMode)
@@ -214,9 +214,8 @@ describe('disposable Docker proof boundary', () => {
   })
 
   it('bounds hosted token fallback and Management API calls', () => {
-    const hosted = read('recipes/knowledge-graph-poc.sh')
-    expect(hosted).toContain('-o ConnectTimeout=15')
-    expect(hosted).toContain('-o ConnectionAttempts=1')
+    const hosted = read('recipes/hosted/rollback/knowledge-graph-poc.sh')
+    expect(hosted).toContain('VOYAGER_ALLOW_HOSTED_ROLLBACK')
     expect(hosted).toContain('--connect-timeout 15 --max-time 180')
   })
 })

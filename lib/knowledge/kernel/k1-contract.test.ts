@@ -140,7 +140,7 @@ describe('K1 final-shape backfill contract', () => {
   })
 
   it('orders the catch-up gap and all proofs in one rollback transaction', () => {
-    const recipe = readRepoFile('recipes/knowledge-graph-poc.sh')
+    const recipe = readRepoFile('recipes/hosted/rollback/knowledge-graph-poc.sh')
     const transaction = readRepoFile('recipes/lib/knowledge-graph-transaction.sh')
     expect(transaction.indexOf('k1-legacy.sql')).toBeLessThan(transaction.indexOf('PRODUCT_MIGRATIONS'))
     expect(transaction.indexOf('k1-historical.sql')).toBeLessThan(transaction.indexOf('$CUTOVER'))

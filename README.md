@@ -104,10 +104,11 @@ and production promotion follow [CLAUDE.md](./CLAUDE.md).
 ```bash
 npm run type-check
 npm run test:run
-for recipe in recipes/*.sh; do bash -n "$recipe"; done
+find recipes -type f -name '*.sh' -print0 | xargs -0 bash -n
 ```
 
-`recipes/knowledge-graph-poc.sh` is a hosted PostgreSQL proof, not an installer.
+`recipes/hosted/rollback/knowledge-graph-poc.sh` is a hosted PostgreSQL proof,
+not an installer.
 It resolves credentials without printing them, executes the candidate and its
 fixtures inside one `BEGIN`/`ROLLBACK`, and verifies the public catalogue is
 identical afterward. See [recipes/README.md](./recipes/README.md).

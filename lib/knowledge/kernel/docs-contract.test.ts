@@ -47,7 +47,7 @@ describe('tracked graph contributor truth', () => {
     const recipes = read('recipes/README.md')
     expect(recipes).not.toMatch(/optional for Isaac/i)
     expect(recipes).toContain('a gate, not a residual')
-    expect(recipes).toContain('voyager-dev')
+    expect(recipes).toContain('explicitly authorized development')
     expect(recipes).toContain('127.0.0.1')
     expect(recipes).toContain('390 × 844')
   })
@@ -65,7 +65,7 @@ describe('tracked graph contributor truth', () => {
     expect(recipes).toContain('docker pull pgvector/pgvector@sha256:18d16372b8406bb38a9f94cbff15d125c463d71fde2770aa8b5c64bfcc1578ee')
     expect(recipes).toContain('VOYAGER_SUPABASE_ACCESS_TOKEN')
     expect(recipes).toContain('VOYAGER_SUPABASE_PROJECT_REF')
-    expect(recipes).toContain('remote CI never requires personal secrets')
+    expect(recipes).toMatch(/remote\s+CI never requires personal secrets/)
     expect(recipes).not.toMatch(/Exact 001.?056 replay|replays every standard migration/i)
   })
 
@@ -98,7 +98,9 @@ describe('tracked graph contributor truth', () => {
     expect(guidance).not.toMatch(/\bpnpm\b/)
     expect(workflow).toContain('run: npm ci')
     expect(workflow).toContain('run: npm run test:run')
-    expect(workflow).toContain('bash -n recipes/*.sh recipes/lib/*.sh')
+    expect(workflow).toContain(
+      "find recipes -type f -name '*.sh' -print0 | xargs -0 bash -n",
+    )
     expect(workflow.indexOf('docker pull pgvector/pgvector@sha256:18d16372b8406bb38a9f94cbff15d125c463d71fde2770aa8b5c64bfcc1578ee'))
       .toBeLessThan(workflow.indexOf('./recipes/installed-schema-authority.sh'))
     expect(workflow).not.toContain('TODO')

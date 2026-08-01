@@ -7,7 +7,7 @@ const migration = readFileSync(
   'utf8',
 )
 const proof = readFileSync(
-  resolve(process.cwd(), 'recipes/private-reply-promotion-proof.sql'),
+  resolve(process.cwd(), 'recipes/sql/private-reply-promotion-proof.sql'),
   'utf8',
 )
 

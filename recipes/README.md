@@ -12,8 +12,6 @@ do not replace them.
 | `./recipes/address-grammar.sh`       | @own=private · every other @=held · all leading names=ordinary room text · client/server audience parity                                                                                                                | `ADDRESS_GRAMMAR_GREEN`       |
 | `./recipes/two-account-bench.sh`     | Two accounts, one names "wren": owner can invoke; other account cannot; leading name remains human room text                                                                                                            | `TWO_ACCOUNT_BENCH_OK`        |
 | `./recipes/private-voyager-trust.sh` | Owner-private turn persistence + content-only human Share-to-room boundary + private background results                                                                                                                 | `PRIVATE_VOYAGER_TRUST_GREEN` |
-| `./recipes/handles-uniqueness.sh`    | `idx_handles_lower` rejects a cross-case dup on dev (non-mutating; requires `~/.supabase/access-token`)                                                                                                                 | `HANDLES_UNIQUE_OK`           |
-| `./recipes/knowledge-graph-poc.sh`   | One ledger · multi-scope canonical identities · immutable source/authority snapshots, grants and edge evidence · T+0 membership projection · K1 parity/rejections · old graph absent in-transaction · catalogue identical after rollback | `KNOWLEDGE_GRAPH_POC_GREEN`   |
 | `./recipes/authority-projection-concurrency.sh` | Disposable local two-session voyage/space membership serialization against exact authority migrations | `AUTHORITY_PROJECTION_CONCURRENCY_GREEN` |
 | `./recipes/knowledge-graph-cutover-concurrency.sh` | Disposable authenticated legacy-writer overlap with lossless rejection evidence and post-cutover RPC writer | `KNOWLEDGE_GRAPH_CUTOVER_CONCURRENCY_GREEN` |
 | `./recipes/private-reply-promotion-concurrency.sh` | Disposable publication-first, parent-voyage-revocation-first, and room-membership-revocation-first row-lock serialization | `PRIVATE_REPLY_PROMOTION_CONCURRENCY_GREEN` |
@@ -28,9 +26,26 @@ do not replace them.
 | `./recipes/typecheck.sh`             | `tsc --noEmit` clean                                                                                                                                                                                                    | `TYPECHECK_OK`                |
 | `./recipes/full-suite.sh`            | disposable K3 structural proof followed by the full unit/contract suite                                                                                                                                                  | `FULL_SUITE_GREEN`            |
 
-## Required browser contract (two-account fambam — a gate, not a residual)
+## Hosted runners
 
-This is not optional and it is not Isaac's homework. No K checkpoint closes on
+Hosted recipes are isolated under `recipes/hosted/` and never belong in CI or
+a local/disposable battery:
+
+| Class | Runner | Additional confirmation |
+|---|---|---|
+| Mutating | `hosted/mutating/handles-uniqueness.sh` | `VOYAGER_ALLOW_HOSTED_MUTATION=1` |
+| Read-only | `hosted/read-only/installed-precondition-live.sh` | none |
+| Rollback | `hosted/rollback/knowledge-graph-poc.sh` | `VOYAGER_ALLOW_HOSTED_ROLLBACK=1` |
+| Rollback | `hosted/rollback/privacy-backstop-proof.sh` | `VOYAGER_ALLOW_HOSTED_ROLLBACK=1` |
+
+Every hosted runner requires `VOYAGER_SUPABASE_PROJECT_REF` to equal the
+separately reviewed `VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF` before it reads
+`VOYAGER_SUPABASE_ACCESS_TOKEN` or invokes the Management API. There are no
+default targets, embedded project refs, token-file fallbacks, or SSH fallbacks.
+
+## Required browser contract (two accounts — a gate, not a residual)
+
+This is not optional residual work. No K checkpoint closes on
 the shell ring alone: the ring proves database and contract shape, and it has
 already been observed going green against a schema the product does not run.
 The browser run is the only place the whole product is exercised, so a
@@ -38,13 +53,11 @@ checkpoint is complete only when this contract has been driven end to end on the
 exact sealed candidate, with every step observed and no executable step left for
 a human to perform later.
 
-**Bench.** Run the candidate against the `voyager-dev` Supabase *branch*
-database, never the shared primary project. The branch carries the real
-two-account `fambam` fixture (`isaac` with voyager `wren`, `elisheya` with
-voyager `jeremy`, both active in one room). Point the worktree's own
-`.env.local` at the branch; a `git worktree add` does not carry env files.
-Applying candidate migrations to the shared primary project merely to satisfy a
-test is forbidden.
+**Bench.** Run the candidate against the explicitly authorized development
+database, never production. Use two invited test accounts that are active in
+one room. Point the worktree's own `.env.local` at that development target; a
+`git worktree add` does not carry env files. Applying candidate migrations to
+production merely to satisfy a test is forbidden.
 
 **Two isolated sessions, one browser.** `localhost` and `127.0.0.1` are distinct
 cookie and localStorage origins, so account A signs in on
@@ -59,7 +72,7 @@ and dev-server logs. A silent server-side error (an RPC falling back to a
 degraded path) counts as a failure even when the interface looks correct, so
 read the logs, do not just read the screen.
 
-Two signed-in accounts (Isaac + Elisheya) in one room:
+Two signed-in test accounts in one room:
 
 1. Account A: name your Voyager — "call you Wren" (or via the composer). Confirm the naming line.
 2. Account A: type `@wren …` — the composer shows **→ private aside to Wren**; send it; only A sees the reply (B's feed does not).
@@ -76,7 +89,10 @@ Two signed-in accounts (Isaac + Elisheya) in one room:
 13. At a 390 × 844 viewport the page never scrolls horizontally (`documentElement.scrollWidth === clientWidth`), and the composer audience line stays legible.
 14. Read the dev-server log for the whole run. Semantic retrieval reports a non-zero `semantic=` count; a `Search error` or a silent fall back to keyword-only is a failure.
 
-After migration 053 is installed, `recipes/private-reply-promotion-proof.sql` is the rollback-only database proof for created/replayed idempotency, exact content-only publication, one mapping, and one delivery per recipient.
+After migration 053 is installed,
+`recipes/sql/private-reply-promotion-proof.sql` is the rollback-only database
+proof for created/replayed idempotency, exact content-only publication, one
+mapping, and one delivery per recipient.
 
 ## Local authority-projection concurrency
 
@@ -122,34 +138,36 @@ The human Spec and Test gates additionally run the same precondition against
 the linked Supabase project:
 
 ```bash
-./recipes/installed-precondition-live.sh
+./recipes/hosted/read-only/installed-precondition-live.sh
 ```
 
 The checker accepts the access token only from
 `VOYAGER_SUPABASE_ACCESS_TOKEN` and the project ref only from
-`VOYAGER_SUPABASE_PROJECT_REF`. It submits only the read-only SQL contract to
-Supabase's official Management API, redacts failures, and never embeds project
-identity. Its one request uses the Management API read-only query endpoint,
-with no write-path fallback. It has no token-file or SSH fallback. It is
-network-free until a human explicitly invokes it, and remote CI never requires personal secrets.
+`VOYAGER_SUPABASE_PROJECT_REF`. The target must exactly match
+`VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF`. It submits only the read-only SQL
+contract to Supabase's official Management API, redacts failures, and never
+embeds project identity. Its one request uses the Management API read-only
+query endpoint, with no write-path fallback. It has no token-file or SSH
+fallback. It is network-free until a human explicitly invokes it, and remote
+CI never requires personal secrets.
 A missing image, environment value, network response, safe specific failure
 identifier, or non-exact green marker is a dependency failure, never
 installed-state success.
 
 ## Phase 2 knowledge-graph Spec gate
 
-From any directory, run:
+From any directory, set the target, its independently reviewed authorization,
+the injected token, and the rollback confirmation before running:
 
 ```bash
-/Users/isaac/the-workshop/voyagershell-oru-319-memory-kernel/recipes/knowledge-graph-poc.sh DISPOSABLE_PROJECT_REF
+./recipes/hosted/rollback/knowledge-graph-poc.sh
 ```
 
-The required argument must name an explicitly disposable project or branch.
-The canonical project ref is rejected before credential discovery or any API
-call. The recipe takes `VOYAGER_SUPABASE_ACCESS_TOKEN` first, then the canonical Mac
-token file, then securely reads the Fedora token. It writes the token to a
-mode-0600 temporary header file and immediately unsets the shell variables, so
-the bearer value never enters curl's arguments. It sends one Management API
+The target must exactly match the separately supplied authorized ref before
+credential discovery or any API call. The recipe accepts the access token only
+from `VOYAGER_SUPABASE_ACCESS_TOKEN`. It writes the token to a mode-0600
+temporary header file and immediately unsets the shell variables, so the bearer
+value never enters curl's arguments. It sends one Management API
 transaction containing deployable product authority hardening 054–059,
 graph schema/authorization/retrieval 061–063, fixed eligible and deliberately
 unresolved legacy scenarios in a fresh run-scoped UUID namespace, the cutover
@@ -194,9 +212,8 @@ claiming transaction, inherit their human source audience exactly, and create a
 ordinary null-audience event can receive its canonical audience once and enter
 the graph, while a second audience change fails.
 
-Note that `knowledge-graph-poc.sh` runs against the shared dev branch and
-deliberately refuses when the cutover is already installed there. Since the
-boundary was applied to `voyager-dev`, use `knowledge-graph-local-proof.sh` for
+The hosted rollback runner deliberately refuses when the cutover is already
+installed on its authorized target. Use `knowledge-graph-local-proof.sh` for
 the same evidence on a disposable database.
 
 ## K4b topic nodes and backfill

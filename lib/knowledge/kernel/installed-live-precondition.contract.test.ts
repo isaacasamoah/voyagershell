@@ -1,17 +1,13 @@
 import { spawnSync } from 'node:child_process'
 import {
-  chmodSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
+  chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const checker = resolve(process.cwd(), 'recipes/installed-precondition-live.sh')
+const checker = resolve(process.cwd(),
+  'recipes/hosted/read-only/installed-precondition-live.sh')
 const composer = resolve(process.cwd(), 'recipes/lib/installed-precondition.sh')
 const fragments = [
   'recipes/sql/installed-pre-054-precondition/expectations.sql',
@@ -56,7 +52,8 @@ const runChecker = (
     MOCK_REQUEST_LOG: requestLog,
     MOCK_RESPONSE: responsePath,
     VOYAGER_SUPABASE_ACCESS_TOKEN: 'sensitive-token-value',
-    VOYAGER_SUPABASE_PROJECT_REF: 'sensitive-project-ref',
+    VOYAGER_SUPABASE_PROJECT_REF: 'sensitiveprojectref',
+    VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF: 'sensitiveprojectref',
     ...overrides,
   }
   for (const [key, value] of Object.entries(env)) {
@@ -157,16 +154,25 @@ describe('live installed precondition checker', () => {
     const noToken = runChecker('[]', {
       VOYAGER_SUPABASE_ACCESS_TOKEN: undefined,
     })
-    expect(noToken.result.status).toBe(1)
+    expect(noToken.result.status).toBe(2)
     expect(noToken.result.stderr).toContain('VOYAGER_SUPABASE_ACCESS_TOKEN is required')
     expect(noToken.curlArgs).toBe('')
 
     const noProject = runChecker('[]', {
       VOYAGER_SUPABASE_PROJECT_REF: undefined,
     })
-    expect(noProject.result.status).toBe(1)
+    expect(noProject.result.status).toBe(2)
     expect(noProject.result.stderr).toContain('VOYAGER_SUPABASE_PROJECT_REF is required')
     expect(noProject.curlArgs).toBe('')
+
+    const noAuthorization = runChecker('[]', {
+      VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF: undefined,
+    })
+    expect(noAuthorization.result.status).toBe(2)
+    expect(noAuthorization.result.stderr).toContain(
+      'VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF is required',
+    )
+    expect(noAuthorization.curlArgs).toBe('')
   })
 
   it('rejects header-breaking tokens before curl', () => {
@@ -174,7 +180,7 @@ describe('live installed precondition checker', () => {
       const invalid = runChecker('[]', {
         VOYAGER_SUPABASE_ACCESS_TOKEN: token,
       })
-      expect(invalid.result.status).toBe(1)
+      expect(invalid.result.status).toBe(2)
       expect(invalid.result.stderr).toContain(
         'VOYAGER_SUPABASE_ACCESS_TOKEN is invalid',
       )
@@ -193,33 +199,33 @@ describe('live installed precondition checker', () => {
     expect(result.stderr).toBe('')
     expect(curlArgs.startsWith('--disable\n')).toBe(true)
     expect(curlArgs).toContain(
-      'https://api.supabase.com/v1/projects/sensitive-project-ref/database/query/read-only\n',
+      'https://api.supabase.com/v1/projects/sensitiveprojectref/database/query/read-only\n',
     )
     expect(curlArgs).not.toContain(
-      'https://api.supabase.com/v1/projects/sensitive-project-ref/database/query\n',
+      'https://api.supabase.com/v1/projects/sensitiveprojectref/database/query\n',
     )
     expect(curlArgs).toContain('--header\n@')
     expect(curlArgs).not.toContain('sensitive-token-value')
     expect(checkerSource).toContain('/database/query/read-only"')
     expect(checkerSource).not.toMatch(/\/database\/query"\s*$/m)
     expect(JSON.parse(request)).toEqual({ query: contract })
-    expect(result.stdout + result.stderr).not.toContain('sensitive-project-ref')
+    expect(result.stdout + result.stderr).not.toContain('sensitiveprojectref')
   })
 
   it('fails closed on HTTP failure and redacts response and environment values', () => {
     const { result } = runChecker(
-      '{"error":"sensitive-token-value sensitive-project-ref"}',
+      '{"error":"sensitive-token-value sensitiveprojectref"}',
       { MOCK_CURL_EXIT: '22' },
     )
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('Management API request failed')
     expect(result.stdout + result.stderr).not.toContain('sensitive-token-value')
-    expect(result.stdout + result.stderr).not.toContain('sensitive-project-ref')
+    expect(result.stdout + result.stderr).not.toContain('sensitiveprojectref')
   })
 
   it('fails closed on malformed or non-green responses without echoing them', () => {
     for (const response of [
-      'not-json sensitive-token-value sensitive-project-ref',
+      'not-json sensitive-token-value sensitiveprojectref',
       '[{"precondition_marker":"WRONG","detail":"sensitive-token-value"}]',
       '[{"precondition_marker":"INSTALLED_PRE_054_PRECONDITION_GREEN","extra":true}]',
     ]) {
@@ -227,7 +233,7 @@ describe('live installed precondition checker', () => {
       expect(result.status).toBe(1)
       expect(result.stderr).toContain('returned a malformed precondition verdict')
       expect(result.stdout + result.stderr).not.toContain('sensitive-token-value')
-      expect(result.stdout + result.stderr).not.toContain('sensitive-project-ref')
+      expect(result.stdout + result.stderr).not.toContain('sensitiveprojectref')
     }
   })
 
@@ -237,7 +243,7 @@ describe('live installed precondition checker', () => {
       expect(result.status).toBe(1)
       expect(result.stderr).toContain(`precondition failed: ${failureId}`)
       expect(result.stdout + result.stderr).not.toContain('sensitive-token-value')
-      expect(result.stdout + result.stderr).not.toContain('sensitive-project-ref')
+      expect(result.stdout + result.stderr).not.toContain('sensitiveprojectref')
     }
   })
 })
