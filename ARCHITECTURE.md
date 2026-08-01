@@ -22,16 +22,18 @@ Supabase
       +-- voyages / spaces      product authority
       +-- message_deliveries    destination delivery state
       +-- graph_nodes / graph_edges / graph_authority_edges   the one graph
+      +-- knowledge_units / knowledge_topics   claims and topic authorities
       +-- knowledge_audiences   immutable scope carried by every source event
       +-- knowledge_source_intents   the exactly-once ingress claim
 ```
 
 `lib/retrieval/voyager-tools.ts` is the registered tool catalogue.
 `lib/retrieval/knowledge-retrieval-tools.ts` defines the knowledge retrieval
-tools. The K2 cutover removed the legacy `knowledge_edges` table, its
-`graph_traverse` RPC and every caller, so no registered tool traverses the graph
-today; the six-kind boundary in `lib/knowledge/kernel/boundary.ts` still uses an
-isolated candidate client and gains its live caller in K3.
+tools, including the registered `graph_memory` read. Its current caller is
+`retrieveKnowledgeGraphClaims` in `lib/knowledge/kernel/boundary.ts`, which
+invokes `retrieve_knowledge_graph_claims_v2`. `composeSystemPrompt` uses that
+boundary for standing memory on each turn, and the registered tool uses the
+same boundary for on-demand graph reach.
 
 `lib/messaging/ingress.ts` is the only harness path by which a person's message
 or their Voyager's response becomes a fact. For human input it resolves the
@@ -72,17 +74,29 @@ historical source content.
 
 ## Canonical graph substrate
 
-Migrations `061`–`071` are the installed graph and atomic-ingress shape. Numeric
+Migrations `061`–`076` are the current graph and memory-kernel shape. Numeric
 discovery is not installed-state authority: the pre-054 catalogue contract
 remains the explicit boundary for applying product migrations `054`–`059`, and
-the local proof then applies the entire `060`–`071` release boundary in order.
+the local proofs then apply each later migration in order.
 
 ### Stable identities
 
 `graph_nodes` contains one scope-neutral row for each `(kind, authority_id)`.
-The six kinds are Person, Voyager, Voyage, Space, MessageEvent, and
-KnowledgeUnit. The physical UUID is canonical and checked by PostgreSQL. A
-Person participating in many disjoint scopes still has one node.
+The seven kinds are Person, Voyager, Voyage, Space, MessageEvent, KnowledgeUnit,
+and Topic. The physical UUID is canonical and checked by PostgreSQL. A Person
+participating in many disjoint scopes still has one node.
+
+`knowledge_topics` is the immutable authority table for Topic nodes. It owns
+the normalized label and 1536-dimensional embedding; every Topic graph node
+must reference one exact authority row. Active topic identity does not classify
+against that vector: migration `075` blocks over the claim embeddings of
+authorized units already filed under each topic and returns the nearest claim
+as matcher context.
+
+`knowledge_topic_identity_outcomes` is the backfill ledger for pre-v4 units
+only. Live v4 units do not write an outcome row there: their topic decisions are
+the KnowledgeUnit-to-Topic edges, evidence, and grants written atomically inside
+`complete_v4_knowledge_extraction_attempt`.
 
 `graph_node_grants` is immutable evidence that an audience may discover a
 stable identity. A grant stores basis kind/id/version, optional evidence event,
@@ -105,6 +119,12 @@ relations. Its stable edge ID derives from canonical endpoints and kind;
 `relates_to` canonicalizes endpoint order. Every usable edge has one or more
 `graph_edge_evidence` rows pointing to exact source events. An edge has no
 synthetic intersection audience and cannot manufacture endpoint grants.
+
+Topic nodes are shared hubs. Each KnowledgeUnit-to-Topic `about` edge carries
+its exact source-event evidence, and the Topic receives one grant per
+authorizing source audience. Sharing a topic identity never widens access:
+viewers discover only the incident units and degree authorized by their own
+audiences.
 
 ### Current authority projection
 
@@ -174,6 +194,16 @@ Projection functions are defined before activation; activation takes
 transaction-held writer locks, installs triggers, and performs a complete
 idempotent catch-up so writes before the lock are not lost.
 
+Migrations `072`–`076` add the event-owned Cartographer, the registered graph
+memory read, Topic authority nodes, and the re-derived v4 topic matcher.
+Migration `074` remains the structural topic migration. Migration `075`
+separates claim-vector blocking from identity: a versioned model instruction
+reuses an authorized candidate or proposes a new label, and only the server
+writes. Migration `076` hardens candidate snapshots, completion authority,
+backfill ACLs, and topic-only rework. Activation drains pinned older jobs before
+re-deriving pre-v4 units, removing falsified topic assignments, and asserting
+complete physics, topics, and zero orphan authority rows.
+
 The atomic writer creates the canonical source audience, event, MessageEvent
 node, grants, structural edges, evidence, and delivery fan-out before returning.
 Deployment-gap recovery binds the only permitted null-audience rows, after
@@ -188,9 +218,13 @@ must never occur as an accidental cascade around the immutable ledger.
 
 ## Proof boundary
 
-The kernel fixture exercises all six node kinds and all sixteen edge kinds,
+The historical K2 kernel fixture exercises its six node kinds and all sixteen edge kinds,
 cross-scope identity, red/blue denial symmetry, historical labels, leave,
 late join, absence, rejoin, post-rejoin sources, deterministic replay, parent
 cascades, and direct-write rejection. The hosted recipe adds K1 canonical
 backfill parity, unresolved-row reporting, activation-gap catch-up, sequence
 non-consumption, old-catalogue absence, and catalogue equality after rollback.
+The disposable K4b recipe separately proves the seventh Topic kind, canonical
+topic authority, shared-hub privacy, stale-mint re-matching, adjacent-subject
+separation, and ordered zero-residue backfill. The committed model harness
+measures the exact matcher contract over real OpenAI claim embeddings.

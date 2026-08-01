@@ -17,6 +17,25 @@ export interface PersonCandidate {
   displayName: string
 }
 
+export interface TopicCandidate {
+  topicId: string
+  label: string
+  representativeUnitId?: string
+  representativeClaim?: string
+  similarity: number
+}
+
+export type TopicMatchDecision =
+  | { kind: 'existing'; topicId: string }
+  | { kind: 'new'; label: string }
+
+export interface TopicMatcherRun {
+  kind: 'structured'
+  topics: TopicMatchDecision[]
+  inputTokens: number | undefined
+  outputTokens: number | undefined
+}
+
 export interface ExtractionAttempt {
   attemptId: string
   leaseToken: string
@@ -36,7 +55,7 @@ export type ExtractionFailureKind = 'provider_failed' | 'malformed_output'
 export type ExtractionRun =
   | {
       kind: 'structured'
-      object: import('./contract').ExtractionObject
+      object: import('./contract').AnyExtractionObject
       // Undefined when the provider reported no usage. Recording an unknown
       // count as 0 would assert the call consumed nothing, which is a
       // different fact from not knowing.
@@ -61,4 +80,14 @@ export interface KnowledgeEventRow {
   event_id: string
   content: string
   source_created_at: string
+}
+
+export interface TopicBackfillUnit {
+  unitId: string
+  sourceEventId: string
+  sourceContent: string
+  sourceActorId: string
+  claim: string
+  knowledgeAudienceId: string
+  embedding: string | null
 }

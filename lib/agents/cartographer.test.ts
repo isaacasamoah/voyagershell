@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { extractionSchema } from './cartographer/contract'
 
 const mocks = vi.hoisted(() => ({
   resolveUserModelWithMeta: vi.fn(),
@@ -11,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   applySessionDecay: vi.fn(),
   checkPreferenceSuperseding: vi.fn(),
   processRetrievalFeedback: vi.fn(),
+  embedCartographerText: vi.fn(),
+  embedLegacyTopicInputs: vi.fn(),
+  findTopicCandidates: vi.fn(),
+  completeMatchedExtraction: vi.fn(),
 }))
 
 vi.mock('@/lib/models', () => ({
@@ -35,6 +38,14 @@ vi.mock('./cartographer/preference-superseding', () => ({
 }))
 vi.mock('./cartographer/retrieval-feedback', () => ({
   processRetrievalFeedback: mocks.processRetrievalFeedback,
+}))
+vi.mock('./cartographer/topics', () => ({
+  embedCartographerText: mocks.embedCartographerText,
+  embedLegacyTopicInputs: mocks.embedLegacyTopicInputs,
+  findTopicCandidates: mocks.findTopicCandidates,
+}))
+vi.mock('./cartographer/topic-pipeline', () => ({
+  completeMatchedExtraction: mocks.completeMatchedExtraction,
 }))
 
 import { runCartographer } from './cartographer'
@@ -84,6 +95,21 @@ describe('event-owned Cartographer extraction', () => {
     })
     mocks.applySessionDecay.mockResolvedValue({ decayed: 0, skipped: 0 })
     mocks.processRetrievalFeedback.mockResolvedValue({ promoted: 0 })
+    mocks.embedCartographerText.mockResolvedValue([1, 0])
+    mocks.embedLegacyTopicInputs.mockResolvedValue([{
+      label: 'amber notebook',
+      embedding: '[1,0]',
+    }])
+    mocks.findTopicCandidates.mockResolvedValue([])
+    mocks.completeMatchedExtraction.mockResolvedValue({
+      kind: 'completed',
+      completion: {
+        outcome: 'succeeded',
+        unitId: '72000000-0000-4000-8000-000000000008',
+        replayed: false,
+      },
+      usage: { inputTokens: 140, outputTokens: 35 },
+    })
   })
 
   it('records concrete model identity and completes one exact source job', async () => {
@@ -107,6 +133,8 @@ describe('event-owned Cartographer extraction', () => {
       inputTokens: 120,
       outputTokens: 30,
     }))
+    expect(mocks.completeExtractionAttempt.mock.calls[0][0].knowledgeType).toBeUndefined()
+    expect(mocks.completeExtractionAttempt.mock.calls[0][0].embedding).toBeUndefined()
     expect(mocks.applyEnrichments).toHaveBeenCalledOnce()
     expect(result).toEqual({
       kind: 'completed',
@@ -177,29 +205,29 @@ describe('event-owned Cartographer extraction', () => {
       outcome: 'provider_failed',
     }))
   })
-})
 
-describe('single structured extraction contract', () => {
-  it('accepts one claim and one supplied-person slot', () => {
-    expect(extractionSchema.safeParse({
-      claim: 'Elisheya keeps the amber notebook.',
-      aboutPersonId: attempt.candidates[0].personId,
-      knowledgeType: 'domain',
-      attentionScore: 0.8,
-      contextSnippet: 'Elisheya keeps the amber notebook.',
-    }).success).toBe(true)
+  it('records a non-empty fallback class when an embedding error has no name', async () => {
+    mocks.beginExtractionAttempt.mockResolvedValue({
+      ...attempt,
+      extractorVersion: 'cartographer-single-claim-v3',
+    })
+    const unnamed = new Error('embedding unavailable')
+    unnamed.name = ''
+    mocks.embedCartographerText.mockRejectedValue(unnamed)
+    mocks.completeExtractionAttempt.mockResolvedValue({
+      outcome: 'provider_failed',
+      unitId: null,
+      replayed: false,
+    })
+
+    await runCartographer({ userId: attempt.sourceActorId })
+
+    expect(mocks.completeExtractionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: 'provider_failed',
+        errorClass: 'embedding_provider_error',
+      }),
+    )
   })
 
-  it('rejects about-without-claim, extra fields, and multiple claims', () => {
-    const base = {
-      aboutPersonId: attempt.candidates[0].personId,
-      knowledgeType: 'domain',
-      attentionScore: 0.8,
-      contextSnippet: 'Notebook fact.',
-    }
-    expect(extractionSchema.safeParse({ ...base, claim: null }).success).toBe(false)
-    expect(extractionSchema.safeParse({ ...base, claim: 'Fact', secondClaim: 'Other' }).success)
-      .toBe(false)
-    expect(extractionSchema.safeParse({ ...base, claim: ['Fact', 'Other'] }).success).toBe(false)
-  })
 })

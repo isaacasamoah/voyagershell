@@ -8,17 +8,20 @@ const GENERATION_APIS = new Set(['generateObject', 'generateText', 'streamObject
 const EMBEDDING_APIS = new Set(['embed', 'embedMany'])
 const EXPECTED_GENERATION = [
   'lib/agents/cartographer/extractor.ts|generateObject|model',
+  'lib/agents/cartographer/extractor.ts|generateObject|model',
+  'lib/agents/cartographer/topic-matcher.ts|generateObject|model',
   'lib/agents/deep-retrieval.ts|generateText|resolved.model',
   'lib/harness/run-turn.ts|streamText|chatModel',
 ]
 const EXPECTED_EXTRACTOR_HANDOFF = ['lib/agents/cartographer.ts|extractKnowledge|resolved.model']
+const EXPECTED_TOPIC_MATCHER_HANDOFF = [
+  'lib/agents/cartographer/backfill.ts|matchKnowledgeTopics|resolved.model', 'lib/agents/cartographer/topic-pipeline.ts|matchKnowledgeTopics|input.model']
 const EXPECTED_OPENAI_EMBEDDINGS = [
-  // K4a's embed-before-commit: the unit's vector is computed on the API key,
-  // never the subscription, because the Codex backend does not serve embeddings.
-  "lib/agents/cartographer.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/apply.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
+  "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
+  "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/knowledge/event-storage.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/knowledge/search.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
 ]
@@ -189,8 +192,8 @@ describe('model lane contract', () => {
     const entries = productionEntries()
     expect(aiCallSites(entries, GENERATION_APIS)).toEqual(EXPECTED_GENERATION)
     expect(namedCallSites(entries, 'extractKnowledge')).toEqual(EXPECTED_EXTRACTOR_HANDOFF)
+    expect(namedCallSites(entries, 'matchKnowledgeTopics')).toEqual(EXPECTED_TOPIC_MATCHER_HANDOFF)
   })
-
   it('rejects a bypass added inside an already-known generation file', () => {
     const entries = productionEntries()
     const mutated = entries.map((entry) => entry.file === 'lib/agents/deep-retrieval.ts'
@@ -225,8 +228,7 @@ embedMany({ model: createCodexModel(fakeCredential), values: ['mutation fixture'
       'lib/models/codex.ts|embedMany|createCodexModel(fakeCredential)',
       'lib/models/codex.ts|embed|createCodexModel(fakeCredential)',
     ])
-    expect(() => assertEmbeddingContract(mutated))
-      .toThrow('embedding lane changed')
+    expect(() => assertEmbeddingContract(mutated)).toThrow('embedding lane changed')
     const cartographerMutated = entries.map((entry) => (
       entry.file === 'lib/agents/cartographer.ts'
         ? {
@@ -237,14 +239,12 @@ embed({ model: resolved.model, value: 'mutation fixture' })`,
           }
         : entry
     ))
-    expect(() => assertEmbeddingContract(cartographerMutated))
-      .toThrow('embedding lane changed')
+    expect(() => assertEmbeddingContract(cartographerMutated)).toThrow('embedding lane changed')
     const helperMutated = entries.map((entry) => (
       entry.file === 'lib/agents/cartographer/embeddings.ts'
         ? { ...entry, source: entry.source.replace('new OpenAI()', 'new OpenAI({ baseURL })') }
         : entry
     ))
-    expect(() => assertEmbeddingContract(helperMutated))
-      .toThrow('embedding lane changed')
+    expect(() => assertEmbeddingContract(helperMutated)).toThrow('embedding lane changed')
   })
 })

@@ -1,6 +1,7 @@
-export const GRAPH_NODE_KINDS = [
+export const K2_GRAPH_NODE_KINDS = [
   'person', 'voyager', 'voyage', 'space', 'message_event', 'knowledge_unit',
 ] as const
+export const GRAPH_NODE_KINDS = [...K2_GRAPH_NODE_KINDS, 'topic'] as const
 
 export const GRAPH_EDGE_KINDS = [
   'authored_by', 'posted_in', 'reply_to', 'in_voyage', 'member_of',

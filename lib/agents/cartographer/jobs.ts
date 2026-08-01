@@ -5,6 +5,12 @@ import type {
   ExtractionCompletion,
   ExtractionFailureKind,
 } from './types'
+import { isCurrentContract } from './contract'
+import type { LegacyTopicInput } from './topics'
+import {
+  isRetryableTopicError,
+  TopicCandidatesRetryableError,
+} from './topic-retry'
 
 export const beginExtractionAttempt = async (input: {
   userId: string
@@ -68,13 +74,13 @@ export const completeExtractionAttempt = async (input: {
   knowledgeType?: 'domain' | 'operational' | 'preference'
   attentionScore?: number
   embedding?: string
+  topicInputs?: LegacyTopicInput[] | Json
+  topicCandidateSnapshot?: Json
   errorClass?: string
   inputTokens?: number
   outputTokens?: number
 }): Promise<ExtractionCompletion> => {
-  const { data, error } = await getAdminClient().rpc(
-    'complete_knowledge_extraction_attempt',
-    {
+  const args = {
       p_attempt_id: input.attempt.attemptId,
       p_lease_token: input.attempt.leaseToken,
       p_result: input.result,
@@ -84,11 +90,21 @@ export const completeExtractionAttempt = async (input: {
       p_knowledge_type: input.knowledgeType ?? null,
       p_attention_score: input.attentionScore ?? null,
       p_embedding: input.embedding ?? null,
+      p_topic_inputs: input.topicInputs ?? null,
       p_error_class: input.errorClass ?? null,
       p_input_tokens: input.inputTokens ?? null,
       p_output_tokens: input.outputTokens ?? null,
-    },
-  )
+  }
+  const current = isCurrentContract(input.attempt.extractorVersion)
+  const { data, error } = current
+    ? await getAdminClient().rpc('complete_v4_knowledge_extraction_attempt', {
+      ...args,
+      p_topic_candidate_snapshot: input.topicCandidateSnapshot ?? null,
+    })
+    : await getAdminClient().rpc('complete_knowledge_extraction_attempt', args)
+  if (error && isRetryableTopicError(error.message)) {
+    throw new TopicCandidatesRetryableError()
+  }
   if (error) throw new Error(error.message)
   const row = data?.[0]
   if (!row) throw new Error('knowledge_extraction_completion_returned_no_row')

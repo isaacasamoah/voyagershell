@@ -23,6 +23,18 @@ export type KnowledgeExtractionAttemptRow = {
 export type KnowledgeExtractionCompletionRow = {
   outcome: KnowledgeExtractionOutcomeKind; unit_id: string | null; replayed: boolean
 }
+export type KnowledgeTopicCandidateRow = {
+  topic_id: string; label: string; representative_unit_id: string | null;
+  representative_claim: string | null; similarity: number
+}
+export type KnowledgeTopicBackfillJobRow = {
+  source_event_id: string; requesting_user_id: string
+}
+export type KnowledgeTopicBackfillUnitRow = {
+  unit_id: string; source_event_id: string; source_content: string;
+  source_actor_id: string; claim: string; knowledge_audience_id: string;
+  embedding: string | null
+}
 export type KnowledgeByIdRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'>
 export type VoyageMessageRow = Pick<KnowledgeSearchRow,
   'event_id' | 'content' | 'source_created_at' | 'sender_display_name' | 'sender_user_id'>
@@ -39,6 +51,12 @@ export type ResumableSessionRow = Pick<SessionAuthorityRow,
   'id' | 'title' | 'status' | 'last_message_at' | 'message_count' | 'created_at' | 'voyage_slug'>
 
 export type PublicFunctions = {
+  activate_knowledge_topic_contract: {
+    Args: Record<PropertyKey, never>; Returns: string
+  }
+  assert_knowledge_topic_backfill_complete: {
+    Args: Record<PropertyKey, never>; Returns: Json
+  }
   archive_session: { Args: { p_session_id: string; p_user_id: string }; Returns: boolean }
   authorize_knowledge_scope: { Args: { p_surface: string; p_user_id: string; p_voyage_slug: string | null };
     Returns: string }
@@ -58,8 +76,17 @@ export type PublicFunctions = {
     p_raw_output?: Json | null; p_claim?: string | null; p_about_person_id?: string | null;
     p_knowledge_type?: string | null; p_attention_score?: number | null;
     p_embedding?: string | null;
+    p_topic_inputs?: Json | null;
     p_error_class?: string | null; p_input_tokens?: number | null;
     p_output_tokens?: number | null
+  }; Returns: KnowledgeExtractionCompletionRow[] }
+  complete_v4_knowledge_extraction_attempt: { Args: {
+    p_attempt_id: string; p_lease_token: string; p_result: KnowledgeExtractionOutcomeKind;
+    p_raw_output?: Json | null; p_claim?: string | null; p_about_person_id?: string | null;
+    p_knowledge_type?: string | null; p_attention_score?: number | null;
+    p_embedding?: string | null; p_topic_inputs?: Json | null;
+    p_topic_candidate_snapshot?: Json | null; p_error_class?: string | null;
+    p_input_tokens?: number | null; p_output_tokens?: number | null
   }; Returns: KnowledgeExtractionCompletionRow[] }
   create_room_invite: { Args: { p_session_id: string; p_inviter_user_id: string;
     p_invitee_user_id: string }; Returns: {
@@ -92,6 +119,16 @@ export type PublicFunctions = {
   is_voyage_captain: { Args: { p_user_id: string; p_voyage_slug: string }; Returns: boolean }
   is_voyage_captain_by_id: { Args: { p_voyage_id: string }; Returns: boolean }
   join_voyage_by_code: { Args: { p_invite_code: string; p_user_id: string }; Returns: string }
+  list_knowledge_topic_backfill_jobs: {
+    Args: Record<PropertyKey, never>; Returns: KnowledgeTopicBackfillJobRow[]
+  }
+  list_knowledge_topic_backfill_units: {
+    Args: Record<PropertyKey, never>; Returns: KnowledgeTopicBackfillUnitRow[]
+  }
+  resolve_knowledge_topic: { Args: {
+    p_extractor_version: string; p_knowledge_audience_id: string;
+    p_embedding: string; p_exclude_unit_id?: string | null
+  }; Returns: KnowledgeTopicCandidateRow[] }
   keyword_search: { Args: { p_query: string; p_user_id: string; p_voyage_slug?: string | null;
     p_knowledge_type?: string | null; p_min_attention?: number; p_match_count?: number;
   }; Returns: KeywordSearchRow[] }
@@ -124,4 +161,9 @@ export type PublicFunctions = {
     p_present: boolean }; Returns: boolean }
   touch_session_activity: { Args: { p_session_id: string; p_user_id: string }; Returns: boolean }
   update_knowledge_embedding: { Args: { p_embedding: string; p_event_id: string }; Returns: boolean }
+  write_knowledge_topic_identity_backfill: { Args: {
+    p_unit_id: string; p_raw_output: Json; p_knowledge_type: string;
+    p_attention_score: number; p_embedding: string; p_topic_inputs: Json;
+    p_topic_candidate_snapshot: Json
+  }; Returns: boolean }
 }

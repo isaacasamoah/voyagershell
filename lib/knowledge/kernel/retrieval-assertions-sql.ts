@@ -1,9 +1,9 @@
-import { GRAPH_NODE_KINDS, type KnowledgeGraphFixture } from './contract'
+import { K2_GRAPH_NODE_KINDS, type KnowledgeGraphFixture } from './contract'
 import { quote, uuid, valuesSql } from './sql'
 
 const renderAuthorizedRoots = (fixture: KnowledgeGraphFixture): string => {
   const viewer = fixture.viewerProfileIds.a
-  const roots = GRAPH_NODE_KINDS.map((kind) => {
+  const roots = K2_GRAPH_NODE_KINDS.map((kind) => {
     const node = fixture.nodes.find((candidate) => {
       if (candidate.kind !== kind) return false
       if (kind === 'person' || kind === 'voyager') return candidate.authorityId === viewer
