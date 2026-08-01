@@ -2,7 +2,7 @@
 CREATE FUNCTION public.k4b_commit(
   p_key text, p_claim text, p_topics jsonb, p_axis integer, p_room boolean)
 RETURNS uuid LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
-DECLARE v_event uuid; v_attempt uuid; v_token uuid; v_unit uuid; v_candidates uuid[];
+DECLARE v_event uuid; v_attempt uuid; v_token uuid; v_unit uuid; v_candidates jsonb;
   v_embedding vector(1536) := public.k4b_vector(p_axis);
 BEGIN
   SELECT event_id INTO STRICT v_event FROM public.claim_source_message_ingress(
@@ -19,7 +19,8 @@ BEGIN
   FROM public.begin_knowledge_extraction_attempt(
     '72000000-0000-4000-8000-000000000001', 'openai', 'classification-model',
     'balanced', v_event, 120);
-  SELECT coalesce(array_agg(topic_id ORDER BY topic_id), '{}') INTO v_candidates
+  SELECT coalesce(jsonb_agg(jsonb_build_array(topic_id, representative_unit_id)
+    ORDER BY topic_id, representative_unit_id), '[]'::jsonb) INTO v_candidates
   FROM public.resolve_knowledge_topic('cartographer-single-claim-v4',
     (SELECT knowledge_audience_id FROM public.knowledge_events WHERE id = v_event),
     v_embedding, NULL);
@@ -29,13 +30,13 @@ BEGIN
       'knowledgeType','domain','attentionScore',0.8,'contextSnippet',p_claim,'topics',p_topics),
     p_claim => p_claim, p_knowledge_type => 'domain', p_attention_score => 0.8,
     p_embedding => v_embedding, p_topic_inputs => p_topics,
-    p_topic_candidate_ids => v_candidates, p_input_tokens => 10, p_output_tokens => 5);
+    p_topic_candidate_snapshot => v_candidates, p_input_tokens => 10, p_output_tokens => 5);
   RETURN v_unit;
 END $$;
 
 DO $k4b_backfill$
 DECLARE v_job record; v_attempt uuid; v_token uuid; v_result jsonb; v_old record;
-  v_embedding vector(1536); v_candidates uuid[]; v_topics jsonb; v_topic uuid;
+  v_embedding vector(1536); v_candidates jsonb; v_topics jsonb; v_topic uuid;
 BEGIN
   FOR v_job IN SELECT job.source_event_id, audience.member_profile_ids[1] requester
     FROM public.knowledge_extraction_jobs job JOIN public.knowledge_audiences audience
@@ -56,11 +57,12 @@ BEGIN
     WHERE unit.extractor_version <> 'cartographer-single-claim-v4' AND done.unit_id IS NULL
     ORDER BY CASE WHEN unit.claim LIKE '%coffee after two%' THEN 0 ELSE 1 END, unit.id LOOP
     v_embedding := coalesce(v_old.embedding, public.k4b_vector(6));
-    SELECT coalesce(array_agg(topic_id ORDER BY topic_id), '{}') INTO v_candidates
+    SELECT coalesce(jsonb_agg(jsonb_build_array(topic_id, representative_unit_id)
+      ORDER BY topic_id, representative_unit_id), '[]'::jsonb) INTO v_candidates
     FROM public.resolve_knowledge_topic('cartographer-single-claim-v4',
       v_old.knowledge_audience_id, v_embedding, v_old.id);
     IF v_old.claim LIKE '%coffee after two%' OR v_old.claim LIKE '%afternoon caffeine%' THEN
-      v_topic := v_candidates[1];
+      v_topic := (v_candidates->0->>0)::uuid;
       IF v_topic IS NULL THEN RAISE EXCEPTION 'k4b_rework_candidate_missing'; END IF;
       v_topics := jsonb_build_array(jsonb_build_object(
         'kind','existing','topicId',v_topic));

@@ -24,7 +24,8 @@ export type KnowledgeExtractionCompletionRow = {
   outcome: KnowledgeExtractionOutcomeKind; unit_id: string | null; replayed: boolean
 }
 export type KnowledgeTopicCandidateRow = {
-  topic_id: string; label: string; representative_claim: string | null; similarity: number
+  topic_id: string; label: string; representative_unit_id: string | null;
+  representative_claim: string | null; similarity: number
 }
 export type KnowledgeTopicBackfillJobRow = {
   source_event_id: string; requesting_user_id: string
@@ -84,7 +85,7 @@ export type PublicFunctions = {
     p_raw_output?: Json | null; p_claim?: string | null; p_about_person_id?: string | null;
     p_knowledge_type?: string | null; p_attention_score?: number | null;
     p_embedding?: string | null; p_topic_inputs?: Json | null;
-    p_topic_candidate_ids?: string[] | null; p_error_class?: string | null;
+    p_topic_candidate_snapshot?: Json | null; p_error_class?: string | null;
     p_input_tokens?: number | null; p_output_tokens?: number | null
   }; Returns: KnowledgeExtractionCompletionRow[] }
   create_room_invite: { Args: { p_session_id: string; p_inviter_user_id: string;
@@ -160,13 +161,9 @@ export type PublicFunctions = {
     p_present: boolean }; Returns: boolean }
   touch_session_activity: { Args: { p_session_id: string; p_user_id: string }; Returns: boolean }
   update_knowledge_embedding: { Args: { p_embedding: string; p_event_id: string }; Returns: boolean }
-  write_knowledge_topic_backfill: { Args: {
-    p_unit_id: string; p_raw_output: Json; p_knowledge_type: string;
-    p_attention_score: number; p_embedding: string; p_topic_inputs: Json
-  }; Returns: boolean }
   write_knowledge_topic_identity_backfill: { Args: {
     p_unit_id: string; p_raw_output: Json; p_knowledge_type: string;
     p_attention_score: number; p_embedding: string; p_topic_inputs: Json;
-    p_topic_candidate_ids: string[]
+    p_topic_candidate_snapshot: Json
   }; Returns: boolean }
 }

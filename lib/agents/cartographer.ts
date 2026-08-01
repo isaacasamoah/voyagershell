@@ -174,7 +174,7 @@ export const runCartographer = async (
           : undefined,
         embedding,
         topicInputs: isCurrentContract(attempt.extractorVersion) ? [] : topicInputs,
-        topicCandidateIds: isCurrentContract(attempt.extractorVersion) ? [] : undefined,
+        topicCandidateSnapshot: isCurrentContract(attempt.extractorVersion) ? [] : undefined,
         inputTokens,
         outputTokens,
       })

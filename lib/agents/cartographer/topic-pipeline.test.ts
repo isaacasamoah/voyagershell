@@ -50,6 +50,7 @@ describe('claim-blocked topic pipeline', () => {
       .mockResolvedValueOnce([{
         topicId: '72000000-0000-4000-8000-000000000008',
         label: 'quantum engines',
+        representativeUnitId: '72000000-0000-4000-8000-000000000010',
         representativeClaim: 'Quantum propulsion research is next quarter.',
         similarity: 0.44,
       }])
@@ -92,7 +93,10 @@ describe('claim-blocked topic pipeline', () => {
     expect(mocks.matchKnowledgeTopics).toHaveBeenCalledTimes(2)
     expect(mocks.completeExtractionAttempt.mock.calls[1][0]).toEqual(
       expect.objectContaining({
-        topicCandidateIds: ['72000000-0000-4000-8000-000000000008'],
+        topicCandidateSnapshot: [[
+          '72000000-0000-4000-8000-000000000008',
+          '72000000-0000-4000-8000-000000000010',
+        ]],
         topicInputs: [{
           kind: 'existing',
           topicId: '72000000-0000-4000-8000-000000000008',

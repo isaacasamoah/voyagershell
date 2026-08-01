@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const read = (path: string): string => readFileSync(resolve(process.cwd(), path), 'utf8')
 const migration = read('supabase/migrations/072_event_driven_cartographer.sql')
+const currentCompletion = read('supabase/migrations/076_topic_identity_hardening.sql')
 const localProof = read('recipes/cartographer-k3-local-proof.sh')
 const hostedProof = read('recipes/knowledge-graph-poc.sh')
 const hostedTransaction = read('recipes/lib/knowledge-graph-transaction.sh')
@@ -34,10 +35,12 @@ describe('K3 database-owned extraction contract', () => {
   })
 
   it('derives audience and graph provenance without caller-supplied scope', () => {
-    const completionSignature = migration.match(
-      /CREATE FUNCTION public\.complete_knowledge_extraction_attempt\(([\s\S]*?\n)\) RETURNS/,
+    const completionSignature = currentCompletion.match(
+      /CREATE OR REPLACE FUNCTION public\.complete_knowledge_extraction_attempt\(([\s\S]*?\n)\) RETURNS/,
     )?.[1] ?? ''
     expect(completionSignature).not.toMatch(/audience|edge_kind|extractor_version/)
+    expect(completionSignature).toContain('p_topic_inputs jsonb DEFAULT NULL')
+    expect(completionSignature).toContain('p_output_tokens integer DEFAULT NULL')
     expect(migration).toMatch(/v_edge,\s*v_unit_node,\s*v_event_node,\s*'derived_from'/)
     expect(migration).toMatch(/v_edge,\s*v_unit_node,\s*v_person_node\.id,\s*'about'/)
     expect(migration).toContain("'edge_evidence'")

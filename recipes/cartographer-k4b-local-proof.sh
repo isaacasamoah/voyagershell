@@ -80,6 +80,9 @@ docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$
 docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/supabase/migrations/075_topic_identity_matcher.sql" >/dev/null \
   || fail 'migration 075 failed'
+docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/supabase/migrations/076_topic_identity_hardening.sql" >/dev/null \
+  || fail 'migration 076 failed'
 docker exec -i "$CONTAINER_NAME" psql -X -q -U postgres -d "$DATABASE" \
   < "$TEMP_DIR/denial.sql" > "$TEMP_DIR/denial.txt" 2>&1
 [ "$(rg -c 'permission denied' "$TEMP_DIR/denial.txt")" = 5 ] \
@@ -186,7 +189,7 @@ ROW
         'attentionScore',0.8,'contextSnippet','$claim','topics',jsonb_build_array(
           jsonb_build_object('kind','new','label','$label'))),
       '$claim',NULL,'domain',0.8,public.k4b_vector($vector_index),jsonb_build_array(
-        jsonb_build_object('kind','new','label','$label')),'{}'::uuid[],NULL,10,5)" \
+        jsonb_build_object('kind','new','label','$label')),'[]'::jsonb,NULL,10,5)" \
       > "$TEMP_DIR/race-$index.out" 2>&1 &
   eval "race_pid_$index=$!"
   PIDS="$PIDS $!"
@@ -221,10 +224,16 @@ loser="$(docker exec "$CONTAINER_NAME" psql -X -Atq -F '|' -v ON_ERROR_STOP=1 \
 IFS='|' read -r loser_attempt loser_token loser_claim <<ROW
 $loser
 ROW
-winner_topic="$(docker exec "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
+winner="$(docker exec "$CONTAINER_NAME" psql -X -Atq -F '|' -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" -c \
-  "SELECT id FROM public.knowledge_topics WHERE normalized_label IN
-   ('orbital ceramics','spacecraft ceramic shields')")"
+  "SELECT topic.id, unit_node.authority_id FROM public.knowledge_topics topic
+   JOIN public.graph_nodes topic_node ON topic_node.kind='topic' AND topic_node.authority_id=topic.id
+   JOIN public.graph_edges edge ON edge.target_node_id=topic_node.id AND edge.kind='about'
+   JOIN public.graph_nodes unit_node ON unit_node.id=edge.source_node_id AND unit_node.kind='knowledge_unit'
+   WHERE topic.normalized_label IN ('orbital ceramics','spacecraft ceramic shields')")"
+IFS='|' read -r winner_topic winner_unit <<ROW
+$winner
+ROW
 docker exec "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" -c \
   "SELECT outcome FROM public.complete_v4_knowledge_extraction_attempt(
     '$loser_attempt','$loser_token','succeeded',
@@ -233,7 +242,7 @@ docker exec "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 -U postgres -d "$D
         jsonb_build_object('kind','existing','topicId','$winner_topic'))),
     '$loser_claim',NULL,'domain',0.8,public.k4b_vector(7),jsonb_build_array(
       jsonb_build_object('kind','existing','topicId','$winner_topic')),
-    ARRAY['$winner_topic']::uuid[],NULL,10,5)" > "$TEMP_DIR/race-retry.out" \
+    jsonb_build_array(jsonb_build_array('$winner_topic','$winner_unit')),NULL,10,5)" > "$TEMP_DIR/race-retry.out" \
   || fail 'stale paraphrase did not complete after model-style candidate reuse'
 [ "$(docker exec "$CONTAINER_NAME" psql -X -Atq -U postgres -d "$DATABASE" -c \
   "SELECT count(*) FROM public.knowledge_topics WHERE normalized_label IN

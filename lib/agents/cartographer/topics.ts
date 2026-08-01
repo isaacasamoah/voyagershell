@@ -36,7 +36,11 @@ export const findTopicCandidates = async (
   if (error) throw new Error(error.message)
   return (data ?? []).map((candidate) => {
     const representative = candidate.representative_claim
-      ? { representativeClaim: candidate.representative_claim }
+      && candidate.representative_unit_id
+      ? {
+        representativeUnitId: candidate.representative_unit_id,
+        representativeClaim: candidate.representative_claim,
+      }
       : {}
     return {
       topicId: candidate.topic_id,
@@ -69,6 +73,15 @@ export const toTopicWriteInputs = (
     ? { kind: 'existing', topicId: decision.topicId }
     : { kind: 'new', label: decision.label }
 ))
+
+export const toTopicCandidateSnapshot = (
+  candidates: TopicCandidate[],
+): Json => candidates.map(({ topicId, representativeUnitId }) => {
+  if (!representativeUnitId) {
+    throw new Error('knowledge_topic_candidate_representative_missing')
+  }
+  return [topicId, representativeUnitId]
+})
 
 export const parseVectorString = (value: string): number[] => (
   value.slice(1, -1).split(',').map(Number)

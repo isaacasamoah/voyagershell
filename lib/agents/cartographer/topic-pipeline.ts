@@ -8,6 +8,7 @@ import {
 import { matchKnowledgeTopics } from './topic-matcher'
 import {
   findTopicCandidates,
+  toTopicCandidateSnapshot,
   toTopicWriteInputs,
 } from './topics'
 import type {
@@ -84,7 +85,7 @@ export const completeMatchedExtraction = async (input: {
         attentionScore: input.object.attentionScore,
         embedding: input.embedding,
         topicInputs: toTopicWriteInputs(matched.topics),
-        topicCandidateIds: candidates.map(({ topicId }) => topicId),
+        topicCandidateSnapshot: toTopicCandidateSnapshot(candidates),
         ...usage,
       })
       return { kind: 'completed', completion, usage }

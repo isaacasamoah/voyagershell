@@ -8,6 +8,7 @@ import {
   embedCartographerText,
   findTopicCandidates,
   parseVectorString,
+  toTopicCandidateSnapshot,
   toTopicWriteInputs,
 } from './topics'
 import type { ExtractionObject } from './contract'
@@ -89,7 +90,7 @@ const rederiveUnit = async (unit: TopicBackfillUnit): Promise<void> => {
         p_knowledge_type: object.knowledgeType,
         p_attention_score: object.attentionScore,
         p_embedding: `[${embedding.join(',')}]`,
-        p_topic_candidate_ids: candidates.map(({ topicId }) => topicId),
+        p_topic_candidate_snapshot: toTopicCandidateSnapshot(candidates),
         p_topic_inputs: toTopicWriteInputs(matched.topics),
       },
     )

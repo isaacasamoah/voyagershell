@@ -20,6 +20,7 @@ export interface PersonCandidate {
 export interface TopicCandidate {
   topicId: string
   label: string
+  representativeUnitId?: string
   representativeClaim?: string
   similarity: number
 }

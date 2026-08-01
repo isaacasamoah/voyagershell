@@ -78,7 +78,7 @@ export const completeExtractionAttempt = async (input: {
   attentionScore?: number
   embedding?: string
   topicInputs?: LegacyTopicInput[] | Json
-  topicCandidateIds?: string[]
+  topicCandidateSnapshot?: Json
   errorClass?: string
   inputTokens?: number
   outputTokens?: number
@@ -102,7 +102,7 @@ export const completeExtractionAttempt = async (input: {
   const { data, error } = current
     ? await getAdminClient().rpc('complete_v4_knowledge_extraction_attempt', {
       ...args,
-      p_topic_candidate_ids: input.topicCandidateIds ?? null,
+      p_topic_candidate_snapshot: input.topicCandidateSnapshot ?? null,
     })
     : await getAdminClient().rpc('complete_knowledge_extraction_attempt', args)
   if (error?.message.includes('knowledge_topic_candidates_stale')) {
