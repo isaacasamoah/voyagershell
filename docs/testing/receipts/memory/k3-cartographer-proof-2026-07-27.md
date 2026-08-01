@@ -1,6 +1,10 @@
 # K3 Cartographer — interactive proof against the development database
 
-Status: `proved, with two named limitations`
+Status: `limited`
+
+Sanitization: account handles, exact hosted refs, session topology, personal
+messages, and durable object identifiers were redacted. Revisions, counts,
+timing, proof shapes, verdicts, limitations, and residue are retained.
 
 This record covers the production-shaped proof the 2026-07-26 evidence record
 named as still required. It is not a release, a deployment, or a product Test
@@ -10,12 +14,8 @@ Gate.
 
 - Branch: `feature/k3-cartographer-poc`
 - Revision proved: `9b3b57c` (structural slice inherited from `78b3da6`)
-- Database: Supabase branch `voyager-dev`, project ref `hpotfrfdigzmhyibihst`
-- Forbidden primary ref `iesprdzzgjypnksoljym`: never contacted; the string
-  appears in `.env.local` only inside a comment, and `NEXT_PUBLIC_SUPABASE_URL`
-  resolves to the development ref
-- Bench: `next dev` on `localhost:3001` from this worktree, `.env.local`
-  (owner-only) pointing at the development branch
+- Database: authorized development target; production was never contacted
+- Bench: `next dev` from this worktree with owner-only environment configuration
 - Migration `072` applied 2026-07-27 through the owner's signed-in Supabase SQL
   editor, wrapped in one explicit transaction. Verified after application:
   4/4 tables, 4/4 functions, active contract `cartographer-single-claim-v1`,
@@ -23,18 +23,17 @@ Gate.
   absent. `knowledge_extraction_jobs` held 0 rows, confirming history was not
   replayed.
 
-The documented Management API token in `~/.config/agent-secrets/supabase.env`
-is well formed but returns `401` on `/v1/projects` and `/v1/organizations`. It
-is revoked or invalid, not misscoped. See the open question below.
+The available Management API credential returned `401` to project and
+organization discovery. The credential value and location remain owner-only.
 
 ## How it was driven
 
-Two real accounts, two origins, one browser, through `claude-has-hands`:
+Two real accounts, two isolated origins, one browser:
 
 | Account | Origin | Role |
 |---|---|---|
-| isaacasamoah | `http://localhost:3001` | captain, 6 voyages |
-| elisheya | `http://127.0.0.1:3001` | crew, fambam only |
+| Account A | redacted isolated origin | captain, 6 voyages |
+| Account B | redacted isolated origin | crew, one shared voyage |
 
 Distinct origins give distinct `localStorage`, so the two Supabase sessions do
 not collide. Identity was confirmed per account from `/api/voyages` rather than
@@ -46,9 +45,9 @@ because the automation target has silently drifted between tabs in this harness.
 Three ordinary sentences, typed into the real composer. No seeded rows, no
 "remember" command, no fixture insert.
 
-1. Isaac, to the room: *Elisheya is training for the Melbourne half marathon in October.*
-2. Isaac, private aside to Corvid: *@corvid I have decided to stop drinking coffee after 2pm.*
-3. Isaac, to the room: *Elisheya's favourite coffee shop is the one on Lygon Street.*
+1. Account A sent one ordinary interpersonal fact to the room.
+2. Account A sent one personal preference as a private aside.
+3. Account A sent one ordinary place preference to the room.
 
 ## Observed result — the central claim
 
@@ -56,15 +55,15 @@ The first sentence produced, with no further action:
 
 | Object | Value |
 |---|---|
-| Source event | `ecd23f62-c12a-47c5-bb12-4dc5f77e8d3a`, `message` / `user`, 09:13:41.391Z |
+| Source event | redacted id, `message` / `user`, 09:13:41.391Z |
 | Job | created 09:13:41.424Z — 33 ms later, inside the ingress transaction |
-| Attempt | `a640edd1`, number 1, provider `openai.responses`, model `gpt-5.5` |
+| Attempt | redacted id, number 1, provider `openai.responses`, model `gpt-5.5` |
 | Outcome | `succeeded`, 09:13:47.276Z |
-| Unit | `474b390c`, claim_key `claim:0`, audience `81f1302a` |
-| `derived_from` | `37c52ea3` → message_event node `12793f32` |
-| `about` | `9ab72618` → person node `e293d8be` (`elisheya`, authority `e8610c57`) |
-| Unit grant | audience `81f1302a`, basis `source_event` = the exact source event |
-| Person endpoint grant | audience `81f1302a`, basis `edge_evidence` = the `about` edge, basis_event = the source event |
+| Unit | redacted id, claim_key `claim:0`, room audience |
+| `derived_from` | one edge to the exact message-event node |
+| `about` | one edge to Account B's canonical Person node |
+| Unit grant | room audience, basis `source_event` = the exact source event |
+| Person endpoint grant | same audience, basis `edge_evidence` = the `about` edge, basis_event = the source event |
 | Edge evidence | both edges cite the exact source event |
 
 End to end, off the response path, in about six seconds.
@@ -77,7 +76,7 @@ End to end, off the response path, in about six seconds.
 | K3-C2 one source produces zero or one immutable claim | **pass** | One unit per source event, derived from the immutable `knowledge_events` row. No `knowledge_current` read participates. Not falsified by deleting the projection row — see limitations. |
 | K3-C3 provenance is exact and audience-bound | **pass, with a limitation** | Attempt records extractor version, concrete provider `openai.responses`, concrete model `gpt-5.5`, and the exact source audience. One separate immutable outcome carries raw output and terminal result. Token counts are not observable from this provider — see limitation 1. |
 | K3-C4 retries are safe | **pass** | Replaying the identical completion returned `replayed=true` with the same `unit_id` and wrote no new rows. Re-leasing the completed job returned zero rows. Counts stayed 1/1/1/1 and the claim stayed byte-identical. |
-| K3-C5 scope never widens | **pass** | Two units under two different inherited audiences: room `81f1302a` (isaac + elisheya) and private `a1ab10d2`. The `about` target `e8610c57` is a member of the source audience, so the model chose from the supplied candidate set. Audience is derived in PostgreSQL; no caller supplies it. |
+| K3-C5 scope never widens | **pass** | Two units inherited two different audiences: the shared room audience and Account A's private audience. The `about` target belongs to the source audience, so the model chose from the supplied candidate set. Audience is derived in PostgreSQL; no caller supplies it. |
 | K3-C6 one source-backed interpersonal fragment is complete | **pass** | The exact delta above: one attempt, one outcome, one unit, one unit node, one source-audience grant, one `derived_from`, one `about`, both evidence rows, and the endpoint grant needed for traversal. Extraction produced no structural edge — the `authored_by`/`posted_in` increments come from K2 ingress of the message itself. |
 | K3-C7 no outcome is silent | **partial** | Success and no-claim are distinguishable in stored state, and a conflicting payload was rejected with `23505` leaving the unit unmutated. Provider failure, malformed output and expiry were **not** exercised against the live branch — see limitation 2. |
 
@@ -100,8 +99,8 @@ Control: `service_role` reads the unit, proving the probes targeted live rows.
 
 ## Experienced behaviour
 
-- The room message appeared for both accounts. Elisheya's feed shows it at
-  19:13 from ISAACASAMOAH as the last item; nothing followed it.
+- The room message appeared for both accounts as the final item; nothing
+  followed it.
 - No public Voyager reply and no Cartographer output appeared in either feed.
   Extraction is invisible to the room, as intended.
 - No console errors on either origin.
@@ -155,8 +154,8 @@ enrichment surface, which the spec explicitly retains until K5.
 ## Data left behind
 
 Three source events, three jobs, three attempts, three outcomes, three units
-and six new edges remain in the `voyager-dev` fambam room. They are ordinary
-room and private content in a development database and were deliberately not
+and six new edges remain in the authorized development database. They are
+ordinary room and private content and were deliberately not
 deleted: `knowledge_events` is append-only and the extraction tables are
 immutable by trigger, so removing them would mean defeating the guards this
 work exists to prove.

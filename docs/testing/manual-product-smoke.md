@@ -1,8 +1,9 @@
-# Voyager v0.1 Testing Checklist
+# Voyager manual product smoke
 
-**Version:** 0.1 (Foundation)
-**URL:** https://voyagershell.vercel.app
-**Date:** 2026-01-11
+Status: `current instructions`
+
+Run against the authorized preview/development surface, never production.
+Record completed results as a sanitized, revision-bound receipt.
 
 ---
 
@@ -49,8 +50,8 @@
 
 | Test | Status | Notes |
 |------|--------|-------|
-| Tell Voyager a fact: "My dog's name is Max" | | |
-| New conversation → ask: "What's my dog's name?" | | |
+| Tell Voyager a synthetic fact | | |
+| New conversation → ask for that fact | | |
 | Voyager remembers (semantic search working) | | |
 | Tell a decision: "We decided to use Stripe" | | |
 | Later ask: "What did we decide about payments?" | | |
@@ -59,7 +60,7 @@
 **Test Phrases:**
 - "Remember that our API uses REST, not GraphQL"
 - "The deadline is March 15th"
-- "Jake prefers detailed explanations"
+- "A test collaborator prefers detailed explanations"
 
 ---
 

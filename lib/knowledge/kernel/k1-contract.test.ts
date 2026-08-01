@@ -11,7 +11,7 @@ const readRepoFile = (path: string): string => readFileSync(resolve(process.cwd(
 const migration = (): string => readRepoFile('supabase/migrations/064_knowledge_graph_cutover.sql')
 const oldTable = ['knowledge', 'edges'].join('_')
 const oldRpc = ['graph', 'traverse'].join('_')
-const k1Seed = createK1FixtureSeed('oru-319-k1-contract')
+const k1Seed = createK1FixtureSeed('voyager-k1-contract')
 const assertionSql = (): string => renderK1CutoverAssertionsSql(k1Seed)
 describe('K1 final-shape backfill contract', () => {
   it('maps only explicit immutable source audiences and reports unresolved rows', () => {
@@ -119,7 +119,7 @@ describe('K1 final-shape backfill contract', () => {
 
   it('isolates each hosted run without reusing active or conflicting rows', () => {
     const setup = renderK1LegacySetupSql(k1Seed)
-    const otherSeed = createK1FixtureSeed('oru-319-k1-contract-other')
+    const otherSeed = createK1FixtureSeed('voyager-k1-contract-other')
     const generator = readRepoFile('lib/knowledge/kernel/generate-k1-sql.ts')
     expect(otherSeed.ownerId).not.toBe(k1Seed.ownerId)
     expect(renderK1LegacySetupSql(k1Seed)).toBe(setup)

@@ -78,7 +78,8 @@ describe('tracked graph contributor truth', () => {
     expect(text).not.toContain('057–063')
     expect(text).toContain('060–071')
     expect(text).toContain('054–059')
-    expect(text).toMatch(/no registered tool traverses the graph/i)
+    expect(text).toMatch(/registered `graph_memory`/i)
+    expect(text).not.toMatch(/nothing traverses the graph today/i)
     expect(text).not.toMatch(/registered `graph` tool accepts (?:any|one) of the six/i)
   })
 

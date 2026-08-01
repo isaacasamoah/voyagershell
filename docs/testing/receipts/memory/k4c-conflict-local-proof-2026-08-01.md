@@ -1,5 +1,11 @@
 # K4c conflict ledger — local structural proof (2026-08-01)
 
+Status: `current`
+
+Sanitization: no personal values or hosted identifiers were needed for this
+disposable proof. Counts, boundary shapes, verdicts, and limitations are
+retained.
+
 ## Result
 
 `recipes/cartographer-k4c-local-proof.sh` completed successfully against the
@@ -35,6 +41,6 @@ disposable database.
 ```
 
 This proves the local migration, race, writer, traversal, and zero-edge
-contracts. It does not prove the live `voyager-dev` migration, live provider
+contracts. It does not prove the hosted development migration, live provider
 behavior, browser experience, or production behavior; those remain outside
 this build and with the bridge.

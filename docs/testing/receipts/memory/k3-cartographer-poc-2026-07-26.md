@@ -1,6 +1,10 @@
 # K3 Cartographer proof-of-concept evidence
 
-Status: `needs_attention`
+Status: `superseded`
+
+Sanitization: exact hosted refs, credential topology, and account/session
+identifiers were removed. Revisions, proof shapes, verdicts, limitations, and
+residue counts are retained.
 
 This record covers the bounded Spec-phase proof of concept. It is not a
 release, deployment, product Test Gate, or claim that K3 is ready to build.
@@ -11,8 +15,8 @@ release, deployment, product Test Gate, or claim that K3 is ready to build.
 - Branch: `feature/k3-cartographer-poc`
 - Reviewed specification digest:
   `e8252bae82b3806b992802b20c1658bd65930d6a1e8d4444b882bc7a799bdbb1`
-- Authorized development project ref: `hpotfrfdigzmhyibihst`
-- Forbidden primary project ref: `iesprdzzgjypnksoljym`
+- Target classification: authorized development database
+- Production target: forbidden and not contacted
 - Final local revision: the commit containing this evidence record; the side
   quest result records its exact hash.
 
@@ -62,19 +66,17 @@ inside that disposable container and were removed with it.
 
 The actual provider/local-application recipe did not run:
 
-1. The documented local Supabase Management API token file was absent.
-2. The documented Fedora credential fallback timed out before authentication.
-3. No controllable signed-in browser was attached to this side-quest session.
+1. No authorized Management API credential was available to the proof session.
+2. No controllable signed-in browser was attached to the proof session.
 
 The migration therefore was not applied to the development database, no PoC
 room event or provider attempt was created, and there were no PoC rows to
 clean up. No request targeted the primary project, and neither database
 received a write.
 
-The next bounded step is to attach a signed-in Chrome session or restore the
-documented development Management API credential, reverify
-`hpotfrfdigzmhyibihst`, apply only migration 072 there, and run the reviewed
-two-account dev-room recipe. Until that evidence records the exact event,
+The next bounded step was to attach a signed-in browser session, reverify the
+authorized development target, apply only migration 072 there, and run the
+reviewed two-account development-room recipe. Until that evidence recorded the exact event,
 audience, provider/model, tokens, unit, edges, denial probes, and cleanup
 outcome, this PoC remains `needs_attention` and must not advance to post-PoC
 review or the human Spec Gate.

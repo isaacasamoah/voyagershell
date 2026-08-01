@@ -16,7 +16,7 @@ two differ.
 | Agent primitives and registry | `lib/agents/primitives.ts` |
 | Final tool registry | `lib/retrieval/voyager-tools.ts` |
 | Knowledge retrieval tools | `lib/retrieval/knowledge-retrieval-tools.ts` |
-| Future graph proof boundary | `lib/knowledge/kernel/boundary.ts` |
+| Graph-memory product boundary | `lib/knowledge/kernel/boundary.ts` |
 | Knowledge event writer | `lib/knowledge/events.ts` |
 | Prompt composition | `lib/prompts/` |
 | Tool types | `lib/retrieval/tool-types.ts` |
@@ -31,12 +31,12 @@ retrieve. Background work returns findings to the same primary voice. Avoid
 heuristics that compete with the model for query-depth decisions.
 
 `createVoyagerTools()` is the single registered catalogue. Knowledge tools are
-`semantic_search`, `keyword_grep`, `anchored_search` and `get_nodes`. The K2
-cutover removed the legacy `graph` tool with the `graph_traverse` RPC and
-`knowledge_edges` table it read, so nothing traverses the graph today. The
-six-kind kernel boundary is still an isolated proof client; when K3 gives it a
-live caller, never expose paths, counts, grants, evidence, labels, edge
-metadata, or provenance through it.
+`graph_memory`, `semantic_search`, `keyword_grep`, `anchored_search` and
+`get_nodes`. The K2 cutover removed the legacy `graph` tool with the
+`graph_traverse` RPC and `knowledge_edges` table it read. The current
+`graph_memory` reader traverses the canonical graph from the speaking Person
+and returns only authorized typed claims. Never expose paths, counts, grants,
+evidence, labels, edge metadata, or provenance through it.
 
 ## Knowledge contract
 
@@ -88,6 +88,11 @@ gap events; and enforces a non-null event audience. A response inherits its
 human source audience and uses `generated_by`; never recompute it from room
 presence. The bounded canonical `NULL -> UUID` transition exists only inside
 deployment-gap recovery and all later changes are rejected.
+
+Post-K2 migrations 072–077 add event-owned extraction, the registered
+graph-memory reader, canonical topic identity, and the evidence-gated conflict
+and supersession ledger. `knowledge_events` remains the only event-content
+authority.
 
 ## Logging and models
 

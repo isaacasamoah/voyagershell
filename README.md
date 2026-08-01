@@ -9,22 +9,24 @@ shared voyages and rooms, event-sourced memory, and agent-selected retrieval.
 Next.js chat and room APIs
         |
         +-- Voyager tool registry
-        |     semantic_search, keyword_grep, anchored_search, get_nodes, ...
+        |     graph_memory, semantic_search, keyword_grep, anchored_search, ...
         |
         +-- atomic ingress (claim, audience, event, graph, outbox in one commit)
         |
         +-- knowledge_events: sole event-content ledger
         |     knowledge_current: derived search projection
         |
-        +-- the canonical graph (migrations 061-071)
+        +-- the canonical graph and memory pipeline (migrations 061-077)
               scope-neutral identities, immutable audiences and grants
               evidence-bound historical edges and current authority projections
 ```
 
 There is one graph. The K2 cutover replaced the event-only legacy graph with the
 canonical substrate and removed the old table, its traversal RPC and every
-caller in the same change; no tool traverses the graph until K3 gives it claims
-worth traversing. Every human message and Voyager response enters through one
+caller in the same change. K3 writes source-derived KnowledgeUnits; K4a
+registered `graph_memory` as the authorized product reader; K4b adds canonical
+topic identity; and K4c records evidence-gated conflict and supersession edges.
+Every human message and Voyager response enters through one
 database function that claims the intent before it writes anything, so a retry
 cannot produce a second event, graph fragment, response, or delivery. A Voyager
 reply inherits the exact immutable audience of its claimed human source and is

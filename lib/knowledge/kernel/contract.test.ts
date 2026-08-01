@@ -29,7 +29,7 @@ const migrationPaths = [
 const migrations = (): string => migrationPaths.map(readRepoFile).join('\n')
 const cloneFixture = (): any => structuredClone(knowledgeGraphFixture)
 
-describe('ORU-319 final graph substrate contract', () => {
+describe('final knowledge graph substrate contract', () => {
   it('locks six canonical node kinds and all sixteen edge kinds', () => {
     expect(new Set(knowledgeGraphFixture.nodes.map((node) => node.kind)))
       .toEqual(new Set(K2_GRAPH_NODE_KINDS))

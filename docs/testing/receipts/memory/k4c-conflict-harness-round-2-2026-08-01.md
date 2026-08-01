@@ -1,5 +1,10 @@
 # K4c conflict harness — round 2 local result (2026-08-01)
 
+Status: `current`
+
+Sanitization: corpus subject matter was redacted. Corpus identity, size,
+payload shape, measurements, verdicts, diagnosis, and gate amendment remain.
+
 ## Decision
 
 The amended `relation-conflict-v2` two-stage judgment remains below the K4c-R1
@@ -50,8 +55,8 @@ Additional observations:
 - Blocking positive recall: `1.000`.
 - Judged pairs: `48`.
 - Combined verdict recall: `0.913`.
-- Stage 1 missed one afternoon-caffeine supersession.
-- Stage 2 classified one car-loan supersession as `contradicts`.
+- Stage 1 missed one expected supersession.
+- Stage 2 classified one expected supersession as `contradicts`.
 - The rejected one-call form measured stage-1 conflict `P 1.000 / R 0.957`,
   `contradicts P 0.833 / R 1.000`, `supersedes P 1.000 / R 0.769`, and
   combined verdict recall `0.870`.
@@ -64,11 +69,11 @@ K4c-R1 requires precision `1.000` on both final verdicts and recall at least
 The amendment fixed the dangerous round-1 direction: neither measured v2 form
 emitted a false supersession, and the two-call boundary recovered one of the
 one-call supersession misses. It still cannot draw the accepted boundary at
-perfect precision: the car-loan focus explicitly ends the loan repayments,
-but the older claim phrases that obligation as a monthly budget item, so the
-judge treats it as a conflicting downstream fact rather than the same replaced
-commitment. Stage 1 separately treats the narrower earlier espresso rule as
-potentially compatible with the newer general afternoon-coffee habit. Further
+perfect precision: one focus explicitly ends an earlier obligation, but the
+older claim phrases that obligation through a downstream consequence, so the
+judge treats it as a conflict rather than the same replaced commitment. Stage
+1 separately treated a narrower earlier rule as potentially compatible with a
+newer general habit. Further
 prompt adjustment would tune the mechanism after its gate measurement; the
 remaining issue instead needs a spec decision about whether these differently
 phrased operative consequences are truly supersession ground truth.
@@ -77,7 +82,7 @@ phrased operative consequences are truly supersession ground truth.
 
 ## Gate addendum — Amendment 2
 
-Isaac amended K4c-R1's acceptance bar at the gate after the round-2
+The owner amended K4c-R1's acceptance bar at the gate after the round-2
 measurement: `supersedes` precision must equal `1.000`, `contradicts`
 precision must be at least `0.90`, and recall must be at least `0.75` for both
 verdicts. Under that amended bar, the untuned-corpus `relation-conflict-v2`

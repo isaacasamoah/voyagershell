@@ -1,5 +1,10 @@
 # K4c conflict harness — local result (2026-08-01)
 
+Status: `superseded`
+
+Sanitization: corpus subject matter was redacted. Corpus size, payload shape,
+measurements, verdicts, and the stop decision are retained.
+
 ## Decision
 
 The `relation-conflict-v1` judgment did not meet the K4c-R1 build gate. The
@@ -49,10 +54,9 @@ Additional observations:
 - Blocking positive recall: `1.000`.
 - Judged pairs: `48`.
 - Combined verdict recall: `0.739`.
-- Five expected contradictions were classified as `supersedes`: two in the
-  running/physiotherapy case, one in school pickup, and two in pet surgery
-  preparation.
-- One afternoon-caffeine supersession was missed.
+- Five expected contradictions were classified as `supersedes` across three
+  redacted subject domains.
+- One expected supersession was missed.
 
 K4c-R1 requires precision `1.000` on both verdicts and recall at least `0.75`.
 The supersession precision failure is decisive, so the claim returns to Spec.
