@@ -14,6 +14,12 @@ import {
 import type { ExtractionObject } from './contract'
 import type { TopicBackfillUnit } from './types'
 import { matchKnowledgeTopics } from './topic-matcher'
+import {
+  isRetryableTopicError,
+  TOPIC_BACKFILL_RETRY_EXHAUSTED,
+  TOPIC_WRITE_MAX_ATTEMPTS,
+  waitForTopicRetry,
+} from './topic-retry'
 
 export interface TopicBackfillResult {
   activatedVersion: string
@@ -38,6 +44,27 @@ const listOldJobs = async (): Promise<Array<{
   const { data, error } = await getAdminClient().rpc('list_knowledge_topic_backfill_jobs')
   if (error) throw new Error(error.message)
   return data ?? []
+}
+
+const recheckOldJob = async (
+  sourceEventId: string,
+): Promise<'terminal' | 'lease_held' | 'unclaimable'> => {
+  const { data, error } = await getAdminClient()
+    .from('knowledge_extraction_jobs')
+    .select('state, lease_expires_at')
+    .eq('source_event_id', sourceEventId)
+    .neq('extractor_version', CARTOGRAPHER_EXTRACTOR_VERSION)
+  if (error) throw new Error(error.message)
+  const active = (data ?? []).find((job) => (
+    job.state !== 'succeeded' && job.state !== 'no_claim'
+  ))
+  if (!active) return 'terminal'
+  if (active.state === 'leased'
+    && active.lease_expires_at
+    && Date.parse(active.lease_expires_at) > Date.now()) {
+    return 'lease_held'
+  }
+  return 'unclaimable'
 }
 
 const listUnits = async (): Promise<TopicBackfillUnit[]> => {
@@ -70,7 +97,11 @@ const rederiveUnit = async (unit: TopicBackfillUnit): Promise<void> => {
   if (object.claim !== unit.claim || object.aboutPersonId !== null) {
     throw new Error('knowledge_topic_backfill_changed_immutable_claim')
   }
-  for (;;) {
+  for (
+    let attemptNumber = 1;
+    attemptNumber <= TOPIC_WRITE_MAX_ATTEMPTS;
+    attemptNumber++
+  ) {
     const candidates = await findTopicCandidates(
       CARTOGRAPHER_EXTRACTOR_VERSION,
       unit.knowledgeAudienceId,
@@ -94,10 +125,17 @@ const rederiveUnit = async (unit: TopicBackfillUnit): Promise<void> => {
         p_topic_inputs: toTopicWriteInputs(matched.topics),
       },
     )
-    if (error?.message.includes('knowledge_topic_candidates_stale')) continue
+    if (error && isRetryableTopicError(error.message)) {
+      if (attemptNumber === TOPIC_WRITE_MAX_ATTEMPTS) {
+        throw new Error(TOPIC_BACKFILL_RETRY_EXHAUSTED)
+      }
+      await waitForTopicRetry(attemptNumber)
+      continue
+    }
     if (error) throw new Error(error.message)
     return
   }
+  throw new Error('knowledge_topic_backfill_retry_loop_unreachable')
 }
 
 export const runTopicBackfill = async (): Promise<TopicBackfillResult> => {
@@ -111,6 +149,14 @@ export const runTopicBackfill = async (): Promise<TopicBackfillResult> => {
         userId: job.requesting_user_id,
         sourceEventId: job.source_event_id,
       })
+      if (result.kind === 'no_job') {
+        const state = await recheckOldJob(job.source_event_id)
+        if (state === 'terminal') continue
+        if (state === 'lease_held') {
+          await waitForTopicRetry(5)
+          continue
+        }
+      }
       if (result.kind !== 'completed'
         || (result.outcome !== 'succeeded' && result.outcome !== 'no_claim')) {
         throw new Error(`knowledge_topic_old_job_not_terminal:${job.source_event_id}`)

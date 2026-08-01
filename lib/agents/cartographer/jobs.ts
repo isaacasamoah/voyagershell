@@ -7,13 +7,10 @@ import type {
 } from './types'
 import { isCurrentContract } from './contract'
 import type { LegacyTopicInput } from './topics'
-
-export class TopicCandidatesStaleError extends Error {
-  constructor() {
-    super('knowledge_topic_candidates_stale')
-    this.name = 'TopicCandidatesStaleError'
-  }
-}
+import {
+  isRetryableTopicError,
+  TopicCandidatesRetryableError,
+} from './topic-retry'
 
 export const beginExtractionAttempt = async (input: {
   userId: string
@@ -105,8 +102,8 @@ export const completeExtractionAttempt = async (input: {
       p_topic_candidate_snapshot: input.topicCandidateSnapshot ?? null,
     })
     : await getAdminClient().rpc('complete_knowledge_extraction_attempt', args)
-  if (error?.message.includes('knowledge_topic_candidates_stale')) {
-    throw new TopicCandidatesStaleError()
+  if (error && isRetryableTopicError(error.message)) {
+    throw new TopicCandidatesRetryableError()
   }
   if (error) throw new Error(error.message)
   const row = data?.[0]

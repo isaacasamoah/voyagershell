@@ -74,7 +74,7 @@ historical source content.
 
 ## Canonical graph substrate
 
-Migrations `061`–`075` are the current graph and memory-kernel shape. Numeric
+Migrations `061`–`076` are the current graph and memory-kernel shape. Numeric
 discovery is not installed-state authority: the pre-054 catalogue contract
 remains the explicit boundary for applying product migrations `054`–`059`, and
 the local proofs then apply each later migration in order.
@@ -92,6 +92,11 @@ must reference one exact authority row. Active topic identity does not classify
 against that vector: migration `075` blocks over the claim embeddings of
 authorized units already filed under each topic and returns the nearest claim
 as matcher context.
+
+`knowledge_topic_identity_outcomes` is the backfill ledger for pre-v4 units
+only. Live v4 units do not write an outcome row there: their topic decisions are
+the KnowledgeUnit-to-Topic edges, evidence, and grants written atomically inside
+`complete_v4_knowledge_extraction_attempt`.
 
 `graph_node_grants` is immutable evidence that an audience may discover a
 stable identity. A grant stores basis kind/id/version, optional evidence event,
@@ -189,14 +194,15 @@ Projection functions are defined before activation; activation takes
 transaction-held writer locks, installs triggers, and performs a complete
 idempotent catch-up so writes before the lock are not lost.
 
-Migrations `072`–`075` add the event-owned Cartographer, the registered graph
+Migrations `072`–`076` add the event-owned Cartographer, the registered graph
 memory read, Topic authority nodes, and the re-derived v4 topic matcher.
 Migration `074` remains the structural topic migration. Migration `075`
 separates claim-vector blocking from identity: a versioned model instruction
 reuses an authorized candidate or proposes a new label, and only the server
-writes. Activation drains pinned older jobs before re-deriving pre-v4 units,
-removing falsified topic assignments, and asserting complete physics, topics,
-and zero orphan authority rows.
+writes. Migration `076` hardens candidate snapshots, completion authority,
+backfill ACLs, and topic-only rework. Activation drains pinned older jobs before
+re-deriving pre-v4 units, removing falsified topic assignments, and asserting
+complete physics, topics, and zero orphan authority rows.
 
 The atomic writer creates the canonical source audience, event, MessageEvent
 node, grants, structural edges, evidence, and delivery fan-out before returning.

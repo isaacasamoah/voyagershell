@@ -206,4 +206,28 @@ describe('event-owned Cartographer extraction', () => {
     }))
   })
 
+  it('records a non-empty fallback class when an embedding error has no name', async () => {
+    mocks.beginExtractionAttempt.mockResolvedValue({
+      ...attempt,
+      extractorVersion: 'cartographer-single-claim-v3',
+    })
+    const unnamed = new Error('embedding unavailable')
+    unnamed.name = ''
+    mocks.embedCartographerText.mockRejectedValue(unnamed)
+    mocks.completeExtractionAttempt.mockResolvedValue({
+      outcome: 'provider_failed',
+      unitId: null,
+      replayed: false,
+    })
+
+    await runCartographer({ userId: attempt.sourceActorId })
+
+    expect(mocks.completeExtractionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: 'provider_failed',
+        errorClass: 'embedding_provider_error',
+      }),
+    )
+  })
+
 })

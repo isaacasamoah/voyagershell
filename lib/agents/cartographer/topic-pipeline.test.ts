@@ -18,8 +18,11 @@ vi.mock('./topic-matcher', () => ({
   matchKnowledgeTopics: mocks.matchKnowledgeTopics,
 }))
 
-import { TopicCandidatesStaleError } from './jobs'
 import { completeMatchedExtraction } from './topic-pipeline'
+import {
+  TOPIC_WRITE_RETRY_EXHAUSTED_ERROR_CLASS,
+  TopicCandidatesRetryableError,
+} from './topic-retry'
 
 const attempt = {
   attemptId: '72000000-0000-4000-8000-000000000001',
@@ -71,7 +74,7 @@ describe('claim-blocked topic pipeline', () => {
         outputTokens: 4,
       })
     mocks.completeExtractionAttempt
-      .mockRejectedValueOnce(new TopicCandidatesStaleError())
+      .mockRejectedValueOnce(new TopicCandidatesRetryableError())
       .mockResolvedValueOnce({
         outcome: 'succeeded',
         unitId: '72000000-0000-4000-8000-000000000009',
@@ -106,5 +109,47 @@ describe('claim-blocked topic pipeline', () => {
       }),
     )
     expect(result).toEqual(expect.objectContaining({ kind: 'completed' }))
+  })
+
+  it('caps retryable candidate races and releases the lease as a failure', async () => {
+    mocks.findTopicCandidates.mockReset().mockResolvedValue([])
+    mocks.matchKnowledgeTopics.mockReset().mockResolvedValue({
+      kind: 'structured',
+      topics: [{ kind: 'new', label: 'the qe work' }],
+      inputTokens: 20,
+      outputTokens: 5,
+    })
+    mocks.completeExtractionAttempt.mockReset()
+    for (let index = 0; index < 5; index++) {
+      mocks.completeExtractionAttempt
+        .mockRejectedValueOnce(new TopicCandidatesRetryableError())
+    }
+    mocks.completeExtractionAttempt.mockResolvedValueOnce({
+      outcome: 'provider_failed',
+      unitId: null,
+      replayed: false,
+    })
+
+    const result = await completeMatchedExtraction({
+      model: {} as LanguageModel,
+      attempt,
+      object,
+      embedding: '[1,0]',
+      embeddingVector: [1, 0],
+      extractionUsage: { inputTokens: 100, outputTokens: 20 },
+    })
+
+    expect(mocks.findTopicCandidates).toHaveBeenCalledTimes(5)
+    expect(mocks.matchKnowledgeTopics).toHaveBeenCalledTimes(5)
+    expect(mocks.completeExtractionAttempt).toHaveBeenCalledTimes(6)
+    expect(mocks.completeExtractionAttempt.mock.calls[5][0]).toEqual({
+      attempt,
+      result: 'provider_failed',
+      errorClass: TOPIC_WRITE_RETRY_EXHAUSTED_ERROR_CLASS,
+    })
+    expect(result).toEqual({
+      kind: 'matcher_failed',
+      completion: { outcome: 'provider_failed', unitId: null, replayed: false },
+    })
   })
 })

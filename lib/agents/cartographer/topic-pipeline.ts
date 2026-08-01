@@ -3,8 +3,13 @@ import type { Json } from '@/lib/supabase/types'
 import type { ExtractionObject } from './contract'
 import {
   completeExtractionAttempt,
-  TopicCandidatesStaleError,
 } from './jobs'
+import {
+  TOPIC_WRITE_MAX_ATTEMPTS,
+  TOPIC_WRITE_RETRY_EXHAUSTED_ERROR_CLASS,
+  TopicCandidatesRetryableError,
+  waitForTopicRetry,
+} from './topic-retry'
 import { matchKnowledgeTopics } from './topic-matcher'
 import {
   findTopicCandidates,
@@ -40,7 +45,11 @@ export const completeMatchedExtraction = async (input: {
   embeddingVector: number[]
   extractionUsage: Usage
 }): Promise<MatchedCompletion> => {
-  for (;;) {
+  for (
+    let attemptNumber = 1;
+    attemptNumber <= TOPIC_WRITE_MAX_ATTEMPTS;
+    attemptNumber++
+  ) {
     const candidates = await findTopicCandidates(
       input.attempt.extractorVersion,
       input.attempt.knowledgeAudienceId,
@@ -90,8 +99,18 @@ export const completeMatchedExtraction = async (input: {
       })
       return { kind: 'completed', completion, usage }
     } catch (error) {
-      if (error instanceof TopicCandidatesStaleError) continue
-      throw error
+      if (!(error instanceof TopicCandidatesRetryableError)) throw error
+      if (attemptNumber < TOPIC_WRITE_MAX_ATTEMPTS) {
+        await waitForTopicRetry(attemptNumber)
+        continue
+      }
+      const completion = await completeExtractionAttempt({
+        attempt: input.attempt,
+        result: 'provider_failed',
+        errorClass: TOPIC_WRITE_RETRY_EXHAUSTED_ERROR_CLASS,
+      })
+      return { kind: 'matcher_failed', completion }
     }
   }
+  throw new Error('knowledge_topic_candidate_retry_loop_unreachable')
 }

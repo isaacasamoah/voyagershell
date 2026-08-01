@@ -36,6 +36,12 @@ export type CartographerRunResult =
   | { kind: 'completed'; outcome: string; sourceEventId: string; unitId: string | null }
   | { kind: 'failed'; error: string }
 
+const embeddingErrorClass = (error: unknown): string => (
+  error instanceof Error && error.name
+    ? error.name.slice(0, 80)
+    : 'embedding_provider_error'
+)
+
 export const runCartographer = async (
   payload: CartographerPayload,
 ): Promise<CartographerRunResult> => {
@@ -89,7 +95,7 @@ export const runCartographer = async (
         const completion = await completeExtractionAttempt({
           attempt,
           result: 'provider_failed',
-          errorClass: error instanceof Error ? error.name.slice(0, 80) : 'embedding_provider_error',
+          errorClass: embeddingErrorClass(error),
         })
         return {
           kind: 'completed', outcome: completion.outcome,
@@ -129,7 +135,7 @@ export const runCartographer = async (
         const completion = await completeExtractionAttempt({
           attempt,
           result: 'provider_failed',
-          errorClass: error instanceof Error ? error.name.slice(0, 80) : 'embedding_provider_error',
+          errorClass: embeddingErrorClass(error),
         })
         return {
           kind: 'completed', outcome: completion.outcome,

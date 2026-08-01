@@ -18,6 +18,7 @@ const rework = read('supabase/migrations/075_topic_identity_matcher.sql')
 const hardening = read('supabase/migrations/076_topic_identity_hardening.sql')
 const enqueue = read('supabase/migrations/073_graph_memory_read.sql')
 const proof = read('recipes/cartographer-k4b-local-proof.sh')
+const fullSuite = read('recipes/full-suite.sh')
 const assertions = read('recipes/sql/cartographer-k4b-assertions.sql')
 const backfill = read('lib/agents/cartographer/backfill.ts')
 const architecture = read('ARCHITECTURE.md')
@@ -71,6 +72,10 @@ describe('K4b topic identity contract', () => {
     expect(lock).toBeLessThan(stale)
     expect(stale).toBeLessThan(mint)
     expect(writer).toContain('knowledge_topic_candidate_not_authorized')
+    expect(writer).toContain('p_topic_candidate_snapshot IS NULL')
+    expect(writer).toContain(
+      'jsonb_build_array(candidate.topic_id, candidate.representative_unit_id)',
+    )
     expect(writer).not.toMatch(/<=>.*(RETURN|v_topic)|similarity.*INSERT/i)
     expect(hardening).toContain('complete_v4_knowledge_extraction_attempt')
     expect(hardening).toContain('write_v4_knowledge_unit_topics')
@@ -85,6 +90,12 @@ describe('K4b topic identity contract', () => {
     expect(assertions).toContain('k4b_private_only_topic_leaked')
     expect(proof).toContain('outsider could inspect the private-only topic table count')
     expect(architecture).toContain('Topic nodes are shared hubs.')
+    expect(architecture).toContain(
+      '`knowledge_topic_identity_outcomes` is the backfill ledger for pre-v4 units',
+    )
+    expect(architecture).toContain(
+      'the KnowledgeUnit-to-Topic edges, evidence, and grants written atomically',
+    )
   })
 
   it('scopes destructive rework to unit-to-topic edges only', () => {
@@ -155,6 +166,7 @@ describe('K4b topic identity contract', () => {
     expect(rework).toContain("'orphanTopics',v_orphans")
     expect(proof).toContain('enqueue-first activation did not wait')
     expect(proof).toContain('activation-first enqueue did not wait')
+    expect(fullSuite).toContain('./recipes/cartographer-k4b-local-proof.sh')
   })
 
   it('proves stale-race recovery and keeps K4c absent', () => {

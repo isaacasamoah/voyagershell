@@ -102,8 +102,10 @@ DECLARE
   v_current jsonb; v_snapshot jsonb; v_current_topic_ids uuid[];
 BEGIN
   IF p_extractor_version <> 'cartographer-single-claim-v4'
+    OR p_topic_inputs IS NULL
     OR jsonb_typeof(p_topic_inputs) <> 'array'
     OR jsonb_array_length(p_topic_inputs) > 3
+    OR p_topic_candidate_snapshot IS NULL
     OR jsonb_typeof(p_topic_candidate_snapshot) <> 'array'
     OR EXISTS (
       SELECT 1 FROM jsonb_array_elements(p_topic_candidate_snapshot) candidate
@@ -563,20 +565,25 @@ BEGIN
       SELECT EXISTS (
         SELECT 1
         FROM public.graph_edges edge
+        JOIN public.graph_nodes source_node ON source_node.id = edge.source_node_id
         JOIN public.graph_nodes target_node ON target_node.id = edge.target_node_id
         WHERE edge.id = (v_old->>'edge_id')::uuid
           AND edge.kind = 'about'
+          AND source_node.kind = 'knowledge_unit'
           AND target_node.kind::text = 'topic'
       ) INTO v_allowed;
     ELSIF TG_TABLE_NAME = 'graph_node_grants' THEN
       SELECT EXISTS (
         SELECT 1
         FROM public.graph_edges edge
+        JOIN public.graph_nodes source_node ON source_node.id = edge.source_node_id
         JOIN public.graph_nodes target_node ON target_node.id = edge.target_node_id
         WHERE edge.id = (v_old->>'basis_id')::uuid
           AND edge.target_node_id = (v_old->>'node_id')::uuid
           AND edge.kind = 'about'
+          AND source_node.kind = 'knowledge_unit'
           AND target_node.kind::text = 'topic'
+          AND v_old->>'basis_kind' = 'edge_evidence'
       ) INTO v_allowed;
     ELSIF TG_TABLE_NAME = 'graph_nodes' THEN
       v_allowed := v_old->>'kind' = 'topic'
@@ -619,7 +626,9 @@ BEGIN
     OR p_raw_output->>'claim' IS DISTINCT FROM v_unit.claim
     OR p_raw_output->'aboutPersonId' IS DISTINCT FROM 'null'
     OR p_raw_output->'topics' IS DISTINCT FROM p_topic_inputs
+    OR p_knowledge_type IS NULL
     OR p_knowledge_type NOT IN ('domain', 'operational', 'preference')
+    OR p_attention_score IS NULL
     OR p_attention_score NOT BETWEEN 0 AND 1
     OR p_embedding IS NULL THEN
     RAISE EXCEPTION 'knowledge_topic_identity_backfill_payload_invalid'

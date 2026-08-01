@@ -202,7 +202,7 @@ the same evidence on a disposable database.
 ## K4b topic nodes and backfill
 
 `cartographer-k4b-local-proof.sh` installs the exact through-073 baseline,
-migration 074, a falsified-v3 residue fixture, and migration 075 in one
+migration 074, a falsified-v3 residue fixture, and migrations 075–076 in one
 disposable, no-network pgvector container. It proves model-selected topic
 execution, a real stale concurrent-mint retry, adjacent-subject separation,
 shared-hub audience visibility, both pointer cutover orderings, the ordered
