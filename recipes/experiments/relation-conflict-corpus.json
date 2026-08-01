@@ -1,0 +1,461 @@
+{
+  "description": "Authored K4c conflict-ledger corpus. Labels are acceptance data and are never included in the model instruction or payload.",
+  "cases": [
+    {
+      "subject": "running and physiotherapy",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000000101",
+        "claim": "My physio told me today to avoid all running for the next eight weeks.",
+        "topicLabels": ["physiotherapy restrictions"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000000111",
+          "claim": "I am training for the Melbourne half marathon and plan to run four times each week.",
+          "topicLabels": ["melbourne half marathon training"],
+          "shape": "cross_topic_conflict",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000112",
+          "claim": "My half-marathon plan includes a long run every Sunday.",
+          "topicLabels": ["melbourne half marathon training"],
+          "shape": "cross_topic_conflict",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000113",
+          "claim": "The physiotherapist instructed me not to run for eight weeks.",
+          "topicLabels": ["physiotherapy restrictions"],
+          "shape": "restatement_not_contradiction",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000114",
+          "claim": "The physio clinic is on Rathdowne Street.",
+          "topicLabels": ["physio appointment"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "race selection",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000000201",
+        "claim": "I signed up for the full Melbourne Marathon instead of the half; the full is now my target race.",
+        "topicLabels": ["melbourne marathon training"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000000211",
+          "claim": "I am training for the Melbourne half marathon in October.",
+          "topicLabels": ["melbourne half marathon training"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000212",
+          "claim": "The Melbourne half is my target race this year.",
+          "topicLabels": ["melbourne half marathon training"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000213",
+          "claim": "I changed my race entry from the half marathon to the full marathon.",
+          "topicLabels": ["melbourne marathon training"],
+          "shape": "restatement_not_contradiction",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000214",
+          "claim": "I prefer trail running to road running.",
+          "topicLabels": ["trail running"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "afternoon caffeine",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000000301",
+        "claim": "I no longer avoid afternoon coffee; I now drink one at 3 pm most days.",
+        "topicLabels": ["afternoon caffeine habit"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000000311",
+          "claim": "I have stopped drinking coffee after 2 pm.",
+          "topicLabels": ["afternoon caffeine habit"],
+          "shape": "negation",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000312",
+          "claim": "No espresso after two o'clock for me.",
+          "topicLabels": ["afternoon caffeine habit"],
+          "shape": "negation",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000313",
+          "claim": "I usually have coffee at about 3 pm now.",
+          "topicLabels": ["afternoon caffeine habit"],
+          "shape": "restatement_not_contradiction",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000314",
+          "claim": "My favourite cafe is on Lygon Street.",
+          "topicLabels": ["cafe recommendations"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "vegetarian dinner",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000000401",
+        "claim": "For the dinner menu, every dish must be vegetarian.",
+        "topicLabels": ["dinner menu"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000000411",
+          "claim": "The dinner menu must include the beef brisket.",
+          "topicLabels": ["dinner menu"],
+          "shape": "negation",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000412",
+          "claim": "The caterer will provide only meat dishes and no vegetarian alternatives.",
+          "topicLabels": ["catering booking"],
+          "shape": "cross_topic_conflict",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000413",
+          "claim": "We should serve roast vegetables at dinner.",
+          "topicLabels": ["dinner menu"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000414",
+          "claim": "One dinner guest is allergic to peanuts.",
+          "topicLabels": ["guest allergies"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "answer length preference",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000000501",
+        "claim": "From now on, give me detailed answers with reasoning unless I ask for brevity.",
+        "topicLabels": ["response length preference"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000000511",
+          "claim": "Keep answers to two sentences unless I ask for detail.",
+          "topicLabels": ["response length preference"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000512",
+          "claim": "I want short replies, not essays.",
+          "topicLabels": ["response length preference"],
+          "shape": "negation",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000513",
+          "claim": "Detailed reasoning is now my default answer style.",
+          "topicLabels": ["response length preference"],
+          "shape": "restatement_not_contradiction",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000514",
+          "claim": "Use bullet points for comparisons.",
+          "topicLabels": ["answer formatting"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "school pickup",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000000601",
+        "claim": "School pickup on Wednesday must happen at 2:30 pm.",
+        "topicLabels": ["wednesday school pickup"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000000611",
+          "claim": "Wednesday school pickup is booked for 3:15 pm.",
+          "topicLabels": ["wednesday school pickup"],
+          "shape": "negation",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000612",
+          "claim": "Wednesday assembly runs until 3 pm and the student cannot leave early.",
+          "topicLabels": ["school assembly"],
+          "shape": "cross_topic_conflict",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000613",
+          "claim": "An aunt will handle Wednesday pickup at 2:30 pm.",
+          "topicLabels": ["wednesday school pickup"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000614",
+          "claim": "Thursday school pickup is at 3:15 pm.",
+          "topicLabels": ["thursday school pickup"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "home lease",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000000701",
+        "claim": "We renewed the Carlton lease through June 2028, replacing the plan to move in 2027.",
+        "topicLabels": ["carlton home lease"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000000711",
+          "claim": "We plan to leave Carlton when the lease ends in June 2027.",
+          "topicLabels": ["carlton home lease"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000712",
+          "claim": "We are staying in Carlton through June 2028.",
+          "topicLabels": ["carlton home lease"],
+          "shape": "restatement_not_contradiction",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000713",
+          "claim": "Rent is paid monthly by direct debit.",
+          "topicLabels": ["rent payments"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000714",
+          "claim": "Our current home is in Carlton.",
+          "topicLabels": ["carlton home"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "medication safety",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000000801",
+        "claim": "The pharmacist says I must not take ibuprofen while I am on this medication.",
+        "topicLabels": ["medication safety"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000000811",
+          "claim": "My post-run recovery plan includes ibuprofen after every long run.",
+          "topicLabels": ["running recovery"],
+          "shape": "cross_topic_conflict",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000812",
+          "claim": "The doctor instructed me to take ibuprofen twice daily during this medication course.",
+          "topicLabels": ["pain treatment"],
+          "shape": "cross_topic_conflict",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000813",
+          "claim": "I take this medication with breakfast.",
+          "topicLabels": ["medication schedule"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000814",
+          "claim": "The local pharmacy closes at 6 pm.",
+          "topicLabels": ["pharmacy hours"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "september travel",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000000901",
+        "claim": "The Tokyo trip is cancelled; we are going to Hobart in September instead.",
+        "topicLabels": ["september travel"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000000911",
+          "claim": "We are flying to Tokyo in September.",
+          "topicLabels": ["tokyo trip"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000912",
+          "claim": "We need to book the Tokyo hotel for September.",
+          "topicLabels": ["tokyo trip"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000913",
+          "claim": "We are travelling to Hobart in September now.",
+          "topicLabels": ["september travel"],
+          "shape": "restatement_not_contradiction",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000000914",
+          "claim": "My passport expires in 2028.",
+          "topicLabels": ["passport"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "work location",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000001001",
+        "claim": "My role has changed to fully remote; the three-office-days arrangement has ended.",
+        "topicLabels": ["work location"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000001011",
+          "claim": "I work from the office three days each week.",
+          "topicLabels": ["work location"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000001012",
+          "claim": "Monday, Wednesday, and Friday are my required office days.",
+          "topicLabels": ["office schedule"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000001013",
+          "claim": "I now work remotely every weekday.",
+          "topicLabels": ["work location"],
+          "shape": "restatement_not_contradiction",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000001014",
+          "claim": "My manager is based in Sydney.",
+          "topicLabels": ["manager"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "pet surgery preparation",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000001101",
+        "claim": "Milo must receive no food after 8 pm before tomorrow's surgery.",
+        "topicLabels": ["milo surgery preparation"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000001111",
+          "claim": "Milo's standing medication routine requires a snack at 10 pm tonight.",
+          "topicLabels": ["milo medication routine"],
+          "shape": "cross_topic_conflict",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000001112",
+          "claim": "Milo must take his oral tablet hidden in food at 10 pm tonight.",
+          "topicLabels": ["milo medication routine"],
+          "shape": "cross_topic_conflict",
+          "expected": "contradicts"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000001113",
+          "claim": "Milo may drink water overnight before surgery.",
+          "topicLabels": ["milo surgery preparation"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000001114",
+          "claim": "Milo's surgery appointment is at 8 am.",
+          "topicLabels": ["milo surgery appointment"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    },
+    {
+      "subject": "car loan",
+      "focus": {
+        "unitId": "00000000-0000-4000-8000-000000001201",
+        "claim": "We paid off the car loan in full today; there are no remaining repayments.",
+        "topicLabels": ["car loan"]
+      },
+      "candidates": [
+        {
+          "unitId": "00000000-0000-4000-8000-000000001211",
+          "claim": "The car loan has monthly repayments through December.",
+          "topicLabels": ["car loan"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000001212",
+          "claim": "The budget includes a 600 dollar car-loan repayment every month.",
+          "topicLabels": ["monthly budget"],
+          "shape": "temporal_supersession",
+          "expected": "supersedes"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000001213",
+          "claim": "The car debt is fully paid and the monthly repayment is finished.",
+          "topicLabels": ["car loan"],
+          "shape": "restatement_not_contradiction",
+          "expected": "none"
+        },
+        {
+          "unitId": "00000000-0000-4000-8000-000000001214",
+          "claim": "The car is due for a service in August.",
+          "topicLabels": ["car servicing"],
+          "shape": "adjacent_compatible",
+          "expected": "none"
+        }
+      ]
+    }
+  ]
+}

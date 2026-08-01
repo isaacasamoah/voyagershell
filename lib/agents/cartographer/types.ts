@@ -91,3 +91,39 @@ export interface TopicBackfillUnit {
   knowledgeAudienceId: string
   embedding: string | null
 }
+
+export type RelationVerdict = 'contradicts' | 'supersedes'
+
+export interface RelationCandidate {
+  unitId: string
+  claim: string
+  topicLabels: string[]
+  similarity: number | null
+}
+
+export interface RelationAttempt {
+  attemptId: string
+  leaseToken: string
+  unitId: string
+  personId: string
+  contractVersion: string
+  candidateLimit: number
+  stage1Instruction: string
+  stage2Instruction: string
+  verdicts: RelationVerdict[]
+  focusClaim: string
+  candidates: RelationCandidate[]
+}
+
+export interface RelationWrite {
+  candidateUnitId: string
+  sourceUnitId: string
+  targetUnitId: string
+  kind: RelationVerdict
+}
+
+export interface RelationCompletion {
+  outcome: ExtractionCompletion['outcome']
+  edgeIds: string[]
+  replayed: boolean
+}

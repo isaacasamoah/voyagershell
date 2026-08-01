@@ -126,6 +126,31 @@ authorizing source audience. Sharing a topic identity never widens access:
 viewers discover only the incident units and degree authorized by their own
 audiences.
 
+Conflict discovery is a separate, versioned per-person pass. A committed
+KnowledgeUnit enqueues one `knowledge_relation_jobs` row for each person in its
+immutable source audience. `begin_relation_attempt` selects topic siblings and
+claim-vector neighbors that person can read and persists the exact ordered
+unit IDs before either model call. The leased attempt also returns the database
+contract's prompts, verdicts, and candidate cap; the runtime refuses a version
+it does not implement and records a retryable failed attempt without calling a
+model. Attempts and their K3-shaped outcomes are immutable; provider failures
+retry only to the contract cap, after which the job is completed without a
+retained lease. A commit rejected because candidate authorization changed is
+also re-queued to rebuild the snapshot; every other commit rejection is
+terminal. The bounded migration backfill records whether it completed or was
+skipped because the existing unit-by-person fanout exceeded its install-time
+cap.
+
+The only discovery writer is `complete_relation_attempt`. It may add
+`contradicts` or `supersedes` edges between KnowledgeUnits, both endpoint
+events as evidence, and an assertion containing every unit the judgment read.
+It cannot add grants, `about` or structural edges, or the dormant agreement
+kinds. Relation traversal uses an assertion only when the viewer independently
+belongs to the immutable source audience behind every recorded input unit's
+historical grant. Existing historical and authority hops keep their prior
+authorization rules. A `supersedes` edge is a discovered candidate for later
+truth machinery; it does not hide, demote, or rewrite either immutable unit.
+
 ### Current authority projection
 
 `graph_authority_edges` is rebuildable current state for only `member_of`,

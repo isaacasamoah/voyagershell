@@ -16,13 +16,7 @@ import type {
   TopicBackfillUnit,
   TopicCandidate,
 } from './types'
-
-const classifyProviderFailure = (error: unknown): 'provider_failed' | 'malformed_output' => {
-  const name = error instanceof Error ? error.name : ''
-  return name.includes('NoObjectGenerated') || name.includes('TypeValidation')
-    ? 'malformed_output'
-    : 'provider_failed'
-}
+import { classifyProviderFailure } from './provider-failure'
 
 export const extractKnowledge = async (
   model: LanguageModel,

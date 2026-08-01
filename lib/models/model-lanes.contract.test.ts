@@ -9,9 +9,13 @@ const EMBEDDING_APIS = new Set(['embed', 'embedMany'])
 const EXPECTED_GENERATION = [
   'lib/agents/cartographer/extractor.ts|generateObject|model',
   'lib/agents/cartographer/extractor.ts|generateObject|model',
+  'lib/agents/cartographer/relation-judge.ts|generateObject|model',
+  'lib/agents/cartographer/relation-judge.ts|generateObject|model',
   'lib/agents/cartographer/topic-matcher.ts|generateObject|model',
   'lib/agents/deep-retrieval.ts|generateText|resolved.model',
   'lib/harness/run-turn.ts|streamText|chatModel',
+  'recipes/experiments/relation-conflict-harness.ts|generateObject|model',
+  'recipes/experiments/relation-conflict-harness.ts|generateObject|model',
 ]
 const EXPECTED_EXTRACTOR_HANDOFF = ['lib/agents/cartographer.ts|extractKnowledge|resolved.model']
 const EXPECTED_TOPIC_MATCHER_HANDOFF = [
@@ -24,6 +28,7 @@ const EXPECTED_OPENAI_EMBEDDINGS = [
   "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/knowledge/event-storage.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/knowledge/search.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
+  'recipes/experiments/relation-conflict-harness-support.ts|getOpenAI().embeddings.create|relationContract.blocking.embeddingModel',
 ]
 
 const trackedTypeScript = (): string[] => execFileSync(

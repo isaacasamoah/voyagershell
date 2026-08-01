@@ -96,7 +96,20 @@ describe('topic backfill recovery', () => {
     expect(mocks.rpc).toHaveBeenCalledTimes(8)
   })
 
-  it('re-lists when a no-job race has already become terminal', async () => {
+  it.each([
+    { label: 'no-job', result: { kind: 'no_job' as const } },
+    {
+      label: 'relation completion',
+      result: {
+        kind: 'relation_completed' as const,
+        outcome: 'succeeded',
+        unitId: '72000000-0000-4000-8000-000000000009',
+        edgeIds: [],
+      },
+    },
+  ])('re-lists when a $label leaves the old extraction job terminal', async ({
+    result: cartographerResult,
+  }) => {
     let jobLists = 0
     mocks.rpc.mockImplementation((name: string) => {
       if (name === 'activate_knowledge_topic_contract') {
@@ -134,7 +147,7 @@ describe('topic backfill recovery', () => {
       error: null,
     })
     mocks.from.mockReturnValue(query)
-    mocks.runCartographer.mockResolvedValue({ kind: 'no_job' })
+    mocks.runCartographer.mockResolvedValue(cartographerResult)
 
     const result = await runTopicBackfill()
 

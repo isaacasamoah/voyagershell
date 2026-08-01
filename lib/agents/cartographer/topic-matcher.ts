@@ -8,19 +8,11 @@ import type {
   TopicCandidate,
   TopicMatcherRun,
 } from './types'
+import { classifyProviderFailure } from './provider-failure'
 
 export type TopicMatcherResult =
   | TopicMatcherRun
   | { kind: 'failed'; failure: ExtractionFailureKind; errorClass: string }
-
-const classifyProviderFailure = (
-  error: unknown,
-): ExtractionFailureKind => {
-  const name = error instanceof Error ? error.name : ''
-  return name.includes('NoObjectGenerated') || name.includes('TypeValidation')
-    ? 'malformed_output'
-    : 'provider_failed'
-}
 
 export const matchKnowledgeTopics = async (
   model: LanguageModel,

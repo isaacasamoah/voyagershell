@@ -29,11 +29,13 @@ import {
   type LegacyTopicInput,
 } from './cartographer/topics'
 import { completeMatchedExtraction } from './cartographer/topic-pipeline'
+import { runRelationPipeline } from './cartographer/relation-pipeline'
 
 export type CartographerRunResult =
   | { kind: 'no_job' }
   | { kind: 'model_identity_unavailable' }
   | { kind: 'completed'; outcome: string; sourceEventId: string; unitId: string | null }
+  | { kind: 'relation_completed'; outcome: string; unitId: string; edgeIds: string[] }
   | { kind: 'failed'; error: string }
 
 const embeddingErrorClass = (error: unknown): string => (
@@ -71,6 +73,23 @@ export const runCartographer = async (
       return { kind: 'model_identity_unavailable' }
     }
 
+    let relationResult: Awaited<ReturnType<typeof runRelationPipeline>> = {
+      kind: 'no_job',
+    }
+    let relationError: string | null = null
+    try {
+      relationResult = await runRelationPipeline({
+        userId,
+        model: resolved.model,
+        modelProvider: provider,
+        modelId,
+        resolverLabel: resolved.label,
+      })
+    } catch (error) {
+      relationError = error instanceof Error ? error.message : String(error)
+      log.agent('Relation drain failed', { userId, error: relationError }, 'error')
+    }
+
     const attempt = await beginExtractionAttempt({
       userId,
       sourceEventId,
@@ -79,6 +98,15 @@ export const runCartographer = async (
       resolverLabel: resolved.label,
     })
     if (!attempt) {
+      if (relationResult.kind === 'completed') {
+        return {
+          kind: 'relation_completed',
+          outcome: relationResult.outcome,
+          unitId: relationResult.unitId,
+          edgeIds: relationResult.edgeIds,
+        }
+      }
+      if (relationError) return { kind: 'failed', error: relationError }
       return { kind: 'no_job' }
     }
 
