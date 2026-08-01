@@ -32,6 +32,7 @@ export type VoyageRole = 'captain' | 'crew'
 export type SessionStatus = 'active' | 'historical' | 'archived'
 export type MemoryType = 'fact' | 'preference' | 'entity' | 'decision' | 'event' | 'insight' | 'concept'
 export type KnowledgeExtractionJobState = 'pending' | 'leased' | 'succeeded' | 'no_claim'
+export type KnowledgeRelationJobState = 'pending' | 'leased' | 'completed'
 export type KnowledgeExtractionOutcomeKind =
   | 'succeeded'
   | 'no_claim'

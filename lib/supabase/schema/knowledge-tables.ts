@@ -2,6 +2,7 @@ import type {
   Json,
   KnowledgeExtractionJobState,
   KnowledgeExtractionOutcomeKind,
+  KnowledgeRelationJobState,
   NullableJson,
   NullableUnknown,
   Relationship,
@@ -26,6 +27,48 @@ type CurrentRow = {
   delivery_status: string | null
 }
 export type KnowledgeTables = {
+  knowledge_relation_contracts: TableShape<{
+    contract_version: string; description: string; stage1_instruction: string;
+    stage2_instruction: string; verdicts: string[]; blocking_spec: Json;
+    model_task: string; model_quality: string; provider_calls_per_job: number;
+    max_attempts: number; created_at: string
+  }, { contract_version: string; description: string; stage1_instruction: string;
+    stage2_instruction: string; verdicts: string[]; blocking_spec: Json;
+    model_task: string; model_quality: string; provider_calls_per_job: number;
+    max_attempts: number; created_at?: string }>
+  knowledge_relation_contract_active: TableShape<{
+    singleton: boolean; contract_version: string; activated_at: string
+  }, { singleton?: boolean; contract_version: string; activated_at?: string }>
+  knowledge_relation_jobs: TableShape<{
+    unit_id: string; person_id: string; contract_version: string;
+    state: KnowledgeRelationJobState; next_attempt_number: number;
+    active_attempt_id: string | null; lease_token: string | null;
+    lease_expires_at: string | null; created_at: string; updated_at: string
+  }, { unit_id: string; person_id: string; contract_version: string;
+    state?: KnowledgeRelationJobState; next_attempt_number?: number;
+    active_attempt_id?: string | null; lease_token?: string | null;
+    lease_expires_at?: string | null; created_at?: string; updated_at?: string }>
+  knowledge_relation_attempts: TableShape<{
+    id: string; unit_id: string; person_id: string; contract_version: string;
+    attempt_number: number; candidate_unit_ids: string[]; model_provider: string;
+    model_id: string; resolver_label: string | null; lease_token: string; started_at: string
+  }, { id: string; unit_id: string; person_id: string; contract_version: string;
+    attempt_number: number; candidate_unit_ids: string[]; model_provider: string;
+    model_id: string; resolver_label?: string | null; lease_token: string; started_at?: string }>
+  knowledge_relation_outcomes: TableShape<{
+    attempt_id: string; unit_id: string; person_id: string; contract_version: string;
+    outcome: KnowledgeExtractionOutcomeKind; raw_output: Json | null;
+    relations: Json; grant_requests: Json; error_class: string | null;
+    input_tokens: number | null; output_tokens: number | null; recorded_at: string
+  }, { attempt_id: string; unit_id: string; person_id: string; contract_version: string;
+    outcome: KnowledgeExtractionOutcomeKind; raw_output?: Json | null;
+    relations?: Json; grant_requests?: Json; error_class?: string | null;
+    input_tokens?: number | null; output_tokens?: number | null; recorded_at?: string }>
+  knowledge_relation_assertions: TableShape<{
+    edge_id: string; input_unit_ids: string[]; contract_version: string;
+    attempt_id: string; recorded_at: string
+  }, { edge_id: string; input_unit_ids: string[]; contract_version: string;
+    attempt_id: string; recorded_at?: string }>
   knowledge_topics: TableShape<{
     id: string; normalized_label: string; embedding: string; created_at: string
   }, { id: string; normalized_label: string; embedding: string; created_at?: string }>

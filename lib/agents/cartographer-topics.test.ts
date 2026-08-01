@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   embedLegacyTopicInputs: vi.fn(),
   findTopicCandidates: vi.fn(),
   completeMatchedExtraction: vi.fn(),
+  runRelationPipeline: vi.fn(),
 }))
 vi.mock('@/lib/models', () => ({ resolveUserModelWithMeta: mocks.resolveUserModelWithMeta }))
 vi.mock('./cartographer/jobs', () => ({
@@ -23,6 +24,9 @@ vi.mock('./cartographer/topics', () => ({
 }))
 vi.mock('./cartographer/topic-pipeline', () => ({
   completeMatchedExtraction: mocks.completeMatchedExtraction,
+}))
+vi.mock('./cartographer/relation-pipeline', () => ({
+  runRelationPipeline: mocks.runRelationPipeline,
 }))
 vi.mock('./cartographer/apply', () => ({ applyEnrichments: vi.fn() }))
 vi.mock('./cartographer/session-decay', () => ({
@@ -87,6 +91,7 @@ describe('Cartographer topic contract transitions', () => {
       },
       usage: { inputTokens: 140, outputTokens: 35 },
     })
+    mocks.runRelationPipeline.mockResolvedValue({ kind: 'no_job' })
   })
 
   it('preserves label-level inputs only for pinned v3 jobs', async () => {

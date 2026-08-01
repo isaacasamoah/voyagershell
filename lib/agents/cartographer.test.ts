@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   embedLegacyTopicInputs: vi.fn(),
   findTopicCandidates: vi.fn(),
   completeMatchedExtraction: vi.fn(),
+  runRelationPipeline: vi.fn(),
 }))
 
 vi.mock('@/lib/models', () => ({
@@ -46,6 +47,9 @@ vi.mock('./cartographer/topics', () => ({
 }))
 vi.mock('./cartographer/topic-pipeline', () => ({
   completeMatchedExtraction: mocks.completeMatchedExtraction,
+}))
+vi.mock('./cartographer/relation-pipeline', () => ({
+  runRelationPipeline: mocks.runRelationPipeline,
 }))
 
 import { runCartographer } from './cartographer'
@@ -110,6 +114,7 @@ describe('event-owned Cartographer extraction', () => {
       },
       usage: { inputTokens: 140, outputTokens: 35 },
     })
+    mocks.runRelationPipeline.mockResolvedValue({ kind: 'no_job' })
   })
 
   it('records concrete model identity and completes one exact source job', async () => {
@@ -121,6 +126,13 @@ describe('event-owned Cartographer extraction', () => {
     expect(mocks.beginExtractionAttempt).toHaveBeenCalledWith({
       userId: attempt.sourceActorId,
       sourceEventId: attempt.sourceEventId,
+      modelProvider: 'anthropic',
+      modelId: 'claude-sonnet-4-6',
+      resolverLabel: 'claude-sonnet',
+    })
+    expect(mocks.runRelationPipeline).toHaveBeenCalledWith({
+      userId: attempt.sourceActorId,
+      model: { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
       modelProvider: 'anthropic',
       modelId: 'claude-sonnet-4-6',
       resolverLabel: 'claude-sonnet',
@@ -166,6 +178,26 @@ describe('event-owned Cartographer extraction', () => {
     const completion = mocks.completeExtractionAttempt.mock.calls[0][0]
     expect(completion.inputTokens).toBeUndefined()
     expect(completion.outputTokens).toBeUndefined()
+  })
+
+  it('returns a drained relation when no extraction job is available', async () => {
+    mocks.runRelationPipeline.mockResolvedValue({
+      kind: 'completed',
+      unitId: '72000000-0000-4000-8000-000000000009',
+      outcome: 'succeeded',
+      edgeIds: ['72000000-0000-4000-8000-000000000010'],
+    })
+    mocks.beginExtractionAttempt.mockResolvedValue(null)
+
+    const result = await runCartographer({ userId: attempt.sourceActorId })
+
+    expect(result).toEqual({
+      kind: 'relation_completed',
+      unitId: '72000000-0000-4000-8000-000000000009',
+      outcome: 'succeeded',
+      edgeIds: ['72000000-0000-4000-8000-000000000010'],
+    })
+    expect(mocks.extractKnowledge).not.toHaveBeenCalled()
   })
 
   it('fails closed before leasing when concrete model identity is absent', async () => {

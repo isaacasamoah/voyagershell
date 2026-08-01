@@ -35,6 +35,17 @@ export type KnowledgeTopicBackfillUnitRow = {
   source_actor_id: string; claim: string; knowledge_audience_id: string;
   embedding: string | null
 }
+export type KnowledgeRelationCandidate = {
+  unitId: string; claim: string; topicLabels: string[]; similarity: number | null
+}
+export type KnowledgeRelationAttemptRow = {
+  attempt_id: string; lease_token: string; unit_id: string; person_id: string;
+  contract_version: string; focus_claim: string;
+  candidates: KnowledgeRelationCandidate[]; attempt_number: number
+}
+export type KnowledgeRelationCompletionRow = {
+  outcome: KnowledgeExtractionOutcomeKind; edge_ids: string[]; replayed: boolean
+}
 export type KnowledgeByIdRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'>
 export type VoyageMessageRow = Pick<KnowledgeSearchRow,
   'event_id' | 'content' | 'source_created_at' | 'sender_display_name' | 'sender_user_id'>
@@ -65,6 +76,11 @@ export type PublicFunctions = {
     p_resolver_label?: string | null; p_source_event_id?: string | null;
     p_lease_seconds?: number
   }; Returns: KnowledgeExtractionAttemptRow[] }
+  begin_relation_attempt: { Args: {
+    p_requesting_user_id: string; p_model_provider: string; p_model_id: string;
+    p_resolver_label?: string | null; p_unit_id?: string | null;
+    p_lease_seconds?: number
+  }; Returns: KnowledgeRelationAttemptRow[] }
   canonical_space_member_id: { Args: { p_space_id: string; p_user_id: string }; Returns: string }
   claim_source_message_ingress: { Args: { p_actor_id: string; p_transport: string;
     p_client_message_id: string; p_space_id: string | null; p_voyage_slug: string | null;
@@ -88,6 +104,12 @@ export type PublicFunctions = {
     p_topic_candidate_snapshot?: Json | null; p_error_class?: string | null;
     p_input_tokens?: number | null; p_output_tokens?: number | null
   }; Returns: KnowledgeExtractionCompletionRow[] }
+  complete_relation_attempt: { Args: {
+    p_attempt_id: string; p_lease_token: string; p_result: KnowledgeExtractionOutcomeKind;
+    p_raw_output?: Json | null; p_relations?: Json; p_grant_requests?: Json;
+    p_error_class?: string | null; p_input_tokens?: number | null;
+    p_output_tokens?: number | null
+  }; Returns: KnowledgeRelationCompletionRow[] }
   create_room_invite: { Args: { p_session_id: string; p_inviter_user_id: string;
     p_invitee_user_id: string }; Returns: {
       invite_status: string; invite_space_id: string | null
