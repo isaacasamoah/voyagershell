@@ -14,13 +14,16 @@ hosted_target_require() {
       "$runner_name" >&2
     return 2
   fi
-  case "$target_ref:$authorized_ref" in
-    *[!a-z0-9:]*)
-      printf '%s: hosted project refs must be lowercase alphanumeric\n' \
-        "$runner_name" >&2
-      return 2
-      ;;
-  esac
+  local project_ref
+  for project_ref in "$target_ref" "$authorized_ref"; do
+    case "$project_ref" in
+      *[!a-z0-9]*)
+        printf '%s: hosted project refs must be lowercase alphanumeric\n' \
+          "$runner_name" >&2
+        return 2
+        ;;
+    esac
+  done
   if [ "$target_ref" != "$authorized_ref" ]; then
     printf '%s: target is not explicitly authorized\n' "$runner_name" >&2
     return 3

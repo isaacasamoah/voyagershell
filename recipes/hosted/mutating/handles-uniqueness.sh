@@ -23,24 +23,11 @@ hosted_confirmation_require handles-uniqueness \
   VOYAGER_ALLOW_HOSTED_MUTATION || exit $?
 hosted_access_token_require handles-uniqueness || exit $?
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/voyager-handles-proof.XXXXXX")"
-printf 'Authorization: Bearer %s\nContent-Type: application/json\n' \
-  "$ACCESS_TOKEN" > "$TEMP_DIR/headers.txt"
-unset ACCESS_TOKEN VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF \
-  VOYAGER_ALLOW_HOSTED_MUTATION VOYAGER_SUPABASE_PROJECT_REF
 
 SENTINEL="zz_voyager_casetest"
 SENTINEL_UPPER="ZZ_VOYAGER_CASETEST"
-
-# `q <sql>` runs one statement; `-f` makes curl exit non-zero on an HTTP error so
-# set -e catches a transport failure. The Bearer token is only ever in the header,
-# never echoed. Query text is JSON-encoded via jq so it can't break the payload.
-q() { curl --disable --silent --show-error --fail-with-body \
-  --connect-timeout 15 --max-time 180 \
-  --request POST "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
-  --header "@$TEMP_DIR/headers.txt" \
-  -d "{\"query\": $(printf '%s' "$1" | jq -Rs .)}"; }
-
 SENTINEL_CREATED=0
+
 cleanup() {
   if [ "$SENTINEL_CREATED" -eq 1 ]; then
     q "DELETE FROM public.handles WHERE lower(handle) = '$SENTINEL';" \
@@ -50,6 +37,20 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
+
+printf 'Authorization: Bearer %s\nContent-Type: application/json\n' \
+  "$ACCESS_TOKEN" > "$TEMP_DIR/headers.txt"
+unset ACCESS_TOKEN VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF \
+  VOYAGER_ALLOW_HOSTED_MUTATION VOYAGER_SUPABASE_PROJECT_REF
+
+# `q <sql>` runs one statement; `-f` makes curl exit non-zero on an HTTP error so
+# set -e catches a transport failure. The Bearer token is only ever in the header,
+# never echoed. Query text is JSON-encoded via jq so it can't break the payload.
+q() { curl --disable --silent --show-error --fail-with-body \
+  --connect-timeout 15 --max-time 180 \
+  --request POST "https://api.supabase.com/v1/projects/$PROJECT_REF/database/query" \
+  --header "@$TEMP_DIR/headers.txt" \
+  -d "{\"query\": $(printf '%s' "$1" | jq -Rs .)}"; }
 
 # An FK-valid owner (handles.owner_user_id → profiles.id). Read-only; ORDER BY id
 # makes the pick deterministic. We attach our sentinels to this owner but only
