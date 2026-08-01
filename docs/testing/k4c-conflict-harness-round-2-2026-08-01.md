@@ -74,3 +74,19 @@ remaining issue instead needs a spec decision about whether these differently
 phrased operative consequences are truly supersession ground truth.
 
 `K4C-HARNESS-BELOW-BAR`
+
+## Gate addendum — Amendment 2
+
+Isaac amended K4c-R1's acceptance bar at the gate after the round-2
+measurement: `supersedes` precision must equal `1.000`, `contradicts`
+precision must be at least `0.90`, and recall must be at least `0.75` for both
+verdicts. Under that amended bar, the untuned-corpus `relation-conflict-v2`
+two-call measurements pass: `supersedes` P/R `1.000/0.846` and `contradicts`
+P/R `0.909/1.000`.
+
+This amendment was ruled after measurement, with the provenance and reasoning
+recorded in Amendment 2 of the approved spec. It resolves the tension between
+the safe default-to-`contradicts` rule and a perfect-precision requirement for
+that recoverable verdict. The K4c-R1 harness gate is therefore satisfied.
+
+`K4C-HARNESS-PASS-AMENDED-BAR`
