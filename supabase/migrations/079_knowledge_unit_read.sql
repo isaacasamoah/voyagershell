@@ -199,9 +199,7 @@ CREATE OR REPLACE FUNCTION public.retrieve_knowledge_graph_claims_v3(
   p_frontier_budget integer DEFAULT 128
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, public
-SET enable_seqscan = off
-SET enable_bitmapscan = off AS $$
+SET search_path = pg_catalog, public AS $$
 DECLARE
   v_root uuid;
   v_frontier uuid[];

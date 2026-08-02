@@ -1,5 +1,6 @@
--- K5a C4 R4: exact vector distance over the membership-indexed authorized set.
--- No planner GUC or ANN setting is permitted in this battery.
+-- K5a C4 R5: exact vector distance over the membership-indexed authorized set.
+-- The battery asserts plan mechanism, never literal executor-node placement.
+-- No planner GUC or ANN setting is permitted.
 
 CREATE OR REPLACE FUNCTION public.k5a_c4_seed_private_units(
   p_person_id uuid,
@@ -250,8 +251,8 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION public.k5a_c4_plan_signature(p_plan jsonb)
-RETURNS text
+CREATE OR REPLACE FUNCTION public.k5a_c4_plan_nodes(p_plan jsonb)
+RETURNS TABLE(path text, node jsonb)
 LANGUAGE sql IMMUTABLE STRICT
 SET search_path = pg_catalog AS $$
   WITH RECURSIVE nodes(node, path) AS (
@@ -264,10 +265,104 @@ SET search_path = pg_catalog AS $$
       coalesce(nodes.node->'Plans', '[]'::jsonb)
     ) WITH ORDINALITY child(value, ordinality)
   )
-  SELECT string_agg(concat_ws(':',
-    node->>'Node Type', node->>'Relation Name', node->>'Index Name'
-  ), '>' ORDER BY path)
+  SELECT path, node
   FROM nodes
+$$;
+
+CREATE OR REPLACE FUNCTION public.k5a_c4_plan_mechanism(
+  p_plan jsonb,
+  p_authorized_cardinality integer
+) RETURNS jsonb
+LANGUAGE plpgsql IMMUTABLE STRICT
+SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_row_sources text[];
+  v_unit_rows_read bigint;
+  v_rows_removed bigint;
+  v_access_paths jsonb;
+BEGIN
+  SELECT array_agg(source ORDER BY source) INTO v_row_sources
+  FROM (
+    SELECT DISTINCT node->>'Relation Name' AS source
+    FROM public.k5a_c4_plan_nodes(p_plan)
+    WHERE node ? 'Relation Name'
+  ) sources;
+
+  SELECT coalesce(sum(
+    (node->>'Actual Rows')::bigint * (node->>'Actual Loops')::bigint
+  ), 0) INTO v_unit_rows_read
+  FROM public.k5a_c4_plan_nodes(p_plan)
+  WHERE node->>'Relation Name' = 'knowledge_units'
+    AND node->>'Index Name' = 'knowledge_units_pkey';
+
+  SELECT coalesce(sum(
+    coalesce((node->>'Rows Removed by Filter')::bigint, 0)
+    + coalesce((node->>'Rows Removed by Index Recheck')::bigint, 0)
+  ), 0) INTO v_rows_removed
+  FROM public.k5a_c4_plan_nodes(p_plan)
+  WHERE node->>'Relation Name' = 'knowledge_units'
+    OR node->>'Alias' IN ('unit', 'candidate');
+
+  v_access_paths := jsonb_build_object(
+    'knowledge_audiences', 'knowledge_audiences_member_profile_ids_lookup',
+    'knowledge_units_membership', 'knowledge_units_audience_lookup',
+    'knowledge_units_hydration', 'knowledge_units_pkey',
+    'knowledge_events', 'knowledge_events_pkey',
+    'knowledge_unit_citations', 'knowledge_unit_retirements_lookup'
+  );
+
+  IF v_row_sources IS DISTINCT FROM ARRAY[
+      'knowledge_audiences', 'knowledge_events',
+      'knowledge_unit_citations', 'knowledge_units'
+    ]::text[]
+    OR NOT EXISTS (
+      SELECT 1 FROM public.k5a_c4_plan_nodes(p_plan)
+      WHERE node->>'Relation Name' = 'knowledge_audiences'
+        AND node->>'Index Name' =
+          'knowledge_audiences_member_profile_ids_lookup'
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM public.k5a_c4_plan_nodes(p_plan)
+      WHERE node->>'Relation Name' = 'knowledge_units'
+        AND node->>'Index Name' = 'knowledge_units_audience_lookup'
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM public.k5a_c4_plan_nodes(p_plan)
+      WHERE node->>'Relation Name' = 'knowledge_units'
+        AND node->>'Index Name' = 'knowledge_units_pkey'
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM public.k5a_c4_plan_nodes(p_plan)
+      WHERE node->>'Relation Name' = 'knowledge_events'
+        AND node->>'Index Name' = 'knowledge_events_pkey'
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM public.k5a_c4_plan_nodes(p_plan)
+      WHERE node->>'Relation Name' = 'knowledge_unit_citations'
+        AND node->>'Index Name' = 'knowledge_unit_retirements_lookup'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.k5a_c4_plan_nodes(p_plan)
+      WHERE node->>'Relation Name' = 'knowledge_units'
+        AND (
+          node->>'Node Type' = 'Seq Scan'
+          OR node->>'Index Name' = 'knowledge_units_embedding_hnsw'
+        )
+    )
+    OR v_unit_rows_read IS DISTINCT FROM p_authorized_cardinality::bigint
+    OR v_rows_removed > 1 THEN
+    RAISE EXCEPTION 'k5a_c4_r5_plan_mechanism_failed:%:%:%:%:%',
+      p_authorized_cardinality, v_row_sources, v_unit_rows_read,
+      v_rows_removed, p_plan;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'row_sources', to_jsonb(v_row_sources),
+    'access_paths', v_access_paths,
+    'unit_rows_read', v_unit_rows_read,
+    'unit_rows_removed_by_filter', v_rows_removed
+  );
+END
 $$;
 
 CREATE OR REPLACE FUNCTION public.k5a_c4_measure_p95(
@@ -317,7 +412,7 @@ BEGIN
 END
 $$;
 
-DO $k5a_c4_r4$
+DO $k5a_c4_r5$
 DECLARE
   v_owner uuid := '72000000-0000-4000-8000-000000000001';
   v_member uuid := '72000000-0000-4000-8000-000000000002';
@@ -332,25 +427,30 @@ DECLARE
   v_missing integer;
   v_plan_100 jsonb;
   v_plan_1001 jsonb;
-  v_plan_threshold jsonb;
+  v_plan_curve_probe jsonb;
   v_plan_owner_before jsonb;
   v_plan_owner_after jsonb;
-  v_signature_100 text;
-  v_signature_1001 text;
-  v_signature_threshold text;
-  v_owner_signature_before text;
-  v_owner_signature_after text;
+  v_mechanism_100 jsonb;
+  v_mechanism_1001 jsonb;
+  v_mechanism_curve_probe jsonb;
+  v_owner_mechanism_before jsonb;
+  v_owner_mechanism_after jsonb;
   v_owner_result_before jsonb;
   v_owner_result_after jsonb;
   v_p95_100 double precision;
   v_p95_1001 double precision;
-  v_p95_threshold double precision;
+  v_p95_curve_probe double precision;
   v_owner_p95_before double precision;
   v_owner_p95_after double precision;
+  v_owner_baseline_p95 double precision[] := '{}';
+  v_owner_p95_stddev double precision;
+  v_timing_envelope double precision;
   v_slope double precision;
-  v_threshold integer;
-  v_threshold_kind text := 'interpolated_550ms_floor';
+  v_curve_probe_units integer;
+  v_curve_probe_kind text := 'interpolated_instrumented_550ms_sample';
   v_foreign_before integer;
+  v_foreign_after integer;
+  i integer;
 BEGIN
   -- Enough nonmatching audience rows make membership lookup a real planner
   -- choice rather than a tiny-table artifact.
@@ -390,7 +490,7 @@ BEGIN
   ANALYZE public.knowledge_audiences;
   ANALYZE public.knowledge_units;
   v_plan_100 := public.k5a_c4_exact_search_plan(v_member, v_query);
-  v_signature_100 := public.k5a_c4_plan_signature(v_plan_100);
+  v_mechanism_100 := public.k5a_c4_plan_mechanism(v_plan_100, 100);
   v_p95_100 := public.k5a_c4_measure_p95(
     v_member, v_query, v_member_target
   );
@@ -401,35 +501,37 @@ BEGIN
   );
   ANALYZE public.knowledge_units;
   v_plan_1001 := public.k5a_c4_exact_search_plan(v_member, v_query);
-  v_signature_1001 := public.k5a_c4_plan_signature(v_plan_1001);
+  v_mechanism_1001 := public.k5a_c4_plan_mechanism(v_plan_1001, 1001);
   v_p95_1001 := public.k5a_c4_measure_p95(
     v_member, v_query, v_member_target
   );
 
   IF v_p95_100 >= 550 THEN
-    v_threshold := 100;
-    v_threshold_kind := 'first_sample_at_550ms_floor';
+    v_curve_probe_units := 100;
+    v_curve_probe_kind := 'first_instrumented_sample_at_550ms';
   ELSIF v_p95_1001 > v_p95_100 THEN
     v_slope := (v_p95_1001 - v_p95_100) / 901;
-    v_threshold := ceil(
+    v_curve_probe_units := ceil(
       1001 + greatest(550 - v_p95_1001, 0) / v_slope
     )::integer;
-    v_threshold := greatest(v_threshold, 1001);
+    v_curve_probe_units := greatest(v_curve_probe_units, 1001);
   ELSE
-    v_threshold := 10010;
-    v_threshold_kind := 'lower_bound_nonpositive_sample_slope';
+    v_curve_probe_units := 10010;
+    v_curve_probe_kind := 'instrumented_nonpositive_sample_slope';
   END IF;
 
   v_missing := greatest(
-    v_threshold - public.k5a_c4_authorized_unit_count(v_member), 0
+    v_curve_probe_units - public.k5a_c4_authorized_unit_count(v_member), 0
   );
   PERFORM public.k5a_c4_seed_private_units(
-    v_member, 'member-to-threshold', v_missing, NULL
+    v_member, 'member-to-curve-probe', v_missing, NULL
   );
   ANALYZE public.knowledge_units;
-  v_plan_threshold := public.k5a_c4_exact_search_plan(v_member, v_query);
-  v_signature_threshold := public.k5a_c4_plan_signature(v_plan_threshold);
-  v_p95_threshold := public.k5a_c4_measure_p95(
+  v_plan_curve_probe := public.k5a_c4_exact_search_plan(v_member, v_query);
+  v_mechanism_curve_probe := public.k5a_c4_plan_mechanism(
+    v_plan_curve_probe, v_curve_probe_units
+  );
+  v_p95_curve_probe := public.k5a_c4_measure_p95(
     v_member, v_query, v_member_target
   );
 
@@ -439,15 +541,24 @@ BEGIN
   );
   ANALYZE public.knowledge_units;
   v_plan_owner_before := public.k5a_c4_exact_search_plan(v_owner, v_query);
-  v_owner_signature_before := public.k5a_c4_plan_signature(v_plan_owner_before);
+  v_owner_mechanism_before := public.k5a_c4_plan_mechanism(
+    v_plan_owner_before, 1001
+  );
   SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
   INTO v_owner_result_before
   FROM public.search_knowledge_units(
     v_owner, v_query, 0.99, 10, NULL, NULL, NULL, NULL
   ) hit;
-  v_owner_p95_before := public.k5a_c4_measure_p95(
-    v_owner, v_query, v_owner_target
-  );
+  FOR i IN 1..5 LOOP
+    v_owner_baseline_p95 := array_append(
+      v_owner_baseline_p95,
+      public.k5a_c4_measure_p95(v_owner, v_query, v_owner_target)
+    );
+  END LOOP;
+  SELECT avg(sample), coalesce(stddev_samp(sample), 0)
+  INTO v_owner_p95_before, v_owner_p95_stddev
+  FROM unnest(v_owner_baseline_p95) sample;
+  v_timing_envelope := 3 * v_owner_p95_stddev;
 
   -- Grow only the member's private corpus by exactly ten times while the
   -- owner's authorized subset remains fixed at 1,001 units.
@@ -462,7 +573,9 @@ BEGIN
   );
   ANALYZE public.knowledge_units;
   v_plan_owner_after := public.k5a_c4_exact_search_plan(v_owner, v_query);
-  v_owner_signature_after := public.k5a_c4_plan_signature(v_plan_owner_after);
+  v_owner_mechanism_after := public.k5a_c4_plan_mechanism(
+    v_plan_owner_after, 1001
+  );
   SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
   INTO v_owner_result_after
   FROM public.search_knowledge_units(
@@ -471,55 +584,70 @@ BEGIN
   v_owner_p95_after := public.k5a_c4_measure_p95(
     v_owner, v_query, v_owner_target
   );
+  v_foreign_after := public.k5a_c4_authorized_unit_count(v_member);
 
-  IF v_signature_100 IS DISTINCT FROM v_signature_1001
-    OR v_signature_100 IS DISTINCT FROM v_signature_threshold
-    OR v_plan_100::text NOT LIKE '%knowledge_audiences_member_profile_ids_lookup%'
-    OR v_plan_100::text NOT LIKE '%knowledge_units_audience_lookup%'
-    OR v_plan_1001::text NOT LIKE '%knowledge_audiences_member_profile_ids_lookup%'
-    OR v_plan_1001::text NOT LIKE '%knowledge_units_audience_lookup%'
-    OR v_plan_threshold::text NOT LIKE '%knowledge_audiences_member_profile_ids_lookup%'
-    OR v_plan_threshold::text NOT LIKE '%knowledge_units_audience_lookup%'
-    OR v_plan_100::text LIKE '%knowledge_units_embedding_hnsw%'
-    OR v_plan_1001::text LIKE '%knowledge_units_embedding_hnsw%'
-    OR v_plan_threshold::text LIKE '%knowledge_units_embedding_hnsw%' THEN
-    RAISE EXCEPTION 'k5a_c4_r4_plan_stability_failed:%:%:%:%:%:%',
-      v_signature_100, v_signature_1001, v_signature_threshold,
-      v_plan_100, v_plan_1001, v_plan_threshold;
+  IF v_mechanism_100->'row_sources'
+      IS DISTINCT FROM v_mechanism_1001->'row_sources'
+    OR v_mechanism_100->'row_sources'
+      IS DISTINCT FROM v_mechanism_curve_probe->'row_sources'
+    OR v_mechanism_100->'access_paths'
+      IS DISTINCT FROM v_mechanism_1001->'access_paths'
+    OR v_mechanism_100->'access_paths'
+      IS DISTINCT FROM v_mechanism_curve_probe->'access_paths' THEN
+    RAISE EXCEPTION 'k5a_c4_r5_plan_semantics_changed:%:%:%',
+      v_mechanism_100, v_mechanism_1001, v_mechanism_curve_probe;
   END IF;
 
   IF v_owner_result_before IS DISTINCT FROM v_owner_result_after
-    OR v_owner_signature_before IS DISTINCT FROM v_owner_signature_after
-    OR abs(v_owner_p95_before - v_owner_p95_after) > 55 THEN
-    RAISE EXCEPTION 'k5a_c4_r4_foreign_corpus_changed:%:%:%:%:%:%',
+    OR v_foreign_after IS DISTINCT FROM v_foreign_before * 10
+    OR v_owner_mechanism_before->'row_sources'
+      IS DISTINCT FROM v_owner_mechanism_after->'row_sources'
+    OR v_owner_mechanism_before->'access_paths'
+      IS DISTINCT FROM v_owner_mechanism_after->'access_paths'
+    OR v_owner_mechanism_before->'unit_rows_read'
+      IS DISTINCT FROM v_owner_mechanism_after->'unit_rows_read'
+    OR abs(v_owner_p95_before - v_owner_p95_after) > v_timing_envelope THEN
+    RAISE EXCEPTION 'k5a_c4_r5_foreign_corpus_changed:%:%:%:%:%:%:%:%',
       v_owner_result_before, v_owner_result_after,
-      v_owner_signature_before, v_owner_signature_after,
-      v_owner_p95_before, v_owner_p95_after;
+      v_owner_mechanism_before, v_owner_mechanism_after,
+      v_owner_baseline_p95, v_owner_p95_after,
+      v_timing_envelope, v_foreign_after;
   END IF;
 
   IF pg_get_functiondef(
       'public.search_knowledge_units(uuid,vector,double precision,integer,uuid,timestamptz,timestamptz,uuid[])'::regprocedure
-    ) ~ '(enable_seqscan|enable_sort|ef_search|iterative_scan)'
+    ) ~ '(enable_(seqscan|bitmapscan|sort)|ef_search|iterative_scan)'
     OR pg_get_functiondef(
       'public.search_knowledge_units(uuid,vector,double precision,integer,uuid,timestamptz,timestamptz,uuid[])'::regprocedure
     ) LIKE '%knowledge_units_embedding_hnsw%' THEN
-    RAISE EXCEPTION 'k5a_c4_r4_planner_forcing_or_ann_survived';
+    RAISE EXCEPTION 'k5a_c4_r5_planner_forcing_or_ann_survived';
   END IF;
 
-  RAISE NOTICE 'K5A_C4_R4_CURVE:%', jsonb_build_object(
+  IF pg_get_functiondef(
+      'public.retrieve_knowledge_graph_claims_v3(uuid,uuid,uuid[],integer,integer,integer,integer,integer,integer,integer)'::regprocedure
+    ) ~ 'enable_(seqscan|bitmapscan|sort)' THEN
+    RAISE EXCEPTION 'k5a_c4_r5_kernel_planner_forcing_survived';
+  END IF;
+
+  RAISE NOTICE 'K5A_C4_R5_MECHANISM:%', jsonb_build_object(
     'p95_ms_100', round(v_p95_100::numeric, 3),
     'p95_ms_1001', round(v_p95_1001::numeric, 3),
-    'derived_ann_threshold_units', v_threshold,
-    'threshold_kind', v_threshold_kind,
-    'p95_ms_threshold', round(v_p95_threshold::numeric, 3),
-    'owner_p95_ms_before_foreign_growth',
+    'instrumented_curve_probe_units', v_curve_probe_units,
+    'curve_probe_kind', v_curve_probe_kind,
+    'p95_ms_curve_probe', round(v_p95_curve_probe::numeric, 3),
+    'g5_ann_threshold_units', NULL,
+    'g5_status', 'clean_non_explain_measurement_required',
+    'owner_baseline_p95_ms', to_jsonb(v_owner_baseline_p95),
+    'owner_p95_mean_before_foreign_growth',
       round(v_owner_p95_before::numeric, 3),
     'owner_p95_ms_after_foreign_growth',
       round(v_owner_p95_after::numeric, 3),
+    'timing_envelope_3sigma_ms', round(v_timing_envelope::numeric, 3),
+    'owner_mechanism', v_owner_mechanism_after,
     'foreign_authorized_units',
-      public.k5a_c4_authorized_unit_count(v_member)
+      v_foreign_after
   );
 END
-$k5a_c4_r4$;
+$k5a_c4_r5$;
 
-SELECT 'CARTOGRAPHER_K5A_C4_R4_GREEN';
+SELECT 'CARTOGRAPHER_K5A_C4_R5_GREEN';

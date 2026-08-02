@@ -147,7 +147,7 @@ c4_verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq \
   -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r4-assertions.sql")" \
   || fail 'C4 R4 exact authorized-subset assertions failed'
-[ "$c4_verdict" = CARTOGRAPHER_K5A_C4_R4_GREEN ] \
+[ "$c4_verdict" = CARTOGRAPHER_K5A_C4_R5_GREEN ] \
   || fail 'exact C4 R4 verdict missing'
 
 printf '%s\n' CARTOGRAPHER_K5A_C3_LOCAL_GREEN

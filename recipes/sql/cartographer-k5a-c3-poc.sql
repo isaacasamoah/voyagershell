@@ -82,9 +82,7 @@ CREATE FUNCTION public.k5a_c3_selecting_read_poc(
   p_frontier_budget integer DEFAULT 128
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, public
-SET enable_seqscan = off
-SET enable_bitmapscan = off AS $$
+SET search_path = pg_catalog, public AS $$
 DECLARE
   v_root uuid;
   v_frontier uuid[];
@@ -778,11 +776,6 @@ DECLARE
   v_reader_after_elapsed double precision;
   i integer;
 BEGIN
-  -- R3 treats non-enumeration as an authorization mechanism, not a planner
-  -- preference. Force every annotation lookup through its person-keyed index,
-  -- including on a tiny relation where PostgreSQL would prefer a heap scan.
-  SET LOCAL enable_seqscan = off;
-  SET LOCAL enable_bitmapscan = off;
   SELECT id INTO STRICT v_stale FROM k5a_c3_units WHERE name = 'stale';
   SELECT id INTO STRICT v_fresh FROM k5a_c3_units WHERE name = 'fresh';
   SELECT id INTO STRICT v_correction FROM k5a_c3_units WHERE name = 'correction';

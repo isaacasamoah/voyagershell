@@ -38,8 +38,7 @@ describe('K5a stage-two contract', () => {
     expect(migration).toContain(
       'annotation.assertion_person_id = p_viewer_profile_id',
     )
-    expect(migration).toContain('SET enable_seqscan = off')
-    expect(migration).toContain('SET enable_bitmapscan = off')
+    expect(migration).not.toMatch(/SET enable_(seqscan|bitmapscan|sort)\s*=/)
     expect(migration).toContain('public.knowledge_unit_effective_attention(')
     expect(migration).toContain("'tensions'")
     expect(migration).not.toMatch(/model_provider|provider_call/i)
@@ -55,6 +54,7 @@ describe('K5a stage-two contract', () => {
     expect(battery).toContain('k5a_c3_foreign_degree_independence_failed')
     expect(battery).toContain('k5a_c3_own_degree_overflow_failed')
     expect(battery).toContain('k5a_c3_chain_middle_degradation_failed')
+    expect(battery).not.toMatch(/SET(?: LOCAL)? enable_/)
     expect(concurrentProbe).toContain(
       'public.retrieve_knowledge_graph_claims_v3(',
     )
@@ -96,15 +96,18 @@ describe('K5a stage-two contract', () => {
     expect(authorized).toBeGreaterThan(membership)
     expect(exactDistance).toBeGreaterThan(authorized)
     expect(semanticRead).not.toMatch(
-      /knowledge_units_embedding_hnsw|enable_seqscan|enable_sort|ef_search|iterative_scan/,
+      /knowledge_units_embedding_hnsw|enable_seqscan|enable_bitmapscan|enable_sort|ef_search|iterative_scan/,
     )
     expect(migration).not.toMatch(/authorize_knowledge_scope|knowledge_in_scope/)
     expect(battery).toContain('k5a_c4_victim_seat_failed')
     expect(battery).toContain("IS DISTINCT FROM '[]'::jsonb")
     expect(c4R4Battery).toContain('k5a_c4_exact_recall_failed')
-    expect(c4R4Battery).toContain('k5a_c4_r4_plan_stability_failed')
-    expect(c4R4Battery).toContain('k5a_c4_r4_foreign_corpus_changed')
-    expect(c4R4Battery).toContain('derived_ann_threshold_units')
+    expect(c4R4Battery).toContain('k5a_c4_r5_plan_mechanism_failed')
+    expect(c4R4Battery).toContain('k5a_c4_r5_foreign_corpus_changed')
+    expect(c4R4Battery).toContain('unit_rows_read')
+    expect(c4R4Battery).toContain('timing_envelope_3sigma_ms')
+    expect(c4R4Battery).toContain("'g5_ann_threshold_units', NULL")
+    expect(c4R4Battery).not.toContain('derived_ann_threshold_units')
     expect(c4R4Battery).not.toMatch(
       /SET LOCAL (enable_|hnsw\.)|SET (enable_|hnsw\.)/,
     )

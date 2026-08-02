@@ -2,6 +2,13 @@
 
 Status: `BLOCKED-R4-PLAN-STABILITY`
 
+Round 5 resolved this C4 letter-versus-mechanism blocker. The unchanged
+candidate reproduced byte-identical results and p95 355.837 ms → 364.273 ms
+with only interior executor placement changing. Stage 2 is now blocked earlier
+by the kernel-wide no-forcing reproof of C3; see
+`k5a-r5-kernel-no-forcing-blocked-2026-08-02.md`. The revised C4 mechanism
+battery has not yet run to a green verdict.
+
 Prior clean Stage-2 checkpoint: `ae8d666`. R4 blocker checkpoint: this
 receipt's commit on `feature/k5a-graph-memory`.
 

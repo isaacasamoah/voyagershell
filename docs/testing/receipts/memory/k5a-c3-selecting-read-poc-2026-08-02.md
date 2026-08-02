@@ -1,6 +1,13 @@
 # K5a C3/C4 selecting and search read — local proof (2026-08-02)
 
-Status: `C3 passed; original C4 result superseded by the R4 blocker receipt`
+Status: `superseded — R5 no-forcing reproof exposed C3 foreign enumeration`
+
+The production result recorded below was obtained while the v3 function and
+the plan probes disabled sequential and bitmap scans. Round 5 ruled those GUCs
+illegal kernel-wide. Their removal exposed a sequential annotation-index scan
+whose filtered rows grew with foreign degree. See
+`k5a-r5-kernel-no-forcing-blocked-2026-08-02.md`; this receipt is historical
+evidence, not a current passing verdict.
 
 Sanitization: the proof used only synthetic claims and the existing disposable
 K3/K4 fixture identities. No hosted identifier, credential, personal corpus,
