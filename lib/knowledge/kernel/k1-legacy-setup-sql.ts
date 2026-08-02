@@ -4,19 +4,19 @@ const quote = (value: string): string => `'${value.replaceAll("'", "''")}'`
 const legacyRelation = ['knowledge', 'edges'].join('_')
 
 export const renderK1LegacySetupSql = (seed: K1FixtureSeed): string => {
-  const voyageSlug = `oru-319-k1-${seed.voyageId}`
-  const otherVoyageSlug = `oru-319-k1-${seed.otherVoyageId}`
-  const missingVoyageSlug = `oru-319-k1-missing-${seed.unresolvedEventId}`
+  const voyageSlug = `voyager-k1-${seed.voyageId}`
+  const otherVoyageSlug = `voyager-k1-${seed.otherVoyageId}`
+  const missingVoyageSlug = `voyager-k1-missing-${seed.unresolvedEventId}`
   return `
 -- K1 controls exist only inside the hosted rollback transaction.
 INSERT INTO auth.users(id, email, raw_user_meta_data, created_at) VALUES
-  (${quote(seed.ownerId)}::uuid, ${quote(`oru-319-k1-${seed.ownerId}@example.invalid`)},
+  (${quote(seed.ownerId)}::uuid, ${quote(`voyager-k1-${seed.ownerId}@example.invalid`)},
     '{"display_name":"K1 owner"}'::jsonb, now()),
-  (${quote(seed.recipientId)}::uuid, ${quote(`oru-319-k1-${seed.recipientId}@example.invalid`)},
+  (${quote(seed.recipientId)}::uuid, ${quote(`voyager-k1-${seed.recipientId}@example.invalid`)},
     '{"display_name":"K1 recipient"}'::jsonb, now());
 INSERT INTO public.voyages(id, slug, name) VALUES
-  (${quote(seed.voyageId)}::uuid, ${quote(voyageSlug)}, 'ORU-319 K1 backfill'),
-  (${quote(seed.otherVoyageId)}::uuid, ${quote(otherVoyageSlug)}, 'ORU-319 K1 other');
+  (${quote(seed.voyageId)}::uuid, ${quote(voyageSlug)}, 'K1 backfill'),
+  (${quote(seed.otherVoyageId)}::uuid, ${quote(otherVoyageSlug)}, 'K1 other');
 INSERT INTO public.voyage_members(id, voyage_id, user_id, role) VALUES
   (${quote(seed.voyageMemberId)}::uuid, ${quote(seed.voyageId)}::uuid,
     ${quote(seed.ownerId)}::uuid, 'crew'),

@@ -59,7 +59,7 @@ export interface K1FixtureSeed {
 }
 
 const fixtureUuid = (namespace: string, label: keyof K1FixtureSeed): string => {
-  const hex = createHash('sha256').update(`oru-319-k1:${namespace}:${label}`).digest('hex')
+  const hex = createHash('sha256').update(`voyager-k1:${namespace}:${label}`).digest('hex')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
 }
 

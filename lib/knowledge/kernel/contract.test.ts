@@ -29,7 +29,7 @@ const migrationPaths = [
 const migrations = (): string => migrationPaths.map(readRepoFile).join('\n')
 const cloneFixture = (): any => structuredClone(knowledgeGraphFixture)
 
-describe('ORU-319 final graph substrate contract', () => {
+describe('final knowledge graph substrate contract', () => {
   it('locks six canonical node kinds and all sixteen edge kinds', () => {
     expect(new Set(knowledgeGraphFixture.nodes.map((node) => node.kind)))
       .toEqual(new Set(K2_GRAPH_NODE_KINDS))
@@ -209,7 +209,7 @@ describe('ORU-319 final graph substrate contract', () => {
   })
 
   it('runs the uninstalled graph and active-membership cut in one rollback recipe', () => {
-    const recipe = readRepoFile('recipes/knowledge-graph-poc.sh')
+    const recipe = readRepoFile('recipes/hosted/rollback/knowledge-graph-poc.sh')
     const transaction = readRepoFile('recipes/lib/knowledge-graph-transaction.sh')
     expect(transaction).toContain('BEGIN;')
     expect(transaction).toContain('ROLLBACK;')

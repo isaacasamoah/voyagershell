@@ -4,20 +4,13 @@ set -euo pipefail; set +x
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-source "$SCRIPT_DIR/lib/installed-precondition.sh"
-source "$SCRIPT_DIR/lib/knowledge-graph-transaction.sh"
-CANONICAL_REF="iesprdzzgjypnksoljym"
-if [ "$#" -ne 1 ]; then
-  printf 'usage: %s DISPOSABLE_PROJECT_REF\n' "${0##*/}" >&2
-  exit 2
-fi
-PROJECT_REF="$1"
-case "$PROJECT_REF" in *[!a-z0-9]*|'') printf 'knowledge-graph: invalid disposable project ref\n' >&2; exit 2 ;; esac
-if [ "$PROJECT_REF" = "$CANONICAL_REF" ]; then
-  printf 'knowledge-graph: canonical project ref is forbidden\n' >&2
-  exit 3
-fi
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$REPO_ROOT/recipes/lib/hosted-target.sh"
+source "$REPO_ROOT/recipes/lib/installed-precondition.sh"
+source "$REPO_ROOT/recipes/lib/knowledge-graph-transaction.sh"
+hosted_target_require knowledge-graph || exit $?
+hosted_confirmation_require knowledge-graph \
+  VOYAGER_ALLOW_HOSTED_ROLLBACK || exit $?
 PROOF_SQL="$REPO_ROOT/recipes/sql/knowledge-graph"
 PRODUCT_MIGRATIONS=("$REPO_ROOT/supabase/migrations/054_active_membership_authority.sql"
   "$REPO_ROOT/supabase/migrations/055_active_knowledge_retrieval.sql"
@@ -47,7 +40,12 @@ INSTALLED_POSTCONDITION="$PROOF_SQL/../installed-post-059-contract.sql"
 API_URL="https://api.supabase.com/v1/projects/$PROJECT_REF/database/query"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/voyager-knowledge-graph.XXXXXX")"
 INSTALLED_PRECONDITION="$TEMP_DIR/installed-precondition.sql"
-cleanup() { unset ACCESS_TOKEN VOYAGER_SUPABASE_ACCESS_TOKEN; rm -rf -- "$TEMP_DIR"; }
+cleanup() {
+  unset ACCESS_TOKEN VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF \
+    VOYAGER_ALLOW_HOSTED_ROLLBACK VOYAGER_SUPABASE_ACCESS_TOKEN \
+    VOYAGER_SUPABASE_PROJECT_REF
+  rm -rf -- "$TEMP_DIR"
+}
 trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 for command_name in curl jq; do
@@ -72,39 +70,11 @@ installed_precondition_compose "$REPO_ROOT" > "$INSTALLED_PRECONDITION" || {
   printf 'knowledge-graph: dependencies missing; run npm ci first\n' >&2
   exit 2
 }
-if [ -n "${VOYAGER_SUPABASE_ACCESS_TOKEN:-}" ]; then
-  ACCESS_TOKEN="$VOYAGER_SUPABASE_ACCESS_TOKEN"
-elif [ -r /Users/isaac/.supabase/access-token ]; then
-  ACCESS_TOKEN=
-  if ! IFS= read -r ACCESS_TOKEN < /Users/isaac/.supabase/access-token \
-    && [ -z "$ACCESS_TOKEN" ]; then
-    printf 'knowledge-graph: local Supabase token file is empty or unreadable\n' >&2
-    exit 2
-  fi
-else
-  command -v ssh >/dev/null || {
-    printf 'knowledge-graph: ssh required for Fedora token fallback\n' >&2
-    exit 2
-  }
-  if ! ACCESS_TOKEN="$(ssh -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=1 fedora '
-      test -r /home/isaac/.supabase/access-token || exit 1
-      token=
-      IFS= read -r token < /home/isaac/.supabase/access-token || test -n "$token"
-      test -n "$token" || exit 1
-      printf %s "$token"
-    ')"; then
-    printf 'knowledge-graph: Fedora Supabase token fallback failed\n' >&2
-    exit 2
-  fi
-fi
-[ -n "$ACCESS_TOKEN" ] || {
-  printf 'knowledge-graph: Supabase access token unavailable\n' >&2
-  exit 2
-}
-case "$ACCESS_TOKEN" in *$'\r'*|*$'\n'*) printf 'knowledge-graph: invalid Supabase access token\n' >&2; exit 2 ;; esac
+hosted_access_token_require knowledge-graph || exit $?
 printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$ACCESS_TOKEN" > "$TEMP_DIR/headers.txt"
 chmod 600 "$TEMP_DIR/headers.txt"
-unset ACCESS_TOKEN VOYAGER_SUPABASE_ACCESS_TOKEN
+unset ACCESS_TOKEN VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF \
+  VOYAGER_ALLOW_HOSTED_ROLLBACK VOYAGER_SUPABASE_PROJECT_REF
 query_api() {
   local sql_file="$1"
   local response_file="$2"

@@ -6,7 +6,7 @@ const read = (path: string): string => readFileSync(resolve(process.cwd(), path)
 const migration = read('supabase/migrations/072_event_driven_cartographer.sql')
 const currentCompletion = read('supabase/migrations/076_topic_identity_hardening.sql')
 const localProof = read('recipes/cartographer-k3-local-proof.sh')
-const hostedProof = read('recipes/knowledge-graph-poc.sh')
+const hostedProof = read('recipes/hosted/rollback/knowledge-graph-poc.sh')
 const hostedTransaction = read('recipes/lib/knowledge-graph-transaction.sh')
 const targetCatalog = read('recipes/sql/knowledge-graph/catalog-targets.sql')
 

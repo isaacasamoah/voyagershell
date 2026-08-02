@@ -24,11 +24,11 @@ INSERT INTO public.space_members(space_id, user_id, state) VALUES
 INSERT INTO public.knowledge_events(id, event_type, user_id, voyage_slug, content,
   metadata, source_type, actor_type, participants, sequence_num) VALUES
   (${uuid(seed.childHistoricalEventId)}, 'message', ${uuid(seed.ownerId)},
-    ${quote(`oru-319-k1-${seed.voyageId}`)}, 'K1 child-left historical source',
+    ${quote(`voyager-k1-${seed.voyageId}`)}, 'K1 child-left historical source',
     ${quote(JSON.stringify({ session_id: seed.sessionId }))}::jsonb, 'explicit', 'pipeline',
     ARRAY[${uuid(seed.ownerId)}, ${uuid(seed.childFormerId)}], -319311),
   (${uuid(seed.parentHistoricalEventId)}, 'message', ${uuid(seed.ownerId)},
-    ${quote(`oru-319-k1-${seed.voyageId}`)}, 'K1 parent-left historical source',
+    ${quote(`voyager-k1-${seed.voyageId}`)}, 'K1 parent-left historical source',
     ${quote(JSON.stringify({ session_id: seed.sessionId }))}::jsonb, 'explicit', 'pipeline',
     ARRAY[${uuid(seed.ownerId)}, ${uuid(seed.parentFormerId)}], -319312);
 UPDATE public.space_members SET state = 'left'

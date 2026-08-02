@@ -39,16 +39,16 @@ jobs:
           # (not connecting to real services)
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
-          SUPABASE_SERVICE_ROLE_KEY: placeholder
+          SUPABASE_SECRET_KEY: placeholder
           ANTHROPIC_API_KEY: placeholder
           OPENAI_API_KEY: placeholder
-          GOOGLE_GENERATIVE_AI_API_KEY: placeholder
+          GOOGLE_GEMINI_API_KEY: placeholder
 
       - name: Test
         run: npm run test:run
 
       - name: Recipe syntax
-        run: bash -n recipes/*.sh recipes/lib/*.sh
+        run: find recipes -type f -name '*.sh' -print0 | xargs -0 bash -n
 
       - name: Pull installed-authority database image
         run: docker pull pgvector/pgvector@sha256:18d16372b8406bb38a9f94cbff15d125c463d71fde2770aa8b5c64bfcc1578ee

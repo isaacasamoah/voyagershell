@@ -2,7 +2,7 @@ import type { K1FixtureSeed } from './k1-fixture-seed'
 import { quote, uuid } from './sql'
 
 export const renderActiveMembershipAssertionsSql = (seed: K1FixtureSeed): string => {
-  const voyageSlug = `oru-319-k1-${seed.voyageId}`
+  const voyageSlug = `voyager-k1-${seed.voyageId}`
   return `
 DO $active_membership$
 DECLARE v_member_id uuid; v_revision bigint; v_invite text; v_joined uuid;

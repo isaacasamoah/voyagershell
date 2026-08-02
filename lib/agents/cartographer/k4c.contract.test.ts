@@ -20,7 +20,9 @@ const relationJobs = read('lib/agents/cartographer/relation-jobs.ts')
 const recipe = read('recipes/cartographer-k4c-local-proof.sh')
 const assertions = read('recipes/sql/cartographer-k4c-assertions.sql')
 const fullSuite = read('recipes/full-suite.sh')
-const proof = read('docs/testing/k4c-conflict-local-proof-2026-08-01.md')
+const proof = read(
+  'docs/testing/receipts/memory/k4c-conflict-local-proof-2026-08-01.md',
+)
 
 describe('K4c relation conflict contract', () => {
   it('pins the measured two-call asymmetric contract without examples', () => {

@@ -1,6 +1,12 @@
 # K4b local proof — topic nodes and ordered backfill
 
-Status: `structural and implementation-bound matcher pass`
+Status: `current`
+
+Result: structural and implementation-bound matcher pass.
+
+Sanitization: live topic labels and the exact hosted target were redacted.
+Revisions, candidate shapes, similarity measurements, verdicts, limitations,
+and residue counts are retained.
 
 This record covers the bounded, disposable-Postgres proof for K4b. It decides
 whether the re-derived topic identity pipeline meets its local Test boundary.
@@ -26,7 +32,7 @@ It is not browser, hosted-database, deployment, or release evidence.
 | Three phrasings, one subject | `quantum engines`, `QE systems`, and `quantum propulsion` resolved to one authority/topic node with exactly three inbound `about` edges. |
 | Genuinely new subject | `sourdough fermentation` minted exactly one new authority/topic node. |
 | Concurrent paraphrase race | Two independent “new topic” completions waited behind the global advisory key. One committed; the other received `knowledge_topic_candidates_stale`, was re-matched against the new candidate, and reused it. One topic node and two inbound `about` edges remained. |
-| Adjacent but distinct | Orthogonal fixtures for `marathon training` and `trail running` produced exactly two topic nodes. |
+| Adjacent but distinct | Orthogonal fixtures for two related activities produced exactly two topic nodes. |
 | Private-only visibility | A separate `private telescope` topic had one private unit, one private-audience grant, and no room evidence. The outside viewer received no existence grant, label, root traversal, or authorized neighbor/degree count. With that viewer's authenticated identity installed, an exact table-count probe for the topic was permission-denied. |
 | Mixed visibility | The unrelated viewer received no grant, label, root traversal, or authorized degree for the mixed `recovery planning` topic. The room member saw the topic label and exactly the room unit/degree `1`; the private unit was absent. The private author saw both units/degree `2`. Four general authority-surface probes as `authenticated` were also permission-denied. |
 | Enqueue-first cutover | An open event transaction held the active-pointer `FOR SHARE` lock. Activation was still waiting when probed. The event committed first with v3, after which activation completed; the v3 job was drained before re-derivation. |
@@ -55,34 +61,35 @@ Forge, pull request, merge, preview, or production action occurred.
 
 ## Live pass, 2026-07-29 — K4-C2 falsified on real embeddings
 
-Migration `074` was applied to `voyager-dev` and the backfill run against it:
+Migration `074` was applied to the authorized development database and the
+backfill run against it:
 contract v3 activated, 6 units re-derived, assertions clean (0 non-terminal
 pre-v3 jobs, 0 units missing physics, 0 units missing topic derivation).
 
-**What worked.** Both physio units — separate source events — resolved to the
-same `physio appointment` topic. Convergence across events is real. Types
-re-derived sensibly (marathon → domain, physio → operational, preferences →
-preference), and `about → person` edges were preserved.
+**What worked.** Two live units from separate source events resolved to the
+same topic. Convergence across events is real. Types re-derived sensibly across
+domain, operational, and preference claims, and `about → person` edges were
+preserved.
 
 **What failed.** Measured `text-embedding-3-small` cosine similarity on the
 actual labels, against the 0.7 threshold:
 
 | Must merge | | Must stay separate | |
 |---|---|---|---|
-| `quantum engines` ~ `the qe work` | 0.447 | `coffee consumption` ~ `coffee shops` | 0.611 |
-| `the qe work` ~ `quantum propulsion` | 0.380 | `marathon training` ~ `trail running` | 0.601 |
-| `coffee consumption` ~ `caffeine habits` | 0.646 | `melbourne half marathon` ~ `running training` | 0.424 |
+| must-merge pair A | 0.447 | must-split pair A | 0.611 |
+| must-merge pair B | 0.380 | must-split pair B | 0.601 |
+| must-merge live pair | 0.646 | must-split live pair | 0.424 |
 
 Must-merge runs as low as **0.380**; must-split runs as high as **0.611**. The
 bands overlap, so no single threshold satisfies both directions. This is a
 design falsification, not a calibration gap — and it reproduced on real data,
-not only the contrived example: the backfill minted both `coffee consumption`
-and `caffeine habits` for one claim.
+not only the contrived example: the backfill minted two topic labels for one
+live claim.
 
 The structural proof passed because it used synthetic vectors. That is the
 limitation the build report named honestly, and it was the right one to name.
 
-**Residue on `voyager-dev`:** 8 topics minted under the falsified rule, usable
+**Residue on the development database:** 8 topics minted under the falsified rule, usable
 but knowingly over-split. The replacement now includes controlled
 re-derivation; applying it to that live residue remains a separately authorized
 operation and was not part of this proof.

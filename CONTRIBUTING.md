@@ -58,17 +58,19 @@ The canonical graph contract is:
 - typed immutable node grants;
 - immutable canonical historical edges with exact event evidence;
 - rebuildable current authority edges projected from product rows; and
-- root and per-hop authorization behind the future graph retrieval boundary.
+- root and per-hop authorization behind the registered `graph_memory` boundary.
 
 MessageEvent and KnowledgeUnit visibility must exactly inherit the source
 audience. Structural historical visibility requires the exact edge-evidence
 basis. A link never creates endpoint grants. Current membership checks must use
 `state = 'active'`; retained `left` rows grant nothing.
 
-The K2 cutover removed the event-only `graph` tool, so nothing traverses the
-graph today. Code may extend `lib/knowledge/kernel/boundary.ts` and its privacy
-contract, but it stays isolated from UI, chat, tools and live writers until K3
-gives it claims to return.
+The K2 cutover removed the event-only `graph` tool. The current
+`graph_memory` tool traverses the canonical graph from the speaking Person and
+returns only authorized typed claims. K3 supplies source-derived units, K4b
+adds canonical topic identity, and K4c adds evidence-gated conflict and
+supersession relations. Extend `lib/knowledge/kernel/boundary.ts` without
+exposing paths, counts, grants, evidence, labels, edge metadata, or provenance.
 
 ## Migration safety
 
@@ -81,7 +83,7 @@ gives it claims to return.
 - Preserve token secrecy and use `curl --fail-with-body` plus an exact verdict.
 - Prove the public catalogue is unchanged after rollback.
 
-Product migration files currently end at the K2 response recovery, 071. File numbering and
+Product migration files currently end at the K4c relation ledger, 077. File numbering and
 the hosted migration ledger are not installed-state authority: run the shared
 pre-054 catalogue contract before applying 054–059. Migrations 060–071 are ONE
 release boundary — source intent, graph substrate, cutover with backfill and
@@ -92,6 +94,10 @@ event, MessageEvent node, grants, historical edges/evidence, and fan-out.
 Voyager replies use that same writer and inherit the claimed human source
 audience; never recompute it from the current room. The bounded `NULL -> UUID`
 transition exists only for deployment-gap recovery.
+
+Migrations 072–077 add event-owned extraction, the registered graph-memory
+reader, canonical topic identity, and the relation-conflict ledger. They do not
+change the rule that `knowledge_events` is the only event-content authority.
 
 ## Pull requests
 

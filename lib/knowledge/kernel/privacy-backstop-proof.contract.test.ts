@@ -13,8 +13,14 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const runnerPath = resolve(process.cwd(), 'recipes/privacy-backstop-proof.sh')
+const runnerPath = resolve(
+  process.cwd(),
+  'recipes/hosted/rollback/privacy-backstop-proof.sh',
+)
 const runner = readFileSync(runnerPath, 'utf8')
+const hostedGuard = readFileSync(resolve(
+  process.cwd(), 'recipes/lib/hosted-target.sh',
+), 'utf8')
 
 const runWithFailingCurl = () => {
   const root = mkdtempSync(join(tmpdir(), 'privacy-backstop-contract.'))
@@ -50,6 +56,9 @@ const runWithFailingCurl = () => {
       MOCK_CURL_LOG: curlLog,
       MOCK_RESPONSE: response,
       VOYAGER_SUPABASE_ACCESS_TOKEN: 'sensitive-token-value',
+      VOYAGER_SUPABASE_PROJECT_REF: 'developmentprojectref',
+      VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF: 'developmentprojectref',
+      VOYAGER_ALLOW_HOSTED_ROLLBACK: '1',
     },
   })
   const curlArgs = existsSync(curlLog) ? readFileSync(curlLog, 'utf8') : ''
@@ -80,6 +89,9 @@ const runTracedBeforeNetwork = () => {
       PATH: `${mockBin}:${process.env.PATH ?? ''}`,
       TMPDIR: runtime,
       VOYAGER_SUPABASE_ACCESS_TOKEN: 'traced-sensitive-token-value',
+      VOYAGER_SUPABASE_PROJECT_REF: 'developmentprojectref',
+      VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF: 'developmentprojectref',
+      VOYAGER_ALLOW_HOSTED_ROLLBACK: '1',
     },
   })
   const curlInvoked = existsSync(curlMarker)
@@ -108,6 +120,9 @@ const runWithInvalidToken = (controlCharacter: '\r' | '\n') => {
       PATH: `${mockBin}:${process.env.PATH ?? ''}`,
       TMPDIR: runtime,
       VOYAGER_SUPABASE_ACCESS_TOKEN: `invalid${controlCharacter}token`,
+      VOYAGER_SUPABASE_PROJECT_REF: 'developmentprojectref',
+      VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF: 'developmentprojectref',
+      VOYAGER_ALLOW_HOSTED_ROLLBACK: '1',
     },
   })
   const curlInvoked = existsSync(curlMarker)
@@ -117,11 +132,26 @@ const runWithInvalidToken = (controlCharacter: '\r' | '\n') => {
 }
 
 describe('privacy backstop proof runner contract', () => {
-  it('bounds Fedora credential discovery and the Management API call', () => {
-    expect(runner).toContain(
-      'ssh -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=1 fedora',
+  it('has no credential fallback and bounds the Management API call', () => {
+    expect(`${hostedGuard}\n${runner}`).not.toMatch(
+      /access-token|\/Users\/|\/home\/|\bssh\b/,
     )
     expect(runner).toContain('--connect-timeout 15 --max-time 180')
+  })
+
+  it('rejects an unauthorized target before credential or network access', () => {
+    const result = spawnSync('/bin/bash', [runnerPath], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        VOYAGER_SUPABASE_PROJECT_REF: 'unexpectedprojectref',
+        VOYAGER_AUTHORIZED_SUPABASE_PROJECT_REF: 'approveddevelopmentref',
+        VOYAGER_ALLOW_HOSTED_ROLLBACK: '1',
+        VOYAGER_SUPABASE_ACCESS_TOKEN: 'must-not-be-read',
+      },
+    })
+    expect(result.status).toBe(3)
+    expect(result.stderr).toContain('target is not explicitly authorized')
   })
 
   it('ignores curl configuration first and redacts reflected failures', () => {
@@ -144,7 +174,9 @@ describe('privacy backstop proof runner contract', () => {
     const { curlInvoked, result, runtimeEntries } = runTracedBeforeNetwork()
     const combinedOutput = result.stdout + result.stderr
     const traceDisabled = runner.indexOf('set +x')
-    const credentialAccess = runner.indexOf('VOYAGER_SUPABASE_ACCESS_TOKEN:-')
+    const credentialAccess = runner.indexOf(
+      'hosted_access_token_require privacy-backstop',
+    )
 
     expect(traceDisabled).toBeGreaterThan(-1)
     expect(traceDisabled).toBeLessThan(credentialAccess)
@@ -162,14 +194,19 @@ describe('privacy backstop proof runner contract', () => {
     (_label, controlCharacter) => {
       const { curlInvoked, result, runtimeEntries } =
         runWithInvalidToken(controlCharacter)
-      const tokenGuard = runner.indexOf('case "$ACCESS_TOKEN" in')
+      const tokenGuard = hostedGuard.indexOf(
+        'case "$VOYAGER_SUPABASE_ACCESS_TOKEN" in',
+      )
       const headerWrite = runner.indexOf('> "$TEMP_DIR/headers.txt"')
 
       expect(result.status).toBe(2)
-      expect(result.stderr).toContain('invalid Supabase access token')
+      expect(result.stderr).toContain(
+        'VOYAGER_SUPABASE_ACCESS_TOKEN is invalid',
+      )
       expect(curlInvoked).toBe(false)
       expect(tokenGuard).toBeGreaterThan(-1)
-      expect(tokenGuard).toBeLessThan(headerWrite)
+      expect(tokenGuard).toBeGreaterThan(-1)
+      expect(headerWrite).toBeGreaterThan(-1)
       expect(runtimeEntries).toEqual([])
     },
   )

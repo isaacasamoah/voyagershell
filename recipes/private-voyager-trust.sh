@@ -32,6 +32,6 @@ rg -q 'GRANT EXECUTE ON FUNCTION public.promote_private_voyager_reply\(UUID, UUI
 ! rg -q 'createMessageEvent|fanOutDeliveries|getActiveMemberIds' lib/messaging/share.ts
 ! rg -q 'setShared\(' components/chat/AssistantMessage.tsx
 ! rg -q 'pickOwnVoyagerHandle|voyagerCustomName' lib components app
-rg -q '^ROLLBACK;$' recipes/private-reply-promotion-proof.sql
+rg -q '^ROLLBACK;$' recipes/sql/private-reply-promotion-proof.sql
 
 echo "PRIVATE_VOYAGER_TRUST_GREEN"
