@@ -1,5 +1,25 @@
 \set ON_ERROR_STOP on
 
+\if :{?response_floor_ms}
+\else
+  \echo 'response_floor_ms must be supplied from boundary.ts'
+  \quit
+\endif
+\if :{?small_page_budget}
+\else
+  \echo 'small_page_budget must be supplied by the proof driver'
+  \quit
+\endif
+
+CREATE TABLE public.k5a_c3_runtime_config (
+  response_floor_ms double precision NOT NULL CHECK (response_floor_ms > 0),
+  small_relation_page_budget integer NOT NULL
+    CHECK (small_relation_page_budget > 0)
+);
+INSERT INTO public.k5a_c3_runtime_config(
+  response_floor_ms, small_relation_page_budget
+) VALUES (:response_floor_ms, :small_page_budget);
+
 -- K5a C3 remains a disposable selecting-read proof. Migration 079 owns the
 -- durable annotation projection; the function below proves the R3 algorithm
 -- against that real table without installing a production read function.
@@ -573,7 +593,7 @@ BEGIN
 END
 $$;
 
-CREATE TEMP TABLE k5a_c3_units(name text PRIMARY KEY, id uuid NOT NULL);
+CREATE TABLE public.k5a_c3_units(name text PRIMARY KEY, id uuid NOT NULL);
 DO $k5a_c3_seed$
 DECLARE
   v_owner uuid := '72000000-0000-4000-8000-000000000001';
@@ -737,7 +757,160 @@ BEGIN
 END
 $k5a_c3_seed$;
 
-DO $k5a_c3_assertions$
+CREATE FUNCTION public.k5a_c3_annotation_plan_poc(
+  p_endpoint_unit_id uuid,
+  p_viewer_profile_id uuid
+) RETURNS jsonb
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_plan jsonb;
+BEGIN
+  EXECUTE format(
+    'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '
+    'SELECT partner_unit_id, edge_id, assertion_attempt_id, input_unit_ids '
+    'FROM public.knowledge_relation_annotation_index '
+    'WHERE endpoint_unit_id = %L::uuid AND assertion_person_id = %L::uuid '
+    'ORDER BY repair_priority, assertion_recorded_at DESC, edge_id, assertion_attempt_id '
+    'LIMIT 9', p_endpoint_unit_id, p_viewer_profile_id
+  ) INTO STRICT v_plan;
+  RETURN v_plan;
+END
+$$;
+
+CREATE FUNCTION public.k5a_c3_plan_nodes_poc(p_plan jsonb)
+RETURNS TABLE(path text, node jsonb)
+LANGUAGE sql IMMUTABLE STRICT
+SET search_path = pg_catalog AS $$
+  WITH RECURSIVE nodes(node, path) AS (
+    SELECT p_plan->0->'Plan', '0000'::text
+    UNION ALL
+    SELECT child.value,
+      nodes.path || '.' || lpad(child.ordinality::text, 4, '0')
+    FROM nodes
+    CROSS JOIN LATERAL jsonb_array_elements(
+      coalesce(nodes.node->'Plans', '[]'::jsonb)
+    ) WITH ORDINALITY child(value, ordinality)
+  )
+  SELECT path, node
+  FROM nodes
+$$;
+
+CREATE FUNCTION public.k5a_c3_annotation_mechanism_poc(p_plan jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql STABLE STRICT
+SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_row_sources text[];
+  v_rows_read bigint;
+  v_rows_removed bigint;
+  v_relation_pages integer;
+  v_node_types text[];
+  v_index_names text[];
+BEGIN
+  SELECT array_agg(source ORDER BY source) INTO v_row_sources
+  FROM (
+    SELECT DISTINCT node->>'Relation Name' AS source
+    FROM public.k5a_c3_plan_nodes_poc(p_plan)
+    WHERE node ? 'Relation Name'
+  ) sources;
+  SELECT coalesce(sum(
+      (
+        coalesce((node->>'Actual Rows')::bigint, 0)
+        + coalesce((node->>'Rows Removed by Filter')::bigint, 0)
+        + coalesce((node->>'Rows Removed by Index Recheck')::bigint, 0)
+      ) * coalesce((node->>'Actual Loops')::bigint, 1)
+    ), 0),
+    coalesce(sum(
+      (
+        coalesce((node->>'Rows Removed by Filter')::bigint, 0)
+        + coalesce((node->>'Rows Removed by Index Recheck')::bigint, 0)
+      ) * coalesce((node->>'Actual Loops')::bigint, 1)
+    ), 0),
+    array_agg(DISTINCT node->>'Node Type' ORDER BY node->>'Node Type')
+  INTO v_rows_read, v_rows_removed, v_node_types
+  FROM public.k5a_c3_plan_nodes_poc(p_plan)
+  WHERE node->>'Relation Name' = 'knowledge_relation_annotation_index';
+  SELECT array_agg(DISTINCT node->>'Index Name' ORDER BY node->>'Index Name')
+  INTO v_index_names
+  FROM public.k5a_c3_plan_nodes_poc(p_plan)
+  WHERE node ? 'Index Name';
+  SELECT ceil(
+    pg_relation_size('public.knowledge_relation_annotation_index'::regclass)
+      / current_setting('block_size')::numeric
+  )::integer INTO v_relation_pages;
+  RETURN jsonb_build_object(
+    'row_sources', to_jsonb(v_row_sources),
+    'node_types', to_jsonb(coalesce(v_node_types, '{}'::text[])),
+    'index_names', to_jsonb(coalesce(v_index_names, '{}'::text[])),
+    'rows_read', v_rows_read,
+    'rows_removed_by_filter', v_rows_removed,
+    'relation_pages', v_relation_pages
+  );
+END
+$$;
+
+CREATE FUNCTION public.k5a_c3_foreign_focus_result_poc()
+RETURNS jsonb
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_member uuid := '72000000-0000-4000-8000-000000000002';
+  v_focus uuid;
+  v_own uuid;
+  v_exclusions uuid[];
+BEGIN
+  SELECT id INTO STRICT v_focus FROM public.k5a_c3_units
+  WHERE name = 'foreign-focus';
+  SELECT id INTO STRICT v_own FROM public.k5a_c3_units
+  WHERE name = 'foreign-own';
+  SELECT array_agg(id ORDER BY id) INTO v_exclusions
+  FROM public.knowledge_units WHERE id NOT IN (v_focus, v_own);
+  RETURN public.retrieve_knowledge_graph_claims_v3(
+    v_member, v_member, v_exclusions, 2, 8, 32, 8, 8, 512, 128
+  );
+END
+$$;
+
+CREATE FUNCTION public.k5a_c3_measure_reader_p95_poc(
+  p_expected jsonb,
+  p_repetitions integer DEFAULT 10
+) RETURNS double precision
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_started timestamptz;
+  v_result jsonb;
+  v_samples double precision[] := '{}';
+  i integer;
+BEGIN
+  IF p_repetitions < 10 THEN
+    RAISE EXCEPTION 'k5a_c3_reader_sample_too_small';
+  END IF;
+  PERFORM public.k5a_c3_foreign_focus_result_poc();
+  FOR i IN 1..p_repetitions LOOP
+    v_started := clock_timestamp();
+    v_result := public.k5a_c3_foreign_focus_result_poc();
+    IF v_result IS DISTINCT FROM p_expected THEN
+      RAISE EXCEPTION 'k5a_c3_reader_result_changed:%:%',
+        p_expected, v_result;
+    END IF;
+    v_samples := array_append(
+      v_samples,
+      extract(epoch FROM clock_timestamp() - v_started) * 1000
+    );
+  END LOOP;
+  RETURN (
+    SELECT percentile_disc(0.95) WITHIN GROUP (ORDER BY sample)
+    FROM unnest(v_samples) sample
+  );
+END
+$$;
+
+CREATE FUNCTION public.k5a_c3_assert_behavior_poc(p_regime text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public AS $k5a_c3_assertions$
 DECLARE
   v_owner uuid := '72000000-0000-4000-8000-000000000001';
   v_member uuid := '72000000-0000-4000-8000-000000000002';
@@ -749,11 +922,8 @@ DECLARE
   v_chain_full jsonb;
   v_chain_priority jsonb;
   v_chain_bounded jsonb;
-  v_foreign_before jsonb;
-  v_foreign_after jsonb;
-  v_plan_before jsonb;
-  v_plan_after jsonb;
   v_suppressed_plan jsonb;
+  v_suppressed_mechanism jsonb;
   v_exclusions uuid[];
   v_stale uuid;
   v_fresh uuid;
@@ -767,15 +937,14 @@ DECLARE
   v_chain_c uuid;
   v_chain_d uuid;
   v_chain_x uuid;
-  v_foreign_focus uuid;
-  v_foreign_own uuid;
   v_started timestamptz;
-  v_index_before_elapsed double precision;
-  v_index_after_elapsed double precision;
-  v_reader_before_elapsed double precision;
-  v_reader_after_elapsed double precision;
-  i integer;
+  v_response_floor_ms double precision;
 BEGIN
+  IF p_regime NOT IN ('small', 'realistic') THEN
+    RAISE EXCEPTION 'k5a_c3_regime_invalid:%', p_regime;
+  END IF;
+  SELECT response_floor_ms INTO STRICT v_response_floor_ms
+  FROM public.k5a_c3_runtime_config;
   SELECT id INTO STRICT v_stale FROM k5a_c3_units WHERE name = 'stale';
   SELECT id INTO STRICT v_fresh FROM k5a_c3_units WHERE name = 'fresh';
   SELECT id INTO STRICT v_correction FROM k5a_c3_units WHERE name = 'correction';
@@ -791,10 +960,6 @@ BEGIN
   SELECT id INTO STRICT v_chain_c FROM k5a_c3_units WHERE name = 'chain-c';
   SELECT id INTO STRICT v_chain_d FROM k5a_c3_units WHERE name = 'chain-d';
   SELECT id INTO STRICT v_chain_x FROM k5a_c3_units WHERE name = 'chain-x';
-  SELECT id INTO STRICT v_foreign_focus FROM k5a_c3_units
-    WHERE name = 'foreign-focus';
-  SELECT id INTO STRICT v_foreign_own FROM k5a_c3_units
-    WHERE name = 'foreign-own';
 
   SELECT array_agg(id ORDER BY id) INTO v_exclusions
   FROM public.knowledge_units
@@ -881,7 +1046,8 @@ BEGIN
     v_member, v_member, v_exclusions, 1, 2, 16, 4, 8, 512, 128
   );
   IF v_high_degree->>'truncated' <> 'true'
-    OR extract(epoch FROM clock_timestamp() - v_started) >= 0.55
+    OR extract(epoch FROM clock_timestamp() - v_started) * 1000
+      >= v_response_floor_ms
     OR jsonb_array_length(v_high_degree->'claims') <> 3 THEN
     RAISE EXCEPTION 'k5a_c3_own_degree_overflow_failed:%', v_high_degree;
   END IF;
@@ -938,145 +1104,125 @@ BEGIN
     RAISE EXCEPTION 'k5a_c3_chain_middle_degradation_failed:%', v_chain_bounded;
   END IF;
 
-  -- Degree independence is measured at the amended annotation boundary. The
-  -- same viewer seek runs before and after 128 foreign-person rows are added.
-  ANALYZE public.knowledge_relation_annotation_index;
-  EXECUTE format(
-    'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '
-    'SELECT partner_unit_id, edge_id, assertion_attempt_id, input_unit_ids '
-    'FROM public.knowledge_relation_annotation_index '
-    'WHERE endpoint_unit_id = %L::uuid AND assertion_person_id = %L::uuid '
-    'ORDER BY repair_priority, assertion_recorded_at DESC, edge_id, assertion_attempt_id '
-    'LIMIT 9', v_foreign_focus, v_member
-  ) INTO v_plan_before;
-  v_started := clock_timestamp();
-  FOR i IN 1..50 LOOP
-    PERFORM * FROM (
-      SELECT partner_unit_id
-      FROM public.knowledge_relation_annotation_index
-      WHERE endpoint_unit_id = v_foreign_focus
-        AND assertion_person_id = v_member
-      ORDER BY repair_priority, assertion_recorded_at DESC,
-        edge_id, assertion_attempt_id
-      LIMIT 9
-    ) own_rows;
-  END LOOP;
-  v_index_before_elapsed := extract(epoch FROM clock_timestamp() - v_started);
+  v_suppressed_plan := public.k5a_c3_annotation_plan_poc(
+    v_suppressed_top, v_member
+  );
+  v_suppressed_mechanism := public.k5a_c3_annotation_mechanism_poc(
+    v_suppressed_plan
+  );
+  IF v_suppressed_mechanism->'row_sources'
+      IS DISTINCT FROM '["knowledge_relation_annotation_index"]'::jsonb
+    OR v_suppressed_plan::text LIKE '%knowledge_relation_assertions%'
+    OR v_suppressed_plan::text NOT LIKE '%' || v_suppressed_top::text || '%'
+    OR v_suppressed_plan::text NOT LIKE '%' || v_member::text || '%'
+    OR (v_suppressed_mechanism->>'rows_read')::bigint < 0
+    OR (p_regime = 'realistic' AND (
+      jsonb_array_length(v_suppressed_mechanism->'index_names') = 0
+      OR (v_suppressed_mechanism->>'rows_removed_by_filter')::bigint <> 0
+    )) THEN
+    RAISE EXCEPTION 'k5a_c3_suppressed_pair_plan_failed:%:%:%',
+      p_regime, v_suppressed_mechanism, v_suppressed_plan;
+  END IF;
 
-  SELECT array_agg(id ORDER BY id) INTO v_exclusions
-  FROM public.knowledge_units WHERE id NOT IN (v_foreign_focus, v_foreign_own);
-  PERFORM public.retrieve_knowledge_graph_claims_v3(
-    v_member, v_member, v_exclusions, 2, 8, 32, 8, 8, 512, 128
+  RETURN jsonb_build_object(
+    'atomic', v_result,
+    'deduped', v_deduped,
+    'suppressed', v_suppressed,
+    'baseline', v_baseline,
+    'own_degree', v_high_degree,
+    'chain_full', v_chain_full,
+    'chain_priority', v_chain_priority,
+    'chain_bounded', v_chain_bounded,
+    'suppressed_mechanism', v_suppressed_mechanism
   );
-  v_started := clock_timestamp();
-  v_foreign_before := public.retrieve_knowledge_graph_claims_v3(
-    v_member, v_member, v_exclusions, 2, 8, 32, 8, 8, 512, 128
-  );
-  v_reader_before_elapsed := extract(epoch FROM clock_timestamp() - v_started);
+END
+$k5a_c3_assertions$;
+
+DO $k5a_c3_small_regime$
+DECLARE
+  v_owner uuid := '72000000-0000-4000-8000-000000000001';
+  v_member uuid := '72000000-0000-4000-8000-000000000002';
+  v_focus uuid;
+  v_own uuid;
+  v_behavior_before jsonb;
+  v_behavior_after jsonb;
+  v_result_before jsonb;
+  v_result_after jsonb;
+  v_plan_before jsonb;
+  v_plan_after jsonb;
+  v_mechanism_before jsonb;
+  v_mechanism_after jsonb;
+  v_p95_before double precision;
+  v_p95_after double precision;
+  v_response_floor_ms double precision;
+  v_page_budget integer;
+  i integer;
+BEGIN
+  SELECT response_floor_ms, small_relation_page_budget
+  INTO STRICT v_response_floor_ms, v_page_budget
+  FROM public.k5a_c3_runtime_config;
+  SELECT id INTO STRICT v_focus FROM public.k5a_c3_units
+  WHERE name = 'foreign-focus';
+  SELECT id INTO STRICT v_own FROM public.k5a_c3_units
+  WHERE name = 'foreign-own';
+
+  ANALYZE public.knowledge_relation_annotation_index;
+  v_behavior_before := public.k5a_c3_assert_behavior_poc('small');
+  v_result_before := public.k5a_c3_foreign_focus_result_poc();
+  IF v_result_before->>'truncated' <> 'false' THEN
+    RAISE EXCEPTION 'k5a_c3_foreign_degree_output_changed:%', v_result_before;
+  END IF;
+  v_plan_before := public.k5a_c3_annotation_plan_poc(v_focus, v_member);
+  v_mechanism_before := public.k5a_c3_annotation_mechanism_poc(v_plan_before);
+  v_p95_before := public.k5a_c3_measure_reader_p95_poc(v_result_before);
 
   FOR i IN 1..128 LOOP
     PERFORM public.k5a_c3_seed_relation_poc(
-      v_foreign_own, v_foreign_focus, v_owner, 'supersedes', i
+      v_own, v_focus, v_owner, 'supersedes', i
     );
   END LOOP;
   ANALYZE public.knowledge_relation_annotation_index;
-  EXECUTE format(
-    'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '
-    'SELECT partner_unit_id, edge_id, assertion_attempt_id, input_unit_ids '
-    'FROM public.knowledge_relation_annotation_index '
-    'WHERE endpoint_unit_id = %L::uuid AND assertion_person_id = %L::uuid '
-    'ORDER BY repair_priority, assertion_recorded_at DESC, edge_id, assertion_attempt_id '
-    'LIMIT 9', v_foreign_focus, v_member
-  ) INTO v_plan_after;
-  v_started := clock_timestamp();
-  FOR i IN 1..50 LOOP
-    PERFORM * FROM (
-      SELECT partner_unit_id
-      FROM public.knowledge_relation_annotation_index
-      WHERE endpoint_unit_id = v_foreign_focus
-        AND assertion_person_id = v_member
-      ORDER BY repair_priority, assertion_recorded_at DESC,
-        edge_id, assertion_attempt_id
-      LIMIT 9
-    ) own_rows;
-  END LOOP;
-  v_index_after_elapsed := extract(epoch FROM clock_timestamp() - v_started);
+  v_behavior_after := public.k5a_c3_assert_behavior_poc('small');
+  v_result_after := public.k5a_c3_foreign_focus_result_poc();
+  v_plan_after := public.k5a_c3_annotation_plan_poc(v_focus, v_member);
+  v_mechanism_after := public.k5a_c3_annotation_mechanism_poc(v_plan_after);
+  v_p95_after := public.k5a_c3_measure_reader_p95_poc(v_result_after);
 
-  SELECT array_agg(id ORDER BY id) INTO v_exclusions
-  FROM public.knowledge_units WHERE id NOT IN (v_foreign_focus, v_foreign_own);
-  PERFORM public.retrieve_knowledge_graph_claims_v3(
-    v_member, v_member, v_exclusions, 2, 8, 32, 8, 8, 512, 128
-  );
-  v_started := clock_timestamp();
-  v_foreign_after := public.retrieve_knowledge_graph_claims_v3(
-    v_member, v_member, v_exclusions, 2, 8, 32, 8, 8, 512, 128
-  );
-  v_reader_after_elapsed := extract(epoch FROM clock_timestamp() - v_started);
-  IF v_plan_before::text NOT LIKE '%knowledge_relation_annotation_own_lookup%'
-    OR v_plan_after::text NOT LIKE '%knowledge_relation_annotation_own_lookup%'
-    OR v_plan_before::text NOT LIKE '%"Index Cond":%'
-    OR v_plan_after::text NOT LIKE '%"Index Cond":%'
-    OR v_plan_before::text LIKE '%"Filter":%'
-    OR v_plan_after::text LIKE '%"Filter":%'
-    OR v_plan_before::text NOT LIKE '%' || v_foreign_focus::text || '%'
-    OR v_plan_after::text NOT LIKE '%' || v_foreign_focus::text || '%'
-    OR v_plan_before::text NOT LIKE '%' || v_member::text || '%'
-    OR v_plan_after::text NOT LIKE '%' || v_member::text || '%'
-    OR v_plan_before::text LIKE '%knowledge_relation_assertions%'
-    OR v_plan_after::text LIKE '%knowledge_relation_assertions%'
-    OR v_plan_before #>> '{0,Plan,Node Type}'
-      IS DISTINCT FROM v_plan_after #>> '{0,Plan,Node Type}'
-    OR v_plan_before #>> '{0,Plan,Plans,0,Node Type}'
-      IS DISTINCT FROM v_plan_after #>> '{0,Plan,Plans,0,Node Type}'
-    OR v_plan_before #>> '{0,Plan,Plans,0,Index Name}'
-      IS DISTINCT FROM v_plan_after #>> '{0,Plan,Plans,0,Index Name}'
-    OR v_plan_before #>> '{0,Plan,Plans,0,Index Cond}'
-      IS DISTINCT FROM v_plan_after #>> '{0,Plan,Plans,0,Index Cond}'
-    OR v_plan_before::text NOT LIKE '%"Actual Rows": 1%'
-    OR v_plan_after::text NOT LIKE '%"Actual Rows": 1%'
+  IF v_result_before IS DISTINCT FROM v_result_after
+    OR v_behavior_before - 'suppressed_mechanism'
+      IS DISTINCT FROM v_behavior_after - 'suppressed_mechanism'
+    OR (v_mechanism_before->>'relation_pages')::integer > v_page_budget
+    OR (v_mechanism_after->>'relation_pages')::integer > v_page_budget
+    OR NOT (v_mechanism_before->'node_types' ? 'Seq Scan')
+    OR NOT (v_mechanism_after->'node_types' ? 'Seq Scan')
+    OR v_p95_before >= v_response_floor_ms
+    OR v_p95_after >= v_response_floor_ms
+    OR greatest(v_p95_before, v_response_floor_ms)
+      IS DISTINCT FROM greatest(v_p95_after, v_response_floor_ms)
     OR (SELECT count(*)
         FROM public.knowledge_relation_annotation_index annotation
-        WHERE annotation.endpoint_unit_id = v_foreign_focus
+        WHERE annotation.endpoint_unit_id = v_focus
           AND annotation.assertion_person_id = v_owner) <> 128
     OR (SELECT count(*)
         FROM public.knowledge_relation_annotation_index annotation
-        WHERE annotation.endpoint_unit_id = v_foreign_focus
-          AND annotation.assertion_person_id = v_member) <> 1
-    OR abs(v_index_before_elapsed - v_index_after_elapsed) >= 0.2
-    OR greatest(v_index_before_elapsed, v_index_after_elapsed) >= 0.55
-    OR abs(v_reader_before_elapsed - v_reader_after_elapsed) >= 0.2
-    OR greatest(v_reader_before_elapsed, v_reader_after_elapsed) >= 0.55 THEN
-    RAISE EXCEPTION 'k5a_c3_foreign_degree_independence_failed:%:%:%:%:%:%',
-      v_plan_before, v_plan_after,
-      v_index_before_elapsed, v_index_after_elapsed,
-      v_reader_before_elapsed, v_reader_after_elapsed;
+        WHERE annotation.endpoint_unit_id = v_focus
+          AND annotation.assertion_person_id = v_member) <> 1 THEN
+    RAISE EXCEPTION 'k5a_c3_r6_small_regime_failed:%:%:%:%:%:%:%:%',
+      v_behavior_before, v_behavior_after,
+      v_mechanism_before, v_mechanism_after,
+      v_p95_before, v_p95_after, v_response_floor_ms, v_page_budget;
   END IF;
 
-  IF v_foreign_before->>'truncated' <> 'false'
-    OR v_foreign_before IS DISTINCT FROM v_foreign_after THEN
-    RAISE EXCEPTION 'k5a_c3_foreign_degree_output_changed:%:%',
-      v_foreign_before, v_foreign_after;
-  END IF;
-
-  EXECUTE format(
-    'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '
-    'SELECT partner_unit_id, edge_id, assertion_attempt_id, input_unit_ids '
-    'FROM public.knowledge_relation_annotation_index '
-    'WHERE endpoint_unit_id = %L::uuid AND assertion_person_id = %L::uuid '
-    'ORDER BY repair_priority, assertion_recorded_at DESC, edge_id, assertion_attempt_id '
-    'LIMIT 9', v_suppressed_top, v_member
-  ) INTO v_suppressed_plan;
-  IF v_suppressed_plan::text NOT LIKE '%knowledge_relation_annotation_own_lookup%'
-    OR v_suppressed_plan::text NOT LIKE '%"Index Cond":%'
-    OR v_suppressed_plan::text LIKE '%"Filter":%'
-    OR v_suppressed_plan::text NOT LIKE '%' || v_suppressed_top::text || '%'
-    OR v_suppressed_plan::text NOT LIKE '%' || v_member::text || '%'
-    OR v_suppressed_plan::text LIKE '%knowledge_relation_assertions%'
-    OR v_suppressed_plan::text NOT LIKE '%"Actual Rows": 0%' THEN
-    RAISE EXCEPTION 'k5a_c3_suppressed_pair_plan_failed:%', v_suppressed_plan;
-  END IF;
+  RAISE NOTICE 'K5A_C3_R6_SMALL:%', jsonb_build_object(
+    'page_budget', v_page_budget,
+    'before', v_mechanism_before,
+    'after_128_foreign_assertions', v_mechanism_after,
+    'reader_p95_ms_before', round(v_p95_before::numeric, 3),
+    'reader_p95_ms_after', round(v_p95_after::numeric, 3),
+    'response_floor_ms_from_boundary_source', v_response_floor_ms
+  );
 END
-$k5a_c3_assertions$;
+$k5a_c3_small_regime$;
 
 DO $k5a_c4_victim_seat$
 DECLARE
@@ -1167,4 +1313,4 @@ GRANT EXECUTE ON FUNCTION public.k5a_c3_selecting_read_poc(
   integer, integer, integer
 ) TO service_role;
 
-SELECT 'CARTOGRAPHER_K5A_C3_R3_POC_GREEN';
+SELECT 'CARTOGRAPHER_K5A_C3_R6_SMALL_GREEN';

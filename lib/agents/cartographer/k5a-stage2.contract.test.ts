@@ -8,6 +8,7 @@ const read = (path: string): string =>
 const migration = read('supabase/migrations/079_knowledge_unit_read.sql')
 const vectorMigration = read('supabase/migrations/076_topic_identity_hardening.sql')
 const battery = read('recipes/sql/cartographer-k5a-c3-poc.sql')
+const realisticBattery = read('recipes/sql/cartographer-k5a-c3-realistic.sql')
 const c4R4Battery = read('recipes/sql/cartographer-k5a-c4-r4-assertions.sql')
 const concurrentProbe = read('recipes/sql/cartographer-k5a-c3-probe.sql')
 const boundary = read('lib/knowledge/kernel/boundary.ts')
@@ -51,10 +52,17 @@ describe('K5a stage-two contract', () => {
       .toBeGreaterThan(8)
     expect(battery).toContain('k5a_c3_exclude_unit_dedupe_failed')
     expect(battery).toContain('k5a_c3_atomic_top_k_failed')
-    expect(battery).toContain('k5a_c3_foreign_degree_independence_failed')
+    expect(realisticBattery).toContain('k5a_c3_r6_realistic_regime_failed')
     expect(battery).toContain('k5a_c3_own_degree_overflow_failed')
     expect(battery).toContain('k5a_c3_chain_middle_degradation_failed')
     expect(battery).not.toMatch(/SET(?: LOCAL)? enable_/)
+    expect(realisticBattery).not.toMatch(/SET(?: LOCAL)? enable_/)
+    expect(battery).toContain("k5a_c3_assert_behavior_poc('small')")
+    expect(realisticBattery).toContain("k5a_c3_assert_behavior_poc('realistic')")
+    expect(realisticBattery).toContain('k5a_c3_r6_crossover_failed')
+    expect(realisticBattery).toContain("? 'knowledge_relation_annotation_own_lookup'")
+    expect(realisticBattery).toContain("v_mechanism_before->'rows_read'")
+    expect(realisticBattery).toContain('timing_envelope_3sigma_ms')
     expect(concurrentProbe).toContain(
       'public.retrieve_knowledge_graph_claims_v3(',
     )
@@ -75,6 +83,10 @@ describe('K5a stage-two contract', () => {
     const authorized = semanticRead.indexOf(
       'authorized AS MATERIALIZED', membership,
     )
+    const grantBound = semanticRead.indexOf(
+      "canonical_graph_node_id('knowledge_unit', candidate.id)",
+      membership,
+    )
     const exactDistance = semanticRead.indexOf(
       'unit.embedding <=> p_query_embedding', authorized,
     )
@@ -94,6 +106,8 @@ describe('K5a stage-two contract', () => {
     expect(migration).toContain('public.traverse_knowledge_graph(')
     expect(membership).toBeGreaterThan(-1)
     expect(authorized).toBeGreaterThan(membership)
+    expect(grantBound).toBeGreaterThan(membership)
+    expect(grantBound).toBeLessThan(authorized)
     expect(exactDistance).toBeGreaterThan(authorized)
     expect(semanticRead).not.toMatch(
       /knowledge_units_embedding_hnsw|enable_seqscan|enable_bitmapscan|enable_sort|ef_search|iterative_scan/,

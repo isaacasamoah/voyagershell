@@ -10,6 +10,8 @@ DATABASE=voyager_cartographer_k5a_c3
 CONTAINER_NAME="voyager-cartographer-k5a-c3-$(date +%s)-$$"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/voyager-cartographer-k5a-c3.XXXXXX")"
 VITE_NODE="$REPO_ROOT/node_modules/.bin/vite-node"
+BOUNDARY_SOURCE="$REPO_ROOT/lib/knowledge/kernel/boundary.ts"
+SMALL_RELATION_PAGE_BUDGET=8
 PIDS=()
 
 fail() { printf 'cartographer-k5a-c3-local: %s\n' "$1" >&2; exit 1; }
@@ -38,6 +40,12 @@ docker_proof_detect_security >/dev/null 2>&1 || fail 'Docker daemon is unavailab
 docker image inspect "$IMAGE" >/dev/null 2>&1 \
   || fail 'the pinned pgvector image must already exist locally; pulling is forbidden'
 [ -x "$VITE_NODE" ] || fail 'dependencies missing; run npm install first'
+[ -f "$BOUNDARY_SOURCE" ] || fail 'knowledge-kernel boundary source is missing'
+RESPONSE_FLOOR_MS="$(sed -nE \
+  's/^const RESPONSE_FLOOR_MS = ([0-9][0-9_]*);$/\1/p' \
+  "$BOUNDARY_SOURCE" | tr -d '_')"
+[[ "$RESPONSE_FLOOR_MS" =~ ^[1-9][0-9]*$ ]] \
+  || fail 'could not read RESPONSE_FLOOR_MS from the knowledge-kernel boundary'
 for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql \
   "$REPO_ROOT"/supabase/migrations/{061,062,063,064,065,066,067,068,069,070,071,072,073,074,075,076,077,078,079}_*.sql \
   "$REPO_ROOT/recipes/sql/cartographer-k3-setup.sql" \
@@ -45,6 +53,7 @@ for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql
   "$REPO_ROOT/recipes/sql/cartographer-k4b-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k4c-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-poc.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-realistic.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r4-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql"; do
   [ -f "$file" ] || fail "missing SQL: $file"
@@ -124,11 +133,13 @@ for pass in 1 2; do
 done
 
 verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-  -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
+  -v ON_ERROR_STOP=1 -v response_floor_ms="$RESPONSE_FLOOR_MS" \
+  -v small_page_budget="$SMALL_RELATION_PAGE_BUDGET" \
+  -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-poc.sql")" \
   || fail 'C3 seeded-corpus assertions failed'
-[ "$verdict" = CARTOGRAPHER_K5A_C3_R3_POC_GREEN ] \
-  || fail 'exact C3 PoC verdict missing'
+[ "$verdict" = CARTOGRAPHER_K5A_C3_R6_SMALL_GREEN ] \
+  || fail 'exact small-regime C3 verdict missing'
 
 for index in $(seq 1 8); do
   docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
@@ -137,11 +148,33 @@ for index in $(seq 1 8); do
     > "$TEMP_DIR/probe-$index.out" 2>&1 &
   track_pid "$!"
 done
-reap_pids || fail 'one or more concurrent suppressed-pair probes failed'
+reap_pids || fail 'one or more small-regime concurrent probes failed'
 probe_verdicts="$(rg --no-filename -N '^K5A_C3_CONCURRENT_PROBE_GREEN$' \
   "$TEMP_DIR"/probe-*.out | wc -l | tr -d ' ')"
 [ "$probe_verdicts" = 8 ] \
-  || fail "8 concurrent probes produced $probe_verdicts green verdicts"
+  || fail "8 small-regime concurrent probes produced $probe_verdicts green verdicts"
+
+realistic_verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+  -v ON_ERROR_STOP=1 -v response_floor_ms="$RESPONSE_FLOOR_MS" \
+  -v small_page_budget="$SMALL_RELATION_PAGE_BUDGET" \
+  -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-realistic.sql")" \
+  || fail 'C3 realistic-regime assertions failed'
+[ "$realistic_verdict" = CARTOGRAPHER_K5A_C3_R6_REALISTIC_GREEN ] \
+  || fail 'exact realistic-regime C3 verdict missing'
+
+for index in $(seq 1 8); do
+  docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
+    -U postgres -d "$DATABASE" \
+    < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql" \
+    > "$TEMP_DIR/realistic-probe-$index.out" 2>&1 &
+  track_pid "$!"
+done
+reap_pids || fail 'one or more realistic-regime concurrent probes failed'
+probe_verdicts="$(rg --no-filename -N '^K5A_C3_CONCURRENT_PROBE_GREEN$' \
+  "$TEMP_DIR"/realistic-probe-*.out | wc -l | tr -d ' ')"
+[ "$probe_verdicts" = 8 ] \
+  || fail "8 realistic-regime concurrent probes produced $probe_verdicts green verdicts"
 
 c4_verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq \
   -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \

@@ -547,6 +547,10 @@ BEGIN
           AND candidate.embedding IS NOT NULL
           AND candidate.knowledge_type IS NOT NULL
           AND candidate.attention_score > 0
+          AND public.viewer_has_graph_node_grant(
+            public.canonical_graph_node_id('knowledge_unit', candidate.id),
+            p_viewer_profile_id
+          )
         ORDER BY candidate.id
         OFFSET 0
       ) unit
@@ -577,10 +581,6 @@ BEGIN
           WHERE retirement.knowledge_unit_id = unit.id
             AND retirement.person_id = p_viewer_profile_id
             AND retirement.act_kind = 'retired'
-        )
-        AND public.viewer_has_graph_node_grant(
-          public.canonical_graph_node_id('knowledge_unit', unit.id),
-          p_viewer_profile_id
         )
     ), scored AS MATERIALIZED (
       SELECT authorized.*,

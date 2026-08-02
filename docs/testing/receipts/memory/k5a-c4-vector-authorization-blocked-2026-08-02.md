@@ -1,20 +1,25 @@
 # K5a C4 vector authorization — R4 plan-stability blocker (2026-08-02)
 
-Status: `BLOCKED-R4-PLAN-STABILITY`
+Status: `SUPERSEDED-R4-PLAN-STABILITY-BLOCKER`
+
+Rounds 4 and 5 resolved this historical blocker. The exact authorized-subset
+implementation and mechanism-grade battery now pass; current evidence is in
+`k5a-r6-c3-r5-c4-local-proof-2026-08-03.md`. The plans below remain the
+evidence that rejected global ANN post-filtering.
 
 Round 5 resolved this C4 letter-versus-mechanism blocker. The unchanged
 candidate reproduced byte-identical results and p95 355.837 ms → 364.273 ms
-with only interior executor placement changing. Stage 2 is now blocked earlier
-by the kernel-wide no-forcing reproof of C3; see
-`k5a-r5-kernel-no-forcing-blocked-2026-08-02.md`. The revised C4 mechanism
-battery has not yet run to a green verdict.
+with only interior executor placement changing. Round 6 subsequently resolved
+the kernel-wide no-forcing reproof of C3, after which the revised C4 mechanism
+battery ran to a green verdict.
 
 Prior clean Stage-2 checkpoint: `ae8d666`. R4 blocker checkpoint: this
 receipt's commit on `feature/k5a-graph-memory`.
 
-This receipt is a blocking handoff, not a passing proof. Spec R4 has now ruled
-the vector-access design, but the re-PoC did not pass all four C4 bars. Do not
-merge, release, or describe K5a Stage 2 as complete from this branch.
+At its checkpoint, this receipt was a blocking handoff rather than a passing
+proof: the re-PoC did not pass all four C4 bars, so that revision was not to be
+merged, released, or described as K5a Stage 2 complete. Rounds 4 and 5 replaced
+that checkpoint verdict; the current result is recorded in the receipt above.
 
 ## R4 provenance reconciliation
 

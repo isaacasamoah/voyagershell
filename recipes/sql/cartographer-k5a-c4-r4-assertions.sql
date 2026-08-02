@@ -202,6 +202,9 @@ BEGIN
           AND candidate.embedding IS NOT NULL
           AND candidate.knowledge_type IS NOT NULL
           AND candidate.attention_score > 0
+          AND public.viewer_has_graph_node_grant(
+            public.canonical_graph_node_id('knowledge_unit', candidate.id), $1
+          )
         ORDER BY candidate.id
         OFFSET 0
       ) unit
@@ -231,9 +234,6 @@ BEGIN
           WHERE retirement.knowledge_unit_id = unit.id
             AND retirement.person_id = $1
             AND retirement.act_kind = 'retired'
-        )
-        AND public.viewer_has_graph_node_grant(
-          public.canonical_graph_node_id('knowledge_unit', unit.id), $1
         )
     ), scored AS MATERIALIZED (
       SELECT authorized.*,
@@ -317,9 +317,8 @@ BEGIN
     ]::text[]
     OR NOT EXISTS (
       SELECT 1 FROM public.k5a_c4_plan_nodes(p_plan)
-      WHERE node->>'Relation Name' = 'knowledge_audiences'
-        AND node->>'Index Name' =
-          'knowledge_audiences_member_profile_ids_lookup'
+      WHERE node->>'Index Name' =
+        'knowledge_audiences_member_profile_ids_lookup'
     )
     OR NOT EXISTS (
       SELECT 1 FROM public.k5a_c4_plan_nodes(p_plan)
