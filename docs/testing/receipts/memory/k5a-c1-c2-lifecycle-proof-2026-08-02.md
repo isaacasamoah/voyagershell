@@ -25,6 +25,7 @@ No live Supabase project or other live database was read or written.
 | --- | --- |
 | Restart safety | Migration `078` completed twice in one installed K4c-shaped database without duplicate types, relations, constraints, indexes, triggers, functions, or grants. |
 | Per-person sessions | Owner and room member stored distinct index rows for the same room session; each row used the durable session creation time. |
+| Legacy session upgrade | A pre-078 row carrying the retired writer's processing-time timestamp was normalized to durable `sessions.created_at` before effective distance could read it. |
 | Citation identity | Three same-session standing deliveries produced one act; standing, reach, and search produced distinct channelled acts. |
 | Eligibility | A room member could cite the shared unit and could not cite the owner-private unit; denial left no act. |
 | Attention arithmetic | Non-latched legacy fixtures matched the type-aware decay curve and 0.05 promotion increment; promotion capped at 1.0. |
@@ -32,6 +33,7 @@ No live Supabase project or other live database was read or written.
 | Promotion window | Standing acts and reach acts older than the newest six viewer sessions did not promote. |
 | Privacy | Owner citations changed only the owner's effective attention; the member's attention and session distance remained independently computed. |
 | Immutability | Update and delete attempts against lifecycle acts failed, and `knowledge_units` remained byte-identical across every read and act write. |
+| Citation shape | A direct cited-act insert with a null actor profile failed the lifecycle shape constraint. |
 | Database authority | The act relation and all writer/read functions were inaccessible to `authenticated`; service role retained the exact required grants. |
 
 ## TypeScript delivery boundary

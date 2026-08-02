@@ -58,7 +58,7 @@ describe('K5a stage-one contract', () => {
     expect(poc).toContain('p_annotation_check_budget')
   })
 
-  it('proves atomicity, suppression, honest truncation, and dedupe', () => {
+  it('records the empirical C3 battery and its independent-review blocker', () => {
     expect(poc).toContain('k5a_c3_atomic_top_k_failed')
     expect(poc).toContain('k5a_c3_suppressed_pair_signalled')
     expect(poc).toContain('k5a_c3_annotation_budget_failed')
@@ -68,6 +68,8 @@ describe('K5a stage-one contract', () => {
     expect(probe).toContain('K5A_C3_CONCURRENT_PROBE_GREEN')
     expect(fullSuite).toContain('./recipes/cartographer-k5a-c3-local-proof.sh')
     expect(receipt).toContain('CARTOGRAPHER_K5A_C3_LOCAL_GREEN')
+    expect(receipt).toContain('Status: `blocked at independent review`')
+    expect(receipt).toContain('pair repair processes only the original top-K')
   })
 
   it('installs the lifecycle substrate transactionally and re-runs it', () => {
@@ -78,9 +80,11 @@ describe('K5a stage-one contract', () => {
     expect(migration).toContain("'cited', 'retired'")
     expect(migration).toContain("'standing', 'reach', 'search'")
     expect(migration).toContain('PRIMARY KEY (user_id, session_id)')
+    expect(migration).toContain('SET started_at = session.created_at')
     expect(migration).toContain('knowledge_unit_citations_delivery_once')
     expect(migration).toContain('knowledge_unit_citations_viewer_session')
     expect(migration).toContain('p_channel IS NULL')
+    expect(migration).toContain('actor_profile_id IS NOT NULL')
     expect(migration).toContain("delivery_channel IN ('reach', 'search')")
     expect(migration).toContain('recent.distance BETWEEN 0 AND 5')
     expect(migration).toContain('FROM PUBLIC, anon, authenticated')
@@ -92,9 +96,11 @@ describe('K5a stage-one contract', () => {
   it('proves person isolation, immutable acts, and unit purity', () => {
     expect(lifecycleAssertions).toContain('k5a_channel_eligibility_or_person_isolation_failed')
     expect(lifecycleAssertions).toContain('k5a_viewer_session_distance_failed')
+    expect(lifecycleAssertions).toContain('k5a_legacy_session_timestamp_not_normalized')
     expect(lifecycleAssertions).toContain('k5a_terminal_zero_divergence_not_named')
     expect(lifecycleAssertions).toContain('k5a_citation_window_failed')
     expect(lifecycleAssertions).toContain('k5a_lifecycle_update_accepted')
+    expect(lifecycleAssertions).toContain('k5a_null_citation_actor_accepted')
     expect(lifecycleAssertions).toContain('k5a_attention_or_citation_mutated_unit')
     expect(fullSuite).toContain('./recipes/cartographer-k5a-c1-c2-local-proof.sh')
     expect(lifecycleReceipt).toContain('CARTOGRAPHER_K5A_C1_C2_LOCAL_GREEN')

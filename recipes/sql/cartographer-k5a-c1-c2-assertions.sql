@@ -28,6 +28,15 @@ BEGIN
   SELECT md5(string_agg(to_jsonb(unit)::text, '' ORDER BY unit.id))
   INTO v_before_digest FROM public.knowledge_units unit;
 
+  IF EXISTS (
+    SELECT 1 FROM public.session_index index_row
+    JOIN public.sessions session ON session.id::text = index_row.session_id
+    WHERE index_row.session_id = v_shared_session
+      AND index_row.started_at IS DISTINCT FROM session.created_at
+  ) THEN
+    RAISE EXCEPTION 'k5a_legacy_session_timestamp_not_normalized';
+  END IF;
+
   PERFORM public.upsert_person_session_index(v_owner, v_shared_session, 1);
   PERFORM public.upsert_person_session_index(v_member, v_shared_session, 1);
   IF (SELECT count(*) FROM public.session_index
@@ -69,6 +78,17 @@ BEGIN
       WHERE knowledge_unit_id = v_shared_unit AND person_id = v_member) <> 1 THEN
     RAISE EXCEPTION 'k5a_citation_key_or_privacy_failed';
   END IF;
+  BEGIN
+    INSERT INTO public.knowledge_unit_citations(
+      knowledge_unit_id, person_id, act_kind, session_id, delivery_channel,
+      actor_kind, actor_profile_id, basis_kind, basis_id, basis_version
+    ) VALUES (
+      v_shared_unit, v_owner, 'cited', v_shared_session, 'standing',
+      'person', NULL, 'delivery', v_shared_session, 1
+    );
+    RAISE EXCEPTION 'k5a_null_citation_actor_accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
 
   v_owner_attention := public.knowledge_unit_effective_attention(
     v_shared_unit, v_owner

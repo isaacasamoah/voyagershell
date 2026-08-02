@@ -63,6 +63,15 @@ $session_primary_key$;
 CREATE INDEX IF NOT EXISTS idx_session_index_user_started
   ON public.session_index(user_id, started_at DESC, session_id);
 
+-- The retired application writer stamped processing time. Effective distance
+-- is defined from durable session start, so normalize the legacy rows before
+-- any computed read can consume them.
+UPDATE public.session_index index_row
+SET started_at = session.created_at
+FROM public.sessions session
+WHERE session.id::text = index_row.session_id
+  AND index_row.started_at IS DISTINCT FROM session.created_at;
+
 CREATE TABLE IF NOT EXISTS public.knowledge_unit_citations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   knowledge_unit_id uuid NOT NULL
@@ -83,6 +92,7 @@ CREATE TABLE IF NOT EXISTS public.knowledge_unit_citations (
       AND session_id IS NOT NULL AND length(btrim(session_id)) > 0
       AND delivery_channel IS NOT NULL
       AND actor_kind = 'person'
+      AND actor_profile_id IS NOT NULL
       AND actor_profile_id = person_id
       AND basis_kind = 'delivery'
       AND basis_id = session_id

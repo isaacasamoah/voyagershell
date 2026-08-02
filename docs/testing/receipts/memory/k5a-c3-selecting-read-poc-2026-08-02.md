@@ -1,6 +1,6 @@
 # K5a C3 selecting read — local PoC proof (2026-08-02)
 
-Status: `current`
+Status: `blocked at independent review`
 
 Sanitization: the proof used only synthetic claims and the existing disposable
 K3/K4 fixture identities. No hosted identifier, credential, or personal corpus
@@ -17,6 +17,20 @@ CARTOGRAPHER_K5A_C3_LOCAL_GREEN
 ```
 
 No live Supabase project or other live database was read or written.
+
+This green marker is an empirical battery result, not an accepted C3 verdict.
+Independent Build review found that the PoC derives public truncation from raw
+tension degree and assertion-input pressure before the assertion is authorized.
+Moving authorization in front of those counters avoids the output leak but
+requires scanning arbitrary hidden degree before the stated budgets, which
+breaks the structural deadline bound. The approved privacy, honest-completeness,
+and bounded-check claims therefore need a Spec decision: an indexed current
+authorization projection, a hard degree invariant, or an explicit amendment.
+
+The same review found that pair repair processes only the original top-K
+snapshot. A promoted middle node in an A-B-C tension chain can survive without
+bringing C. A bounded repair queue and a three-node chain probe are required
+after the authorization design is settled.
 
 ## Observed battery
 
@@ -37,6 +51,7 @@ No live Supabase project or other live database was read or written.
 ./recipes/cartographer-k5a-c3-local-proof.sh
 ```
 
-This proves the selecting mechanism before the full migration-079 read is
-built. It does not install a production RPC, touch a hosted database, prove the
-future composer wording, or close K5a stages two through four.
+This records the seeded behavior that passed before the full migration-079 read
+is built. It does not prove the approved selecting mechanism, install a
+production RPC, touch a hosted database, prove the future composer wording, or
+authorize K5a stage two.

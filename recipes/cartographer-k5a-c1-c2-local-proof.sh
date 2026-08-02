@@ -103,6 +103,25 @@ docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
   < "$REPO_ROOT/recipes/sql/cartographer-k4c-assertions.sql" >/dev/null \
   || fail 'K4c fixture setup failed'
 
+# Reproduce the retired writer's upgrade shape: the global session key exists,
+# but started_at reflects processing time rather than durable session creation.
+docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+  -U postgres -d "$DATABASE" >/dev/null <<'SQL'
+CREATE TABLE IF NOT EXISTS public.session_index (
+  session_id text PRIMARY KEY,
+  user_id uuid NOT NULL,
+  started_at timestamptz DEFAULT now(),
+  event_count integer DEFAULT 0
+);
+INSERT INTO public.session_index(session_id, user_id, started_at, event_count)
+SELECT session.id::text, session.user_id,
+  session.created_at + interval '30 days', 1
+FROM public.sessions session
+WHERE session.id = '72000000-0000-4000-8000-000000000012'
+ON CONFLICT (session_id) DO UPDATE
+SET started_at = EXCLUDED.started_at, event_count = EXCLUDED.event_count;
+SQL
+
 for pass in 1 2; do
   docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
     -U postgres -d "$DATABASE" \
