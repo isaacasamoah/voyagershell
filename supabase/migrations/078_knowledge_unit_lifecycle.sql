@@ -60,8 +60,22 @@ BEGIN
 END
 $session_primary_key$;
 
+-- Migration 031 installed an older two-column index under this name. Replace
+-- that shape in place so the deterministic six-session probe can stop inside
+-- the index even when one person has a long session history.
+DO $session_window_index$
+DECLARE
+  v_index regclass := to_regclass('public.idx_session_index_user_started');
+BEGIN
+  IF v_index IS NOT NULL
+    AND pg_get_indexdef(v_index)
+      NOT LIKE '%(user_id, started_at DESC, session_id DESC)%' THEN
+    DROP INDEX public.idx_session_index_user_started;
+  END IF;
+END
+$session_window_index$;
 CREATE INDEX IF NOT EXISTS idx_session_index_user_started
-  ON public.session_index(user_id, started_at DESC, session_id);
+  ON public.session_index(user_id, started_at DESC, session_id DESC);
 
 -- The retired application writer stamped processing time. Effective distance
 -- is defined from durable session start, so normalize the legacy rows before
@@ -333,6 +347,8 @@ DECLARE
   v_distance integer;
   v_citations integer;
   v_retired boolean;
+  v_cutoff_started_at timestamptz;
+  v_cutoff_session_id text;
 BEGIN
   IF p_knowledge_unit_id IS NULL OR p_person_id IS NULL THEN
     RAISE EXCEPTION 'knowledge_unit_effective_attention_input_invalid'
@@ -358,21 +374,34 @@ BEGIN
   v_distance := public.knowledge_unit_session_distance(
     p_knowledge_unit_id, p_person_id
   );
+  SELECT index_row.started_at, index_row.session_id
+  INTO v_cutoff_started_at, v_cutoff_session_id
+  FROM public.session_index index_row
+  WHERE index_row.user_id = p_person_id
+  ORDER BY index_row.started_at DESC, index_row.session_id DESC
+  OFFSET 5 LIMIT 1;
   SELECT count(*)::integer INTO v_citations
-  FROM public.knowledge_unit_citations citation
-  JOIN (
-    SELECT session_id,
-      row_number() OVER (
-        ORDER BY started_at DESC, session_id DESC
-      ) - 1 AS distance
-    FROM public.session_index
-    WHERE user_id = p_person_id
-  ) recent ON recent.session_id = citation.session_id
+  FROM (
+    SELECT index_row.session_id
+    FROM public.session_index index_row
+    WHERE index_row.user_id = p_person_id
+      AND (
+        v_cutoff_started_at IS NULL
+        OR index_row.started_at > v_cutoff_started_at
+        OR (
+          index_row.started_at = v_cutoff_started_at
+          AND index_row.session_id >= v_cutoff_session_id
+        )
+      )
+    ORDER BY index_row.started_at DESC, index_row.session_id DESC
+    LIMIT 6
+  ) recent
+  JOIN public.knowledge_unit_citations citation
+    ON citation.session_id = recent.session_id
   WHERE citation.knowledge_unit_id = p_knowledge_unit_id
     AND citation.person_id = p_person_id
     AND citation.act_kind = 'cited'
-    AND citation.delivery_channel IN ('reach', 'search')
-    AND recent.distance BETWEEN 0 AND 5;
+    AND citation.delivery_channel IN ('reach', 'search');
   SELECT EXISTS (
     SELECT 1 FROM public.knowledge_unit_citations act
     WHERE act.knowledge_unit_id = p_knowledge_unit_id

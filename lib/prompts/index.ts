@@ -17,7 +17,7 @@ import { upsertPersonSessionIndex } from "@/lib/knowledge/lifecycle/session-inde
 import {
   graphMemoryReachWarning,
   mergeGraphStandingPreferences,
-  selectGraphStandingClaims,
+  selectGraphStandingDeliveryClaims,
 } from "./graph-standing";
 
 export * from "./types";
@@ -142,20 +142,23 @@ export const composeSystemPrompt = async (
         }),
   ]);
 
-  const standingClaims = selectGraphStandingClaims(graphMemory);
+  const standingDeliveryClaims = selectGraphStandingDeliveryClaims(graphMemory);
   const standingCitation = sessionId
     ? await recordKnowledgeUnitCitations({
         personId: userId,
         sessionId,
         channel: "standing",
-        knowledgeUnitIds: standingClaims.map(
+        knowledgeUnitIds: standingDeliveryClaims.map(
           (claim) => claim.knowledgeUnitId,
         ),
       })
     : { outcome: "failed" as const, inserted: 0 as const };
   const standingCitationFailed = standingCitation.outcome === "failed";
   const withheldEventIds = new Set(
-    standingClaims.map((claim) => claim.sourceEventId),
+    standingDeliveryClaims.map((claim) => claim.sourceEventId),
+  );
+  const withheldUnitIds = new Set(
+    standingDeliveryClaims.map((claim) => claim.knowledgeUnitId),
   );
   const deliveredProjectedWindow = standingCitationFailed
     ? {
@@ -169,7 +172,7 @@ export const composeSystemPrompt = async (
     ? {
         outcome: "success",
         claims: graphMemory.claims.filter(
-          (claim) => !standingClaims.includes(claim),
+          (claim) => !withheldUnitIds.has(claim.knowledgeUnitId),
         ),
         truncated: graphMemory.truncated,
       }
@@ -232,7 +235,7 @@ export const composeSystemPrompt = async (
   const dynamicParts: string[] = [];
   const graphWarning = graphMemoryReachWarning(graphMemory);
   if (graphWarning) dynamicParts.push(graphWarning);
-  if (standingCitationFailed && standingClaims.length > 0) {
+  if (standingCitationFailed && standingDeliveryClaims.length > 0) {
     dynamicParts.push(
       "# Memory delivery\nSome standing graph memory was withheld because its delivery could not be recorded. Do not infer that no additional memory exists.",
     );
@@ -288,14 +291,9 @@ export const composeSystemPrompt = async (
     staticPrompt,
     dynamicPrompt,
     retrieval,
-    workingMemoryUnitIds: graphMemory.claims
-      .filter(
-        (claim) =>
-          claim.knowledgeType === "preference" &&
-          claim.attentionScore >= 0.5 &&
-          (!standingCitationFailed || !standingClaims.includes(claim)),
-      )
-      .map((claim) => claim.knowledgeUnitId),
+    workingMemoryUnitIds: standingCitationFailed
+      ? []
+      : standingDeliveryClaims.map((claim) => claim.knowledgeUnitId),
   };
 };
 

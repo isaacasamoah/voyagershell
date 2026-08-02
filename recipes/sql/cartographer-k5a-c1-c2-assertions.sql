@@ -216,6 +216,60 @@ BEGIN
 END
 $k5a_c1_c2$;
 
+-- K5A-PERF: prove the production window probe remains proportional to the
+-- six-session physics window rather than the viewer's lifetime history.
+DO $k5a_recent_window_plan$
+DECLARE
+  v_owner uuid := '72000000-0000-4000-8000-000000000001';
+  v_cutoff_started_at timestamptz;
+  v_cutoff_session_id text;
+  v_plan jsonb;
+  v_shared_blocks integer;
+BEGIN
+  INSERT INTO public.session_index(session_id, user_id, started_at, event_count)
+  SELECT format('k5a-perf-%s', lpad(series::text, 5, '0')), v_owner,
+    '2040-01-01T00:00:00Z'::timestamptz + make_interval(secs => series), 0
+  FROM generate_series(1, 8000) series
+  ON CONFLICT (user_id, session_id) DO NOTHING;
+  ANALYZE public.session_index;
+
+  SELECT index_row.started_at, index_row.session_id
+  INTO STRICT v_cutoff_started_at, v_cutoff_session_id
+  FROM public.session_index index_row
+  WHERE index_row.user_id = v_owner
+  ORDER BY index_row.started_at DESC, index_row.session_id DESC
+  OFFSET 5 LIMIT 1;
+
+  EXECUTE $plan$
+    EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+    SELECT index_row.session_id
+    FROM public.session_index index_row
+    WHERE index_row.user_id = $1
+      AND (
+        index_row.started_at > $2
+        OR (
+          index_row.started_at = $2
+          AND index_row.session_id >= $3
+        )
+      )
+    ORDER BY index_row.started_at DESC, index_row.session_id DESC
+    LIMIT 6
+  $plan$ INTO STRICT v_plan
+  USING v_owner, v_cutoff_started_at, v_cutoff_session_id;
+
+  v_shared_blocks :=
+    coalesce((v_plan #>> '{0,Plan,Shared Hit Blocks}')::integer, 0)
+    + coalesce((v_plan #>> '{0,Plan,Shared Read Blocks}')::integer, 0);
+  IF v_plan::text NOT LIKE '%idx_session_index_user_started%'
+    OR v_plan::text LIKE '%"Node Type": "Seq Scan"%'
+    OR (v_plan #>> '{0,Plan,Actual Rows}')::integer > 6
+    OR v_shared_blocks > 64 THEN
+    RAISE EXCEPTION 'k5a_recent_window_plan_unbounded:%:%',
+      v_shared_blocks, v_plan;
+  END IF;
+END
+$k5a_recent_window_plan$;
+
 DO $k5a_catalogue$
 DECLARE
   v_primary_columns text[];

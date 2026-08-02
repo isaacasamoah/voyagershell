@@ -22,6 +22,12 @@ export interface KnowledgeGraphClaim {
   readonly sourceContent: string;
   readonly knowledgeType: "domain" | "operational" | "preference";
   readonly attentionScore: number;
+  readonly tensions: readonly KnowledgeGraphTension[];
+}
+
+export interface KnowledgeGraphTension {
+  readonly withUnitId: string;
+  readonly relativeRecency: "newer" | "older" | "same";
 }
 
 export interface KnowledgeGraphRetrievalOptions {
@@ -29,6 +35,10 @@ export interface KnowledgeGraphRetrievalOptions {
   readonly excludeUnitIds?: readonly string[];
   readonly nodeBudget?: number;
   readonly frontierBudget?: number;
+  readonly claimBudget?: number;
+  readonly perClaimPartnerCap?: number;
+  readonly annotationCheckBudget?: number;
+  readonly closureBudget?: number;
 }
 
 export interface KnowledgeGraphSuccess {
@@ -60,6 +70,7 @@ interface ClaimRow {
   readonly sourceContent: unknown;
   readonly knowledgeType: unknown;
   readonly attentionScore: unknown;
+  readonly tensions: unknown;
 }
 
 const wait = async (milliseconds: number): Promise<void> => {
@@ -81,6 +92,15 @@ const normalizeDepth = (depth: number | undefined): number => {
   return Math.min(Math.max(depth ?? 4, 0), 8);
 };
 
+const normalizeBudget = (
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number => Number.isInteger(value)
+  ? Math.min(Math.max(value ?? fallback, minimum), maximum)
+  : fallback;
+
 const toClaim = (value: unknown): KnowledgeGraphClaim | null => {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     return null;
@@ -94,6 +114,21 @@ const toClaim = (value: unknown): KnowledgeGraphClaim | null => {
     return null;
   if (typeof row.attentionScore !== "number" || row.attentionScore < 0 || row.attentionScore > 1)
     return null;
+  if (!Array.isArray(row.tensions)) return null;
+  const tensions = row.tensions.flatMap((value) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      return [];
+    const tension = value as Record<string, unknown>;
+    if (!isUuid(tension.withUnitId)) return [];
+    if (!["newer", "older", "same"].includes(String(tension.relativeRecency)))
+      return [];
+    return [{
+      withUnitId: tension.withUnitId,
+      relativeRecency:
+        tension.relativeRecency as KnowledgeGraphTension["relativeRecency"],
+    }];
+  });
+  if (tensions.length !== row.tensions.length) return null;
   return {
     knowledgeUnitId: row.knowledgeUnitId,
     claim: row.claim,
@@ -101,6 +136,7 @@ const toClaim = (value: unknown): KnowledgeGraphClaim | null => {
     sourceContent: row.sourceContent,
     knowledgeType: row.knowledgeType as KnowledgeGraphClaim["knowledgeType"],
     attentionScore: row.attentionScore,
+    tensions,
   };
 };
 
@@ -114,12 +150,24 @@ export const retrieveKnowledgeGraphClaims = async (
       return failure("invalid_request");
     const viewerProfileId = await requireAuth();
     if (!isUuid(viewerProfileId)) return failure("invalid_request");
+    const annotationCheckBudget = normalizeBudget(
+      options.annotationCheckBudget, 64, 1, 4096,
+    );
+    const closureBudget = normalizeBudget(
+      options.closureBudget, 16, 0, Math.min(64, annotationCheckBudget),
+    );
     const admin = getKnowledgeGraphCandidateClient();
     const rpcCall = Promise.resolve(
-      admin.rpc("retrieve_knowledge_graph_claims_v2", {
+      admin.rpc("retrieve_knowledge_graph_claims_v3", {
         p_root_authority_id: root.authorityId,
         p_viewer_profile_id: viewerProfileId,
         p_exclude_unit_ids: (options.excludeUnitIds ?? []).filter(isUuid),
+        p_claim_budget: normalizeBudget(options.claimBudget, 8, 1, 64),
+        p_per_claim_partner_cap: normalizeBudget(
+          options.perClaimPartnerCap, 8, 1, 16,
+        ),
+        p_annotation_check_budget: annotationCheckBudget,
+        p_closure_budget: closureBudget,
         p_max_depth: normalizeDepth(options.maxDepth),
         p_node_budget: options.nodeBudget ?? 512,
         p_frontier_budget: options.frontierBudget ?? 128,

@@ -1,7 +1,7 @@
 // Semantic search over the event-sourced knowledge system.
-import OpenAI from 'openai'
 import { getClientForContext } from '@/lib/supabase/authenticated'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { generateSearchEmbedding, toVectorString } from './search-embedding'
 import {
   transformKnowledgeNode,
   type KnowledgeNode,
@@ -10,22 +10,6 @@ import {
 } from './search-types'
 
 const getClientForUser = (userId: string) => getClientForContext({ userId })
-
-let openai: OpenAI | null = null
-const getOpenAI = (): OpenAI => {
-  if (!openai) openai = new OpenAI()
-  return openai
-}
-
-const generateEmbedding = async (text: string): Promise<number[]> => {
-  const response = await getOpenAI().embeddings.create({
-    model: 'text-embedding-3-small',
-    input: text,
-  })
-  return response.data[0].embedding
-}
-
-const toVectorString = (embedding: number[]): string => `[${embedding.join(',')}]`
 
 export const searchKnowledge = async (
   userId: string,
@@ -44,7 +28,7 @@ export const searchKnowledge = async (
     console.log(
       `[Knowledge] Search: "${query.slice(0, 50)}..." threshold: ${threshold}, limit: ${limit}, type: ${knowledgeType ?? 'all'}, minAttention: ${minAttention}`,
     )
-    const embedding = await generateEmbedding(query)
+    const embedding = await generateSearchEmbedding(query)
     const rpcKnowledgeType = knowledgeType && knowledgeType !== 'operational'
       ? knowledgeType : undefined
     const { data, error } = await getClientForUser(userId).rpc('search_knowledge', {

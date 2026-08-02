@@ -12,7 +12,8 @@ export type GraphTables = {
   knowledge_units: TableShape<{
     id: string; claim: string; source_event_id: string; extractor_version: string;
     claim_key: string; knowledge_audience_id: string; knowledge_type: string | null;
-    attention_score: number | null; embedding: string | null
+    attention_score: number | null; embedding: string | null;
+    claim_search_vector: unknown
   }, { id: string; claim: string; source_event_id: string; extractor_version: string;
     claim_key: string; knowledge_audience_id: string; knowledge_type?: string | null;
     attention_score?: number | null; embedding?: string | null }>

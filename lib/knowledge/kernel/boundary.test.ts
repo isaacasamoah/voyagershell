@@ -24,6 +24,7 @@ const AUTHORIZED_ROW = {
   sourceContent: "I left the amber notebook behind the blue atlas.",
   knowledgeType: "domain",
   attentionScore: 0.8,
+  tensions: [],
 };
 
 const settle = async <T>(promise: Promise<T>): Promise<T> => {
@@ -46,10 +47,14 @@ describe("knowledge-graph application boundary", () => {
       { kind: "person", authorityId: OWNER_ID },
       { excludeUnitIds: [AUTHORIZED_ROW.knowledgeUnitId] },
     ));
-    expect(rpcMock).toHaveBeenCalledWith("retrieve_knowledge_graph_claims_v2", {
+    expect(rpcMock).toHaveBeenCalledWith("retrieve_knowledge_graph_claims_v3", {
       p_root_authority_id: OWNER_ID,
       p_viewer_profile_id: OWNER_ID,
       p_exclude_unit_ids: [AUTHORIZED_ROW.knowledgeUnitId],
+      p_claim_budget: 8,
+      p_per_claim_partner_cap: 8,
+      p_annotation_check_budget: 64,
+      p_closure_budget: 16,
       p_max_depth: 4,
       p_node_budget: 512,
       p_frontier_budget: 128,

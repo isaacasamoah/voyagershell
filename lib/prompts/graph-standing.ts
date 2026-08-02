@@ -20,6 +20,23 @@ export const selectGraphStandingClaims = (
     claim.knowledgeType === "preference" && claim.attentionScore >= 0.5,
 );
 
+export const selectGraphStandingDeliveryClaims = (
+  graphMemory: KnowledgeGraphResult,
+): KnowledgeGraphClaim[] => {
+  const claimsByUnitId = new Map(
+    graphMemory.claims.map((claim) => [claim.knowledgeUnitId, claim]),
+  );
+  const delivered = new Map<string, KnowledgeGraphClaim>();
+  for (const claim of selectGraphStandingClaims(graphMemory)) {
+    delivered.set(claim.knowledgeUnitId, claim);
+    for (const tension of claim.tensions) {
+      const partner = claimsByUnitId.get(tension.withUnitId);
+      if (partner) delivered.set(partner.knowledgeUnitId, partner);
+    }
+  }
+  return Array.from(delivered.values());
+};
+
 export const selectGraphStandingPreferences = (
   curatedWindow: CuratedWindow,
   graphMemory: KnowledgeGraphResult,
@@ -36,23 +53,48 @@ export const mergeGraphStandingPreferences = (
   curatedWindow: CuratedWindow,
   graphMemory: KnowledgeGraphResult,
 ): CuratedWindow => {
+  const claimsByUnitId = new Map(
+    graphMemory.claims.map((claim) => [claim.knowledgeUnitId, claim]),
+  );
+  const tensionLabel = (claim: KnowledgeGraphClaim): string =>
+    claim.tensions.length === 0
+      ? ""
+      : ` [Memory tension: ${claim.tensions.map((tension) => {
+          const partner = claimsByUnitId.get(tension.withUnitId);
+          const partnerLabel = partner
+            ? `"${partner.claim}"`
+            : "another viewer-visible memory";
+          return `this claim is ${tension.relativeRecency} than ${partnerLabel}`;
+        }).join("; ")}.]`;
+  const standingByEventId = new Map(
+    selectGraphStandingClaims(graphMemory).map(
+      (claim) => [claim.sourceEventId, claim],
+    ),
+  );
+  const projectedPreferences = curatedWindow.preferences.map((item) => {
+    const standing = standingByEventId.get(item.eventId);
+    const label = standing ? tensionLabel(standing) : "";
+    return label ? { ...item, content: `${item.content}${label}` } : item;
+  });
   const graphPreferences: KnowledgeNode[] = selectGraphStandingPreferences(
     curatedWindow,
     graphMemory,
   )
-    .map((claim) => ({
-      eventId: claim.sourceEventId,
-      content: claim.claim,
-      classifications: [],
-      entities: [],
-      topics: [],
-      createdAt: new Date(),
-      knowledgeType: claim.knowledgeType,
-      attentionScore: claim.attentionScore,
-      contextSnippet: claim.claim,
-    }));
+    .map((claim) => {
+      return {
+        eventId: claim.sourceEventId,
+        content: `${claim.claim}${tensionLabel(claim)}`,
+        classifications: [],
+        entities: [],
+        topics: [],
+        createdAt: new Date(),
+        knowledgeType: claim.knowledgeType,
+        attentionScore: claim.attentionScore,
+        contextSnippet: claim.claim,
+      };
+    });
   return {
     ...curatedWindow,
-    preferences: [...curatedWindow.preferences, ...graphPreferences],
+    preferences: [...projectedPreferences, ...graphPreferences],
   };
 };

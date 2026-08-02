@@ -34,6 +34,8 @@ const PROJECTED_EVENT_ID = '71000000-0000-4000-8000-000000000003'
 const PROJECTED_UNIT_ID = '71000000-0000-4000-8000-000000000004'
 const NEW_EVENT_ID = '71000000-0000-4000-8000-000000000005'
 const NEW_UNIT_ID = '71000000-0000-4000-8000-000000000006'
+const CORRECTION_EVENT_ID = '71000000-0000-4000-8000-000000000007'
+const CORRECTION_UNIT_ID = '71000000-0000-4000-8000-000000000008'
 
 const projectedPreference: KnowledgeNode = {
   eventId: PROJECTED_EVENT_ID,
@@ -58,6 +60,7 @@ const graphPreference = (
   sourceContent: claim,
   knowledgeType: 'preference',
   attentionScore: 0.9,
+  tensions: [],
 })
 
 describe('standing graph-memory citations', () => {
@@ -136,6 +139,50 @@ describe('standing graph-memory citations', () => {
     expect(composed.dynamicPrompt).toContain(
       'standing graph memory was withheld because its delivery could not be recorded',
     )
+  })
+
+  it('cites and dedupes a rendered tension partner with its standing claim', async () => {
+    mocks.curatePromptWindow.mockResolvedValue({
+      preferences: [], operational: [], domainHeadlines: [],
+      totalTokens: 0, evictedCount: 0,
+    })
+    const standing: KnowledgeGraphClaim = {
+      ...graphPreference(
+        NEW_UNIT_ID, NEW_EVENT_ID, 'Use the old address.',
+      ),
+      tensions: [{
+        withUnitId: CORRECTION_UNIT_ID,
+        relativeRecency: 'older',
+      }],
+    }
+    mocks.retrieveKnowledgeGraphClaims.mockResolvedValue({
+      outcome: 'success',
+      claims: [standing, {
+        knowledgeUnitId: CORRECTION_UNIT_ID,
+        sourceEventId: CORRECTION_EVENT_ID,
+        claim: 'Use the new address.',
+        sourceContent: 'Use the new address.',
+        knowledgeType: 'operational',
+        attentionScore: 0.4,
+        tensions: [],
+      }],
+      truncated: false,
+    })
+
+    const composed = await composeSystemPrompt(PERSON_ID, {
+      sessionId: SESSION_ID,
+    })
+
+    expect(mocks.recordKnowledgeUnitCitations).toHaveBeenCalledWith({
+      personId: PERSON_ID,
+      sessionId: SESSION_ID,
+      channel: 'standing',
+      knowledgeUnitIds: [NEW_UNIT_ID, CORRECTION_UNIT_ID],
+    })
+    expect(composed.staticPrompt).toContain('Use the new address.')
+    expect(composed.workingMemoryUnitIds).toEqual([
+      NEW_UNIT_ID, CORRECTION_UNIT_ID,
+    ])
   })
 
   it('does not reach graph memory without a durable session index', async () => {

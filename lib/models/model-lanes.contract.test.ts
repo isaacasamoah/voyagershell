@@ -27,15 +27,18 @@ const EXPECTED_OPENAI_EMBEDDINGS = [
   "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/knowledge/event-storage.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
-  "lib/knowledge/search.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
+  "lib/knowledge/search-embedding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   'recipes/experiments/relation-conflict-harness-support.ts|getOpenAI().embeddings.create|relationContract.blocking.embeddingModel',
 ]
 
-const trackedTypeScript = (): string[] => execFileSync(
-  'git',
-  ['ls-files', '*.ts', '*.tsx'],
-  { encoding: 'utf8' },
-).trim().split('\n').filter(Boolean)
+const trackedTypeScript = (): string[] => [
+  ...execFileSync('git', ['ls-files', '*.ts', '*.tsx'], { encoding: 'utf8' })
+    .trim().split('\n').filter(Boolean),
+  ...execFileSync(
+    'git', ['ls-files', '--others', '--exclude-standard', '*.ts', '*.tsx'],
+    { encoding: 'utf8' },
+  ).trim().split('\n').filter(Boolean),
+]
 
 const productionEntries = (): SourceEntry[] => trackedTypeScript()
   .filter((file) => (

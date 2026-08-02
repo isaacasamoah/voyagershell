@@ -52,6 +52,14 @@ export type KnowledgeRelationAttemptRow = {
 export type KnowledgeRelationCompletionRow = {
   outcome: KnowledgeExtractionOutcomeKind; edge_ids: string[]; replayed: boolean
 }
+export type KnowledgeUnitSearchRow = {
+  unit_id: string; claim: string; source_event_id: string;
+  source_content: string; source_created_at: string; knowledge_type: string;
+  effective_attention: number; similarity: number | null
+}
+export type KnowledgeUnitKeywordRow = Omit<
+  KnowledgeUnitSearchRow, 'similarity'
+> & { rank_score: number }
 export type KnowledgeByIdRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'>
 export type VoyageMessageRow = Pick<KnowledgeSearchRow,
   'event_id' | 'content' | 'source_created_at' | 'sender_display_name' | 'sender_user_id'>
@@ -171,6 +179,10 @@ export type PublicFunctions = {
   keyword_search: { Args: { p_query: string; p_user_id: string; p_voyage_slug?: string | null;
     p_knowledge_type?: string | null; p_min_attention?: number; p_match_count?: number;
   }; Returns: KeywordSearchRow[] }
+  keyword_search_units: { Args: {
+    p_viewer_profile_id: string; p_query: string; p_match_count?: number;
+    p_anchor_person_id?: string | null
+  }; Returns: KnowledgeUnitKeywordRow[] }
   knowledge_in_scope: { Args: { p_row_user_id: string | null; p_row_voyage_slug: string | null;
     p_row_event_type: string | null; p_row_knowledge_type: string | null;
     p_row_participants: string[] | null; p_user_id: string | null;
@@ -182,6 +194,13 @@ export type PublicFunctions = {
     p_person_id: string; p_session_id: string;
     p_channel: KnowledgeDeliveryChannel; p_unit_ids: string[]
   }; Returns: number }
+  retrieve_knowledge_graph_claims_v3: { Args: {
+    p_root_authority_id: string; p_viewer_profile_id: string;
+    p_exclude_unit_ids?: string[]; p_claim_budget?: number;
+    p_per_claim_partner_cap?: number; p_annotation_check_budget?: number;
+    p_closure_budget?: number; p_max_depth?: number; p_node_budget?: number;
+    p_frontier_budget?: number
+  }; Returns: Json }
   regenerate_voyage_invite: { Args: { p_user_id: string; p_voyage_id: string }; Returns: string }
   remove_session_room_member: { Args: { p_session_id: string; p_user_id: string;
     p_member_user_id: string }; Returns: boolean }
@@ -191,6 +210,12 @@ export type PublicFunctions = {
     p_classifications?: string[]; p_match_threshold?: number; p_match_count?: number;
     p_knowledge_type?: string; p_min_attention?: number };
     Returns: KnowledgeSearchRow[] }
+  search_knowledge_units: { Args: {
+    p_viewer_profile_id: string; p_query_embedding?: string | null;
+    p_match_threshold?: number; p_match_count?: number;
+    p_anchor_person_id?: string | null; p_since?: string | null;
+    p_until?: string | null; p_unit_ids?: string[] | null
+  }; Returns: KnowledgeUnitSearchRow[] }
   scoped_knowledge_fetch: { Args: { p_user_id: string; p_voyage_slug?: string | null;
     p_scope?: string; p_content_match?: string | null;
     p_case_sensitive?: boolean; p_since?: string | null; p_until?: string | null;

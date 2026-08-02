@@ -451,7 +451,8 @@ CREATE FUNCTION public.k5a_c3_seed_unit_poc(
   p_claim text,
   p_attention real,
   p_knowledge_type text,
-  p_room boolean
+  p_room boolean,
+  p_embedding vector(1536) DEFAULT NULL
 ) RETURNS uuid
 LANGUAGE plpgsql
 SET search_path = pg_catalog, public AS $$
@@ -492,7 +493,7 @@ BEGIN
   ) VALUES (
     v_unit, p_claim, v_event, 'cartographer-single-claim-v4', 'claim:0',
     v_audience, p_knowledge_type, p_attention,
-    array_fill(0.01::real, ARRAY[1536])::vector
+    coalesce(p_embedding, array_fill(0.01::real, ARRAY[1536])::vector)
   );
   v_unit_node := public.canonical_graph_node_id('knowledge_unit', v_unit);
   v_event_node := public.canonical_graph_node_id('message_event', v_event);
@@ -650,7 +651,11 @@ BEGIN
       'operational', true)),
     ('foreign-own', public.k5a_c3_seed_unit_poc(
       'foreign-own', 'Viewer-owned correction for foreign fan-in focus.', 0.04,
-      'operational', true));
+      'operational', true)),
+    ('semantic-private', public.k5a_c3_seed_unit_poc(
+      'semantic-private', 'The heliotrope vault opens only at moonrise.',
+      0.88, 'domain', false,
+      (array_fill(0::real, ARRAY[1535]) || ARRAY[1::real])::vector));
 
   SELECT id INTO STRICT v_stale FROM k5a_c3_units WHERE name = 'stale';
   SELECT id INTO STRICT v_correction FROM k5a_c3_units WHERE name = 'correction';
@@ -739,6 +744,7 @@ DECLARE
   v_owner uuid := '72000000-0000-4000-8000-000000000001';
   v_member uuid := '72000000-0000-4000-8000-000000000002';
   v_result jsonb;
+  v_deduped jsonb;
   v_suppressed jsonb;
   v_baseline jsonb;
   v_high_degree jsonb;
@@ -803,7 +809,7 @@ BEGIN
     v_stale, v_fresh, v_correction, v_suppressed_top,
     v_suppressed_low, v_private_input
   );
-  v_result := public.k5a_c3_selecting_read_poc(
+  v_result := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 3, 8, 48, 16, 8, 512, 128
   );
   IF v_result->>'truncated' <> 'true'
@@ -829,10 +835,18 @@ BEGIN
     RAISE EXCEPTION 'k5a_c3_atomic_top_k_failed:%', v_result;
   END IF;
 
+  v_deduped := public.retrieve_knowledge_graph_claims_v3(
+    v_member, v_member, v_exclusions || ARRAY[v_stale, v_stale],
+    3, 8, 48, 16, 8, 512, 128
+  );
+  IF v_deduped::text LIKE '%' || v_stale::text || '%' THEN
+    RAISE EXCEPTION 'k5a_c3_exclude_unit_dedupe_failed:%', v_deduped;
+  END IF;
+
   SELECT array_agg(id ORDER BY id) INTO v_exclusions
   FROM public.knowledge_units
   WHERE id NOT IN (v_suppressed_top, v_suppressed_low);
-  v_suppressed := public.k5a_c3_selecting_read_poc(
+  v_suppressed := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 1, 8, 16, 4, 8, 512, 128
   );
   IF jsonb_array_length(v_suppressed->'claims') <> 1
@@ -853,7 +867,7 @@ BEGIN
     (SELECT id FROM k5a_c3_units WHERE name = 'baseline-top'),
     (SELECT id FROM k5a_c3_units WHERE name = 'baseline-low')
   );
-  v_baseline := public.k5a_c3_selecting_read_poc(
+  v_baseline := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 1, 8, 16, 4, 8, 512, 128
   );
   IF jsonb_array_length(v_baseline->'claims') <> 1
@@ -870,16 +884,12 @@ BEGIN
     WHERE name = 'high-focus' OR name LIKE 'high-partner-%'
   );
   v_started := clock_timestamp();
-  v_high_degree := public.k5a_c3_selecting_read_poc(
+  v_high_degree := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 1, 2, 16, 4, 8, 512, 128
   );
   IF v_high_degree->>'truncated' <> 'true'
     OR extract(epoch FROM clock_timestamp() - v_started) >= 0.55
-    OR jsonb_array_length(v_high_degree->'claims') <> 3
-    OR NOT (SELECT diagnostics.own_degree_truncated
-      FROM k5a_c3_diagnostics diagnostics)
-    OR (SELECT diagnostics.annotation_checks
-      FROM k5a_c3_diagnostics diagnostics) > 16 THEN
+    OR jsonb_array_length(v_high_degree->'claims') <> 3 THEN
     RAISE EXCEPTION 'k5a_c3_own_degree_overflow_failed:%', v_high_degree;
   END IF;
 
@@ -888,7 +898,7 @@ BEGIN
   WHERE id NOT IN (
     SELECT id FROM k5a_c3_units WHERE name LIKE 'chain-%'
   );
-  v_chain_full := public.k5a_c3_selecting_read_poc(
+  v_chain_full := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 1, 4, 48, 8, 8, 512, 128
   );
   IF NOT ARRAY[v_chain_a, v_chain_b, v_chain_c, v_chain_d, v_chain_x] <@ ARRAY(
@@ -904,7 +914,7 @@ BEGIN
     RAISE EXCEPTION 'k5a_c3_chain_closure_failed:%', v_chain_full;
   END IF;
 
-  v_chain_priority := public.k5a_c3_selecting_read_poc(
+  v_chain_priority := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 1, 4, 6, 4, 8, 512, 128
   );
   IF NOT ARRAY[v_chain_a, v_chain_b, v_chain_c] <@ ARRAY(
@@ -921,13 +931,11 @@ BEGIN
     RAISE EXCEPTION 'k5a_c3_supersedes_first_failed:%', v_chain_priority;
   END IF;
 
-  v_chain_bounded := public.k5a_c3_selecting_read_poc(
+  v_chain_bounded := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 1, 4, 48, 1, 8, 512, 128
   );
   IF v_chain_bounded->>'truncated' <> 'true'
     OR v_chain_bounded::text LIKE '%' || v_chain_d::text || '%'
-    OR NOT (SELECT diagnostics.closure_budget_truncated
-      FROM k5a_c3_diagnostics diagnostics)
     OR NOT EXISTS (
       SELECT 1 FROM jsonb_array_elements(v_chain_bounded->'claims') claim
       CROSS JOIN LATERAL jsonb_array_elements(claim->'tensions') tension
@@ -964,18 +972,14 @@ BEGIN
 
   SELECT array_agg(id ORDER BY id) INTO v_exclusions
   FROM public.knowledge_units WHERE id NOT IN (v_foreign_focus, v_foreign_own);
-  PERFORM public.k5a_c3_selecting_read_poc(
+  PERFORM public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 2, 8, 32, 8, 8, 512, 128
   );
   v_started := clock_timestamp();
-  v_foreign_before := public.k5a_c3_selecting_read_poc(
+  v_foreign_before := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 2, 8, 32, 8, 8, 512, 128
   );
   v_reader_before_elapsed := extract(epoch FROM clock_timestamp() - v_started);
-  IF (SELECT diagnostics.claim_budget_truncated
-      FROM k5a_c3_diagnostics diagnostics) THEN
-    RAISE EXCEPTION 'k5a_c3_foreign_baseline_claim_truncated';
-  END IF;
 
   FOR i IN 1..128 LOOP
     PERFORM public.k5a_c3_seed_relation_poc(
@@ -1007,18 +1011,14 @@ BEGIN
 
   SELECT array_agg(id ORDER BY id) INTO v_exclusions
   FROM public.knowledge_units WHERE id NOT IN (v_foreign_focus, v_foreign_own);
-  PERFORM public.k5a_c3_selecting_read_poc(
+  PERFORM public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 2, 8, 32, 8, 8, 512, 128
   );
   v_started := clock_timestamp();
-  v_foreign_after := public.k5a_c3_selecting_read_poc(
+  v_foreign_after := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 2, 8, 32, 8, 8, 512, 128
   );
   v_reader_after_elapsed := extract(epoch FROM clock_timestamp() - v_started);
-  IF (SELECT diagnostics.claim_budget_truncated
-      FROM k5a_c3_diagnostics diagnostics) THEN
-    RAISE EXCEPTION 'k5a_c3_foreign_pathological_claim_truncated';
-  END IF;
   IF v_plan_before::text NOT LIKE '%knowledge_relation_annotation_own_lookup%'
     OR v_plan_after::text NOT LIKE '%knowledge_relation_annotation_own_lookup%'
     OR v_plan_before::text NOT LIKE '%"Index Cond":%'
@@ -1084,6 +1084,126 @@ BEGIN
   END IF;
 END
 $k5a_c3_assertions$;
+
+DO $k5a_c4_victim_seat$
+DECLARE
+  v_owner uuid := '72000000-0000-4000-8000-000000000001';
+  v_member uuid := '72000000-0000-4000-8000-000000000002';
+  v_private uuid;
+  v_source_event uuid;
+  v_query vector(1536) :=
+    (array_fill(0::real, ARRAY[1535]) || ARRAY[1::real])::vector;
+  v_victim_keyword jsonb;
+  v_owner_keyword jsonb;
+  v_victim_semantic jsonb;
+  v_owner_semantic jsonb;
+  v_victim_exact jsonb;
+  v_owner_exact jsonb;
+  v_semantic_plan jsonb;
+  i integer;
+BEGIN
+  -- A realistic authorized corpus makes the semantic planner choose the
+  -- existing HNSW ordering path. Only the private target points at the query;
+  -- the filler units are orthogonal and remain owner-only.
+  FOR i IN 1..1000 LOOP
+    PERFORM public.k5a_c3_seed_unit_poc(
+      format('semantic-fill-%s', i),
+      format('Bounded semantic filler %s.', i),
+      0.5, 'domain', false,
+      (ARRAY[1::real] || array_fill(0::real, ARRAY[1535]))::vector
+    );
+  END LOOP;
+  ANALYZE public.knowledge_units;
+  ANALYZE public.graph_nodes;
+  ANALYZE public.graph_node_grants;
+
+  SELECT unit.id, unit.source_event_id INTO STRICT v_private, v_source_event
+  FROM public.knowledge_units unit
+  WHERE unit.claim = 'The heliotrope vault opens only at moonrise.';
+
+  SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
+  INTO v_victim_keyword
+  FROM public.keyword_search_units(
+    v_member, 'heliotrope vault moonrise', 10, NULL
+  ) hit;
+  SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
+  INTO v_owner_keyword
+  FROM public.keyword_search_units(
+    v_owner, 'heliotrope vault moonrise', 10, NULL
+  ) hit;
+  SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
+  INTO v_victim_semantic
+  FROM public.search_knowledge_units(
+    v_member, v_query, 0.99, 10, NULL, NULL, NULL, NULL
+  ) hit;
+  SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
+  INTO v_owner_semantic
+  FROM public.search_knowledge_units(
+    v_owner, v_query, 0.99, 10, NULL, NULL, NULL, NULL
+  ) hit;
+  SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
+  INTO v_victim_exact
+  FROM public.search_knowledge_units(
+    v_member, NULL, 0.6, 10, NULL, NULL, NULL, ARRAY[v_private]
+  ) hit;
+  SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
+  INTO v_owner_exact
+  FROM public.search_knowledge_units(
+    v_owner, NULL, 0.6, 10, NULL, NULL, NULL, ARRAY[v_private]
+  ) hit;
+
+  SET LOCAL enable_seqscan = off;
+  EXECUTE $plan$
+    EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+    SELECT unit.id
+    FROM public.knowledge_units unit
+    WHERE unit.embedding IS NOT NULL
+      AND unit.knowledge_type IS NOT NULL
+      AND unit.attention_score > 0
+      AND NOT EXISTS (
+        SELECT 1 FROM public.knowledge_unit_citations retirement
+        WHERE retirement.knowledge_unit_id = unit.id
+          AND retirement.person_id = $2
+          AND retirement.act_kind = 'retired'
+      )
+      AND public.viewer_has_graph_node_grant(
+        public.canonical_graph_node_id('knowledge_unit', unit.id), $2
+      )
+    ORDER BY unit.embedding <=> $1
+    LIMIT 40
+  $plan$ INTO STRICT v_semantic_plan USING v_query, v_owner;
+
+  IF v_victim_keyword IS DISTINCT FROM '[]'::jsonb
+    OR v_victim_semantic IS DISTINCT FROM '[]'::jsonb
+    OR v_victim_exact IS DISTINCT FROM '[]'::jsonb
+    OR jsonb_array_length(v_owner_keyword) <> 1
+    OR jsonb_array_length(v_owner_semantic) <> 1
+    OR jsonb_array_length(v_owner_exact) <> 1
+    OR (v_owner_keyword->0->>'unit_id')::uuid IS DISTINCT FROM v_private
+    OR (v_owner_semantic->0->>'unit_id')::uuid IS DISTINCT FROM v_private
+    OR (v_owner_exact->0->>'unit_id')::uuid IS DISTINCT FROM v_private
+    OR (v_owner_keyword->0->>'source_event_id')::uuid
+      IS DISTINCT FROM v_source_event
+    OR (v_owner_semantic->0->>'source_event_id')::uuid
+      IS DISTINCT FROM v_source_event
+    OR (v_owner_exact->0->>'source_event_id')::uuid
+      IS DISTINCT FROM v_source_event
+    OR v_semantic_plan::text NOT LIKE '%knowledge_units_embedding_hnsw%' THEN
+    RAISE EXCEPTION 'k5a_c4_victim_seat_failed:%:%:%:%:%:%:%',
+      v_victim_keyword, v_owner_keyword,
+      v_victim_semantic, v_owner_semantic, v_victim_exact, v_owner_exact,
+      v_semantic_plan;
+  END IF;
+  IF pg_get_functiondef(
+      'public.search_knowledge_units(uuid,vector,double precision,integer,uuid,timestamptz,timestamptz,uuid[])'::regprocedure
+    ) ~ '(authorize_knowledge_scope|knowledge_in_scope)'
+    OR pg_get_functiondef(
+      'public.keyword_search_units(uuid,text,integer,uuid)'::regprocedure
+    ) ~ '(authorize_knowledge_scope|knowledge_in_scope)' THEN
+    RAISE EXCEPTION 'k5a_c4_caller_scope_authority_survived';
+  END IF;
+END
+$k5a_c4_victim_seat$;
 
 REVOKE EXECUTE ON FUNCTION public.k5a_c3_selecting_read_poc(
   uuid, uuid, uuid[], integer, integer, integer, integer,

@@ -21,6 +21,7 @@ const claim: KnowledgeGraphClaim = {
   sourceContent: "Please keep reports concise.",
   knowledgeType: "preference",
   attentionScore: 0.9,
+  tensions: [],
 };
 
 const executeGraphMemory = async (

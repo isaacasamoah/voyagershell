@@ -19,6 +19,7 @@ const graphClaim = (knowledgeUnitId: string): KnowledgeGraphClaim => ({
   sourceContent: `Source for ${knowledgeUnitId}`,
   knowledgeType: 'operational',
   attentionScore: 0.85,
+  tensions: [],
 })
 
 describe('runTurn graph memory', () => {
