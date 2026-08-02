@@ -8,6 +8,7 @@ const read = (path: string): string =>
 const migration = read('supabase/migrations/079_knowledge_unit_read.sql')
 const vectorMigration = read('supabase/migrations/076_topic_identity_hardening.sql')
 const battery = read('recipes/sql/cartographer-k5a-c3-poc.sql')
+const c4R4Battery = read('recipes/sql/cartographer-k5a-c4-r4-assertions.sql')
 const concurrentProbe = read('recipes/sql/cartographer-k5a-c3-probe.sql')
 const boundary = read('lib/knowledge/kernel/boundary.ts')
 const search = read('lib/knowledge/unit-search.ts')
@@ -61,16 +62,29 @@ describe('K5a stage-two contract', () => {
   })
 
   it('installs unit vector, keyword, anchored, time, and exact-id reads', () => {
-    const nearest = migration.indexOf('WITH nearest AS MATERIALIZED')
-    const boundedNearest = migration.indexOf(
-      'LIMIT least(p_match_count * 4, 200)', nearest,
+    const semanticStart = migration.indexOf(
+      'CREATE OR REPLACE FUNCTION public.search_knowledge_units',
     )
-    const attentionAfterNearest = migration.indexOf(
-      'public.knowledge_unit_effective_attention(', boundedNearest,
+    const semanticEnd = migration.indexOf(
+      'CREATE OR REPLACE FUNCTION public.keyword_search_units', semanticStart,
+    )
+    const semanticRead = migration.slice(semanticStart, semanticEnd)
+    const membership = semanticRead.indexOf(
+      'WITH viewer_audiences AS MATERIALIZED',
+    )
+    const authorized = semanticRead.indexOf(
+      'authorized AS MATERIALIZED', membership,
+    )
+    const exactDistance = semanticRead.indexOf(
+      'unit.embedding <=> p_query_embedding', authorized,
     )
     expect(migration).toContain('claim_search_vector tsvector')
     expect(migration).toContain('GENERATED ALWAYS AS')
     expect(vectorMigration).toContain('knowledge_units_embedding_hnsw')
+    expect(migration).toContain(
+      'knowledge_audiences_member_profile_ids_lookup',
+    )
+    expect(migration).toContain('knowledge_units_audience_lookup')
     expect(migration).toContain(
       'CREATE OR REPLACE FUNCTION public.search_knowledge_units',
     )
@@ -78,14 +92,22 @@ describe('K5a stage-two contract', () => {
       'CREATE OR REPLACE FUNCTION public.keyword_search_units',
     )
     expect(migration).toContain('public.traverse_knowledge_graph(')
-    expect(nearest).toBeGreaterThan(-1)
-    expect(boundedNearest).toBeGreaterThan(nearest)
-    expect(attentionAfterNearest).toBeGreaterThan(boundedNearest)
+    expect(membership).toBeGreaterThan(-1)
+    expect(authorized).toBeGreaterThan(membership)
+    expect(exactDistance).toBeGreaterThan(authorized)
+    expect(semanticRead).not.toMatch(
+      /knowledge_units_embedding_hnsw|enable_seqscan|enable_sort|ef_search|iterative_scan/,
+    )
     expect(migration).not.toMatch(/authorize_knowledge_scope|knowledge_in_scope/)
     expect(battery).toContain('k5a_c4_victim_seat_failed')
     expect(battery).toContain("IS DISTINCT FROM '[]'::jsonb")
-    expect(battery).toContain('knowledge_units_embedding_hnsw')
-    expect(battery).toContain('FOR i IN 1..1000 LOOP')
+    expect(c4R4Battery).toContain('k5a_c4_exact_recall_failed')
+    expect(c4R4Battery).toContain('k5a_c4_r4_plan_stability_failed')
+    expect(c4R4Battery).toContain('k5a_c4_r4_foreign_corpus_changed')
+    expect(c4R4Battery).toContain('derived_ann_threshold_units')
+    expect(c4R4Battery).not.toMatch(
+      /SET LOCAL (enable_|hnsw\.)|SET (enable_|hnsw\.)/,
+    )
     expect(functions).toContain('search_knowledge_units:')
     expect(functions).toContain('keyword_search_units:')
   })

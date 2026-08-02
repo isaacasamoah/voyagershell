@@ -1099,24 +1099,7 @@ DECLARE
   v_owner_semantic jsonb;
   v_victim_exact jsonb;
   v_owner_exact jsonb;
-  v_semantic_plan jsonb;
-  i integer;
 BEGIN
-  -- A realistic authorized corpus makes the semantic planner choose the
-  -- existing HNSW ordering path. Only the private target points at the query;
-  -- the filler units are orthogonal and remain owner-only.
-  FOR i IN 1..1000 LOOP
-    PERFORM public.k5a_c3_seed_unit_poc(
-      format('semantic-fill-%s', i),
-      format('Bounded semantic filler %s.', i),
-      0.5, 'domain', false,
-      (ARRAY[1::real] || array_fill(0::real, ARRAY[1535]))::vector
-    );
-  END LOOP;
-  ANALYZE public.knowledge_units;
-  ANALYZE public.graph_nodes;
-  ANALYZE public.graph_node_grants;
-
   SELECT unit.id, unit.source_event_id INTO STRICT v_private, v_source_event
   FROM public.knowledge_units unit
   WHERE unit.claim = 'The heliotrope vault opens only at moonrise.';
@@ -1152,27 +1135,6 @@ BEGIN
     v_owner, NULL, 0.6, 10, NULL, NULL, NULL, ARRAY[v_private]
   ) hit;
 
-  SET LOCAL enable_seqscan = off;
-  EXECUTE $plan$
-    EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-    SELECT unit.id
-    FROM public.knowledge_units unit
-    WHERE unit.embedding IS NOT NULL
-      AND unit.knowledge_type IS NOT NULL
-      AND unit.attention_score > 0
-      AND NOT EXISTS (
-        SELECT 1 FROM public.knowledge_unit_citations retirement
-        WHERE retirement.knowledge_unit_id = unit.id
-          AND retirement.person_id = $2
-          AND retirement.act_kind = 'retired'
-      )
-      AND public.viewer_has_graph_node_grant(
-        public.canonical_graph_node_id('knowledge_unit', unit.id), $2
-      )
-    ORDER BY unit.embedding <=> $1
-    LIMIT 40
-  $plan$ INTO STRICT v_semantic_plan USING v_query, v_owner;
-
   IF v_victim_keyword IS DISTINCT FROM '[]'::jsonb
     OR v_victim_semantic IS DISTINCT FROM '[]'::jsonb
     OR v_victim_exact IS DISTINCT FROM '[]'::jsonb
@@ -1187,12 +1149,10 @@ BEGIN
     OR (v_owner_semantic->0->>'source_event_id')::uuid
       IS DISTINCT FROM v_source_event
     OR (v_owner_exact->0->>'source_event_id')::uuid
-      IS DISTINCT FROM v_source_event
-    OR v_semantic_plan::text NOT LIKE '%knowledge_units_embedding_hnsw%' THEN
-    RAISE EXCEPTION 'k5a_c4_victim_seat_failed:%:%:%:%:%:%:%',
+      IS DISTINCT FROM v_source_event THEN
+    RAISE EXCEPTION 'k5a_c4_victim_seat_failed:%:%:%:%:%:%',
       v_victim_keyword, v_owner_keyword,
-      v_victim_semantic, v_owner_semantic, v_victim_exact, v_owner_exact,
-      v_semantic_plan;
+      v_victim_semantic, v_owner_semantic, v_victim_exact, v_owner_exact;
   END IF;
   IF pg_get_functiondef(
       'public.search_knowledge_units(uuid,vector,double precision,integer,uuid,timestamptz,timestamptz,uuid[])'::regprocedure

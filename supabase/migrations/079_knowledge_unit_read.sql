@@ -178,6 +178,13 @@ ALTER TABLE public.knowledge_units
   GENERATED ALWAYS AS (to_tsvector('english', claim)) STORED;
 CREATE INDEX IF NOT EXISTS knowledge_units_claim_search
   ON public.knowledge_units USING gin(claim_search_vector);
+CREATE INDEX IF NOT EXISTS knowledge_audiences_member_profile_ids_lookup
+  ON public.knowledge_audiences USING gin(member_profile_ids);
+CREATE INDEX IF NOT EXISTS knowledge_units_audience_lookup
+  ON public.knowledge_units(knowledge_audience_id, id)
+  WHERE embedding IS NOT NULL
+    AND knowledge_type IS NOT NULL
+    AND attention_score > 0;
 
 CREATE OR REPLACE FUNCTION public.retrieve_knowledge_graph_claims_v3(
   p_root_authority_id uuid,
@@ -510,8 +517,7 @@ CREATE OR REPLACE FUNCTION public.search_knowledge_units(
   effective_attention real, similarity double precision
 )
 LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public
-SET enable_seqscan = off AS $$
+SET search_path = pg_catalog, public AS $$
 BEGIN
   IF p_viewer_profile_id IS NULL
     OR p_match_threshold IS NULL OR p_match_threshold NOT BETWEEN 0 AND 1
@@ -529,10 +535,41 @@ BEGIN
   END IF;
   IF p_query_embedding IS NOT NULL THEN
     RETURN QUERY
-    WITH nearest AS MATERIALIZED (
-      SELECT unit.id AS unit_id,
+    WITH viewer_audiences AS MATERIALIZED (
+      SELECT audience.id
+      FROM public.knowledge_audiences audience
+      WHERE audience.member_profile_ids @> ARRAY[p_viewer_profile_id]::uuid[]
+    ), authorized_unit_ids AS MATERIALIZED (
+      SELECT unit.id
+      FROM viewer_audiences audience
+      CROSS JOIN LATERAL (
+        SELECT candidate.id
+        FROM public.knowledge_units candidate
+        WHERE candidate.knowledge_audience_id = audience.id
+          AND candidate.embedding IS NOT NULL
+          AND candidate.knowledge_type IS NOT NULL
+          AND candidate.attention_score > 0
+        ORDER BY candidate.id
+        OFFSET 0
+      ) unit
+    ), authorized AS MATERIALIZED (
+      SELECT unit.id AS unit_id, unit.claim,
+        event.id AS source_event_id, event.content AS source_content,
+        event.created_at AS source_created_at, unit.knowledge_type,
         unit.embedding <=> p_query_embedding AS distance
-      FROM public.knowledge_units unit
+      FROM authorized_unit_ids authorized_id
+      CROSS JOIN LATERAL (
+        SELECT candidate.*
+        FROM public.knowledge_units candidate
+        WHERE candidate.id = authorized_id.id
+        OFFSET 0
+      ) unit
+      CROSS JOIN LATERAL (
+        SELECT source.id, source.content, source.created_at
+        FROM public.knowledge_events source
+        WHERE source.id = unit.source_event_id
+        OFFSET 0
+      ) event
       WHERE unit.embedding IS NOT NULL
         AND unit.knowledge_type IS NOT NULL
         AND unit.attention_score IS NOT NULL
@@ -547,19 +584,12 @@ BEGIN
           public.canonical_graph_node_id('knowledge_unit', unit.id),
           p_viewer_profile_id
         )
-      ORDER BY unit.embedding <=> p_query_embedding
-      LIMIT least(p_match_count * 4, 200)
     ), scored AS MATERIALIZED (
-      SELECT nearest.unit_id, unit.claim,
-        event.id AS source_event_id, event.content AS source_content,
-        event.created_at AS source_created_at, unit.knowledge_type,
-        nearest.distance,
+      SELECT authorized.*,
         public.knowledge_unit_effective_attention(
-          nearest.unit_id, p_viewer_profile_id
+          authorized.unit_id, p_viewer_profile_id
         ) AS effective_attention
-      FROM nearest
-      JOIN public.knowledge_units unit ON unit.id = nearest.unit_id
-      JOIN public.knowledge_events event ON event.id = unit.source_event_id
+      FROM authorized
     )
     SELECT scored.unit_id, scored.claim,
       scored.source_event_id, scored.source_content,

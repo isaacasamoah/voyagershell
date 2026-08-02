@@ -45,6 +45,7 @@ for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql
   "$REPO_ROOT/recipes/sql/cartographer-k4b-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k4c-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-poc.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r4-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql"; do
   [ -f "$file" ] || fail "missing SQL: $file"
 done
@@ -141,5 +142,12 @@ probe_verdicts="$(rg --no-filename -N '^K5A_C3_CONCURRENT_PROBE_GREEN$' \
   "$TEMP_DIR"/probe-*.out | wc -l | tr -d ' ')"
 [ "$probe_verdicts" = 8 ] \
   || fail "8 concurrent probes produced $probe_verdicts green verdicts"
+
+c4_verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+  -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r4-assertions.sql")" \
+  || fail 'C4 R4 exact authorized-subset assertions failed'
+[ "$c4_verdict" = CARTOGRAPHER_K5A_C4_R4_GREEN ] \
+  || fail 'exact C4 R4 verdict missing'
 
 printf '%s\n' CARTOGRAPHER_K5A_C3_LOCAL_GREEN

@@ -1,11 +1,32 @@
-# K5a C4 vector authorization — blocked pending Spec R4 (2026-08-02)
+# K5a C4 vector authorization — R4 plan-stability blocker (2026-08-02)
 
-Status: `BLOCKED-PENDING-SPEC R4`
+Status: `BLOCKED-R4-PLAN-STABILITY`
 
-Checkpoint: `ae8d666` on `feature/k5a-graph-memory`
+Prior clean Stage-2 checkpoint: `ae8d666`. R4 blocker checkpoint: this
+receipt's commit on `feature/k5a-graph-memory`.
 
-This receipt is a blocking handoff, not a passing proof. Do not merge, release,
-or describe K5a Stage 2 as complete from this checkpoint.
+This receipt is a blocking handoff, not a passing proof. Spec R4 has now ruled
+the vector-access design, but the re-PoC did not pass all four C4 bars. Do not
+merge, release, or describe K5a Stage 2 as complete from this branch.
+
+## R4 provenance reconciliation
+
+The amendment's provenance note and the original observations below agree; no
+numeric or semantic divergence was found before the R4 implementation began:
+
+- default HNSW effort returned forty candidates and missed the exact authorized
+  target;
+- `hnsw.ef_search = 200` restored that target but selected a primary-key scan
+  and top-N sort over 1,048 rows, with 40,503 shared-hit blocks and 86.722 ms at
+  the enclosing limit;
+- a fresh database repeated the same primary-key-and-sort shape with 40,501
+  shared-hit blocks and 86.862 ms total execution.
+
+R4 adopted option D: compute exact vector distance over exactly the authorized
+subset, enumerate that subset through the audience-membership and
+unit-to-audience indexes, use no planner forcing, retain migration 076's HNSW
+index only for K4b topic blocking, and leave iterative scan behind a measured
+scale gate. G5 remained a raised product question and did not block the battery.
 
 ## Decision this evidence settles
 
@@ -180,6 +201,49 @@ npm run type-check
 npm run build
 ```
 
-The first two commands are expected to remain blocked at C4 until R4 rules a
-vector authorization design. A green result from HNSW randomness alone is not
-sufficient evidence to lift this block.
+The first two commands remain blocked at C4. A green result requires all four
+R4 bars; exact recall or stable latency alone cannot lift this block.
+
+## R4 re-PoC and second stop point
+
+The R4 candidate adds a GIN lookup on
+`knowledge_audiences.member_profile_ids` and a partial B-tree membership index
+on searchable `knowledge_units(knowledge_audience_id, id)`. Semantic search
+enumerates authorized unit IDs through those indexes, hydrates each authorized
+unit by primary key, and only then computes exact vector distance. The semantic
+function contains no planner GUC, HNSW reference, `ef_search`, or
+`iterative_scan` setting. The disposable battery uses 8,192 nonmatching
+audiences so the GIN access is a real planner choice and a 20,000-row
+non-searchable backdrop so small-table sequential plans cannot masquerade as
+the intended membership path.
+
+Three R4 executions were observed:
+
+1. The direct authorized join returned the exact target at 100, 1,001, and the
+   measured threshold, but the unit membership path changed from an index scan
+   at 100 to bitmap access at 1,001. The derived threshold was 1,974 authorized
+   units; the three `EXPLAIN ANALYZE` executions were 32.448 ms, 289.788 ms,
+   and 541.231 ms. The plan-stability bar failed.
+2. The first correction made the audience GIN choice real and used an ordered
+   lateral unit enumeration. The GIN lookup held, but the unit path changed
+   from sequential access at 100 to bitmap access at 1,001 and at the derived
+   1,881-unit threshold. The three plan executions were 32.495 ms, 279.349 ms,
+   and 533.042 ms. The plan-stability bar failed again.
+3. The second correction split membership enumeration from primary-key
+   hydration and narrowed the unit membership index to searchable rows. Exact
+   recall passed and the same two named membership indexes and plan signature
+   held at 100, 1,001, and the derived threshold. With the owner's authorized
+   set fixed at 1,001 units, the foreign authorized set then grew exactly 10x.
+   The owner's result remained byte-identical and p95 remained materially
+   unchanged, from 371.889 ms to 368.091 ms. PostgreSQL nevertheless reordered
+   the event-primary-key `Memoize` node and retirement `Materialize` node. The
+   required plan identity therefore failed even though results and latency did
+   not.
+
+That is the same material plan-stability failure after two corrective attempts.
+The implementer stopped without adding a planner toggle, disguising the plan
+change in the signature, weakening the bar, or proceeding to full-suite and
+independent final review. The unresolved decision is whether R4 means literal
+identity of every downstream executor node, or stability of the authorized-set
+membership access path plus corpus-independent results and latency. Build must
+not decide that semantic amendment itself.

@@ -1,6 +1,6 @@
 # K5a C3/C4 selecting and search read — local proof (2026-08-02)
 
-Status: `production R3 and C4 batteries passed`
+Status: `C3 passed; original C4 result superseded by the R4 blocker receipt`
 
 Sanitization: the proof used only synthetic claims and the existing disposable
 K3/K4 fixture identities. No hosted identifier, credential, personal corpus,
@@ -45,7 +45,7 @@ fails if an assertion does not produce exactly two rows.
 | Production equivalence | Every selecting-read and concurrent probe invokes `retrieve_knowledge_graph_claims_v3`; the disposable PoC function remains only as the original mechanism reference. |
 | Victim-seat search | Keyword, vector, and exact-unit-ID reads returned byte-identical `[]` for a person outside the private audience; the owner received exactly the private unit with its exact source event ID. |
 | Search authority | Both unit search functions use graph grant plus audience predicates. Anchored search walks from the Person node. Neither function calls the retired caller-scope authorization model. |
-| Bounded semantic read | Against 1,001 owner-authorized embedded units, the executed semantic candidate plan used `knowledge_units_embedding_hnsw`. Production bounds that candidate set to at most four times the requested count (maximum 200) before any effective-attention lookup, then applies the requested result limit. |
+| Semantic read | The original bounded-HNSW observation was falsified by the later exact-recall stress probe and is not release evidence. R4 now requires exact distance over the authorized subset; its current re-PoC and remaining plan-stability blocker are recorded in `k5a-c4-vector-authorization-blocked-2026-08-02.md`. |
 
 The amended C1/C2 battery also seeds 8,000 viewer sessions. Its executed plan
 returns the six-session citation window through
