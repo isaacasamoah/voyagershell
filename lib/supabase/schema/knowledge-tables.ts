@@ -1,8 +1,10 @@
 import type {
   Json,
+  KnowledgeDeliveryChannel,
   KnowledgeExtractionJobState,
   KnowledgeExtractionOutcomeKind,
   KnowledgeRelationJobState,
+  KnowledgeUnitLifecycleActKind,
   NullableJson,
   NullableUnknown,
   Relationship,
@@ -27,6 +29,30 @@ type CurrentRow = {
   delivery_status: string | null
 }
 export type KnowledgeTables = {
+  knowledge_unit_citations: TableShape<{
+    id: string; knowledge_unit_id: string; person_id: string;
+    act_kind: KnowledgeUnitLifecycleActKind; session_id: string | null;
+    delivery_channel: KnowledgeDeliveryChannel | null; actor_kind: string;
+    actor_profile_id: string | null; basis_kind: string; basis_id: string;
+    basis_version: number; recorded_at: string
+  }, { id?: string; knowledge_unit_id: string; person_id: string;
+    act_kind?: KnowledgeUnitLifecycleActKind; session_id?: string | null;
+    delivery_channel?: KnowledgeDeliveryChannel | null; actor_kind: string;
+    actor_profile_id?: string | null; basis_kind: string; basis_id: string;
+    basis_version: number; recorded_at?: string }, Partial<{
+      id: string; knowledge_unit_id: string; person_id: string;
+      act_kind: KnowledgeUnitLifecycleActKind; session_id: string | null;
+      delivery_channel: KnowledgeDeliveryChannel | null; actor_kind: string;
+      actor_profile_id: string | null; basis_kind: string; basis_id: string;
+      basis_version: number; recorded_at: string
+    }>, [
+      Relationship<'knowledge_unit_citations_actor_profile_id_fkey',
+        'actor_profile_id', 'profiles', 'id'>,
+      Relationship<'knowledge_unit_citations_knowledge_unit_id_fkey',
+        'knowledge_unit_id', 'knowledge_units', 'id'>,
+      Relationship<'knowledge_unit_citations_person_id_fkey',
+        'person_id', 'profiles', 'id'>,
+    ]>
   knowledge_relation_contracts: TableShape<{
     contract_version: string; description: string; stage1_instruction: string;
     stage2_instruction: string; verdicts: string[]; blocking_spec: Json;

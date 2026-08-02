@@ -13,6 +13,12 @@ const lifecycleRecipe = read('recipes/cartographer-k5a-c1-c2-local-proof.sh')
 const lifecycleAssertions = read(
   'recipes/sql/cartographer-k5a-c1-c2-assertions.sql',
 )
+const citationRecorder = read('lib/knowledge/lifecycle/citations.ts')
+const promptComposer = read('lib/prompts/index.ts')
+const graphTool = read('lib/retrieval/knowledge-retrieval-tools.ts')
+const sessionDecay = read('lib/agents/cartographer/session-decay.ts')
+const generatedFunctions = read('lib/supabase/schema/functions.ts')
+const generatedTables = read('lib/supabase/schema/knowledge-tables.ts')
 const fullSuite = read('recipes/full-suite.sh')
 const receipt = read(
   'docs/testing/receipts/memory/k5a-c3-selecting-read-poc-2026-08-02.md',
@@ -92,5 +98,17 @@ describe('K5a stage-one contract', () => {
     expect(lifecycleAssertions).toContain('k5a_attention_or_citation_mutated_unit')
     expect(fullSuite).toContain('./recipes/cartographer-k5a-c1-c2-local-proof.sh')
     expect(lifecycleReceipt).toContain('CARTOGRAPHER_K5A_C1_C2_LOCAL_GREEN')
+  })
+
+  it('records standing and reach delivery before exposure with coherent types', () => {
+    expect(citationRecorder).toContain("'record_knowledge_unit_citations'")
+    expect(promptComposer).toContain('channel: "standing"')
+    expect(promptComposer).toContain('standingCitationFailed')
+    expect(graphTool).toContain('channel: "reach"')
+    expect(graphTool).toContain('citation.outcome === "failed"')
+    expect(sessionDecay).not.toContain('upsertSessionIndex')
+    expect(generatedFunctions).toContain('record_knowledge_unit_citations')
+    expect(generatedFunctions).toContain('upsert_person_session_index')
+    expect(generatedTables).toContain('knowledge_unit_citations: TableShape')
   })
 })

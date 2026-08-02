@@ -19,6 +19,11 @@ import {
   type KnowledgeGraphResult,
   type KnowledgeGraphRoot,
 } from "@/lib/knowledge/kernel/boundary";
+import {
+  recordKnowledgeUnitCitations,
+  type CitationRecordingInput,
+  type CitationRecordingResult,
+} from "@/lib/knowledge/lifecycle/citations";
 
 const graphMemorySchema = z.object({
   maxDepth: z.number().int().min(0).max(8).optional().default(4),
@@ -68,16 +73,21 @@ type GraphMemoryRetriever = (
   options?: KnowledgeGraphRetrievalOptions,
 ) => Promise<KnowledgeGraphResult>;
 
+type CitationRecorder = (
+  input: CitationRecordingInput,
+) => Promise<CitationRecordingResult>;
+
 export const createKnowledgeRetrievalTools = (
   ctx: ToolContext,
   graphMemoryRetriever: GraphMemoryRetriever = retrieveKnowledgeGraphClaims,
+  citationRecorder: CitationRecorder = recordKnowledgeUnitCitations,
 ) => ({
   graph_memory: tool({
     description:
       "Walk authorized memory from the speaking Person. Returns typed claims with immutable source attribution and reports when budget limits truncate reach.",
     inputSchema: graphMemorySchema,
     execute: async (input) => {
-      const result = await graphMemoryRetriever(
+      const reached = await graphMemoryRetriever(
         { kind: "person", authorityId: ctx.userId },
         {
           maxDepth: input.maxDepth,
@@ -86,6 +96,21 @@ export const createKnowledgeRetrievalTools = (
           excludeUnitIds: ctx.workingMemoryUnitIds ?? [],
         },
       );
+      const citation = reached.outcome === "success" && reached.claims.length > 0
+        ? ctx.conversationId
+          ? await citationRecorder({
+              personId: ctx.userId,
+              sessionId: ctx.conversationId,
+              channel: "reach",
+              knowledgeUnitIds: reached.claims.map(
+                (claim) => claim.knowledgeUnitId,
+              ),
+            })
+          : { outcome: "failed" as const, inserted: 0 as const }
+        : { outcome: "skipped" as const, inserted: 0 as const };
+      const result: KnowledgeGraphResult = citation.outcome === "failed"
+        ? { outcome: "exception", claims: [], truncated: false }
+        : reached;
       return {
         outcome: result.outcome,
         claims: result.claims.map((claim) => ({

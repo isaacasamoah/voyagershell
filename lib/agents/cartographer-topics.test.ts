@@ -30,8 +30,10 @@ vi.mock('./cartographer/relation-pipeline', () => ({
 }))
 vi.mock('./cartographer/apply', () => ({ applyEnrichments: vi.fn() }))
 vi.mock('./cartographer/session-decay', () => ({
-  upsertSessionIndex: vi.fn(),
   applySessionDecay: vi.fn(),
+}))
+vi.mock('@/lib/knowledge/lifecycle/session-index', () => ({
+  upsertPersonSessionIndex: vi.fn(),
 }))
 vi.mock('./cartographer/preference-superseding', () => ({
   checkPreferenceSuperseding: vi.fn(),

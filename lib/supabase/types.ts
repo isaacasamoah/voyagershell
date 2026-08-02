@@ -1,7 +1,9 @@
 import type {
   Json,
+  KnowledgeDeliveryChannel,
   KnowledgeExtractionJobState,
   KnowledgeExtractionOutcomeKind,
+  KnowledgeUnitLifecycleActKind,
   MemoryType,
   SessionStatus,
   VoyageRole,
@@ -21,6 +23,8 @@ type PublicEnums = {
   voyage_role: VoyageRole
   knowledge_extraction_job_state: KnowledgeExtractionJobState
   knowledge_extraction_outcome_kind: KnowledgeExtractionOutcomeKind
+  knowledge_delivery_channel: KnowledgeDeliveryChannel
+  knowledge_unit_lifecycle_act_kind: KnowledgeUnitLifecycleActKind
 }
 
 export type Database = {
@@ -189,6 +193,8 @@ export const Constants = {
         'commit_rejected',
         'expired',
       ],
+      knowledge_delivery_channel: ['standing', 'reach', 'search'],
+      knowledge_unit_lifecycle_act_kind: ['cited', 'retired'],
     },
   },
 } as const

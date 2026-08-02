@@ -3,7 +3,8 @@ import { resolveUserModelWithMeta } from '@/lib/models'
 import { applyEnrichments } from './cartographer/apply'
 import { checkPreferenceSuperseding } from './cartographer/preference-superseding'
 import { processRetrievalFeedback } from './cartographer/retrieval-feedback'
-import { applySessionDecay, upsertSessionIndex } from './cartographer/session-decay'
+import { applySessionDecay } from './cartographer/session-decay'
+import { upsertPersonSessionIndex } from '@/lib/knowledge/lifecycle/session-index'
 import { extractKnowledge } from './cartographer/extractor'
 import {
   beginExtractionAttempt,
@@ -226,7 +227,7 @@ export const runCartographer = async (
         source_created_at: '',
       }])
       if (attempt.sourceSessionId) {
-        await upsertSessionIndex(attempt.sourceSessionId, attempt.sourceActorId, 1)
+        await upsertPersonSessionIndex(attempt.sourceActorId, attempt.sourceSessionId, 1)
         await applySessionDecay(attempt.sourceActorId, attempt.sourceSessionId)
       }
       await checkPreferenceSuperseding([assessment], attempt.sourceActorId)

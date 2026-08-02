@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   completeExtractionAttempt: vi.fn(),
   extractKnowledge: vi.fn(),
   applyEnrichments: vi.fn(),
-  upsertSessionIndex: vi.fn(),
+  upsertPersonSessionIndex: vi.fn(),
   applySessionDecay: vi.fn(),
   checkPreferenceSuperseding: vi.fn(),
   processRetrievalFeedback: vi.fn(),
@@ -31,8 +31,10 @@ vi.mock('./cartographer/apply', () => ({
   applyEnrichments: mocks.applyEnrichments,
 }))
 vi.mock('./cartographer/session-decay', () => ({
-  upsertSessionIndex: mocks.upsertSessionIndex,
   applySessionDecay: mocks.applySessionDecay,
+}))
+vi.mock('@/lib/knowledge/lifecycle/session-index', () => ({
+  upsertPersonSessionIndex: mocks.upsertPersonSessionIndex,
 }))
 vi.mock('./cartographer/preference-superseding', () => ({
   checkPreferenceSuperseding: mocks.checkPreferenceSuperseding,

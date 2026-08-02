@@ -34,10 +34,30 @@ No live Supabase project or other live database was read or written.
 | Immutability | Update and delete attempts against lifecycle acts failed, and `knowledge_units` remained byte-identical across every read and act write. |
 | Database authority | The act relation and all writer/read functions were inaccessible to `authenticated`; service role retained the exact required grants. |
 
+## TypeScript delivery boundary
+
+The application boundary records every unit-backed standing preference before
+it enters the composed prompt, and records every successful `graph_memory`
+result through the `reach` channel before returning it to the model. A failed
+citation write withholds those claims and preserves the existing honest
+`exception`/memory-warning shape. Projected and graph-derived copies of the
+same source event still render once, while the underlying unit receives one
+standing act for the session.
+
+The old Cartographer-local `upsertSessionIndex` implementation was removed.
+Both the turn composer and Cartographer now call the typed, per-person
+`upsert_person_session_index` RPC boundary introduced by migration `078`.
+
+The focused lifecycle, standing-delivery, reach-delivery, Cartographer, and
+schema contract tests passed, and the full Vitest run passed 475 tests in 91
+files. TypeScript strict checking also passed.
+
 ## Command
 
 ```bash
 ./recipes/cartographer-k5a-c1-c2-local-proof.sh
+npm run type-check
+npx vitest run
 ```
 
 This proves migration `078` and its database arithmetic. It does not apply the

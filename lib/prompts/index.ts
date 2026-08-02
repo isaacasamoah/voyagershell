@@ -11,7 +11,14 @@ import {
 import type { VoyagerIdentity } from "@/lib/messaging/address";
 import { formatCuratedWindow } from "./format/user";
 import { retrieveKnowledgeGraphClaims } from "@/lib/knowledge/kernel/boundary";
-import { graphMemoryReachWarning, mergeGraphStandingPreferences } from "./graph-standing";
+import type { KnowledgeGraphResult } from "@/lib/knowledge/kernel/boundary";
+import { recordKnowledgeUnitCitations } from "@/lib/knowledge/lifecycle/citations";
+import { upsertPersonSessionIndex } from "@/lib/knowledge/lifecycle/session-index";
+import {
+  graphMemoryReachWarning,
+  mergeGraphStandingPreferences,
+  selectGraphStandingClaims,
+} from "./graph-standing";
 
 export * from "./types";
 export { CORE_PROMPT, CORE_PROMPT_TOKENS } from "./core";
@@ -92,6 +99,12 @@ export const composeSystemPrompt = async (
   } = options ?? {};
   const startTime = Date.now();
 
+  // A graph claim cannot enter working memory without a durable per-person
+  // session identity. The event count is incremented later by Cartographer.
+  const sessionIndexed = sessionId
+    ? await upsertPersonSessionIndex(userId, sessionId, 0)
+    : false;
+
   // Load curated knowledge window + voyage context in parallel. Message
   // awareness is no longer woven into the prompt (v2) — messages are
   // delivered on the wire and retrieved on demand, not re-narrated here.
@@ -114,17 +127,56 @@ export const composeSystemPrompt = async (
           return null;
         })
       : Promise.resolve(null),
-    retrieveKnowledgeGraphClaims({ kind: "person", authorityId: userId }).catch(
-      () => ({
-        outcome: "exception" as const,
-        claims: [] as const,
-        truncated: false as const,
-      }),
-    ),
+    sessionIndexed
+      ? retrieveKnowledgeGraphClaims({ kind: "person", authorityId: userId }).catch(
+          () => ({
+            outcome: "exception" as const,
+            claims: [] as const,
+            truncated: false as const,
+          }),
+        )
+      : Promise.resolve({
+          outcome: "exception" as const,
+          claims: [] as const,
+          truncated: false as const,
+        }),
   ]);
+
+  const standingClaims = selectGraphStandingClaims(graphMemory);
+  const standingCitation = sessionId
+    ? await recordKnowledgeUnitCitations({
+        personId: userId,
+        sessionId,
+        channel: "standing",
+        knowledgeUnitIds: standingClaims.map(
+          (claim) => claim.knowledgeUnitId,
+        ),
+      })
+    : { outcome: "failed" as const, inserted: 0 as const };
+  const standingCitationFailed = standingCitation.outcome === "failed";
+  const withheldEventIds = new Set(
+    standingClaims.map((claim) => claim.sourceEventId),
+  );
+  const deliveredProjectedWindow = standingCitationFailed
+    ? {
+        ...projectedWindow,
+        preferences: projectedWindow.preferences.filter(
+          (item) => !withheldEventIds.has(item.eventId),
+        ),
+      }
+    : projectedWindow;
+  const deliveredGraphMemory: KnowledgeGraphResult = standingCitationFailed
+    ? {
+        outcome: "success",
+        claims: graphMemory.claims.filter(
+          (claim) => !standingClaims.includes(claim),
+        ),
+        truncated: graphMemory.truncated,
+      }
+    : graphMemory;
   const curatedWindow = mergeGraphStandingPreferences(
-    projectedWindow,
-    graphMemory,
+    deliveredProjectedWindow,
+    deliveredGraphMemory,
   );
 
   // Preferences render exactly once, via formatCuratedWindow below ("What I
@@ -180,6 +232,11 @@ export const composeSystemPrompt = async (
   const dynamicParts: string[] = [];
   const graphWarning = graphMemoryReachWarning(graphMemory);
   if (graphWarning) dynamicParts.push(graphWarning);
+  if (standingCitationFailed && standingClaims.length > 0) {
+    dynamicParts.push(
+      "# Memory delivery\nSome standing graph memory was withheld because its delivery could not be recorded. Do not infer that no additional memory exists.",
+    );
+  }
 
   // Auth state flag — identity handles the behavior (see First Contact in core.ts)
   if (authState === "unauthenticated") {
@@ -234,7 +291,9 @@ export const composeSystemPrompt = async (
     workingMemoryUnitIds: graphMemory.claims
       .filter(
         (claim) =>
-          claim.knowledgeType === "preference" && claim.attentionScore >= 0.5,
+          claim.knowledgeType === "preference" &&
+          claim.attentionScore >= 0.5 &&
+          (!standingCitationFailed || !standingClaims.includes(claim)),
       )
       .map((claim) => claim.knowledgeUnitId),
   };

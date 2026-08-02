@@ -1,4 +1,9 @@
-import type { Json, KnowledgeExtractionOutcomeKind, VoyageRole } from './base'
+import type {
+  Json,
+  KnowledgeDeliveryChannel,
+  KnowledgeExtractionOutcomeKind,
+  VoyageRole,
+} from './base'
 import type { SessionStatus } from './base'
 
 export type KnowledgeSearchRow = {
@@ -69,6 +74,11 @@ export type PublicFunctions = {
   assert_knowledge_topic_backfill_complete: {
     Args: Record<PropertyKey, never>; Returns: Json
   }
+  calculate_knowledge_unit_effective_attention: { Args: {
+    p_birth_attention: number; p_knowledge_type: string;
+    p_session_distance: number; p_windowed_reach_citations: number;
+    p_retired?: boolean
+  }; Returns: number }
   archive_session: { Args: { p_session_id: string; p_user_id: string }; Returns: boolean }
   authorize_knowledge_scope: { Args: { p_surface: string; p_user_id: string; p_voyage_slug: string | null };
     Returns: string }
@@ -136,6 +146,12 @@ export type PublicFunctions = {
   get_voyage_messages: { Args: { p_user_id: string; p_voyage_slug: string;
     p_since: string; p_max_count: number }; Returns: VoyageMessageRow[] }
   increment_promotion_count: { Args: { p_event_id: string }; Returns: undefined }
+  knowledge_unit_effective_attention: { Args: {
+    p_knowledge_unit_id: string; p_person_id: string
+  }; Returns: number }
+  knowledge_unit_session_distance: { Args: {
+    p_knowledge_unit_id: string; p_person_id: string
+  }; Returns: number }
   is_active_space_member: { Args: { p_space_id: string }; Returns: boolean }
   is_active_voyage_member_by_id: { Args: { p_voyage_id: string }; Returns: boolean }
   is_effective_space_member: { Args: { p_space_id: string; p_user_id: string }; Returns: boolean }
@@ -162,6 +178,10 @@ export type PublicFunctions = {
   promote_private_voyager_reply: { Args: { p_source_event_id: string; p_conversation_id: string;
     p_user_id: string }; Returns: { shared_event_id: string; status: string;
       shared_content: string }[] }
+  record_knowledge_unit_citations: { Args: {
+    p_person_id: string; p_session_id: string;
+    p_channel: KnowledgeDeliveryChannel; p_unit_ids: string[]
+  }; Returns: number }
   regenerate_voyage_invite: { Args: { p_user_id: string; p_voyage_id: string }; Returns: string }
   remove_session_room_member: { Args: { p_session_id: string; p_user_id: string;
     p_member_user_id: string }; Returns: boolean }
@@ -183,6 +203,9 @@ export type PublicFunctions = {
   set_session_ai_presence: { Args: { p_session_id: string; p_user_id: string;
     p_present: boolean }; Returns: boolean }
   touch_session_activity: { Args: { p_session_id: string; p_user_id: string }; Returns: boolean }
+  upsert_person_session_index: { Args: {
+    p_person_id: string; p_session_id: string; p_event_count?: number
+  }; Returns: undefined }
   update_knowledge_embedding: { Args: { p_embedding: string; p_event_id: string }; Returns: boolean }
   write_knowledge_topic_identity_backfill: { Args: {
     p_unit_id: string; p_raw_output: Json; p_knowledge_type: string;

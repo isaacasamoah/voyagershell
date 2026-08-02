@@ -16,36 +16,6 @@ const getDecayFactor = (distance: number): number => {
   return DECAY_CURVE[distance] ?? DECAY_CURVE[5]
 }
 
-export const upsertSessionIndex = async (
-  sessionId: string,
-  userId: string,
-  eventCount: number,
-): Promise<void> => {
-  const supabase = getAdminClient()
-  const { error: insertError } = await (supabase as any)
-    .from('session_index')
-    .insert({
-      session_id: sessionId,
-      user_id: userId,
-      event_count: eventCount,
-      started_at: new Date().toISOString(),
-    })
-
-  if (!insertError) return
-  if (insertError.code !== '23505') {
-    log.agent('Session index insert failed', { sessionId, error: insertError.message }, 'warn')
-    return
-  }
-
-  const { error: updateError } = await (supabase as any)
-    .from('session_index')
-    .update({ event_count: eventCount })
-    .eq('session_id', sessionId)
-  if (updateError) {
-    log.agent('Session index update failed', { sessionId, error: updateError.message }, 'warn')
-  }
-}
-
 const getSessionDistances = async (
   userId: string,
   currentSessionId: string,

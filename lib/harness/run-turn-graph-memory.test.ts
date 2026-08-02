@@ -53,6 +53,10 @@ describe('runTurn graph memory', () => {
           ].filter((claim) => !observedExclusions.includes(claim.knowledgeUnitId))
           return { outcome: 'success', claims, truncated: false }
         },
+        async ({ knowledgeUnitIds }) => ({
+          outcome: 'recorded',
+          inserted: knowledgeUnitIds.length,
+        }),
       ).graph_memory
       return {
         tools: { graph_memory },
