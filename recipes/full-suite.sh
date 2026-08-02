@@ -8,5 +8,6 @@ cd "$(dirname "$0")/.."
 ./recipes/cartographer-k4b-local-proof.sh
 ./recipes/cartographer-k4c-local-proof.sh
 ./recipes/cartographer-k5a-c3-local-proof.sh
+./recipes/cartographer-k5a-c1-c2-local-proof.sh
 npx vitest run --reporter=dot
 echo "FULL_SUITE_GREEN"
