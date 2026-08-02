@@ -1,6 +1,5 @@
 // Semantic search over the event-sourced knowledge system.
 import { getClientForContext } from '@/lib/supabase/authenticated'
-import { getAdminClient } from '@/lib/supabase/admin'
 import { generateSearchEmbedding, toVectorString } from './search-embedding'
 import {
   transformKnowledgeNode,
@@ -59,32 +58,6 @@ export const searchKnowledge = async (
     return results.map(transformKnowledgeNode)
   } catch (error) {
     console.error('[Knowledge] searchKnowledge error:', error)
-    return []
-  }
-}
-
-export const getKnowledgeByIds = async (
-  eventIds: string[],
-  userId: string,
-  voyageSlug?: string,
-): Promise<KnowledgeNode[]> => {
-  if (eventIds.length === 0) return []
-  try {
-    const { data, error } = await getAdminClient().rpc('get_knowledge_by_ids', {
-      p_event_ids: eventIds,
-      p_user_id: userId,
-      p_voyage_slug: voyageSlug ?? null,
-    })
-    if (error) {
-      console.error('[Knowledge] getKnowledgeByIds error:', error)
-      return []
-    }
-    return (data ?? []).map((row) => transformKnowledgeNode({
-      ...row,
-      similarity: 1.0,
-    } as KnowledgeNodeInput))
-  } catch (error) {
-    console.error('[Knowledge] getKnowledgeByIds error:', error)
     return []
   }
 }

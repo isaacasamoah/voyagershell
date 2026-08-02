@@ -66,7 +66,6 @@ describe('K5a stage-two contract', () => {
     expect(concurrentProbe).toContain(
       'public.retrieve_knowledge_graph_claims_v3(',
     )
-    expect(concurrentProbe).not.toContain('k5a_c3_selecting_read_poc(')
   })
 
   it('installs unit vector, keyword, anchored, time, and exact-id reads', () => {

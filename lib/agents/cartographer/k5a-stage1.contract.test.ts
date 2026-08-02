@@ -45,15 +45,16 @@ describe('K5a stage-one contract', () => {
     expect(recipe).toContain('CARTOGRAPHER_K5A_C3_LOCAL_GREEN')
   })
 
-  it('walks before selecting and repairs only annotation-visible pairs', () => {
-    const walk = poc.indexOf('v_frontier := ARRAY[v_root]')
-    const candidates = poc.indexOf('INSERT INTO k5a_c3_candidates')
-    const topK = poc.indexOf('INSERT INTO k5a_c3_selected')
-    const annotations = poc.indexOf(
+  it('keeps production v3 walk-select-annotate-repair ordering', () => {
+    const walk = annotationMigration.indexOf('v_frontier := ARRAY[v_root]')
+    const candidates = annotationMigration.indexOf('INSERT INTO k5a_read_candidates')
+    const topK = annotationMigration.indexOf('INSERT INTO k5a_read_selected')
+    const annotations = annotationMigration.indexOf(
       'FROM public.knowledge_relation_annotation_index annotation',
+      topK,
     )
-    const promotion = poc.indexOf(
-      'INSERT INTO k5a_c3_selected(unit_id, selected_rank, promoted)',
+    const promotion = annotationMigration.indexOf(
+      'INSERT INTO k5a_read_selected(unit_id, selected_rank, promoted)',
       topK + 1,
     )
     expect(walk).toBeGreaterThan(-1)
@@ -61,13 +62,12 @@ describe('K5a stage-one contract', () => {
     expect(candidates).toBeLessThan(topK)
     expect(topK).toBeLessThan(annotations)
     expect(annotations).toBeLessThan(promotion)
-    expect(poc).toContain('assertion_person_id = p_viewer_profile_id')
-    expect(poc).not.toMatch(/SET(?: LOCAL)? enable_/)
-    expect(poc).toContain('ORDER BY annotation.repair_priority')
-    expect(poc).toContain('Bound the own-person index seek before checking walk membership')
-    expect(poc).toContain('p_per_claim_partner_cap')
-    expect(poc).toContain('p_annotation_check_budget')
-    expect(poc).toContain('p_closure_budget')
+    expect(annotationMigration).toContain('assertion_person_id = p_viewer_profile_id')
+    expect(annotationMigration).not.toMatch(/SET(?: LOCAL)? enable_/)
+    expect(annotationMigration).toContain('ORDER BY annotation.repair_priority')
+    expect(annotationMigration).toContain('p_per_claim_partner_cap')
+    expect(annotationMigration).toContain('p_annotation_check_budget')
+    expect(annotationMigration).toContain('p_closure_budget')
   })
 
   it('installs the R3 annotation projection with one transactional writer', () => {

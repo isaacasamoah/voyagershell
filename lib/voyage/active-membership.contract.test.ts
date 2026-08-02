@@ -148,12 +148,9 @@ describe('active voyage membership clean transition', () => {
 
   it('routes every admin-backed retrieval caller through the hardened RPCs', () => {
     const callers: Array<[string, string[]]> = [
-      ['lib/knowledge/hybrid-primitives.ts', ["('keyword_search'", 'p_user_id: userId']],
       ['lib/knowledge/curator.ts', ["('scoped_knowledge_fetch'", 'p_user_id: userId']],
       ['lib/retrieval/temporal-retrieval-tool.ts', ['temporalUnitSearch(', 'ctx.userId']],
       ['lib/knowledge/search.ts', ["('search_knowledge'", 'p_user_id: userId']],
-      ['lib/knowledge/scoped-search.ts', ["('scoped_knowledge_fetch'",
-        'p_user_id: userId', 'p_user_id: callerUserId']],
       ['lib/knowledge/unit-search.ts', ["'search_knowledge_units'",
         "'keyword_search_units'", 'p_viewer_profile_id: viewerProfileId']],
     ]
@@ -162,8 +159,6 @@ describe('active voyage membership clean transition', () => {
       for (const fragment of fragments) expect(source).toContain(fragment)
       expect(source).not.toContain('voyage_members')
     }
-    expect(read('lib/knowledge/hybrid.ts')).toContain("from './hybrid-primitives'")
-    expect(read('lib/knowledge/scoped-search.ts').match(/\('scoped_knowledge_fetch'/g)).toHaveLength(2)
   })
 
   it('filters every app membership-derived audience at its shared boundary', () => {

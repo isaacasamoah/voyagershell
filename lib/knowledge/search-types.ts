@@ -42,19 +42,6 @@ export interface KnowledgeNodeInput {
   event_type?: string | null
 }
 
-export interface GrepOptions {
-  scope?: 'personal' | 'voyage' | 'all'
-  caseSensitive?: boolean
-  limit?: number
-  voyageSlug?: string
-  minAttention?: number
-}
-
-export interface GrepResult extends Omit<KnowledgeNode, 'similarity'> {
-  highlight: string
-  matchStart: number
-}
-
 export const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({
   eventId: row.event_id,
   content: row.content,

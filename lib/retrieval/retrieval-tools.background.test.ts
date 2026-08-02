@@ -26,13 +26,6 @@ const runGuardedBackgroundTask = vi.fn(async (options: {
 const loadTools = async () => {
   vi.resetModules()
   vi.doMock('ai', () => ({ tool: (definition: unknown) => definition }))
-  vi.doMock('@/lib/knowledge', () => ({
-    searchKnowledge: vi.fn(),
-    keywordGrep: vi.fn(),
-    personAnchoredSearch: vi.fn(),
-    getKnowledgeByIds: vi.fn(),
-  }))
-  vi.doMock('@/lib/knowledge/hybrid', () => ({ hybridSearch: vi.fn() }))
   vi.doMock('@/lib/messaging/deliveries', () => ({ fanOutDeliveries }))
   vi.doMock('@/lib/messaging/room', () => ({
     getRoom: vi.fn(),

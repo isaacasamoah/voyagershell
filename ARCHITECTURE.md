@@ -31,9 +31,16 @@ Supabase
 `lib/retrieval/knowledge-retrieval-tools.ts` defines the knowledge retrieval
 tools, including the registered `graph_memory` read. Its current caller is
 `retrieveKnowledgeGraphClaims` in `lib/knowledge/kernel/boundary.ts`, which
-invokes `retrieve_knowledge_graph_claims_v2`. `composeSystemPrompt` uses that
+invokes `retrieve_knowledge_graph_claims_v3`. `composeSystemPrompt` uses that
 boundary for standing memory on each turn, and the registered tool uses the
 same boundary for on-demand graph reach.
+
+This branch switched the application to v3 (ae8d666). The RELEASED application
+(origin/dev boundary.ts:119) still calls v2 against the live database, so v2
+must survive the deployment window: it is dropped only at 081 cutover, after
+the released application no longer references it. On this branch, v2 and the
+CandidateFunctions v2 Args entry persist solely as that deployment-window
+surface, mandated for 081 deletion.
 
 `lib/messaging/ingress.ts` is the only harness path by which a person's message
 or their Voyager's response becomes a fact. For human input it resolves the
@@ -45,11 +52,12 @@ private conversation shape and inherits that source's exact audience. The
 response receives a `generated_by` edge to the owner's Voyager, not an
 `authored_by` edge to the owner.
 
-Every registered service-role knowledge read crosses a caller-scoped RPC.
-Exact-ID hydration uses `get_knowledge_by_ids`; direct mentions use
-`get_voyage_messages`; neither registered path reads `knowledge_current`
-through the admin client. PostgreSQL rechecks active voyage membership when the
-query executes, including graph roots and every traversal frontier.
+Every registered service-role knowledge read crosses a database RPC. Exact-ID
+hydration uses unit-native `search_knowledge_units` with `p_unit_ids` under the
+graph's grant and audience predicates; direct mentions use the pre-cutover
+`get_voyage_messages` caller-scope RPC. Neither registered path reads
+`knowledge_current` through the admin client. PostgreSQL rechecks authorization
+when the query executes, including graph roots and every traversal frontier.
 
 ## Event-sourced knowledge
 

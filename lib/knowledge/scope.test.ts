@@ -1,56 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const authenticatedRpc = vi.fn()
 const adminRpc = vi.fn()
-const keywordGrepTool = vi.fn()
-const getKnowledgeByIdsTool = vi.fn()
-const hybridSearchTool = vi.fn()
-const sampleKnowledgeRow = {
-  event_id: 'event-1',
-  content: 'React 19 was discussed in the pricing thread.',
-  source_created_at: '2026-07-09T00:00:00.000Z',
-  classifications: ['fact'],
-  entities: [],
-  topics: [],
-  knowledge_type: 'domain',
-  attention_score: 0.9,
-  context_snippet: null,
-  sender_display_name: null,
-  sender_user_id: null,
-  event_type: 'explicit',
-  session_id: null,
-  promotion_count: 0,
-}
-const mockOpenAI = () => {
-  vi.doMock('openai', () => ({
-    default: class FakeOpenAI {
-      embeddings = { create: vi.fn() }
-    },
-  }))
-}
-const installSearchMocks = () => {
-  vi.resetModules()
-  mockOpenAI()
-  vi.doMock('@/lib/supabase/authenticated', () => ({
-    getClientForContext: () => ({ rpc: authenticatedRpc }),
-  }))
-  vi.doMock('@/lib/supabase/admin', () => ({
-    getAdminClient: () => ({ rpc: adminRpc }),
-  }))
-  vi.doMock('@/lib/knowledge/lifecycle/citations', () => ({
-    recordKnowledgeUnitCitations: vi.fn().mockResolvedValue({
-      outcome: 'recorded',
-      inserted: 1,
-    }),
-  }))
-}
-const loadScopedSearchModule = async () => {
-  installSearchMocks()
-  return import('./scoped-search')
-}
-const loadSemanticSearchModule = async () => {
-  installSearchMocks()
-  return import('./search')
-}
 const loadCuratorModule = async () => {
   vi.resetModules()
   vi.doMock('@/lib/supabase/admin', () => ({
@@ -64,15 +13,6 @@ const loadCuratorModule = async () => {
 const loadToolsModule = async () => {
   vi.resetModules()
   vi.doMock('ai', () => ({ tool: (definition: unknown) => definition }))
-  vi.doMock('@/lib/knowledge', () => ({
-    searchKnowledge: vi.fn(),
-    keywordGrep: keywordGrepTool,
-    personAnchoredSearch: vi.fn(),
-    getKnowledgeByIds: getKnowledgeByIdsTool,
-  }))
-  vi.doMock('@/lib/knowledge/hybrid', () => ({
-    hybridSearch: hybridSearchTool,
-  }))
   vi.doMock('@/lib/messaging/deliveries', () => ({
     fanOutDeliveries: vi.fn(),
   }))
@@ -124,49 +64,7 @@ const loadToolsModule = async () => {
 describe('knowledge scope RPC routing', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    authenticatedRpc.mockResolvedValue({ data: [], error: null })
     adminRpc.mockResolvedValue({ data: [], error: null })
-    keywordGrepTool.mockResolvedValue([])
-    getKnowledgeByIdsTool.mockResolvedValue([])
-    hybridSearchTool.mockResolvedValue([])
-  })
-  it('routes keywordGrep through scoped_knowledge_fetch with grep filters', async () => {
-    authenticatedRpc.mockResolvedValue({ data: [sampleKnowledgeRow], error: null })
-    const { keywordGrep } = await loadScopedSearchModule()
-
-    const results = await keywordGrep('user-1', 'React', {
-      scope: 'voyage',
-      voyageSlug: 'fambam',
-      caseSensitive: true,
-      minAttention: 0.42,
-      limit: 7,
-    })
-
-    expect(results).toHaveLength(1)
-    expect(authenticatedRpc).toHaveBeenCalledWith('scoped_knowledge_fetch', {
-      p_user_id: 'user-1',
-      p_voyage_slug: 'fambam',
-      p_scope: 'voyage',
-      p_content_match: '%React%',
-      p_case_sensitive: true,
-      p_min_attention: 0.42,
-      p_match_count: 7,
-    })
-  })
-  it('hydrates exact IDs only through the mandatory caller-scoped RPC', async () => {
-    adminRpc.mockResolvedValue({ data: [sampleKnowledgeRow], error: null })
-    const { getKnowledgeByIds } = await loadSemanticSearchModule()
-
-    await expect(getKnowledgeByIds(
-      ['59eec620-1a4e-4c8a-9f57-08e5f8321660'],
-      'user-1',
-      'fambam',
-    )).resolves.toHaveLength(1)
-    expect(adminRpc).toHaveBeenCalledWith('get_knowledge_by_ids', {
-      p_event_ids: ['59eec620-1a4e-4c8a-9f57-08e5f8321660'],
-      p_user_id: 'user-1',
-      p_voyage_slug: 'fambam',
-    })
   })
 
   it('routes curator windows through scoped_knowledge_fetch with voyage and personal scopes', async () => {

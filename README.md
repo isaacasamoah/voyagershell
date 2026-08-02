@@ -31,9 +31,10 @@ database function that claims the intent before it writes anything, so a retry
 cannot produce a second event, graph fragment, response, or delivery. A Voyager
 reply inherits the exact immutable audience of its claimed human source and is
 linked to the canonical Voyager node with `generated_by`.
-Service-role tool code never hydrates `knowledge_current` directly:
-`get_knowledge_by_ids` and `get_voyage_messages` require the caller identity and
-recheck current membership inside PostgreSQL at execution time.
+Service-role tool code never hydrates `knowledge_current` directly. Exact-ID
+hydration uses unit-native `search_knowledge_units` under the graph's grant and
+audience predicates; direct mentions use pre-cutover `get_voyage_messages`,
+which rechecks caller identity and current membership inside PostgreSQL.
 
 Voyage membership has one current meaning: only a retained row with
 `state = 'active'` grants product access. A rejoin reactivates that row as crew
