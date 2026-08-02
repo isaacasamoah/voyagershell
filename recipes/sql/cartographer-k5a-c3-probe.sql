@@ -13,7 +13,7 @@ WITH fixture AS (
   SELECT public.k5a_c3_selecting_read_poc(
     '72000000-0000-4000-8000-000000000002',
     '72000000-0000-4000-8000-000000000002',
-    exclusions.ids, 1, 8, 16, 8, 512, 128
+    exclusions.ids, 1, 8, 16, 4, 8, 512, 128
   ) AS value
   FROM exclusions
 )

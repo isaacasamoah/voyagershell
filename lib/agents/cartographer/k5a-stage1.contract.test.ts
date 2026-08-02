@@ -9,6 +9,7 @@ const recipe = read('recipes/cartographer-k5a-c3-local-proof.sh')
 const poc = read('recipes/sql/cartographer-k5a-c3-poc.sql')
 const probe = read('recipes/sql/cartographer-k5a-c3-probe.sql')
 const migration = read('supabase/migrations/078_knowledge_unit_lifecycle.sql')
+const annotationMigration = read('supabase/migrations/079_knowledge_unit_read.sql')
 const lifecycleRecipe = read('recipes/cartographer-k5a-c1-c2-local-proof.sh')
 const lifecycleAssertions = read(
   'recipes/sql/cartographer-k5a-c1-c2-assertions.sql',
@@ -43,7 +44,9 @@ describe('K5a stage-one contract', () => {
     const walk = poc.indexOf('v_frontier := ARRAY[v_root]')
     const candidates = poc.indexOf('INSERT INTO k5a_c3_candidates')
     const topK = poc.indexOf('INSERT INTO k5a_c3_selected')
-    const annotations = poc.indexOf('FOR v_assertion IN')
+    const annotations = poc.indexOf(
+      'FROM public.knowledge_relation_annotation_index annotation',
+    )
     const promotion = poc.indexOf(
       'INSERT INTO k5a_c3_selected(unit_id, selected_rank, promoted)',
       topK + 1,
@@ -53,23 +56,62 @@ describe('K5a stage-one contract', () => {
     expect(candidates).toBeLessThan(topK)
     expect(topK).toBeLessThan(annotations)
     expect(annotations).toBeLessThan(promotion)
-    expect(poc).toContain('v_partner_visible := NOT EXISTS')
+    expect(poc).toContain('assertion_person_id = p_viewer_profile_id')
+    expect(poc).toContain('SET enable_seqscan = off')
+    expect(poc).toContain('SET enable_bitmapscan = off')
+    expect(poc).toContain('ORDER BY annotation.repair_priority')
+    expect(poc).toContain('Bound the own-person index seek before checking walk membership')
     expect(poc).toContain('p_per_claim_partner_cap')
     expect(poc).toContain('p_annotation_check_budget')
+    expect(poc).toContain('p_closure_budget')
   })
 
-  it('records the empirical C3 battery and its independent-review blocker', () => {
+  it('installs the R3 annotation projection with one transactional writer', () => {
+    expect(annotationMigration.trimStart().startsWith('-- K5a stage 1b')).toBe(true)
+    expect(annotationMigration).toContain('BEGIN;')
+    expect(annotationMigration.trimEnd().endsWith('COMMIT;')).toBe(true)
+    expect(annotationMigration).toContain(
+      'CREATE TABLE IF NOT EXISTS public.knowledge_relation_annotation_index',
+    )
+    expect(annotationMigration).toContain('knowledge_relation_annotation_own_lookup')
+    expect(annotationMigration).toContain('endpoint_unit_id, assertion_person_id')
+    expect(annotationMigration).toContain('AFTER INSERT ON public.knowledge_relation_assertions')
+    expect(annotationMigration).toContain('knowledge_relation_annotation_backfill_incomplete')
+    expect(annotationMigration).toContain('ENABLE ROW LEVEL SECURITY')
+    expect(annotationMigration).toContain('GRANT SELECT ON public.knowledge_relation_annotation_index')
+    expect(annotationMigration).not.toContain(
+      'GRANT INSERT ON public.knowledge_relation_annotation_index',
+    )
+    expect(generatedTables).toContain(
+      'knowledge_relation_annotation_index: TableShape',
+    )
+  })
+
+  it('records the amended empirical C3 battery and mechanism proof', () => {
     expect(poc).toContain('k5a_c3_atomic_top_k_failed')
     expect(poc).toContain('k5a_c3_suppressed_pair_signalled')
-    expect(poc).toContain('k5a_c3_annotation_budget_failed')
-    expect(poc).toContain("name = 'standing' OR name LIKE 'high-%'")
+    expect(poc).toContain('k5a_c3_own_degree_overflow_failed')
+    expect(poc).toContain('diagnostics.own_degree_truncated')
+    expect(poc).toContain('k5a_c3_foreign_degree_independence_failed')
+    expect(poc).toContain('k5a_c3_supersedes_first_failed')
+    expect(poc).toContain('k5a_c3_chain_middle_degradation_failed')
+    expect(poc).toContain('diagnostics.closure_budget_truncated')
+    expect(poc).toContain('k5a_c3_suppressed_pair_plan_failed')
+    expect(poc).toContain('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)')
+    expect(poc).toContain('knowledge_relation_annotation_own_lookup')
+    expect(poc).toContain("'{0,Plan,Plans,0,Index Cond}'")
+    expect(poc).toContain('v_reader_before_elapsed')
+    expect(poc).toContain('v_reader_after_elapsed')
+    expect(poc).toContain('v_suppressed_plan::text NOT LIKE \'%"Index Cond":%\'')
+    expect(poc).toContain('v_suppressed_plan::text LIKE \'%"Filter":%\'')
+    expect(poc).toContain('v_plan_before::text LIKE \'%knowledge_relation_assertions%\'')
     expect(poc).toContain("channel IN ('reach', 'search')")
     expect(poc).toContain("session_distance BETWEEN 0 AND 5")
     expect(probe).toContain('K5A_C3_CONCURRENT_PROBE_GREEN')
     expect(fullSuite).toContain('./recipes/cartographer-k5a-c3-local-proof.sh')
     expect(receipt).toContain('CARTOGRAPHER_K5A_C3_LOCAL_GREEN')
-    expect(receipt).toContain('Status: `blocked at independent review`')
-    expect(receipt).toContain('pair repair processes only the original top-K')
+    expect(receipt).toContain('Status: `R3 battery passed`')
+    expect(receipt).toContain('foreign assertion rows')
   })
 
   it('installs the lifecycle substrate transactionally and re-runs it', () => {

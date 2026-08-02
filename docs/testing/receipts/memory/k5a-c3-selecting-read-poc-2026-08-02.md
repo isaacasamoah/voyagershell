@@ -1,49 +1,45 @@
-# K5a C3 selecting read — local PoC proof (2026-08-02)
+# K5a C3 R3 selecting read — local PoC proof (2026-08-02)
 
-Status: `blocked at independent review`
+Status: `R3 battery passed`
 
 Sanitization: the proof used only synthetic claims and the existing disposable
-K3/K4 fixture identities. No hosted identifier, credential, or personal corpus
-value was used.
+K3/K4 fixture identities. No hosted identifier, credential, personal corpus,
+or live database was read or written.
 
 ## Result
 
-`recipes/cartographer-k5a-c3-local-proof.sh` completed successfully against the
-pinned pgvector PostgreSQL image in a disposable container with networking
-disabled. It emitted:
+`recipes/cartographer-k5a-c3-local-proof.sh` applied migrations 078 and 079
+twice, then ran the R3 selecting-read battery in the pinned pgvector PostgreSQL
+image with container networking disabled. It emitted:
 
 ```text
 CARTOGRAPHER_K5A_C3_LOCAL_GREEN
 ```
 
-No live Supabase project or other live database was read or written.
+Migration 079 now owns an append-only `knowledge_relation_annotation_index`.
+The relation-assertion insert trigger writes two oriented endpoint rows in the
+same transaction. Each row is keyed by endpoint and assertion person, retains
+the exact input grants to reverify, and carries a derived repair priority:
+newer-ward `supersedes`, then one-hop `contradicts`, then older-ward
+`supersedes`. The table is immutable, RLS-enabled, readable only by the service
+role, and not directly writable by any application role. Migration backfill
+fails if an assertion does not produce exactly two rows.
 
-This green marker is an empirical battery result, not an accepted C3 verdict.
-Independent Build review found that the PoC derives public truncation from raw
-tension degree and assertion-input pressure before the assertion is authorized.
-Moving authorization in front of those counters avoids the output leak but
-requires scanning arbitrary hidden degree before the stated budgets, which
-breaks the structural deadline bound. The approved privacy, honest-completeness,
-and bounded-check claims therefore need a Spec decision: an indexed current
-authorization projection, a hard degree invariant, or an explicit amendment.
-
-The same review found that pair repair processes only the original top-K
-snapshot. A promoted middle node in an A-B-C tension chain can survive without
-bringing C. A bounded repair queue and a three-node chain probe are required
-after the authorization design is settled.
-
-## Observed battery
+## R3 battery
 
 | Boundary | Observed result |
 | --- | --- |
-| Ordered read | Authorization completed as a graph walk before effective-attention ranking or claim selection began. |
-| Atomic selection | A stale 0.95 claim survived top three while its 0.20 correction fell below the budget line; the returned set was the exact top three plus the correction. |
-| Suppressed assertion | A room-visible pair whose assertion included a private third input did not promote its lower endpoint and returned no tension, count, edge kind, or timing field. |
-| Annotation budgets | A focus claim with eight tension partners stopped at the two-partner and four-input-check limits, completed beneath the existing 550 ms application floor, and reported only `truncated = true`. |
-| Truncation honesty | Every over-budget result returned `truncated = true`; no failed or partial read was presented as complete. |
-| Attention dynamics | Twelve standing deliveries and one reach delivery outside the decay window contributed no promotion, so a fresh birth-0.9 claim outranked the old birth-0.6 claim. |
-| Working-memory dedupe | The excluded standing preference was not reintroduced by selection or pair repair. |
-| Concurrent suppression | Eight parallel suppressed-pair reads returned the same no-annotation shape. |
+| Walk before selection | Authorization completed as a graph walk before effective-attention ranking or top-K selection. |
+| Atomic top-K repair | A stale top-three claim brought in its below-budget correction without exposing edge kinds or internal counters. |
+| Foreign-degree independence | The same already viewer-visible edge gained 128 foreign-person assertions, so traversal topology did not change. Before and after, the full reader's result and truncation flag were byte-identical; both full reads and fifty repeated index seeks stayed below the 550 ms floor and within 200 ms of each other. |
+| Own-degree overflow | Eight viewer-owned partners with a cap of two returned the focus plus exactly two partners. Cause-specific proof instrumentation recorded `own_degree_truncated = true`, so the probe does not borrow its verdict from top-K truncation. |
+| Bounded chain closure | A newer-ward A-B-C-D supersession chain closed while budget remained. With closure budget one, C still arrived with its B tension while D was omitted, and cause-specific instrumentation recorded closure-budget truncation. |
+| Supersedes first | With only six annotation-budget units, C arrived through B before B's contradicting partner was considered. |
+| Suppressed pair | A room-visible pair asserted by another person, with a private third input, did not promote or annotate either endpoint for the viewer. |
+| Mechanism proof | Executed JSON plans used the same `knowledge_relation_annotation_own_lookup` shape before and after foreign fan-in, with endpoint and assertion person together in `Index Cond` and no `Filter`. The suppressed lookup read zero rows, foreign assertion rows were never scanned, and no plan referenced `knowledge_relation_assertions`. Sequential and bitmap scans were disabled at this authorization boundary so table size or statistics cannot replace the exact own-person seek. |
+| Input revalidation | Every admitted annotation rechecked all assertion input grants before promotion or tension output. Closure steps consumed the annotation budget. |
+| Attention and dedupe | Standing deliveries and an expired reach citation did not entrench old memory; excluded working memory was not reintroduced. |
+| Concurrent suppression | Eight parallel reads returned the same no-annotation suppressed-pair shape. |
 
 ## Command
 
@@ -51,7 +47,7 @@ after the authorization design is settled.
 ./recipes/cartographer-k5a-c3-local-proof.sh
 ```
 
-This records the seeded behavior that passed before the full migration-079 read
-is built. It does not prove the approved selecting mechanism, install a
-production RPC, touch a hosted database, prove the future composer wording, or
-authorize K5a stage two.
+This is an empirical C3 mechanism verdict for the R3 amendment. It does not
+install the final migration-079 selecting RPC, touch a hosted database, measure
+composer latency, prove composer wording, or authorize K5a stage two. Per the
+G4 ruling, relation-job draining remains lazy and was not forced by this read.

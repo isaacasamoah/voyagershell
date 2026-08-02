@@ -102,6 +102,17 @@ export type KnowledgeTables = {
     attempt_id: string; recorded_at: string
   }, { edge_id: string; input_unit_ids: string[]; contract_version: string;
     attempt_id: string; recorded_at?: string }>
+  knowledge_relation_annotation_index: TableShape<{
+    endpoint_unit_id: string; partner_unit_id: string; assertion_person_id: string;
+    edge_id: string; assertion_attempt_id: string; edge_kind: string;
+    endpoint_is_source: boolean; repair_priority: number; input_unit_ids: string[];
+    assertion_recorded_at: string
+  }, {
+    endpoint_unit_id: string; partner_unit_id: string; assertion_person_id: string;
+    edge_id: string; assertion_attempt_id: string; edge_kind: string;
+    endpoint_is_source: boolean; repair_priority: number; input_unit_ids: string[];
+    assertion_recorded_at: string
+  }>
   knowledge_topics: TableShape<{
     id: string; normalized_label: string; embedding: string; created_at: string
   }, { id: string; normalized_label: string; embedding: string; created_at?: string }>

@@ -39,7 +39,7 @@ docker image inspect "$IMAGE" >/dev/null 2>&1 \
   || fail 'the pinned pgvector image must already exist locally; pulling is forbidden'
 [ -x "$VITE_NODE" ] || fail 'dependencies missing; run npm install first'
 for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql \
-  "$REPO_ROOT"/supabase/migrations/{061,062,063,064,065,066,067,068,069,070,071,072,073,074,075,076,077}_*.sql \
+  "$REPO_ROOT"/supabase/migrations/{061,062,063,064,065,066,067,068,069,070,071,072,073,074,075,076,077,078,079}_*.sql \
   "$REPO_ROOT/recipes/sql/cartographer-k3-setup.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k4b-v3-residue.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k4b-assertions.sql" \
@@ -113,12 +113,20 @@ docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/recipes/sql/cartographer-k4c-assertions.sql" >/dev/null \
   || fail 'K4c fixture setup failed'
+for pass in 1 2; do
+  for number in 078 079; do
+    sql_file=("$REPO_ROOT/supabase/migrations/${number}_"*.sql)
+    docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+      -U postgres -d "$DATABASE" < "${sql_file[0]}" >/dev/null \
+      || fail "migration $number pass $pass failed"
+  done
+done
 
 verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq \
   -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-poc.sql")" \
   || fail 'C3 seeded-corpus assertions failed'
-[ "$verdict" = CARTOGRAPHER_K5A_C3_POC_GREEN ] \
+[ "$verdict" = CARTOGRAPHER_K5A_C3_R3_POC_GREEN ] \
   || fail 'exact C3 PoC verdict missing'
 
 for index in $(seq 1 8); do
