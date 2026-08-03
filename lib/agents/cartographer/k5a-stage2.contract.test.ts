@@ -6,16 +6,22 @@ const read = (path: string): string =>
   readFileSync(resolve(process.cwd(), path), 'utf8')
 
 const migration = read('supabase/migrations/079_knowledge_unit_read.sql')
+const relationMigration = read('supabase/migrations/077_relation_conflict_ledger.sql')
 const vectorMigration = read('supabase/migrations/076_topic_identity_hardening.sql')
 const battery = read('recipes/sql/cartographer-k5a-c3-poc.sql')
+const shapeBattery = read('recipes/sql/cartographer-k5a-c3-r7-shapes.sql')
 const realisticBattery = read('recipes/sql/cartographer-k5a-c3-realistic.sql')
-const c4R4Battery = read('recipes/sql/cartographer-k5a-c4-r4-assertions.sql')
+const c4R5Battery = read('recipes/sql/cartographer-k5a-c4-r5-assertions.sql')
 const concurrentProbe = read('recipes/sql/cartographer-k5a-c3-probe.sql')
+const c3Recipe = read('recipes/cartographer-k5a-c3-local-proof.sh')
 const boundary = read('lib/knowledge/kernel/boundary.ts')
 const search = read('lib/knowledge/unit-search.ts')
 const searchTools = read('lib/retrieval/unit-search-tools.ts')
 const temporalTool = read('lib/retrieval/temporal-retrieval-tool.ts')
 const functions = read('lib/supabase/schema/functions.ts')
+const r7Receipt = read(
+  'docs/testing/receipts/memory/k5a-r7-battery-corrections-2026-08-03.md',
+)
 
 describe('K5a stage-two contract', () => {
   it('installs the production walk-select-annotate-repair read', () => {
@@ -45,24 +51,56 @@ describe('K5a stage-two contract', () => {
     expect(migration).not.toMatch(/model_provider|provider_call/i)
   })
 
-  it('drives the production function through the C3 mechanism battery', () => {
+  it('drives production v3 through observable and design-integrity batteries', () => {
     expect(battery.match(/public\.retrieve_knowledge_graph_claims_v3\(/g))
       .not.toBeNull()
     expect(battery.match(/public\.retrieve_knowledge_graph_claims_v3\(/g)!.length)
       .toBeGreaterThan(8)
     expect(battery).toContain('k5a_c3_exclude_unit_dedupe_failed')
     expect(battery).toContain('k5a_c3_atomic_top_k_failed')
-    expect(realisticBattery).toContain('k5a_c3_r6_realistic_regime_failed')
+    expect(realisticBattery).toContain(
+      'k5a_c3_r7_realistic_observable_or_integrity_failed',
+    )
     expect(battery).toContain('k5a_c3_own_degree_overflow_failed')
     expect(battery).toContain('k5a_c3_chain_middle_degradation_failed')
     expect(battery).not.toMatch(/SET(?: LOCAL)? enable_/)
     expect(realisticBattery).not.toMatch(/SET(?: LOCAL)? enable_/)
     expect(battery).toContain("k5a_c3_assert_behavior_poc('small')")
     expect(realisticBattery).toContain("k5a_c3_assert_behavior_poc('realistic')")
-    expect(realisticBattery).toContain('k5a_c3_r6_crossover_failed')
-    expect(realisticBattery).toContain("? 'knowledge_relation_annotation_own_lookup'")
-    expect(realisticBattery).toContain("v_mechanism_before->'rows_read'")
-    expect(realisticBattery).toContain('timing_envelope_3sigma_ms')
+    expect(shapeBattery).toContain('k5a_c3_r7_pointwise_disjunction_failed')
+    expect(shapeBattery).toContain("'own-degree-cap'")
+    expect(shapeBattery).toContain("'production-width'")
+    expect(shapeBattery).toContain("'non-all-visible'")
+    expect(shapeBattery).toContain("'combined-worst'")
+    expect(shapeBattery).toContain('derived_page_budget')
+    expect(shapeBattery).toContain('first_index_pages')
+    expect(shapeBattery).toContain('heap_fetches_or_blocks')
+    expect(shapeBattery).toContain('rows_removed_by_filter')
+    expect(shapeBattery).not.toContain('source_caps_changed')
+    expect(c3Recipe).toContain('ts.createSourceFile(')
+    expect(c3Recipe).toContain('value.name.text === "perClaimPartnerCap"')
+    expect(c3Recipe).toContain('run_interruptible docker run')
+    expect(c3Recipe).not.toContain('run_interruptible docker_proof_run')
+    expect(c3Recipe).toContain('run_interruptible docker exec')
+    expect(relationMigration).toContain(
+      'v_input_ids := ARRAY[v_attempt.unit_id] || v_attempt.candidate_unit_ids',
+    )
+    expect(realisticBattery).toContain(
+      "v_design_integrity_before->'rows_read'",
+    )
+    expect(realisticBattery).toContain(
+      'database_timing_diagnostic_3sigma_ms',
+    )
+    expect(realisticBattery).toContain(
+      "'pending_confirmed_floor_minus_overhead'",
+    )
+    expect(r7Receipt).toContain(
+      'Status: `R7_BATTERY_CORRECTIONS_LOCAL_GREEN`',
+    )
+    expect(r7Receipt).toContain(
+      'observable-boundary timing arm is deliberately absent',
+    )
+    expect(r7Receipt).toContain('combined-worst')
     expect(concurrentProbe).toContain(
       'public.retrieve_knowledge_graph_claims_v3(',
     )
@@ -114,14 +152,24 @@ describe('K5a stage-two contract', () => {
     expect(migration).not.toMatch(/authorize_knowledge_scope|knowledge_in_scope/)
     expect(battery).toContain('k5a_c4_victim_seat_failed')
     expect(battery).toContain("IS DISTINCT FROM '[]'::jsonb")
-    expect(c4R4Battery).toContain('k5a_c4_exact_recall_failed')
-    expect(c4R4Battery).toContain('k5a_c4_r5_plan_mechanism_failed')
-    expect(c4R4Battery).toContain('k5a_c4_r5_foreign_corpus_changed')
-    expect(c4R4Battery).toContain('unit_rows_read')
-    expect(c4R4Battery).toContain('timing_envelope_3sigma_ms')
-    expect(c4R4Battery).toContain("'g5_ann_threshold_units', NULL")
-    expect(c4R4Battery).not.toContain('derived_ann_threshold_units')
-    expect(c4R4Battery).not.toMatch(
+    expect(c4R5Battery).toContain('k5a_c4_exact_recall_failed')
+    expect(c4R5Battery).toContain(
+      'v_max_curve_probe_units constant integer := 10010',
+    )
+    expect(c4R5Battery).toContain(
+      'k5a_c4_r5_plan_design_integrity_failed',
+    )
+    expect(c4R5Battery).toContain('k5a_c4_r5_foreign_corpus_changed')
+    expect(c4R5Battery).toContain('unit_rows_read')
+    expect(c4R5Battery).toContain(
+      'database_timing_diagnostic_3sigma_ms',
+    )
+    expect(c4R5Battery).toContain(
+      "'pending_confirmed_floor_minus_overhead'",
+    )
+    expect(c4R5Battery).toContain("'g5_ann_threshold_units', NULL")
+    expect(c4R5Battery).not.toContain('derived_ann_threshold_units')
+    expect(c4R5Battery).not.toMatch(
       /SET LOCAL (enable_|hnsw\.)|SET (enable_|hnsw\.)/,
     )
     expect(functions).toContain('search_knowledge_units:')

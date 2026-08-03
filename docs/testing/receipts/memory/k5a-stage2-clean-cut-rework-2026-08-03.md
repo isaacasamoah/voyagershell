@@ -51,8 +51,10 @@ the released application no longer references it. On this branch, v2 and the
 CandidateFunctions v2 Args entry persist solely as that deployment-window
 surface, mandated for 081 deletion.
 
-The `cartographer-k5a-c4-r4-assertions.sql` filename remains unchanged pending
-the separate battery adjudication.
+At this Stage 2 revision the C4 battery's filename was still held at its prior
+round name pending adjudication. R7 later renamed the live battery to
+`cartographer-k5a-c4-r5-assertions.sql`; this historical receipt remains scoped
+to the revision named above.
 
 ## Verification
 

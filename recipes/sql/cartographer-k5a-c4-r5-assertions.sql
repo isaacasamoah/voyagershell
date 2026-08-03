@@ -1,5 +1,6 @@
 -- K5a C4 R5: exact vector distance over the membership-indexed authorized set.
--- The battery asserts plan mechanism, never literal executor-node placement.
+-- Row sources, named access paths, rows read and rows removed are
+-- design-integrity checks, never privacy proxies or literal executor placement.
 -- No planner GUC or ANN setting is permitted.
 
 CREATE OR REPLACE FUNCTION public.k5a_c4_seed_private_units(
@@ -26,11 +27,11 @@ BEGIN
 
   WITH shaped AS MATERIALIZED (
     SELECT series,
-      md5(format('k5a-c4-r4-event:%s:%s:%s',
+      md5(format('k5a-c4-r5-event:%s:%s:%s',
         p_person_id, p_key_prefix, series))::uuid AS event_id,
-      md5(format('k5a-c4-r4-unit:%s:%s:%s',
+      md5(format('k5a-c4-r5-unit:%s:%s:%s',
         p_person_id, p_key_prefix, series))::uuid AS unit_id,
-      format('R4 exact-vector %s item %s.', p_key_prefix, series) AS claim,
+      format('R5 exact-vector %s item %s.', p_key_prefix, series) AS claim,
       clock_timestamp() + make_interval(secs => series / 1000000.0)
         AS created_at
     FROM generate_series(1, p_count) series
@@ -40,7 +41,7 @@ BEGIN
     actor_id, actor_type, created_at, participants, knowledge_audience_id
   )
   SELECT event_id, p_person_id, 'message', claim,
-    jsonb_build_object('proof', 'k5a-c4-r4'), 'conversation',
+    jsonb_build_object('proof', 'k5a-c4-r5'), 'conversation',
     jsonb_build_object('proof_key', p_key_prefix, 'series', series),
     p_person_id, 'user', created_at, ARRAY[p_person_id], v_audience_id
   FROM shaped
@@ -48,18 +49,18 @@ BEGIN
 
   WITH shaped AS MATERIALIZED (
     SELECT series,
-      md5(format('k5a-c4-r4-event:%s:%s:%s',
+      md5(format('k5a-c4-r5-event:%s:%s:%s',
         p_person_id, p_key_prefix, series))::uuid AS event_id,
-      md5(format('k5a-c4-r4-unit:%s:%s:%s',
+      md5(format('k5a-c4-r5-unit:%s:%s:%s',
         p_person_id, p_key_prefix, series))::uuid AS unit_id,
-      format('R4 exact-vector %s item %s.', p_key_prefix, series) AS claim
+      format('R5 exact-vector %s item %s.', p_key_prefix, series) AS claim
     FROM generate_series(1, p_count) series
   )
   INSERT INTO public.knowledge_units(
     id, claim, source_event_id, extractor_version, claim_key,
     knowledge_audience_id, knowledge_type, attention_score, embedding
   )
-  SELECT unit_id, claim, event_id, 'k5a-c4-r4-proof',
+  SELECT unit_id, claim, event_id, 'k5a-c4-r5-proof',
     format('proof:%s:%s', p_key_prefix, series), v_audience_id,
     'domain', 0.7,
     CASE WHEN series = 1 AND p_target_vector IS NOT NULL
@@ -71,11 +72,11 @@ BEGIN
 
   WITH shaped AS MATERIALIZED (
     SELECT series,
-      md5(format('k5a-c4-r4-event:%s:%s:%s',
+      md5(format('k5a-c4-r5-event:%s:%s:%s',
         p_person_id, p_key_prefix, series))::uuid AS event_id,
-      md5(format('k5a-c4-r4-unit:%s:%s:%s',
+      md5(format('k5a-c4-r5-unit:%s:%s:%s',
         p_person_id, p_key_prefix, series))::uuid AS unit_id,
-      format('R4 exact-vector %s item %s.', p_key_prefix, series) AS claim
+      format('R5 exact-vector %s item %s.', p_key_prefix, series) AS claim
     FROM generate_series(1, p_count) series
   )
   INSERT INTO public.graph_nodes(id, kind, authority_id, label)
@@ -86,11 +87,11 @@ BEGIN
 
   WITH shaped AS MATERIALIZED (
     SELECT series,
-      md5(format('k5a-c4-r4-event:%s:%s:%s',
+      md5(format('k5a-c4-r5-event:%s:%s:%s',
         p_person_id, p_key_prefix, series))::uuid AS event_id,
-      md5(format('k5a-c4-r4-unit:%s:%s:%s',
+      md5(format('k5a-c4-r5-unit:%s:%s:%s',
         p_person_id, p_key_prefix, series))::uuid AS unit_id,
-      format('R4 exact-vector %s item %s.', p_key_prefix, series) AS claim
+      format('R5 exact-vector %s item %s.', p_key_prefix, series) AS claim
     FROM generate_series(1, p_count) series
   )
   INSERT INTO public.graph_node_grants(
@@ -143,8 +144,8 @@ BEGIN
 
   WITH shaped AS MATERIALIZED (
     SELECT series,
-      md5(format('k5a-c4-r4-backdrop-event:%s', series))::uuid AS event_id,
-      md5(format('k5a-c4-r4-backdrop-unit:%s', series))::uuid AS unit_id
+      md5(format('k5a-c4-r5-backdrop-event:%s', series))::uuid AS event_id,
+      md5(format('k5a-c4-r5-backdrop-unit:%s', series))::uuid AS unit_id
     FROM generate_series(1, p_count) series
   )
   INSERT INTO public.knowledge_events(
@@ -152,8 +153,8 @@ BEGIN
     actor_id, actor_type, created_at, participants, knowledge_audience_id
   )
   SELECT event_id, p_person_id, 'message',
-    format('R4 planner backdrop %s.', series),
-    jsonb_build_object('proof', 'k5a-c4-r4-backdrop'), 'conversation',
+    format('R5 planner backdrop %s.', series),
+    jsonb_build_object('proof', 'k5a-c4-r5-backdrop'), 'conversation',
     jsonb_build_object('series', series), p_person_id, 'user',
     clock_timestamp(), ARRAY[p_person_id], v_audience_id
   FROM shaped
@@ -161,16 +162,16 @@ BEGIN
 
   WITH shaped AS MATERIALIZED (
     SELECT series,
-      md5(format('k5a-c4-r4-backdrop-event:%s', series))::uuid AS event_id,
-      md5(format('k5a-c4-r4-backdrop-unit:%s', series))::uuid AS unit_id
+      md5(format('k5a-c4-r5-backdrop-event:%s', series))::uuid AS event_id,
+      md5(format('k5a-c4-r5-backdrop-unit:%s', series))::uuid AS unit_id
     FROM generate_series(1, p_count) series
   )
   INSERT INTO public.knowledge_units(
     id, claim, source_event_id, extractor_version, claim_key,
     knowledge_audience_id, knowledge_type, attention_score, embedding
   )
-  SELECT unit_id, format('R4 planner backdrop %s.', series), event_id,
-    'k5a-c4-r4-backdrop', format('proof:backdrop:%s', series),
+  SELECT unit_id, format('R5 planner backdrop %s.', series), event_id,
+    'k5a-c4-r5-backdrop', format('proof:backdrop:%s', series),
     v_audience_id, NULL, NULL, NULL
   FROM shaped
   ON CONFLICT (id) DO NOTHING;
@@ -269,7 +270,7 @@ SET search_path = pg_catalog AS $$
   FROM nodes
 $$;
 
-CREATE OR REPLACE FUNCTION public.k5a_c4_plan_mechanism(
+CREATE OR REPLACE FUNCTION public.k5a_c4_plan_design_integrity(
   p_plan jsonb,
   p_authorized_cardinality integer
 ) RETURNS jsonb
@@ -350,7 +351,7 @@ BEGIN
     )
     OR v_unit_rows_read IS DISTINCT FROM p_authorized_cardinality::bigint
     OR v_rows_removed > 1 THEN
-    RAISE EXCEPTION 'k5a_c4_r5_plan_mechanism_failed:%:%:%:%:%',
+    RAISE EXCEPTION 'k5a_c4_r5_plan_design_integrity_failed:%:%:%:%:%',
       p_authorized_cardinality, v_row_sources, v_unit_rows_read,
       v_rows_removed, p_plan;
   END IF;
@@ -418,10 +419,10 @@ DECLARE
   v_query vector(1536) :=
     (array_fill(0::real, ARRAY[1534]) || ARRAY[1::real, 0::real])::vector;
   v_owner_target uuid := md5(format(
-    'k5a-c4-r4-unit:%s:%s:%s', v_owner, 'owner-target', 1
+    'k5a-c4-r5-unit:%s:%s:%s', v_owner, 'owner-target', 1
   ))::uuid;
   v_member_target uuid := md5(format(
-    'k5a-c4-r4-unit:%s:%s:%s', v_member, 'member-target', 1
+    'k5a-c4-r5-unit:%s:%s:%s', v_member, 'member-target', 1
   ))::uuid;
   v_missing integer;
   v_plan_100 jsonb;
@@ -429,11 +430,11 @@ DECLARE
   v_plan_curve_probe jsonb;
   v_plan_owner_before jsonb;
   v_plan_owner_after jsonb;
-  v_mechanism_100 jsonb;
-  v_mechanism_1001 jsonb;
-  v_mechanism_curve_probe jsonb;
-  v_owner_mechanism_before jsonb;
-  v_owner_mechanism_after jsonb;
+  v_design_integrity_100 jsonb;
+  v_design_integrity_1001 jsonb;
+  v_design_integrity_curve_probe jsonb;
+  v_owner_design_integrity_before jsonb;
+  v_owner_design_integrity_after jsonb;
   v_owner_result_before jsonb;
   v_owner_result_after jsonb;
   v_p95_100 double precision;
@@ -446,6 +447,7 @@ DECLARE
   v_timing_envelope double precision;
   v_slope double precision;
   v_curve_probe_units integer;
+  v_max_curve_probe_units constant integer := 10010;
   v_curve_probe_kind text := 'interpolated_instrumented_550ms_sample';
   v_foreign_before integer;
   v_foreign_after integer;
@@ -454,9 +456,9 @@ BEGIN
   -- Enough nonmatching audience rows make membership lookup a real planner
   -- choice rather than a tiny-table artifact.
   INSERT INTO auth.users(id, email, raw_user_meta_data, created_at)
-  SELECT md5(format('k5a-c4-r4-noise-profile:%s', series))::uuid,
-    format('k5a-c4-r4-noise-%s@example.invalid', series),
-    jsonb_build_object('display_name', format('R4 noise %s', series)),
+  SELECT md5(format('k5a-c4-r5-noise-profile:%s', series))::uuid,
+    format('k5a-c4-r5-noise-%s@example.invalid', series),
+    jsonb_build_object('display_name', format('R5 noise %s', series)),
     clock_timestamp()
   FROM generate_series(1, 8192) series
   ON CONFLICT DO NOTHING;
@@ -464,8 +466,8 @@ BEGIN
   INSERT INTO auth.users(id, email, raw_user_meta_data, created_at)
   VALUES (
     '72000000-0000-4000-8000-000000000003',
-    'k5a-c4-r4-backdrop@example.invalid',
-    '{"display_name":"R4 planner backdrop"}'::jsonb,
+    'k5a-c4-r5-backdrop@example.invalid',
+    '{"display_name":"R5 planner backdrop"}'::jsonb,
     clock_timestamp()
   ) ON CONFLICT DO NOTHING;
   PERFORM public.k5a_c4_seed_foreign_backdrop(
@@ -489,7 +491,9 @@ BEGIN
   ANALYZE public.knowledge_audiences;
   ANALYZE public.knowledge_units;
   v_plan_100 := public.k5a_c4_exact_search_plan(v_member, v_query);
-  v_mechanism_100 := public.k5a_c4_plan_mechanism(v_plan_100, 100);
+  v_design_integrity_100 := public.k5a_c4_plan_design_integrity(
+    v_plan_100, 100
+  );
   v_p95_100 := public.k5a_c4_measure_p95(
     v_member, v_query, v_member_target
   );
@@ -500,7 +504,9 @@ BEGIN
   );
   ANALYZE public.knowledge_units;
   v_plan_1001 := public.k5a_c4_exact_search_plan(v_member, v_query);
-  v_mechanism_1001 := public.k5a_c4_plan_mechanism(v_plan_1001, 1001);
+  v_design_integrity_1001 := public.k5a_c4_plan_design_integrity(
+    v_plan_1001, 1001
+  );
   v_p95_1001 := public.k5a_c4_measure_p95(
     v_member, v_query, v_member_target
   );
@@ -510,12 +516,16 @@ BEGIN
     v_curve_probe_kind := 'first_instrumented_sample_at_550ms';
   ELSIF v_p95_1001 > v_p95_100 THEN
     v_slope := (v_p95_1001 - v_p95_100) / 901;
-    v_curve_probe_units := ceil(
-      1001 + greatest(550 - v_p95_1001, 0) / v_slope
+    v_curve_probe_units := least(
+      ceil(1001 + greatest(550 - v_p95_1001, 0) / v_slope),
+      v_max_curve_probe_units::double precision
     )::integer;
     v_curve_probe_units := greatest(v_curve_probe_units, 1001);
+    IF v_curve_probe_units = v_max_curve_probe_units THEN
+      v_curve_probe_kind := 'instrumented_positive_slope_capped_at_supported_scale';
+    END IF;
   ELSE
-    v_curve_probe_units := 10010;
+    v_curve_probe_units := v_max_curve_probe_units;
     v_curve_probe_kind := 'instrumented_nonpositive_sample_slope';
   END IF;
 
@@ -527,7 +537,7 @@ BEGIN
   );
   ANALYZE public.knowledge_units;
   v_plan_curve_probe := public.k5a_c4_exact_search_plan(v_member, v_query);
-  v_mechanism_curve_probe := public.k5a_c4_plan_mechanism(
+  v_design_integrity_curve_probe := public.k5a_c4_plan_design_integrity(
     v_plan_curve_probe, v_curve_probe_units
   );
   v_p95_curve_probe := public.k5a_c4_measure_p95(
@@ -540,7 +550,7 @@ BEGIN
   );
   ANALYZE public.knowledge_units;
   v_plan_owner_before := public.k5a_c4_exact_search_plan(v_owner, v_query);
-  v_owner_mechanism_before := public.k5a_c4_plan_mechanism(
+  v_owner_design_integrity_before := public.k5a_c4_plan_design_integrity(
     v_plan_owner_before, 1001
   );
   SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
@@ -572,7 +582,7 @@ BEGIN
   );
   ANALYZE public.knowledge_units;
   v_plan_owner_after := public.k5a_c4_exact_search_plan(v_owner, v_query);
-  v_owner_mechanism_after := public.k5a_c4_plan_mechanism(
+  v_owner_design_integrity_after := public.k5a_c4_plan_design_integrity(
     v_plan_owner_after, 1001
   );
   SELECT coalesce(jsonb_agg(to_jsonb(hit) ORDER BY hit.unit_id), '[]')
@@ -585,30 +595,30 @@ BEGIN
   );
   v_foreign_after := public.k5a_c4_authorized_unit_count(v_member);
 
-  IF v_mechanism_100->'row_sources'
-      IS DISTINCT FROM v_mechanism_1001->'row_sources'
-    OR v_mechanism_100->'row_sources'
-      IS DISTINCT FROM v_mechanism_curve_probe->'row_sources'
-    OR v_mechanism_100->'access_paths'
-      IS DISTINCT FROM v_mechanism_1001->'access_paths'
-    OR v_mechanism_100->'access_paths'
-      IS DISTINCT FROM v_mechanism_curve_probe->'access_paths' THEN
+  IF v_design_integrity_100->'row_sources'
+      IS DISTINCT FROM v_design_integrity_1001->'row_sources'
+    OR v_design_integrity_100->'row_sources'
+      IS DISTINCT FROM v_design_integrity_curve_probe->'row_sources'
+    OR v_design_integrity_100->'access_paths'
+      IS DISTINCT FROM v_design_integrity_1001->'access_paths'
+    OR v_design_integrity_100->'access_paths'
+      IS DISTINCT FROM v_design_integrity_curve_probe->'access_paths' THEN
     RAISE EXCEPTION 'k5a_c4_r5_plan_semantics_changed:%:%:%',
-      v_mechanism_100, v_mechanism_1001, v_mechanism_curve_probe;
+      v_design_integrity_100, v_design_integrity_1001,
+      v_design_integrity_curve_probe;
   END IF;
 
   IF v_owner_result_before IS DISTINCT FROM v_owner_result_after
     OR v_foreign_after IS DISTINCT FROM v_foreign_before * 10
-    OR v_owner_mechanism_before->'row_sources'
-      IS DISTINCT FROM v_owner_mechanism_after->'row_sources'
-    OR v_owner_mechanism_before->'access_paths'
-      IS DISTINCT FROM v_owner_mechanism_after->'access_paths'
-    OR v_owner_mechanism_before->'unit_rows_read'
-      IS DISTINCT FROM v_owner_mechanism_after->'unit_rows_read'
-    OR abs(v_owner_p95_before - v_owner_p95_after) > v_timing_envelope THEN
+    OR v_owner_design_integrity_before->'row_sources'
+      IS DISTINCT FROM v_owner_design_integrity_after->'row_sources'
+    OR v_owner_design_integrity_before->'access_paths'
+      IS DISTINCT FROM v_owner_design_integrity_after->'access_paths'
+    OR v_owner_design_integrity_before->'unit_rows_read'
+      IS DISTINCT FROM v_owner_design_integrity_after->'unit_rows_read' THEN
     RAISE EXCEPTION 'k5a_c4_r5_foreign_corpus_changed:%:%:%:%:%:%:%:%',
       v_owner_result_before, v_owner_result_after,
-      v_owner_mechanism_before, v_owner_mechanism_after,
+      v_owner_design_integrity_before, v_owner_design_integrity_after,
       v_owner_baseline_p95, v_owner_p95_after,
       v_timing_envelope, v_foreign_after;
   END IF;
@@ -628,7 +638,7 @@ BEGIN
     RAISE EXCEPTION 'k5a_c4_r5_kernel_planner_forcing_survived';
   END IF;
 
-  RAISE NOTICE 'K5A_C4_R5_MECHANISM:%', jsonb_build_object(
+  RAISE NOTICE 'K5A_C4_R5_DESIGN_INTEGRITY:%', jsonb_build_object(
     'p95_ms_100', round(v_p95_100::numeric, 3),
     'p95_ms_1001', round(v_p95_1001::numeric, 3),
     'instrumented_curve_probe_units', v_curve_probe_units,
@@ -641,8 +651,13 @@ BEGIN
       round(v_owner_p95_before::numeric, 3),
     'owner_p95_ms_after_foreign_growth',
       round(v_owner_p95_after::numeric, 3),
-    'timing_envelope_3sigma_ms', round(v_timing_envelope::numeric, 3),
-    'owner_mechanism', v_owner_mechanism_after,
+    'database_timing_diagnostic_3sigma_ms',
+      round(v_timing_envelope::numeric, 3),
+    'database_timing_diagnostic_inside_envelope',
+      abs(v_owner_p95_before - v_owner_p95_after) <= v_timing_envelope,
+    'observable_boundary_timing_status',
+      'pending_confirmed_floor_minus_overhead',
+    'owner_design_integrity', v_owner_design_integrity_after,
     'foreign_authorized_units',
       v_foreign_after
   );

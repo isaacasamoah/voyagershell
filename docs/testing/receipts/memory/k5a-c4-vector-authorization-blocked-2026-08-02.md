@@ -3,15 +3,16 @@
 Status: `SUPERSEDED-R4-PLAN-STABILITY-BLOCKER`
 
 Rounds 4 and 5 resolved this historical blocker. The exact authorized-subset
-implementation and mechanism-grade battery now pass; current evidence is in
-`k5a-r6-c3-r5-c4-local-proof-2026-08-03.md`. The plans below remain the
-evidence that rejected global ANN post-filtering.
+implementation passes the current observable and design-integrity battery;
+current evidence is in `k5a-r7-battery-corrections-2026-08-03.md`. The plans
+below remain the evidence that rejected global ANN post-filtering.
 
 Round 5 resolved this C4 letter-versus-mechanism blocker. The unchanged
 candidate reproduced byte-identical results and p95 355.837 ms → 364.273 ms
 with only interior executor placement changing. Round 6 subsequently resolved
-the kernel-wide no-forcing reproof of C3, after which the revised C4 mechanism
-battery ran to a green verdict.
+the kernel-wide no-forcing reproof of C3, after which the revised C4 battery ran
+to a green verdict. R7 subsequently reclassified its physical read evidence as
+design integrity and moved timing proof to the observable boundary.
 
 Prior clean Stage-2 checkpoint: `ae8d666`. R4 blocker checkpoint: this
 receipt's commit on `feature/k5a-graph-memory`.

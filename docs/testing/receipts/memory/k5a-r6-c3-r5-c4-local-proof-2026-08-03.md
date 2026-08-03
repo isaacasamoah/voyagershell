@@ -1,6 +1,14 @@
 # K5a R6 C3 and R5 C4 local proof (2026-08-03)
 
-Status: `C3_AND_C4_LOCAL_BATTERIES_GREEN`
+Status: `SUPERSEDED_BY_R7_BATTERY_CORRECTION`
+
+This receipt is historical evidence for the Stage 2 revision named below. R7
+replaced its fixed eight-page C3 coverage with pointwise shape-space budgets,
+reclassified rows and rows-removed as design integrity rather than privacy,
+and moved timing proof to the observable boundary. The current battery
+semantics and local verdict are recorded in
+`k5a-r7-battery-corrections-2026-08-03.md`; do not use this receipt's R6 floor
+comparison as a current gate.
 
 Base checkpoint: `213bb5fc4e76905c82af2d665a4914e3d5a671f4` on
 `feature/k5a-graph-memory`.

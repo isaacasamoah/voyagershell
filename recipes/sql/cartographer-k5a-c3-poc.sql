@@ -1,25 +1,5 @@
 \set ON_ERROR_STOP on
 
-\if :{?response_floor_ms}
-\else
-  \echo 'response_floor_ms must be supplied from boundary.ts'
-  \quit
-\endif
-\if :{?small_page_budget}
-\else
-  \echo 'small_page_budget must be supplied by the proof driver'
-  \quit
-\endif
-
-CREATE TABLE public.k5a_c3_runtime_config (
-  response_floor_ms double precision NOT NULL CHECK (response_floor_ms > 0),
-  small_relation_page_budget integer NOT NULL
-    CHECK (small_relation_page_budget > 0)
-);
-INSERT INTO public.k5a_c3_runtime_config(
-  response_floor_ms, small_relation_page_budget
-) VALUES (:response_floor_ms, :small_page_budget);
-
 -- K5a C3 remains a disposable selecting-read proof. Migration 079 owns the
 -- durable annotation projection; the function below proves the R3 algorithm
 -- against that real table without installing a production read function.
@@ -421,7 +401,7 @@ SET search_path = pg_catalog AS $$
   FROM nodes
 $$;
 
-CREATE FUNCTION public.k5a_c3_annotation_mechanism_poc(p_plan jsonb)
+CREATE FUNCTION public.k5a_c3_annotation_design_integrity_poc(p_plan jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql STABLE STRICT
 SET search_path = pg_catalog, public AS $$
@@ -548,7 +528,7 @@ DECLARE
   v_chain_priority jsonb;
   v_chain_bounded jsonb;
   v_suppressed_plan jsonb;
-  v_suppressed_mechanism jsonb;
+  v_suppressed_design_integrity jsonb;
   v_exclusions uuid[];
   v_stale uuid;
   v_fresh uuid;
@@ -562,14 +542,10 @@ DECLARE
   v_chain_c uuid;
   v_chain_d uuid;
   v_chain_x uuid;
-  v_started timestamptz;
-  v_response_floor_ms double precision;
 BEGIN
   IF p_regime NOT IN ('small', 'realistic') THEN
     RAISE EXCEPTION 'k5a_c3_regime_invalid:%', p_regime;
   END IF;
-  SELECT response_floor_ms INTO STRICT v_response_floor_ms
-  FROM public.k5a_c3_runtime_config;
   SELECT id INTO STRICT v_stale FROM k5a_c3_units WHERE name = 'stale';
   SELECT id INTO STRICT v_fresh FROM k5a_c3_units WHERE name = 'fresh';
   SELECT id INTO STRICT v_correction FROM k5a_c3_units WHERE name = 'correction';
@@ -666,13 +642,10 @@ BEGIN
     SELECT id FROM k5a_c3_units
     WHERE name = 'high-focus' OR name LIKE 'high-partner-%'
   );
-  v_started := clock_timestamp();
   v_high_degree := public.retrieve_knowledge_graph_claims_v3(
     v_member, v_member, v_exclusions, 1, 2, 16, 4, 8, 512, 128
   );
   IF v_high_degree->>'truncated' <> 'true'
-    OR extract(epoch FROM clock_timestamp() - v_started) * 1000
-      >= v_response_floor_ms
     OR jsonb_array_length(v_high_degree->'claims') <> 3 THEN
     RAISE EXCEPTION 'k5a_c3_own_degree_overflow_failed:%', v_high_degree;
   END IF;
@@ -732,21 +705,22 @@ BEGIN
   v_suppressed_plan := public.k5a_c3_annotation_plan_poc(
     v_suppressed_top, v_member
   );
-  v_suppressed_mechanism := public.k5a_c3_annotation_mechanism_poc(
+  v_suppressed_design_integrity :=
+    public.k5a_c3_annotation_design_integrity_poc(
     v_suppressed_plan
   );
-  IF v_suppressed_mechanism->'row_sources'
+  IF v_suppressed_design_integrity->'row_sources'
       IS DISTINCT FROM '["knowledge_relation_annotation_index"]'::jsonb
     OR v_suppressed_plan::text LIKE '%knowledge_relation_assertions%'
     OR v_suppressed_plan::text NOT LIKE '%' || v_suppressed_top::text || '%'
     OR v_suppressed_plan::text NOT LIKE '%' || v_member::text || '%'
-    OR (v_suppressed_mechanism->>'rows_read')::bigint < 0
+    OR (v_suppressed_design_integrity->>'rows_read')::bigint < 0
     OR (p_regime = 'realistic' AND (
-      jsonb_array_length(v_suppressed_mechanism->'index_names') = 0
-      OR (v_suppressed_mechanism->>'rows_removed_by_filter')::bigint <> 0
+      jsonb_array_length(v_suppressed_design_integrity->'index_names') = 0
+      OR (v_suppressed_design_integrity->>'rows_removed_by_filter')::bigint <> 0
     )) THEN
     RAISE EXCEPTION 'k5a_c3_suppressed_pair_plan_failed:%:%:%',
-      p_regime, v_suppressed_mechanism, v_suppressed_plan;
+      p_regime, v_suppressed_design_integrity, v_suppressed_plan;
   END IF;
 
   RETURN jsonb_build_object(
@@ -758,7 +732,7 @@ BEGIN
     'chain_full', v_chain_full,
     'chain_priority', v_chain_priority,
     'chain_bounded', v_chain_bounded,
-    'suppressed_mechanism', v_suppressed_mechanism
+    'suppressed_design_integrity', v_suppressed_design_integrity
   );
 END
 $k5a_c3_assertions$;
@@ -775,17 +749,10 @@ DECLARE
   v_result_after jsonb;
   v_plan_before jsonb;
   v_plan_after jsonb;
-  v_mechanism_before jsonb;
-  v_mechanism_after jsonb;
-  v_p95_before double precision;
-  v_p95_after double precision;
-  v_response_floor_ms double precision;
-  v_page_budget integer;
+  v_design_integrity_before jsonb;
+  v_design_integrity_after jsonb;
   i integer;
 BEGIN
-  SELECT response_floor_ms, small_relation_page_budget
-  INTO STRICT v_response_floor_ms, v_page_budget
-  FROM public.k5a_c3_runtime_config;
   SELECT id INTO STRICT v_focus FROM public.k5a_c3_units
   WHERE name = 'foreign-focus';
   SELECT id INTO STRICT v_own FROM public.k5a_c3_units
@@ -798,8 +765,8 @@ BEGIN
     RAISE EXCEPTION 'k5a_c3_foreign_degree_output_changed:%', v_result_before;
   END IF;
   v_plan_before := public.k5a_c3_annotation_plan_poc(v_focus, v_member);
-  v_mechanism_before := public.k5a_c3_annotation_mechanism_poc(v_plan_before);
-  v_p95_before := public.k5a_c3_measure_reader_p95_poc(v_result_before);
+  v_design_integrity_before :=
+    public.k5a_c3_annotation_design_integrity_poc(v_plan_before);
 
   FOR i IN 1..128 LOOP
     PERFORM public.k5a_c3_seed_relation_poc(
@@ -810,20 +777,32 @@ BEGIN
   v_behavior_after := public.k5a_c3_assert_behavior_poc('small');
   v_result_after := public.k5a_c3_foreign_focus_result_poc();
   v_plan_after := public.k5a_c3_annotation_plan_poc(v_focus, v_member);
-  v_mechanism_after := public.k5a_c3_annotation_mechanism_poc(v_plan_after);
-  v_p95_after := public.k5a_c3_measure_reader_p95_poc(v_result_after);
+  v_design_integrity_after :=
+    public.k5a_c3_annotation_design_integrity_poc(v_plan_after);
 
   IF v_result_before IS DISTINCT FROM v_result_after
-    OR v_behavior_before - 'suppressed_mechanism'
-      IS DISTINCT FROM v_behavior_after - 'suppressed_mechanism'
-    OR (v_mechanism_before->>'relation_pages')::integer > v_page_budget
-    OR (v_mechanism_after->>'relation_pages')::integer > v_page_budget
-    OR NOT (v_mechanism_before->'node_types' ? 'Seq Scan')
-    OR NOT (v_mechanism_after->'node_types' ? 'Seq Scan')
-    OR v_p95_before >= v_response_floor_ms
-    OR v_p95_after >= v_response_floor_ms
-    OR greatest(v_p95_before, v_response_floor_ms)
-      IS DISTINCT FROM greatest(v_p95_after, v_response_floor_ms)
+    OR v_behavior_before - 'suppressed_design_integrity'
+      IS DISTINCT FROM v_behavior_after - 'suppressed_design_integrity'
+    OR v_design_integrity_before->'row_sources'
+      IS DISTINCT FROM '["knowledge_relation_annotation_index"]'::jsonb
+    OR v_design_integrity_after->'row_sources'
+      IS DISTINCT FROM '["knowledge_relation_annotation_index"]'::jsonb
+    OR (
+      v_design_integrity_before->'index_names'
+        ? 'knowledge_relation_annotation_own_lookup'
+      AND (
+        (v_design_integrity_before->>'rows_removed_by_filter')::integer <> 0
+        OR (v_design_integrity_before->>'rows_read')::integer <> 1
+      )
+    )
+    OR (
+      v_design_integrity_after->'index_names'
+        ? 'knowledge_relation_annotation_own_lookup'
+      AND (
+        (v_design_integrity_after->>'rows_removed_by_filter')::integer <> 0
+        OR (v_design_integrity_after->>'rows_read')::integer <> 1
+      )
+    )
     OR (SELECT count(*)
         FROM public.knowledge_relation_annotation_index annotation
         WHERE annotation.endpoint_unit_id = v_focus
@@ -832,19 +811,15 @@ BEGIN
         FROM public.knowledge_relation_annotation_index annotation
         WHERE annotation.endpoint_unit_id = v_focus
           AND annotation.assertion_person_id = v_member) <> 1 THEN
-    RAISE EXCEPTION 'k5a_c3_r6_small_regime_failed:%:%:%:%:%:%:%:%',
+    RAISE EXCEPTION 'k5a_c3_r7_small_observable_or_integrity_failed:%:%:%:%',
       v_behavior_before, v_behavior_after,
-      v_mechanism_before, v_mechanism_after,
-      v_p95_before, v_p95_after, v_response_floor_ms, v_page_budget;
+      v_design_integrity_before, v_design_integrity_after;
   END IF;
 
-  RAISE NOTICE 'K5A_C3_R6_SMALL:%', jsonb_build_object(
-    'page_budget', v_page_budget,
-    'before', v_mechanism_before,
-    'after_128_foreign_assertions', v_mechanism_after,
-    'reader_p95_ms_before', round(v_p95_before::numeric, 3),
-    'reader_p95_ms_after', round(v_p95_after::numeric, 3),
-    'response_floor_ms_from_boundary_source', v_response_floor_ms
+  RAISE NOTICE 'K5A_C3_R7_SMALL_OBSERVABLES:%', jsonb_build_object(
+    'design_integrity_before', v_design_integrity_before,
+    'design_integrity_after_128_foreign_assertions',
+      v_design_integrity_after
   );
 END
 $k5a_c3_small_regime$;
@@ -929,4 +904,4 @@ BEGIN
 END
 $k5a_c4_victim_seat$;
 
-SELECT 'CARTOGRAPHER_K5A_C3_R6_SMALL_GREEN';
+SELECT 'CARTOGRAPHER_K5A_C3_R7_SMALL_GREEN';

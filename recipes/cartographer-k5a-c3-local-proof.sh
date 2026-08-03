@@ -11,8 +11,9 @@ CONTAINER_NAME="voyager-cartographer-k5a-c3-$(date +%s)-$$"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/voyager-cartographer-k5a-c3.XXXXXX")"
 VITE_NODE="$REPO_ROOT/node_modules/.bin/vite-node"
 BOUNDARY_SOURCE="$REPO_ROOT/lib/knowledge/kernel/boundary.ts"
-SMALL_RELATION_PAGE_BUDGET=8
+RELATION_CONTRACT_SOURCE="$REPO_ROOT/lib/agents/cartographer/relation-conflict-contract.json"
 PIDS=()
+FOREGROUND_PID=
 
 fail() { printf 'cartographer-k5a-c3-local: %s\n' "$1" >&2; exit 1; }
 cleanup() {
@@ -24,6 +25,18 @@ cleanup() {
   exit "$cleanup_status"
 }
 track_pid() { PIDS+=("$1"); }
+run_interruptible() {
+  local command_status
+  "$@" <&0 &
+  FOREGROUND_PID=$!
+  if wait "$FOREGROUND_PID"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
+  FOREGROUND_PID=
+  return "$command_status"
+}
 reap_pids() {
   local pid failed=0
   for pid in "${PIDS[@]}"; do
@@ -32,8 +45,15 @@ reap_pids() {
   PIDS=()
   return "$failed"
 }
+handle_signal() {
+  trap - HUP INT TERM
+  if [ -n "$FOREGROUND_PID" ]; then
+    kill "$FOREGROUND_PID" 2>/dev/null || true
+  fi
+  exit 130
+}
 trap cleanup EXIT
-trap 'exit 130' HUP INT TERM
+trap handle_signal HUP INT TERM
 
 command -v docker >/dev/null || fail 'docker is required'
 docker_proof_detect_security >/dev/null 2>&1 || fail 'Docker daemon is unavailable'
@@ -41,11 +61,46 @@ docker image inspect "$IMAGE" >/dev/null 2>&1 \
   || fail 'the pinned pgvector image must already exist locally; pulling is forbidden'
 [ -x "$VITE_NODE" ] || fail 'dependencies missing; run npm install first'
 [ -f "$BOUNDARY_SOURCE" ] || fail 'knowledge-kernel boundary source is missing'
-RESPONSE_FLOOR_MS="$(sed -nE \
-  's/^const RESPONSE_FLOOR_MS = ([0-9][0-9_]*);$/\1/p' \
-  "$BOUNDARY_SOURCE" | tr -d '_')"
-[[ "$RESPONSE_FLOOR_MS" =~ ^[1-9][0-9]*$ ]] \
-  || fail 'could not read RESPONSE_FLOOR_MS from the knowledge-kernel boundary'
+[ -f "$RELATION_CONTRACT_SOURCE" ] || fail 'relation contract source is missing'
+PER_CLAIM_PARTNER_CAP="$(node -e '
+  const fs = require("node:fs")
+  const ts = require("typescript")
+  const source = fs.readFileSync(process.argv[1], "utf8")
+  const file = ts.createSourceFile(
+    process.argv[1], source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
+  )
+  const caps = []
+  const visit = (node) => {
+    if (ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "normalizeBudget" &&
+        node.arguments.length === 4) {
+      const [value, , , maximum] = node.arguments
+      if (ts.isPropertyAccessExpression(value) &&
+          ts.isIdentifier(value.expression) &&
+          value.expression.text === "options" &&
+          value.name.text === "perClaimPartnerCap" &&
+          ts.isNumericLiteral(maximum)) {
+        caps.push(maximum.text)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  if (caps.length !== 1) process.exit(1)
+  process.stdout.write(caps[0])
+' "$BOUNDARY_SOURCE")" \
+  || fail 'could not read the per-claim partner cap from the boundary source'
+RELATION_CANDIDATE_LIMIT="$(node -e '
+  const fs = require("node:fs")
+  const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
+  process.stdout.write(String(contract.blocking.candidateLimit))
+' "$RELATION_CONTRACT_SOURCE")" \
+  || fail 'could not read candidateLimit from the active relation contract'
+[[ "$PER_CLAIM_PARTNER_CAP" =~ ^[1-9][0-9]*$ ]] \
+  || fail 'per-claim partner cap is not a positive integer'
+[[ "$RELATION_CANDIDATE_LIMIT" =~ ^[1-9][0-9]*$ ]] \
+  || fail 'relation candidate limit is not a positive integer'
 for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql \
   "$REPO_ROOT"/supabase/migrations/{061,062,063,064,065,066,067,068,069,070,071,072,073,074,075,076,077,078,079}_*.sql \
   "$REPO_ROOT/recipes/sql/cartographer-k3-setup.sql" \
@@ -53,18 +108,23 @@ for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql
   "$REPO_ROOT/recipes/sql/cartographer-k4b-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k4c-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-poc.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-r7-shapes.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-realistic.sql" \
-  "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r4-assertions.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r5-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql"; do
   [ -f "$file" ] || fail "missing SQL: $file"
 done
 
-docker_proof_run --detach --rm --pull=never --name "$CONTAINER_NAME" --network none \
+docker_run_args=(--detach --rm --pull=never --name "$CONTAINER_NAME" --network none)
+if [ "$DOCKER_PROOF_SELINUX" = true ]; then
+  docker_run_args=(--security-opt label=disable "${docker_run_args[@]}")
+fi
+run_interruptible docker run "${docker_run_args[@]}" \
   --volume "$REPO_ROOT:/workspace:ro" -e POSTGRES_DB="$DATABASE" \
   -e POSTGRES_HOST_AUTH_METHOD=trust "$IMAGE" >/dev/null
-docker_proof_wait_ready "$CONTAINER_NAME" "$DATABASE" \
+run_interruptible docker_proof_wait_ready "$CONTAINER_NAME" "$DATABASE" \
   || fail 'PostgreSQL readiness timeout'
-docker_proof_install_pre054 "$CONTAINER_NAME" "$DATABASE" \
+run_interruptible docker_proof_install_pre054 "$CONTAINER_NAME" "$DATABASE" \
   || fail 'pre-054 installed-state baseline or contract failed'
 
 "$VITE_NODE" "$REPO_ROOT/lib/knowledge/kernel/generate-sql.ts" \
@@ -93,7 +153,7 @@ docker_proof_install_pre054 "$CONTAINER_NAME" "$DATABASE" \
     "$REPO_ROOT/recipes/sql/cartographer-k3-setup.sql"
   printf 'COMMIT;\n'
 } > "$TEMP_DIR/setup.sql"
-docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" < "$TEMP_DIR/setup.sql" >/dev/null \
   || fail 'pre-073 setup failed'
 
@@ -103,43 +163,56 @@ for sql_file in \
   "$REPO_ROOT/recipes/sql/cartographer-k4b-v3-residue.sql" \
   "$REPO_ROOT/supabase/migrations/075_topic_identity_matcher.sql" \
   "$REPO_ROOT/supabase/migrations/076_topic_identity_hardening.sql"; do
-  docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
     -U postgres -d "$DATABASE" < "$sql_file" >/dev/null \
     || fail "migration setup failed: $(basename "$sql_file")"
 done
-docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" >/dev/null <<'SQL'
 SELECT public.activate_knowledge_topic_contract();
 SQL
-docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/recipes/sql/cartographer-k4b-assertions.sql" >/dev/null \
   || fail 'K4b fixture setup failed'
-docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/supabase/migrations/077_relation_conflict_ledger.sql" >/dev/null \
   || fail 'migration 077 failed'
-docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" \
   < "$REPO_ROOT/recipes/sql/cartographer-k4c-assertions.sql" >/dev/null \
   || fail 'K4c fixture setup failed'
 for pass in 1 2; do
   for number in 078 079; do
     sql_file=("$REPO_ROOT/supabase/migrations/${number}_"*.sql)
-    docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+    run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
       -U postgres -d "$DATABASE" < "${sql_file[0]}" >/dev/null \
       || fail "migration $number pass $pass failed"
   done
 done
 
-verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-  -v ON_ERROR_STOP=1 -v response_floor_ms="$RESPONSE_FLOOR_MS" \
-  -v small_page_budget="$SMALL_RELATION_PAGE_BUDGET" \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+  -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-poc.sql")" \
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-poc.sql" \
+  > "$TEMP_DIR/c3-small-verdict.out" \
   || fail 'C3 seeded-corpus assertions failed'
-[ "$verdict" = CARTOGRAPHER_K5A_C3_R6_SMALL_GREEN ] \
+verdict="$(<"$TEMP_DIR/c3-small-verdict.out")"
+[ "$verdict" = CARTOGRAPHER_K5A_C3_R7_SMALL_GREEN ] \
   || fail 'exact small-regime C3 verdict missing'
+
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+  -v ON_ERROR_STOP=1 \
+  -v per_claim_partner_cap="$PER_CLAIM_PARTNER_CAP" \
+  -v relation_candidate_limit="$RELATION_CANDIDATE_LIMIT" \
+  -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-r7-shapes.sql" \
+  > "$TEMP_DIR/c3-shape-verdict.out" \
+  || fail 'C3 R7 shape-space assertions failed'
+shape_verdict="$(<"$TEMP_DIR/c3-shape-verdict.out")"
+[ "$shape_verdict" = CARTOGRAPHER_K5A_C3_R7_SHAPES_GREEN ] \
+  || fail 'exact C3 R7 shape-space verdict missing'
 
 for index in $(seq 1 8); do
   docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
@@ -154,13 +227,14 @@ probe_verdicts="$(rg --no-filename -N '^K5A_C3_CONCURRENT_PROBE_GREEN$' \
 [ "$probe_verdicts" = 8 ] \
   || fail "8 small-regime concurrent probes produced $probe_verdicts green verdicts"
 
-realistic_verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-  -v ON_ERROR_STOP=1 -v response_floor_ms="$RESPONSE_FLOOR_MS" \
-  -v small_page_budget="$SMALL_RELATION_PAGE_BUDGET" \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+  -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-realistic.sql")" \
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-realistic.sql" \
+  > "$TEMP_DIR/c3-realistic-verdict.out" \
   || fail 'C3 realistic-regime assertions failed'
-[ "$realistic_verdict" = CARTOGRAPHER_K5A_C3_R6_REALISTIC_GREEN ] \
+realistic_verdict="$(<"$TEMP_DIR/c3-realistic-verdict.out")"
+[ "$realistic_verdict" = CARTOGRAPHER_K5A_C3_R7_REALISTIC_GREEN ] \
   || fail 'exact realistic-regime C3 verdict missing'
 
 for index in $(seq 1 8); do
@@ -176,11 +250,13 @@ probe_verdicts="$(rg --no-filename -N '^K5A_C3_CONCURRENT_PROBE_GREEN$' \
 [ "$probe_verdicts" = 8 ] \
   || fail "8 realistic-regime concurrent probes produced $probe_verdicts green verdicts"
 
-c4_verdict="$(docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
   -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r4-assertions.sql")" \
-  || fail 'C4 R4 exact authorized-subset assertions failed'
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r5-assertions.sql" \
+  > "$TEMP_DIR/c4-r5-verdict.out" \
+  || fail 'C4 R5 exact authorized-subset assertions failed'
+c4_verdict="$(<"$TEMP_DIR/c4-r5-verdict.out")"
 [ "$c4_verdict" = CARTOGRAPHER_K5A_C4_R5_GREEN ] \
-  || fail 'exact C4 R4 verdict missing'
+  || fail 'exact C4 R5 verdict missing'
 
 printf '%s\n' CARTOGRAPHER_K5A_C3_LOCAL_GREEN

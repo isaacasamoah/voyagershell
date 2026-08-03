@@ -6,10 +6,6 @@ const read = (path: string): string =>
   readFileSync(resolve(process.cwd(), path), 'utf8')
 
 const recipe = read('recipes/cartographer-k5a-c3-local-proof.sh')
-const poc = read('recipes/sql/cartographer-k5a-c3-poc.sql')
-const realistic = read('recipes/sql/cartographer-k5a-c3-realistic.sql')
-const probe = read('recipes/sql/cartographer-k5a-c3-probe.sql')
-const boundary = read('lib/knowledge/kernel/boundary.ts')
 const migration = read('supabase/migrations/078_knowledge_unit_lifecycle.sql')
 const annotationMigration = read('supabase/migrations/079_knowledge_unit_read.sql')
 const lifecycleRecipe = read('recipes/cartographer-k5a-c1-c2-local-proof.sh')
@@ -23,14 +19,8 @@ const sessionDecay = read('lib/agents/cartographer/session-decay.ts')
 const generatedFunctions = read('lib/supabase/schema/functions.ts')
 const generatedTables = read('lib/supabase/schema/knowledge-tables.ts')
 const fullSuite = read('recipes/full-suite.sh')
-const receipt = read(
-  'docs/testing/receipts/memory/k5a-c3-selecting-read-poc-2026-08-02.md',
-)
 const lifecycleReceipt = read(
   'docs/testing/receipts/memory/k5a-c1-c2-lifecycle-proof-2026-08-02.md',
-)
-const r6Receipt = read(
-  'docs/testing/receipts/memory/k5a-r6-c3-r5-c4-local-proof-2026-08-03.md',
 )
 
 describe('K5a stage-one contract', () => {
@@ -89,45 +79,6 @@ describe('K5a stage-one contract', () => {
     expect(generatedTables).toContain(
       'knowledge_relation_annotation_index: TableShape',
     )
-  })
-
-  it('records the amended empirical C3 battery and mechanism proof', () => {
-    expect(poc).toContain('k5a_c3_atomic_top_k_failed')
-    expect(poc).toContain('k5a_c3_suppressed_pair_signalled')
-    expect(poc).toContain('k5a_c3_own_degree_overflow_failed')
-    expect(poc).toContain('k5a_c3_r6_small_regime_failed')
-    expect(poc).toContain('k5a_c3_supersedes_first_failed')
-    expect(poc).toContain('k5a_c3_chain_middle_degradation_failed')
-    expect(poc).toContain('k5a_c3_suppressed_pair_plan_failed')
-    expect(poc).toContain('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)')
-    expect(poc).toContain("v_mechanism_after->'node_types' ? 'Seq Scan'")
-    expect(poc).toContain('v_p95_before >= v_response_floor_ms')
-    expect(poc).toContain('small_relation_page_budget')
-    expect(realistic).toContain('k5a_c3_r6_crossover_failed')
-    expect(realistic).toContain('k5a_c3_r6_realistic_regime_failed')
-    expect(realistic).toContain('knowledge_relation_annotation_own_lookup')
-    expect(realistic).toContain("'rows_removed_by_filter'")
-    expect(realistic).toContain("'rows_read'")
-    expect(realistic).toContain('timing_envelope_3sigma_ms')
-    expect(recipe).toContain('BOUNDARY_SOURCE=')
-    expect(recipe).toContain('RESPONSE_FLOOR_MS="$(sed')
-    expect(boundary).toMatch(/^const RESPONSE_FLOOR_MS = [0-9_]+;$/m)
-    expect(poc).not.toContain('550')
-    expect(realistic).not.toContain('550')
-    expect(recipe).toContain('CARTOGRAPHER_K5A_C3_R6_SMALL_GREEN')
-    expect(recipe).toContain('CARTOGRAPHER_K5A_C3_R6_REALISTIC_GREEN')
-    expect(poc).toContain("channel IN ('reach', 'search')")
-    expect(poc).toContain("session_distance BETWEEN 0 AND 5")
-    expect(probe).toContain('K5A_C3_CONCURRENT_PROBE_GREEN')
-    expect(fullSuite).toContain('./recipes/cartographer-k5a-c3-local-proof.sh')
-    expect(receipt).toContain('CARTOGRAPHER_K5A_C3_LOCAL_GREEN')
-    expect(receipt).toContain('Status: `superseded')
-    expect(receipt).toContain('foreign assertion rows')
-    expect(r6Receipt).toContain('Status: `C3_AND_C4_LOCAL_BATTERIES_GREEN`')
-    expect(r6Receipt).toContain('CARTOGRAPHER_K5A_C3_LOCAL_GREEN')
-    expect(r6Receipt).toContain('first measured state beyond')
-    expect(r6Receipt).toMatch(/rows read did not change by\s+one/)
-    expect(r6Receipt).toContain('g5_ann_threshold_units = null')
   })
 
   it('installs the lifecycle substrate transactionally and re-runs it', () => {

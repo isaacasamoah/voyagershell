@@ -2,10 +2,11 @@
 
 Status: `SUPERSEDED-R5-C3-NON-ENUMERATION-BLOCKER`
 
-Round 6 resolved this historical blocker with the ruled two-regime bar. The
-GUC-free production query now passes the small-table, crossover, and
-realistic-scale battery recorded in
-`k5a-r6-c3-r5-c4-local-proof-2026-08-03.md`. The observations below remain the
+Round 6 resolved this historical blocker with the ruled two-regime bar, and R7
+then replaced that bar's single-shape coverage and reclassified its physical
+read evidence. The GUC-free production query's current observable and
+design-integrity evidence is in
+`k5a-r7-battery-corrections-2026-08-03.md`. The observations below remain the
 evidence that caused the return to Spec; they are not the current verdict.
 
 Base checkpoint: `256ad6095a3cea0b1f1e942d1299358d152751e4` on
@@ -13,8 +14,8 @@ Base checkpoint: `256ad6095a3cea0b1f1e942d1299358d152751e4` on
 
 At its checkpoint, this was a blocking handoff rather than a passing proof, so
 that revision was not to be merged, released, or described as K5a Stage 2
-complete. Round 6 replaced that checkpoint verdict with the passing two-regime
-proof linked above.
+complete. Round 6 replaced that checkpoint verdict; the current R7 proof is
+linked above.
 
 ## Decision this evidence settles
 
