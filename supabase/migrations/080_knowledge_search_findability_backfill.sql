@@ -1,6 +1,9 @@
 -- K5a G8 and G9: exact search spans the whole authorized set; coverage stays
 -- on already-live event kinds. This migration is one atomic pre-cutover unit.
 BEGIN;
+SELECT public.assert_knowledge_topic_backfill_complete();
+SELECT public.activate_knowledge_topic_contract();
+
 CREATE TABLE IF NOT EXISTS public.knowledge_extraction_coverage_backfill_markers (
   extractor_version text PRIMARY KEY REFERENCES public.knowledge_extractor_contracts(extractor_version),
   eligible_event_count integer NOT NULL CHECK (eligible_event_count >= 0),
