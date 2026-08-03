@@ -55,7 +55,7 @@ END;
 $function$;
 
 CREATE OR REPLACE FUNCTION public.keyword_search(p_query text, p_user_id uuid, p_voyage_slug text DEFAULT NULL::text, p_knowledge_type text DEFAULT NULL::text, p_min_attention double precision DEFAULT 0.0, p_match_count integer DEFAULT 50, p_participants uuid[] DEFAULT NULL::uuid[])
- RETURNS TABLE(event_id uuid, content text, source_created_at timestamp with time zone, rank_score double precision, classifications text[], entities text[], topics text[], connected_to uuid[], knowledge_type text, attention_score double precision, context_snippet text, sender_display_name text, sender_user_id uuid, event_type text)
+ RETURNS TABLE(event_id uuid, content text, source_created_at timestamp with time zone, rank_score double precision, classifications text[], entities text[], topics text[], knowledge_type text, attention_score double precision, context_snippet text, sender_display_name text, sender_user_id uuid, event_type text)
  LANGUAGE plpgsql
 AS $function$
 BEGIN
@@ -63,7 +63,7 @@ BEGIN
   SELECT
     kc.event_id, kc.content, kc.source_created_at,
     ts_rank(kc.search_vector, plainto_tsquery('english', p_query))::double precision AS rank_score,
-    kc.classifications, kc.entities, kc.topics, kc.connected_to,
+    kc.classifications, kc.entities, kc.topics,
     kc.knowledge_type, kc.attention_score::double precision, kc.context_snippet,
     kc.sender_display_name, kc.sender_user_id, kc.event_type
   FROM knowledge_current kc
