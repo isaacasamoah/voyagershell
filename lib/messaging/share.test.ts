@@ -42,7 +42,7 @@ describe('sharePrivateVoyagerReply — atomic promotion service', () => {
     })
   })
 
-  it('returns the canonical event on replay and retries best-effort embedding', async () => {
+  it('returns the canonical event on replay without a second write', async () => {
     mocks.rpc.mockResolvedValue({
       data: [{
         shared_event_id: 'shared-event-1',

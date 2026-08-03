@@ -95,6 +95,7 @@ const executeRememberFallback = async (
     const eventId = await createMessageEvent(ctx.conversationId ?? 'shell-reconciler', 'user', intent.payload, {
       userId: ctx.userId,
       voyageSlug: ctx.voyageSlug,
+      classifications: ['preference'],
       eventType: 'message',
     })
 

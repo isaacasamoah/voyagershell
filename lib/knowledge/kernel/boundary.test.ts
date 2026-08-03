@@ -22,6 +22,8 @@ const AUTHORIZED_ROW = {
   claim: "Vanessa keeps the amber notebook behind the blue atlas.",
   sourceEventId: AUTHORITY_ID,
   sourceContent: "I left the amber notebook behind the blue atlas.",
+  sourceCreatedAt: "2026-01-01T00:00:00Z",
+  sessionId: null,
   knowledgeType: "domain",
   attentionScore: 0.8,
   tensions: [],

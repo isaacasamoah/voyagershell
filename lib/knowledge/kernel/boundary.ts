@@ -19,6 +19,8 @@ export interface KnowledgeGraphClaim {
   readonly claim: string;
   readonly sourceEventId: string;
   readonly sourceContent: string;
+  readonly sourceCreatedAt?: string;
+  readonly sessionId?: string | null;
   readonly knowledgeType: "domain" | "operational" | "preference";
   readonly attentionScore: number;
   readonly tensions: readonly KnowledgeGraphTension[];
@@ -65,6 +67,8 @@ interface ClaimRow {
   readonly claim: unknown;
   readonly sourceEventId: unknown;
   readonly sourceContent: unknown;
+  readonly sourceCreatedAt: unknown;
+  readonly sessionId: unknown;
   readonly knowledgeType: unknown;
   readonly attentionScore: unknown;
   readonly tensions: unknown;
@@ -107,6 +111,9 @@ const toClaim = (value: unknown): KnowledgeGraphClaim | null => {
   if (typeof row.claim !== "string" || row.claim.length === 0) return null;
   if (typeof row.sourceContent !== "string" || row.sourceContent.length === 0)
     return null;
+  if (typeof row.sourceCreatedAt !== "string" || Number.isNaN(Date.parse(row.sourceCreatedAt)))
+    return null;
+  if (row.sessionId !== null && typeof row.sessionId !== "string") return null;
   if (!["domain", "operational", "preference"].includes(String(row.knowledgeType)))
     return null;
   if (typeof row.attentionScore !== "number" || row.attentionScore < 0 || row.attentionScore > 1)
@@ -131,6 +138,8 @@ const toClaim = (value: unknown): KnowledgeGraphClaim | null => {
     claim: row.claim,
     sourceEventId: row.sourceEventId,
     sourceContent: row.sourceContent,
+    sourceCreatedAt: row.sourceCreatedAt,
+    sessionId: row.sessionId as string | null,
     knowledgeType: row.knowledgeType as KnowledgeGraphClaim["knowledgeType"],
     attentionScore: row.attentionScore,
     tensions,

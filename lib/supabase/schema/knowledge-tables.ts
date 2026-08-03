@@ -6,7 +6,6 @@ import type {
   KnowledgeRelationJobState,
   KnowledgeUnitLifecycleActKind,
   NullableJson,
-  NullableUnknown,
   Relationship,
   TableShape,
 } from './base'

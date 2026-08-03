@@ -108,19 +108,7 @@ export const composeSystemPrompt = async (
   // Load curated knowledge window + voyage context in parallel. Message
   // awareness is no longer woven into the prompt (v2) — messages are
   // delivered on the wire and retrieved on demand, not re-narrated here.
-  const [projectedWindow, voyageContext, graphMemory] = await Promise.all([
-    curatePromptWindow(userId, voyageSlug, undefined, sessionId).catch(
-      (error) => {
-        console.warn("[Prompts] Failed to curate prompt window:", error);
-        return {
-          preferences: [],
-          operational: [],
-          domainHeadlines: [],
-          totalTokens: 0,
-          evictedCount: 0,
-        };
-      },
-    ),
+  const [voyageContext, graphMemory] = await Promise.all([
     voyageSlug
       ? loadVoyageContext(voyageSlug, userId).catch((error) => {
           console.warn("[Prompts] Failed to load voyage context:", error);
@@ -141,6 +129,12 @@ export const composeSystemPrompt = async (
           truncated: false as const,
         }),
   ]);
+  const projectedWindow = await curatePromptWindow(
+    userId, voyageSlug, undefined, sessionId, graphMemory,
+  ).catch((error) => {
+    console.warn("[Prompts] Failed to curate prompt window:", error);
+    return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 };
+  });
 
   const standingDeliveryClaims = selectGraphStandingDeliveryClaims(graphMemory);
   const standingCitation = sessionId

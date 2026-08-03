@@ -13,10 +13,6 @@ export type KnowledgeSearchRow = {
   context_snippet: string; sender_display_name: string;
   sender_user_id: string; event_type: string
 }
-export type KeywordSearchRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'> & { rank_score: number }
-export type ScopedKnowledgeRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'> & {
-  session_id: string | null; promotion_count: number
-}
 export type SourceIngressRow = { event_id: string; status: 'created' | 'replayed' }
 export type DeploymentGapRecoveryRow = { recovered: number; rejected: number }
 export type KnowledgeExtractionAttemptRow = {
@@ -60,7 +56,6 @@ export type KnowledgeUnitSearchRow = {
 export type KnowledgeUnitKeywordRow = Omit<
   KnowledgeUnitSearchRow, 'similarity'
 > & { rank_score: number }
-export type KnowledgeByIdRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'>
 export type VoyageMessageRow = Pick<KnowledgeSearchRow,
   'event_id' | 'content' | 'source_created_at' | 'sender_display_name' | 'sender_user_id'>
 export type SessionAuthorityRow = {

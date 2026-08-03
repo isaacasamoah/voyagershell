@@ -10,7 +10,11 @@ const loadCuratorModule = async () => {
   }))
   vi.doMock('./kernel/boundary', () => ({
     retrieveKnowledgeGraphClaims: vi.fn().mockResolvedValue({
-      outcome: 'success', claims: [], truncated: false,
+      outcome: 'success', claims: [
+        { knowledgeUnitId: '71000000-0000-7000-6000-000000000001', sourceEventId: '72000000-0000-7000-6000-000000000001', claim: 'pref', sourceContent: 'pref', sourceCreatedAt: '2026-01-01T00:00:00Z', sessionId: null, knowledgeType: 'preference', attentionScore: 0.8, tensions: [] },
+        { knowledgeUnitId: '71000000-0000-7000-6000-000000000002', sourceEventId: '72000000-0000-7000-6000-000000000002', claim: 'op', sourceContent: 'op', sourceCreatedAt: '2026-01-02T00:00:00Z', sessionId: 'session-1', knowledgeType: 'operational', attentionScore: 0.8, tensions: [] },
+        { knowledgeUnitId: '71000000-0000-7000-6000-000000000003', sourceEventId: '72000000-0000-7000-6000-000000000003', claim: 'domain', sourceContent: 'domain', sourceCreatedAt: '2026-01-03T00:00:00Z', sessionId: null, knowledgeType: 'domain', attentionScore: 0.8, tensions: [] },
+      ], truncated: false,
     }),
   }))
   return import('./curator')
@@ -77,6 +81,14 @@ describe('knowledge scope RPC routing', () => {
 
     await curatePromptWindow('user-1')
     expect(adminRpc).not.toHaveBeenCalledWith('scoped_knowledge_fetch', expect.anything())
+  })
+
+  it('places unit-native claims in their ruled tiers', async () => {
+    const { curatePromptWindow } = await loadCuratorModule()
+    const window = await curatePromptWindow('user-1')
+    expect(window.preferences.map((node) => node.content)).toEqual(['pref'])
+    expect(window.operational.map((node) => node.content)).toEqual(['op'])
+    expect(window.domainHeadlines.map((node) => node.content)).toEqual(['domain'])
   })
 
   it('routes time-range retrieval through unit search with source-time filters', async () => {

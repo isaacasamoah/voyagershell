@@ -288,6 +288,7 @@ BEGIN
     source_event_id uuid NOT NULL,
     source_content text NOT NULL,
     source_created_at timestamptz NOT NULL,
+    source_session_id text,
     source_sequence_num bigint NOT NULL,
     initial_rank integer NOT NULL
   ) ON COMMIT DROP;
@@ -320,7 +321,7 @@ BEGIN
 
   INSERT INTO k5a_read_candidates(
     unit_id, claim, knowledge_type, effective_attention,
-    source_event_id, source_content, source_created_at,
+    source_event_id, source_content, source_created_at, source_session_id,
     source_sequence_num, initial_rank
   )
   WITH scored AS MATERIALIZED (
@@ -330,6 +331,7 @@ BEGIN
       ) AS effective_attention,
       event.id AS source_event_id, event.content AS source_content,
       event.created_at AS source_created_at,
+      event.metadata->>'session_id' AS source_session_id,
       event.sequence_num AS source_sequence_num
     FROM public.graph_nodes node
     JOIN public.knowledge_units unit
@@ -483,6 +485,8 @@ BEGIN
     'attentionScore', candidate.effective_attention,
     'sourceEventId', candidate.source_event_id,
     'sourceContent', candidate.source_content,
+    'sourceCreatedAt', candidate.source_created_at,
+    'sessionId', candidate.source_session_id,
     'tensions', coalesce((
       SELECT jsonb_agg(jsonb_build_object(
         'withUnitId', annotation.partner_unit_id,

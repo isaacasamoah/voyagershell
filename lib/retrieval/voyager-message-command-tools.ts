@@ -87,7 +87,6 @@ export const createVoyagerMessageCommandTools = (ctx: ToolContext) => ({
       const sender = members.find((member) => member.userId === ctx.userId)
       const senderDisplayName = sender?.displayName ?? sender?.email ?? 'Unknown'
       const recipientNames = resolved.map((member) => member.displayName)
-      const contextSnippet = `${senderDisplayName} to ${recipientNames.join(', ')}: ${message.slice(0, 60)}`
       const eventId = await createMessageEvent(
         ctx.conversationId ?? 'mention',
         'user',
@@ -122,6 +121,7 @@ export const createVoyagerMessageCommandTools = (ctx: ToolContext) => ({
       const classifications = requestedClassifications ?? ['preference']
       const eventId = await createMessageEvent(ctx.conversationId ?? 'tool-remember', 'user', content, {
         userId: ctx.userId,
+        voyageSlug: ctx.voyageSlug,
         classifications,
         eventType: 'message',
       })
