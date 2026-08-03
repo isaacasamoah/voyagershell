@@ -13,7 +13,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { estimateTokens } from '@/lib/conversation/window'
 import type { KnowledgeNode } from './search-types'
-import { retrieveKnowledgeGraphClaims, type KnowledgeGraphResult } from './kernel/boundary'
+import type { KnowledgeGraphResult } from './kernel/boundary'
 
 // =============================================================================
 // Types
@@ -157,23 +157,22 @@ const getRecentSessionIds = async (
  */
 export const curatePromptWindow = async (
   userId: string,
+  graphMemory: KnowledgeGraphResult,
   voyageSlug?: string,
   config: PromptWindowConfig = DEFAULT_WINDOW_CONFIG,
   sessionId?: string,
-  graphMemory?: KnowledgeGraphResult,
 ): Promise<CuratedWindow> => {
   // Parallel: fetch authorized graph claims + recent session IDs. Voyage scope
   // is enforced by graph grants; it is not a caller-supplied SQL scope.
   const [knowledgeResult, recentSessions] = await Promise.all([
-    graphMemory ?? await retrieveKnowledgeGraphClaims({ kind: 'person', authorityId: userId }, {
-      claimBudget: 64,
-      nodeBudget: 512,
-    }),
+    Promise.resolve(graphMemory),
     getRecentSessionIds(userId, sessionId, config.operationalSessionWindow),
   ])
 
   if (knowledgeResult.outcome !== 'success') {
-    console.warn('[Curator] Unit-native graph read failed:', knowledgeResult.outcome)
+    if (knowledgeResult.outcome !== 'skipped') {
+      console.warn('[Curator] Unit-native graph read failed:', knowledgeResult.outcome)
+    }
     return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 }
   }
 

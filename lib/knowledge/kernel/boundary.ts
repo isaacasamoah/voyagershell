@@ -50,7 +50,8 @@ export type KnowledgeGraphFailureOutcome =
   | "invalid_request"
   | "deadline_exceeded"
   | "rpc_error"
-  | "exception";
+  | "exception"
+  | "skipped";
 
 export interface KnowledgeGraphFailure {
   readonly outcome: KnowledgeGraphFailureOutcome;

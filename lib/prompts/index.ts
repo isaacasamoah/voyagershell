@@ -116,7 +116,10 @@ export const composeSystemPrompt = async (
         })
       : Promise.resolve(null),
     sessionIndexed
-      ? retrieveKnowledgeGraphClaims({ kind: "person", authorityId: userId }).catch(
+      ? retrieveKnowledgeGraphClaims(
+          { kind: "person", authorityId: userId },
+          { claimBudget: 64, nodeBudget: 512 },
+        ).catch(
           () => ({
             outcome: "exception" as const,
             claims: [] as const,
@@ -124,13 +127,13 @@ export const composeSystemPrompt = async (
           }),
         )
       : Promise.resolve({
-          outcome: "exception" as const,
+          outcome: "skipped" as const,
           claims: [] as const,
           truncated: false as const,
         }),
   ]);
   const projectedWindow = await curatePromptWindow(
-    userId, voyageSlug, undefined, sessionId, graphMemory,
+    userId, graphMemory, voyageSlug, undefined, sessionId,
   ).catch((error) => {
     console.warn("[Prompts] Failed to curate prompt window:", error);
     return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 };

@@ -3,7 +3,18 @@ const adminRpc = vi.fn()
 const loadCuratorModule = async () => {
   vi.resetModules()
   vi.doMock('@/lib/supabase/admin', () => ({
-    getAdminClient: () => ({ rpc: adminRpc }),
+    getAdminClient: () => ({
+      rpc: adminRpc,
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: async () => ({ data: [{ session_id: 'session-1' }], error: null }),
+            }),
+          }),
+        }),
+      }),
+    }),
   }))
   vi.doMock('@/lib/conversation/window', () => ({
     estimateTokens: () => 1,
@@ -68,6 +79,7 @@ const loadToolsModule = async () => {
   return import('../retrieval/retrieval-tools')
 }
 describe('knowledge scope RPC routing', () => {
+  const emptyGraph = { outcome: 'success' as const, claims: [], truncated: false as const }
   beforeEach(() => {
     vi.clearAllMocks()
     adminRpc.mockResolvedValue({ data: [], error: null })
@@ -76,19 +88,39 @@ describe('knowledge scope RPC routing', () => {
   it('routes curator windows through the unit-native graph read', async () => {
     const { curatePromptWindow } = await loadCuratorModule()
 
-    await curatePromptWindow('user-1', 'fambam')
+    await curatePromptWindow('user-1', emptyGraph, 'fambam')
     expect(adminRpc).not.toHaveBeenCalledWith('scoped_knowledge_fetch', expect.anything())
 
-    await curatePromptWindow('user-1')
+    await curatePromptWindow('user-1', emptyGraph)
     expect(adminRpc).not.toHaveBeenCalledWith('scoped_knowledge_fetch', expect.anything())
   })
 
   it('places unit-native claims in their ruled tiers', async () => {
     const { curatePromptWindow } = await loadCuratorModule()
-    const window = await curatePromptWindow('user-1')
+    const window = await curatePromptWindow('user-1', {
+      outcome: 'success', truncated: false,
+      claims: [
+        { knowledgeUnitId: '71000000-0000-7000-6000-000000000001', sourceEventId: '72000000-0000-7000-6000-000000000001', claim: 'pref', sourceContent: 'pref', sourceCreatedAt: '2026-01-01T00:00:00Z', sessionId: null, knowledgeType: 'preference', attentionScore: 0.8, tensions: [] },
+        { knowledgeUnitId: '71000000-0000-7000-6000-000000000002', sourceEventId: '72000000-0000-7000-6000-000000000002', claim: 'op', sourceContent: 'op', sourceCreatedAt: '2026-01-02T00:00:00Z', sessionId: 'session-1', knowledgeType: 'operational', attentionScore: 0.8, tensions: [] },
+        { knowledgeUnitId: '71000000-0000-7000-6000-000000000003', sourceEventId: '72000000-0000-7000-6000-000000000003', claim: 'domain', sourceContent: 'domain', sourceCreatedAt: '2026-01-03T00:00:00Z', sessionId: null, knowledgeType: 'domain', attentionScore: 0.8, tensions: [] },
+      ],
+    })
     expect(window.preferences.map((node) => node.content)).toEqual(['pref'])
     expect(window.operational.map((node) => node.content)).toEqual(['op'])
     expect(window.domainHeadlines.map((node) => node.content)).toEqual(['domain'])
+  })
+
+  it('filters stale operational sessions and orders by real source time', async () => {
+    const { curatePromptWindow } = await loadCuratorModule()
+    const window = await curatePromptWindow('user-1', {
+      outcome: 'success', truncated: false,
+      claims: [
+        { knowledgeUnitId: '71000000-0000-7000-6000-000000000010', sourceEventId: '72000000-0000-7000-6000-000000000010', claim: 'stale', sourceContent: 'stale', sourceCreatedAt: '2026-01-03T00:00:00Z', sessionId: 'old-session', knowledgeType: 'operational', attentionScore: 0.8, tensions: [] },
+        { knowledgeUnitId: '71000000-0000-7000-6000-000000000011', sourceEventId: '72000000-0000-7000-6000-000000000011', claim: 'older', sourceContent: 'older', sourceCreatedAt: '2026-01-01T00:00:00Z', sessionId: 'session-1', knowledgeType: 'operational', attentionScore: 0.8, tensions: [] },
+        { knowledgeUnitId: '71000000-0000-7000-6000-000000000012', sourceEventId: '72000000-0000-7000-6000-000000000012', claim: 'newer', sourceContent: 'newer', sourceCreatedAt: '2026-01-02T00:00:00Z', sessionId: 'session-1', knowledgeType: 'operational', attentionScore: 0.8, tensions: [] },
+      ],
+    }, undefined, undefined, 'session-current')
+    expect(window.operational.map((node) => node.content)).toEqual(['newer', 'older'])
   })
 
   it('routes time-range retrieval through unit search with source-time filters', async () => {
