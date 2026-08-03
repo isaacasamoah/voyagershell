@@ -115,17 +115,21 @@ npm run build    # production build
 
 **Production:** https://voyagershell.vercel.app
 
-### Supabase Migrations
+### Supabase Migrations & DB-branch hygiene
 
-The authorized development database is the only writable hosted target for
-feature, Spec, and preview work. Production has no default path and requires a
-separate owner-authorized release.
+This project uses **Supabase database branching** — one project, two DB branches.
+Code branches and DB branches pair up; keep them aligned:
 
-Hosted recipes require the requested project ref to match a separately supplied
-authorized ref before they read an injected Management API token. See
-`recipes/README.md`. Maintainers apply reviewed migrations through the
-owner-authorized SQL path and verify the expected catalog change separately;
-never infer database identity from the app URL or worktree path.
+| Code branch | DB branch | Ref | Role |
+|---|---|---|---|
+| `feature/*`, `dev` | **`voyager-dev`** | `hpotfrfdigzmhyibihst` | **Persistent DEV branch — the ONLY writable target for feature/Spec/preview work and for applying migrations as dev proceeds.** |
+| `main` | `main` | `iesprdzzgjypnksoljym` | **PRODUCTION** — no default write path; migrations land here only at an explicit owner-authorized release. |
+
+**Rules:**
+- Apply migrations to the **`voyager-dev` branch** continuously as dev proceeds — that is the standing dev surface, not disposable local Postgres. Disposable proofs must translate into the dev branch, not stay in Docker.
+- **Never apply dev/test migrations to `main` (production).** Production gets migrations only at release (branch merge/promotion).
+- **Confirm the DB branch by NAME before any DDL** — list branches with `GET /v1/projects/iesprdzzgjypnksoljym/branches`. A raw ref string is not human-verifiable, and `GET /v1/projects` lists only the parent project (shows `main`/prod), NOT the branch DBs. **Never infer the DB target from the app URL (`.env.local` points at prod) or the worktree path.**
+- DDL path is the **Supabase Management API** (`POST /v1/projects/<branch_ref>/database/query`) with the owner-supplied `sbp_` token; requests must send a browser User-Agent or Cloudflare WAF-blocks them (403 / "error code 1010" — not a SQL error). See `recipes/README.md`. Verify the expected catalog change separately after applying.
 
 ## Code Standards
 
