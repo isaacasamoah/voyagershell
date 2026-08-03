@@ -21,6 +21,10 @@
 --   - Still returns is_active, is_pinned, importance columns (data preservation)
 -- =============================================================================
 
+DROP FUNCTION IF EXISTS public.search_knowledge(
+  vector(1536), UUID, TEXT, BOOLEAN, TEXT[], FLOAT, FLOAT, INT, TEXT, FLOAT
+);
+
 CREATE OR REPLACE FUNCTION public.search_knowledge(
   query_embedding vector(1536),
   p_user_id UUID DEFAULT NULL,
