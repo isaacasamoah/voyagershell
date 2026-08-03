@@ -22,27 +22,30 @@
     },
     "aboutPersonNullRule": "Any person named in a claim who is NOT one of the two supplied candidates (Devi, Priya, the finance team, the platform team, a duty manager, an incident lead) must yield aboutPersonId null. A non-null ID for such a case is a fabricated reference and fails bar 3' regardless of the type label.",
     "rimScoring": "Cases with stratum control-rim are non-durable controls but are scored and reported SEPARATELY from the gated hard core, per §4 bar 1b'. They are measured, never gated.",
+    "typeRimScoring": "Cases with stratum positive-type-rim carry a real expected type label, but are scored and reported SEPARATELY from the gated 2b arm and sit outside its denominator. Per the K5 Spec seat's clarification D (2026-08-03): rule 1's no-added-information test needs an attribution signal to run, and a bare imperative that carries none leaves the preference/operational boundary undecided rather than decided. Undecided cases are reported, never gated. The label itself does not change.",
+    "adjudication": "The eight contested labels were adjudicated by the K5 Spec seat (the definitional authority for the §2 type procedure and §5 durability definition) on 2026-08-03, before any run: 7 confirmed, 1 definition-gap (clarification D above), ZERO label changes. The uncontested set was spot-checked for systemic error with none found. Separately, this author's arithmetic finding was accepted and the ruling corrected — §6's hard core minimum is now >=30 and its <=10% rule-of-three bound attaches to the hard core specifically rather than to the control set as a whole. Neither this author nor the builder adjudicates these labels.",
     "strataCounts": {
-      "total": 80,
+      "total": 81,
       "controls": {
         "total": 41,
         "controlHardCore": 30,
         "controlRim": 11,
-        "minimums": "ruling §6: >=30 controls, >=20 hard core, >=10 rim"
+        "minimums": "ruling §6 as corrected 2026-08-03: >=30 controls, >=30 hard core, >=10 rim"
       },
       "positives": {
-        "total": 39,
+        "total": 40,
         "positivePreference": 13,
         "positiveOperational": 17,
+        "positiveTypeRim": 1,
         "positiveDomain": 9,
-        "operationalPlusPreference": 30,
+        "gatedOperationalPlusPreference": 30,
         "nonNullAboutPerson": 18,
-        "minimums": "ruling §6: >=30 operational-or-preference of which >=12 preference, >=8 domain, >=12 non-null about-person"
+        "minimums": "ruling §6: >=30 GATED operational-or-preference of which >=12 preference, >=8 domain, >=12 non-null about-person. The positive-type-rim case is typed operational but sits outside the gated 2b denominator; its about-person stays inside bar 3's."
       },
       "byShape": {
         "document": { "controls": 10, "positives": 10 },
         "slack_message": { "controls": 11, "positives": 10 },
-        "jira_update": { "controls": 10, "positives": 9 },
+        "jira_update": { "controls": 10, "positives": 10 },
         "explicit": { "controls": 10, "positives": 10 },
         "minimums": "ruling §6: >=4 of each admitted shape in EACH of the control and positive sets"
       }
@@ -52,16 +55,17 @@
       "gatedHardCoreControls": "n=30 -> <=10.0%",
       "allControlsIncludingRim": "n=41 -> <=7.3%",
       "rimReportedSeparately": "n=11 -> <=27.3% (not gated)",
-      "zeroingDirectionTypeArm_2b": "operational-or-preference positives, n=30 -> <=10.0%",
-      "preferenceBoundary_2a": "n=13 true-preference positives -> <=23.1%; the both-directions denominator also includes the 26 positives that must NOT be returned preference",
-      "aboutPerson_bar3": "n=39 positives -> <=7.7%",
+      "zeroingDirectionTypeArm_2b": "gated operational-or-preference positives, n=30 -> <=10.0%",
+      "typeRimReportedSeparately": "n=1 -> reported only; no bound is claimed and none is computable at n=1",
+      "preferenceBoundary_2a": "n=13 true-preference positives -> <=23.1%; the both-directions denominator also includes the 27 positives that must NOT be returned preference",
+      "aboutPerson_bar3": "n=40 positives -> <=7.5%",
       "domain_2c": "n=9 -> measured only, against the 0.60 collapse floor; no power claim made",
-      "note": "Hard core was built to 30 rather than the >=20 minimum so the ONE gated arm the ruling calls 'the single most consequential dimension in this measurement' certifies to the <=10% the ruling's own arithmetic quotes. At the bare >=20 minimum the gated arm would certify only to <=15%; the ruling's <=10% sentence is computed against the 30-case control set as a whole, which is a different denominator from the arm bar 1b actually gates. Cost of the extra 9 cases is one extra extraction call each on a single run."
+      "note": "Hard core was built to 30 rather than the >=20 originally written so the ONE gated arm the ruling calls 'the single most consequential dimension in this measurement' certifies to the <=10% the ruling's own arithmetic quotes. At the bare >=20 the gated arm would have certified only to <=15%, because the ruling's <=10% sentence was computed against the control set as a whole — a different denominator from the arm bar 1b actually gates. That finding was accepted on 2026-08-03 and §6 corrected: the hard core minimum is now >=30 and the <=10% bound attaches to the hard core specifically. Moving one undecidable case out of the gated 2b arm and authoring one decidable replacement keeps that arm's denominator at 30 and its bound at <=10%."
     },
     "freeze": {
-      "state": "FROZEN — labels final before any v5 run. Per §6, any post-run label change invalidates the run.",
+      "state": "RE-FROZEN 2026-08-03 after Spec-seat adjudication — labels final before any v5 run. Per §6, any post-run label change invalidates the run. This re-freeze is pre-run and changed ZERO labels: it moved one case's scoring stratum and added one new case. It supersedes payload hash 84369a79ed9bbecc67f1c02318c5101296db5fa10fa054021d0b03363a44eb5a (80 cases), which is void.",
       "hashMethod": "shasum -a 256 over the canonical label payload: jq -S -c '{version,cases}' recipes/experiments/k5a-c5-extraction-corpus-v2.json | shasum -a 256",
-      "payloadSha256": "84369a79ed9bbecc67f1c02318c5101296db5fa10fa054021d0b03363a44eb5a",
+      "payloadSha256": "47f188f48fde5ad93df3e7a8bcd5de03108fc074f17d05b981e4edd8a665345a",
       "hashScopeNote": "The hash covers version + cases (ids, content, and all three expected labels). meta is excluded so the hash can be recorded inside the file it seals; meta carries no labels."
     },
     "harnessNote": "recipes/experiments/k5a-c5-extraction-harness.ts currently imports the v1 corpus. Pointing it at this file is the builder's wiring step for the v5 run; this author did not modify the harness, the contract, any migration, or any battery. The extra per-case fields (stratum, labelNote) are ignored by the harness's CorpusCase cast."
@@ -805,6 +809,17 @@
       "labelNote": "Prohibition plus its positive replacement, one rule."
     },
     {
+      "id": "v2-pos-op-jira-05",
+      "stratum": "positive-operational",
+      "eventType": "jira_update",
+      "audience": "room",
+      "content": "ORU-486 — comment: I'm making this the rule for the epic going forward: no schema migration merges without a rollback script in the same PR.",
+      "expectedClaim": "No schema migration merges without a rollback script in the same PR.",
+      "expectedKnowledgeType": "operational",
+      "expectedAboutPersonId": null,
+      "labelNote": "Authored 2026-08-03 as the gated replacement for v2-pos-op-explicit-02, and decidable under clarification D because it carries an explicit attribution signal: first-person authoring of a rule. That signal lets rule 1's no-added-information test actually run, and it fails — restating this as 'the author prefers no schema migration merges without a rollback script' drops the institution of a rule and converts an obligation into a stance, which is information added. So rule 1 does not fire and rule 2 does. About-person is null: the claim's subject is schema migrations, not the author, and the first person sits only in the instituting frame, which is provenance — the same treatment the runbook frame gets in v2-pos-op-doc-03."
+    },
+    {
       "id": "v2-pos-op-explicit-01",
       "stratum": "positive-operational",
       "eventType": "explicit",
@@ -817,14 +832,14 @@
     },
     {
       "id": "v2-pos-op-explicit-02",
-      "stratum": "positive-operational",
+      "stratum": "positive-type-rim",
       "eventType": "explicit",
       "audience": "private",
       "content": "If something touches production data, tell me before you do it, not after.",
       "expectedClaim": "Tell the author before touching production data, not after.",
       "expectedKnowledgeType": "operational",
       "expectedAboutPersonId": "10000000-0000-4000-8000-000000000001",
-      "labelNote": "Torn against preference. Decided operational because the sentence is a conditional imperative, not an assertion about what the author wants. About-person is the author for parity with v2-pos-op-doc-05: the claim names them, even as its object."
+      "labelNote": "REPORTED, NOT GATED — the type label is outside the gated 2b denominator, per the Spec seat's clarification D (2026-08-03). Rule 1's no-added-information test needs an attribution signal to run; this is a bare conditional imperative carrying none, so the preference/operational boundary is undecided here rather than decided, and undecided cases are scored, never gated. The label itself is unchanged from authoring: type operational (the sentence is an imperative, not an assertion of what the author wants), about-person the author for parity with v2-pos-op-doc-05 (the claim names them, even as its object). About-person remains gated under bar 3 — clarification D reaches the type axis only."
     },
     {
       "id": "v2-pos-op-explicit-03",
