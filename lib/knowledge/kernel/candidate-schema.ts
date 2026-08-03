@@ -22,11 +22,6 @@ type CandidateFunctions = Omit<InstalledPublic['Functions'], 'graph_traverse'> &
     p_closure_budget?: number; p_max_depth?: number; p_node_budget?: number;
     p_frontier_budget?: number
   }; Returns: import('@/lib/supabase/types').Json }
-  retrieve_knowledge_graph_claims_v2: { Args: {
-    p_root_authority_id: string; p_viewer_profile_id: string;
-    p_exclude_unit_ids?: string[]; p_max_depth?: number; p_node_budget?: number;
-    p_frontier_budget?: number
-  }; Returns: import('@/lib/supabase/types').Json }
   retrieve_knowledge_graph_claims: { Args: {
     p_root_kind: GraphNodeKind; p_root_authority_id: string; p_viewer_profile_id: string;
     p_graph_enabled?: boolean; p_max_depth?: number; p_node_budget?: number;

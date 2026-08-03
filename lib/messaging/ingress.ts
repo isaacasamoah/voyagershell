@@ -13,8 +13,7 @@
 
 import { getAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/debug'
-import { updateEventEmbedding, updateSessionActivity } from '@/lib/knowledge/event-storage'
-import { updateKnowledgeEnrichment } from '@/lib/knowledge/event-enrichment'
+import { updateSessionActivity } from '@/lib/knowledge/event-storage'
 import type { Json } from '@/lib/supabase/types'
 import type { RoomState } from './room'
 
@@ -154,25 +153,10 @@ export const claimSourceIngress = async (
   return { eventId: row.event_id, status: row.status, recipients: resolved.recipients }
 }
 
-/**
- * The enrichment that follows a newly created event. Every write here lands on
- * the mutable projection, never on the immutable event, and none of it may fail
- * the send — the event and its delivery set are already committed.
- */
 export const enrichNewIngress = async (
   input: ResolveIngressInput,
   outcome: IngressOutcome,
 ): Promise<void> => {
   if (outcome.status !== 'created') return
-  const resolved = resolveIngress(input)
-  await updateEventEmbedding(outcome.eventId, input.content).catch(() => {})
   await updateSessionActivity(input.sessionId, input.userId).catch(() => {})
-  if (resolved.attention) {
-    await updateKnowledgeEnrichment(outcome.eventId, {
-      attentionScore: resolved.attention.score,
-      contextSnippet: resolved.attention.snippet,
-    }).catch((error) => {
-      log.api('Ingress enrichment failed (non-blocking)', { error: String(error) }, 'warn')
-    })
-  }
 }

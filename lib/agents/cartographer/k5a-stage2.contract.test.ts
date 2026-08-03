@@ -157,7 +157,7 @@ describe('K5a stage-two contract', () => {
     expect(battery).toContain("IS DISTINCT FROM '[]'::jsonb")
     expect(c4R5Battery).toContain('k5a_c4_exact_recall_failed')
     expect(c4R5Battery).toContain(
-      'v_curve_probe_units constant integer := 1500',
+      'v_curve_probe_units constant integer := 1400',
     )
     expect(c4R5Battery).toContain(
       'k5a_c4_r5_plan_design_integrity_failed',

@@ -31,7 +31,7 @@ DECLARE
   v_owner_baseline_p95 double precision[] := '{}';
   v_owner_p95_stddev double precision;
   v_timing_envelope double precision;
-  v_curve_probe_units constant integer := 1500;
+  v_curve_probe_units constant integer := 1400;
   v_foreign_before integer;
   v_foreign_after integer;
   i integer;

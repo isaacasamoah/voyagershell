@@ -1,5 +1,5 @@
 import { log } from '@/lib/debug'
-import { createMessageEvent, createExplicitEvent } from '@/lib/knowledge/events'
+import { createMessageEvent } from '@/lib/knowledge/events'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { getVoyageBySlug } from '@/lib/voyage/core'
 import { getVoyageMembers } from '@/lib/voyage/members'
@@ -94,20 +94,20 @@ const executeRememberFallback = async (
   }
 
   try {
-    const eventId = await createExplicitEvent(intent.payload, {
+    const eventId = await createMessageEvent(ctx.conversationId ?? 'shell-reconciler', 'user', intent.payload, {
       userId: ctx.userId,
       voyageSlug: ctx.voyageSlug,
       classifications: ['preference'],
-      sessionId: ctx.conversationId,
+      eventType: 'message',
     })
 
     if (!eventId) {
-      log.shell('remember fallback: createExplicitEvent returned null', undefined, 'warn')
+      log.shell('remember fallback: createMessageEvent returned null', undefined, 'warn')
       return null
     }
 
     log.shell(`remember fallback executed: saved "${intent.payload.slice(0, 40)}"`)
-    return 'createExplicitEvent'
+    return 'createMessageEvent'
   } catch (error) {
     log.shell(`remember fallback error: ${String(error)}`, undefined, 'error')
     return null

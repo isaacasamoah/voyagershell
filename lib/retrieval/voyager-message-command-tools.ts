@@ -1,6 +1,6 @@
 import { tool } from 'ai'
 import { z } from 'zod'
-import { createExplicitEvent, createMessageEvent } from '@/lib/knowledge/events'
+import { createMessageEvent } from '@/lib/knowledge/events'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { getVoyageBySlug } from '@/lib/voyage/core'
 import { getVoyageMembers } from '@/lib/voyage/members'
@@ -122,11 +122,11 @@ export const createVoyagerMessageCommandTools = (ctx: ToolContext) => ({
     }),
     execute: async ({ content, classifications: requestedClassifications }) => {
       const classifications = requestedClassifications ?? ['preference']
-      const eventId = await createExplicitEvent(content, {
+      const eventId = await createMessageEvent(ctx.conversationId ?? 'tool-remember', 'user', content, {
         userId: ctx.userId,
         voyageSlug: ctx.voyageSlug,
         classifications,
-        sessionId: ctx.conversationId,
+        eventType: 'message',
       })
       if (!eventId) return 'Failed to save knowledge. Please try again.'
       return `Saved as ${classifications.join(', ')} knowledge.`

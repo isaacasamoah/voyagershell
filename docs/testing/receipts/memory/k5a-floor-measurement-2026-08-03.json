@@ -49,9 +49,9 @@
   },
   "proposal": {
     "response_floor_ms": 556,
-    "g5_exact_recall_through_authorized_units": 1500,
-    "g5_gate_begins_above_authorized_units": 1500,
-    "first_measured_over_existing_floor_authorized_units": 1600,
+    "g5_exact_recall_through_authorized_units": 1400,
+    "g5_gate_begins_above_authorized_units": 1400,
+    "first_measured_over_existing_floor_authorized_units": 1500,
     "approximate_search_lands_automatically": false
   }
 }

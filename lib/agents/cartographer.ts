@@ -1,9 +1,5 @@
 import { log } from '@/lib/debug/logger'
 import { resolveUserModelWithMeta } from '@/lib/models'
-import { applyEnrichments } from './cartographer/apply'
-import { checkPreferenceSuperseding } from './cartographer/preference-superseding'
-import { processRetrievalFeedback } from './cartographer/retrieval-feedback'
-import { applySessionDecay } from './cartographer/session-decay'
 import { upsertPersonSessionIndex } from '@/lib/knowledge/lifecycle/session-index'
 import { extractKnowledge } from './cartographer/extractor'
 import {
@@ -217,23 +213,9 @@ export const runCartographer = async (
       })
     }
     if (completion.outcome === 'succeeded' || completion.outcome === 'no_claim') {
-      const assessment = {
-        eventId: attempt.sourceEventId,
-        knowledgeType: object.knowledgeType,
-        attentionScore: object.attentionScore,
-        contextSnippet: object.contextSnippet,
-      }
-      await applyEnrichments([assessment], [{
-        event_id: attempt.sourceEventId,
-        content: attempt.sourceContent,
-        source_created_at: '',
-      }])
       if (attempt.sourceSessionId) {
         await upsertPersonSessionIndex(attempt.sourceActorId, attempt.sourceSessionId, 1)
-        await applySessionDecay(attempt.sourceActorId, attempt.sourceSessionId)
       }
-      await checkPreferenceSuperseding([assessment], attempt.sourceActorId)
-      await processRetrievalFeedback(attempt.sourceActorId)
     }
 
     log.agent('Cartographer job complete', {

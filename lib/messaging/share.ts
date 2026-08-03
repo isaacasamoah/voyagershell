@@ -1,4 +1,3 @@
-import { updateEventEmbedding } from '@/lib/knowledge/event-storage'
 import { getAdminClient } from '@/lib/supabase/admin'
 
 export type SharePublicationStatus = 'created' | 'replayed'
@@ -74,7 +73,6 @@ export const sharePrivateVoyagerReply = async ({
   // a retry can heal an earlier vector-provider failure, while an OpenAI/vector
   // failure can never roll back or duplicate the publication itself.
   if (typeof row.shared_content === 'string') {
-    await updateEventEmbedding(row.shared_event_id, row.shared_content)
   }
 
   return {

@@ -10,9 +10,7 @@
 export {
   emitMessageEvent,
   createMessageEvent,
-  createExplicitEvent,
 } from './events'
-export { updateKnowledgeEnrichment } from './event-enrichment'
 
 export type {
   SourceEventType,

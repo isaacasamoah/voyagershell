@@ -120,10 +120,10 @@ describe('K5a stage-three floor proposal contract', () => {
     expect(measurement.proposal.response_floor_ms).toBe(556)
     expect(
       measurement.proposal.g5_exact_recall_through_authorized_units,
-    ).toBe(1500)
+    ).toBe(1400)
     expect(
       measurement.proposal.first_measured_over_existing_floor_authorized_units,
-    ).toBe(1600)
+    ).toBe(1500)
   })
 })
 

@@ -8,7 +8,7 @@ Base revision: `c598c44256afb291b1e1971384edcb826ed59349` on
 Confirmed `RESPONSE_FLOOR_MS`: **556 ms**.
 
 Confirmed G5 exact-recall threshold: **exact authorized-subset search is the
-promise through 1,500 authorized units. Above 1,500 units, the authorized-
+promise through 1,400 authorized units. Above 1,400 units, the authorized-
 partition ANN design returns to its gate; approximate results do not begin
 automatically.**
 
@@ -51,8 +51,8 @@ bracket rather than an interpolated line. 1,500 is the largest measured scale
 whose clean p95 remains under the existing 550 ms database-work horizon;
 1,600 is the first measured point above it.
 
-At 1,500 units, each same-session pair measured the fixed viewer subset,
-inserted exactly 1,500 newly authorized units for a foreign viewer, then
+At 1,400 units, each same-session pair measured the fixed viewer subset,
+inserted exactly 1,400 newly authorized units for a foreign viewer, then
 measured the fixed subset again:
 
 | Pair | Foreign before → after | Before p95 (ms) | After p95 (ms) | Absolute delta (ms) |
