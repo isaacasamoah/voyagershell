@@ -1,4 +1,9 @@
-# K5a G8 post-findability timing curve (2026-08-03)
+# K5a G8 claims-scoped warm-synthetic timing curve (2026-08-03)
+
+Scope label: `CLAIMS-SCOPED`, `WARM-SYNTHETIC`. The curve is evidence for the
+claims boundary measurement only, not a G6 timing claim for unit search. The
+search boundary, floor number, and unsupported-scale behavior remain pending
+G11; no search-path floor is asserted here.
 
 Status: `K5A_G8_CURVE_MEASURED`
 
@@ -13,7 +18,7 @@ The two measured levers are:
    exact horizon.** Its fully derived envelope is 539.547 ms; the next measured
    point, 1,500, is 597.549 ms.
 
-These are timing-envelope choices, not query repairs. The same 080 candidate
+These are claims-boundary timing-envelope choices, not query repairs. The same 080 candidate
 passed every C3/C4 recall, plan, bounded-read, corpus-independence, and
 zeroed/retired findability bar before this clean measurement. Neither the query
 nor a bar was changed.

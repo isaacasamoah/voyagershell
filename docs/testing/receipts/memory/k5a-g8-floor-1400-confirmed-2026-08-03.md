@@ -1,4 +1,9 @@
-# K5A G8 floor confirmation at 1,400
+# K5A claims-scoped warm-synthetic floor arm at 1,400
+
+Scope label: `CLAIMS-SCOPED`, `WARM-SYNTHETIC`. This receipt measures the
+`retrieveKnowledgeGraphClaims` boundary only. It does **not** establish the
+G6 timing arm for unit search; the search boundary and its number/unsupported
+scale behavior remain pending G11.
 
 The ruled lever keeps `RESPONSE_FLOOR_MS = 556` and moves the exact-recall
 horizon to 1,400 authorized units. The source-coupled arm was rerun with the
@@ -16,6 +21,7 @@ active horizon set to 1,400 and passed.
 
 The arm reads `RESPONSE_FLOOR_MS` from its source and derives the under-floor
 budget by subtracting measured overhead; it does not copy a latency literal.
-The 1,400 horizon is the exact-search guarantee boundary. Above it, the
+Within this claims-only measurement, the 1,400 horizon is the exact-recall
+boundary. Above it, the
 authorized-partition ANN gate is the ruled path; approximation is never
 automatic and never permitted to leak across authorization.

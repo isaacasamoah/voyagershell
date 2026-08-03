@@ -1,4 +1,8 @@
-# K5a G6 floor and G5 threshold confirmation (2026-08-03)
+# K5a claims-scoped warm-synthetic floor proposal (2026-08-03)
+
+Scope label: `CLAIMS-SCOPED`, `WARM-SYNTHETIC`. This proposal does not claim
+that G6 timing protection holds on unit search; that boundary is a separate
+G11-rulable item.
 
 Status: `FLOOR_CONFIRMED_G8_MEASURED`
 

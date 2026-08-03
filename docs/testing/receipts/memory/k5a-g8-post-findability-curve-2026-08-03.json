@@ -1,5 +1,6 @@
 {
-  "status": "K5A_G8_CURVE_MEASURED",
+  "status": "K5A_G8_CURVE_MEASURED_CLAIMS_SCOPED_WARM_SYNTHETIC",
+  "scope": "claims-only boundary; not a search-path G6 timing claim",
   "date": "2026-08-03",
   "candidate_revision": "20f40280b04c911d4ef076e3c774e68fe241bf5c",
   "migration": "080_knowledge_search_findability_backfill.sql",
