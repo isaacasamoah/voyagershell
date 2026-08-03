@@ -130,6 +130,8 @@ Code branches and DB branches pair up; keep them aligned:
 - **Never apply dev/test migrations to `main` (production).** Production gets migrations only at release (branch merge/promotion).
 - **Confirm the DB branch by NAME before any DDL** — list branches with `GET /v1/projects/iesprdzzgjypnksoljym/branches`. A raw ref string is not human-verifiable, and `GET /v1/projects` lists only the parent project (shows `main`/prod), NOT the branch DBs. **Never infer the DB target from the app URL (`.env.local` points at prod) or the worktree path.**
 - DDL path is the **Supabase Management API** (`POST /v1/projects/<branch_ref>/database/query`) with the owner-supplied `sbp_` token; requests must send a browser User-Agent or Cloudflare WAF-blocks them (403 / "error code 1010" — not a SQL error). See `recipes/README.md`. Verify the expected catalog change separately after applying.
+- **Apply/release tool:** `recipes/release/apply-migrations.py --ref <branch_ref> [--reset]` — applies pending migrations in order, records the ledger, stops on the first error. `--reset` rebuilds from zero.
+- **CLEAN-FROM-ZERO GATE (the anti-drift rule):** the migration chain must rebuild a database **from scratch** with zero errors — `apply-migrations.py --ref hpotfrfdigzmhyibihst --reset` on `voyager-dev`. A migration that only applies forward onto an accreted state but cannot replay from zero is **not done** and is **not promotable**. Run the reset-rebuild whenever migrations change; a green clean-replay is the proof dev has not drifted. Promotion `voyager-dev → main` is that same clean chain replayed onto production — never a hand-reconciled catch-up.
 
 ## Code Standards
 
