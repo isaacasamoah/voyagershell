@@ -249,4 +249,18 @@ GRANT EXECUTE ON FUNCTION public.search_knowledge_units(
   public.keyword_search_units(uuid, text, integer, uuid)
 TO service_role;
 
+DO $empty_coverage$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.knowledge_events event
+    JOIN public.knowledge_audiences audience
+      ON audience.id = event.knowledge_audience_id
+    WHERE event.actor_type = 'user'
+      AND event.event_type IN ('conversation', 'message')
+      AND audience.purpose = 'source'
+  ) THEN
+    PERFORM public.assert_knowledge_extraction_coverage_backfill_complete();
+  END IF;
+END $empty_coverage$;
+
 COMMIT;
