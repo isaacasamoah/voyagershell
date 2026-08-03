@@ -13,6 +13,21 @@ const databaseMeasurement = read(
   'recipes/sql/cartographer-k5a-floor-measurement.sql',
 )
 const databaseDriver = read('recipes/cartographer-k5a-c3-local-proof.sh')
+const c5Harness = read('recipes/experiments/k5a-c5-extraction-harness.ts')
+const c5Corpus = JSON.parse(read(
+  'recipes/experiments/k5a-c5-extraction-corpus.json',
+)) as {
+  version: string
+  cases: Array<{
+    id: string
+    eventType: string
+    expectedClaim: string | null
+    expectedKnowledgeType: string | null
+  }>
+}
+const c5Receipt = read(
+  'docs/testing/receipts/memory/k5a-c5-extraction-measurement-2026-08-03.md',
+)
 const proposal = read(
   'docs/testing/receipts/memory/k5a-floor-proposal-2026-08-03.md',
 )
@@ -81,5 +96,30 @@ describe('K5a stage-three floor proposal contract', () => {
     expect(
       measurement.proposal.first_measured_over_existing_floor_authorized_units,
     ).toBe(1600)
+  })
+})
+
+describe('K5a C5 extraction gate contract', () => {
+  it('measures every newly eligible shape through the production extractor', () => {
+    expect(c5Corpus.version).toBe('k5a-c5-labelled-v1')
+    expect(c5Corpus.cases).toHaveLength(24)
+    expect(new Set(c5Corpus.cases.map(({ id }) => id)).size).toBe(24)
+    expect(new Set(c5Corpus.cases.map(({ eventType }) => eventType))).toEqual(
+      new Set(['document', 'slack_message', 'jira_update', 'explicit']),
+    )
+    expect(c5Harness).toContain("import { extractKnowledge }")
+    expect(c5Harness).toContain('CARTOGRAPHER_EXTRACTOR_VERSION')
+    expect(c5Harness).toContain('await extractKnowledge(model, attempt)')
+    expect(c5Harness).toContain('sourceAudienceId === attemptAudienceId')
+    expect(c5Harness).not.toContain('knowledge_extraction_jobs')
+  })
+
+  it('keeps the blocked gate explicit and prevents an invented acceptance bar', () => {
+    expect(c5Receipt).toContain('K5A-C5-BLOCKED-PENDING-SPEC')
+    expect(c5Receipt).toContain('22 / 24')
+    expect(c5Receipt).toContain('16 / 20')
+    expect(c5Receipt).toContain('24 / 24')
+    expect(c5Receipt).toContain('no `080` file was authored')
+    expect(c5Harness).not.toMatch(/precision|recall|acceptance.*(?:0\.|1\.0)/)
   })
 })

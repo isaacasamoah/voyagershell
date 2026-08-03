@@ -32,6 +32,7 @@ evidence.
 | `k4c-conflict-harness-round-2-2026-08-01.md` | current | Second measurement and owner-approved amended bar |
 | `k4c-conflict-local-proof-2026-08-01.md` | current | Disposable relation-ledger structural proof |
 | `k4c-conflict-live-proof-2026-08-01.md` | current | Development/browser conflict resolution and outsider privacy |
+| `k5a-c5-extraction-measurement-2026-08-03.md` | blocked | Connected C5 model gate; exact result awaits a ruled quality bar before migration 080 |
 
 Use `manual-product-smoke.md` as the human checklist. Store a completed run as
 a sanitized, revision-bound receipt rather than writing results into the
