@@ -148,7 +148,7 @@ describe('active voyage membership clean transition', () => {
 
   it('routes every admin-backed retrieval caller through the hardened RPCs', () => {
     const callers: Array<[string, string[]]> = [
-      ['lib/knowledge/curator.ts', ["('scoped_knowledge_fetch'", 'p_user_id: userId']],
+      ['lib/knowledge/curator.ts', ['retrieveKnowledgeGraphClaims(', 'authorityId: userId']],
       ['lib/retrieval/temporal-retrieval-tool.ts', ['temporalUnitSearch(', 'ctx.userId']],
       ['lib/knowledge/search.ts', ['semanticUnitSearch(', 'userId, query']],
       ['lib/knowledge/unit-search.ts', ["'search_knowledge_units'",

@@ -13,6 +13,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { estimateTokens } from '@/lib/conversation/window'
 import type { KnowledgeNode } from './search-types'
+import { retrieveKnowledgeGraphClaims } from './kernel/boundary'
 
 // =============================================================================
 // Types
@@ -157,8 +158,8 @@ const getRecentSessionIds = async (
 }
 
 /**
- * Curate a token-budgeted prompt window from knowledge_current.
- * Single SQL query, tier-aware ranking, hard budget enforcement.
+ * Curate a token-budgeted prompt window from the unit-native graph read.
+ * Tier-aware ranking and hard budget enforcement remain local and deterministic.
  *
  * Performance target: < 50ms (pure SQL, no LLM calls).
  */
@@ -168,26 +169,31 @@ export const curatePromptWindow = async (
   config: PromptWindowConfig = DEFAULT_WINDOW_CONFIG,
   sessionId?: string,
 ): Promise<CuratedWindow> => {
-  const supabase = getAdminClient()
-
-  // Parallel: fetch knowledge candidates + recent session IDs for operational filtering
+  // Parallel: fetch authorized graph claims + recent session IDs. Voyage scope
+  // is enforced by graph grants; it is not a caller-supplied SQL scope.
   const [knowledgeResult, recentSessions] = await Promise.all([
-    supabase.rpc('scoped_knowledge_fetch', {
-      p_user_id: userId,
-      p_voyage_slug: voyageSlug,
-      p_scope: voyageSlug ? 'all' : 'personal',
-      p_min_attention: 0.3,
-      p_match_count: 500,
+    retrieveKnowledgeGraphClaims({ kind: 'person', authorityId: userId }, {
+      claimBudget: 64,
+      nodeBudget: 512,
     }),
     getRecentSessionIds(userId, sessionId, config.operationalSessionWindow),
   ])
 
-  if (knowledgeResult.error || !knowledgeResult.data) {
-    console.warn('[Curator] Query failed:', knowledgeResult.error?.message)
+  if (knowledgeResult.outcome !== 'success') {
+    console.warn('[Curator] Unit-native graph read failed:', knowledgeResult.outcome)
     return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 }
   }
 
-  const rawRows: Array<CuratorRow & { session_id?: string | null }> = knowledgeResult.data
+  const rawRows: Array<CuratorRow & { session_id?: string | null }> =
+    knowledgeResult.claims.map((claim) => ({
+      event_id: claim.sourceEventId,
+      content: claim.claim,
+      knowledge_type: claim.knowledgeType,
+      attention_score: claim.attentionScore,
+      context_snippet: claim.claim,
+      source_created_at: new Date().toISOString(),
+      classifications: [], entities: [], topics: [],
+    }))
 
   // Sort by effective attention (includes promotion boost) then recency (F4.4)
   const rows = rawRows.sort((a, b) => {

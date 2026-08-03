@@ -177,4 +177,12 @@ run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP
 [ "$(<"$TEMP_DIR/080-backfill-verdict.out")" = CARTOGRAPHER_K5A_080_BACKFILL_GREEN ] \
   || fail 'exact migration 080 backfill verdict missing'
 
+for pass in 1 2; do
+  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+    -U postgres -d "$DATABASE" \
+    < "$REPO_ROOT/supabase/migrations/081_event_native_cutover.sql" >/dev/null \
+    || fail "migration 081 pass $pass failed"
+done
+printf '%s\n' CARTOGRAPHER_K5A_081_IDEMPOTENT_GREEN
+
 source "$REPO_ROOT/recipes/lib/cartographer-k5a-c3-run-probes.sh"

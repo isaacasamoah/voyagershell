@@ -63,7 +63,6 @@ const loadTools = async () => {
   vi.doMock('@/lib/voyage/username', () => ({ normalizeUsername: vi.fn() }))
   vi.doMock('@/lib/knowledge/events', () => ({
     createMessageEvent,
-    createExplicitEvent: vi.fn(),
   }))
   return import('./retrieval-tools')
 }
@@ -128,9 +127,7 @@ describe('spawn_background_agent delivery', () => {
         voyageSlug: 'launch',
         participants: ['user-1'],
         source: 'agent',
-        attentionScore: 0.85,
         eventType: 'conversation',
-        contextSnippet: 'Voyager research: Map every launch dependency',
       },
     )
     expect(fanOutDeliveries).not.toHaveBeenCalled()

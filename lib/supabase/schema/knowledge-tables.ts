@@ -17,17 +17,6 @@ type EventRow = {
   source_ref: NullableJson; actor_id: string | null; actor_type: string; created_at: string;
   participants: string[] | null; knowledge_audience_id: string | null
 }
-type CurrentRow = {
-  event_id: string; user_id: string | null; voyage_slug: string | null; content: string;
-  classifications: string[] | null; entities: string[] | null; topics: string[] | null;
-  embedding: string | null; source_created_at: string; updated_at: string;
-  participants: string[] | null; event_type: string | null; knowledge_type: string | null;
-  attention_score: number | null; context_snippet: string | null; sender_display_name: string | null;
-  sender_user_id: string | null; addressed_to: string[] | null; session_id: string | null;
-  search_vector: NullableUnknown; superseded_by: string | null; base_attention: number | null;
-  promotion_count: number | null; surfacing_tier: string | null; deliver_after: string | null;
-  delivery_status: string | null
-}
 export type KnowledgeTables = {
   knowledge_unit_citations: TableShape<{
     id: string; knowledge_unit_id: string; person_id: string;
@@ -125,10 +114,6 @@ export type KnowledgeTables = {
     source_ref?: NullableJson; actor_id?: string | null; actor_type?: string; created_at?: string;
     participants?: string[] | null; knowledge_audience_id?: string | null
   }>
-  knowledge_current: TableShape<CurrentRow,
-    Partial<CurrentRow> & { event_id: string; content: string; source_created_at: string },
-    Partial<CurrentRow>,
-    [Relationship<'knowledge_current_event_id_fkey', 'event_id', 'knowledge_events', 'id', true>]>
   messages: TableShape<{
     id: string; session_id: string | null; role: string; content: string;
     knowledge_event_id: string | null; created_at: string | null

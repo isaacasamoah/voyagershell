@@ -12,8 +12,6 @@ interface MessageEventOptions {
   senderDisplayName?: string
   senderUserId?: string
   spaceId?: string
-  attentionScore?: number
-  contextSnippet?: string
   eventType?: SourceEventType
 }
 

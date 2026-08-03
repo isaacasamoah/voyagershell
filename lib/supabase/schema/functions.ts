@@ -91,8 +91,6 @@ export type PublicFunctions = {
     p_retired?: boolean
   }; Returns: number }
   archive_session: { Args: { p_session_id: string; p_user_id: string }; Returns: boolean }
-  authorize_knowledge_scope: { Args: { p_surface: string; p_user_id: string; p_voyage_slug: string | null };
-    Returns: string }
   begin_knowledge_extraction_attempt: { Args: {
     p_requesting_user_id: string; p_model_provider: string; p_model_id: string;
     p_resolver_label?: string | null; p_source_event_id?: string | null;
@@ -147,8 +145,6 @@ export type PublicFunctions = {
     p_limit?: number }; Returns: ResumableSessionRow[] }
   get_session_scope: { Args: { p_session_id: string; p_user_id: string };
     Returns: SessionScopeRow[] }
-  get_knowledge_by_ids: { Args: { p_event_ids: string[]; p_user_id: string;
-    p_voyage_slug: string | null }; Returns: KnowledgeByIdRow[] }
   get_user_voyages: { Args: { p_user_id: string }; Returns: { voyage_id: string; slug: string;
     name: string; role: VoyageRole; joined_at: string }[] }
   get_voyage_by_invite_code: { Args: { p_invite_code: string }; Returns: {
@@ -156,7 +152,6 @@ export type PublicFunctions = {
   get_voyage_role: { Args: { p_user_id: string; p_voyage_slug: string }; Returns: VoyageRole }
   get_voyage_messages: { Args: { p_user_id: string; p_voyage_slug: string;
     p_since: string; p_max_count: number }; Returns: VoyageMessageRow[] }
-  increment_promotion_count: { Args: { p_event_id: string }; Returns: undefined }
   knowledge_unit_effective_attention: { Args: {
     p_knowledge_unit_id: string; p_person_id: string
   }; Returns: number }
@@ -179,17 +174,10 @@ export type PublicFunctions = {
     p_extractor_version: string; p_knowledge_audience_id: string;
     p_embedding: string; p_exclude_unit_id?: string | null
   }; Returns: KnowledgeTopicCandidateRow[] }
-  keyword_search: { Args: { p_query: string; p_user_id: string; p_voyage_slug?: string | null;
-    p_knowledge_type?: string | null; p_min_attention?: number; p_match_count?: number;
-  }; Returns: KeywordSearchRow[] }
   keyword_search_units: { Args: {
     p_viewer_profile_id: string; p_query: string; p_match_count?: number;
     p_anchor_person_id?: string | null
   }; Returns: KnowledgeUnitKeywordRow[] }
-  knowledge_in_scope: { Args: { p_row_user_id: string | null; p_row_voyage_slug: string | null;
-    p_row_event_type: string | null; p_row_knowledge_type: string | null;
-    p_row_participants: string[] | null; p_user_id: string | null;
-    p_voyage_slug: string | null; p_participants: string[] | null }; Returns: boolean }
   promote_private_voyager_reply: { Args: { p_source_event_id: string; p_conversation_id: string;
     p_user_id: string }; Returns: { shared_event_id: string; status: string;
       shared_content: string }[] }
@@ -209,21 +197,12 @@ export type PublicFunctions = {
     p_member_user_id: string }; Returns: boolean }
   resume_session: { Args: { p_session_id: string; p_user_id: string };
     Returns: SessionAuthorityRow[] }
-  search_knowledge: { Args: { query_embedding: string; p_user_id: string; p_voyage_slug?: string;
-    p_classifications?: string[]; p_match_threshold?: number; p_match_count?: number;
-    p_knowledge_type?: string; p_min_attention?: number };
-    Returns: KnowledgeSearchRow[] }
   search_knowledge_units: { Args: {
     p_viewer_profile_id: string; p_query_embedding?: string | null;
     p_match_threshold?: number; p_match_count?: number;
     p_anchor_person_id?: string | null; p_since?: string | null;
     p_until?: string | null; p_unit_ids?: string[] | null
   }; Returns: KnowledgeUnitSearchRow[] }
-  scoped_knowledge_fetch: { Args: { p_user_id: string; p_voyage_slug?: string | null;
-    p_scope?: string; p_content_match?: string | null;
-    p_case_sensitive?: boolean; p_since?: string | null; p_until?: string | null;
-    p_min_attention?: number; p_match_count?: number; p_sender_user_id?: string | null };
-    Returns: ScopedKnowledgeRow[] }
   transition_room_invite: { Args: { p_session_id: string; p_user_id: string;
     p_space_id: string | null; p_action: string }; Returns: {
       transition_status: string; transition_space_id: string | null
@@ -234,7 +213,6 @@ export type PublicFunctions = {
   upsert_person_session_index: { Args: {
     p_person_id: string; p_session_id: string; p_event_count?: number
   }; Returns: undefined }
-  update_knowledge_embedding: { Args: { p_embedding: string; p_event_id: string }; Returns: boolean }
   write_knowledge_topic_identity_backfill: { Args: {
     p_unit_id: string; p_raw_output: Json; p_knowledge_type: string;
     p_attention_score: number; p_embedding: string; p_topic_inputs: Json;

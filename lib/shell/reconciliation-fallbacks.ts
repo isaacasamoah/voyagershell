@@ -67,8 +67,6 @@ const executeTellFallback = async (
         source: 'mention',
         senderDisplayName,
         senderUserId: ctx.userId,
-        attentionScore: 0.85,
-        contextSnippet: `${senderDisplayName} to ${match.displayName}: ${content.slice(0, 60)}`,
       },
     )
 
@@ -97,7 +95,6 @@ const executeRememberFallback = async (
     const eventId = await createMessageEvent(ctx.conversationId ?? 'shell-reconciler', 'user', intent.payload, {
       userId: ctx.userId,
       voyageSlug: ctx.voyageSlug,
-      classifications: ['preference'],
       eventType: 'message',
     })
 

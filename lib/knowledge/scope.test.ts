@@ -8,6 +8,11 @@ const loadCuratorModule = async () => {
   vi.doMock('@/lib/conversation/window', () => ({
     estimateTokens: () => 1,
   }))
+  vi.doMock('./kernel/boundary', () => ({
+    retrieveKnowledgeGraphClaims: vi.fn().mockResolvedValue({
+      outcome: 'success', claims: [], truncated: false,
+    }),
+  }))
   return import('./curator')
 }
 const loadToolsModule = async () => {
@@ -55,10 +60,7 @@ const loadToolsModule = async () => {
     resolveMemberByName: vi.fn(),
   }))
   vi.doMock('@/lib/voyage/invitations', () => ({ sendVoyageInvite: vi.fn() }))
-  vi.doMock('@/lib/knowledge/events', () => ({
-    createMessageEvent: vi.fn(),
-    createExplicitEvent: vi.fn(),
-  }))
+  vi.doMock('@/lib/knowledge/events', () => ({ createMessageEvent: vi.fn() }))
   return import('../retrieval/retrieval-tools')
 }
 describe('knowledge scope RPC routing', () => {
@@ -67,26 +69,14 @@ describe('knowledge scope RPC routing', () => {
     adminRpc.mockResolvedValue({ data: [], error: null })
   })
 
-  it('routes curator windows through scoped_knowledge_fetch with voyage and personal scopes', async () => {
+  it('routes curator windows through the unit-native graph read', async () => {
     const { curatePromptWindow } = await loadCuratorModule()
 
     await curatePromptWindow('user-1', 'fambam')
-    expect(adminRpc).toHaveBeenLastCalledWith('scoped_knowledge_fetch', {
-      p_user_id: 'user-1',
-      p_voyage_slug: 'fambam',
-      p_scope: 'all',
-      p_min_attention: 0.3,
-      p_match_count: 500,
-    })
+    expect(adminRpc).not.toHaveBeenCalledWith('scoped_knowledge_fetch', expect.anything())
 
     await curatePromptWindow('user-1')
-    expect(adminRpc).toHaveBeenLastCalledWith('scoped_knowledge_fetch', {
-      p_user_id: 'user-1',
-      p_voyage_slug: undefined,
-      p_scope: 'personal',
-      p_min_attention: 0.3,
-      p_match_count: 500,
-    })
+    expect(adminRpc).not.toHaveBeenCalledWith('scoped_knowledge_fetch', expect.anything())
   })
 
   it('routes time-range retrieval through unit search with source-time filters', async () => {

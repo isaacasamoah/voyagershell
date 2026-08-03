@@ -27,7 +27,7 @@ END $cutover_precondition$;
 
 -- The deployment-window trigger is no longer an authority. New ingress writes
 -- the immutable event plus its graph audience through the claim RPC instead.
-DROP TRIGGER IF EXISTS trg_knowledge_events_apply ON public.knowledge_events;
+DROP TRIGGER IF EXISTS on_knowledge_event_insert ON public.knowledge_events;
 DROP FUNCTION IF EXISTS public.apply_knowledge_event();
 
 -- Promotion remains atomic, but the event insert is now the sole durable write;
@@ -132,11 +132,10 @@ $$;
 
 DROP FUNCTION IF EXISTS public.knowledge_in_scope(uuid, text, text, text, uuid[], uuid, text, uuid[]);
 DROP FUNCTION IF EXISTS public.authorize_knowledge_scope(text, uuid, text);
-DROP FUNCTION IF EXISTS public.search_knowledge(vector, uuid, text, boolean, text[], double precision, integer);
-DROP FUNCTION IF EXISTS public.search_knowledge(vector, uuid, text, boolean, text[], double precision, integer, uuid[]);
+DROP FUNCTION IF EXISTS public.search_knowledge(vector, uuid, text, text[], double precision, integer, text, double precision);
 DROP FUNCTION IF EXISTS public.keyword_search(text, uuid, text, text, double precision, integer);
 DROP FUNCTION IF EXISTS public.keyword_search(text, uuid, text, text, double precision, integer, uuid[]);
-DROP FUNCTION IF EXISTS public.scoped_knowledge_fetch(uuid, text, uuid[], text, text, boolean, timestamptz, timestamptz, double precision, integer);
+DROP FUNCTION IF EXISTS public.scoped_knowledge_fetch(uuid, text, text, text, boolean, timestamptz, timestamptz, double precision, integer, uuid);
 DROP FUNCTION IF EXISTS public.get_knowledge_by_ids(uuid[], uuid, text);
 DROP FUNCTION IF EXISTS public.graph_traverse(uuid, uuid, text, text, text, integer, double precision, integer);
 DROP FUNCTION IF EXISTS public.update_knowledge_embedding(uuid, vector);
@@ -144,7 +143,7 @@ DROP FUNCTION IF EXISTS public.increment_promotion_count(uuid);
 
 -- The old projection is retired last. CASCADE removes only its historical
 -- trigger/index/policy dependencies; 079's unit-native reads do not depend on it.
-DROP TABLE public.knowledge_current CASCADE;
+DROP TABLE IF EXISTS public.knowledge_current CASCADE;
 
 -- Native v3 is the only graph claim retrieval function after this boundary.
 DROP FUNCTION IF EXISTS public.retrieve_knowledge_graph_claims_v2(uuid, uuid, uuid[], integer, integer, integer);

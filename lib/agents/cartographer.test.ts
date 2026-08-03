@@ -5,11 +5,7 @@ const mocks = vi.hoisted(() => ({
   beginExtractionAttempt: vi.fn(),
   completeExtractionAttempt: vi.fn(),
   extractKnowledge: vi.fn(),
-  applyEnrichments: vi.fn(),
   upsertPersonSessionIndex: vi.fn(),
-  applySessionDecay: vi.fn(),
-  checkPreferenceSuperseding: vi.fn(),
-  processRetrievalFeedback: vi.fn(),
   embedCartographerText: vi.fn(),
   embedLegacyTopicInputs: vi.fn(),
   findTopicCandidates: vi.fn(),
@@ -27,20 +23,8 @@ vi.mock('./cartographer/jobs', () => ({
 vi.mock('./cartographer/extractor', () => ({
   extractKnowledge: mocks.extractKnowledge,
 }))
-vi.mock('./cartographer/apply', () => ({
-  applyEnrichments: mocks.applyEnrichments,
-}))
-vi.mock('./cartographer/session-decay', () => ({
-  applySessionDecay: mocks.applySessionDecay,
-}))
 vi.mock('@/lib/knowledge/lifecycle/session-index', () => ({
   upsertPersonSessionIndex: mocks.upsertPersonSessionIndex,
-}))
-vi.mock('./cartographer/preference-superseding', () => ({
-  checkPreferenceSuperseding: mocks.checkPreferenceSuperseding,
-}))
-vi.mock('./cartographer/retrieval-feedback', () => ({
-  processRetrievalFeedback: mocks.processRetrievalFeedback,
 }))
 vi.mock('./cartographer/topics', () => ({
   embedCartographerText: mocks.embedCartographerText,
@@ -99,8 +83,6 @@ describe('event-owned Cartographer extraction', () => {
       unitId: '72000000-0000-4000-8000-000000000008',
       replayed: false,
     })
-    mocks.applySessionDecay.mockResolvedValue({ decayed: 0, skipped: 0 })
-    mocks.processRetrievalFeedback.mockResolvedValue({ promoted: 0 })
     mocks.embedCartographerText.mockResolvedValue([1, 0])
     mocks.embedLegacyTopicInputs.mockResolvedValue([{
       label: 'amber notebook',
@@ -149,7 +131,6 @@ describe('event-owned Cartographer extraction', () => {
     }))
     expect(mocks.completeExtractionAttempt.mock.calls[0][0].knowledgeType).toBeUndefined()
     expect(mocks.completeExtractionAttempt.mock.calls[0][0].embedding).toBeUndefined()
-    expect(mocks.applyEnrichments).not.toHaveBeenCalled()
     expect(result).toEqual({
       kind: 'completed',
       outcome: 'succeeded',
@@ -246,7 +227,6 @@ describe('event-owned Cartographer extraction', () => {
       result: 'provider_failed',
       errorClass: 'APICallError',
     })
-    expect(mocks.applyEnrichments).not.toHaveBeenCalled()
     expect(result).toEqual(expect.objectContaining({
       kind: 'completed',
       outcome: 'provider_failed',

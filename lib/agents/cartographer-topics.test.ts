@@ -28,18 +28,8 @@ vi.mock('./cartographer/topic-pipeline', () => ({
 vi.mock('./cartographer/relation-pipeline', () => ({
   runRelationPipeline: mocks.runRelationPipeline,
 }))
-vi.mock('./cartographer/apply', () => ({ applyEnrichments: vi.fn() }))
-vi.mock('./cartographer/session-decay', () => ({
-  applySessionDecay: vi.fn(),
-}))
 vi.mock('@/lib/knowledge/lifecycle/session-index', () => ({
   upsertPersonSessionIndex: vi.fn(),
-}))
-vi.mock('./cartographer/preference-superseding', () => ({
-  checkPreferenceSuperseding: vi.fn(),
-}))
-vi.mock('./cartographer/retrieval-feedback', () => ({
-  processRetrievalFeedback: vi.fn(),
 }))
 
 import { runCartographer } from './cartographer'

@@ -1,19 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const rpc = vi.fn()
-const updateEventEmbedding = vi.fn()
 const updateSessionActivity = vi.fn()
 
 vi.mock('@/lib/supabase/admin', () => ({
   getAdminClient: () => ({ rpc }),
 }))
-vi.mock('@/lib/knowledge/event-storage', () => ({
-  updateEventEmbedding,
-  updateSessionActivity,
-}))
-vi.mock('@/lib/knowledge/event-enrichment', () => ({
-  updateKnowledgeEnrichment: vi.fn(),
-}))
+vi.mock('@/lib/knowledge/event-storage', () => ({ updateSessionActivity }))
 vi.mock('@/lib/debug', () => ({
   log: { api: vi.fn() },
 }))
@@ -21,7 +14,6 @@ vi.mock('@/lib/debug', () => ({
 describe('atomic message ingress', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    updateEventEmbedding.mockResolvedValue(undefined)
     updateSessionActivity.mockResolvedValue(undefined)
     rpc.mockResolvedValue({
       data: [{ event_id: 'assistant-event-1', status: 'created' }],
@@ -85,7 +77,6 @@ describe('atomic message ingress', () => {
       recipients: [],
     })
 
-    expect(updateEventEmbedding).not.toHaveBeenCalled()
     expect(updateSessionActivity).toHaveBeenCalledWith(
       'conversation-1',
       'user-1',
@@ -97,7 +88,6 @@ describe('atomic message ingress', () => {
       status: 'replayed',
       recipients: [],
     })
-    expect(updateEventEmbedding).not.toHaveBeenCalled()
     expect(updateSessionActivity).not.toHaveBeenCalled()
   })
 })

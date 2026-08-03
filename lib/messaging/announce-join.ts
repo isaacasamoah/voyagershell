@@ -32,7 +32,6 @@ export const announceJoin = async (
       source: 'join',
       senderUserId: joinerUserId,
       senderDisplayName: joinerName,
-      attentionScore: 0.3,
     })
     if (eventId) void fanOutDeliveries(eventId, recipients)
   } catch (error) {

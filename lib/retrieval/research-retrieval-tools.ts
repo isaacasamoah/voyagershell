@@ -61,9 +61,7 @@ export const createResearchRetrievalTools = (ctx: ToolContext) => ({
                     voyageSlug: ctx.voyageSlug,
                     participants: [ctx.userId],
                     source: 'agent',
-                    attentionScore: 0.85,
                     eventType: 'conversation',
-                    contextSnippet: `Voyager research: ${objective.slice(0, 60)}`,
                   },
                 )
                 if (!eventId) throw new Error('Failed to create background research message event')

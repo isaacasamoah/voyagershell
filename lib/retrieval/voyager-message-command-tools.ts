@@ -100,8 +100,6 @@ export const createVoyagerMessageCommandTools = (ctx: ToolContext) => ({
           source: 'mention',
           senderDisplayName,
           senderUserId: ctx.userId,
-          attentionScore: 0.85,
-          contextSnippet,
         },
       )
       if (eventId) {
@@ -124,7 +122,6 @@ export const createVoyagerMessageCommandTools = (ctx: ToolContext) => ({
       const classifications = requestedClassifications ?? ['preference']
       const eventId = await createMessageEvent(ctx.conversationId ?? 'tool-remember', 'user', content, {
         userId: ctx.userId,
-        voyageSlug: ctx.voyageSlug,
         classifications,
         eventType: 'message',
       })

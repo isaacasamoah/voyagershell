@@ -2,14 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
-  updateEventEmbedding: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/admin', () => ({
   getAdminClient: () => ({ rpc: mocks.rpc }),
-}))
-vi.mock('@/lib/knowledge/event-storage', () => ({
-  updateEventEmbedding: mocks.updateEventEmbedding,
 }))
 
 import { sharePrivateVoyagerReply } from './share'
@@ -31,7 +27,6 @@ describe('sharePrivateVoyagerReply — atomic promotion service', () => {
       }],
       error: null,
     })
-    mocks.updateEventEmbedding.mockResolvedValue(undefined)
   })
 
   it('delegates the entire publication boundary to the service-only RPC', async () => {
@@ -45,7 +40,6 @@ describe('sharePrivateVoyagerReply — atomic promotion service', () => {
       p_conversation_id: 'conversation-1',
       p_user_id: 'user-isaac',
     })
-    expect(mocks.updateEventEmbedding).not.toHaveBeenCalled()
   })
 
   it('returns the canonical event on replay and retries best-effort embedding', async () => {
@@ -63,7 +57,6 @@ describe('sharePrivateVoyagerReply — atomic promotion service', () => {
       eventId: 'shared-event-1',
       status: 'replayed',
     })
-    expect(mocks.updateEventEmbedding).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -75,7 +68,6 @@ describe('sharePrivateVoyagerReply — atomic promotion service', () => {
   ] as const)('maps RPC failure %s to %s', async (message, code) => {
     mocks.rpc.mockResolvedValue({ data: null, error: { message } })
     await expect(callShare()).resolves.toEqual({ ok: false, code })
-    expect(mocks.updateEventEmbedding).not.toHaveBeenCalled()
   })
 
   it('fails closed on a malformed RPC result', async () => {

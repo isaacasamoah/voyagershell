@@ -19,10 +19,7 @@ export interface KnowledgeNode {
 export interface SearchOptions {
   threshold?: number
   limit?: number
-  classifications?: Classification[]
-  voyageSlug?: string
   knowledgeType?: string
-  minAttention?: number
 }
 
 export interface KnowledgeNodeInput {

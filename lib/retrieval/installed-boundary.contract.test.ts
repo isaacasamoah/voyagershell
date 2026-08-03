@@ -41,12 +41,11 @@ describe('registered installed retrieval boundary', () => {
   it('has one exact installed contract for retained and replacement RPCs', () => {
     const types = read('lib/supabase/schema/functions.ts')
     for (const name of [
-      'get_knowledge_by_ids', 'get_voyage_messages', 'claim_source_message_ingress',
+      'get_voyage_messages', 'claim_source_message_ingress',
       'get_or_create_active_session', 'get_resumable_sessions',
       'get_session_scope', 'resume_session', 'archive_session',
       'touch_session_activity', 'get_last_active_voyage_slug',
       'set_session_ai_presence', 'remove_session_room_member',
-      'update_knowledge_embedding',
     ]) expect(types).toContain(`${name}:`)
     for (const name of [
       'create_knowledge_event', 'get_knowledge_pending_embedding',
