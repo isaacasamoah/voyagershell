@@ -12,6 +12,7 @@ TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/voyager-cartographer-k5a-c3.XXXXXX")"
 VITE_NODE="$REPO_ROOT/node_modules/.bin/vite-node"
 BOUNDARY_SOURCE="$REPO_ROOT/lib/knowledge/kernel/boundary.ts"
 RELATION_CONTRACT_SOURCE="$REPO_ROOT/lib/agents/cartographer/relation-conflict-contract.json"
+FLOOR_RECEIPT_SOURCE="$REPO_ROOT/docs/testing/receipts/memory/k5a-floor-measurement-2026-08-03.json"
 PIDS=()
 FOREGROUND_PID=
 
@@ -60,73 +61,9 @@ docker_proof_detect_security >/dev/null 2>&1 || fail 'Docker daemon is unavailab
 docker image inspect "$IMAGE" >/dev/null 2>&1 \
   || fail 'the pinned pgvector image must already exist locally; pulling is forbidden'
 [ -x "$VITE_NODE" ] || fail 'dependencies missing; run npm install first'
-[ -f "$BOUNDARY_SOURCE" ] || fail 'knowledge-kernel boundary source is missing'
-[ -f "$RELATION_CONTRACT_SOURCE" ] || fail 'relation contract source is missing'
-PER_CLAIM_PARTNER_CAP="$(node -e '
-  const fs = require("node:fs")
-  const ts = require("typescript")
-  const source = fs.readFileSync(process.argv[1], "utf8")
-  const file = ts.createSourceFile(
-    process.argv[1], source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
-  )
-  const caps = []
-  const visit = (node) => {
-    if (ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === "normalizeBudget" &&
-        node.arguments.length === 4) {
-      const [value, , , maximum] = node.arguments
-      if (ts.isPropertyAccessExpression(value) &&
-          ts.isIdentifier(value.expression) &&
-          value.expression.text === "options" &&
-          value.name.text === "perClaimPartnerCap" &&
-          ts.isNumericLiteral(maximum)) {
-        caps.push(maximum.text)
-      }
-    }
-    ts.forEachChild(node, visit)
-  }
-  visit(file)
-  if (caps.length !== 1) process.exit(1)
-  process.stdout.write(caps[0])
-' "$BOUNDARY_SOURCE")" \
-  || fail 'could not read the per-claim partner cap from the boundary source'
-RESPONSE_FLOOR_MS="$(node -e '
-  const fs = require("node:fs")
-  const ts = require("typescript")
-  const source = fs.readFileSync(process.argv[1], "utf8")
-  const file = ts.createSourceFile(
-    process.argv[1], source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
-  )
-  const floors = []
-  const visit = (node) => {
-    if (ts.isVariableDeclaration(node) &&
-        ts.isIdentifier(node.name) &&
-        node.name.text === "RESPONSE_FLOOR_MS" &&
-        node.initializer && ts.isNumericLiteral(node.initializer)) {
-      floors.push(node.initializer.text)
-    }
-    ts.forEachChild(node, visit)
-  }
-  visit(file)
-  if (floors.length !== 1) process.exit(1)
-  process.stdout.write(floors[0])
-' "$BOUNDARY_SOURCE")" \
-  || fail 'could not read RESPONSE_FLOOR_MS from the boundary source'
-RELATION_CANDIDATE_LIMIT="$(node -e '
-  const fs = require("node:fs")
-  const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
-  process.stdout.write(String(contract.blocking.candidateLimit))
-' "$RELATION_CONTRACT_SOURCE")" \
-  || fail 'could not read candidateLimit from the active relation contract'
-[[ "$PER_CLAIM_PARTNER_CAP" =~ ^[1-9][0-9]*$ ]] \
-  || fail 'per-claim partner cap is not a positive integer'
-[[ "$RESPONSE_FLOOR_MS" =~ ^[1-9][0-9]*$ ]] \
-  || fail 'response floor is not a positive integer'
-[[ "$RELATION_CANDIDATE_LIMIT" =~ ^[1-9][0-9]*$ ]] \
-  || fail 'relation candidate limit is not a positive integer'
+source "$REPO_ROOT/recipes/lib/cartographer-k5a-read-contracts.sh"
 for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql \
-  "$REPO_ROOT"/supabase/migrations/{061,062,063,064,065,066,067,068,069,070,071,072,073,074,075,076,077,078,079}_*.sql \
+  "$REPO_ROOT"/supabase/migrations/{061,062,063,064,065,066,067,068,069,070,071,072,073,074,075,076,077,078,079,080}_*.sql \
   "$REPO_ROOT/recipes/sql/cartographer-k3-setup.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k4b-v3-residue.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k4b-assertions.sql" \
@@ -138,7 +75,10 @@ for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c5-structural-falsifier.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r5-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-floor-measurement.sql" \
-  "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql"; do
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-080-pre-backfill.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-080-backfill-assertions.sql" \
+  "$REPO_ROOT/recipes/lib/cartographer-k5a-c3-run-probes.sh"; do
   [ -f "$file" ] || fail "missing SQL: $file"
 done
 
@@ -218,103 +158,22 @@ for pass in 1 2; do
       || fail "migration $number pass $pass failed"
   done
 done
-
-run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-  -v ON_ERROR_STOP=1 \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-poc.sql" \
-  > "$TEMP_DIR/c3-small-verdict.out" \
-  || fail 'C3 seeded-corpus assertions failed'
-verdict="$(<"$TEMP_DIR/c3-small-verdict.out")"
-[ "$verdict" = CARTOGRAPHER_K5A_C3_R7_SMALL_GREEN ] \
-  || fail 'exact small-regime C3 verdict missing'
-
-run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-  -v ON_ERROR_STOP=1 \
-  -v per_claim_partner_cap="$PER_CLAIM_PARTNER_CAP" \
-  -v relation_candidate_limit="$RELATION_CANDIDATE_LIMIT" \
-  -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-r7-shapes.sql" \
-  > "$TEMP_DIR/c3-shape-verdict.out" \
-  || fail 'C3 R7 shape-space assertions failed'
-shape_verdict="$(<"$TEMP_DIR/c3-shape-verdict.out")"
-[ "$shape_verdict" = CARTOGRAPHER_K5A_C3_R7_SHAPES_GREEN ] \
-  || fail 'exact C3 R7 shape-space verdict missing'
-
-for index in $(seq 1 8); do
-  docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-080-pre-backfill.sql" >/dev/null \
+  || fail 'migration 080 pre-backfill fixture failed'
+for pass in 1 2; do
+  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
     -U postgres -d "$DATABASE" \
-    < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql" \
-    > "$TEMP_DIR/probe-$index.out" 2>&1 &
-  track_pid "$!"
+    < "$REPO_ROOT/supabase/migrations/080_knowledge_search_findability_backfill.sql" \
+    >/dev/null || fail "migration 080 pass $pass failed"
 done
-reap_pids || fail 'one or more small-regime concurrent probes failed'
-probe_verdicts="$(rg --no-filename -N '^K5A_C3_CONCURRENT_PROBE_GREEN$' \
-  "$TEMP_DIR"/probe-*.out | wc -l | tr -d ' ')"
-[ "$probe_verdicts" = 8 ] \
-  || fail "8 small-regime concurrent probes produced $probe_verdicts green verdicts"
-
-run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-  -v ON_ERROR_STOP=1 \
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
   -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-realistic.sql" \
-  > "$TEMP_DIR/c3-realistic-verdict.out" \
-  || fail 'C3 realistic-regime assertions failed'
-realistic_verdict="$(<"$TEMP_DIR/c3-realistic-verdict.out")"
-[ "$realistic_verdict" = CARTOGRAPHER_K5A_C3_R7_REALISTIC_GREEN ] \
-  || fail 'exact realistic-regime C3 verdict missing'
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-080-backfill-assertions.sql" \
+  > "$TEMP_DIR/080-backfill-verdict.out" \
+  || fail 'migration 080 backfill assertions failed'
+[ "$(<"$TEMP_DIR/080-backfill-verdict.out")" = CARTOGRAPHER_K5A_080_BACKFILL_GREEN ] \
+  || fail 'exact migration 080 backfill verdict missing'
 
-for index in $(seq 1 8); do
-  docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
-    -U postgres -d "$DATABASE" \
-    < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql" \
-    > "$TEMP_DIR/realistic-probe-$index.out" 2>&1 &
-  track_pid "$!"
-done
-reap_pids || fail 'one or more realistic-regime concurrent probes failed'
-probe_verdicts="$(rg --no-filename -N '^K5A_C3_CONCURRENT_PROBE_GREEN$' \
-  "$TEMP_DIR"/realistic-probe-*.out | wc -l | tr -d ' ')"
-[ "$probe_verdicts" = 8 ] \
-  || fail "8 realistic-regime concurrent probes produced $probe_verdicts green verdicts"
-
-run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-  -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r5-assertions.sql" \
-  > "$TEMP_DIR/c4-r5-verdict.out" \
-  || fail 'C4 R5 exact authorized-subset assertions failed'
-c4_verdict="$(<"$TEMP_DIR/c4-r5-verdict.out")"
-[ "$c4_verdict" = CARTOGRAPHER_K5A_C4_R5_GREEN ] \
-  || fail 'exact C4 R5 verdict missing'
-
-run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-  -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-v5-dynamics.sql" \
-  > "$TEMP_DIR/c3-v5-dynamics-verdict.out" \
-  || fail 'C3 recoverable type-error dynamics assertion failed'
-dynamics_verdict="$(<"$TEMP_DIR/c3-v5-dynamics-verdict.out")"
-[ "$dynamics_verdict" = CARTOGRAPHER_K5A_C3_V5_DYNAMICS_GREEN ] \
-  || fail 'exact C3 v5 dynamics verdict missing'
-
-run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-  -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
-  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c5-structural-falsifier.sql" \
-  > "$TEMP_DIR/c5-structural-verdict.out" \
-  || fail 'C5 structural audience-inheritance assertions failed'
-structural_verdict="$(<"$TEMP_DIR/c5-structural-verdict.out")"
-[ "$structural_verdict" = CARTOGRAPHER_K5A_C5_STRUCTURAL_GREEN ] \
-  || fail 'exact C5 structural audience-inheritance verdict missing'
-
-if [ "${K5A_FLOOR_MEASUREMENT:-0}" = 1 ]; then
-  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
-    -v ON_ERROR_STOP=1 -v existing_response_floor_ms="$RESPONSE_FLOOR_MS" \
-    -U postgres -d "$DATABASE" \
-    < "$REPO_ROOT/recipes/sql/cartographer-k5a-floor-measurement.sql" \
-    > "$TEMP_DIR/floor-database-verdict.out" \
-    || fail 'clean floor database measurement failed'
-  floor_verdict="$(<"$TEMP_DIR/floor-database-verdict.out")"
-  [ "$floor_verdict" = CARTOGRAPHER_K5A_FLOOR_DATABASE_GREEN ] \
-    || fail 'exact clean floor database verdict missing'
-  printf '%s\n' CARTOGRAPHER_K5A_FLOOR_DATABASE_GREEN
-fi
-
-printf '%s\n' CARTOGRAPHER_K5A_C3_LOCAL_GREEN
+source "$REPO_ROOT/recipes/lib/cartographer-k5a-c3-run-probes.sh"

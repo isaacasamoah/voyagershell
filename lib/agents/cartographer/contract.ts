@@ -1,9 +1,8 @@
 import { z } from 'zod'
 import topicMatcherContract from './topic-matcher-contract.json'
 
-// Runtime activation remains v4 until migration 080 installs the complete v5
-// database surface and flips the singleton pointer. The v5 candidate is still
-// a distinct, frozen contract identity for its one-shot acceptance result.
+// G9 deferred C5: runtime activation remains v4. The frozen v5 candidate stays
+// available only as evidence for its consumed one-shot acceptance result.
 export const CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v4'
 export const CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION =
   'cartographer-single-claim-v5'

@@ -6,13 +6,21 @@ const read = (path: string): string =>
   readFileSync(resolve(process.cwd(), path), 'utf8')
 
 const boundary = read('lib/knowledge/kernel/boundary.ts')
+const boundaryTiming = read('lib/knowledge/kernel/boundary-timing.ts')
 const boundaryMeasurement = read(
   'recipes/cartographer-k5a-floor-boundary.measurement.ts',
 )
-const databaseMeasurement = read(
-  'recipes/sql/cartographer-k5a-floor-measurement.sql',
-)
+const databaseMeasurement = [
+  read('recipes/sql/cartographer-k5a-floor-measurement.sql'),
+  read('recipes/sql/cartographer-k5a-floor-measurement-core.sql'),
+  read('recipes/sql/cartographer-k5a-birth-zero-measurement.sql'),
+].join('\n')
 const databaseDriver = read('recipes/cartographer-k5a-c3-local-proof.sh')
+const databaseProbes = read('recipes/lib/cartographer-k5a-c3-run-probes.sh')
+const sourceContracts = read('recipes/lib/cartographer-k5a-read-contracts.sh')
+const coverageMigration = read(
+  'supabase/migrations/080_knowledge_search_findability_backfill.sql',
+)
 const cartographerContract = read('lib/agents/cartographer/contract.ts')
 const c5Harness = read('recipes/experiments/k5a-c5-extraction-harness.ts')
 const c5Structural = read(
@@ -64,8 +72,8 @@ const measurement = JSON.parse(read(
 
 describe('K5a stage-three floor proposal contract', () => {
   it('instruments every observable boundary phase without changing retrieval', () => {
-    expect(boundary).toContain('K5A_BOUNDARY_TIMING === "1"')
-    expect(boundary).toContain('performance.mark(BOUNDARY_TIMING_MARK')
+    expect(boundaryTiming).toContain('K5A_BOUNDARY_TIMING === \'1\'')
+    expect(boundaryTiming).toContain('performance.mark(BOUNDARY_TIMING_MARK')
     expect(boundary).not.toContain('observeTiming?:')
     expect(boundary).toContain('authMs = performance.now() - authStartedAt')
     expect(boundary).toContain(
@@ -75,15 +83,18 @@ describe('K5a stage-three floor proposal contract', () => {
       'transportMs = performance.now() - transportStartedAt',
     )
     expect(boundary).toContain('parseMs = performance.now() - parseStartedAt')
-    expect(boundary).toContain('Diagnostics cannot change the retrieval result.')
+    expect(boundaryTiming).toContain('Diagnostics cannot change the retrieval result.')
   })
 
-  it('keeps the proposal gated while measuring clean database and boundary paths', () => {
-    expect(boundary).toContain('const RESPONSE_FLOOR_MS = 550')
+  it('couples the confirmed floor to clean database and boundary measurements', () => {
+    expect(boundary).toContain('const RESPONSE_FLOOR_MS = 556')
     expect(databaseMeasurement).toContain('warm_no_explain_same_session')
     expect(databaseMeasurement).not.toContain('EXPLAIN (')
     expect(databaseMeasurement).not.toContain('p95_ms <= 550')
-    expect(databaseMeasurement).toContain('existing_response_floor_ms')
+    expect(databaseMeasurement).toContain('response_floor_ms')
+    expect(databaseMeasurement).toContain('boundary_overhead_ms')
+    expect(databaseMeasurement).toContain('g5_exact_units')
+    expect(databaseMeasurement).toContain('v_database_budget_ms')
     expect(databaseMeasurement).toContain('FOR i IN 1..5 LOOP')
     expect(databaseMeasurement).toContain('floor-foreign-pair-%s')
     expect(databaseMeasurement).toContain('k5a_floor_foreign_growth_mismatch')
@@ -91,16 +102,18 @@ describe('K5a stage-three floor proposal contract', () => {
     expect(databaseMeasurement).toContain(
       'CARTOGRAPHER_K5A_FLOOR_DATABASE_GREEN',
     )
-    expect(databaseDriver).toContain('K5A_FLOOR_MEASUREMENT')
-    expect(databaseDriver).toContain('node.name.text === "RESPONSE_FLOOR_MS"')
+    expect(databaseDriver).toContain('cartographer-k5a-c3-run-probes.sh')
+    expect(databaseProbes).toContain('K5A_FLOOR_MEASUREMENT')
+    expect(sourceContracts).toContain('node.name.text === "RESPONSE_FLOOR_MS"')
+    expect(sourceContracts).toContain('phase_overhead_p95_ms')
     expect(boundaryMeasurement).toContain('loopback_supabase_http_without_database_execution')
     expect(boundaryMeasurement).toContain('sample.floorWaitMs > 0')
-    expect(proposal).toContain('FLOOR_PROPOSAL_AWAITING_CONFIRMATION')
-    expect(proposal).toContain('still says 550 ms')
+    expect(proposal).toContain('FLOOR_CONFIRMED_G8_MEASURED')
+    expect(proposal).toContain('now carries\n556 ms')
   })
 
   it('derives one floor and G5 threshold from the captured measurements', () => {
-    expect(measurement.status).toBe('FLOOR_PROPOSAL_AWAITING_CONFIRMATION')
+    expect(measurement.status).toBe('FLOOR_CONFIRMED_G8_MEASURED')
     expect(measurement.boundary.phase_overhead_p95_ms).toBe(3.256)
     expect(measurement.derivation.unrounded_floor_ms).toBe(555.095)
     expect(measurement.derivation.integer_ceiling_floor_ms).toBe(556)
@@ -180,14 +193,23 @@ describe('K5a C5 extraction gate contract', () => {
     expect(v5ResultReceipt).toContain('C5 fails and returns to Spec')
   })
 
-  it('keeps 080 un-authored while pinning every priced transition cost', () => {
-    expect(migrationFiles.some((file) => file.startsWith('080_'))).toBe(false)
+  it('defers C5 while preserving its spent evidence and priced costs', () => {
+    expect(migrationFiles.some((file) => file.startsWith('080_'))).toBe(true)
+    expect(coverageMigration).toContain(
+      "event.event_type IN ('conversation', 'message')",
+    )
+    expect(coverageMigration).not.toContain('cartographer-single-claim-v5')
+    expect(coverageMigration).not.toContain("'document'")
+    expect(coverageMigration).not.toContain("'slack_message'")
+    expect(coverageMigration).not.toContain("'jira_update'")
+    expect(coverageMigration).not.toContain("'explicit'")
     expect(v5ReadyReceipt).toContain('topic-retrieval-v4')
     expect(v5ReadyReceipt).toContain('topic similarity threshold `0.2`')
     expect(v5ReadyReceipt).toContain('topic candidate limit `8`')
     expect(v5ReadyReceipt).toContain('admits v4 and v5')
     expect(v5ReadyReceipt).toContain('Activation is an `UPDATE`')
     expect(v5ReadyReceipt).toContain('Migration 081 remains untouched')
+    expect(cartographerContract).toContain('G9 deferred C5')
   })
 
   it('makes audience inheritance and recoverable type dynamics falsifiable', () => {

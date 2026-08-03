@@ -1,20 +1,20 @@
-# K5a G6 floor and G5 threshold proposal (2026-08-03)
+# K5a G6 floor and G5 threshold confirmation (2026-08-03)
 
-Status: `FLOOR_PROPOSAL_AWAITING_CONFIRMATION`
+Status: `FLOOR_CONFIRMED_G8_MEASURED`
 
 Base revision: `c598c44256afb291b1e1971384edcb826ed59349` on
 `feature/k5a-graph-memory`.
 
-Proposed `RESPONSE_FLOOR_MS`: **556 ms**.
+Confirmed `RESPONSE_FLOOR_MS`: **556 ms**.
 
-Proposed G5 exact-recall threshold: **exact authorized-subset search is the
+Confirmed G5 exact-recall threshold: **exact authorized-subset search is the
 promise through 1,500 authorized units. Above 1,500 units, the authorized-
 partition ANN design returns to its gate; approximate results do not begin
 automatically.**
 
-`lib/knowledge/kernel/boundary.ts` still says 550 ms at this proposal revision.
-Neither the product-visible floor nor the source-coupled under-floor battery
-arm changes until Isaac confirms the number.
+Isaac confirmed both numbers after the measurement. `boundary.ts` now carries
+556 ms, and the under-floor arm reads that constant plus the 3.256 ms overhead
+from the machine receipt to assert a 552.744 ms database-work ceiling.
 
 ## Measurement boundary
 
@@ -105,10 +105,10 @@ floor raw              = 535.991 + 3.256 + 15.848
 floor integer          = ceil(555.095) = 556 ms
 ```
 
-After confirmation, the source-coupled database arm will read the 556 ms floor
-from `boundary.ts` and subtract the measured 3.256 ms boundary p95, giving a
-552.744 ms database-work ceiling. It will not copy either the old 550 literal
-or an independently chosen allowance.
+The source-coupled database arm reads the 556 ms floor from `boundary.ts` and
+subtracts the measured 3.256 ms boundary p95, giving a 552.744 ms database-work
+ceiling. It copies neither the old 550 literal nor an independently chosen
+allowance.
 
 Machine-readable receipt:
 `k5a-floor-measurement-2026-08-03.json`.

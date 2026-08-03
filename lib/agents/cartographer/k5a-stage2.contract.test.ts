@@ -11,9 +11,12 @@ const vectorMigration = read('supabase/migrations/076_topic_identity_hardening.s
 const battery = read('recipes/sql/cartographer-k5a-c3-poc.sql')
 const shapeBattery = read('recipes/sql/cartographer-k5a-c3-r7-shapes.sql')
 const realisticBattery = read('recipes/sql/cartographer-k5a-c3-realistic.sql')
-const c4R5Battery = read('recipes/sql/cartographer-k5a-c4-r5-assertions.sql')
+const c4R5Battery = [
+  'measure', 'plan', 'battery',
+].map((part) => read(`recipes/sql/cartographer-k5a-c4-r5-${part}.sql`)).join('\n')
 const concurrentProbe = read('recipes/sql/cartographer-k5a-c3-probe.sql')
 const c3Recipe = read('recipes/cartographer-k5a-c3-local-proof.sh')
+const c3Contracts = read('recipes/lib/cartographer-k5a-read-contracts.sh')
 const boundary = read('lib/knowledge/kernel/boundary.ts')
 const search = read('lib/knowledge/unit-search.ts')
 const searchTools = read('lib/retrieval/unit-search-tools.ts')
@@ -77,8 +80,8 @@ describe('K5a stage-two contract', () => {
     expect(shapeBattery).toContain('heap_fetches_or_blocks')
     expect(shapeBattery).toContain('rows_removed_by_filter')
     expect(shapeBattery).not.toContain('source_caps_changed')
-    expect(c3Recipe).toContain('ts.createSourceFile(')
-    expect(c3Recipe).toContain('value.name.text === "perClaimPartnerCap"')
+    expect(c3Contracts).toContain('ts.createSourceFile(')
+    expect(c3Contracts).toContain('value.name.text === "perClaimPartnerCap"')
     expect(c3Recipe).toContain('run_interruptible docker run')
     expect(c3Recipe).not.toContain('run_interruptible docker_proof_run')
     expect(c3Recipe).toContain('run_interruptible docker exec')
@@ -92,7 +95,7 @@ describe('K5a stage-two contract', () => {
       'database_timing_diagnostic_3sigma_ms',
     )
     expect(realisticBattery).toContain(
-      "'pending_confirmed_floor_minus_overhead'",
+      "'covered_by_source_coupled_floor_arm'",
     )
     expect(r7Receipt).toContain(
       'Status: `R7_BATTERY_CORRECTIONS_LOCAL_GREEN`',
@@ -154,7 +157,7 @@ describe('K5a stage-two contract', () => {
     expect(battery).toContain("IS DISTINCT FROM '[]'::jsonb")
     expect(c4R5Battery).toContain('k5a_c4_exact_recall_failed')
     expect(c4R5Battery).toContain(
-      'v_max_curve_probe_units constant integer := 10010',
+      'v_curve_probe_units constant integer := 1500',
     )
     expect(c4R5Battery).toContain(
       'k5a_c4_r5_plan_design_integrity_failed',
@@ -165,9 +168,11 @@ describe('K5a stage-two contract', () => {
       'database_timing_diagnostic_3sigma_ms',
     )
     expect(c4R5Battery).toContain(
-      "'pending_confirmed_floor_minus_overhead'",
+      "'covered_by_source_coupled_floor_arm'",
     )
-    expect(c4R5Battery).toContain("'g5_ann_threshold_units', NULL")
+    expect(c4R5Battery).toContain(
+      "'g5_ann_threshold_units', v_curve_probe_units",
+    )
     expect(c4R5Battery).not.toContain('derived_ann_threshold_units')
     expect(c4R5Battery).not.toMatch(
       /SET LOCAL (enable_|hnsw\.)|SET (enable_|hnsw\.)/,

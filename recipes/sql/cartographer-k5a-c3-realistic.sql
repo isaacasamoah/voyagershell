@@ -104,7 +104,7 @@ BEGIN
       round(v_timing_envelope::numeric, 3),
     'database_timing_diagnostic_inside_envelope',
       abs(v_p95_mean_before - v_p95_after) <= v_timing_envelope,
-    'observable_boundary_timing_status', 'pending_confirmed_floor_minus_overhead'
+    'observable_boundary_timing_status', 'covered_by_source_coupled_floor_arm'
   );
 END
 $k5a_c3_realistic_regime$;

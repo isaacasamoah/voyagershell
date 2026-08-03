@@ -55,7 +55,7 @@ export type KnowledgeRelationCompletionRow = {
 export type KnowledgeUnitSearchRow = {
   unit_id: string; claim: string; source_event_id: string;
   source_content: string; source_created_at: string; knowledge_type: string;
-  effective_attention: number; similarity: number | null
+  viewer_retired: boolean; effective_attention: number; similarity: number | null
 }
 export type KnowledgeUnitKeywordRow = Omit<
   KnowledgeUnitSearchRow, 'similarity'
@@ -78,6 +78,9 @@ export type ResumableSessionRow = Pick<SessionAuthorityRow,
 export type PublicFunctions = {
   activate_knowledge_topic_contract: {
     Args: Record<PropertyKey, never>; Returns: string
+  }
+  assert_knowledge_extraction_coverage_backfill_complete: {
+    Args: Record<PropertyKey, never>; Returns: Json
   }
   assert_knowledge_topic_backfill_complete: {
     Args: Record<PropertyKey, never>; Returns: Json

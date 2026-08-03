@@ -1,17 +1,14 @@
 import { requireAuth } from "@/lib/auth";
 import { getKnowledgeGraphCandidateClient } from "./candidate-client";
 import { GRAPH_NODE_KINDS, type GraphNodeKind } from "./contract";
-
+import { markKnowledgeGraphBoundaryTiming } from "./boundary-timing";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // The walk is capped at eight hops and 512 nodes. Eight seconds leaves more
 // than fifteen times the observed 516 ms small-walk latency while keeping a
 // resumed turn bounded even when every permitted hop needs authorization.
 const RPC_DEADLINE_MS = 8_000;
-const RESPONSE_FLOOR_MS = 550;
-const BOUNDARY_TIMING_ENABLED = process.env.K5A_BOUNDARY_TIMING === "1";
-const BOUNDARY_TIMING_MARK = "voyager.knowledge-graph-boundary";
-
+const RESPONSE_FLOOR_MS = 556;
 export interface KnowledgeGraphRoot {
   readonly kind: GraphNodeKind;
   readonly authorityId: string;
@@ -31,7 +28,6 @@ export interface KnowledgeGraphTension {
   readonly withUnitId: string;
   readonly relativeRecency: "newer" | "older" | "same";
 }
-
 export interface KnowledgeGraphRetrievalOptions {
   readonly maxDepth?: number;
   readonly excludeUnitIds?: readonly string[];
@@ -48,7 +44,6 @@ export interface KnowledgeGraphSuccess {
   readonly claims: readonly KnowledgeGraphClaim[];
   readonly truncated: boolean;
 }
-
 export type KnowledgeGraphFailureOutcome =
   | "invalid_request"
   | "deadline_exceeded"
@@ -64,17 +59,6 @@ export interface KnowledgeGraphFailure {
 export type KnowledgeGraphResult =
   | KnowledgeGraphSuccess
   | KnowledgeGraphFailure;
-
-interface KnowledgeGraphBoundaryTiming {
-  readonly outcome: KnowledgeGraphResult["outcome"];
-  readonly authMs: number;
-  readonly clientAcquisitionMs: number;
-  readonly transportMs: number;
-  readonly parseMs: number;
-  readonly beforeFloorMs: number;
-  readonly floorWaitMs: number;
-  readonly totalMs: number;
-}
 
 interface ClaimRow {
   readonly knowledgeUnitId: unknown;
@@ -256,23 +240,9 @@ export const retrieveKnowledgeGraphClaims = async (
     const floorStartedAt = performance.now();
     if (remaining > 0) await wait(remaining);
     const floorWaitMs = performance.now() - floorStartedAt;
-    if (BOUNDARY_TIMING_ENABLED) {
-      try {
-        performance.mark(BOUNDARY_TIMING_MARK, {
-          detail: {
-            outcome: resultOutcome,
-            authMs,
-            clientAcquisitionMs,
-            transportMs,
-            parseMs,
-            beforeFloorMs,
-            floorWaitMs,
-            totalMs: performance.now() - startedAt,
-          } satisfies KnowledgeGraphBoundaryTiming,
-        });
-      } catch {
-        // Diagnostics cannot change the retrieval result.
-      }
-    }
+    markKnowledgeGraphBoundaryTiming({
+      outcome: resultOutcome, authMs, clientAcquisitionMs, transportMs, parseMs,
+      beforeFloorMs, floorWaitMs, totalMs: performance.now() - startedAt,
+    });
   }
 };

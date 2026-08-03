@@ -102,9 +102,8 @@ export const extractKnowledge = async (
   )
 }
 
-// The consumed C5 one-shot used the future v5 row before migration 080 could
-// activate it. Keep that exact contract available to the sealed measurement
-// harness without admitting v5 to production routing or unit physics.
+// The consumed C5 one-shot used the now-deferred v5 candidate. Keep that exact
+// contract available to its sealed harness without admitting v5 to runtime.
 export const extractV5CandidateKnowledge = async (
   model: LanguageModel,
   attempt: ExtractionAttempt,

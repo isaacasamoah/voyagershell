@@ -1,5 +1,5 @@
 {
-  "status": "FLOOR_PROPOSAL_AWAITING_CONFIRMATION",
+  "status": "FLOOR_CONFIRMED_G8_MEASURED",
   "base_revision": "c598c44256afb291b1e1971384edcb826ed59349",
   "database": {
     "method": "warm_no_explain_same_session",

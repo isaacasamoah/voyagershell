@@ -98,9 +98,8 @@ export const completeExtractionAttempt = async (input: {
   const claimBlockedTopics = isClaimBlockedTopicContract(
     input.attempt.extractorVersion,
   )
-  // Migration 080 widens this version-pinned RPC to v5 before the active
-  // pointer flips. Until then the active v4 contract keeps using its original
-  // completion path.
+  // G9 deferred C5, so the active v4 contract keeps its original completion
+  // path and the v5 candidate never enters runtime routing.
   const { data, error } = claimBlockedTopics
     ? await getAdminClient().rpc('complete_v4_knowledge_extraction_attempt', {
       ...args,

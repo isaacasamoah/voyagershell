@@ -128,7 +128,7 @@ describe('Cartographer extractor prompt versioning', () => {
     expect(operational).toBeLessThan(domain)
   })
 
-  it('keeps the v5 candidate out of runtime routing before migration 080', async () => {
+  it('keeps the deferred v5 candidate out of runtime routing', async () => {
     await extractKnowledge({} as LanguageModel, {
       ...attempt,
       extractorVersion: 'cartographer-single-claim-v5',
