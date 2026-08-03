@@ -47,7 +47,7 @@ text, model input, and observed output did not change.
 | Claim correctness | 22 / 24 (0.917) | Every positive claim preserved its labelled meaning. Two no-claim controls became durable status claims. |
 | Type correctness | 16 / 20 (0.800) | Four positive cases labelled `domain` were returned as `operational`. |
 | About-person correctness | 24 / 24 (1.000) | The author and named Mara were selected only when explicitly named by the claim. |
-| Audience inheritance | 24 / 24 (1.000) | Every extraction attempt carried exactly its source audience ID. |
+| Audience inheritance | not credited | The original harness compared a value with itself. The C5 structural falsifier now owns this privacy bar. |
 | Provider/schema outcomes | 24 / 24 structured | No provider or schema failure occurred. |
 
 The two claim disagreements were:
@@ -69,8 +69,9 @@ seeing this run would tune the mechanism past the gate rather than measure it.
 All other positive claims were semantically equivalent restatements of their
 labels. The four source shapes each completed six structured judgments. The
 model never invented a Person ID and the explicit “remember this” cases scored
-5 / 6 for claim correctness, 5 / 5 for type correctness, and 6 / 6 for both
-about-person and audience inheritance.
+5 / 6 for claim correctness, 5 / 5 for type correctness, and 6 / 6 for
+about-person. The original audience score was later ruled tautological and is
+not evidence.
 
 ## Blocker
 

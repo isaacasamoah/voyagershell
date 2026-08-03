@@ -3,6 +3,7 @@ import {
   CARTOGRAPHER_PROMPT,
   HISTORICAL_CARTOGRAPHER_PROMPT,
   V3_CARTOGRAPHER_PROMPT,
+  V4_CARTOGRAPHER_PROMPT,
   extractionSchema,
   historicalExtractionSchema,
   isCurrentContract,
@@ -31,6 +32,7 @@ export const extractKnowledge = async (
   }
   const v3 = isV3Contract(attempt.extractorVersion)
   const current = isCurrentContract(attempt.extractorVersion)
+  const v4 = attempt.extractorVersion === 'cartographer-single-claim-v4'
   const historicalPrompt = `## Immutable source event
 ${JSON.stringify(source)}
 
@@ -54,7 +56,9 @@ Return the structured Cartographer result.` : historicalPrompt
       model,
       system: v3
         ? V3_CARTOGRAPHER_PROMPT
-        : current ? CARTOGRAPHER_PROMPT : HISTORICAL_CARTOGRAPHER_PROMPT,
+        : current
+          ? CARTOGRAPHER_PROMPT
+          : v4 ? V4_CARTOGRAPHER_PROMPT : HISTORICAL_CARTOGRAPHER_PROMPT,
       messages: [{ role: 'user', content: prompt }],
       schema: v3
         ? v3ExtractionSchema
@@ -90,7 +94,9 @@ it, and return the structured Cartographer result.`
   try {
     const result = await generateObject({
       model,
-      system: CARTOGRAPHER_PROMPT,
+      // This backfill writes a v4 topic-identity outcome. It must remain judged
+      // by the frozen v4 prompt even after a later contract becomes current.
+      system: V4_CARTOGRAPHER_PROMPT,
       messages: [{ role: 'user', content: prompt }],
       schema: extractionSchema,
       maxOutputTokens: 1024,

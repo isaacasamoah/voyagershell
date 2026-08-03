@@ -25,7 +25,7 @@ const architecture = read('ARCHITECTURE.md')
 
 describe('K4b topic identity contract', () => {
   it('versions extraction and matching separately with conservative structured output', () => {
-    expect(CARTOGRAPHER_EXTRACTOR_VERSION).toBe('cartographer-single-claim-v4')
+    expect(CARTOGRAPHER_EXTRACTOR_VERSION).toBe('cartographer-single-claim-v5')
     expect(TOPIC_MATCHER_VERSION).toBe('topic-retrieval-v4')
     expect(TOPIC_CANDIDATE_FLOOR).toBe(0.2)
     expect(TOPIC_CANDIDATE_LIMIT).toBe(8)

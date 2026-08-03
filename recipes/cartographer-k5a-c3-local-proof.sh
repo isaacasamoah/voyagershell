@@ -134,6 +134,8 @@ for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-poc.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-r7-shapes.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-realistic.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-v5-dynamics.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-c5-structural-falsifier.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r5-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-floor-measurement.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql"; do
@@ -283,6 +285,24 @@ run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
 c4_verdict="$(<"$TEMP_DIR/c4-r5-verdict.out")"
 [ "$c4_verdict" = CARTOGRAPHER_K5A_C4_R5_GREEN ] \
   || fail 'exact C4 R5 verdict missing'
+
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+  -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-v5-dynamics.sql" \
+  > "$TEMP_DIR/c3-v5-dynamics-verdict.out" \
+  || fail 'C3 recoverable type-error dynamics assertion failed'
+dynamics_verdict="$(<"$TEMP_DIR/c3-v5-dynamics-verdict.out")"
+[ "$dynamics_verdict" = CARTOGRAPHER_K5A_C3_V5_DYNAMICS_GREEN ] \
+  || fail 'exact C3 v5 dynamics verdict missing'
+
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+  -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-c5-structural-falsifier.sql" \
+  > "$TEMP_DIR/c5-structural-verdict.out" \
+  || fail 'C5 structural audience-inheritance assertions failed'
+structural_verdict="$(<"$TEMP_DIR/c5-structural-verdict.out")"
+[ "$structural_verdict" = CARTOGRAPHER_K5A_C5_STRUCTURAL_GREEN ] \
+  || fail 'exact C5 structural audience-inheritance verdict missing'
 
 if [ "${K5A_FLOOR_MEASUREMENT:-0}" = 1 ]; then
   run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \

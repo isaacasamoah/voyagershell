@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -13,11 +13,19 @@ const databaseMeasurement = read(
   'recipes/sql/cartographer-k5a-floor-measurement.sql',
 )
 const databaseDriver = read('recipes/cartographer-k5a-c3-local-proof.sh')
+const cartographerContract = read('lib/agents/cartographer/contract.ts')
 const c5Harness = read('recipes/experiments/k5a-c5-extraction-harness.ts')
-const c5Corpus = JSON.parse(read(
-  'recipes/experiments/k5a-c5-extraction-corpus.json',
+const c5Structural = read(
+  'recipes/sql/cartographer-k5a-c5-structural-falsifier.sql',
+)
+const c3V5Dynamics = read(
+  'recipes/sql/cartographer-k5a-c3-v5-dynamics.sql',
+)
+const c5CorpusV2 = JSON.parse(read(
+  'recipes/experiments/k5a-c5-extraction-corpus-v2.json',
 )) as {
   version: string
+  meta: { freeze: { payloadSha256: string } }
   cases: Array<{
     id: string
     eventType: string
@@ -28,6 +36,10 @@ const c5Corpus = JSON.parse(read(
 const c5Receipt = read(
   'docs/testing/receipts/memory/k5a-c5-extraction-measurement-2026-08-03.md',
 )
+const v5ReadyReceipt = read(
+  'docs/testing/receipts/memory/k5a-v5-ready-2026-08-03.md',
+)
+const migrationFiles = readdirSync(resolve(process.cwd(), 'supabase/migrations'))
 const proposal = read(
   'docs/testing/receipts/memory/k5a-floor-proposal-2026-08-03.md',
 )
@@ -100,26 +112,93 @@ describe('K5a stage-three floor proposal contract', () => {
 })
 
 describe('K5a C5 extraction gate contract', () => {
-  it('measures every newly eligible shape through the production extractor', () => {
-    expect(c5Corpus.version).toBe('k5a-c5-labelled-v1')
-    expect(c5Corpus.cases).toHaveLength(24)
-    expect(new Set(c5Corpus.cases.map(({ id }) => id)).size).toBe(24)
-    expect(new Set(c5Corpus.cases.map(({ eventType }) => eventType))).toEqual(
+  it('wires the frozen v2 payload to the v5 pair without running it', () => {
+    expect(c5CorpusV2.version).toBe('k5a-c5-labelled-v2')
+    expect(c5CorpusV2.cases).toHaveLength(80)
+    expect(new Set(c5CorpusV2.cases.map(({ id }) => id)).size).toBe(80)
+    expect(new Set(c5CorpusV2.cases.map(({ eventType }) => eventType))).toEqual(
       new Set(['document', 'slack_message', 'jira_update', 'explicit']),
     )
     expect(c5Harness).toContain("import { extractKnowledge }")
-    expect(c5Harness).toContain('CARTOGRAPHER_EXTRACTOR_VERSION')
+    expect(c5Harness).toContain(
+      "measuredExtractorVersion = 'cartographer-single-claim-v5'",
+    )
+    expect(c5Harness).not.toContain('CARTOGRAPHER_EXTRACTOR_VERSION')
     expect(c5Harness).toContain('await extractKnowledge(model, attempt)')
-    expect(c5Harness).toContain('sourceAudienceId === attemptAudienceId')
+    expect(c5Harness).toContain('modelProvider: measuredModelProvider')
+    expect(c5Harness).toContain('modelId: connectedCodexModelName')
+    expect(c5Harness).not.toContain('sourceAudienceId === attemptAudienceId')
+    expect(c5Harness).not.toContain('audienceInheritance')
     expect(c5Harness).not.toContain('knowledge_extraction_jobs')
+    expect(c5CorpusV2.meta.freeze.payloadSha256).toBe(
+      '84369a79ed9bbecc67f1c02318c5101296db5fa10fa054021d0b03363a44eb5a',
+    )
+    expect(c5Harness).toContain(
+      'observedPayloadSha256 !== expectedPayloadSha256',
+    )
   })
 
-  it('keeps the blocked gate explicit and prevents an invented acceptance bar', () => {
+  it('keeps the v4 evidence and its uncredited audience arm explicit', () => {
     expect(c5Receipt).toContain('K5A-C5-BLOCKED-PENDING-SPEC')
     expect(c5Receipt).toContain('22 / 24')
     expect(c5Receipt).toContain('16 / 20')
-    expect(c5Receipt).toContain('24 / 24')
+    expect(c5Receipt).toContain('Audience inheritance | not credited')
     expect(c5Receipt).toContain('no `080` file was authored')
     expect(c5Harness).not.toMatch(/precision|recall|acceptance.*(?:0\.|1\.0)/)
+  })
+
+  it('completes v5 once while preserving the v4 prompt identity', () => {
+    expect(cartographerContract).toContain(
+      "CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v5'",
+    )
+    expect(cartographerContract).toContain(
+      'export const V4_CARTOGRAPHER_PROMPT = HISTORICAL_CARTOGRAPHER_PROMPT',
+    )
+    expect(cartographerContract).toContain('asserts the absence of a settled fact')
+    expect(cartographerContract).toContain('ordered procedure; first match wins')
+    expect(cartographerContract).toContain('classify what the claim asserts')
+    expect(v5ReadyReceipt).toContain(
+      'K5A-V5-WIRED-PENDING-LABEL-ADJUDICATION',
+    )
+    expect(v5ReadyReceipt).toContain(
+      '(cartographer-single-claim-v5, model_provider/model_id)',
+    )
+    expect(v5ReadyReceipt).toContain('Any post-run label change invalidates')
+  })
+
+  it('keeps 080 un-authored while pinning every priced transition cost', () => {
+    expect(migrationFiles.some((file) => file.startsWith('080_'))).toBe(false)
+    expect(v5ReadyReceipt).toContain('topic-retrieval-v4')
+    expect(v5ReadyReceipt).toContain('topic similarity threshold `0.2`')
+    expect(v5ReadyReceipt).toContain('topic candidate limit `8`')
+    expect(v5ReadyReceipt).toContain('admits v4 and v5')
+    expect(v5ReadyReceipt).toContain('Activation is an `UPDATE`')
+    expect(v5ReadyReceipt).toContain('Migration 081 remains untouched')
+  })
+
+  it('makes audience inheritance and recoverable type dynamics falsifiable', () => {
+    for (const relation of [
+      'knowledge_extraction_jobs',
+      'knowledge_extraction_attempts',
+      'knowledge_extraction_attempt_outcomes',
+      'knowledge_units',
+      'graph_node_grants',
+    ]) {
+      expect(c5Structural).toContain(relation)
+    }
+    expect(c5Structural).toContain(
+      'job.knowledge_audience_id = event.knowledge_audience_id',
+    )
+    expect(c5Structural).toContain(
+      'unit_grant.knowledge_audience_id = event.knowledge_audience_id',
+    )
+    expect(c5Structural).toContain('k5a_c5_voyager_response_enqueued')
+    expect(c5Structural).toContain('CARTOGRAPHER_K5A_C5_STRUCTURAL_GREEN')
+    expect(databaseDriver).toContain(
+      'cartographer-k5a-c5-structural-falsifier.sql',
+    )
+    expect(c3V5Dynamics).toContain("0.60, 'operational'")
+    expect(c3V5Dynamics).toContain("0.90, 'domain'")
+    expect(c3V5Dynamics).toContain('CARTOGRAPHER_K5A_C3_V5_DYNAMICS_GREEN')
   })
 })

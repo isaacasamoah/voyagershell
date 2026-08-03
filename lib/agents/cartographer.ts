@@ -17,7 +17,7 @@ import type {
 } from './cartographer/types'
 import { toVectorString } from './cartographer/embeddings'
 import {
-  isCurrentContract,
+  isClaimBlockedTopicContract,
   isV3Contract,
   requiresUnitPhysics,
   type ExtractionObject,
@@ -175,7 +175,7 @@ export const runCartographer = async (
     let inputTokens = extracted.inputTokens
     let outputTokens = extracted.outputTokens
     let completion: ExtractionCompletion
-    if (isCurrentContract(attempt.extractorVersion)
+    if (isClaimBlockedTopicContract(attempt.extractorVersion)
       && object.claim !== null
       && embedding
       && embeddingVector) {
@@ -196,7 +196,7 @@ export const runCartographer = async (
       completion = await completeExtractionAttempt({
         attempt,
         result: object.claim === null ? 'no_claim' : 'succeeded',
-        rawOutput: isCurrentContract(attempt.extractorVersion)
+        rawOutput: isClaimBlockedTopicContract(attempt.extractorVersion)
           ? { ...object, topics: [] }
           : object,
         claim: object.claim ?? undefined,
@@ -208,8 +208,10 @@ export const runCartographer = async (
           ? object.attentionScore
           : undefined,
         embedding,
-        topicInputs: isCurrentContract(attempt.extractorVersion) ? [] : topicInputs,
-        topicCandidateSnapshot: isCurrentContract(attempt.extractorVersion) ? [] : undefined,
+        topicInputs: isClaimBlockedTopicContract(attempt.extractorVersion)
+          ? [] : topicInputs,
+        topicCandidateSnapshot: isClaimBlockedTopicContract(attempt.extractorVersion)
+          ? [] : undefined,
         inputTokens,
         outputTokens,
       })

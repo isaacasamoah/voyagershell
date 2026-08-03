@@ -1,7 +1,7 @@
+import { createHash } from 'node:crypto'
 import { extractKnowledge } from '../../lib/agents/cartographer/extractor'
-import { CARTOGRAPHER_EXTRACTOR_VERSION } from '../../lib/agents/cartographer/contract'
 import type { ExtractionAttempt } from '../../lib/agents/cartographer/types'
-import corpusDocument from './k5a-c5-extraction-corpus.json'
+import corpusDocument from './k5a-c5-extraction-corpus-v2.json'
 import {
   connectedCodexModelName,
   getConnectedCodexModel,
@@ -12,6 +12,7 @@ type KnowledgeType = 'domain' | 'operational' | 'preference'
 
 interface CorpusCase {
   id: string
+  stratum: string
   eventType: NewlyEligibleEventType
   content: string
   expectedClaim: string | null
@@ -22,9 +23,8 @@ interface CorpusCase {
 
 interface HarnessResult {
   id: string
+  stratum: string
   eventType: NewlyEligibleEventType
-  sourceAudienceId: string
-  attemptAudienceId: string
   expected: {
     claim: string | null
     knowledgeType: KnowledgeType | null
@@ -37,17 +37,53 @@ interface HarnessResult {
   }
 }
 
-const corpus = corpusDocument as { version: string; cases: CorpusCase[] }
+interface CorpusDocument {
+  version: string
+  meta: { freeze: { payloadSha256: string } }
+  cases: CorpusCase[]
+}
+
+const corpus = corpusDocument as CorpusDocument
+const expectedPayloadSha256 =
+  '84369a79ed9bbecc67f1c02318c5101296db5fa10fa054021d0b03363a44eb5a'
+const measuredExtractorVersion = 'cartographer-single-claim-v5'
+const measuredModelProvider = 'openai'
 const actorPersonId = '10000000-0000-4000-8000-000000000001'
 const candidatePersonId = '10000000-0000-4000-8000-000000000002'
 const privateAudienceId = '20000000-0000-4000-8000-000000000001'
 const roomAudienceId = '20000000-0000-4000-8000-000000000002'
 
+const canonicalize = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+        .map(([key, entry]) => [key, canonicalize(entry)]),
+    )
+  }
+  return value
+}
+
 const assertCorpus = (): void => {
   const admitted = new Set<NewlyEligibleEventType>([
     'document', 'slack_message', 'jira_update', 'explicit',
   ])
-  if (corpus.cases.length < 20) throw new Error('k5a_c5_corpus_too_small')
+  if (corpus.version !== 'k5a-c5-labelled-v2') {
+    throw new Error(`k5a_c5_corpus_version_invalid:${corpus.version}`)
+  }
+  if (corpus.cases.length !== 80) throw new Error('k5a_c5_corpus_size_changed')
+  const canonicalPayload = `${JSON.stringify(canonicalize({
+    version: corpus.version,
+    cases: corpus.cases,
+  }))}\n`
+  const observedPayloadSha256 = createHash('sha256')
+    .update(canonicalPayload)
+    .digest('hex')
+  if (corpus.meta.freeze.payloadSha256 !== expectedPayloadSha256
+    || observedPayloadSha256 !== expectedPayloadSha256) {
+    throw new Error(`k5a_c5_corpus_payload_changed:${observedPayloadSha256}`)
+  }
   if (new Set(corpus.cases.map(({ id }) => id)).size !== corpus.cases.length) {
     throw new Error('k5a_c5_duplicate_case_id')
   }
@@ -78,7 +114,7 @@ const runCase = async (
     attemptId: `30000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
     leaseToken: `40000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
     sourceEventId: `50000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
-    extractorVersion: CARTOGRAPHER_EXTRACTOR_VERSION,
+    extractorVersion: measuredExtractorVersion,
     knowledgeAudienceId: sourceAudienceId,
     sourceContent: testCase.content,
     sourceEventType: testCase.eventType,
@@ -96,9 +132,8 @@ const runCase = async (
   }
   return {
     id: testCase.id,
+    stratum: testCase.stratum,
     eventType: testCase.eventType,
-    sourceAudienceId,
-    attemptAudienceId: attempt.knowledgeAudienceId,
     expected: {
       claim: testCase.expectedClaim,
       knowledgeType: testCase.expectedKnowledgeType,
@@ -120,19 +155,17 @@ const main = async (): Promise<void> => {
     results.push(await runCase(model, corpus.cases[index], index))
     console.log(`judgedCases=${index + 1}/${corpus.cases.length}`)
   }
-  const audienceMatches = results.filter(
-    ({ sourceAudienceId, attemptAudienceId }) => sourceAudienceId === attemptAudienceId,
-  ).length
   console.log(JSON.stringify({
     corpusVersion: corpus.version,
-    model: `openai/${connectedCodexModelName}`,
+    corpusPayloadSha256: expectedPayloadSha256,
+    measurementPair: {
+      contractVersion: measuredExtractorVersion,
+      modelProvider: measuredModelProvider,
+      modelId: connectedCodexModelName,
+    },
     cases: results.length,
-    audienceInheritance: `${audienceMatches}/${results.length}`,
     results,
   }, null, 2))
-  if (audienceMatches !== results.length) {
-    throw new Error('k5a_c5_audience_inheritance_failed')
-  }
   console.log('K5A_C5_EXTRACTION_MEASUREMENT_COMPLETE')
 }
 
