@@ -53,6 +53,8 @@ GRANT EXECUTE ON FUNCTION create_personal_voyage TO authenticated;
 -- UPDATE get_user_voyages TO RETURN is_personal
 -- =============================================================================
 
+DROP FUNCTION IF EXISTS public.get_user_voyages(UUID);
+
 CREATE OR REPLACE FUNCTION get_user_voyages(p_user_id UUID)
 RETURNS TABLE (
   voyage_id UUID,
