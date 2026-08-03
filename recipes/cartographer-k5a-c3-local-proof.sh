@@ -91,6 +91,28 @@ PER_CLAIM_PARTNER_CAP="$(node -e '
   process.stdout.write(caps[0])
 ' "$BOUNDARY_SOURCE")" \
   || fail 'could not read the per-claim partner cap from the boundary source'
+RESPONSE_FLOOR_MS="$(node -e '
+  const fs = require("node:fs")
+  const ts = require("typescript")
+  const source = fs.readFileSync(process.argv[1], "utf8")
+  const file = ts.createSourceFile(
+    process.argv[1], source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS,
+  )
+  const floors = []
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === "RESPONSE_FLOOR_MS" &&
+        node.initializer && ts.isNumericLiteral(node.initializer)) {
+      floors.push(node.initializer.text)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  if (floors.length !== 1) process.exit(1)
+  process.stdout.write(floors[0])
+' "$BOUNDARY_SOURCE")" \
+  || fail 'could not read RESPONSE_FLOOR_MS from the boundary source'
 RELATION_CANDIDATE_LIMIT="$(node -e '
   const fs = require("node:fs")
   const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
@@ -99,6 +121,8 @@ RELATION_CANDIDATE_LIMIT="$(node -e '
   || fail 'could not read candidateLimit from the active relation contract'
 [[ "$PER_CLAIM_PARTNER_CAP" =~ ^[1-9][0-9]*$ ]] \
   || fail 'per-claim partner cap is not a positive integer'
+[[ "$RESPONSE_FLOOR_MS" =~ ^[1-9][0-9]*$ ]] \
+  || fail 'response floor is not a positive integer'
 [[ "$RELATION_CANDIDATE_LIMIT" =~ ^[1-9][0-9]*$ ]] \
   || fail 'relation candidate limit is not a positive integer'
 for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql \
@@ -111,6 +135,7 @@ for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-r7-shapes.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-realistic.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r5-assertions.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-floor-measurement.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql"; do
   [ -f "$file" ] || fail "missing SQL: $file"
 done
@@ -258,5 +283,18 @@ run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
 c4_verdict="$(<"$TEMP_DIR/c4-r5-verdict.out")"
 [ "$c4_verdict" = CARTOGRAPHER_K5A_C4_R5_GREEN ] \
   || fail 'exact C4 R5 verdict missing'
+
+if [ "${K5A_FLOOR_MEASUREMENT:-0}" = 1 ]; then
+  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+    -v ON_ERROR_STOP=1 -v existing_response_floor_ms="$RESPONSE_FLOOR_MS" \
+    -U postgres -d "$DATABASE" \
+    < "$REPO_ROOT/recipes/sql/cartographer-k5a-floor-measurement.sql" \
+    > "$TEMP_DIR/floor-database-verdict.out" \
+    || fail 'clean floor database measurement failed'
+  floor_verdict="$(<"$TEMP_DIR/floor-database-verdict.out")"
+  [ "$floor_verdict" = CARTOGRAPHER_K5A_FLOOR_DATABASE_GREEN ] \
+    || fail 'exact clean floor database verdict missing'
+  printf '%s\n' CARTOGRAPHER_K5A_FLOOR_DATABASE_GREEN
+fi
 
 printf '%s\n' CARTOGRAPHER_K5A_C3_LOCAL_GREEN

@@ -9,6 +9,8 @@ const UUID_PATTERN =
 // resumed turn bounded even when every permitted hop needs authorization.
 const RPC_DEADLINE_MS = 8_000;
 const RESPONSE_FLOOR_MS = 550;
+const BOUNDARY_TIMING_ENABLED = process.env.K5A_BOUNDARY_TIMING === "1";
+const BOUNDARY_TIMING_MARK = "voyager.knowledge-graph-boundary";
 
 export interface KnowledgeGraphRoot {
   readonly kind: GraphNodeKind;
@@ -62,6 +64,17 @@ export interface KnowledgeGraphFailure {
 export type KnowledgeGraphResult =
   | KnowledgeGraphSuccess
   | KnowledgeGraphFailure;
+
+interface KnowledgeGraphBoundaryTiming {
+  readonly outcome: KnowledgeGraphResult["outcome"];
+  readonly authMs: number;
+  readonly clientAcquisitionMs: number;
+  readonly transportMs: number;
+  readonly parseMs: number;
+  readonly beforeFloorMs: number;
+  readonly floorWaitMs: number;
+  readonly totalMs: number;
+}
 
 interface ClaimRow {
   readonly knowledgeUnitId: unknown;
@@ -145,18 +158,35 @@ export const retrieveKnowledgeGraphClaims = async (
   options: KnowledgeGraphRetrievalOptions = {},
 ): Promise<KnowledgeGraphResult> => {
   const startedAt = performance.now();
+  let authMs = 0;
+  let clientAcquisitionMs = 0;
+  let transportMs = 0;
+  let parseMs = 0;
+  let resultOutcome: KnowledgeGraphResult["outcome"] = "exception";
+  const complete = <Result extends KnowledgeGraphResult>(
+    result: Result,
+  ): Result => {
+    resultOutcome = result.outcome;
+    return result;
+  };
   try {
     if (!isRoot(root) || root.kind !== "person")
-      return failure("invalid_request");
+      return complete(failure("invalid_request"));
+    const authStartedAt = performance.now();
     const viewerProfileId = await requireAuth();
-    if (!isUuid(viewerProfileId)) return failure("invalid_request");
+    authMs = performance.now() - authStartedAt;
+    if (!isUuid(viewerProfileId))
+      return complete(failure("invalid_request"));
     const annotationCheckBudget = normalizeBudget(
       options.annotationCheckBudget, 64, 1, 4096,
     );
     const closureBudget = normalizeBudget(
       options.closureBudget, 16, 0, Math.min(64, annotationCheckBudget),
     );
+    const clientStartedAt = performance.now();
     const admin = getKnowledgeGraphCandidateClient();
+    clientAcquisitionMs = performance.now() - clientStartedAt;
+    const transportStartedAt = performance.now();
     const rpcCall = Promise.resolve(
       admin.rpc("retrieve_knowledge_graph_claims_v3", {
         p_root_authority_id: root.authorityId,
@@ -184,31 +214,65 @@ export const retrieveKnowledgeGraphClaims = async (
       rpcCall,
       wait(remainingRpcBudget).then(() => ({ kind: "deadline" as const })),
     ]);
-    if (outcome.kind === "deadline") return failure("deadline_exceeded");
-    if (outcome.kind === "exception") return failure("exception");
+    transportMs = performance.now() - transportStartedAt;
+    if (outcome.kind === "deadline")
+      return complete(failure("deadline_exceeded"));
+    if (outcome.kind === "exception")
+      return complete(failure("exception"));
+    const parseStartedAt = performance.now();
     const { data, error } = outcome.value;
     if (
       error ||
       data === null ||
       typeof data !== "object" ||
       Array.isArray(data)
-    )
-      return failure("rpc_error");
+    ) {
+      parseMs = performance.now() - parseStartedAt;
+      return complete(failure("rpc_error"));
+    }
     const envelope = data as { claims?: unknown; truncated?: unknown };
     if (
       !Array.isArray(envelope.claims) ||
       typeof envelope.truncated !== "boolean"
-    )
-      return failure("rpc_error");
+    ) {
+      parseMs = performance.now() - parseStartedAt;
+      return complete(failure("rpc_error"));
+    }
     const claims = envelope.claims.flatMap((row) => {
       const claim = toClaim(row);
       return claim ? [claim] : [];
     });
-    return { outcome: "success", claims, truncated: envelope.truncated };
+    parseMs = performance.now() - parseStartedAt;
+    return complete({
+      outcome: "success",
+      claims,
+      truncated: envelope.truncated,
+    });
   } catch {
-    return failure("exception");
+    return complete(failure("exception"));
   } finally {
-    const remaining = RESPONSE_FLOOR_MS - (performance.now() - startedAt);
+    const beforeFloorMs = performance.now() - startedAt;
+    const remaining = RESPONSE_FLOOR_MS - beforeFloorMs;
+    const floorStartedAt = performance.now();
     if (remaining > 0) await wait(remaining);
+    const floorWaitMs = performance.now() - floorStartedAt;
+    if (BOUNDARY_TIMING_ENABLED) {
+      try {
+        performance.mark(BOUNDARY_TIMING_MARK, {
+          detail: {
+            outcome: resultOutcome,
+            authMs,
+            clientAcquisitionMs,
+            transportMs,
+            parseMs,
+            beforeFloorMs,
+            floorWaitMs,
+            totalMs: performance.now() - startedAt,
+          } satisfies KnowledgeGraphBoundaryTiming,
+        });
+      } catch {
+        // Diagnostics cannot change the retrieval result.
+      }
+    }
   }
 };
