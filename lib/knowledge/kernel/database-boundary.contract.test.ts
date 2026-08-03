@@ -65,7 +65,6 @@ describe('K1 database boundaries', () => {
   it('describes the post-cutover database and no legacy graph surface', () => {
     const live = [
       read('lib/retrieval/knowledge-retrieval-tools.ts'),
-      read('lib/agents/cartographer/apply.ts'),
     ].join('\n')
     expect(live).not.toContain("rpc('graph_traverse'")
     expect(live).not.toContain('createEdge(')

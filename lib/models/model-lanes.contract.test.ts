@@ -22,12 +22,8 @@ const EXPECTED_EXTRACTOR_HANDOFF = [
 const EXPECTED_TOPIC_MATCHER_HANDOFF = [
   'lib/agents/cartographer/backfill.ts|matchKnowledgeTopics|resolved.model', 'lib/agents/cartographer/topic-pipeline.ts|matchKnowledgeTopics|input.model']
 const EXPECTED_OPENAI_EMBEDDINGS = [
-  "lib/agents/cartographer/apply.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
-  "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
-  "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
-  "lib/knowledge/event-storage.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/knowledge/search-embedding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   'recipes/experiments/relation-conflict-harness-support.ts|getOpenAI().embeddings.create|relationContract.blocking.embeddingModel',
 ]

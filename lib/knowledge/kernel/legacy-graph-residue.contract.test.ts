@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 // deletion is proved exhaustive rather than asserted. These are every place a
 // live runtime could still reach the graph the cutover removed.
 const liveRuntimePaths = ['lib/retrieval/knowledge-retrieval-tools.ts',
-  'lib/retrieval/voyager-tools.ts', 'lib/agents/cartographer/apply.ts',
+  'lib/retrieval/voyager-tools.ts',
   'lib/knowledge/index.ts',
   'lib/supabase/schema/functions.ts', 'lib/supabase/schema/knowledge-tables.ts',
   'lib/supabase/schema/base.ts'] as const

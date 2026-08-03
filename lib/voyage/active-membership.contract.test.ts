@@ -150,7 +150,7 @@ describe('active voyage membership clean transition', () => {
     const callers: Array<[string, string[]]> = [
       ['lib/knowledge/curator.ts', ["('scoped_knowledge_fetch'", 'p_user_id: userId']],
       ['lib/retrieval/temporal-retrieval-tool.ts', ['temporalUnitSearch(', 'ctx.userId']],
-      ['lib/knowledge/search.ts', ["('search_knowledge'", 'p_user_id: userId']],
+      ['lib/knowledge/search.ts', ['semanticUnitSearch(', 'userId, query']],
       ['lib/knowledge/unit-search.ts', ["'search_knowledge_units'",
         "'keyword_search_units'", 'p_viewer_profile_id: viewerProfileId']],
     ]

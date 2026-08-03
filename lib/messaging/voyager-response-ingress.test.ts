@@ -85,10 +85,7 @@ describe('atomic message ingress', () => {
       recipients: [],
     })
 
-    expect(updateEventEmbedding).toHaveBeenCalledWith(
-      'assistant-event-1',
-      'A private answer.',
-    )
+    expect(updateEventEmbedding).not.toHaveBeenCalled()
     expect(updateSessionActivity).toHaveBeenCalledWith(
       'conversation-1',
       'user-1',

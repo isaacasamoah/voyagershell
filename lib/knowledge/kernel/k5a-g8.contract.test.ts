@@ -53,7 +53,7 @@ describe('K5a G8 birth-zero measurement contract', () => {
     expect(receipt).toContain('does not make the class impossible')
     expect(receipt).toMatch(/worst read over the\s+\*\*whole authorized set\*\*/)
     expect(migrations.some((file) => file.startsWith('080_'))).toBe(true)
-    expect(migrations.some((file) => file.startsWith('081_'))).toBe(false)
+    expect(migrations.some((file) => file.startsWith('081_'))).toBe(true)
   })
 
   it('keeps 080 backfill-only and installs the coordinated G8 change atomically', () => {

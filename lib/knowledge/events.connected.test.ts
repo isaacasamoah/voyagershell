@@ -111,10 +111,7 @@ describe('knowledge source events without legacy array linking', () => {
     expect(insertedEvents).toHaveLength(1)
     expect((insertedEvents[0].metadata as { entities: string[] }).entities).toEqual(['Cartographer'])
     expect(updatePayloads.some(({ payload }) => Object.hasOwn(payload, retiredColumn))).toBe(false)
-    expect(fakeAdmin.rpc).toHaveBeenCalledWith('update_knowledge_embedding', {
-      p_event_id: 'event-1',
-      p_embedding: '[0.1,0.2,0.3]',
-    })
+    expect(fakeAdmin.rpc).not.toHaveBeenCalledWith('update_knowledge_embedding', expect.anything())
   })
 
   it('does not expose the retired linker helper', async () => {

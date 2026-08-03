@@ -15,7 +15,6 @@ const lifecycleAssertions = read(
 const citationRecorder = read('lib/knowledge/lifecycle/citations.ts')
 const promptComposer = read('lib/prompts/index.ts')
 const graphTool = read('lib/retrieval/knowledge-retrieval-tools.ts')
-const sessionDecay = read('lib/agents/cartographer/session-decay.ts')
 const generatedFunctions = read('lib/supabase/schema/functions.ts')
 const generatedTables = read('lib/supabase/schema/knowledge-tables.ts')
 const fullSuite = read('recipes/full-suite.sh')
@@ -30,9 +29,9 @@ describe('K5a stage-one contract', () => {
     expect(recipe).toContain('docker exec -i')
     expect(recipe).not.toMatch(/psql[\s\S]{0,120}\s-c\s/)
     expect(recipe).toContain('PIDS=()')
-    expect(recipe).toContain('track_pid "$!"')
+    expect(recipe).toContain('FOREGROUND_PID=$!')
     expect(recipe).toContain('cleanup_status=$?')
-    expect(recipe).toContain('CARTOGRAPHER_K5A_C3_LOCAL_GREEN')
+    expect(recipe).toContain('cartographer-k5a-c3-run-probes.sh')
   })
 
   it('keeps production v3 walk-select-annotate-repair ordering', () => {
@@ -133,7 +132,6 @@ describe('K5a stage-one contract', () => {
     expect(promptComposer).not.toContain('standingClaims.includes(claim)')
     expect(graphTool).toContain("channel: 'reach'")
     expect(graphTool).toContain("citation.outcome === 'failed'")
-    expect(sessionDecay).not.toContain('upsertSessionIndex')
     expect(generatedFunctions).toContain('record_knowledge_unit_citations')
     expect(generatedFunctions).toContain('upsert_person_session_index')
     expect(generatedTables).toContain('knowledge_unit_citations: TableShape')

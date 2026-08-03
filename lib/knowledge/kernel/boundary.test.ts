@@ -96,7 +96,7 @@ describe("knowledge-graph application boundary", () => {
     void denied.then(() => states.push(true));
     void failed.then(() => states.push(true));
 
-    await vi.advanceTimersByTimeAsync(549);
+    await vi.advanceTimersByTimeAsync(555);
     expect(states).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     expect(await denied).toEqual({

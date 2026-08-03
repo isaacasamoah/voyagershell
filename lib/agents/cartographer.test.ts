@@ -149,7 +149,7 @@ describe('event-owned Cartographer extraction', () => {
     }))
     expect(mocks.completeExtractionAttempt.mock.calls[0][0].knowledgeType).toBeUndefined()
     expect(mocks.completeExtractionAttempt.mock.calls[0][0].embedding).toBeUndefined()
-    expect(mocks.applyEnrichments).toHaveBeenCalledOnce()
+    expect(mocks.applyEnrichments).not.toHaveBeenCalled()
     expect(result).toEqual({
       kind: 'completed',
       outcome: 'succeeded',

@@ -45,10 +45,7 @@ describe('sharePrivateVoyagerReply — atomic promotion service', () => {
       p_conversation_id: 'conversation-1',
       p_user_id: 'user-isaac',
     })
-    expect(mocks.updateEventEmbedding).toHaveBeenCalledWith(
-      'shared-event-1',
-      'The exact private answer.',
-    )
+    expect(mocks.updateEventEmbedding).not.toHaveBeenCalled()
   })
 
   it('returns the canonical event on replay and retries best-effort embedding', async () => {
@@ -66,7 +63,7 @@ describe('sharePrivateVoyagerReply — atomic promotion service', () => {
       eventId: 'shared-event-1',
       status: 'replayed',
     })
-    expect(mocks.updateEventEmbedding).toHaveBeenCalledTimes(1)
+    expect(mocks.updateEventEmbedding).not.toHaveBeenCalled()
   })
 
   it.each([
