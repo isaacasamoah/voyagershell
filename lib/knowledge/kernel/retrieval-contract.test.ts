@@ -61,8 +61,8 @@ describe('knowledge-graph retrieval contract', () => {
     expect(boundary).toContain('const RESPONSE_FLOOR_MS = 550')
     expect(boundary).toContain('const RPC_DEADLINE_MS = 8_000')
     expect(boundary).toContain('typeof envelope.truncated !== "boolean"')
-    expect(boundary).toContain(
-      'return { outcome: "success", claims, truncated: envelope.truncated }',
+    expect(boundary).toMatch(
+      /return complete\(\{\s*outcome: "success",\s*claims,\s*truncated: envelope\.truncated,\s*\}\)/,
     )
   })
 

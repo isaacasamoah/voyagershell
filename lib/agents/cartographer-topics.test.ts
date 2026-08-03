@@ -115,11 +115,8 @@ describe('Cartographer topic contract transitions', () => {
     )
   })
 
-  it.each([
-    'cartographer-single-claim-v4',
-    'cartographer-single-claim-v5',
-  ])('blocks %s only after extraction, on the claim vector', async (version) => {
-    const current = { ...attempt, extractorVersion: version }
+  it('blocks runtime-current v4 only after extraction, on the claim vector', async () => {
+    const current = { ...attempt, extractorVersion: 'cartographer-single-claim-v4' }
     mocks.beginExtractionAttempt.mockResolvedValue(current)
     mocks.extractKnowledge.mockResolvedValue({
       kind: 'structured',

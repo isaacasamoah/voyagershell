@@ -1,9 +1,13 @@
 import { z } from 'zod'
 import topicMatcherContract from './topic-matcher-contract.json'
 
-export const CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v5'
+// Runtime activation remains v4 until migration 080 installs the complete v5
+// database surface and flips the singleton pointer. The v5 candidate is still
+// a distinct, frozen contract identity for its one-shot acceptance result.
+export const CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v4'
+export const CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION =
+  'cartographer-single-claim-v5'
 export const CLAIM_BLOCKED_TOPIC_EXTRACTOR_VERSIONS = [
-  'cartographer-single-claim-v4',
   CARTOGRAPHER_EXTRACTOR_VERSION,
 ] as const
 export const CARTOGRAPHER_PHYSICS_VERSIONS = [
@@ -168,7 +172,7 @@ Never invent a Person ID. You may copy only an ID from the supplied candidates.
 Do not infer a claim from prior knowledge, and do not return more than one claim.
 For a null claim, aboutPersonId must also be null.`
 
-export const CARTOGRAPHER_PROMPT = V5_CARTOGRAPHER_PROMPT
+export const CARTOGRAPHER_PROMPT = V4_CARTOGRAPHER_PROMPT
 
 export const isV3Contract = (version: string): boolean => (
   version === 'cartographer-single-claim-v3'

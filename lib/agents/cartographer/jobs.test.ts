@@ -45,16 +45,13 @@ describe('Cartographer completion RPC errors', () => {
     })).rejects.toBeInstanceOf(TopicCandidatesRetryableError)
   })
 
-  it.each([
-    'cartographer-single-claim-v4',
-    'cartographer-single-claim-v5',
-  ])('routes %s through the claim-blocked topic completion', async (version) => {
+  it('routes runtime-current v4 through the claim-blocked topic completion', async () => {
     mocks.rpc.mockResolvedValue({ data: [{
       outcome: 'no_claim', unit_id: null, replayed: false,
     }], error: null })
 
     await completeExtractionAttempt({
-      attempt: { ...attempt, extractorVersion: version },
+      attempt,
       result: 'no_claim',
       rawOutput: {
         claim: null,

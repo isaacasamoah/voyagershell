@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -5,7 +6,12 @@ const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
 
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 
-import { extractKnowledge, rederiveKnowledgeUnit } from './extractor'
+import {
+  extractKnowledge,
+  extractV5CandidateKnowledge,
+  rederiveKnowledgeUnit,
+} from './extractor'
+import { V5_CARTOGRAPHER_PROMPT } from './contract'
 import type {
   ExtractionAttempt,
   TopicBackfillUnit,
@@ -88,7 +94,7 @@ describe('Cartographer extractor prompt versioning', () => {
     }])
   })
 
-  it('keeps the v4 prompt byte-stable after v5 becomes current', async () => {
+  it('keeps the runtime-current v4 prompt byte-stable beside the v5 candidate', async () => {
     await extractKnowledge({} as LanguageModel, {
       ...attempt,
       extractorVersion: 'cartographer-single-claim-v4',
@@ -104,10 +110,10 @@ describe('Cartographer extractor prompt versioning', () => {
   })
 
   it('uses the completed durability and ordered type contract only for v5', async () => {
-    await extractKnowledge({} as LanguageModel, {
+    await extractV5CandidateKnowledge({} as LanguageModel, {
       ...attempt,
       extractorVersion: 'cartographer-single-claim-v5',
-    }, topics)
+    })
 
     const system = mocks.generateObject.mock.calls[0][0].system as string
     const preference = system.indexOf('1. preference')
@@ -120,6 +126,22 @@ describe('Cartographer extractor prompt versioning', () => {
     expect(preference).toBeGreaterThan(-1)
     expect(preference).toBeLessThan(operational)
     expect(operational).toBeLessThan(domain)
+  })
+
+  it('keeps the v5 candidate out of runtime routing before migration 080', async () => {
+    await extractKnowledge({} as LanguageModel, {
+      ...attempt,
+      extractorVersion: 'cartographer-single-claim-v5',
+    })
+
+    expect(mocks.generateObject.mock.calls[0][0].system).not.toContain(
+      'ordered procedure',
+    )
+  })
+
+  it('keeps the measured v5 prompt byte-stable after the one-shot result', () => {
+    expect(createHash('sha256').update(V5_CARTOGRAPHER_PROMPT).digest('hex'))
+      .toBe('3ae9be74c09f0284034a5baddee82672a672e6006baa796c879f9baa425b4ce2')
   })
 
   it('re-derives immutable unit physics without reopening topic labels', async () => {

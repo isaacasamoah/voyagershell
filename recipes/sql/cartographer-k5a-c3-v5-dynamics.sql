@@ -11,6 +11,8 @@ DECLARE
   v_member uuid := '72000000-0000-4000-8000-000000000002';
   v_mistyped uuid;
   v_fresh uuid;
+  v_mistyped_event uuid;
+  v_fresh_event uuid;
   v_mistyped_created_at timestamptz;
   v_fresh_created_at timestamptz;
   v_between timestamptz;
@@ -23,21 +25,36 @@ BEGIN
     'Mara owns the billing reconciliation service.',
     0.60, 'operational', true
   );
-  PERFORM pg_sleep(0.002);
   v_fresh := public.k5a_c3_seed_unit_poc(
     'v5-fresh-higher-birth',
     'The reconciliation service publishes a daily balance report.',
     0.90, 'domain', true
   );
 
-  SELECT event.created_at INTO STRICT v_mistyped_created_at
+  SELECT unit.source_event_id INTO STRICT v_mistyped_event
   FROM public.knowledge_units unit
-  JOIN public.knowledge_events event ON event.id = unit.source_event_id
   WHERE unit.id = v_mistyped;
-  SELECT event.created_at INTO STRICT v_fresh_created_at
+  SELECT unit.source_event_id INTO STRICT v_fresh_event
   FROM public.knowledge_units unit
-  JOIN public.knowledge_events event ON event.id = unit.source_event_id
   WHERE unit.id = v_fresh;
+
+  -- knowledge_events.created_at defaults to transaction_timestamp(), so two
+  -- ingress calls in this proof transaction are intentionally equal. Give the
+  -- disposable fixture an explicit chronology while the source-immutability
+  -- trigger is disabled, then restore the trigger before exercising any
+  -- product function. The enclosing rollback removes both fixture writes.
+  v_fresh_created_at := clock_timestamp();
+  v_mistyped_created_at := v_fresh_created_at - interval '1 second';
+  ALTER TABLE public.knowledge_events
+    DISABLE TRIGGER trg_knowledge_event_source_immutable;
+  UPDATE public.knowledge_events
+  SET created_at = CASE id
+    WHEN v_mistyped_event THEN v_mistyped_created_at
+    WHEN v_fresh_event THEN v_fresh_created_at
+  END
+  WHERE id IN (v_mistyped_event, v_fresh_event);
+  ALTER TABLE public.knowledge_events
+    ENABLE TRIGGER trg_knowledge_event_source_immutable;
   IF v_fresh_created_at <= v_mistyped_created_at THEN
     RAISE EXCEPTION 'k5a_c3_v5_fixture_clock_not_ordered';
   END IF;

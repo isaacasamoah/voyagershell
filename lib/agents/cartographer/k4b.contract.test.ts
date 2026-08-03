@@ -2,12 +2,15 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,
   CARTOGRAPHER_EXTRACTOR_VERSION,
   TOPIC_CANDIDATE_FLOOR,
   TOPIC_CANDIDATE_LIMIT,
   TOPIC_MATCHER_PROMPT,
   TOPIC_MATCHER_VERSION,
   extractionSchema,
+  isClaimBlockedTopicContract,
+  requiresUnitPhysics,
   topicMatcherSchema,
   v3ExtractionSchema,
 } from './contract'
@@ -25,7 +28,14 @@ const architecture = read('ARCHITECTURE.md')
 
 describe('K4b topic identity contract', () => {
   it('versions extraction and matching separately with conservative structured output', () => {
-    expect(CARTOGRAPHER_EXTRACTOR_VERSION).toBe('cartographer-single-claim-v5')
+    expect(CARTOGRAPHER_EXTRACTOR_VERSION).toBe('cartographer-single-claim-v4')
+    expect(CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION)
+      .toBe('cartographer-single-claim-v5')
+    expect(isClaimBlockedTopicContract(CARTOGRAPHER_EXTRACTOR_VERSION)).toBe(true)
+    expect(requiresUnitPhysics(CARTOGRAPHER_EXTRACTOR_VERSION)).toBe(true)
+    expect(isClaimBlockedTopicContract(CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION))
+      .toBe(false)
+    expect(requiresUnitPhysics(CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION)).toBe(false)
     expect(TOPIC_MATCHER_VERSION).toBe('topic-retrieval-v4')
     expect(TOPIC_CANDIDATE_FLOOR).toBe(0.2)
     expect(TOPIC_CANDIDATE_LIMIT).toBe(8)

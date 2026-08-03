@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
-import { extractKnowledge } from '../../lib/agents/cartographer/extractor'
+import { CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION } from '../../lib/agents/cartographer/contract'
+import { extractV5CandidateKnowledge } from '../../lib/agents/cartographer/extractor'
 import type { ExtractionAttempt } from '../../lib/agents/cartographer/types'
 import corpusDocument from './k5a-c5-extraction-corpus-v2.json'
 import {
@@ -46,7 +47,7 @@ interface CorpusDocument {
 const corpus = corpusDocument as CorpusDocument
 const expectedPayloadSha256 =
   '47f188f48fde5ad93df3e7a8bcd5de03108fc074f17d05b981e4edd8a665345a'
-const measuredExtractorVersion = 'cartographer-single-claim-v5'
+const measuredExtractorVersion = CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION
 const measuredModelProvider = 'openai'
 const actorPersonId = '10000000-0000-4000-8000-000000000001'
 const candidatePersonId = '10000000-0000-4000-8000-000000000002'
@@ -126,7 +127,7 @@ const runCase = async (
       { personId: candidatePersonId, displayName: 'Mara' },
     ],
   }
-  const extracted = await extractKnowledge(model, attempt)
+  const extracted = await extractV5CandidateKnowledge(model, attempt)
   if (extracted.kind === 'failed') {
     throw new Error(`k5a_c5_provider_failed:${testCase.id}:${extracted.errorClass}`)
   }

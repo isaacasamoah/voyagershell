@@ -1,9 +1,11 @@
 import { generateObject, type LanguageModel } from 'ai'
 import {
+  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,
   CARTOGRAPHER_PROMPT,
   HISTORICAL_CARTOGRAPHER_PROMPT,
   V3_CARTOGRAPHER_PROMPT,
   V4_CARTOGRAPHER_PROMPT,
+  V5_CARTOGRAPHER_PROMPT,
   extractionSchema,
   historicalExtractionSchema,
   isCurrentContract,
@@ -19,20 +21,17 @@ import type {
 } from './types'
 import { classifyProviderFailure } from './provider-failure'
 
-export const extractKnowledge = async (
-  model: LanguageModel,
+const promptForAttempt = (
   attempt: ExtractionAttempt,
-  topicCandidates: TopicCandidate[] = [],
-): Promise<ExtractionRun> => {
+  topicCandidates: TopicCandidate[],
+  includeTopics: boolean,
+): string => {
   const source = {
     eventId: attempt.sourceEventId,
     eventType: attempt.sourceEventType,
     actorPersonId: attempt.sourceActorId,
     content: attempt.sourceContent,
   }
-  const v3 = isV3Contract(attempt.extractorVersion)
-  const current = isCurrentContract(attempt.extractorVersion)
-  const v4 = attempt.extractorVersion === 'cartographer-single-claim-v4'
   const historicalPrompt = `## Immutable source event
 ${JSON.stringify(source)}
 
@@ -40,7 +39,8 @@ ${JSON.stringify(source)}
 ${JSON.stringify(attempt.candidates)}
 
 Return the structured Cartographer result.`
-  const prompt = v3 ? `## Immutable source event
+  if (!includeTopics) return historicalPrompt
+  return `## Immutable source event
 ${JSON.stringify(source)}
 
 ## Allowed Person candidates
@@ -49,20 +49,22 @@ ${JSON.stringify(attempt.candidates)}
 ## Existing topic candidates
 ${JSON.stringify(topicCandidates)}
 
-Return the structured Cartographer result.` : historicalPrompt
+Return the structured Cartographer result.`
+}
 
+const runExtraction = async (
+  model: LanguageModel,
+  attempt: ExtractionAttempt,
+  system: string,
+  prompt: string,
+  schema: typeof historicalExtractionSchema | typeof v3ExtractionSchema,
+): Promise<ExtractionRun> => {
   try {
     const result = await generateObject({
       model,
-      system: v3
-        ? V3_CARTOGRAPHER_PROMPT
-        : current
-          ? CARTOGRAPHER_PROMPT
-          : v4 ? V4_CARTOGRAPHER_PROMPT : HISTORICAL_CARTOGRAPHER_PROMPT,
+      system,
       messages: [{ role: 'user', content: prompt }],
-      schema: v3
-        ? v3ExtractionSchema
-        : current ? extractionSchema : historicalExtractionSchema,
+      schema,
       maxOutputTokens: 1024,
     })
     return {
@@ -80,6 +82,43 @@ Return the structured Cartographer result.` : historicalPrompt
         : 'unknown_provider_error',
     }
   }
+}
+
+export const extractKnowledge = async (
+  model: LanguageModel,
+  attempt: ExtractionAttempt,
+  topicCandidates: TopicCandidate[] = [],
+): Promise<ExtractionRun> => {
+  const v3 = isV3Contract(attempt.extractorVersion)
+  const current = isCurrentContract(attempt.extractorVersion)
+  return runExtraction(
+    model,
+    attempt,
+    v3 ? V3_CARTOGRAPHER_PROMPT
+      : current ? CARTOGRAPHER_PROMPT : HISTORICAL_CARTOGRAPHER_PROMPT,
+    promptForAttempt(attempt, topicCandidates, v3),
+    v3 ? v3ExtractionSchema
+      : current ? extractionSchema : historicalExtractionSchema,
+  )
+}
+
+// The consumed C5 one-shot used the future v5 row before migration 080 could
+// activate it. Keep that exact contract available to the sealed measurement
+// harness without admitting v5 to production routing or unit physics.
+export const extractV5CandidateKnowledge = async (
+  model: LanguageModel,
+  attempt: ExtractionAttempt,
+): Promise<ExtractionRun> => {
+  if (attempt.extractorVersion !== CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION) {
+    throw new Error('cartographer_v5_candidate_version_required')
+  }
+  return runExtraction(
+    model,
+    attempt,
+    V5_CARTOGRAPHER_PROMPT,
+    promptForAttempt(attempt, [], false),
+    historicalExtractionSchema,
+  )
 }
 
 export const rederiveKnowledgeUnit = async (
