@@ -45,7 +45,7 @@ interface CorpusDocument {
 
 const corpus = corpusDocument as CorpusDocument
 const expectedPayloadSha256 =
-  '84369a79ed9bbecc67f1c02318c5101296db5fa10fa054021d0b03363a44eb5a'
+  '47f188f48fde5ad93df3e7a8bcd5de03108fc074f17d05b981e4edd8a665345a'
 const measuredExtractorVersion = 'cartographer-single-claim-v5'
 const measuredModelProvider = 'openai'
 const actorPersonId = '10000000-0000-4000-8000-000000000001'
@@ -72,7 +72,7 @@ const assertCorpus = (): void => {
   if (corpus.version !== 'k5a-c5-labelled-v2') {
     throw new Error(`k5a_c5_corpus_version_invalid:${corpus.version}`)
   }
-  if (corpus.cases.length !== 80) throw new Error('k5a_c5_corpus_size_changed')
+  if (corpus.cases.length !== 81) throw new Error('k5a_c5_corpus_size_changed')
   const canonicalPayload = `${JSON.stringify(canonicalize({
     version: corpus.version,
     cases: corpus.cases,

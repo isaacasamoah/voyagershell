@@ -114,8 +114,8 @@ describe('K5a stage-three floor proposal contract', () => {
 describe('K5a C5 extraction gate contract', () => {
   it('wires the frozen v2 payload to the v5 pair without running it', () => {
     expect(c5CorpusV2.version).toBe('k5a-c5-labelled-v2')
-    expect(c5CorpusV2.cases).toHaveLength(80)
-    expect(new Set(c5CorpusV2.cases.map(({ id }) => id)).size).toBe(80)
+    expect(c5CorpusV2.cases).toHaveLength(81)
+    expect(new Set(c5CorpusV2.cases.map(({ id }) => id)).size).toBe(81)
     expect(new Set(c5CorpusV2.cases.map(({ eventType }) => eventType))).toEqual(
       new Set(['document', 'slack_message', 'jira_update', 'explicit']),
     )
@@ -131,7 +131,7 @@ describe('K5a C5 extraction gate contract', () => {
     expect(c5Harness).not.toContain('audienceInheritance')
     expect(c5Harness).not.toContain('knowledge_extraction_jobs')
     expect(c5CorpusV2.meta.freeze.payloadSha256).toBe(
-      '84369a79ed9bbecc67f1c02318c5101296db5fa10fa054021d0b03363a44eb5a',
+      '47f188f48fde5ad93df3e7a8bcd5de03108fc074f17d05b981e4edd8a665345a',
     )
     expect(c5Harness).toContain(
       'observedPayloadSha256 !== expectedPayloadSha256',
