@@ -2,6 +2,11 @@
 
 Status: `K5A_BLOCKED_POST_080_FLOOR_ARM`
 
+Follow-up: Bridge Prime ruled this as the expected G8 timing-envelope movement,
+not a search-design failure, and requested the clean curve recorded in
+`k5a-g8-post-findability-curve-2026-08-03.md`. This receipt remains the durable
+evidence that caused that measurement; its stop was correct at the time.
+
 Branch: `feature/k5a-graph-memory`
 
 Checkpoint base: `5b340da`

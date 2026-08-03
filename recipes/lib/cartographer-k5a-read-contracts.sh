@@ -58,6 +58,12 @@ BOUNDARY_OVERHEAD_MS="$(node -e '
   process.stdout.write(String(receipt.boundary.phase_overhead_p95_ms))
 ' "$FLOOR_RECEIPT_SOURCE")" || fail 'could not read measured boundary overhead'
 
+BOUNDARY_JITTER_STDDEV_MS="$(node -e '
+  const fs = require("node:fs")
+  const receipt = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
+  process.stdout.write(String(receipt.boundary.phase_overhead_sample_stddev_ms))
+' "$FLOOR_RECEIPT_SOURCE")" || fail 'could not read measured boundary jitter'
+
 G5_EXACT_UNITS="$(node -e '
   const fs = require("node:fs")
   const receipt = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
@@ -72,5 +78,7 @@ G5_EXACT_UNITS="$(node -e '
   || fail 'relation candidate limit is not a positive integer'
 [[ "$BOUNDARY_OVERHEAD_MS" =~ ^[0-9]+([.][0-9]+)?$ ]] \
   || fail 'boundary overhead is not a nonnegative number'
+[[ "$BOUNDARY_JITTER_STDDEV_MS" =~ ^[0-9]+([.][0-9]+)?$ ]] \
+  || fail 'boundary jitter is not a nonnegative number'
 [[ "$G5_EXACT_UNITS" =~ ^[1-9][0-9]*$ ]] \
   || fail 'G5 exact horizon is not a positive integer'

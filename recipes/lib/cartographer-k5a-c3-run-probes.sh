@@ -96,4 +96,19 @@ if [ "${K5A_FLOOR_MEASUREMENT:-0}" = 1 ]; then
   printf '%s\n' CARTOGRAPHER_K5A_FLOOR_DATABASE_GREEN
 fi
 
+if [ "${K5A_G8_CURVE_MEASUREMENT:-0}" = 1 ]; then
+  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+    -v ON_ERROR_STOP=1 -v response_floor_ms="$RESPONSE_FLOOR_MS" \
+    -v boundary_overhead_ms="$BOUNDARY_OVERHEAD_MS" \
+    -v boundary_jitter_stddev_ms="$BOUNDARY_JITTER_STDDEV_MS" \
+    -U postgres -d "$DATABASE" \
+    < "$REPO_ROOT/recipes/sql/cartographer-k5a-g8-curve.sql" \
+    > "$TEMP_DIR/g8-curve.out" \
+    || fail 'clean post-G8 curve measurement failed'
+  curve_verdict="$(tail -n 1 "$TEMP_DIR/g8-curve.out")"
+  [ "$curve_verdict" = CARTOGRAPHER_K5A_G8_CURVE_GREEN ] \
+    || fail 'exact post-G8 curve verdict missing'
+  sed -n '1,$p' "$TEMP_DIR/g8-curve.out"
+fi
+
 printf '%s\n' CARTOGRAPHER_K5A_C3_LOCAL_GREEN

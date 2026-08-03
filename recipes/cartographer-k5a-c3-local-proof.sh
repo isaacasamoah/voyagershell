@@ -75,6 +75,7 @@ for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c5-structural-falsifier.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c4-r5-assertions.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-floor-measurement.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-g8-curve.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-080-pre-backfill.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-080-backfill-assertions.sql" \
