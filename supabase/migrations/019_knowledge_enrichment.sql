@@ -72,6 +72,10 @@ CREATE INDEX idx_events_session_id
 -- Adds p_knowledge_type and p_min_attention alongside existing params
 -- =============================================================================
 
+DROP FUNCTION IF EXISTS public.search_knowledge(
+  vector(1536), UUID, TEXT, BOOLEAN, TEXT[], FLOAT, FLOAT, INT
+);
+
 CREATE OR REPLACE FUNCTION public.search_knowledge(
   query_embedding vector(1536),
   p_user_id UUID DEFAULT NULL,
