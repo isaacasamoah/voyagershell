@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto'
-import { CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION } from '../../lib/agents/cartographer/contract'
-import { extractV5CandidateKnowledge } from '../../lib/agents/cartographer/extractor'
+import {
+  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,
+  CARTOGRAPHER_EXTRACTOR_VERSION,
+} from '../../lib/agents/cartographer/contract'
+import {
+  extractKnowledge,
+  extractV5CandidateKnowledge,
+} from '../../lib/agents/cartographer/extractor'
 import type { ExtractionAttempt } from '../../lib/agents/cartographer/types'
 import corpusDocument from './k5a-c5-extraction-corpus-v2.json'
 import {
@@ -36,6 +42,12 @@ interface HarnessResult {
     knowledgeType: KnowledgeType
     aboutPersonId: string | null
   }
+  // Undefined when the provider reported no usage; recording an unknown count
+  // as 0 would assert the call consumed nothing, a different fact.
+  usage: {
+    inputTokens: number | undefined
+    outputTokens: number | undefined
+  }
 }
 
 interface CorpusDocument {
@@ -47,7 +59,36 @@ interface CorpusDocument {
 const corpus = corpusDocument as CorpusDocument
 const expectedPayloadSha256 =
   '47f188f48fde5ad93df3e7a8bcd5de03108fc074f17d05b981e4edd8a665345a'
-const measuredExtractorVersion = CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION
+// The measured contract is selectable so the same sealed corpus can be run
+// against more than one extractor contract. Selection changes WHICH contract is
+// measured and nothing else: corpus, labels, bars, strata, schema and user
+// prompt are identical on every arm, so the arms differ only by system prompt.
+// Default is the v5 candidate — the historical behaviour of this harness.
+const measurableExtractorVersions = [
+  CARTOGRAPHER_EXTRACTOR_VERSION,
+  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,
+] as const
+type MeasurableExtractorVersion = (typeof measurableExtractorVersions)[number]
+
+const selectMeasuredExtractorVersions = (): MeasurableExtractorVersion[] => {
+  const requested = (process.argv.slice(2)[0]
+    ?? process.env.K5A_C5_MEASURED_CONTRACTS
+    ?? CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+  if (requested.length === 0) throw new Error('k5a_c5_no_contract_selected')
+  requested.forEach((entry) => {
+    if (!measurableExtractorVersions.includes(entry as MeasurableExtractorVersion)) {
+      throw new Error(`k5a_c5_contract_not_measurable:${entry}`)
+    }
+  })
+  if (new Set(requested).size !== requested.length) {
+    throw new Error('k5a_c5_duplicate_contract_selected')
+  }
+  return requested as MeasurableExtractorVersion[]
+}
+
 const measuredModelProvider = 'openai'
 const actorPersonId = '10000000-0000-4000-8000-000000000001'
 const candidatePersonId = '10000000-0000-4000-8000-000000000002'
@@ -105,6 +146,7 @@ const assertCorpus = (): void => {
 
 const runCase = async (
   model: ReturnType<typeof getConnectedCodexModel>,
+  measuredExtractorVersion: MeasurableExtractorVersion,
   testCase: CorpusCase,
   index: number,
 ): Promise<HarnessResult> => {
@@ -127,7 +169,12 @@ const runCase = async (
       { personId: candidatePersonId, displayName: 'Mara' },
     ],
   }
-  const extracted = await extractV5CandidateKnowledge(model, attempt)
+  // v5 is the frozen candidate and keeps its dedicated entry point; v4 is the
+  // active runtime contract and is measured through the runtime path itself.
+  const extracted =
+    measuredExtractorVersion === CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION
+      ? await extractV5CandidateKnowledge(model, attempt)
+      : await extractKnowledge(model, attempt)
   if (extracted.kind === 'failed') {
     throw new Error(`k5a_c5_provider_failed:${testCase.id}:${extracted.errorClass}`)
   }
@@ -145,17 +192,48 @@ const runCase = async (
       knowledgeType: extracted.object.knowledgeType,
       aboutPersonId: extracted.object.aboutPersonId,
     },
+    usage: {
+      inputTokens: extracted.inputTokens,
+      outputTokens: extracted.outputTokens,
+    },
   }
 }
 
-const main = async (): Promise<void> => {
-  assertCorpus()
-  const model = getConnectedCodexModel('K5A_C5_CODEX_AUTH_PATH')
+const sumUsage = (
+  results: HarnessResult[],
+  field: 'inputTokens' | 'outputTokens',
+): { total: number; reportedCases: number } => results.reduce(
+  (accumulator, result) => {
+    const value = result.usage[field]
+    return value === undefined
+      ? accumulator
+      : {
+          total: accumulator.total + value,
+          reportedCases: accumulator.reportedCases + 1,
+        }
+  },
+  { total: 0, reportedCases: 0 },
+)
+
+const runArm = async (
+  model: ReturnType<typeof getConnectedCodexModel>,
+  measuredExtractorVersion: MeasurableExtractorVersion,
+): Promise<void> => {
   const results: HarnessResult[] = []
   for (let index = 0; index < corpus.cases.length; index++) {
-    results.push(await runCase(model, corpus.cases[index], index))
-    console.log(`judgedCases=${index + 1}/${corpus.cases.length}`)
+    results.push(await runCase(
+      model,
+      measuredExtractorVersion,
+      corpus.cases[index],
+      index,
+    ))
+    console.log(
+      `arm=${measuredExtractorVersion} `
+      + `judgedCases=${index + 1}/${corpus.cases.length}`,
+    )
   }
+  const inputUsage = sumUsage(results, 'inputTokens')
+  const outputUsage = sumUsage(results, 'outputTokens')
   console.log(JSON.stringify({
     corpusVersion: corpus.version,
     corpusPayloadSha256: expectedPayloadSha256,
@@ -165,8 +243,23 @@ const main = async (): Promise<void> => {
       modelId: connectedCodexModelName,
     },
     cases: results.length,
+    usageTotals: {
+      inputTokens: inputUsage.total,
+      outputTokens: outputUsage.total,
+      inputReportedCases: inputUsage.reportedCases,
+      outputReportedCases: outputUsage.reportedCases,
+    },
     results,
   }, null, 2))
+}
+
+const main = async (): Promise<void> => {
+  assertCorpus()
+  const measuredExtractorVersions = selectMeasuredExtractorVersions()
+  const model = getConnectedCodexModel('K5A_C5_CODEX_AUTH_PATH')
+  for (const measuredExtractorVersion of measuredExtractorVersions) {
+    await runArm(model, measuredExtractorVersion)
+  }
   console.log('K5A_C5_EXTRACTION_MEASUREMENT_COMPLETE')
 }
 
