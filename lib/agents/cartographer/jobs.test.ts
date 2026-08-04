@@ -44,4 +44,30 @@ describe('Cartographer completion RPC errors', () => {
       topicCandidateSnapshot: [],
     })).rejects.toBeInstanceOf(TopicCandidatesRetryableError)
   })
+
+  it('routes runtime-current v4 through the claim-blocked topic completion', async () => {
+    mocks.rpc.mockResolvedValue({ data: [{
+      outcome: 'no_claim', unit_id: null, replayed: false,
+    }], error: null })
+
+    await completeExtractionAttempt({
+      attempt,
+      result: 'no_claim',
+      rawOutput: {
+        claim: null,
+        aboutPersonId: null,
+        knowledgeType: 'domain',
+        attentionScore: 0,
+        contextSnippet: 'No durable claim.',
+        topics: [],
+      },
+      topicInputs: [],
+      topicCandidateSnapshot: [],
+    })
+
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'complete_v4_knowledge_extraction_attempt',
+      expect.objectContaining({ p_topic_candidate_snapshot: [] }),
+    )
+  })
 })

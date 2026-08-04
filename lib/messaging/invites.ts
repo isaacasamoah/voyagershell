@@ -26,8 +26,6 @@ export const deliverRoomInvite = async (
       senderDisplayName: inviter.displayName,
       senderUserId: inviter.userId,
       spaceId,
-      attentionScore: 0.9,
-      contextSnippet: `${inviter.displayName} invited you to a room`,
     })
   if (eventId) void fanOutDeliveries(eventId, [inviteeUserId])
 }

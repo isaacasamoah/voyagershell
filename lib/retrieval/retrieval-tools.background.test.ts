@@ -26,13 +26,6 @@ const runGuardedBackgroundTask = vi.fn(async (options: {
 const loadTools = async () => {
   vi.resetModules()
   vi.doMock('ai', () => ({ tool: (definition: unknown) => definition }))
-  vi.doMock('@/lib/knowledge', () => ({
-    searchKnowledge: vi.fn(),
-    keywordGrep: vi.fn(),
-    personAnchoredSearch: vi.fn(),
-    getKnowledgeByIds: vi.fn(),
-  }))
-  vi.doMock('@/lib/knowledge/hybrid', () => ({ hybridSearch: vi.fn() }))
   vi.doMock('@/lib/messaging/deliveries', () => ({ fanOutDeliveries }))
   vi.doMock('@/lib/messaging/room', () => ({
     getRoom: vi.fn(),
@@ -70,7 +63,6 @@ const loadTools = async () => {
   vi.doMock('@/lib/voyage/username', () => ({ normalizeUsername: vi.fn() }))
   vi.doMock('@/lib/knowledge/events', () => ({
     createMessageEvent,
-    createExplicitEvent: vi.fn(),
   }))
   return import('./retrieval-tools')
 }
@@ -135,9 +127,7 @@ describe('spawn_background_agent delivery', () => {
         voyageSlug: 'launch',
         participants: ['user-1'],
         source: 'agent',
-        attentionScore: 0.85,
         eventType: 'conversation',
-        contextSnippet: 'Voyager research: Map every launch dependency',
       },
     )
     expect(fanOutDeliveries).not.toHaveBeenCalled()

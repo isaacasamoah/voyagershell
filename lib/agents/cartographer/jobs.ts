@@ -5,7 +5,7 @@ import type {
   ExtractionCompletion,
   ExtractionFailureKind,
 } from './types'
-import { isCurrentContract } from './contract'
+import { isClaimBlockedTopicContract } from './contract'
 import type { LegacyTopicInput } from './topics'
 import {
   isRetryableTopicError,
@@ -95,8 +95,12 @@ export const completeExtractionAttempt = async (input: {
       p_input_tokens: input.inputTokens ?? null,
       p_output_tokens: input.outputTokens ?? null,
   }
-  const current = isCurrentContract(input.attempt.extractorVersion)
-  const { data, error } = current
+  const claimBlockedTopics = isClaimBlockedTopicContract(
+    input.attempt.extractorVersion,
+  )
+  // G9 deferred C5, so the active v4 contract keeps its original completion
+  // path and the v5 candidate never enters runtime routing.
+  const { data, error } = claimBlockedTopics
     ? await getAdminClient().rpc('complete_v4_knowledge_extraction_attempt', {
       ...args,
       p_topic_candidate_snapshot: input.topicCandidateSnapshot ?? null,

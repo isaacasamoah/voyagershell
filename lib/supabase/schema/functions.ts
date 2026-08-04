@@ -1,4 +1,9 @@
-import type { Json, KnowledgeExtractionOutcomeKind, VoyageRole } from './base'
+import type {
+  Json,
+  KnowledgeDeliveryChannel,
+  KnowledgeExtractionOutcomeKind,
+  VoyageRole,
+} from './base'
 import type { SessionStatus } from './base'
 
 export type KnowledgeSearchRow = {
@@ -7,10 +12,6 @@ export type KnowledgeSearchRow = {
   similarity: number; knowledge_type: string; attention_score: number;
   context_snippet: string; sender_display_name: string;
   sender_user_id: string; event_type: string
-}
-export type KeywordSearchRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'> & { rank_score: number }
-export type ScopedKnowledgeRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'> & {
-  session_id: string | null; promotion_count: number
 }
 export type SourceIngressRow = { event_id: string; status: 'created' | 'replayed' }
 export type DeploymentGapRecoveryRow = { recovered: number; rejected: number }
@@ -47,7 +48,14 @@ export type KnowledgeRelationAttemptRow = {
 export type KnowledgeRelationCompletionRow = {
   outcome: KnowledgeExtractionOutcomeKind; edge_ids: string[]; replayed: boolean
 }
-export type KnowledgeByIdRow = Omit<KnowledgeSearchRow, 'participants' | 'similarity'>
+export type KnowledgeUnitSearchRow = {
+  unit_id: string; claim: string; source_event_id: string;
+  source_content: string; source_created_at: string; knowledge_type: string;
+  viewer_retired: boolean; effective_attention: number; similarity: number | null
+}
+export type KnowledgeUnitKeywordRow = Omit<
+  KnowledgeUnitSearchRow, 'similarity'
+> & { rank_score: number }
 export type VoyageMessageRow = Pick<KnowledgeSearchRow,
   'event_id' | 'content' | 'source_created_at' | 'sender_display_name' | 'sender_user_id'>
 export type SessionAuthorityRow = {
@@ -66,12 +74,18 @@ export type PublicFunctions = {
   activate_knowledge_topic_contract: {
     Args: Record<PropertyKey, never>; Returns: string
   }
+  assert_knowledge_extraction_coverage_backfill_complete: {
+    Args: Record<PropertyKey, never>; Returns: Json
+  }
   assert_knowledge_topic_backfill_complete: {
     Args: Record<PropertyKey, never>; Returns: Json
   }
+  calculate_knowledge_unit_effective_attention: { Args: {
+    p_birth_attention: number; p_knowledge_type: string;
+    p_session_distance: number; p_windowed_reach_citations: number;
+    p_retired?: boolean
+  }; Returns: number }
   archive_session: { Args: { p_session_id: string; p_user_id: string }; Returns: boolean }
-  authorize_knowledge_scope: { Args: { p_surface: string; p_user_id: string; p_voyage_slug: string | null };
-    Returns: string }
   begin_knowledge_extraction_attempt: { Args: {
     p_requesting_user_id: string; p_model_provider: string; p_model_id: string;
     p_resolver_label?: string | null; p_source_event_id?: string | null;
@@ -126,8 +140,6 @@ export type PublicFunctions = {
     p_limit?: number }; Returns: ResumableSessionRow[] }
   get_session_scope: { Args: { p_session_id: string; p_user_id: string };
     Returns: SessionScopeRow[] }
-  get_knowledge_by_ids: { Args: { p_event_ids: string[]; p_user_id: string;
-    p_voyage_slug: string | null }; Returns: KnowledgeByIdRow[] }
   get_user_voyages: { Args: { p_user_id: string }; Returns: { voyage_id: string; slug: string;
     name: string; role: VoyageRole; joined_at: string }[] }
   get_voyage_by_invite_code: { Args: { p_invite_code: string }; Returns: {
@@ -135,7 +147,12 @@ export type PublicFunctions = {
   get_voyage_role: { Args: { p_user_id: string; p_voyage_slug: string }; Returns: VoyageRole }
   get_voyage_messages: { Args: { p_user_id: string; p_voyage_slug: string;
     p_since: string; p_max_count: number }; Returns: VoyageMessageRow[] }
-  increment_promotion_count: { Args: { p_event_id: string }; Returns: undefined }
+  knowledge_unit_effective_attention: { Args: {
+    p_knowledge_unit_id: string; p_person_id: string
+  }; Returns: number }
+  knowledge_unit_session_distance: { Args: {
+    p_knowledge_unit_id: string; p_person_id: string
+  }; Returns: number }
   is_active_space_member: { Args: { p_space_id: string }; Returns: boolean }
   is_active_voyage_member_by_id: { Args: { p_voyage_id: string }; Returns: boolean }
   is_effective_space_member: { Args: { p_space_id: string; p_user_id: string }; Returns: boolean }
@@ -152,30 +169,35 @@ export type PublicFunctions = {
     p_extractor_version: string; p_knowledge_audience_id: string;
     p_embedding: string; p_exclude_unit_id?: string | null
   }; Returns: KnowledgeTopicCandidateRow[] }
-  keyword_search: { Args: { p_query: string; p_user_id: string; p_voyage_slug?: string | null;
-    p_knowledge_type?: string | null; p_min_attention?: number; p_match_count?: number;
-  }; Returns: KeywordSearchRow[] }
-  knowledge_in_scope: { Args: { p_row_user_id: string | null; p_row_voyage_slug: string | null;
-    p_row_event_type: string | null; p_row_knowledge_type: string | null;
-    p_row_participants: string[] | null; p_user_id: string | null;
-    p_voyage_slug: string | null; p_participants: string[] | null }; Returns: boolean }
+  keyword_search_units: { Args: {
+    p_viewer_profile_id: string; p_query: string; p_match_count?: number;
+    p_anchor_person_id?: string | null
+  }; Returns: KnowledgeUnitKeywordRow[] }
   promote_private_voyager_reply: { Args: { p_source_event_id: string; p_conversation_id: string;
     p_user_id: string }; Returns: { shared_event_id: string; status: string;
       shared_content: string }[] }
+  record_knowledge_unit_citations: { Args: {
+    p_person_id: string; p_session_id: string;
+    p_channel: KnowledgeDeliveryChannel; p_unit_ids: string[]
+  }; Returns: number }
+  retrieve_knowledge_graph_claims_v3: { Args: {
+    p_root_authority_id: string; p_viewer_profile_id: string;
+    p_exclude_unit_ids?: string[]; p_claim_budget?: number;
+    p_per_claim_partner_cap?: number; p_annotation_check_budget?: number;
+    p_closure_budget?: number; p_max_depth?: number; p_node_budget?: number;
+    p_frontier_budget?: number
+  }; Returns: Json }
   regenerate_voyage_invite: { Args: { p_user_id: string; p_voyage_id: string }; Returns: string }
   remove_session_room_member: { Args: { p_session_id: string; p_user_id: string;
     p_member_user_id: string }; Returns: boolean }
   resume_session: { Args: { p_session_id: string; p_user_id: string };
     Returns: SessionAuthorityRow[] }
-  search_knowledge: { Args: { query_embedding: string; p_user_id: string; p_voyage_slug?: string;
-    p_classifications?: string[]; p_match_threshold?: number; p_match_count?: number;
-    p_knowledge_type?: string; p_min_attention?: number };
-    Returns: KnowledgeSearchRow[] }
-  scoped_knowledge_fetch: { Args: { p_user_id: string; p_voyage_slug?: string | null;
-    p_scope?: string; p_content_match?: string | null;
-    p_case_sensitive?: boolean; p_since?: string | null; p_until?: string | null;
-    p_min_attention?: number; p_match_count?: number; p_sender_user_id?: string | null };
-    Returns: ScopedKnowledgeRow[] }
+  search_knowledge_units: { Args: {
+    p_viewer_profile_id: string; p_query_embedding?: string | null;
+    p_match_threshold?: number; p_match_count?: number;
+    p_anchor_person_id?: string | null; p_since?: string | null;
+    p_until?: string | null; p_unit_ids?: string[] | null
+  }; Returns: KnowledgeUnitSearchRow[] }
   transition_room_invite: { Args: { p_session_id: string; p_user_id: string;
     p_space_id: string | null; p_action: string }; Returns: {
       transition_status: string; transition_space_id: string | null
@@ -183,7 +205,9 @@ export type PublicFunctions = {
   set_session_ai_presence: { Args: { p_session_id: string; p_user_id: string;
     p_present: boolean }; Returns: boolean }
   touch_session_activity: { Args: { p_session_id: string; p_user_id: string }; Returns: boolean }
-  update_knowledge_embedding: { Args: { p_embedding: string; p_event_id: string }; Returns: boolean }
+  upsert_person_session_index: { Args: {
+    p_person_id: string; p_session_id: string; p_event_count?: number
+  }; Returns: undefined }
   write_knowledge_topic_identity_backfill: { Args: {
     p_unit_id: string; p_raw_output: Json; p_knowledge_type: string;
     p_attention_score: number; p_embedding: string; p_topic_inputs: Json;

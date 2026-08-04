@@ -19,6 +19,7 @@ const graphClaim = (knowledgeUnitId: string): KnowledgeGraphClaim => ({
   sourceContent: `Source for ${knowledgeUnitId}`,
   knowledgeType: 'operational',
   attentionScore: 0.85,
+  tensions: [],
 })
 
 describe('runTurn graph memory', () => {
@@ -53,6 +54,10 @@ describe('runTurn graph memory', () => {
           ].filter((claim) => !observedExclusions.includes(claim.knowledgeUnitId))
           return { outcome: 'success', claims, truncated: false }
         },
+        async ({ knowledgeUnitIds }) => ({
+          outcome: 'recorded',
+          inserted: knowledgeUnitIds.length,
+        }),
       ).graph_memory
       return {
         tools: { graph_memory },

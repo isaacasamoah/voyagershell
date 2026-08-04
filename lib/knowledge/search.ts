@@ -1,106 +1,39 @@
 // Semantic search over the event-sourced knowledge system.
-import OpenAI from 'openai'
-import { getClientForContext } from '@/lib/supabase/authenticated'
-import { getAdminClient } from '@/lib/supabase/admin'
-import {
-  transformKnowledgeNode,
-  type KnowledgeNode,
-  type KnowledgeNodeInput,
-  type SearchOptions,
-} from './search-types'
+import { semanticUnitSearch } from './unit-search'
+import type { KnowledgeNode, SearchOptions } from './search-types'
 
-const getClientForUser = (userId: string) => getClientForContext({ userId })
-
-let openai: OpenAI | null = null
-const getOpenAI = (): OpenAI => {
-  if (!openai) openai = new OpenAI()
-  return openai
-}
-
-const generateEmbedding = async (text: string): Promise<number[]> => {
-  const response = await getOpenAI().embeddings.create({
-    model: 'text-embedding-3-small',
-    input: text,
-  })
-  return response.data[0].embedding
-}
-
-const toVectorString = (embedding: number[]): string => `[${embedding.join(',')}]`
-
+/**
+ * Search for knowledge that is safe to carry into ambient conversation
+ * continuity. Retired claims remain visible through explicit search tools but
+ * must not survive this boundary as established background about the user.
+ */
 export const searchKnowledge = async (
   userId: string,
   query: string,
   options: SearchOptions = {},
 ): Promise<KnowledgeNode[]> => {
-  const {
-    threshold = 0.6,
-    limit = 20,
-    classifications,
-    voyageSlug,
-    knowledgeType,
-    minAttention = 0.0,
-  } = options
+  const { threshold = 0.6, limit = 20, knowledgeType } = options
   try {
     console.log(
-      `[Knowledge] Search: "${query.slice(0, 50)}..." threshold: ${threshold}, limit: ${limit}, type: ${knowledgeType ?? 'all'}, minAttention: ${minAttention}`,
+      `[Knowledge] Search: "${query.slice(0, 50)}..." threshold: ${threshold}, limit: ${limit}, type: ${knowledgeType ?? 'all'}`,
     )
-    const embedding = await generateEmbedding(query)
-    const rpcKnowledgeType = knowledgeType && knowledgeType !== 'operational'
-      ? knowledgeType : undefined
-    const { data, error } = await getClientForUser(userId).rpc('search_knowledge', {
-      query_embedding: toVectorString(embedding),
-      p_user_id: userId,
-      p_voyage_slug: voyageSlug,
-      p_classifications: classifications as string[] | undefined,
-      p_match_threshold: threshold,
-      p_match_count: limit,
-      p_knowledge_type: rpcKnowledgeType,
-      p_min_attention: minAttention,
-    })
-    if (error) {
-      console.error('[Knowledge] Search error:', error)
-      return []
-    }
-    let results: KnowledgeNodeInput[] = data ?? []
-    if (knowledgeType === 'operational') {
-      results = results.filter((result) =>
-        result.knowledge_type === null || result.knowledge_type === 'operational')
-    }
-    console.log(`[Knowledge] Found ${results.length} results`)
-    if (results.length > 0 && results.length <= 5) {
-      results.forEach((result) => console.log(
-        `  - ${result.content.slice(0, 50)}... (sim: ${result.similarity?.toFixed(3) ?? '-'}, attn: ${result.attention_score ?? '-'})`,
-      ))
-    }
-    return results.map(transformKnowledgeNode)
+    const result = await semanticUnitSearch(userId, query, { threshold, limit })
+    const continuityEligibleHits = result.hits.filter((hit) => !hit.retired)
+    const results = knowledgeType
+      ? continuityEligibleHits.filter((hit) => hit.knowledgeType === knowledgeType)
+      : continuityEligibleHits
+    return results.map((hit): KnowledgeNode => ({
+      eventId: hit.sourceEventId,
+      content: hit.claim,
+      classifications: [], entities: [], topics: [],
+      createdAt: new Date(hit.sourceCreatedAt),
+      similarity: hit.score ?? undefined,
+      knowledgeType: hit.knowledgeType,
+      attentionScore: hit.effectiveAttention,
+      contextSnippet: hit.claim,
+    }))
   } catch (error) {
     console.error('[Knowledge] searchKnowledge error:', error)
-    return []
-  }
-}
-
-export const getKnowledgeByIds = async (
-  eventIds: string[],
-  userId: string,
-  voyageSlug?: string,
-): Promise<KnowledgeNode[]> => {
-  if (eventIds.length === 0) return []
-  try {
-    const { data, error } = await getAdminClient().rpc('get_knowledge_by_ids', {
-      p_event_ids: eventIds,
-      p_user_id: userId,
-      p_voyage_slug: voyageSlug ?? null,
-    })
-    if (error) {
-      console.error('[Knowledge] getKnowledgeByIds error:', error)
-      return []
-    }
-    return (data ?? []).map((row) => transformKnowledgeNode({
-      ...row,
-      similarity: 1.0,
-    } as KnowledgeNodeInput))
-  } catch (error) {
-    console.error('[Knowledge] getKnowledgeByIds error:', error)
     return []
   }
 }

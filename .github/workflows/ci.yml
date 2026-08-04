@@ -42,7 +42,6 @@ jobs:
           SUPABASE_SECRET_KEY: placeholder
           ANTHROPIC_API_KEY: placeholder
           OPENAI_API_KEY: placeholder
-          GOOGLE_GEMINI_API_KEY: placeholder
 
       - name: Test
         run: npm run test:run

@@ -10,9 +10,7 @@
 export {
   emitMessageEvent,
   createMessageEvent,
-  createExplicitEvent,
 } from './events'
-export { updateKnowledgeEnrichment } from './event-enrichment'
 
 export type {
   SourceEventType,
@@ -27,27 +25,8 @@ export { curatePromptWindow, DEFAULT_WINDOW_CONFIG } from './curator'
 export type { PromptWindowConfig, CuratedWindow } from './curator'
 
 // Search and retrieval
-export {
-  searchKnowledge,
-  getKnowledgeByIds,
-} from './search'
-export { keywordGrep, personAnchoredSearch } from './scoped-search'
+export { searchKnowledge } from './search'
 export type {
   KnowledgeNode,
   SearchOptions,
-  GrepOptions,
-  GrepResult,
 } from './search-types'
-
-// Hybrid search (v2)
-export { hybridSearch } from './hybrid'
-export type { HybridSearchOptions } from './hybrid'
-export { keywordSearch, rrfFuse } from './hybrid-primitives'
-export type { RankedResult } from './hybrid-primitives'
-
-// Reranking (v2)
-export { cohereRerank } from './rerank'
-export type { RerankOptions, RerankResult } from './rerank'
-
-// Reformulation (v2)
-export { reformulateQuery } from './reformulate'

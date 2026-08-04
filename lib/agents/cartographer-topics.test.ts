@@ -28,16 +28,8 @@ vi.mock('./cartographer/topic-pipeline', () => ({
 vi.mock('./cartographer/relation-pipeline', () => ({
   runRelationPipeline: mocks.runRelationPipeline,
 }))
-vi.mock('./cartographer/apply', () => ({ applyEnrichments: vi.fn() }))
-vi.mock('./cartographer/session-decay', () => ({
-  upsertSessionIndex: vi.fn(),
-  applySessionDecay: vi.fn(),
-}))
-vi.mock('./cartographer/preference-superseding', () => ({
-  checkPreferenceSuperseding: vi.fn(),
-}))
-vi.mock('./cartographer/retrieval-feedback', () => ({
-  processRetrievalFeedback: vi.fn(),
+vi.mock('@/lib/knowledge/lifecycle/session-index', () => ({
+  upsertPersonSessionIndex: vi.fn(),
 }))
 
 import { runCartographer } from './cartographer'
@@ -113,7 +105,7 @@ describe('Cartographer topic contract transitions', () => {
     )
   })
 
-  it('blocks v4 only after extraction, on the claim vector', async () => {
+  it('blocks runtime-current v4 only after extraction, on the claim vector', async () => {
     const current = { ...attempt, extractorVersion: 'cartographer-single-claim-v4' }
     mocks.beginExtractionAttempt.mockResolvedValue(current)
     mocks.extractKnowledge.mockResolvedValue({

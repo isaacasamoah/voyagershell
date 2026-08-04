@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createKnowledgeRetrievalTools } from "@/lib/retrieval/knowledge-retrieval-tools";
 import type {
+  KnowledgeGraphClaim,
   KnowledgeGraphRetrievalOptions,
   KnowledgeGraphResult,
   KnowledgeGraphRoot,
@@ -55,8 +56,15 @@ const retrieve = async (
     ],
     { encoding: "utf8" },
   ).trim();
-  const result = JSON.parse(output) as Omit<KnowledgeGraphResult, "outcome">;
-  return { outcome: "success", ...result };
+  const result = JSON.parse(output) as {
+    claims: Array<Omit<KnowledgeGraphClaim, "tensions">>;
+    truncated: boolean;
+  };
+  return {
+    outcome: "success",
+    claims: result.claims.map((claim) => ({ ...claim, tensions: [] })),
+    truncated: result.truncated,
+  };
 };
 
 const executeGraphMemory = async (
@@ -64,8 +72,16 @@ const executeGraphMemory = async (
   workingMemoryUnitIds: string[] = [],
 ) => {
   const registered = createKnowledgeRetrievalTools(
-    { userId: actor, workingMemoryUnitIds },
+    {
+      userId: actor,
+      conversationId: "72000000-0000-4000-8000-000000000012",
+      workingMemoryUnitIds,
+    },
     retrieve,
+    async ({ knowledgeUnitIds }) => ({
+      outcome: "recorded",
+      inserted: knowledgeUnitIds.length,
+    }),
   ).graph_memory;
   if (!registered.execute)
     throw new Error("graph_memory product tool is not executable");
@@ -89,7 +105,9 @@ const assertPartial = async (
     result.claims.length === 0 ||
     !result.presentation.startsWith("Partial graph reach:")
   ) {
-    throw new Error(`${name}_overflow_was_not_useful_honest_partial`);
+    throw new Error(
+      `${name}_overflow_was_not_useful_honest_partial:${JSON.stringify(result)}`,
+    );
   }
 };
 

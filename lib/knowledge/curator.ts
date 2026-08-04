@@ -13,6 +13,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { estimateTokens } from '@/lib/conversation/window'
 import type { KnowledgeNode } from './search-types'
+import type { KnowledgeGraphResult } from './kernel/boundary'
 
 // =============================================================================
 // Types
@@ -64,17 +65,10 @@ interface CuratorRow {
   sender_display_name?: string | null
   sender_user_id?: string | null
   event_type?: string | null
-  promotion_count?: number | null
 }
 
-/**
- * Compute effective attention: base + promotion boost, capped at 1.0.
- * F4.4: effective_attention = base_attention + (0.05 * promotion_count)
- */
 const effectiveAttention = (row: CuratorRow): number => {
-  const base = row.attention_score ?? 0.5
-  const promotions = row.promotion_count ?? 0
-  return Math.min(base + 0.05 * promotions, 1.0)
+  return row.attention_score ?? 0.5
 }
 
 const toNode = (row: CuratorRow): KnowledgeNode => ({
@@ -85,7 +79,7 @@ const toNode = (row: CuratorRow): KnowledgeNode => ({
   topics: row.topics ?? [],
   createdAt: new Date(row.source_created_at),
   knowledgeType: row.knowledge_type ?? null,
-  attentionScore: effectiveAttention(row), // F4.4: includes promotion boost
+  attentionScore: effectiveAttention(row),
   contextSnippet: row.context_snippet ?? null,
   senderDisplayName: row.sender_display_name ?? undefined,
   senderUserId: row.sender_user_id ?? undefined,
@@ -157,37 +151,42 @@ const getRecentSessionIds = async (
 }
 
 /**
- * Curate a token-budgeted prompt window from knowledge_current.
- * Single SQL query, tier-aware ranking, hard budget enforcement.
+ * Curate a token-budgeted prompt window from the unit-native graph read.
+ * Tier-aware ranking and hard budget enforcement remain local and deterministic.
  *
- * Performance target: < 50ms (pure SQL, no LLM calls).
  */
 export const curatePromptWindow = async (
   userId: string,
+  graphMemory: KnowledgeGraphResult,
   voyageSlug?: string,
   config: PromptWindowConfig = DEFAULT_WINDOW_CONFIG,
   sessionId?: string,
 ): Promise<CuratedWindow> => {
-  const supabase = getAdminClient()
-
-  // Parallel: fetch knowledge candidates + recent session IDs for operational filtering
+  // Parallel: fetch authorized graph claims + recent session IDs. Voyage scope
+  // is enforced by graph grants; it is not a caller-supplied SQL scope.
   const [knowledgeResult, recentSessions] = await Promise.all([
-    supabase.rpc('scoped_knowledge_fetch', {
-      p_user_id: userId,
-      p_voyage_slug: voyageSlug,
-      p_scope: voyageSlug ? 'all' : 'personal',
-      p_min_attention: 0.3,
-      p_match_count: 500,
-    }),
+    Promise.resolve(graphMemory),
     getRecentSessionIds(userId, sessionId, config.operationalSessionWindow),
   ])
 
-  if (knowledgeResult.error || !knowledgeResult.data) {
-    console.warn('[Curator] Query failed:', knowledgeResult.error?.message)
+  if (knowledgeResult.outcome !== 'success') {
+    if (knowledgeResult.outcome !== 'skipped') {
+      console.warn('[Curator] Unit-native graph read failed:', knowledgeResult.outcome)
+    }
     return { preferences: [], operational: [], domainHeadlines: [], totalTokens: 0, evictedCount: 0 }
   }
 
-  const rawRows: Array<CuratorRow & { session_id?: string | null }> = knowledgeResult.data
+  const rawRows: Array<CuratorRow & { session_id?: string | null }> =
+    knowledgeResult.claims.filter((claim) => claim.sourceCreatedAt).map((claim) => ({
+      event_id: claim.sourceEventId,
+      content: claim.claim,
+      knowledge_type: claim.knowledgeType,
+      attention_score: claim.attentionScore,
+      context_snippet: claim.claim,
+      source_created_at: claim.sourceCreatedAt as string,
+      session_id: claim.sessionId,
+      classifications: [], entities: [], topics: [],
+    }))
 
   // Sort by effective attention (includes promotion boost) then recency (F4.4)
   const rows = rawRows.sort((a, b) => {

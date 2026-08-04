@@ -17,25 +17,25 @@ const EXPECTED_GENERATION = [
   'recipes/experiments/relation-conflict-harness.ts|generateObject|model',
   'recipes/experiments/relation-conflict-harness.ts|generateObject|model',
 ]
-const EXPECTED_EXTRACTOR_HANDOFF = ['lib/agents/cartographer.ts|extractKnowledge|resolved.model']
+const EXPECTED_EXTRACTOR_HANDOFF = [
+  'lib/agents/cartographer.ts|extractKnowledge|resolved.model', 'recipes/experiments/k5a-c5-extraction-harness.ts|extractV5CandidateKnowledge|model']
 const EXPECTED_TOPIC_MATCHER_HANDOFF = [
   'lib/agents/cartographer/backfill.ts|matchKnowledgeTopics|resolved.model', 'lib/agents/cartographer/topic-pipeline.ts|matchKnowledgeTopics|input.model']
 const EXPECTED_OPENAI_EMBEDDINGS = [
-  "lib/agents/cartographer/apply.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
-  "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
-  "lib/agents/cartographer/preference-superseding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   "lib/agents/cartographer/topics.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
-  "lib/knowledge/event-storage.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
-  "lib/knowledge/search.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
+  "lib/knowledge/search-embedding.ts|getOpenAI().embeddings.create|'text-embedding-3-small'",
   'recipes/experiments/relation-conflict-harness-support.ts|getOpenAI().embeddings.create|relationContract.blocking.embeddingModel',
 ]
 
-const trackedTypeScript = (): string[] => execFileSync(
-  'git',
-  ['ls-files', '*.ts', '*.tsx'],
-  { encoding: 'utf8' },
-).trim().split('\n').filter(Boolean)
+const trackedTypeScript = (): string[] => [
+  ...execFileSync('git', ['ls-files', '*.ts', '*.tsx'], { encoding: 'utf8' })
+    .trim().split('\n').filter(Boolean),
+  ...execFileSync(
+    'git', ['ls-files', '--others', '--exclude-standard', '*.ts', '*.tsx'],
+    { encoding: 'utf8' },
+  ).trim().split('\n').filter(Boolean),
+]
 
 const productionEntries = (): SourceEntry[] => trackedTypeScript()
   .filter((file) => (
@@ -49,6 +49,10 @@ const productionEntries = (): SourceEntry[] => trackedTypeScript()
 
 const normalized = (node: ts.Node, sourceFile: ts.SourceFile): string => (
   node.getText(sourceFile).replace(/\s+/g, '')
+)
+const sourceFileFor = ({ file, source }: SourceEntry): ts.SourceFile => ts.createSourceFile(
+  file, source, ts.ScriptTarget.Latest, true,
+  file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
 )
 
 const modelArgument = (
@@ -101,13 +105,7 @@ const importedApi = (
 const aiCallSites = (entries: SourceEntry[], apis: Set<string>): string[] => {
   const sites: string[] = []
   for (const entry of entries) {
-    const sourceFile = ts.createSourceFile(
-      entry.file,
-      entry.source,
-      ts.ScriptTarget.Latest,
-      true,
-      entry.file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-    )
+    const sourceFile = sourceFileFor(entry)
     const bindings = aiBindings(sourceFile)
     const visit = (node: ts.Node) => {
       if (ts.isCallExpression(node)) {
@@ -126,13 +124,7 @@ const aiCallSites = (entries: SourceEntry[], apis: Set<string>): string[] => {
 const namedCallSites = (entries: SourceEntry[], name: string): string[] => {
   const sites: string[] = []
   for (const entry of entries) {
-    const sourceFile = ts.createSourceFile(
-      entry.file,
-      entry.source,
-      ts.ScriptTarget.Latest,
-      true,
-      entry.file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-    )
+    const sourceFile = sourceFileFor(entry)
     const visit = (node: ts.Node) => {
       if (ts.isCallExpression(node)
         && ts.isIdentifier(node.expression)
@@ -150,13 +142,7 @@ const namedCallSites = (entries: SourceEntry[], name: string): string[] => {
 const openAIEmbeddingSites = (entries: SourceEntry[]): string[] => {
   const sites: string[] = []
   for (const entry of entries) {
-    const sourceFile = ts.createSourceFile(
-      entry.file,
-      entry.source,
-      ts.ScriptTarget.Latest,
-      true,
-      entry.file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-    )
+    const sourceFile = sourceFileFor(entry)
     const visit = (node: ts.Node) => {
       if (ts.isCallExpression(node)
         && ts.isPropertyAccessExpression(node.expression)
@@ -196,7 +182,10 @@ describe('model lane contract', () => {
   it('keeps each generation call and extractor handoff on the resolved model', () => {
     const entries = productionEntries()
     expect(aiCallSites(entries, GENERATION_APIS)).toEqual(EXPECTED_GENERATION)
-    expect(namedCallSites(entries, 'extractKnowledge')).toEqual(EXPECTED_EXTRACTOR_HANDOFF)
+    expect([
+      ...namedCallSites(entries, 'extractKnowledge'),
+      ...namedCallSites(entries, 'extractV5CandidateKnowledge'),
+    ].sort()).toEqual(EXPECTED_EXTRACTOR_HANDOFF)
     expect(namedCallSites(entries, 'matchKnowledgeTopics')).toEqual(EXPECTED_TOPIC_MATCHER_HANDOFF)
   })
   it('rejects a bypass added inside an already-known generation file', () => {

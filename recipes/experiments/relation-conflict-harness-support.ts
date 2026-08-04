@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { getOpenAI } from '../../lib/agents/cartographer/embeddings'
 import relationContract from '../../lib/agents/cartographer/relation-conflict-contract.json'
 import {
@@ -10,9 +7,12 @@ import {
   RELATION_VERDICTS,
   relationMaxOutputTokens,
 } from '../../lib/agents/cartographer/relation-contract'
-import { CODEX_MODEL, createCodexModel } from '../../lib/models/codex'
 import type { ModelRequirements } from '../../lib/models/router'
 import corpusDocument from './relation-conflict-corpus.json'
+import {
+  connectedCodexModelName,
+  getConnectedCodexModel,
+} from './connected-codex-model'
 
 export type Verdict = 'contradicts' | 'supersedes'
 export type ExpectedVerdict = Verdict | 'none'
@@ -37,15 +37,8 @@ export interface PromptCandidate {
   topicLabels: string[]
   similarity: number
 }
-interface CodexAuthDocument {
-  tokens?: {
-    access_token?: string
-    account_id?: string
-  }
-}
-
 export const corpus = corpusDocument as { cases: CorpusCase[] }
-export const judgmentModelName = CODEX_MODEL
+export const judgmentModelName = connectedCodexModelName
 export const modelRequirements: ModelRequirements = {
   task: 'classification',
   quality: 'balanced',
@@ -132,14 +125,6 @@ export const score = (counts: {
   recall: counts.tp + counts.fn === 0 ? 0 : counts.tp / (counts.tp + counts.fn),
 })
 
-export const getJudgmentModel = (): ReturnType<typeof createCodexModel> => {
-  const authPath =
-    process.env.K4C_CODEX_AUTH_PATH ?? join(homedir(), '.codex', 'auth.json')
-  const document = JSON.parse(
-    readFileSync(authPath, 'utf8'),
-  ) as CodexAuthDocument
-  const accessToken = document.tokens?.access_token
-  const accountId = document.tokens?.account_id
-  if (!accessToken || !accountId) throw new Error('codex_auth_unavailable')
-  return createCodexModel({ accessToken, accountId })
-}
+export const getJudgmentModel = (): ReturnType<typeof getConnectedCodexModel> => (
+  getConnectedCodexModel('K4C_CODEX_AUTH_PATH')
+)

@@ -5,7 +5,7 @@
 // Synthetic welcomes have no human source and are restricted there to the
 // owner-private conversation shape.
 
-import { updateEventEmbedding, updateSessionActivity } from '@/lib/knowledge/event-storage'
+import { updateSessionActivity } from '@/lib/knowledge/event-storage'
 import { getAdminClient } from '@/lib/supabase/admin'
 import type { Json } from '@/lib/supabase/types'
 import { IngressConflictError, type IngressOutcome } from './ingress'
@@ -75,6 +75,5 @@ export const enrichVoyagerResponseIngress = async (
   outcome: IngressOutcome,
 ): Promise<void> => {
   if (outcome.status !== 'created') return
-  await updateEventEmbedding(outcome.eventId, input.content).catch(() => {})
   await updateSessionActivity(input.sessionId, input.userId).catch(() => {})
 }

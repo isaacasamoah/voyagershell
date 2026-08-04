@@ -10,6 +10,8 @@
 --
 -- COALESCE(p_user_id, auth.uid()) covers both call patterns atomically.
 
+DROP FUNCTION IF EXISTS public.resume_session(UUID);
+
 CREATE OR REPLACE FUNCTION public.resume_session(
   p_session_id UUID,
   p_user_id    UUID DEFAULT NULL

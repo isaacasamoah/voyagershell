@@ -1,0 +1,58 @@
+{
+  "status": "K5A_G8_CURVE_MEASURED_CLAIMS_SCOPED_WARM_SYNTHETIC",
+  "scope": "claims-only boundary; not a search-path G6 timing claim",
+  "date": "2026-08-03",
+  "candidate_revision": "20f40280b04c911d4ef076e3c774e68fe241bf5c",
+  "migration": "080_knowledge_search_findability_backfill.sql",
+  "environment": {
+    "database": "disposable local PostgreSQL",
+    "network": "none",
+    "image": "pgvector/pgvector@sha256:18d16372b8406bb38a9f94cbff15d125c463d71fde2770aa8b5c64bfcc1578ee",
+    "live_database_touched": false
+  },
+  "method": {
+    "authorized_units": [100, 500, 1000, 1200, 1300, 1400, 1500, 2000],
+    "same_session_pairs_per_scale": 10,
+    "timed_reads_per_p95": 20,
+    "p95_draws_per_scale": 20,
+    "timed_exact_reads_per_scale": 400,
+    "total_timed_exact_reads": 3200,
+    "foreign_growth": "one authorized-set cardinality per pair, reaching 10x",
+    "planner_forcing": false,
+    "explain_in_timing_path": false
+  },
+  "sealed_inputs": {
+    "response_floor_ms_from_source": 556,
+    "boundary_overhead_ms": 3.256,
+    "boundary_jitter_sample_stddev_ms": 0.689,
+    "boundary_jitter_3sigma_ms": 2.067
+  },
+  "curve": [
+    {"authorized_units": 100, "worst_p95_ms": 39.995, "paired_deltas_ms": [0.379, 0.240, 0.798, 0.259, 1.204, 2.601, 0.765, 1.629, 1.246, 0.488], "paired_margin_p95_ms": 2.601, "derived_floor_ms": 47.919},
+    {"authorized_units": 500, "worst_p95_ms": 185.725, "paired_deltas_ms": [1.517, 2.779, 1.343, 4.099, 0.093, 4.316, 1.294, 3.054, 4.381, 4.387], "paired_margin_p95_ms": 4.387, "derived_floor_ms": 195.435},
+    {"authorized_units": 1000, "worst_p95_ms": 414.167, "paired_deltas_ms": [13.158, 10.719, 4.048, 1.735, 1.067, 28.718, 4.924, 4.347, 21.452, 6.016], "paired_margin_p95_ms": 28.718, "derived_floor_ms": 448.208},
+    {"authorized_units": 1200, "worst_p95_ms": 456.560, "paired_deltas_ms": [8.123, 4.435, 0.732, 12.190, 6.959, 4.324, 3.748, 2.491, 6.794, 11.571], "paired_margin_p95_ms": 12.190, "derived_floor_ms": 474.073},
+    {"authorized_units": 1300, "worst_p95_ms": 497.731, "paired_deltas_ms": [10.652, 13.771, 12.491, 22.792, 6.103, 15.050, 20.148, 1.806, 3.001, 3.674], "paired_margin_p95_ms": 22.792, "derived_floor_ms": 525.846},
+    {"authorized_units": 1400, "worst_p95_ms": 519.039, "paired_deltas_ms": [0.730, 15.185, 7.255, 8.315, 12.807, 0.898, 4.768, 2.800, 5.643, 7.673], "paired_margin_p95_ms": 15.185, "derived_floor_ms": 539.547},
+    {"authorized_units": 1500, "worst_p95_ms": 567.728, "paired_deltas_ms": [14.589, 9.465, 3.343, 2.045, 4.952, 9.087, 15.216, 0.303, 8.678, 24.498], "paired_margin_p95_ms": 24.498, "derived_floor_ms": 597.549},
+    {"authorized_units": 2000, "worst_p95_ms": 800.034, "paired_deltas_ms": [20.915, 14.844, 3.308, 1.285, 22.200, 11.367, 38.958, 15.400, 16.572, 24.146], "paired_margin_p95_ms": 38.958, "derived_floor_ms": 844.315}
+  ],
+  "supported_1500_pairs": [
+    {"pair": 1, "foreign_before": 0, "foreign_after": 1500, "before_p95_ms": 537.934, "after_p95_ms": 552.523, "absolute_delta_ms": 14.589},
+    {"pair": 2, "foreign_before": 1500, "foreign_after": 3000, "before_p95_ms": 547.606, "after_p95_ms": 538.141, "absolute_delta_ms": 9.465},
+    {"pair": 3, "foreign_before": 3000, "foreign_after": 4500, "before_p95_ms": 546.963, "after_p95_ms": 543.620, "absolute_delta_ms": 3.343},
+    {"pair": 4, "foreign_before": 4500, "foreign_after": 6000, "before_p95_ms": 545.975, "after_p95_ms": 548.020, "absolute_delta_ms": 2.045},
+    {"pair": 5, "foreign_before": 6000, "foreign_after": 7500, "before_p95_ms": 544.334, "after_p95_ms": 549.286, "absolute_delta_ms": 4.952},
+    {"pair": 6, "foreign_before": 7500, "foreign_after": 9000, "before_p95_ms": 556.329, "after_p95_ms": 547.242, "absolute_delta_ms": 9.087},
+    {"pair": 7, "foreign_before": 9000, "foreign_after": 10500, "before_p95_ms": 545.805, "after_p95_ms": 561.021, "absolute_delta_ms": 15.216},
+    {"pair": 8, "foreign_before": 10500, "foreign_after": 12000, "before_p95_ms": 547.201, "after_p95_ms": 546.898, "absolute_delta_ms": 0.303},
+    {"pair": 9, "foreign_before": 12000, "foreign_after": 13500, "before_p95_ms": 551.338, "after_p95_ms": 560.016, "absolute_delta_ms": 8.678},
+    {"pair": 10, "foreign_before": 13500, "foreign_after": 15000, "before_p95_ms": 543.230, "after_p95_ms": 567.728, "absolute_delta_ms": 24.498}
+  ],
+  "derived_choices": {
+    "floor_for_1500_ms": 598,
+    "largest_measured_horizon_for_556_units": 1400,
+    "first_measured_scale_over_556_units": 1500
+  },
+  "verdict": "CARTOGRAPHER_K5A_G8_CURVE_GREEN"
+}

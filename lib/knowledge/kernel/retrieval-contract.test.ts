@@ -58,11 +58,11 @@ describe('knowledge-graph retrieval contract', () => {
       'viewer_has_graph_node_grant', 'graph_authority_edge_is_current',
       'graph_node_label_for_viewer', 'authorized_graph_neighbors',
     ]) expect(database).toMatch(new RegExp(`REVOKE EXECUTE ON FUNCTION public\\.${helper}`))
-    expect(boundary).toContain('const RESPONSE_FLOOR_MS = 550')
+    expect(boundary).toContain('const RESPONSE_FLOOR_MS = 556')
     expect(boundary).toContain('const RPC_DEADLINE_MS = 8_000')
     expect(boundary).toContain('typeof envelope.truncated !== "boolean"')
-    expect(boundary).toContain(
-      'return { outcome: "success", claims, truncated: envelope.truncated }',
+    expect(boundary).toMatch(
+      /return complete\(\{\s*outcome: "success",\s*claims,\s*truncated: envelope\.truncated,\s*\}\)/,
     )
   })
 

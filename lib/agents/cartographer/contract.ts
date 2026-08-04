@@ -1,11 +1,18 @@
 import { z } from 'zod'
 import topicMatcherContract from './topic-matcher-contract.json'
 
+// G9 deferred C5: runtime activation remains v4. The frozen v5 candidate stays
+// available only as evidence for its consumed one-shot acceptance result.
 export const CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v4'
+export const CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION =
+  'cartographer-single-claim-v5'
+export const CLAIM_BLOCKED_TOPIC_EXTRACTOR_VERSIONS = [
+  CARTOGRAPHER_EXTRACTOR_VERSION,
+] as const
 export const CARTOGRAPHER_PHYSICS_VERSIONS = [
   'cartographer-single-claim-v2',
   'cartographer-single-claim-v3',
-  CARTOGRAPHER_EXTRACTOR_VERSION,
+  ...CLAIM_BLOCKED_TOPIC_EXTRACTOR_VERSIONS,
 ] as const
 export const TOPIC_MATCHER_VERSION = topicMatcherContract.version
 export const TOPIC_CANDIDATE_FLOOR = topicMatcherContract.candidateFloor
@@ -121,7 +128,50 @@ Topic labels are proposals only: the server owns identity and persistence.
 Do not infer a claim from prior knowledge, and do not return more than one claim.
 For a null claim, aboutPersonId must also be null and topics must be empty.`
 
-export const CARTOGRAPHER_PROMPT = HISTORICAL_CARTOGRAPHER_PROMPT
+// Units already stamped v4 must remain attributable to the exact prompt that
+// judged them. V5 completes the contract in a new version instead of editing
+// that historical prompt in place.
+export const V4_CARTOGRAPHER_PROMPT = HISTORICAL_CARTOGRAPHER_PROMPT
+
+export const V5_CARTOGRAPHER_PROMPT = `${BASE_PROMPT}
+A claim is durable when its truth is asserted to hold beyond the moment of the
+utterance: a reader a month later would still be reading an assertion rather
+than a snapshot.
+
+Return claim: null when the content asserts that an outcome has not yet been
+settled. This includes a decision, conclusion, outcome, choice, or determination
+that is pending, absent, ongoing, undecided, or still to come. Such content
+asserts the absence of a settled fact; do not turn that absence into a durable
+claim. Also return claim: null for greetings, thanks, acknowledgements, and
+other social conversational acts, and when the entire content is a promise to
+say something later.
+
+For a durable claim, choose knowledgeType by this ordered procedure; first match
+wins:
+1. preference — the subject is the author or a supplied Person candidate and
+   the predicate is that person's disposition: what they like, want, prefer,
+   choose, or how they want things done. It can be restated as "this person
+   prefers, wants, or likes X" without adding information.
+2. operational — the predicate is an obligation or sequencing rule for action:
+   something that must, should, or is to be done, including what must happen
+   before, after, or when something else happens. It addresses whoever finds
+   themselves in that situation rather than describing one occurrence, and can
+   be restated as "do X before, after, or when Y" without adding information.
+3. domain — every other durable claim: how something is, including structure,
+   ownership, role, location, attribute, capability, or recurring behaviour. It
+   can be restated as "this subject is, has, or does X" and asserts no
+   obligation.
+
+At the domain/operational rim, classify what the claim asserts, never what a
+reader might do with it. A descriptive role or recurring behaviour is domain;
+only an asserted obligation or sequencing rule is operational. Preference takes
+priority over both even when the disposition has a before/after shape.
+
+Never invent a Person ID. You may copy only an ID from the supplied candidates.
+Do not infer a claim from prior knowledge, and do not return more than one claim.
+For a null claim, aboutPersonId must also be null.`
+
+export const CARTOGRAPHER_PROMPT = V4_CARTOGRAPHER_PROMPT
 
 export const isV3Contract = (version: string): boolean => (
   version === 'cartographer-single-claim-v3'
@@ -129,6 +179,12 @@ export const isV3Contract = (version: string): boolean => (
 
 export const isCurrentContract = (version: string): boolean => (
   version === CARTOGRAPHER_EXTRACTOR_VERSION
+)
+
+export const isClaimBlockedTopicContract = (version: string): boolean => (
+  CLAIM_BLOCKED_TOPIC_EXTRACTOR_VERSIONS.includes(
+    version as (typeof CLAIM_BLOCKED_TOPIC_EXTRACTOR_VERSIONS)[number],
+  )
 )
 
 export const requiresUnitPhysics = (version: string): boolean => (

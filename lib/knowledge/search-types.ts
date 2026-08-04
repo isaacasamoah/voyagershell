@@ -19,10 +19,7 @@ export interface KnowledgeNode {
 export interface SearchOptions {
   threshold?: number
   limit?: number
-  classifications?: Classification[]
-  voyageSlug?: string
   knowledgeType?: string
-  minAttention?: number
 }
 
 export interface KnowledgeNodeInput {
@@ -40,19 +37,6 @@ export interface KnowledgeNodeInput {
   sender_display_name?: string | null
   sender_user_id?: string | null
   event_type?: string | null
-}
-
-export interface GrepOptions {
-  scope?: 'personal' | 'voyage' | 'all'
-  caseSensitive?: boolean
-  limit?: number
-  voyageSlug?: string
-  minAttention?: number
-}
-
-export interface GrepResult extends Omit<KnowledgeNode, 'similarity'> {
-  highlight: string
-  matchStart: number
 }
 
 export const transformKnowledgeNode = (row: KnowledgeNodeInput): KnowledgeNode => ({

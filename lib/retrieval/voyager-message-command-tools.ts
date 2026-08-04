@@ -1,6 +1,6 @@
 import { tool } from 'ai'
 import { z } from 'zod'
-import { createExplicitEvent, createMessageEvent } from '@/lib/knowledge/events'
+import { createMessageEvent } from '@/lib/knowledge/events'
 import { fanOutDeliveries } from '@/lib/messaging/deliveries'
 import { getVoyageBySlug } from '@/lib/voyage/core'
 import { getVoyageMembers } from '@/lib/voyage/members'
@@ -87,7 +87,6 @@ export const createVoyagerMessageCommandTools = (ctx: ToolContext) => ({
       const sender = members.find((member) => member.userId === ctx.userId)
       const senderDisplayName = sender?.displayName ?? sender?.email ?? 'Unknown'
       const recipientNames = resolved.map((member) => member.displayName)
-      const contextSnippet = `${senderDisplayName} to ${recipientNames.join(', ')}: ${message.slice(0, 60)}`
       const eventId = await createMessageEvent(
         ctx.conversationId ?? 'mention',
         'user',
@@ -100,8 +99,6 @@ export const createVoyagerMessageCommandTools = (ctx: ToolContext) => ({
           source: 'mention',
           senderDisplayName,
           senderUserId: ctx.userId,
-          attentionScore: 0.85,
-          contextSnippet,
         },
       )
       if (eventId) {
@@ -122,11 +119,11 @@ export const createVoyagerMessageCommandTools = (ctx: ToolContext) => ({
     }),
     execute: async ({ content, classifications: requestedClassifications }) => {
       const classifications = requestedClassifications ?? ['preference']
-      const eventId = await createExplicitEvent(content, {
+      const eventId = await createMessageEvent(ctx.conversationId ?? 'tool-remember', 'user', content, {
         userId: ctx.userId,
         voyageSlug: ctx.voyageSlug,
         classifications,
-        sessionId: ctx.conversationId,
+        eventType: 'message',
       })
       if (!eventId) return 'Failed to save knowledge. Please try again.'
       return `Saved as ${classifications.join(', ')} knowledge.`

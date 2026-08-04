@@ -1,0 +1,221 @@
+{
+  "version": "k5a-c5-labelled-v1",
+  "cases": [
+    {
+      "id": "document-domain-01",
+      "eventType": "document",
+      "content": "Architecture note: the notification worker reads only from the durable outbox table.",
+      "expectedClaim": "The notification worker reads only from the durable outbox table.",
+      "expectedKnowledgeType": "domain",
+      "expectedAboutPersonId": null,
+      "audience": "private"
+    },
+    {
+      "id": "document-operational-02",
+      "eventType": "document",
+      "content": "Runbook: rotate the signing key before restarting the webhook consumers.",
+      "expectedClaim": "The signing key must be rotated before the webhook consumers are restarted.",
+      "expectedKnowledgeType": "operational",
+      "expectedAboutPersonId": null,
+      "audience": "room"
+    },
+    {
+      "id": "document-preference-03",
+      "eventType": "document",
+      "content": "Working agreement: I prefer design reviews to happen before implementation begins.",
+      "expectedClaim": "The author prefers design reviews before implementation begins.",
+      "expectedKnowledgeType": "preference",
+      "expectedAboutPersonId": "10000000-0000-4000-8000-000000000001",
+      "audience": "private"
+    },
+    {
+      "id": "document-domain-person-04",
+      "eventType": "document",
+      "content": "Team directory: Mara owns the billing reconciliation service.",
+      "expectedClaim": "Mara owns the billing reconciliation service.",
+      "expectedKnowledgeType": "domain",
+      "expectedAboutPersonId": "10000000-0000-4000-8000-000000000002",
+      "audience": "room"
+    },
+    {
+      "id": "document-operational-05",
+      "eventType": "document",
+      "content": "Release checklist: migrations are applied only after the preview smoke passes.",
+      "expectedClaim": "Migrations are applied only after the preview smoke passes.",
+      "expectedKnowledgeType": "operational",
+      "expectedAboutPersonId": null,
+      "audience": "private"
+    },
+    {
+      "id": "document-no-claim-06",
+      "eventType": "document",
+      "content": "Draft notes — still collecting examples; nothing has been decided yet.",
+      "expectedClaim": null,
+      "expectedKnowledgeType": null,
+      "expectedAboutPersonId": null,
+      "audience": "room"
+    },
+    {
+      "id": "slack-domain-01",
+      "eventType": "slack_message",
+      "content": "Heads up: the invoices channel is archived after every quarter close.",
+      "expectedClaim": "The invoices channel is archived after every quarter close.",
+      "expectedKnowledgeType": "domain",
+      "expectedAboutPersonId": null,
+      "audience": "room"
+    },
+    {
+      "id": "slack-operational-02",
+      "eventType": "slack_message",
+      "content": "@team please page the incident lead before changing production feature flags.",
+      "expectedClaim": "The incident lead must be paged before production feature flags are changed.",
+      "expectedKnowledgeType": "operational",
+      "expectedAboutPersonId": null,
+      "audience": "room"
+    },
+    {
+      "id": "slack-preference-03",
+      "eventType": "slack_message",
+      "content": "I prefer async updates in the project channel instead of a daily meeting.",
+      "expectedClaim": "The author prefers async project-channel updates instead of a daily meeting.",
+      "expectedKnowledgeType": "preference",
+      "expectedAboutPersonId": "10000000-0000-4000-8000-000000000001",
+      "audience": "private"
+    },
+    {
+      "id": "slack-domain-person-04",
+      "eventType": "slack_message",
+      "content": "Mara is the escalation contact for failed card settlements.",
+      "expectedClaim": "Mara is the escalation contact for failed card settlements.",
+      "expectedKnowledgeType": "domain",
+      "expectedAboutPersonId": "10000000-0000-4000-8000-000000000002",
+      "audience": "room"
+    },
+    {
+      "id": "slack-operational-05",
+      "eventType": "slack_message",
+      "content": "For support handoffs, attach the customer timeline to the ticket before assigning it.",
+      "expectedClaim": "A customer timeline must be attached before a support ticket is assigned.",
+      "expectedKnowledgeType": "operational",
+      "expectedAboutPersonId": null,
+      "audience": "private"
+    },
+    {
+      "id": "slack-no-claim-06",
+      "eventType": "slack_message",
+      "content": "Thanks everyone — that was a useful discussion.",
+      "expectedClaim": null,
+      "expectedKnowledgeType": null,
+      "expectedAboutPersonId": null,
+      "audience": "room"
+    },
+    {
+      "id": "jira-domain-01",
+      "eventType": "jira_update",
+      "content": "Issue update: the export endpoint now returns one archive per workspace.",
+      "expectedClaim": "The export endpoint returns one archive per workspace.",
+      "expectedKnowledgeType": "domain",
+      "expectedAboutPersonId": null,
+      "audience": "room"
+    },
+    {
+      "id": "jira-operational-02",
+      "eventType": "jira_update",
+      "content": "Acceptance rule: verify the audit row before closing this migration task.",
+      "expectedClaim": "The audit row must be verified before the migration task is closed.",
+      "expectedKnowledgeType": "operational",
+      "expectedAboutPersonId": null,
+      "audience": "private"
+    },
+    {
+      "id": "jira-preference-03",
+      "eventType": "jira_update",
+      "content": "Reporter note: I prefer the compact table layout for the final dashboard.",
+      "expectedClaim": "The reporter prefers the compact table layout for the final dashboard.",
+      "expectedKnowledgeType": "preference",
+      "expectedAboutPersonId": "10000000-0000-4000-8000-000000000001",
+      "audience": "private"
+    },
+    {
+      "id": "jira-domain-person-04",
+      "eventType": "jira_update",
+      "content": "Ownership changed: Mara now owns the account recovery epic.",
+      "expectedClaim": "Mara owns the account recovery epic.",
+      "expectedKnowledgeType": "domain",
+      "expectedAboutPersonId": "10000000-0000-4000-8000-000000000002",
+      "audience": "room"
+    },
+    {
+      "id": "jira-operational-05",
+      "eventType": "jira_update",
+      "content": "Deployment note: run the compatibility check before promoting the release candidate.",
+      "expectedClaim": "The compatibility check must run before the release candidate is promoted.",
+      "expectedKnowledgeType": "operational",
+      "expectedAboutPersonId": null,
+      "audience": "room"
+    },
+    {
+      "id": "jira-no-claim-06",
+      "eventType": "jira_update",
+      "content": "Status update: investigation continues and there is no conclusion yet.",
+      "expectedClaim": null,
+      "expectedKnowledgeType": null,
+      "expectedAboutPersonId": null,
+      "audience": "private"
+    },
+    {
+      "id": "explicit-domain-01",
+      "eventType": "explicit",
+      "content": "Remember this: the garden irrigation controller is in the west utility cabinet.",
+      "expectedClaim": "The garden irrigation controller is in the west utility cabinet.",
+      "expectedKnowledgeType": "domain",
+      "expectedAboutPersonId": null,
+      "audience": "private"
+    },
+    {
+      "id": "explicit-operational-02",
+      "eventType": "explicit",
+      "content": "Remember this: confirm the backup checksum before deleting a local snapshot.",
+      "expectedClaim": "The backup checksum must be confirmed before a local snapshot is deleted.",
+      "expectedKnowledgeType": "operational",
+      "expectedAboutPersonId": null,
+      "audience": "private"
+    },
+    {
+      "id": "explicit-preference-03",
+      "eventType": "explicit",
+      "content": "Remember that I prefer window seats on daytime flights.",
+      "expectedClaim": "The author prefers window seats on daytime flights.",
+      "expectedKnowledgeType": "preference",
+      "expectedAboutPersonId": "10000000-0000-4000-8000-000000000001",
+      "audience": "private"
+    },
+    {
+      "id": "explicit-domain-person-04",
+      "eventType": "explicit",
+      "content": "Remember this about Mara: she is allergic to shellfish.",
+      "expectedClaim": "Mara is allergic to shellfish.",
+      "expectedKnowledgeType": "domain",
+      "expectedAboutPersonId": "10000000-0000-4000-8000-000000000002",
+      "audience": "private"
+    },
+    {
+      "id": "explicit-operational-05",
+      "eventType": "explicit",
+      "content": "Remember this procedure: lock the studio door before arming the alarm.",
+      "expectedClaim": "The studio door must be locked before the alarm is armed.",
+      "expectedKnowledgeType": "operational",
+      "expectedAboutPersonId": null,
+      "audience": "room"
+    },
+    {
+      "id": "explicit-no-claim-06",
+      "eventType": "explicit",
+      "content": "Remember this later — I have not decided what it is yet.",
+      "expectedClaim": null,
+      "expectedKnowledgeType": null,
+      "expectedAboutPersonId": null,
+      "audience": "private"
+    }
+  ]
+}

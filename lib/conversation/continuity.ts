@@ -126,7 +126,6 @@ export const retrieveForContinuity = async (
   if (hasCrossSession && context.userId) {
     try {
       const knowledge = await searchKnowledge(context.userId, currentMessage, {
-        voyageSlug: context.voyageSlug,
         limit: 3,
         threshold: 0.6, // Slightly lower threshold for conversational context
       })

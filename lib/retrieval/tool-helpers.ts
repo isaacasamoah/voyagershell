@@ -1,5 +1,3 @@
-import type { GrepResult, KnowledgeNode } from '@/lib/knowledge'
-import type { RankedResult } from '@/lib/knowledge/hybrid-primitives'
 import { getVoyageBySlug } from '@/lib/voyage/core'
 import { getVoyageMembers, resolveMemberByName } from '@/lib/voyage/members'
 import type { ToolContext } from './tool-types'
@@ -17,34 +15,6 @@ export const resolveOneMember = async (
   if (!match) return { error: `I don't see anyone called ${name} in this voyage.` }
   if (match.userId === ctx.userId) return { error: "That's you — you're already here." }
   return match
-}
-
-export const formatKnowledgeResult = (nodes: KnowledgeNode[]): string => {
-  if (nodes.length === 0) return 'No results found.'
-  return nodes.map((node, index) => {
-    const pinned = node.attentionScore >= 0.9 ? ' [PINNED]' : ''
-    const similarity = node.similarity ? ` (${(node.similarity * 100).toFixed(0)}%)` : ''
-    return `[${index + 1}] id:${node.eventId}${pinned}${similarity}\n${node.content}`
-  }).join('\n\n')
-}
-
-export const formatHybridResult = (results: RankedResult[]): string => {
-  if (results.length === 0) return 'No results found.'
-  return results.map((result, index) => {
-    const sources = result.sources.join('+')
-    const score = result.score.toFixed(4)
-    const attention = result.metadata.attention_score ?? 0.5
-    const pinned = attention >= 0.9 ? ' [PINNED]' : ''
-    return `[${index + 1}] id:${result.eventId}${pinned} (${sources}, rrf:${score})\n${result.content}`
-  }).join('\n\n')
-}
-
-export const formatGrepResult = (results: GrepResult[]): string => {
-  if (results.length === 0) return 'No exact matches found.'
-  return results.map((result, index) => {
-    const pinned = result.attentionScore >= 0.9 ? ' [PINNED]' : ''
-    return `[${index + 1}] id:${result.eventId}${pinned}\n...${result.highlight}...`
-  }).join('\n\n')
 }
 
 export const parseRelativeDate = (input: string): Date => {

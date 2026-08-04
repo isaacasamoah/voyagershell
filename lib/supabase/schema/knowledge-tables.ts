@@ -1,10 +1,11 @@
 import type {
   Json,
+  KnowledgeDeliveryChannel,
   KnowledgeExtractionJobState,
   KnowledgeExtractionOutcomeKind,
   KnowledgeRelationJobState,
+  KnowledgeUnitLifecycleActKind,
   NullableJson,
-  NullableUnknown,
   Relationship,
   TableShape,
 } from './base'
@@ -15,18 +16,31 @@ type EventRow = {
   source_ref: NullableJson; actor_id: string | null; actor_type: string; created_at: string;
   participants: string[] | null; knowledge_audience_id: string | null
 }
-type CurrentRow = {
-  event_id: string; user_id: string | null; voyage_slug: string | null; content: string;
-  classifications: string[] | null; entities: string[] | null; topics: string[] | null;
-  embedding: string | null; source_created_at: string; updated_at: string;
-  participants: string[] | null; event_type: string | null; knowledge_type: string | null;
-  attention_score: number | null; context_snippet: string | null; sender_display_name: string | null;
-  sender_user_id: string | null; addressed_to: string[] | null; session_id: string | null;
-  search_vector: NullableUnknown; superseded_by: string | null; base_attention: number | null;
-  promotion_count: number | null; surfacing_tier: string | null; deliver_after: string | null;
-  delivery_status: string | null
-}
 export type KnowledgeTables = {
+  knowledge_unit_citations: TableShape<{
+    id: string; knowledge_unit_id: string; person_id: string;
+    act_kind: KnowledgeUnitLifecycleActKind; session_id: string | null;
+    delivery_channel: KnowledgeDeliveryChannel | null; actor_kind: string;
+    actor_profile_id: string | null; basis_kind: string; basis_id: string;
+    basis_version: number; recorded_at: string
+  }, { id?: string; knowledge_unit_id: string; person_id: string;
+    act_kind?: KnowledgeUnitLifecycleActKind; session_id?: string | null;
+    delivery_channel?: KnowledgeDeliveryChannel | null; actor_kind: string;
+    actor_profile_id?: string | null; basis_kind: string; basis_id: string;
+    basis_version: number; recorded_at?: string }, Partial<{
+      id: string; knowledge_unit_id: string; person_id: string;
+      act_kind: KnowledgeUnitLifecycleActKind; session_id: string | null;
+      delivery_channel: KnowledgeDeliveryChannel | null; actor_kind: string;
+      actor_profile_id: string | null; basis_kind: string; basis_id: string;
+      basis_version: number; recorded_at: string
+    }>, [
+      Relationship<'knowledge_unit_citations_actor_profile_id_fkey',
+        'actor_profile_id', 'profiles', 'id'>,
+      Relationship<'knowledge_unit_citations_knowledge_unit_id_fkey',
+        'knowledge_unit_id', 'knowledge_units', 'id'>,
+      Relationship<'knowledge_unit_citations_person_id_fkey',
+        'person_id', 'profiles', 'id'>,
+    ]>
   knowledge_relation_contracts: TableShape<{
     contract_version: string; description: string; stage1_instruction: string;
     stage2_instruction: string; verdicts: string[]; blocking_spec: Json;
@@ -76,6 +90,17 @@ export type KnowledgeTables = {
     attempt_id: string; recorded_at: string
   }, { edge_id: string; input_unit_ids: string[]; contract_version: string;
     attempt_id: string; recorded_at?: string }>
+  knowledge_relation_annotation_index: TableShape<{
+    endpoint_unit_id: string; partner_unit_id: string; assertion_person_id: string;
+    edge_id: string; assertion_attempt_id: string; edge_kind: string;
+    endpoint_is_source: boolean; repair_priority: number; input_unit_ids: string[];
+    assertion_recorded_at: string
+  }, {
+    endpoint_unit_id: string; partner_unit_id: string; assertion_person_id: string;
+    edge_id: string; assertion_attempt_id: string; edge_kind: string;
+    endpoint_is_source: boolean; repair_priority: number; input_unit_ids: string[];
+    assertion_recorded_at: string
+  }>
   knowledge_topics: TableShape<{
     id: string; normalized_label: string; embedding: string; created_at: string
   }, { id: string; normalized_label: string; embedding: string; created_at?: string }>
@@ -88,10 +113,6 @@ export type KnowledgeTables = {
     source_ref?: NullableJson; actor_id?: string | null; actor_type?: string; created_at?: string;
     participants?: string[] | null; knowledge_audience_id?: string | null
   }>
-  knowledge_current: TableShape<CurrentRow,
-    Partial<CurrentRow> & { event_id: string; content: string; source_created_at: string },
-    Partial<CurrentRow>,
-    [Relationship<'knowledge_current_event_id_fkey', 'event_id', 'knowledge_events', 'id', true>]>
   messages: TableShape<{
     id: string; session_id: string | null; role: string; content: string;
     knowledge_event_id: string | null; created_at: string | null

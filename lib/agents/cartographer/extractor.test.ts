@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -5,7 +6,12 @@ const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
 
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 
-import { extractKnowledge, rederiveKnowledgeUnit } from './extractor'
+import {
+  extractKnowledge,
+  extractV5CandidateKnowledge,
+  rederiveKnowledgeUnit,
+} from './extractor'
+import { V5_CARTOGRAPHER_PROMPT } from './contract'
 import type {
   ExtractionAttempt,
   TopicBackfillUnit,
@@ -88,7 +94,7 @@ describe('Cartographer extractor prompt versioning', () => {
     }])
   })
 
-  it('extracts the v4 claim before any topic candidates exist', async () => {
+  it('keeps the runtime-current v4 prompt byte-stable beside the v5 candidate', async () => {
     await extractKnowledge({} as LanguageModel, {
       ...attempt,
       extractorVersion: 'cartographer-single-claim-v4',
@@ -98,6 +104,44 @@ describe('Cartographer extractor prompt versioning', () => {
       role: 'user',
       content: historicalPrompt,
     }])
+    expect(mocks.generateObject.mock.calls[0][0].system).not.toContain(
+      'ordered procedure',
+    )
+  })
+
+  it('uses the completed durability and ordered type contract only for v5', async () => {
+    await extractV5CandidateKnowledge({} as LanguageModel, {
+      ...attempt,
+      extractorVersion: 'cartographer-single-claim-v5',
+    })
+
+    const system = mocks.generateObject.mock.calls[0][0].system as string
+    const preference = system.indexOf('1. preference')
+    const operational = system.indexOf('2. operational')
+    const domain = system.indexOf('3. domain')
+    expect(system).toContain('asserts the absence of a settled fact')
+    expect(system).toContain('greetings, thanks, acknowledgements')
+    expect(system).toMatch(/promise to\s+say something later/)
+    expect(system).toContain('classify what the claim asserts')
+    expect(preference).toBeGreaterThan(-1)
+    expect(preference).toBeLessThan(operational)
+    expect(operational).toBeLessThan(domain)
+  })
+
+  it('keeps the deferred v5 candidate out of runtime routing', async () => {
+    await extractKnowledge({} as LanguageModel, {
+      ...attempt,
+      extractorVersion: 'cartographer-single-claim-v5',
+    })
+
+    expect(mocks.generateObject.mock.calls[0][0].system).not.toContain(
+      'ordered procedure',
+    )
+  })
+
+  it('keeps the measured v5 prompt byte-stable after the one-shot result', () => {
+    expect(createHash('sha256').update(V5_CARTOGRAPHER_PROMPT).digest('hex'))
+      .toBe('3ae9be74c09f0284034a5baddee82672a672e6006baa796c879f9baa425b4ce2')
   })
 
   it('re-derives immutable unit physics without reopening topic labels', async () => {
@@ -114,7 +158,9 @@ describe('Cartographer extractor prompt versioning', () => {
     await rederiveKnowledgeUnit({} as LanguageModel, unit)
 
     const prompt = mocks.generateObject.mock.calls[0][0].messages[0].content
+    const system = mocks.generateObject.mock.calls[0][0].system as string
     expect(prompt).not.toMatch(/topic/i)
     expect(prompt).toContain(unit.claim)
+    expect(system).not.toContain('ordered procedure')
   })
 })

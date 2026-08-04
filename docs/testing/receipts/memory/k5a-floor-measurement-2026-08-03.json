@@ -1,0 +1,57 @@
+{
+  "status": "FLOOR_CONFIRMED_G8_MEASURED",
+  "base_revision": "c598c44256afb291b1e1971384edcb826ed59349",
+  "database": {
+    "method": "warm_no_explain_same_session",
+    "curve": [
+      { "authorized_units": 100, "p95_ms": 42.240 },
+      { "authorized_units": 500, "p95_ms": 202.621 },
+      { "authorized_units": 1001, "p95_ms": 390.941 },
+      { "authorized_units": 1200, "p95_ms": 463.883 },
+      { "authorized_units": 1300, "p95_ms": 484.606 },
+      { "authorized_units": 1400, "p95_ms": 491.041 },
+      { "authorized_units": 1500, "p95_ms": 529.556 },
+      { "authorized_units": 1600, "p95_ms": 559.447 }
+    ],
+    "supported_authorized_units": 1500,
+    "supported_pairs": [
+      { "pair": 1, "foreign_units_before": 0, "foreign_units_after": 1500, "before_growth_p95_ms": 522.173, "after_growth_p95_ms": 519.422, "absolute_delta_ms": 2.751 },
+      { "pair": 2, "foreign_units_before": 1500, "foreign_units_after": 3000, "before_growth_p95_ms": 535.991, "after_growth_p95_ms": 522.210, "absolute_delta_ms": 13.781 },
+      { "pair": 3, "foreign_units_before": 3000, "foreign_units_after": 4500, "before_growth_p95_ms": 531.788, "after_growth_p95_ms": 534.824, "absolute_delta_ms": 3.036 },
+      { "pair": 4, "foreign_units_before": 4500, "foreign_units_after": 6000, "before_growth_p95_ms": 534.078, "after_growth_p95_ms": 521.281, "absolute_delta_ms": 12.797 },
+      { "pair": 5, "foreign_units_before": 6000, "foreign_units_after": 7500, "before_growth_p95_ms": 533.918, "after_growth_p95_ms": 534.638, "absolute_delta_ms": 0.720 }
+    ],
+    "supported_p95_mean_ms": 529.032,
+    "supported_p95_sample_stddev_ms": 6.802,
+    "supported_p95_max_ms": 535.991,
+    "paired_delta_p95_ms": 13.781
+  },
+  "boundary": {
+    "method": "30_sample_loopback_supabase_http_without_database_execution",
+    "claims_parsed_per_sample": 8,
+    "cold_client_acquisition_ms": 0.216,
+    "auth_p95_ms": 2.139,
+    "client_acquisition_p95_ms": 0.011,
+    "transport_p95_ms": 1.530,
+    "parse_p95_ms": 0.024,
+    "phase_overhead_p95_ms": 3.256,
+    "phase_overhead_sample_stddev_ms": 0.689,
+    "before_floor_p95_ms": 3.269,
+    "current_floor_total_p95_ms": 552.222
+  },
+  "derivation": {
+    "paired_foreign_growth_margin_ms": 13.781,
+    "boundary_three_sigma_jitter_ms": 2.067,
+    "total_margin_ms": 15.848,
+    "unrounded_floor_ms": 555.095,
+    "integer_ceiling_floor_ms": 556,
+    "database_budget_if_confirmed_ms": 552.744
+  },
+  "proposal": {
+    "response_floor_ms": 556,
+    "g5_exact_recall_through_authorized_units": 1400,
+    "g5_gate_begins_above_authorized_units": 1400,
+    "first_measured_over_existing_floor_authorized_units": 1500,
+    "approximate_search_lands_automatically": false
+  }
+}
