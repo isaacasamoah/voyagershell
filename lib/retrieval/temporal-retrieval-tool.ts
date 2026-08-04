@@ -9,13 +9,15 @@ import { formatKnowledgeUnitHit } from './unit-hit-formatter'
 const searchByTimeSchema = z.object({
   since: z.string().describe('Start date: ISO string or relative date'),
   until: z.string().optional().describe('End date; defaults to now'),
-  query: z.string().optional().describe('Optional text filter'),
   limit: z.number().int().min(1).max(30).optional().default(15),
 })
 
 export const createTemporalRetrievalTool = (ctx: ToolContext) => tool({
   description:
-    'Search authorized knowledge-unit claims by their source event time.',
+    'Search authorized knowledge-unit claims by their source event time. '
+    + 'Returns every claim in the window, most recent first, up to the limit; '
+    + 'it does not narrow by topic. Search a topic with semantic_search, or '
+    + 'exact wording with keyword_grep.',
   inputSchema: searchByTimeSchema,
   execute: async (input) => {
     const sinceDate = parseRelativeDate(input.since)
@@ -29,10 +31,7 @@ export const createTemporalRetrievalTool = (ctx: ToolContext) => tool({
     if (reached.outcome === 'error') {
       return 'Memory time search was cut short; do not infer that no memory exists.'
     }
-    const hits = input.query
-      ? reached.hits.filter((hit) =>
-          hit.claim.toLowerCase().includes(input.query!.toLowerCase()))
-      : reached.hits
+    const hits = reached.hits
     if (hits.length === 0) {
       return `No knowledge found between ${sinceDate.toLocaleDateString()} and ${untilDate.toLocaleDateString()}.`
     }
