@@ -20,6 +20,11 @@ const GLOBAL_WINDOW_MS = 60_000
 const emailAttempts = new Map<string, number[]>()
 const globalAttempts: number[] = []
 
+const shouldLogMagicLink = (): boolean =>
+  process.env.NODE_ENV === 'development' ||
+  process.env.VERCEL_ENV === 'development' ||
+  process.env.VERCEL_ENV === 'preview'
+
 const isRateLimited = (email: string): boolean => {
   const now = Date.now()
 
@@ -90,14 +95,16 @@ export const POST = async (request: NextRequest) => {
     const { hashed_token } = data.properties
     const callbackUrl = `${getBaseUrl()}/auth/callback?token_hash=${encodeURIComponent(hashed_token)}&type=magiclink`
 
-    // Always log the magic link in dev for local testing
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Auth] Magic link (dev):', callbackUrl)
-    }
-
-    // No Resend key: dev-only path, skip email
+    // Never report delivery when no transport attempted one.
     if (!process.env.RESEND_API_KEY) {
-      return NextResponse.json({ success: true })
+      // Local and preview operators need a recovery channel when email is absent.
+      if (shouldLogMagicLink()) {
+        console.log('[Auth] Magic link (non-production):', callbackUrl)
+      }
+      return NextResponse.json(
+        { success: false, outcome: 'transport_unavailable' },
+        { status: 503 },
+      )
     }
 
     // Production: send via Resend with React Email template
@@ -119,7 +126,7 @@ export const POST = async (request: NextRequest) => {
     }
 
     console.log('[Auth] Magic link sent via Resend to', email)
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, outcome: 'sent' })
   } catch (error) {
     console.error('[Auth] magic-link route error:', error)
     return NextResponse.json(
