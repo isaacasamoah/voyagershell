@@ -17,7 +17,7 @@ describe('the complete graph migration boundary', () => {
       .filter((name) => /^\d{3}.*\.sql$/.test(name)).sort()
     const atOrAbove = (floor: number): string[] =>
       discovered.filter((name) => Number(name.slice(0, 3)) >= floor)
-    expect(Math.max(...discovered.map((name) => Number(name.slice(0, 3))))).toBe(81)
+    expect(Math.max(...discovered.map((name) => Number(name.slice(0, 3))))).toBe(82)
     expect(atOrAbove(60)).toEqual(['060_source_intent.sql', ...promoted,
       ...cutover, '068_atomic_source_ingress.sql',
       '069_deployment_gap_recovery.sql',
@@ -31,7 +31,8 @@ describe('the complete graph migration boundary', () => {
       '077_relation_conflict_ledger.sql',
       '078_knowledge_unit_lifecycle.sql',
       '079_knowledge_unit_read.sql', '080_knowledge_search_findability_backfill.sql',
-      '081_event_native_cutover.sql'])
+      '081_event_native_cutover.sql',
+      '082_knowledge_unit_read_session_repair.sql'])
     expect(readdirSync(resolve(process.cwd(), 'recipes/sql/knowledge-graph'))
       .filter((name) => /^\d{3}_/.test(name))).toEqual([])
 
