@@ -88,4 +88,18 @@ describe('K5a graph claim read projection', () => {
     expect(assertions).toContain('public.retrieve_knowledge_graph_claims_v3(')
     expect(assertions).toContain('k5a_082_session_id_not_projected')
   })
+
+  // The recipe reads its budget from boundary.ts by matching a callee name in
+  // the TypeScript AST. Renaming that helper does not fail a type check or a
+  // test — it silently aborts the proof before a single migration is applied,
+  // which is how the executing gate stopped running once already.
+  it('keeps the recipe budget parser matched to the kernel it reads', () => {
+    const contracts = read('recipes/lib/cartographer-k5a-read-contracts.sh')
+    const boundary = read('lib/knowledge/kernel/boundary.ts')
+    const callee = /node\.expression\.text === "(\w+)"/.exec(contracts)
+    expect(callee).not.toBeNull()
+    expect(boundary).toContain(`${callee![1]}(`)
+    expect(boundary).toContain('options.perClaimPartnerCap')
+    expect(boundary).toMatch(/const RESPONSE_FLOOR_MS = \d+/)
+  })
 })

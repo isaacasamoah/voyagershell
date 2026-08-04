@@ -12,7 +12,8 @@ PER_CLAIM_PARTNER_CAP="$(node -e '
   const caps = []
   const visit = (node) => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
-        node.expression.text === "normalizeBudget" && node.arguments.length === 4) {
+        node.expression.text === "normalizeKnowledgeGraphBudget" &&
+        node.arguments.length === 4) {
       const [value, , , maximum] = node.arguments
       if (ts.isPropertyAccessExpression(value) &&
           ts.isIdentifier(value.expression) && value.expression.text === "options" &&
