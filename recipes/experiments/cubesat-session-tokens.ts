@@ -4,10 +4,13 @@ import type { ExtractionAttempt } from '../../lib/agents/cartographer/types'
 import corpusDocument from './cubesat-session-corpus.json'
 
 // Token cost of the context change, counted on the exact strings the runtime
-// sends. The uncapped-context arm is absent on purpose: the fixture stores
-// only the capped slice, so that figure is recorded in the receipt as a
-// pre-reduction measurement rather than emitted here where it could not be
-// reproduced. The connected provider reports no usage, so provider-reported counts
+// sends, over every user turn in the session. The uncapped-context arm is
+// absent on purpose: the fixture stores only the capped slice, so that figure
+// is recorded in the receipt as a separately-run measurement rather than
+// emitted here where it could not be reproduced. Storing the uncapped turn
+// alongside the capped one would make it reproducible, and is the obvious next
+// improvement to this instrument.
+// The connected provider reports no usage, so provider-reported counts
 // come back undefined; this measures the input we construct, which is the half
 // the change actually controls. No model calls -- deterministic and free.
 interface CorpusCase {

@@ -13,9 +13,13 @@ import {
 // change and the context change are separated, and the two context shapes are
 // compared head to head.
 //
-// The corpus is REDUCED FOR PRIVACY to the five ruled cases -- see the
-// reduction note in the fixture. That is not a claim that five is the better
-// instrument.
+// The corpus carries the FULL session: all 13 user messages, each with the turn
+// that preceded it. An earlier revision was reduced to the five ruled cases
+// pending Isaac's ruling on committing his own session; he approved it on
+// 2026-08-04 and the session was restored the same day. Six of the thirteen are
+// ruled. The other seven are carried unruled -- see each case note -- because
+// the assertion vocabulary here cannot express "a null claim is the correct
+// answer", which is what the contract prescribes for several of them.
 type Assertion =
   | 'not_preference'
   | 'is_preference'
@@ -40,7 +44,7 @@ interface CorpusDocument {
 
 const corpus = corpusDocument as CorpusDocument
 const expectedPayloadSha256 =
-  '0e49b2efc5747bb16110ed53a5f6bcaaa6e0bdeec142966c6e7202832bf6c0c7'
+  '6ab60c2dabfd4fbc94ce685fe89a12f314fde1e62fc3be3aa23b45a9a8c59ca3'
 
 // How much of the preceding turn the runtime carries. Must track
 // SESSION_CONTEXT_CHARS in lib/agents/cartographer/jobs.ts or the measurement
@@ -110,10 +114,10 @@ const canonicalize = (value: unknown): unknown => {
 }
 
 const assertCorpus = (): void => {
-  if (corpus.version !== 'cubesat-session-v1') {
+  if (corpus.version !== 'cubesat-session-v2') {
     throw new Error(`cubesat_corpus_version_invalid:${corpus.version}`)
   }
-  if (corpus.cases.length !== 5) throw new Error('cubesat_corpus_size_changed')
+  if (corpus.cases.length !== 13) throw new Error('cubesat_corpus_size_changed')
   const payload = `${JSON.stringify(canonicalize({
     version: corpus.version,
     cases: corpus.cases,
@@ -124,7 +128,7 @@ const assertCorpus = (): void => {
     throw new Error(`cubesat_corpus_payload_changed:${observed}`)
   }
   const ruled = corpus.cases.filter((c) => c.assert !== 'unconstrained')
-  if (ruled.length !== 5) throw new Error(`cubesat_ruled_case_count:${ruled.length}`)
+  if (ruled.length !== 6) throw new Error(`cubesat_ruled_case_count:${ruled.length}`)
 }
 
 const judge = (testCase: CorpusCase, claim: string | null, type: string) => {
