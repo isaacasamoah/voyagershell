@@ -22,6 +22,9 @@ const coverageMigration = read(
   'supabase/migrations/080_knowledge_search_findability_backfill.sql',
 )
 const cartographerContract = read('lib/agents/cartographer/contract.ts')
+const v5ActivationMigration = read(
+  'supabase/migrations/083_activate_v5_extractor_contract.sql',
+)
 const c5Harness = read('recipes/experiments/k5a-c5-extraction-harness.ts')
 const c5Structural = read(
   'recipes/sql/cartographer-k5a-c5-structural-falsifier.sql',
@@ -135,17 +138,35 @@ describe('K5a C5 extraction gate contract', () => {
     expect(new Set(c5CorpusV2.cases.map(({ eventType }) => eventType))).toEqual(
       new Set(['document', 'slack_message', 'jira_update', 'explicit']),
     )
+    // The selectable-contract instrument came from #108 and is preserved: the
+    // same sealed corpus can still be run against more than one contract, with
+    // the same argv / K5A_C5_MEASURED_CONTRACTS entry points, the same
+    // validation errors, and the same v5 default.
     expect(c5Harness).toContain('const measurableExtractorVersions = [\n'
       + '  CARTOGRAPHER_EXTRACTOR_VERSION,\n'
-      + '  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,\n'
+      + '  V4_MEASURED_EXTRACTOR_VERSION,\n'
+      + '  V5_MEASURED_EXTRACTOR_VERSION,\n'
       + '] as const')
     expect(c5Harness).toContain('k5a_c5_contract_not_measurable')
     expect(c5Harness).toContain('k5a_c5_duplicate_contract_selected')
-    expect(c5Harness).toContain('?? CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION)')
-    expect(c5Harness).toContain('=== CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION\n'
-      + '      ? await extractV5CandidateKnowledge(model, attempt)\n'
-      + '      : await extractKnowledge(model, attempt)')
+    expect(c5Harness).toContain('process.env.K5A_C5_MEASURED_CONTRACTS')
     expect(c5Harness).toContain('contractVersion: measuredExtractorVersion')
+    // The default must not drift onto whatever contract is current, or the bare
+    // command silently measures a different arm after every promotion.
+    expect(c5Harness).toContain('?? V5_MEASURED_EXTRACTOR_VERSION)')
+    expect(c5Harness).toContain(
+      "V5_MEASURED_EXTRACTOR_VERSION = 'cartographer-single-claim-v5'",
+    )
+    // What changed from #108: v5 stopped being a candidate when it became the
+    // runtime contract, so its side door was deleted. Every arm now selects by
+    // extractorVersion and runs the live path. Assert the side door cannot
+    // return, otherwise the deletion is a comment rather than a guarantee.
+    expect(c5Harness).toContain("import { extractKnowledge }")
+    expect(c5Harness).toContain('await extractKnowledge(model, attempt)')
+    expect(c5Harness).not.toContain('await extractV5CandidateKnowledge(')
+    expect(cartographerContract).not.toContain(
+      'CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION',
+    )
     expect(c5Harness).toContain('modelProvider: measuredModelProvider')
     expect(c5Harness).toContain('modelId: connectedCodexModelName')
     expect(c5Harness).not.toContain('sourceAudienceId === attemptAudienceId')
@@ -170,10 +191,10 @@ describe('K5a C5 extraction gate contract', () => {
 
   it('completes v5 once while preserving the v4 prompt identity', () => {
     expect(cartographerContract).toContain(
-      "CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v4'",
+      "CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v5'",
     )
     expect(cartographerContract).toContain(
-      "'cartographer-single-claim-v5'",
+      "'cartographer-single-claim-v4'",
     )
     expect(cartographerContract).toContain(
       'export const V4_CARTOGRAPHER_PROMPT = HISTORICAL_CARTOGRAPHER_PROMPT',
@@ -198,7 +219,37 @@ describe('K5a C5 extraction gate contract', () => {
     expect(v5ResultReceipt).toContain('C5 fails and returns to Spec')
   })
 
-  it('defers C5 while preserving its spent evidence and priced costs', () => {
+  it('promotes v5 as harm reduction without claiming it passed', () => {
+    // The promotion must never read as acceptance. A future reader who finds
+    // the activation migration has to meet the FAIL verdict in the same breath,
+    // or they will assume v5 cleared its bars because it shipped.
+    expect(v5ActivationMigration).toContain('K5A-V5-RESULT-FAIL')
+    expect(v5ActivationMigration).toContain('NOT acceptance')
+    expect(v5ActivationMigration).toContain('Best available, still below bar')
+    // Activation is an UPDATE of the one singleton row, never a second insert.
+    expect(v5ActivationMigration).toContain(
+      'UPDATE public.knowledge_extractor_contract_active',
+    )
+    expect(v5ActivationMigration).not.toMatch(
+      /INSERT INTO public\.knowledge_extractor_contract_active/,
+    )
+    // Every version-pinned guard widens before the pointer moves.
+    const widened = v5ActivationMigration.indexOf(
+      'CHECK (extractor_version IN',
+    )
+    const activated = v5ActivationMigration.indexOf(
+      'SET extractor_version = \'cartographer-single-claim-v5\'',
+    )
+    expect(widened).toBeGreaterThan(-1)
+    expect(activated).toBeGreaterThan(widened)
+    // v4 stays intact as a contract row; its units keep their attribution.
+    expect(v5ActivationMigration).toContain("'cartographer-single-claim-v4'")
+    expect(v5ActivationMigration).not.toMatch(
+      /DELETE FROM public\.knowledge_extractor_contracts/,
+    )
+  })
+
+  it('preserves C5 spent evidence and priced costs', () => {
     expect(migrationFiles.some((file) => file.startsWith('080_'))).toBe(true)
     expect(coverageMigration).toContain(
       "event.event_type IN ('conversation', 'message')",
@@ -214,7 +265,7 @@ describe('K5a C5 extraction gate contract', () => {
     expect(v5ReadyReceipt).toContain('admits v4 and v5')
     expect(v5ReadyReceipt).toContain('Activation is an `UPDATE`')
     expect(v5ReadyReceipt).toContain('Migration 081 remains untouched')
-    expect(cartographerContract).toContain('G9 deferred C5')
+    expect(cartographerContract).toContain('K5A-V5-RESULT-FAIL')
   })
 
   it('makes audience inheritance and recoverable type dynamics falsifiable', () => {

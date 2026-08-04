@@ -1,12 +1,6 @@
 import { createHash } from 'node:crypto'
-import {
-  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,
-  CARTOGRAPHER_EXTRACTOR_VERSION,
-} from '../../lib/agents/cartographer/contract'
-import {
-  extractKnowledge,
-  extractV5CandidateKnowledge,
-} from '../../lib/agents/cartographer/extractor'
+import { CARTOGRAPHER_EXTRACTOR_VERSION } from '../../lib/agents/cartographer/contract'
+import { extractKnowledge } from '../../lib/agents/cartographer/extractor'
 import type { ExtractionAttempt } from '../../lib/agents/cartographer/types'
 import corpusDocument from './k5a-c5-extraction-corpus-v2.json'
 import {
@@ -63,17 +57,29 @@ const expectedPayloadSha256 =
 // against more than one extractor contract. Selection changes WHICH contract is
 // measured and nothing else: corpus, labels, bars, strata, schema and user
 // prompt are identical on every arm, so the arms differ only by system prompt.
-// Default is the v5 candidate — the historical behaviour of this harness.
+// Default is v5 — the historical behaviour of this harness.
+//
+// The selector arrived with #108 built on extractV5CandidateKnowledge. That
+// side door was deleted when v5 became the runtime contract, so every arm now
+// selects its contract by extractorVersion and runs through the live
+// extractKnowledge path. The capability is unchanged and the measurement is
+// strictly closer to production than a dedicated candidate entry point was.
+// The default is pinned to the v5 literal rather than to
+// CARTOGRAPHER_EXTRACTOR_VERSION so that promoting the runtime contract never
+// silently moves which arm the bare command measures.
+const V4_MEASURED_EXTRACTOR_VERSION = 'cartographer-single-claim-v4'
+const V5_MEASURED_EXTRACTOR_VERSION = 'cartographer-single-claim-v5'
 const measurableExtractorVersions = [
   CARTOGRAPHER_EXTRACTOR_VERSION,
-  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,
+  V4_MEASURED_EXTRACTOR_VERSION,
+  V5_MEASURED_EXTRACTOR_VERSION,
 ] as const
 type MeasurableExtractorVersion = (typeof measurableExtractorVersions)[number]
 
 const selectMeasuredExtractorVersions = (): MeasurableExtractorVersion[] => {
   const requested = (process.argv.slice(2)[0]
     ?? process.env.K5A_C5_MEASURED_CONTRACTS
-    ?? CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION)
+    ?? V5_MEASURED_EXTRACTOR_VERSION)
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0)
@@ -169,12 +175,9 @@ const runCase = async (
       { personId: candidatePersonId, displayName: 'Mara' },
     ],
   }
-  // v5 is the frozen candidate and keeps its dedicated entry point; v4 is the
-  // active runtime contract and is measured through the runtime path itself.
-  const extracted =
-    measuredExtractorVersion === CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION
-      ? await extractV5CandidateKnowledge(model, attempt)
-      : await extractKnowledge(model, attempt)
+  // Every arm runs the live path; the contract is chosen by extractorVersion,
+  // which the extractor maps to that version's frozen system prompt.
+  const extracted = await extractKnowledge(model, attempt)
   if (extracted.kind === 'failed') {
     throw new Error(`k5a_c5_provider_failed:${testCase.id}:${extracted.errorClass}`)
   }

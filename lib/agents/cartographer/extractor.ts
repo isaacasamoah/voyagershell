@@ -1,11 +1,9 @@
 import { generateObject, type LanguageModel } from 'ai'
 import {
-  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,
   CARTOGRAPHER_PROMPT,
   HISTORICAL_CARTOGRAPHER_PROMPT,
   V3_CARTOGRAPHER_PROMPT,
   V4_CARTOGRAPHER_PROMPT,
-  V5_CARTOGRAPHER_PROMPT,
   extractionSchema,
   historicalExtractionSchema,
   isCurrentContract,
@@ -99,24 +97,6 @@ export const extractKnowledge = async (
     promptForAttempt(attempt, topicCandidates, v3),
     v3 ? v3ExtractionSchema
       : current ? extractionSchema : historicalExtractionSchema,
-  )
-}
-
-// The consumed C5 one-shot used the now-deferred v5 candidate. Keep that exact
-// contract available to its sealed harness without admitting v5 to runtime.
-export const extractV5CandidateKnowledge = async (
-  model: LanguageModel,
-  attempt: ExtractionAttempt,
-): Promise<ExtractionRun> => {
-  if (attempt.extractorVersion !== CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION) {
-    throw new Error('cartographer_v5_candidate_version_required')
-  }
-  return runExtraction(
-    model,
-    attempt,
-    V5_CARTOGRAPHER_PROMPT,
-    promptForAttempt(attempt, [], false),
-    historicalExtractionSchema,
   )
 }
 

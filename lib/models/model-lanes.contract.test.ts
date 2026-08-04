@@ -19,8 +19,7 @@ const EXPECTED_GENERATION = [
 ]
 const EXPECTED_EXTRACTOR_HANDOFF = [
   'lib/agents/cartographer.ts|extractKnowledge|resolved.model',
-  'recipes/experiments/k5a-c5-extraction-harness.ts|extractKnowledge|model',
-  'recipes/experiments/k5a-c5-extraction-harness.ts|extractV5CandidateKnowledge|model']
+  'recipes/experiments/k5a-c5-extraction-harness.ts|extractKnowledge|model']
 const EXPECTED_TOPIC_MATCHER_HANDOFF = [
   'lib/agents/cartographer/backfill.ts|matchKnowledgeTopics|resolved.model', 'lib/agents/cartographer/topic-pipeline.ts|matchKnowledgeTopics|input.model']
 const EXPECTED_OPENAI_EMBEDDINGS = [
@@ -184,10 +183,8 @@ describe('model lane contract', () => {
   it('keeps each generation call and extractor handoff on the resolved model', () => {
     const entries = productionEntries()
     expect(aiCallSites(entries, GENERATION_APIS)).toEqual(EXPECTED_GENERATION)
-    expect([
-      ...namedCallSites(entries, 'extractKnowledge'),
-      ...namedCallSites(entries, 'extractV5CandidateKnowledge'),
-    ].sort()).toEqual(EXPECTED_EXTRACTOR_HANDOFF)
+    expect(namedCallSites(entries, 'extractKnowledge').sort())
+      .toEqual(EXPECTED_EXTRACTOR_HANDOFF)
     expect(namedCallSites(entries, 'matchKnowledgeTopics')).toEqual(EXPECTED_TOPIC_MATCHER_HANDOFF)
   })
   it('rejects a bypass added inside an already-known generation file', () => {

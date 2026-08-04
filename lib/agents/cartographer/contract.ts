@@ -1,12 +1,15 @@
 import { z } from 'zod'
 import topicMatcherContract from './topic-matcher-contract.json'
 
-// G9 deferred C5: runtime activation remains v4. The frozen v5 candidate stays
-// available only as evidence for its consumed one-shot acceptance result.
-export const CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v4'
-export const CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION =
-  'cartographer-single-claim-v5'
+// v5 is the runtime contract. Its C5 one-shot verdict is still
+// K5A-V5-RESULT-FAIL -- it missed the hard-core and about-person bars -- so this
+// is harm reduction over a measurably worse v4, not acceptance. See
+// docs/testing/receipts/memory/k5a-c5-v5-one-shot-result-2026-08-03.md.
+export const CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v5'
+// v4 keeps its own entry: units stamped v4 still complete through the
+// claim-blocked path on retry, and their prompt identity must not move.
 export const CLAIM_BLOCKED_TOPIC_EXTRACTOR_VERSIONS = [
+  'cartographer-single-claim-v4',
   CARTOGRAPHER_EXTRACTOR_VERSION,
 ] as const
 export const CARTOGRAPHER_PHYSICS_VERSIONS = [
@@ -130,7 +133,8 @@ For a null claim, aboutPersonId must also be null and topics must be empty.`
 
 // Units already stamped v4 must remain attributable to the exact prompt that
 // judged them. V5 completes the contract in a new version instead of editing
-// that historical prompt in place.
+// that historical prompt in place. This holds after v5 became current: v4
+// attempts still resolve to this text.
 export const V4_CARTOGRAPHER_PROMPT = HISTORICAL_CARTOGRAPHER_PROMPT
 
 export const V5_CARTOGRAPHER_PROMPT = `${BASE_PROMPT}
@@ -171,7 +175,7 @@ Never invent a Person ID. You may copy only an ID from the supplied candidates.
 Do not infer a claim from prior knowledge, and do not return more than one claim.
 For a null claim, aboutPersonId must also be null.`
 
-export const CARTOGRAPHER_PROMPT = V4_CARTOGRAPHER_PROMPT
+export const CARTOGRAPHER_PROMPT = V5_CARTOGRAPHER_PROMPT
 
 export const isV3Contract = (version: string): boolean => (
   version === 'cartographer-single-claim-v3'
