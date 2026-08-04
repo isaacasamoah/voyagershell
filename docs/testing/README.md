@@ -34,6 +34,7 @@ evidence.
 | `k4c-conflict-live-proof-2026-08-01.md` | current | Development/browser conflict resolution and outsider privacy |
 | `k5a-c5-extraction-measurement-2026-08-03.md` | superseded | Pre-bar measurement; replaced by the frozen v2 instrument below |
 | `k5a-c5-v5-one-shot-result-2026-08-03.md` | failed | Sealed 81-case v5 result; C5 returned to Spec before migration 080 |
+| `wave2-context-contract-2026-08-04.md` | current | v4→v5→v6 promotion; both below bar, v6 unmeasured against C5 |
 
 Use `manual-product-smoke.md` as the human checklist. Store a completed run as
 a sanitized, revision-bound receipt rather than writing results into the

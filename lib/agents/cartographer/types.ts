@@ -46,6 +46,10 @@ export interface ExtractionAttempt {
   sourceEventType: string
   sourceActorId: string
   sourceSessionId: string | null
+  // What the session had established by the time this event was authored.
+  // Null when there is no prior turn to resolve against, or when the contract
+  // does not accept context.
+  sessionContext: string | null
   attemptNumber: number
   candidates: PersonCandidate[]
 }

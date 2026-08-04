@@ -214,3 +214,20 @@ run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP
 [ "$(<"$TEMP_DIR/v5-activation-verdict.out")" = CARTOGRAPHER_V5_ACTIVATION_GREEN ] \
   || fail 'exact v5 activation verdict missing'
 printf '%s\n' CARTOGRAPHER_V5_ACTIVATION_GREEN
+
+for pass in 1 2; do
+  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+    -U postgres -d "$DATABASE" \
+    < "$REPO_ROOT/supabase/migrations/084_activate_v6_context_contract.sql" \
+    >/dev/null || fail "migration 084 pass $pass failed"
+done
+printf '%s\n' CARTOGRAPHER_K5A_084_IDEMPOTENT_GREEN
+
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
+  -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-v6-activation-assertions.sql" \
+  > "$TEMP_DIR/v6-activation-verdict.out" \
+  || fail 'v6 activation assertions failed'
+[ "$(<"$TEMP_DIR/v6-activation-verdict.out")" = CARTOGRAPHER_V6_ACTIVATION_GREEN ] \
+  || fail 'exact v6 activation verdict missing'
+printf '%s\n' CARTOGRAPHER_V6_ACTIVATION_GREEN

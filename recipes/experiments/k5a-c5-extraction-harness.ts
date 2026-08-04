@@ -169,6 +169,7 @@ const runCase = async (
     sourceEventType: testCase.eventType,
     sourceActorId: actorPersonId,
     sourceSessionId: null,
+    sessionContext: null,
     attemptNumber: 1,
     candidates: [
       { personId: actorPersonId, displayName: 'The author' },

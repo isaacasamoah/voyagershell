@@ -19,6 +19,7 @@ const EXPECTED_GENERATION = [
 ]
 const EXPECTED_EXTRACTOR_HANDOFF = [
   'lib/agents/cartographer.ts|extractKnowledge|resolved.model',
+  'recipes/experiments/cubesat-session-harness.ts|extractKnowledge|model',
   'recipes/experiments/k5a-c5-extraction-harness.ts|extractKnowledge|model']
 const EXPECTED_TOPIC_MATCHER_HANDOFF = [
   'lib/agents/cartographer/backfill.ts|matchKnowledgeTopics|resolved.model', 'lib/agents/cartographer/topic-pipeline.ts|matchKnowledgeTopics|input.model']

@@ -24,6 +24,7 @@ const attempt: ExtractionAttempt = {
   sourceEventType: 'message',
   sourceActorId: '72000000-0000-4000-8000-000000000005',
   sourceSessionId: '72000000-0000-4000-8000-000000000006',
+  sessionContext: null,
   attemptNumber: 1,
   candidates: [{
     personId: '72000000-0000-4000-8000-000000000007',

@@ -34,6 +34,7 @@ const attempt = {
   sourceEventType: 'message',
   sourceActorId: '72000000-0000-4000-8000-000000000005',
   sourceSessionId: null,
+    sessionContext: null,
   attemptNumber: 1,
   candidates: [],
 }

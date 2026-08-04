@@ -1,0 +1,63 @@
+{
+  "version": "cubesat-session-v1",
+  "meta": {
+    "source": "Isaac's real Voyager session, 2026-08-04 00:51-01:23 UTC",
+    "freeze": {
+      "payloadSha256": "0e49b2efc5747bb16110ed53a5f6bcaaa6e0bdeec142966c6e7202832bf6c0c7"
+    },
+    "note": "Sealed so the before/after is replayable. The session changes subject at cubesat-08 ('lets change tack'), which is why a whole-session subject line is not automatically correct.",
+    "sessionSubject": "This session is about planning a CubeSat mission.",
+    "reduction": "REDUCED FOR PRIVACY, not because the reduced set is the better instrument. The full session ran 28 turns / 13 user messages; only the five ruled cases are retained, each carrying the preceding turn truncated to the 1200 characters the runtime actually sends. Adding the other eight back is a small edit and does not change what is asserted here."
+  },
+  "cases": [
+    {
+      "id": "cubesat-06",
+      "at": "2026-08-04 01:06:50+00",
+      "content": "lets mostly look out at space",
+      "precedingAssistantTurn": "Tried to remember that, but memory save is still failing — which fits the repair state. We can still make the planning artifact here, then save it once memory is back. For a CubeSat launch, I’d start with the mission backwards: **what question do we want the satellite to answer?** CubeSats are small, constrained spacecraft — usually built in “U” units: - **1U**: 10 × 10 × 10 cm - **3U**: common starter size, more room for power/payload/comms - **6U / 12U**: more capable, higher cost and complexity They’re good for focused missions: Earth observation, radio experiments, atmospheric measurements, tech demos, education, or distributed sensing. My opinion: for a first planning pass, we should avoid “generic space camera” thinking. Imaging is tempting, but it adds a lot: optics, pointing, storage, downlink bandwidth, calibration. Better first mission is one where useful data can be gathered with modest sensors and forgiving operations. Good candidate data themes: 1. **Space weather / radiation** - Measure radiation dose, particle events, maybe magnetometer data. - Useful for spacecraft health, educational science, and correlating with solar activity. - Technically reasonable. 2. **Earth…",
+      "assert": "not_preference",
+      "note": "Disambiguated only by Voyager's preceding question about outward/downward/inward. Classifying this as a preference is the false-preference bug: it is an answer, not a disposition."
+    },
+    {
+      "id": "cubesat-07",
+      "at": "2026-08-04 01:09:03+00",
+      "content": "space craft survivability",
+      "precedingAssistantTurn": "Tried to remember it, but memory save is still failing. I’ll keep the working plan here. Good choice. “Look out at space” gives us a cleaner first mission than Earth imaging: less privacy/regulatory weirdness, less need for high-precision pointing, and the data can still be scientifically interesting. I’d frame the mission as: > **FamBam CubeSat: outward-looking space-environment monitor** > A small CubeSat that measures conditions in near-Earth space and downlinks time-series data for analysis. Best first data targets: 1. **Radiation** - Total ionizing dose over time - Radiation spikes during solar events - Useful for understanding spacecraft risk 2. **Magnetic field** - Local magnetic field strength and direction - Can be compared against Earth magnetic field models - Also useful for attitude/orientation estimation 3. **Solar activity proxy** - Light intensity / UV if feasible - Detect day/night cycles, eclipses, possible solar variation - Simpler than trying to image the Sun directly 4. **Charged particle / plasma environment** - More ambitious - Could detect electron/proton activity depending on sensor choice - Interesting, but may complicate payload design 5. **Spacecraft envi…",
+      "assert": "subject_present",
+      "subjectTerms": [
+        "cubesat"
+      ],
+      "note": "Answer to a two-way mission question in the preceding turn. Scored on \"cubesat\" ONLY: the message itself says \"survivability\", so accepting that term would let the baseline pass without ever recovering the missing subject."
+    },
+    {
+      "id": "cubesat-08",
+      "at": "2026-08-04 01:10:37+00",
+      "content": "ok, lets esign it, what components do we need? where do we get them from and how do they go togehter",
+      "precedingAssistantTurn": "Tried to remember it, but memory save is still not landing. Good. **Spacecraft survivability** is the stronger first mission story: instead of “we collected some space data,” it becomes **“we measured what orbit does to a small spacecraft over time.”** Mission frame: > **FamBam CubeSat Survivability Mission** > Measure radiation, temperature, power behavior, and component health in low Earth orbit to understand how a small spacecraft degrades and survives over time. Core data we want: 1. **Radiation exposure** - Total ionizing dose over mission lifetime - Radiation spikes / events - Possible correlation with resets, bit flips, sensor weirdness 2. **Thermal stress** - Internal temperature - External panel temperature - Battery temperature - Temperature swings between sunlight and eclipse 3. **Power-system health** - Solar panel voltage/current - Battery charge/discharge cycles - Battery degradation over time - Power budget during eclipse 4. **Computer reliability** - Reboots - Watchdog resets - Memory errors if detectable - Uptime between faults 5. **Comms survivability** - Signal strength - Packet loss - Downlink success rate - Antenna/deployment status if applicable 6. **Attitude/…",
+      "assert": "subject_present",
+      "subjectTerms": [
+        "cubesat"
+      ],
+      "note": "'it' = the survivability mission just framed. Today this yields 'an unspecified design'."
+    },
+    {
+      "id": "cubesat-09",
+      "at": "2026-08-04 01:14:04+00",
+      "content": "nice, ok lets layout the costs",
+      "precedingAssistantTurn": "Found a sensible supplier landscape. I’d design this as a **3U CubeSat survivability monitor** first. 1U is possible, but cramped; 3U gives us enough room for power, comms, sensors, redundancy, and a clean payload bay without becoming wildly ambitious. ## Mission design **Mission:** measure how low Earth orbit stresses a small spacecraft over time. **Primary question:** How do radiation, thermal cycling, power stress, and communication degradation affect CubeSat health? **Core data products:** - Radiation dose over time - Internal/external temperature cycles - Battery charge/discharge health - Solar panel output over time - Computer resets / faults / uptime - Downlink quality and packet loss - Orientation/context from magnetometer, IMU, and light sensors --- # 1. Main CubeSat components ## A. Structure / frame This is the physical CubeSat body. For 3U, roughly: > **10 cm × 10 cm × 34 cm** Needed: - 3U CubeSat structure - Rails compatible with deployer standards - Internal mounting points - Access panels - Fasteners - Remove-before-flight pin - Deployment switches Where to get it: - **EnduroSat** - **ISISPACE** - **GomSpace** - **Pumpkin Space Systems** - **AAC Clyde Space** - **Cub…",
+      "assert": "subject_present",
+      "subjectTerms": [
+        "cubesat"
+      ],
+      "note": "Costs OF the CubeSat design just laid out. Today this yields 'The user wants to lay out the costs.'"
+    },
+    {
+      "id": "cubesat-12",
+      "at": "2026-08-04 01:20:37+00",
+      "content": "ok, lets test deep retreival, summarise our chat on cubesats, and by the way your answers are way too long, lets do more concise answers from now on",
+      "precedingAssistantTurn": "The distinction cannot be “better chatbot.” ChatGPT would eat that. The distinction has to be: **PaperShield is not a place to ask questions; it is an operating system for resolving life-admin problems end to end.** ChatGPT can explain a medical bill if you paste it in. PaperShield should: 1. **receive the bill automatically** 2. **classify it** 3. **extract deadlines and risk** 4. **compare it against prior documents** 5. **know the user’s case history** 6. **generate the next action** 7. **send/remind/track/follow up** 8. **measure money saved** 9. **escalate to a human advocate when needed** 10. **keep a secure audit trail** That is the moat. ## The simple positioning difference ### ChatGPT > “Ask me anything.” ### PaperShield > “Send us the stressful letter. We’ll handle the workflow.” That difference matters. Most people do not want to become prompt engineers for their insurance dispute. They want the thing gone. --- # Where ChatGPT is strong ChatGPT can already do parts of this: - summarize documents - explain confusing language - draft letters - answer general questions - suggest next steps - translate bureaucracy into plain English So if the product is just: > “Upload a bil…",
+      "assert": "is_preference",
+      "note": "REGRESSION GUARD. This is correct behaviour and must not be tuned away: an explicit, general, durable preference. Adding a CubeSat subject line must not pull the extraction off it."
+    }
+  ]
+}

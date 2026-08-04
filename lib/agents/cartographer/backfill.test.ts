@@ -71,7 +71,7 @@ describe('topic backfill recovery', () => {
     let unitLists = 0
     mocks.rpc.mockImplementation((name: string) => {
       if (name === 'activate_knowledge_topic_contract') {
-        return Promise.resolve({ data: 'cartographer-single-claim-v5', error: null })
+        return Promise.resolve({ data: 'cartographer-single-claim-v6', error: null })
       }
       if (name === 'list_knowledge_topic_backfill_jobs') {
         return Promise.resolve({ data: [], error: null })
@@ -113,7 +113,7 @@ describe('topic backfill recovery', () => {
     let jobLists = 0
     mocks.rpc.mockImplementation((name: string) => {
       if (name === 'activate_knowledge_topic_contract') {
-        return Promise.resolve({ data: 'cartographer-single-claim-v5', error: null })
+        return Promise.resolve({ data: 'cartographer-single-claim-v6', error: null })
       }
       if (name === 'list_knowledge_topic_backfill_jobs') {
         jobLists++

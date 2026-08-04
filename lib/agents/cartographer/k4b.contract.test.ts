@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   CARTOGRAPHER_EXTRACTOR_VERSION,
+  acceptsSessionContext,
   TOPIC_CANDIDATE_FLOOR,
   TOPIC_CANDIDATE_LIMIT,
   TOPIC_MATCHER_PROMPT,
@@ -27,13 +28,21 @@ const architecture = read('ARCHITECTURE.md')
 
 describe('K4b topic identity contract', () => {
   it('versions extraction and matching separately with conservative structured output', () => {
-    expect(CARTOGRAPHER_EXTRACTOR_VERSION).toBe('cartographer-single-claim-v5')
+    expect(CARTOGRAPHER_EXTRACTOR_VERSION).toBe('cartographer-single-claim-v6')
     expect(isClaimBlockedTopicContract(CARTOGRAPHER_EXTRACTOR_VERSION)).toBe(true)
     expect(requiresUnitPhysics(CARTOGRAPHER_EXTRACTOR_VERSION)).toBe(true)
-    // v4 keeps both properties so its in-flight units still complete through
-    // the claim-blocked path after v5 became current.
-    expect(isClaimBlockedTopicContract('cartographer-single-claim-v4')).toBe(true)
-    expect(requiresUnitPhysics('cartographer-single-claim-v4')).toBe(true)
+    // Superseded contracts keep both properties so their in-flight units still
+    // complete through the claim-blocked path after the cutover.
+    for (const superseded of [
+      'cartographer-single-claim-v4',
+      'cartographer-single-claim-v5',
+    ]) {
+      expect(isClaimBlockedTopicContract(superseded)).toBe(true)
+      expect(requiresUnitPhysics(superseded)).toBe(true)
+    }
+    // Only v6 receives session context; the others were judged without it.
+    expect(acceptsSessionContext(CARTOGRAPHER_EXTRACTOR_VERSION)).toBe(true)
+    expect(acceptsSessionContext('cartographer-single-claim-v5')).toBe(false)
     expect(TOPIC_MATCHER_VERSION).toBe('topic-retrieval-v4')
     expect(TOPIC_CANDIDATE_FLOOR).toBe(0.2)
     expect(TOPIC_CANDIDATE_LIMIT).toBe(8)

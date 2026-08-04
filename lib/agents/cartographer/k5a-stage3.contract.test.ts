@@ -25,6 +25,9 @@ const cartographerContract = read('lib/agents/cartographer/contract.ts')
 const v5ActivationMigration = read(
   'supabase/migrations/083_activate_v5_extractor_contract.sql',
 )
+const v6ActivationMigration = read(
+  'supabase/migrations/084_activate_v6_context_contract.sql',
+)
 const c5Harness = read('recipes/experiments/k5a-c5-extraction-harness.ts')
 const c5Structural = read(
   'recipes/sql/cartographer-k5a-c5-structural-falsifier.sql',
@@ -191,8 +194,9 @@ describe('K5a C5 extraction gate contract', () => {
 
   it('completes v5 once while preserving the v4 prompt identity', () => {
     expect(cartographerContract).toContain(
-      "CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v5'",
+      "CARTOGRAPHER_EXTRACTOR_VERSION = 'cartographer-single-claim-v6'",
     )
+    expect(cartographerContract).toContain("'cartographer-single-claim-v5'")
     expect(cartographerContract).toContain(
       "'cartographer-single-claim-v4'",
     )
@@ -245,6 +249,24 @@ describe('K5a C5 extraction gate contract', () => {
     // v4 stays intact as a contract row; its units keep their attribution.
     expect(v5ActivationMigration).toContain("'cartographer-single-claim-v4'")
     expect(v5ActivationMigration).not.toMatch(
+      /DELETE FROM public\.knowledge_extractor_contracts/,
+    )
+  })
+
+  it('ships v6 without letting it inherit v5 credibility', () => {
+    // v6 carries v5's classification text but none of v5's measurement. If that
+    // is not stated where the contract is registered, the next reader will
+    // assume v6 was measured because v5 was.
+    expect(v6ActivationMigration).toContain('UNMEASURED AGAINST THE C5 CORPUS')
+    expect(v6ActivationMigration).toContain('K5A-V5-RESULT-FAIL')
+    // The deletion and the addition must ship together or the context is a
+    // silent no-op.
+    expect(v6ActivationMigration).toContain('Do not infer a claim from prior knowledge')
+    expect(v6ActivationMigration).toContain('Session context')
+    // v5 stays registered so the A/B receipt keeps pointing at a live row and
+    // a revert lands on v5, not v4.
+    expect(v6ActivationMigration).toContain("'cartographer-single-claim-v5'")
+    expect(v6ActivationMigration).not.toMatch(
       /DELETE FROM public\.knowledge_extractor_contracts/,
     )
   })
