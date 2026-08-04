@@ -13,7 +13,7 @@ const lifecycleAssertions = read(
   'recipes/sql/cartographer-k5a-c1-c2-assertions.sql',
 )
 const citationRecorder = read('lib/knowledge/lifecycle/citations.ts')
-const promptComposer = read('lib/prompts/index.ts')
+const promptComposer = read('lib/prompts/system-memory.ts')
 const graphTool = read('lib/retrieval/knowledge-retrieval-tools.ts')
 const generatedFunctions = read('lib/supabase/schema/functions.ts')
 const generatedTables = read('lib/supabase/schema/knowledge-tables.ts')

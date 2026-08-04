@@ -1,4 +1,4 @@
-import type { KnowledgeGraphResult } from './boundary'
+import type { KnowledgeGraphResult } from './boundary-contract'
 
 export interface KnowledgeGraphBoundaryTiming {
   readonly outcome: KnowledgeGraphResult['outcome']

@@ -122,7 +122,7 @@ outside the recipe with
 then run the recipe. The recipe
 uses `--pull=never` and never publishes a host port or joins a network. It
 mechanically compares migrations 001–053 with reviewed revision
-`c7e1199222f519e60999eb7c9037368f297d115a`; that is a source-byte seal, not a
+`cbbb78f6fb40ed43fe372d49d7eb26eda1434620`; that is a source-byte seal, not a
 claim that the numbered folder is replayable or is the installed-state ledger.
 The recipe constructs one deterministic pre-054 baseline, composes the
 `installed-pre-054-precondition/` fragments in their canonical order, applies

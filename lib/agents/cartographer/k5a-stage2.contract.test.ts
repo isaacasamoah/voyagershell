@@ -17,7 +17,10 @@ const c4R5Battery = [
 const concurrentProbe = read('recipes/sql/cartographer-k5a-c3-probe.sql')
 const c3Recipe = read('recipes/cartographer-k5a-c3-local-proof.sh')
 const c3Contracts = read('recipes/lib/cartographer-k5a-read-contracts.sh')
-const boundary = read('lib/knowledge/kernel/boundary.ts')
+const boundary = [
+  read('lib/knowledge/kernel/boundary.ts'),
+  read('lib/knowledge/kernel/boundary-contract.ts'),
+].join('\n')
 const search = read('lib/knowledge/unit-search.ts')
 const searchTools = read('lib/retrieval/unit-search-tools.ts')
 const temporalTool = read('lib/retrieval/temporal-retrieval-tool.ts')

@@ -141,7 +141,7 @@ describe('installed-state authority recipe', () => {
   })
 
   it('mechanically seals the 001-053 source bytes without calling them a replay', () => {
-    expect(recipe).toContain('c7e1199222f519e60999eb7c9037368f297d115a')
+    expect(recipe).toContain('cbbb78f6fb40ed43fe372d49d7eb26eda1434620')
     expect(recipe).toContain('ls-tree -r --name-only "$BASE_REVISION"')
     expect(recipe).toContain('expected-001-053.txt')
     expect(recipe).toContain('current-001-053.txt')

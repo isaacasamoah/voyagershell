@@ -16,11 +16,19 @@ export interface AuthUser {
   email: string;
 }
 
+export type MagicLinkResult =
+  | { success: true; outcome: 'sent' }
+  | {
+      success: false;
+      outcome: 'transport_unavailable' | 'failed';
+      error: string;
+    };
+
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  sendMagicLink: (email: string) => Promise<{ success: boolean; error?: string }>;
+  sendMagicLink: (email: string) => Promise<MagicLinkResult>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -136,18 +144,39 @@ export const AuthProvider = ({ children, initialUser = null }: AuthProviderProps
         body: JSON.stringify({ email }),
       })
 
-      const data = await res.json()
+      const data = await res.json() as {
+        success?: boolean
+        outcome?: string
+        error?: string
+      }
 
-      if (!res.ok || !data.success) {
+      if (data.outcome === 'transport_unavailable') {
+        console.warn('[Auth] Magic link email transport unavailable')
+        return {
+          success: false as const,
+          outcome: 'transport_unavailable' as const,
+          error: 'Email delivery is not configured here. Ask the operator to retrieve your magic link from the server logs.',
+        }
+      }
+
+      if (!res.ok || !data.success || data.outcome !== 'sent') {
         console.error('[Auth] Magic link error:', data.error)
-        return { success: false, error: data.error ?? 'Failed to send magic link' }
+        return {
+          success: false as const,
+          outcome: 'failed' as const,
+          error: data.error ?? 'Failed to send magic link',
+        }
       }
 
       console.log('[Auth] Magic link sent')
-      return { success: true }
+      return { success: true as const, outcome: 'sent' as const }
     } catch (error) {
       console.error('[Auth] sendMagicLink error:', error)
-      return { success: false, error: 'Failed to send magic link' }
+      return {
+        success: false as const,
+        outcome: 'failed' as const,
+        error: 'Failed to send magic link',
+      }
     }
   }, []);
 

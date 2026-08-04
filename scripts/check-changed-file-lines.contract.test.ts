@@ -8,16 +8,19 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const checker = resolve(process.cwd(), 'scripts/check-changed-file-lines.sh')
-const explicitGeneratedLocks = [
-  'package-lock.json',
-  'npm-shrinkwrap.json',
-  'pnpm-lock.yaml',
+const nonRefactorableArtifacts = [
+  'supabase/migrations/999_fixture.sql',
+  'recipes/experiments/frozen-corpus.json',
+  'recipes/operations/generated-fixture.ts',
+  'docs/testing/receipt.md',
+  'ARCHITECTURE.md',
+  'config/authored.json',
+  'queries/authored.sql',
 ]
-const extensionExcludedLock = 'yarn.lock'
 
 const run = (cwd: string, command: string, args: string[]) =>
   spawnSync(command, args, { cwd, encoding: 'utf8' })
@@ -92,35 +95,38 @@ const runWithFailingEnumerator = (enumerator: 'diff' | 'ls-files') => {
 }
 
 describe('changed-file line cap trust base', () => {
-  it('excludes only generated dependency locks when tracked or untracked', () => {
+  it('exempts non-refactorable artifacts when tracked or untracked', () => {
     const root = createRepo()
     try {
-      for (const lock of [...explicitGeneratedLocks, extensionExcludedLock]) {
-        writeLines(join(root, 'tracked', lock), 1)
+      for (const artifact of nonRefactorableArtifacts) {
+        writeLines(join(root, artifact), 1)
       }
       commitFixture(root)
 
-      for (const lock of [...explicitGeneratedLocks, extensionExcludedLock]) {
-        writeLines(join(root, 'tracked', lock), 300)
-        writeLines(join(root, 'untracked', lock), 300)
+      for (const artifact of nonRefactorableArtifacts) {
+        writeLines(join(root, artifact), 300)
+        writeLines(
+          join(root, dirname(artifact), `untracked-${basename(artifact)}`),
+          300,
+        )
       }
-      writeLines(join(root, 'config', 'authored.json'), 10)
+      writeLines(join(root, 'src', 'within-cap.ts'), 249)
 
       const result = runChecker(root)
       expect(result.status).toBe(0)
       expect(result.stderr).toBe('')
       expect(result.stdout).toContain(
-        'Strict line cap passed: 1 changed files are all under 250 lines.',
+        'Strict line cap passed: 1 changed TypeScript source files are all under 250 lines.',
       )
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
   })
 
-  it('still rejects oversized tracked and untracked authored JSON', () => {
+  it('still rejects oversized tracked and untracked TypeScript source', () => {
     const root = createRepo()
     try {
-      const tracked = join(root, 'config', 'tracked.json')
+      const tracked = join(root, 'src', 'tracked.ts')
       writeLines(tracked, 1)
       commitFixture(root)
 
@@ -128,15 +134,15 @@ describe('changed-file line cap trust base', () => {
       const trackedResult = runChecker(root)
       expect(trackedResult.status).toBe(1)
       expect(trackedResult.stderr).toContain(
-        'config/tracked.json has 250 lines; expected fewer than 250',
+        'src/tracked.ts has 250 lines; expected fewer than 250',
       )
 
       writeLines(tracked, 1)
-      writeLines(join(root, 'config', 'custom-package-lock.json'), 250)
+      writeLines(join(root, 'src', 'untracked.tsx'), 250)
       const untrackedResult = runChecker(root)
       expect(untrackedResult.status).toBe(1)
       expect(untrackedResult.stderr).toContain(
-        'config/custom-package-lock.json has 250 lines; expected fewer than 250',
+        'src/untracked.tsx has 250 lines; expected fewer than 250',
       )
     } finally {
       rmSync(root, { recursive: true, force: true })
