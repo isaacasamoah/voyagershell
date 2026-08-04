@@ -81,6 +81,15 @@ structural_verdict="$(<"$TEMP_DIR/c5-structural-verdict.out")"
 [ "$structural_verdict" = CARTOGRAPHER_K5A_C5_STRUCTURAL_GREEN ] \
   || fail 'exact structural audience-inheritance verdict missing'
 
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
+  -v ON_ERROR_STOP=1 -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-k5a-082-session-repair.sql" \
+  > "$TEMP_DIR/082-session-repair-verdict.out" \
+  || fail '082 session-id projection assertions failed'
+session_repair_verdict="$(<"$TEMP_DIR/082-session-repair-verdict.out")"
+[ "$session_repair_verdict" = CARTOGRAPHER_K5A_082_SESSION_REPAIR_GREEN ] \
+  || fail 'exact 082 session-id projection verdict missing'
+
 if [ "${K5A_FLOOR_MEASUREMENT:-0}" = 1 ]; then
   run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq \
     -v ON_ERROR_STOP=1 -v response_floor_ms="$RESPONSE_FLOOR_MS" \

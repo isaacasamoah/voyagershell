@@ -79,6 +79,7 @@ for file in "$REPO_ROOT"/supabase/migrations/{054,055,056,057,058,059,060}_*.sql
   "$REPO_ROOT/recipes/sql/cartographer-k5a-c3-probe.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-080-pre-backfill.sql" \
   "$REPO_ROOT/recipes/sql/cartographer-k5a-080-backfill-assertions.sql" \
+  "$REPO_ROOT/recipes/sql/cartographer-k5a-082-session-repair.sql" \
   "$REPO_ROOT/recipes/lib/cartographer-k5a-c3-run-probes.sh"; do
   [ -f "$file" ] || fail "missing SQL: $file"
 done
@@ -184,5 +185,13 @@ for pass in 1 2; do
     || fail "migration 081 pass $pass failed"
 done
 printf '%s\n' CARTOGRAPHER_K5A_081_IDEMPOTENT_GREEN
+
+for pass in 1 2; do
+  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+    -U postgres -d "$DATABASE" \
+    < "$REPO_ROOT/supabase/migrations/082_knowledge_unit_read_session_repair.sql" \
+    >/dev/null || fail "migration 082 pass $pass failed"
+done
+printf '%s\n' CARTOGRAPHER_K5A_082_IDEMPOTENT_GREEN
 
 source "$REPO_ROOT/recipes/lib/cartographer-k5a-c3-run-probes.sh"
