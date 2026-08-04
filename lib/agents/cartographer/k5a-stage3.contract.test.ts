@@ -128,19 +128,24 @@ describe('K5a stage-three floor proposal contract', () => {
 })
 
 describe('K5a C5 extraction gate contract', () => {
-  it('seals the measured v2 payload to the v5 pair', () => {
+  it('seals the measured v2 payload to every measured contract pair', () => {
     expect(c5CorpusV2.version).toBe('k5a-c5-labelled-v2')
     expect(c5CorpusV2.cases).toHaveLength(81)
     expect(new Set(c5CorpusV2.cases.map(({ id }) => id)).size).toBe(81)
     expect(new Set(c5CorpusV2.cases.map(({ eventType }) => eventType))).toEqual(
       new Set(['document', 'slack_message', 'jira_update', 'explicit']),
     )
-    expect(c5Harness).toContain("import { extractV5CandidateKnowledge }")
-    expect(c5Harness).toContain(
-      'measuredExtractorVersion = CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION',
-    )
-    expect(c5Harness).not.toContain('CARTOGRAPHER_EXTRACTOR_VERSION')
-    expect(c5Harness).toContain('await extractV5CandidateKnowledge(model, attempt)')
+    expect(c5Harness).toContain('const measurableExtractorVersions = [\n'
+      + '  CARTOGRAPHER_EXTRACTOR_VERSION,\n'
+      + '  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,\n'
+      + '] as const')
+    expect(c5Harness).toContain('k5a_c5_contract_not_measurable')
+    expect(c5Harness).toContain('k5a_c5_duplicate_contract_selected')
+    expect(c5Harness).toContain('?? CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION)')
+    expect(c5Harness).toContain('=== CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION\n'
+      + '      ? await extractV5CandidateKnowledge(model, attempt)\n'
+      + '      : await extractKnowledge(model, attempt)')
+    expect(c5Harness).toContain('contractVersion: measuredExtractorVersion')
     expect(c5Harness).toContain('modelProvider: measuredModelProvider')
     expect(c5Harness).toContain('modelId: connectedCodexModelName')
     expect(c5Harness).not.toContain('sourceAudienceId === attemptAudienceId')

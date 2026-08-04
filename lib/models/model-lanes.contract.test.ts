@@ -18,7 +18,9 @@ const EXPECTED_GENERATION = [
   'recipes/experiments/relation-conflict-harness.ts|generateObject|model',
 ]
 const EXPECTED_EXTRACTOR_HANDOFF = [
-  'lib/agents/cartographer.ts|extractKnowledge|resolved.model', 'recipes/experiments/k5a-c5-extraction-harness.ts|extractV5CandidateKnowledge|model']
+  'lib/agents/cartographer.ts|extractKnowledge|resolved.model',
+  'recipes/experiments/k5a-c5-extraction-harness.ts|extractKnowledge|model',
+  'recipes/experiments/k5a-c5-extraction-harness.ts|extractV5CandidateKnowledge|model']
 const EXPECTED_TOPIC_MATCHER_HANDOFF = [
   'lib/agents/cartographer/backfill.ts|matchKnowledgeTopics|resolved.model', 'lib/agents/cartographer/topic-pipeline.ts|matchKnowledgeTopics|input.model']
 const EXPECTED_OPENAI_EMBEDDINGS = [
