@@ -4,6 +4,7 @@ import { temporalUnitSearch } from '@/lib/knowledge/unit-search'
 import { recordKnowledgeUnitCitations } from '@/lib/knowledge/lifecycle/citations'
 import { parseRelativeDate } from './tool-helpers'
 import type { ToolContext } from './tool-types'
+import { formatKnowledgeUnitHit } from './unit-hit-formatter'
 
 const searchByTimeSchema = z.object({
   since: z.string().describe('Start date: ISO string or relative date'),
@@ -48,8 +49,7 @@ export const createTemporalRetrievalTool = (ctx: ToolContext) => tool({
       return 'Memory search results were withheld because delivery could not be recorded.'
     }
     const formatted = hits.map((hit, index) =>
-      `[${index + 1}] id:${hit.unitId} source:${hit.sourceEventId}\n${hit.claim}`,
-    ).join('\n\n')
+      formatKnowledgeUnitHit(hit, index)).join('\n\n')
     return `Found ${hits.length} items from ${sinceDate.toLocaleDateString()} to ${untilDate.toLocaleDateString()}:\n\n${formatted}`
   },
 })

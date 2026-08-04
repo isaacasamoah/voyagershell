@@ -26,6 +26,7 @@ const reached = {
     sourceContent: 'The launch moved to Tuesday.',
     sourceCreatedAt: '2026-08-02T00:00:00Z',
     knowledgeType: 'operational',
+    retired: false,
     effectiveAttention: 0.8,
     score: null,
   }],
@@ -71,5 +72,27 @@ describe('temporal unit-search delivery', () => {
 
     expect(output).not.toContain(UNIT_ID)
     expect(output).toContain('withheld')
+  })
+
+  it('labels retired time-search hits with shared markers and no score', async () => {
+    mocks.search.mockResolvedValue({
+      outcome: 'success',
+      hits: [{ ...reached.hits[0], retired: true, effectiveAttention: 0.95 }],
+    })
+    mocks.cite.mockResolvedValue({ outcome: 'recorded', inserted: 1 })
+    const registered = createTemporalRetrievalTool({
+      userId: 'person-1', conversationId: 'session-1',
+    })
+    if (!registered.execute) throw new Error('temporal_not_executable')
+    const since = '2026-08-01T00:00:00Z'
+    const until = '2026-08-03T00:00:00Z'
+    const output = await registered.execute(
+      { since, until, limit: 15 },
+      { toolCallId: 'temporal-test', messages: [] },
+    )
+
+    expect(output).toBe(
+      `Found 1 items from ${new Date(since).toLocaleDateString()} to ${new Date(until).toLocaleDateString()}:\n\n[1] id:${UNIT_ID} source:${EVENT_ID} [RETRACTED] [PINNED]\nThe launch moved to Tuesday.`,
+    )
   })
 })

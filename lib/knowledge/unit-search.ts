@@ -12,6 +12,7 @@ export interface KnowledgeUnitHit {
   readonly sourceContent: string
   readonly sourceCreatedAt: string
   readonly knowledgeType: string
+  readonly retired: boolean
   readonly effectiveAttention: number
   readonly score: number | null
 }
@@ -31,6 +32,7 @@ const success = (
     sourceContent: row.source_content,
     sourceCreatedAt: row.source_created_at,
     knowledgeType: row.knowledge_type,
+    retired: row.viewer_retired,
     effectiveAttention: row.effective_attention,
     score: 'similarity' in row ? row.similarity : row.rank_score,
   })),

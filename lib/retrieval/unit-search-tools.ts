@@ -10,6 +10,7 @@ import {
 import type { CitationRecorder } from './knowledge-retrieval-tools'
 import { resolveOneMember } from './tool-helpers'
 import type { ToolContext } from './tool-types'
+import { formatKnowledgeUnitHit } from './unit-hit-formatter'
 
 const semanticSchema = z.object({
   query: z.string().min(1).describe('The semantic search query'),
@@ -41,14 +42,8 @@ const formatHits = (
   if (result.outcome === 'error')
     return 'Memory search was cut short; do not infer that no memory exists.'
   if (result.hits.length === 0) return empty
-  return result.hits.map((hit, index) => {
-    const pinned = hit.effectiveAttention >= 0.9 ? ' [PINNED]' : ''
-    const score = hit.score === null ? '' : ` (${hit.score.toFixed(3)})`
-    const source = includeSourceContent
-      ? `\nSource content:\n${hit.sourceContent}`
-      : ''
-    return `[${index + 1}] id:${hit.unitId} source:${hit.sourceEventId}${pinned}${score}\n${hit.claim}${source}`
-  }).join('\n\n')
+  return result.hits.map((hit, index) =>
+    formatKnowledgeUnitHit(hit, index, includeSourceContent)).join('\n\n')
 }
 
 const deliver = async (

@@ -28,6 +28,7 @@ const reached = {
     sourceContent: 'The launch moved to Tuesday.',
     sourceCreatedAt: '2026-08-02T00:00:00Z',
     knowledgeType: 'operational',
+    retired: false,
     effectiveAttention: 0.8,
     score: 0.7,
   }],
@@ -105,5 +106,35 @@ describe('unit search delivery', () => {
 
     expect(output).toContain('Source content:')
     expect(output).toContain(hydratedSource)
+  })
+
+  it('labels retired hits before the pinned marker', async () => {
+    mocks.keyword.mockResolvedValue({
+      outcome: 'success',
+      hits: [
+        { ...reached.hits[0], retired: true },
+        {
+          ...reached.hits[0],
+          unitId: '71000000-0000-4000-8000-000000000003',
+          sourceEventId: '71000000-0000-4000-8000-000000000004',
+          retired: true,
+          effectiveAttention: 0.95,
+        },
+      ],
+    })
+    const registered = createUnitSearchTools(
+      { userId: 'person-1', conversationId: 'session-1' },
+      vi.fn().mockResolvedValue({ outcome: 'recorded', inserted: 2 }),
+    ).keyword_grep
+    if (!registered.execute) throw new Error('keyword_not_executable')
+    const output = await registered.execute(
+      { pattern: 'launch', limit: 10 },
+      { toolCallId: 'keyword-test', messages: [] },
+    )
+
+    expect(output).toContain(`source:${EVENT_ID} [RETRACTED] (0.700)`)
+    expect(output).toContain(
+      'source:71000000-0000-4000-8000-000000000004 [RETRACTED] [PINNED] (0.700)',
+    )
   })
 })
