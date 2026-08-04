@@ -2,6 +2,11 @@
 import { semanticUnitSearch } from './unit-search'
 import type { KnowledgeNode, SearchOptions } from './search-types'
 
+/**
+ * Search for knowledge that is safe to carry into ambient conversation
+ * continuity. Retired claims remain visible through explicit search tools but
+ * must not survive this boundary as established background about the user.
+ */
 export const searchKnowledge = async (
   userId: string,
   query: string,
@@ -13,9 +18,10 @@ export const searchKnowledge = async (
       `[Knowledge] Search: "${query.slice(0, 50)}..." threshold: ${threshold}, limit: ${limit}, type: ${knowledgeType ?? 'all'}`,
     )
     const result = await semanticUnitSearch(userId, query, { threshold, limit })
+    const continuityEligibleHits = result.hits.filter((hit) => !hit.retired)
     const results = knowledgeType
-      ? result.hits.filter((hit) => hit.knowledgeType === knowledgeType)
-      : result.hits
+      ? continuityEligibleHits.filter((hit) => hit.knowledgeType === knowledgeType)
+      : continuityEligibleHits
     return results.map((hit): KnowledgeNode => ({
       eventId: hit.sourceEventId,
       content: hit.claim,
