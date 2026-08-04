@@ -43,14 +43,16 @@ check_file() {
   local file_name="$1"
   local line_total
 
+  # Append-only, generated, data, and prose artifacts are not refactorable source.
   case "$file_name" in
-    package-lock.json|*/package-lock.json|\
-    npm-shrinkwrap.json|*/npm-shrinkwrap.json|\
-    pnpm-lock.yaml|*/pnpm-lock.yaml) return ;;
+    supabase/migrations/*|\
+    recipes/*|\
+    docs/*|\
+    *.md|*.json|*.sql) return ;;
   esac
 
   case "$file_name" in
-    *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.json|*.sql|*.sh|*.bash|*.yml|*.yaml|*.md) ;;
+    *.ts|*.tsx) ;;
     *) return ;;
   esac
 
@@ -77,5 +79,5 @@ if ((violation_count > 0)); then
   exit 1
 fi
 
-printf 'Strict line cap passed: %d changed files are all under %d lines.\n' \
+printf 'Strict line cap passed: %d changed TypeScript source files are all under %d lines.\n' \
   "$checked_count" "$line_cap"

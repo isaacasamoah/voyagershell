@@ -49,6 +49,9 @@ describe('knowledge-graph retrieval contract', () => {
     const database = retrieval()
     const schema = readRepoFile('supabase/migrations/061_knowledge_graph_schema.sql')
     const boundary = readRepoFile('lib/knowledge/kernel/boundary.ts')
+    const boundaryContract = readRepoFile(
+      'lib/knowledge/kernel/boundary-contract.ts',
+    )
     expect(database.match(/0\.075 - extract\(epoch/g)).toHaveLength(2)
     expect(schema).toContain('trg_knowledge_event_source_immutable')
     expect(database).not.toContain('guard_knowledge_event_source')
@@ -60,9 +63,12 @@ describe('knowledge-graph retrieval contract', () => {
     ]) expect(database).toMatch(new RegExp(`REVOKE EXECUTE ON FUNCTION public\\.${helper}`))
     expect(boundary).toContain('const RESPONSE_FLOOR_MS = 556')
     expect(boundary).toContain('const RPC_DEADLINE_MS = 8_000')
-    expect(boundary).toContain('typeof envelope.truncated !== "boolean"')
-    expect(boundary).toMatch(
-      /return complete\(\{\s*outcome: "success",\s*claims,\s*truncated: envelope\.truncated,\s*\}\)/,
+    expect(boundary).toContain('parseKnowledgeGraphEnvelope(data)')
+    expect(boundaryContract).toContain(
+      'typeof envelope.truncated !== "boolean"',
+    )
+    expect(boundaryContract).toMatch(
+      /return \{\s*outcome: "success",\s*claims,\s*truncated: envelope\.truncated,?\s*\};/,
     )
   })
 
