@@ -179,8 +179,7 @@ export const VoyagerInterface = ({ className }: VoyagerInterfaceProps) => {
     isStreaming: conversation.isStreaming,
     conversationId: conversation.conversationId,
     streamRef,
-    composing,
-    shellHeight,
+    queuedCount: conversation.messageQueue.length,
   })
   return (
     <div

@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import type { RefObject } from 'react'
 import type { UIMessage } from 'ai'
 import {
@@ -7,6 +6,7 @@ import {
   type FeedEvent,
 } from '@/lib/messaging/feed-types'
 import { getAskCaptainParts, getMessageText } from '../message-parts'
+import { useStreamAutoScroll } from './useStreamAutoScroll'
 import { useStreamingReply } from './useStreamingReply'
 
 interface LiveConversationInput {
@@ -15,8 +15,7 @@ interface LiveConversationInput {
   isStreaming: boolean
   conversationId: string | null
   streamRef: RefObject<HTMLDivElement>
-  composing: boolean
-  shellHeight: number | null
+  queuedCount: number
 }
 
 export const useLiveConversation = ({
@@ -25,8 +24,7 @@ export const useLiveConversation = ({
   isStreaming,
   conversationId,
   streamRef,
-  composing,
-  shellHeight,
+  queuedCount,
 }: LiveConversationInput) => {
   const lastAssistant = [...messages].reverse().find((message) => (
     message.role === 'assistant' && !isHydratedMessage(message)
@@ -44,18 +42,14 @@ export const useLiveConversation = ({
     assistantEventCount,
     conversationId,
   })
-  const feedEventCount = feedEvents.length
-  const streamingReplyId = streamingReply?.id ?? null
-  useEffect(() => {
-    const stream = streamRef.current
-    if (!stream) return
-    stream.scrollTo({ top: stream.scrollHeight, behavior: 'smooth' })
-  }, [
-    streamRef,
-    feedEventCount,
-    streamingReplyId,
-    composing,
-    shellHeight,
-  ])
+  // Every message this client puts on screen for the user: the one the AI SDK
+  // just appended, or one parked in the queue while a reply is still running.
+  // Hydrated messages are restored history, not something the user just did.
+  const ownSend = [...messages].reverse().find((message) => (
+    message.role === 'user' && !isHydratedMessage(message)
+  ))
+  const hasOwnSend = Boolean(ownSend) || queuedCount > 0
+  const ownSendKey = hasOwnSend ? `${ownSend?.id ?? ''}:${queuedCount}` : null
+  useStreamAutoScroll({ streamRef, ownSendKey })
   return streamingReply
 }
