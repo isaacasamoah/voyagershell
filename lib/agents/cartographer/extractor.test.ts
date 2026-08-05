@@ -6,11 +6,7 @@ const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
 
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 
-import {
-  extractKnowledge,
-  extractV5CandidateKnowledge,
-  rederiveKnowledgeUnit,
-} from './extractor'
+import { extractKnowledge, rederiveKnowledgeUnit } from './extractor'
 import { V5_CARTOGRAPHER_PROMPT } from './contract'
 import type {
   ExtractionAttempt,
@@ -28,6 +24,7 @@ const attempt: ExtractionAttempt = {
   sourceEventType: 'message',
   sourceActorId: '72000000-0000-4000-8000-000000000005',
   sourceSessionId: '72000000-0000-4000-8000-000000000006',
+  sessionContext: null,
   attemptNumber: 1,
   candidates: [{
     personId: '72000000-0000-4000-8000-000000000007',
@@ -94,7 +91,7 @@ describe('Cartographer extractor prompt versioning', () => {
     }])
   })
 
-  it('keeps the runtime-current v4 prompt byte-stable beside the v5 candidate', async () => {
+  it('keeps the superseded v4 prompt byte-stable now that v5 is current', async () => {
     await extractKnowledge({} as LanguageModel, {
       ...attempt,
       extractorVersion: 'cartographer-single-claim-v4',
@@ -109,11 +106,11 @@ describe('Cartographer extractor prompt versioning', () => {
     )
   })
 
-  it('uses the completed durability and ordered type contract only for v5', async () => {
-    await extractV5CandidateKnowledge({} as LanguageModel, {
+  it('routes the runtime-current v5 to the durability and ordered type contract', async () => {
+    await extractKnowledge({} as LanguageModel, {
       ...attempt,
       extractorVersion: 'cartographer-single-claim-v5',
-    })
+    }, topics)
 
     const system = mocks.generateObject.mock.calls[0][0].system as string
     const preference = system.indexOf('1. preference')
@@ -128,15 +125,19 @@ describe('Cartographer extractor prompt versioning', () => {
     expect(operational).toBeLessThan(domain)
   })
 
-  it('keeps the deferred v5 candidate out of runtime routing', async () => {
+  it('keeps topic candidates out of the v5 user prompt', async () => {
     await extractKnowledge({} as LanguageModel, {
       ...attempt,
       extractorVersion: 'cartographer-single-claim-v5',
-    })
+    }, topics)
 
-    expect(mocks.generateObject.mock.calls[0][0].system).not.toContain(
-      'ordered procedure',
-    )
+    // v5 asks for one claim only. Topics are assigned by the separate matcher
+    // stage, so offering topic candidates here would invite a field the v5
+    // schema does not carry.
+    expect(mocks.generateObject.mock.calls[0][0].messages).toEqual([{
+      role: 'user',
+      content: historicalPrompt,
+    }])
   })
 
   it('keeps the measured v5 prompt byte-stable after the one-shot result', () => {

@@ -1,14 +1,13 @@
 import { generateObject, type LanguageModel } from 'ai'
 import {
-  CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION,
-  CARTOGRAPHER_PROMPT,
   HISTORICAL_CARTOGRAPHER_PROMPT,
   V3_CARTOGRAPHER_PROMPT,
   V4_CARTOGRAPHER_PROMPT,
   V5_CARTOGRAPHER_PROMPT,
+  V6_CARTOGRAPHER_PROMPT,
+  acceptsSessionContext,
   extractionSchema,
   historicalExtractionSchema,
-  isCurrentContract,
   isV3Contract,
   v3ExtractionSchema,
   type AnyExtractionObject,
@@ -21,10 +20,24 @@ import type {
 } from './types'
 import { classifyProviderFailure } from './provider-failure'
 
+export const buildExtractionInput = (
+  attempt: ExtractionAttempt,
+  topicCandidates: TopicCandidate[] = [],
+): { system: string; prompt: string } => ({
+  system: systemPromptFor(attempt.extractorVersion),
+  prompt: promptForAttempt(
+    attempt,
+    topicCandidates,
+    isV3Contract(attempt.extractorVersion),
+    acceptsSessionContext(attempt.extractorVersion),
+  ),
+})
+
 const promptForAttempt = (
   attempt: ExtractionAttempt,
   topicCandidates: TopicCandidate[],
   includeTopics: boolean,
+  includeSessionContext: boolean,
 ): string => {
   const source = {
     eventId: attempt.sourceEventId,
@@ -39,6 +52,19 @@ ${JSON.stringify(source)}
 ${JSON.stringify(attempt.candidates)}
 
 Return the structured Cartographer result.`
+  if (includeSessionContext) {
+    if (attempt.sessionContext === null) return historicalPrompt
+    return `## Immutable source event
+${JSON.stringify(source)}
+
+## Allowed Person candidates
+${JSON.stringify(attempt.candidates)}
+
+## Session context
+${attempt.sessionContext}
+
+Return the structured Cartographer result.`
+  }
   if (!includeTopics) return historicalPrompt
   return `## Immutable source event
 ${JSON.stringify(source)}
@@ -51,6 +77,19 @@ ${JSON.stringify(topicCandidates)}
 
 Return the structured Cartographer result.`
 }
+
+// Explicit map rather than a ternary chain: with v6 current, a v5 attempt must
+// still resolve to the v5 prompt, not fall through to the historical one.
+const SYSTEM_PROMPT_BY_VERSION: Readonly<Record<string, string>> = {
+  'cartographer-single-claim-v3': V3_CARTOGRAPHER_PROMPT,
+  'cartographer-single-claim-v4': V4_CARTOGRAPHER_PROMPT,
+  'cartographer-single-claim-v5': V5_CARTOGRAPHER_PROMPT,
+  'cartographer-single-claim-v6': V6_CARTOGRAPHER_PROMPT,
+}
+
+const systemPromptFor = (version: string): string => (
+  SYSTEM_PROMPT_BY_VERSION[version] ?? HISTORICAL_CARTOGRAPHER_PROMPT
+)
 
 const runExtraction = async (
   model: LanguageModel,
@@ -89,34 +128,15 @@ export const extractKnowledge = async (
   attempt: ExtractionAttempt,
   topicCandidates: TopicCandidate[] = [],
 ): Promise<ExtractionRun> => {
-  const v3 = isV3Contract(attempt.extractorVersion)
-  const current = isCurrentContract(attempt.extractorVersion)
+  const { system, prompt } = buildExtractionInput(attempt, topicCandidates)
   return runExtraction(
     model,
     attempt,
-    v3 ? V3_CARTOGRAPHER_PROMPT
-      : current ? CARTOGRAPHER_PROMPT : HISTORICAL_CARTOGRAPHER_PROMPT,
-    promptForAttempt(attempt, topicCandidates, v3),
-    v3 ? v3ExtractionSchema
-      : current ? extractionSchema : historicalExtractionSchema,
-  )
-}
-
-// The consumed C5 one-shot used the now-deferred v5 candidate. Keep that exact
-// contract available to its sealed harness without admitting v5 to runtime.
-export const extractV5CandidateKnowledge = async (
-  model: LanguageModel,
-  attempt: ExtractionAttempt,
-): Promise<ExtractionRun> => {
-  if (attempt.extractorVersion !== CARTOGRAPHER_CANDIDATE_EXTRACTOR_VERSION) {
-    throw new Error('cartographer_v5_candidate_version_required')
-  }
-  return runExtraction(
-    model,
-    attempt,
-    V5_CARTOGRAPHER_PROMPT,
-    promptForAttempt(attempt, [], false),
-    historicalExtractionSchema,
+    system,
+    prompt,
+    isV3Contract(attempt.extractorVersion)
+      ? v3ExtractionSchema
+      : extractionSchema,
   )
 }
 

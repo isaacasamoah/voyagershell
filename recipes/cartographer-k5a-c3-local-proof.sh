@@ -195,3 +195,39 @@ done
 printf '%s\n' CARTOGRAPHER_K5A_082_IDEMPOTENT_GREEN
 
 source "$REPO_ROOT/recipes/lib/cartographer-k5a-c3-run-probes.sh"
+
+# 083 runs after the probes above so those keep exercising the v4 dynamics they
+# were written against. It moves the active contract to v5.
+for pass in 1 2; do
+  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+    -U postgres -d "$DATABASE" \
+    < "$REPO_ROOT/supabase/migrations/083_activate_v5_extractor_contract.sql" \
+    >/dev/null || fail "migration 083 pass $pass failed"
+done
+printf '%s\n' CARTOGRAPHER_K5A_083_IDEMPOTENT_GREEN
+
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
+  -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-v5-activation-assertions.sql" \
+  > "$TEMP_DIR/v5-activation-verdict.out" \
+  || fail 'v5 activation assertions failed'
+[ "$(<"$TEMP_DIR/v5-activation-verdict.out")" = CARTOGRAPHER_V5_ACTIVATION_GREEN ] \
+  || fail 'exact v5 activation verdict missing'
+printf '%s\n' CARTOGRAPHER_V5_ACTIVATION_GREEN
+
+for pass in 1 2; do
+  run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -q -v ON_ERROR_STOP=1 \
+    -U postgres -d "$DATABASE" \
+    < "$REPO_ROOT/supabase/migrations/084_activate_v6_context_contract.sql" \
+    >/dev/null || fail "migration 084 pass $pass failed"
+done
+printf '%s\n' CARTOGRAPHER_K5A_084_IDEMPOTENT_GREEN
+
+run_interruptible docker exec -i "$CONTAINER_NAME" psql -X -Atq -v ON_ERROR_STOP=1 \
+  -U postgres -d "$DATABASE" \
+  < "$REPO_ROOT/recipes/sql/cartographer-v6-activation-assertions.sql" \
+  > "$TEMP_DIR/v6-activation-verdict.out" \
+  || fail 'v6 activation assertions failed'
+[ "$(<"$TEMP_DIR/v6-activation-verdict.out")" = CARTOGRAPHER_V6_ACTIVATION_GREEN ] \
+  || fail 'exact v6 activation verdict missing'
+printf '%s\n' CARTOGRAPHER_V6_ACTIVATION_GREEN
