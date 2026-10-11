@@ -35,4 +35,3 @@ assistant writer: a real reply inherits its human source audience in the same
 atomic ingress, while a source-less synthetic welcome is restricted to the
 owner-private conversation shape. Migration `071` aligns deployment-gap
 assistant graph structure with that writer.
-
