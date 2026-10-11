@@ -7,11 +7,13 @@ ritual.
 
 ## Local setup
 
-Requirements: Node.js 20, npm, Supabase access for database work, and a local
+Requirements: Node.js 24, npm, Supabase access for database work, and a local
 `.env.local` derived from [.env.example](./.env.example).
 
 ```bash
 npm ci
+cp .env.example .env.local
+# Fill in your own development configuration before starting.
 npm run dev
 ```
 
@@ -19,7 +21,9 @@ Run before review:
 
 ```bash
 npm run type-check
+npm run lint
 npm run test:run
+npm run build
 ```
 
 Use the focused test nearest your change while iterating. Database proof recipes
@@ -28,9 +32,12 @@ are documented in [recipes/README.md](./recipes/README.md).
 ## Code standards
 
 - TypeScript is strict.
-- Use named exports and arrow components.
+- Use named exports and arrow components; Next.js page/layout conventions require
+  default exports.
 - Keep source, SQL, recipe, and contributor-document files below 250 lines;
   split coherent modules instead of compressing unrelated responsibilities.
+- Use comments for intent, constraints and non-obvious behavior. Remove comments
+  that restate names or operations, decorative banners and obsolete history.
 - Co-locate focused `*.test.ts` files with the contract they protect.
 - Preserve user work in dirty worktrees and keep changes task-scoped.
 - Update documentation in the same clean transition as code.
@@ -83,7 +90,7 @@ exposing paths, counts, grants, evidence, labels, edge metadata, or provenance.
 - Preserve token secrecy and use `curl --fail-with-body` plus an exact verdict.
 - Prove the public catalogue is unchanged after rollback.
 
-Product migration files currently end at the K4c relation ledger, 077. File numbering and
+The current migration history is in `supabase/migrations/`. File numbering and
 the hosted migration ledger are not installed-state authority: run the shared
 pre-054 catalogue contract before applying 054–059. Migrations 060–071 are ONE
 release boundary — source intent, graph substrate, cutover with backfill and
@@ -100,6 +107,14 @@ reader, canonical topic identity, and the relation-conflict ledger. They do not
 change the rule that `knowledge_events` is the only event-content authority.
 
 ## Pull requests
+
+Branch from current `dev` and open your pull request against `dev`. Use a separate
+worktree when another checkout has ongoing work. Production promotion is separate.
+
+```bash
+git fetch origin
+git worktree add -b feature/my-change ../voyagershell-my-change origin/dev
+```
 
 Keep commits atomic and explain the user-visible or architectural outcome, the
 proof run, and any residual release gate. Never claim a hosted, preview, or

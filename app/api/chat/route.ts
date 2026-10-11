@@ -28,10 +28,7 @@ const getMessageText = (message: IncomingMessage): string => (
     : typeof message.content === 'string' ? message.content : ''
 )
 
-// The newest human message and the client's own id for it. That id is the
-// exactly-once key the ingress claim is taken on: a retry of the same send
-// carries the same id, so the server recognises it as one intent rather than
-// two. Its absence is honest — the claim then falls back to the session.
+// Preserve the client ID so ingress can recognize retries of the same send.
 const getNewestUserMessage = (
   items: IncomingMessage[],
 ): { text: string; clientMessageId?: string } => {
@@ -106,8 +103,7 @@ export const POST = async (req: Request) => {
       newMessage: newest.text,
       clientMessageId: newest.clientMessageId,
       displayName,
-      // This endpoint only ever carries a human's typed message — the loop guard
-      // asserts it (a turn may begin ONLY on human-authored input).
+      // The authenticated HTTP request is the human entry point for a turn.
       originatorActorType: 'user',
     }
     return adaptTurn(await runTurn(ctx, createVercelHost()))

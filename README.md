@@ -1,134 +1,108 @@
-# Voyager
+# Voyager Shell
 
-Voyager is a conversational collaboration co-pilot. It combines streaming chat,
-shared voyages and rooms, event-sourced memory, and agent-selected retrieval.
+**Let's go together.**
 
-## Current architecture
+Voyager explores how people and their agents can build together around shared
+knowledge. This repository is the first web-based application: conversations,
+shared rooms, agent-directed retrieval and background research.
 
-```text
-Next.js chat and room APIs
-        |
-        +-- Voyager tool registry
-        |     graph_memory, semantic_search, keyword_grep, anchored_search, ...
-        |
-        +-- atomic ingress (claim, audience, event, graph, outbox in one commit)
-        |
-        +-- knowledge_events: sole event-content ledger
-        |     knowledge_current: derived search projection
-        |
-        +-- the canonical graph and memory pipeline (migrations 061-077)
-              scope-neutral identities, immutable audiences and grants
-              evidence-bound historical edges and current authority projections
-```
+[Open Voyager Shell](https://voyagershell.ai) · [Contributing](CONTRIBUTING.md) ·
+[Architecture](ARCHITECTURE.md)
 
-There is one graph. The K2 cutover replaced the event-only legacy graph with the
-canonical substrate and removed the old table, its traversal RPC and every
-caller in the same change. K3 writes source-derived KnowledgeUnits; K4a
-registered `graph_memory` as the authorized product reader; K4b adds canonical
-topic identity; and K4c records evidence-gated conflict and supersession edges.
-Every human message and Voyager response enters through one
-database function that claims the intent before it writes anything, so a retry
-cannot produce a second event, graph fragment, response, or delivery. A Voyager
-reply inherits the exact immutable audience of its claimed human source and is
-linked to the canonical Voyager node with `generated_by`.
-Service-role tool code never hydrates `knowledge_current` directly. Exact-ID
-hydration uses unit-native `search_knowledge_units` under the graph's grant and
-audience predicates; direct mentions use pre-cutover `get_voyage_messages`,
-which rechecks caller identity and current membership inside PostgreSQL.
+## How we got here
 
-Voyage membership has one current meaning: only a retained row with
-`state = 'active'` grants product access. A rejoin reactivates that row as crew
-and increments its authority revision.
+I started [Voyager Demo](https://github.com/isaacasamoah/voyager-demo) to explore
+space through a conversational interface and find people to learn and build
+with. That curiosity grew into this web application for collaboration and
+shared knowledge.
 
-## Knowledge and privacy invariants
+The next chapter is [Voyager Shell App](https://github.com/isaacasamoah/voyagershellapp):
+a native Rust service and Electron experiments connecting the coding agents we
+already use. The astronaut marks the intended place to work from — your current
+bridge into the connected sessions. Service registration, docking and whiteboard
+experiments are being developed in that separate repository. Its default branch
+and experiment branches have different capabilities; follow its documentation
+and pull requests for the version you want to try.
 
-- `knowledge_events` remains the only event-content ledger.
-- A KnowledgeUnit inherits its source event audience exactly.
-- A Voyager response inherits its human source event audience exactly; a room
-  roster never widens a private aside or its answer.
-- Graph node IDs, edge IDs, audience IDs, and space-member IDs are canonical and
-  enforced at the database boundary.
-- A source audience is immutable. Membership changes create authority snapshots;
-  they never rewrite source visibility.
-- Structural historical discovery requires an exact edge/evidence grant.
-- Current `member_of`, `in_voyage`, and `companion_of` edges mirror product rows
-  and are rechecked against exact state, revision, and effective time.
-- Historical-only access returns the label captured by the grant. Current
-  authorized access may return the current registry label.
-- Creating a link does not create endpoint grants.
+The longer-term direction brings people and agents together around a shared
+knowledge graph and collaboration tools. Each prototype helps me learn what
+that should feel like. I share the work to meet other curious builders and
+find useful things to make together.
 
-## Installed-state boundary and K2 release gate
+## What is in this repository
 
-Migration source files `001`–`053` are byte-sealed to the reviewed K0 revision,
-but their numbers and the hosted migration ledger are not treated as a
-replayable installed-state oracle. The explicit read-only pre-054 contract
-names the public tables, columns, types, enum values, function identities,
-security modes, grants, triggers, and constraints required by the next six
-hardening migrations. `054` makes active voyage/space membership authoritative,
-`055` hardens installed retrieval, `056` creates room invites atomically, `057`
-retires ambiguous pending memberships and installs exact-room invite responses,
-`058` promotes private replies, and `059` removes obsolete session mutation
-paths. Existing invite events remain immutable history; their senders must issue
-a fresh exact-room knock before the recipient can act.
-`lib/supabase/types.ts` remains the application database contract. The local
-installed-authority proof constructs a deterministic pre-054 subset, runs the
-precondition, applies only 054–059, and derives the scoped post-migration
-catalogue/type/ACL contract from real `pg_catalog`; it does not claim to
-reproduce unrelated hosted objects. The graph proof then applies the complete
-060–071 boundary to a disposable database in release order.
+| Area | Implementation |
+| --- | --- |
+| Streaming conversation | [Chat API](app/api/chat/route.ts) and [turn harness](lib/harness/run-turn.ts) |
+| Shared voyages and rooms | [Voyages](lib/voyage/) and [messaging](lib/messaging/) |
+| Persistent knowledge and scoped retrieval | [Knowledge](lib/knowledge/), [graph boundary](lib/knowledge/kernel/boundary.ts) and [retrieval tools](lib/retrieval/) |
+| Background research and task progress | [Retrieval agent](lib/agents/deep-retrieval.ts) and [task queue](lib/agents/queue.ts) |
+| Knowledge extraction from conversations | [Cartographer](lib/agents/cartographer.ts) |
+| Model connections and selection | [Models](lib/models/) |
+| Magic-link authentication | [Authentication](lib/auth/) |
 
-K2 makes ordinary message ingress atomic: it creates the canonical source
-audience, event, message node, endpoint grants, historical edges, evidence, and
-fan-out in one transaction. It recovers deployment-gap events and enforces
-`knowledge_events.knowledge_audience_id NOT NULL`. The bounded
-`NULL -> canonical audience` transition exists only inside that recovery; any
-second audience change is rejected. Migration `070` cleanly replaces the old
-assistant writer: a real reply inherits its human source audience in the same
-atomic ingress, while a source-less synthetic welcome is restricted to the
-owner-private conversation shape. Migration `071` aligns deployment-gap
-assistant graph structure with that writer.
+These are code capabilities, not a claim that every workflow has been verified
+on the current hosted deployment. The web app requires Supabase and model
+credentials; it does not include an account-free offline demo. Background tasks
+run within the web host's execution limits. Native terminal docking and desktop
+whiteboards belong to the separate native app.
 
-## Setup
+The default `main` branch represents production code. Development lands on
+`dev`, which may contain newer experiments and database changes. This README
+and its relative links describe the branch you are reading.
 
-Requirements: Node.js 20, npm, a Supabase project, and the keys described in
-[.env.example](./.env.example).
+## Run locally
+
+Use Node.js 24.x and npm. Create your own development Supabase project and use
+its URL and keys; production data is not needed to contribute.
 
 ```bash
+git clone --branch dev https://github.com/isaacasamoah/voyagershell.git
+cd voyagershell
 npm ci
 cp .env.example .env.local
+```
+
+Fill in the core values in [.env.example](.env.example). Chat uses an Anthropic
+key; memory extraction and search use an OpenAI key. Optional integrations are
+labelled in the template. Keep real credentials out of Git.
+
+The application also needs its database schema and Supabase Auth configuration.
+Read the [database recipes](recipes/README.md) before applying migrations to your
+own development database. The migration and schema proofs are distinct from a
+complete fresh-account setup; the latter has not been revalidated for this
+README update. Configure Auth redirects for your local application URL.
+
+```bash
 npm run dev
 ```
 
-Do not apply migrations to production as part of ordinary development. Preview
-and production promotion follow [CLAUDE.md](./CLAUDE.md).
+Open `http://localhost:3000`. See [Contributing](CONTRIBUTING.md) for checks,
+branching and the path from a change to review.
 
-## Verification
+## Find your way around
 
-```bash
-npm run type-check
-npm run test:run
-find recipes -type f -name '*.sh' -print0 | xargs -0 bash -n
-```
+Start with [the architecture overview](ARCHITECTURE.md), which follows a message
+from the browser through the service code to storage. The detailed
+[knowledge contract](docs/architecture/knowledge.md) explains audiences,
+permissions and graph relationships. [Testing guidance](docs/testing/README.md)
+distinguishes unit checks, database proofs and browser journeys.
 
-`recipes/hosted/rollback/knowledge-graph-poc.sh` is a hosted PostgreSQL proof,
-not an installer.
-It resolves credentials without printing them, executes the candidate and its
-fixtures inside one `BEGIN`/`ROLLBACK`, and verifies the public catalogue is
-identical afterward. See [recipes/README.md](./recipes/README.md).
+## Build with me
 
-## Project map
+Questions, small experiments and reports of what was confusing are welcome.
+Open an [issue](https://github.com/isaacasamoah/voyagershell/issues) with what you
+tried, what happened and what you want to understand. For code contributions,
+start with a focused change and include a way to check it.
 
-```text
-app/api/chat/route.ts                     streaming chat boundary
-lib/messaging/ingress.ts                  atomic human and Voyager event writer
-lib/knowledge/kernel/                     graph contract, fixture, SQL proofs
-lib/retrieval/knowledge-retrieval-tools.ts registered graph tool
-lib/retrieval/voyager-tools.ts            final tool registry
-lib/voyage/                               voyage membership and sessions
-supabase/migrations/                      immutable history plus current graph boundary
-recipes/sql/knowledge-graph/              proof fixtures and catalogue assertions
-recipes/                                  rollback-only proving recipes
-```
+Related learning projects:
 
-Contributor architecture and workflow are in [ARCHITECTURE.md](./ARCHITECTURE.md)
-and [CONTRIBUTING.md](./CONTRIBUTING.md).
+- [Voyager Demo](https://github.com/isaacasamoah/voyager-demo): the original space exploration prototype.
+- [Voyager Shell App](https://github.com/isaacasamoah/voyagershellapp): native agent orchestration and desktop experiments.
+- [SpaceML](https://github.com/isaacasamoah/spaceml): space and applied maths experiments.
+- [Theory of Everything](https://github.com/isaacasamoah/theory-of-everything): learning algorithms from scratch.
+
+## Licence
+
+This repository currently has no licence file. Choosing a licence remains an
+open decision for the owner.

@@ -24,7 +24,7 @@ const proof = read('recipes/cartographer-k4b-local-proof.sh')
 const fullSuite = read('recipes/full-suite.sh')
 const assertions = read('recipes/sql/cartographer-k4b-assertions.sql')
 const backfill = read('lib/agents/cartographer/backfill.ts')
-const architecture = read('ARCHITECTURE.md')
+const architecture = read('docs/architecture/knowledge.md')
 
 describe('K4b topic identity contract', () => {
   it('versions extraction and matching separately with conservative structured output', () => {

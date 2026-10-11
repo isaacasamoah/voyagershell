@@ -1,11 +1,3 @@
-// Agentic Retrieval Agent (Background)
-//
-// Single generateText call with retrieval tools.
-// The agent reasons, searches, evaluates, and iterates
-// until it has enough information or hits the step limit.
-//
-// Replaces the old code-sandbox executor pattern entirely.
-
 import { generateText, stepCountIs } from 'ai'
 import { createRetrievalTools } from '@/lib/retrieval/retrieval-tools'
 import type { ToolContext } from '@/lib/retrieval/tool-types'
@@ -13,10 +5,6 @@ import type { BackgroundTaskResult } from './queue'
 import { updateTaskProgress } from './queue'
 import { resolveUserModelWithMeta } from '@/lib/models'
 import { log } from '@/lib/debug'
-
-// =============================================================================
-// Types
-// =============================================================================
 
 export interface BackgroundRetrievalInput {
   taskId: string
@@ -26,10 +14,6 @@ export interface BackgroundRetrievalInput {
   voyageSlug?: string
   conversationId: string
 }
-
-// =============================================================================
-// System Prompt
-// =============================================================================
 
 const AGENTIC_RETRIEVAL_PROMPT = `You are a retrieval agent for Voyager. Your job is to find comprehensive, relevant information from the user's knowledge base.
 
@@ -77,10 +61,6 @@ const getStructuredEventId = (output: unknown): string | undefined => {
   const eventId = record.eventId ?? record.event_id
   return typeof eventId === 'string' ? eventId : undefined
 }
-
-// =============================================================================
-// Main Entry Point
-// =============================================================================
 
 export async function runBackgroundRetrieval(
   input: BackgroundRetrievalInput,
@@ -134,9 +114,8 @@ export async function runBackgroundRetrieval(
     steps: result.steps.length,
   })
 
-  // The final text IS the delivered message — never ship a blank bubble.
-  // Empty text + findings → honest fallback; empty both → throw (the guard
-  // converts it into failTask, not a false 'complete').
+  // This text is delivered directly. With no answer or findings, fail the task
+  // rather than recording a successful result that renders an empty message.
   const finalText = result.text.trim()
   const message = finalText.length > 0
     ? finalText

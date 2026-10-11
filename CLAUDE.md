@@ -113,7 +113,7 @@ npm run dev      # localhost:3000
 npm run build    # production build
 ```
 
-**Production:** https://voyagershell.vercel.app
+**Public application:** https://voyagershell.ai
 
 ### Supabase Migrations & DB-branch hygiene
 
@@ -136,9 +136,13 @@ Code branches and DB branches pair up; keep them aligned:
 ## Code Standards
 
 - TypeScript strict
-- Named exports only
+- Named exports, except default exports required by Next.js route conventions
 - Arrow function components
-- Files under 250 lines
+- Files under 250 lines; split by coherent responsibility.
+- Keep comments for intent, constraints, invariants and non-obvious behavior.
+  Omit narration of obvious code, decorative headings and migration-history notes.
+- Start contributor navigation at `ARCHITECTURE.md`; detailed knowledge and
+  migration contracts live under `docs/architecture/`.
 
 ## Established Patterns
 
