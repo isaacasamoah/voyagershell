@@ -6,6 +6,7 @@ const read = (path: string): string => readFileSync(resolve(process.cwd(), path)
 const docs = [
   'README.md', 'ARCHITECTURE.md', 'CONTRIBUTING.md', '.claude/skills/patterns/SKILL.md',
   '.claude/plans/agentic-retrieval.md', '.claude/agents/anchor.md',
+  'docs/architecture/knowledge.md', 'docs/architecture/migrations.md',
 ] as const
 
 describe('tracked graph contributor truth', () => {

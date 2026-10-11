@@ -23,18 +23,14 @@ import { runRoomGate, runRoomTurn } from './room-turn'
 import { composeTurnMessages } from './turn-messages'
 import { claimTurnIngress } from './turn-ingress'
 import type { HarnessHost, TurnContext, TurnResult } from './types'
+
 export const runTurn = async (
   ctx: TurnContext,
   host: HarnessHost,
 ): Promise<TurnResult> => {
   const { userId, conversationId, voyageSlug, authState, newMessage, displayName } = ctx
   const rawQuery = newMessage
-  // ── The loop guard (the hard rule, code-attested) ─────────────────────────
-  // A Voyager turn may begin ONLY on human-authored input. actor=voyager events
-  // NEVER trigger another Voyager's turn — two named Voyagers cannot answer each
-  // other unbidden (§4). This holds by architecture today (the only caller is a
-  // human POST /api/chat), but the invariant lives HERE so a future realtime→turn
-  // bridge that forwards a voyager-authored event is caught, not silently looped.
+  // Reject agent-originated turns to prevent agents triggering each other.
   if ((ctx.originatorActorType ?? 'user') !== 'user') {
     log.api('runTurn refused a non-human-originated turn (loop guard)', {
       originatorActorType: ctx.originatorActorType,
@@ -42,15 +38,14 @@ export const runTurn = async (
     }, 'warn')
     return { kind: 'empty' }
   }
-  // The previous request's waitUntil is only a fast path. A later authorized
-  // human turn drains one audience-visible pending or expired job before the
-  // future K4 memory-read boundary can depend on it.
+
+  // Deferred extraction may be interrupted. Recover an audience-visible job
+  // before this turn reads memory.
   if (!ctx.autoSent && rawQuery) {
     await runCartographer({ userId })
   }
-  // Resolve the address ONCE, server-side, from the real handle set — the same
-  // pure resolver the composer badge uses (Principle 1: privacy is computed,
-  // never model-guessed). `voyager` survives only as an alias for your own.
+
+  // Resolve private addressing against the user's handle, never model output.
   const ownIdentity = await getOwnVoyagerIdentity(userId)
   const ownVoyagerHandle = ownIdentity.handle
   const address = resolveAddress(rawQuery, {
@@ -65,6 +60,7 @@ export const runTurn = async (
   const intent = detectActionIntent(queryText)
   host.defer(reapStuckTasks().catch(() => {}))
   // The caller's own Voyager is the only brain this endpoint can execute.
+
   const streamContext = conversationId
     ? await composeContextFromStream(userId, conversationId, voyageSlug)
     : []
@@ -88,6 +84,7 @@ export const runTurn = async (
     messageCount: conversationMessages.length,
     queryLength: queryText.length,
   })
+
   const windowResult = computeWindow(conversationMessages)
   const truncatedMessages = getTruncatedMessages(conversationMessages, windowResult)
   const referenceSignals = queryText ? detectReferenceSignals(queryText) : []
@@ -110,6 +107,7 @@ export const runTurn = async (
       })
     }
   }
+
   if (queryText && conversationId) {
     const learningSignal = detectLearningSignal(queryText)
     if (learningSignal) {
@@ -129,14 +127,15 @@ export const runTurn = async (
     role: message.role,
     content: message.content,
   }))
-  // The room grammar and the held-address gate run first — neither is a message
-  // and neither may reach the ledger. Then the ingress claim, before any effect.
+
+  // Handle room commands and unresolved addresses before claiming a message.
   const gate = await runRoomGate({ ctx, queryText, address })
   if (gate.result) return gate.result
   const ingress = await claimTurnIngress(ctx, host, gate, queryText, address)
   if (ingress.result) return ingress.result
   const roomResult = runRoomTurn(gate.room, address)
   if (roomResult) return roomResult
+
   let staticPrefix: string
   let dynamicSuffix = ''
   let retrievedKnowledge: KnowledgeNode[] = []
@@ -173,6 +172,7 @@ export const runTurn = async (
     log.api('Prompt composition failed, using base prompt', { error: String(error) }, 'warn')
     staticPrefix = getBasePrompt()
   }
+
   const toolContext = {
     userId,
     voyageSlug: voyageSlug ?? undefined,
@@ -185,8 +185,7 @@ export const runTurn = async (
   const toolStrategy = composeToolStrategy(registrations)
   staticPrefix = `${staticPrefix}\n\n${toolStrategy}`
 
-  // Room truth: the model NEVER guesses membership — the code-attested roster
-  // (active vs invited-not-joined) goes into the dynamic prompt every turn.
+  // Give the model the current roster, including invitations not yet accepted.
   if (ctx.conversationId) {
     try {
       const roster = await getRoomRoster(ctx.conversationId, ctx.userId)
@@ -228,19 +227,9 @@ export const runTurn = async (
     }),
   })
 
-  // ── The reply is the server's to finish, not the client's ─────────────────
-  // The response stream advances only while something pulls it, and the browser
-  // was the only puller. A reload, a closed tab or a navigation cancels the body,
-  // the pull stops, and onFinish — where finishTurn writes the assistant event —
-  // never runs: the user's own message lands and the answer disappears silently.
-  // Draining here removes that dependency, so the turn completes on the server
-  // whether or not anyone is listening and the WHOLE reply is persisted. There
-  // is deliberately no partial-snapshot path — the finish callback is the single
-  // writer, it fires once on the recorded base stream however many consumers
-  // read it, and a stream that dies mid-generation never reaches it at all.
-  // Complete or nothing; never a truncated answer stored as if it were full.
-  // Deferred through the host so the serverless invocation outlives the response
-  // it already returned.
+  // Keep draining after browser disconnect so onFinish can persist the reply.
+  // The host keeps deferred work alive within its execution limit; persistence
+  // remains in the single finish callback, with no partial-snapshot writer.
   host.defer(Promise.resolve(result.consumeStream({
     onError: (error) => log.api('Turn stream drain failed', { error: String(error) }, 'error'),
   })))

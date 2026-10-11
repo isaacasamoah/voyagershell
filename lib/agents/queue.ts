@@ -48,10 +48,6 @@ interface GuardedBackgroundTaskOptions<T> {
 const BACKGROUND_TASK_TIMEOUT_MS = 280_000 // fits inside the route's maxDuration=300s
 const STUCK_TASK_TTL_MS = 5 * 60 * 1000
 const REAPED_TASK_ERROR = 'reaped: no terminal state within TTL'
-/**
- * Enqueue a new agent task.
- * Called by the spawn_background_agent tool.
- */
 export async function enqueueAgentTask(params: EnqueueParams): Promise<string> {
   const supabase = getClientForContext({ userId: params.userId })
   const { data, error } = await supabase
@@ -84,10 +80,7 @@ export interface TaskProgress {
   percent?: number
 }
 
-/**
- * Update task progress (for realtime UI updates).
- * Called by background agents to report progress.
- */
+/** Progress is observed by the UI through Supabase Realtime. */
 export async function updateTaskProgress(
   taskId: string,
   progress: TaskProgress
@@ -101,8 +94,7 @@ export async function updateTaskProgress(
       updated_at: new Date().toISOString(),
     })
     .eq('id', taskId)
-    // A progress write must NEVER resurrect a terminal task ('failed'/'complete')
-    // back to 'running' — that made timed-out zombies (live, 2026-07-11).
+    // Late progress must not return a failed or completed task to running.
     .in('status', ['pending', 'running'])
 
   if (error) {
@@ -137,9 +129,6 @@ export async function completeTask(
   console.log(`[AgentQueue] Task completed: ${taskId} (${durationMs}ms)`)
 }
 
-/**
- * Mark a task as failed with error.
- */
 export async function failTask(taskId: string, errorMessage: string): Promise<void> {
   const supabase = getAdminClient()
   const { error } = await supabase
@@ -170,7 +159,7 @@ export async function runGuardedBackgroundTask<T>({
   const controller = new AbortController()
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      controller.abort() // actually stop the loop — a raced-out run must not keep burning
+      controller.abort() // Promise.race alone does not cancel the model request.
       reject(new Error('Background agent timed out'))
     }, timeoutMs)
   })

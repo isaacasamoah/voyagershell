@@ -1,10 +1,3 @@
-// Model Router
-// Abstracts model selection based on task requirements
-//
-// Note: Google models use custom Gemini client, not AI SDK.
-// This router only returns AI SDK LanguageModel for Anthropic.
-// For Google, use selectConfig() + the appropriate Gemini integration.
-
 import { anthropic } from '@ai-sdk/anthropic'
 import type { LanguageModel } from 'ai'
 import { DEFAULT_PROVIDERS, type ModelConfig, type ModelProvider } from './providers'
@@ -30,15 +23,12 @@ const createLanguageModel = (config: ModelConfig): LanguageModel => {
     case 'anthropic':
       return anthropic(config.modelId)
     case 'google':
-      // Google uses custom client, not AI SDK
-      // Callers should use selectConfig() + callGemini() for Google
       throw new Error('Google models use custom client. Use selectConfig() + callGemini() instead.')
     default:
       throw new Error(`Unknown provider: ${config.provider}`)
   }
 }
 
-// Providers that support AI SDK LanguageModel interface
 const AI_SDK_PROVIDERS: Set<string> = new Set(['anthropic', 'openai'])
 
 export const createModelRouter = (options?: {
@@ -57,16 +47,14 @@ export const createModelRouter = (options?: {
     })
 
     if (candidates.length === 0) {
-      candidates = fromModels // Fallback to all in scope
+      candidates = fromModels
     }
 
-    // Sort by quality preference
     if (req.quality === 'fast') {
       candidates.sort((a, b) => a.typicalLatencyMs - b.typicalLatencyMs)
     } else if (req.quality === 'best') {
       candidates.sort((a, b) => b.costPerMillion.output - a.costPerMillion.output)
     } else {
-      // balanced - prefer Sonnet
       const sonnet = candidates.find(m => m.id === 'claude-sonnet')
       if (sonnet) return sonnet
     }
@@ -75,13 +63,11 @@ export const createModelRouter = (options?: {
   }
 
   return {
-    // Returns AI SDK LanguageModel (Anthropic only currently)
     select(requirements: ModelRequirements): LanguageModel {
       const config = selectModelConfig(requirements, aiSdkModels)
       return createLanguageModel(config)
     },
 
-    // Returns config for any provider (use with custom clients for Google)
     selectConfig(requirements: ModelRequirements): ModelConfig {
       return selectModelConfig(requirements, allModels)
     },

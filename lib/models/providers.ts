@@ -1,6 +1,3 @@
-// Model providers and configurations
-// Defines available models, their capabilities, and costs
-
 export interface ModelConfig {
   id: string
   provider: 'anthropic' | 'google' | 'openai'

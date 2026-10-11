@@ -106,7 +106,8 @@ voice.
 
 ## Code rules
 
-- TypeScript strict, named exports, arrow components.
+- TypeScript strict, named exports, arrow components. Next.js pages and layouts
+  use the default exports required by the framework.
 - Files below 250 lines; split by coherent responsibility.
 - One canonical owner for each fact or runtime path.
 - Database privacy at the database boundary plus the application boundary.
