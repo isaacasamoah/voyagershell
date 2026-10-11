@@ -53,7 +53,7 @@ and its relative links describe the branch you are reading.
 
 ## Run locally
 
-Use Node.js 20.x and npm. Create your own development Supabase project and use
+Use Node.js 24.x and npm. Create your own development Supabase project and use
 its URL and keys; production data is not needed to contribute.
 
 ```bash

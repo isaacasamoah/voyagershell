@@ -7,7 +7,7 @@ ritual.
 
 ## Local setup
 
-Requirements: Node.js 20, npm, Supabase access for database work, and a local
+Requirements: Node.js 24, npm, Supabase access for database work, and a local
 `.env.local` derived from [.env.example](./.env.example).
 
 ```bash
