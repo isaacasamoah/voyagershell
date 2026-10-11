@@ -4,13 +4,24 @@
 
 ## Event-sourced knowledge
 
-
 `knowledge_events` is the sole ledger containing event content. Events are
 append-only apart from the deliberately bounded audience transition described
 below. `knowledge_current` is a derived projection retained by the event system.
 Current semantic and keyword retrieval read authorized `knowledge_units` through
 database functions. Units contain extracted claims and immutable provenance;
 each unit has exactly the same audience as its source event.
+
+Service-role retrieval must cross the database authorization boundary. Exact-ID
+unit hydration uses `search_knowledge_units` with `p_unit_ids`; direct voyage
+message retrieval uses the caller-authorized `get_voyage_messages` function.
+Neither path may hydrate `knowledge_current` directly through the admin client.
+PostgreSQL rechecks the viewer's audience, grants and current membership as
+required by the query when it executes.
+
+An ordinary Voyager response inherits the exact immutable audience of its
+claimed human source event. Its graph attribution is `generated_by` the owner's
+Voyager, not `authored_by` the person. A synthetic welcome has no human source
+and is restricted to the owner-private conversation shape.
 
 Source visibility is represented by an immutable `knowledge_audiences` row:
 
