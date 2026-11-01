@@ -1,0 +1,16 @@
+[package]
+name = "voyager-native-avatar"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "voyager-native-avatar"
+path = "native-avatar.rs"
+
+[dependencies]
+gpui = { version = "=0.2.2", default-features = false, features = ["x11", "font-kit"] }
+anyhow = "=1.0.103"
+
+[profile.dev]
+debug = 0
