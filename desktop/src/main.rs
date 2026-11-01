@@ -12,6 +12,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
+use voyager_app::client::Client;
 
 gpui::actions!(voyager, [Quit]);
 
@@ -68,6 +69,14 @@ fn run() -> Result<()> {
         include_str!("../mods/header/mod.json"),
     )?;
     seed(&theme, include_str!("../themes/voyager.json"))?;
+    seed(
+        &package.join("validate.js"),
+        include_str!("../../contract/generated/validate.js"),
+    )?;
+    seed(
+        &package.join("workspace.js"),
+        include_str!("../../contract/generated/workspace.js"),
+    )?;
     let manifest: serde_json::Value = serde_json::from_slice(&fs::read(package.join("mod.json"))?)
         .context("Reading header manifest")?;
     if manifest.get("entry").and_then(serde_json::Value::as_str) != Some("main.js")
@@ -82,6 +91,10 @@ fn run() -> Result<()> {
     let initial_theme = fs::read(&theme).context("Reading theme")?;
     let initial_source = host::source_snapshot(&package).map_err(|error| format!("{error:#}"));
     let assets = AppAssets::new(package.clone());
+    let client = Client::open(
+        session.clone(),
+        env::current_dir()?.to_string_lossy().into_owned(),
+    );
     gpui_platform::application()
         .with_assets(assets)
         .run(move |cx: &mut App| {
@@ -99,7 +112,7 @@ fn run() -> Result<()> {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                     point(px(180.), px(130.)),
-                    size(px(900.), px(160.)),
+                    size(px(1450.), px(940.)),
                 ))),
                 titlebar: Some(TitlebarOptions {
                     title: Some(format!("Voyager — {session}").into()),
@@ -112,10 +125,13 @@ fn run() -> Result<()> {
                 cx.new(|cx| {
                     host::Header::new(
                         runtime,
-                        &package,
-                        theme,
-                        initial_theme,
-                        initial_source,
+                        host::Setup {
+                            package,
+                            theme_path: theme,
+                            initial_theme,
+                            initial_source,
+                            client,
+                        },
                         window,
                         cx,
                     )

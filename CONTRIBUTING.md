@@ -19,6 +19,22 @@ On contract branches, also run npm run typecheck and npm run contract:check. The
 
 Native journeys use the candidate revision's prove.py and focused modules. Supply a unique session, debugging port and new evidence directory. A later --quit uses that same evidence and candidate. Do not infer microphone audibility, compositor behavior or another operating system from an X11 test.
 
+The selected native workspace uses one root Cargo workspace and build-only Node dependencies:
+
+```sh
+npm ci --ignore-scripts
+npm run format:check
+npm test
+npm run contract:check
+cargo fmt --all --check
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo build --release --locked -p voyager-desktop --bin voyager-shell
+python prove.py --foundation --journey workspace --launch --session voyager-unique-name --evidence /absolute/new/evidence --desktop-env /absolute/desktop-environment.json
+```
+
+The current workspace checkpoint is described in [docs/workspace.md](docs/workspace.md). It does not yet render or run terminals. Do not use its layout checkpoint as acceptance of the full foundation. Performance measurements use the resulting `target/release/voyager-shell` and record the exact artifact and workload. Debug build timings do not establish release runtime performance.
+
 CONSTRAINTS.md owns the complete acceptance-code inventory and review rules. Count shared helpers once, include temporary proving code and map production ranges actually exercised. Keep a fresh independent review and relevant negative control. A dependency install or green unit suite does not complete a user-facing increment.
 
 Make one logical change per PR. Preserve the existing MIT license and source attribution. Local task specs/plans remain untracked. Do not commit profiles, screenshots, transcripts or credentials. Merging, installation and replacing a demo are separate owner decisions.

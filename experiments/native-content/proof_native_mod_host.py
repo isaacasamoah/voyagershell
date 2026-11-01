@@ -16,6 +16,8 @@ from proof_process import process_identity
 def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
+    parser.add_argument("--foundation", action="store_true")
+    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -30,6 +32,7 @@ def run():
     if not re.fullmatch(r"voyager-[a-z0-9-]+", args.session):
         parser.error("Use a dedicated voyager- session")
     root = Path(__file__).resolve().parent
+    candidate_root = root.parents[1] if args.foundation else root
     binary = args.binary.resolve()
     if args.launch and not binary.is_file():
         raise RuntimeError("Native header capability has not been built")
@@ -45,6 +48,8 @@ def run():
         env.update(json.loads((evidence / "launch.json").read_text())["desktopEnvironment"])
     env.pop("WAYLAND_DISPLAY", None)
     env["VOYAGER_WORKSPACE_SESSION"] = args.session
+    if args.journey == "workspace-unavailable":
+        env["VOYAGER_HC"] = "/bin/false"
     profile = evidence / "profile"
     launch_file = evidence / "launch.json"
     command = [str(binary), "--profile", str(profile), "--session", args.session]
@@ -64,7 +69,7 @@ def run():
     def launch():
         with (evidence / "native.log").open("a") as log:
             process = subprocess.Popen(
-                command, cwd=root, env=env, stdout=log, stderr=log, start_new_session=True
+                command, cwd=candidate_root, env=env, stdout=log, stderr=log, start_new_session=True
             )
         (evidence / "launch-pending.json").write_text(json.dumps({
             "pid": process.pid, "command": command, "session": args.session,
@@ -104,7 +109,7 @@ def run():
     def verify():
         actual = identify(record["pid"])
         assert actual == record["identity"], "Process identity changed"
-        assert actual["uid"] == os.getuid() and actual["cwd"] == str(root)
+        assert actual["uid"] == os.getuid() and actual["cwd"] == str(candidate_root)
         assert actual["session"] == args.session and actual["command"] == record["command"]
         assert int(execute("xdotool", "getwindowpid", record["window"])) == record["pid"]
         assert args.session in execute("xdotool", "getwindowname", record["window"])
@@ -113,7 +118,7 @@ def run():
     execute("xdotool", "windowactivate", "--sync", record["window"])
     pointer = subprocess.Popen(
         ["/usr/bin/python3", str(root / "proof_native_input.py")]
-        + (["--pointer"] if args.notes else []), env=env, text=True,
+        + (["--pointer"] if args.notes or args.foundation else []), env=env, text=True,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=(evidence / "pointer.log").open("a"),
     )
@@ -205,6 +210,14 @@ def run():
         if args.quit:
             close()
             passed.append("native-quit")
+        elif args.foundation:
+            import proof_workspace
+
+            passed.extend(proof_workspace.prove(
+                native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame,
+                evidence=evidence, session=args.session, env=env,
+                journey=args.journey,
+            ))
         elif args.notes:
             import proof_native_notes
 
