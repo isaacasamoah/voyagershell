@@ -2,7 +2,7 @@
   const handle = $("avatar");
   let fadeTimer;
   async function animate() {
-    const base = "../../desktop/assets/";
+    const base = "assets/";
     const frames = [
       "idle.png",
       "book-frames/book-out.png",

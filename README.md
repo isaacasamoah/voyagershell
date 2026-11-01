@@ -1,6 +1,6 @@
-# Voyager Core workspace prototype
+# VoyagerShell
 
-This isolated Electron client uses Herdr Core to run terminal processes and render their screens. It does not replace the installed Voyager service. It remains a research prototype.
+VoyagerShell is a configurable workspace for people and agents, built on Herdr Core. This is the canonical standalone repository for the current prototype. Electron presents the workspace; Herdr Core owns its terminal processes and screens. Native renderer parity and collaboration remain experiments.
 
 The 1 November UX candidate removes duplicate conversation controls, decorative dock buttons, layout/package toolbar buttons and the sidebar footer. One text control stays with the sidebar, or moves to the top bar when the sidebar is collapsed. Speech stays with the full-size avatar or its compact control location. The existing avatar animation and sound implementation is retained.
 
@@ -10,7 +10,7 @@ New Vessel and Split open a compact picker beside the control. It follows the li
 
 ## Run and interact
 
-Use Node 24, a Linux desktop and `hc` 0.1.15 on PATH. Chat and voice additionally need a configured Codex installation. Install dependencies and launch from this directory:
+Use Node 24, a Linux desktop and `hc` 0.1.16 on PATH. Chat and voice additionally need a configured Codex installation. Install dependencies and launch from this directory:
 
 ```sh
 npm ci
