@@ -33,9 +33,15 @@ export interface Snapshot {
   version: string;
 }
 export interface Message {
-  context?: Context | null;
+  context?: Focus | null;
   id: string;
   requestId: string;
   role: Role;
   text: string;
+}
+export interface Focus {
+  cwd?: string | null;
+  path: string[];
+  revision: string;
+  scope: Context;
 }

@@ -14,7 +14,12 @@ are not installed in this first checkpoint. Restoring native inspection and
 the existing application tool groups is C2 work. Instructions describe the
 administrator role; they are not represented as an OS-wide security boundary.
 
-Rust binds a new request to the actual workspace context at Send. Provider
+Rust binds a new request to the actual workspace context at Send. Its descriptor
+contains the original scope and IDs, readable Voyage/Fleet/content path, matching
+layout revision and working directory where the scope has one shared directory.
+These come from the same confirmed owner snapshot. A workspace-wide scope has no
+single directory. Later navigation or renaming does not rewrite a sent request.
+Provider
 responses must match the private connection's request, thread and accepted turn.
 Only visible agent messages reach the projection. Reasoning, account records,
 credentials and audio data do not. A received request is not a completed turn.
@@ -34,6 +39,15 @@ The projection retains a display-limit warning while the underlying turn finishe
 It reports that turn's actual outcome separately. Losing the provider connection
 after a confirmed completion does not turn that completed outcome into uncertainty;
 the connection error is still shown and later sends are refused without recovery.
+The same rule applies if early events exceed the pre-acknowledgement bound. The
+projection remains explicitly incomplete, and the bounded queue retains a native
+completion event so it can report the matching accepted turn's actual outcome.
+Late errors or duplicate terminal notifications do not replace a known outcome.
+
+Settings are validated before a private runtime or turn starts. Invalid settings
+reject that Send. After correcting them, the user may explicitly send again;
+Voyager does not retry automatically. Model and effort changes apply to the next
+private runtime, not silently to an already-created thread.
 
 The owner appends deltas in place. The native view observes a versioned snapshot
 with a blocking wait off the UI thread, then coalesces visible updates at 50 ms.

@@ -1,5 +1,97 @@
 use serde_json::Value;
-use voyager_contract::conversation::{Message, Phase, Role, Snapshot};
+use std::collections::VecDeque;
+use voyager_contract::conversation::{Focus, Message, Phase, Role, Snapshot};
+use voyager_contract::{Context, Layout, Vessel};
+
+pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
+    let mut focus = Focus {
+        scope: layout.context.clone(),
+        path: vec!["Workspace".into()],
+        cwd: None,
+        revision,
+    };
+    if layout.context == Context::Workspace {
+        return Ok(focus);
+    }
+    for voyage in &layout.voyages {
+        if matches!(&layout.context, Context::Voyage { id } if id == &voyage.id) {
+            focus.path.push(voyage.name.clone());
+            focus.cwd = directory(
+                layout,
+                voyage
+                    .fleets
+                    .iter()
+                    .flat_map(|fleet| fleet.vessels.iter())
+                    .chain(voyage.portals.iter()),
+            );
+            return Ok(focus);
+        }
+        for fleet in &voyage.fleets {
+            if matches!(&layout.context, Context::Fleet { id } if id == &fleet.id) {
+                focus.path.extend([voyage.name.clone(), fleet.name.clone()]);
+                focus.cwd = directory(layout, fleet.vessels.iter());
+                return Ok(focus);
+            }
+            if let Some(placement) = fleet
+                .vessels
+                .iter()
+                .find(|p| matches!(&layout.context, Context::Vessel { id } if id == &p.id))
+            {
+                let content = layout
+                    .contents
+                    .iter()
+                    .find(|c| c.id == placement.content)
+                    .ok_or("Focused content is missing")?;
+                focus.path.extend([
+                    voyage.name.clone(),
+                    fleet.name.clone(),
+                    content.type_id.clone(),
+                ]);
+                focus.cwd = Some(content.cwd.clone());
+                return Ok(focus);
+            }
+        }
+        if let Some(placement) = voyage
+            .portals
+            .iter()
+            .find(|p| matches!(&layout.context, Context::Portal { id } if id == &p.id))
+        {
+            let content = layout
+                .contents
+                .iter()
+                .find(|c| c.id == placement.content)
+                .ok_or("Focused content is missing")?;
+            focus
+                .path
+                .extend([voyage.name.clone(), format!("{} Portal", content.type_id)]);
+            focus.cwd = Some(content.cwd.clone());
+            return Ok(focus);
+        }
+    }
+    Err("Focused workspace target is missing".into())
+}
+
+fn directory<'a>(layout: &Layout, placements: impl Iterator<Item = &'a Vessel>) -> Option<String> {
+    let mut dirs = placements
+        .filter_map(|placement| layout.contents.iter().find(|c| c.id == placement.content));
+    let first = &dirs.next()?.cwd;
+    dirs.all(|content| &content.cwd == first)
+        .then(|| first.clone())
+}
+
+pub(crate) fn defer(state: &mut Snapshot, events: &mut VecDeque<Value>, value: Value) -> bool {
+    if events.len() < 16 {
+        events.push_back(value);
+        return false;
+    }
+    state.limited = true;
+    state.error = Some("The displayed response is incomplete because early provider events exceeded the display bound. Native work continues; nothing was replayed.".into());
+    if value.get("method").and_then(Value::as_str) == Some("turn/completed") {
+        events.pop_front();
+        events.push_back(value);
+    }
+    true
+}
 
 pub(crate) fn fail(state: &mut Snapshot, error: String, phase: Phase) -> bool {
     if !matches!(
@@ -74,7 +166,7 @@ pub(crate) fn notification(state: &mut Snapshot, value: &Value, request: &str) -
                 || state.messages.len() >= 128
             {
                 state.limited = true;
-                state.error=Some("The private response exceeded its display bound. It was not truncated or replayed.".into());
+                state.error=Some("The displayed response is incomplete because it exceeded its display bound. Native work continues; nothing was replayed.".into());
                 return true;
             }
             if let Some(message) = state.messages.iter_mut().find(|message| {
@@ -105,18 +197,28 @@ pub(crate) fn notification(state: &mut Snapshot, value: &Value, request: &str) -
             if state.turn.is_some()
                 && params.get("turnId").and_then(Value::as_str) == state.turn.as_deref() =>
         {
-            state.error = params
+            let error = params
                 .pointer("/error/message")
                 .and_then(Value::as_str)
-                .map(str::to_owned);
-            if params.get("willRetry").and_then(Value::as_bool) != Some(true) {
-                state.phase = Phase::Failed;
-            }
+                .unwrap_or("Private provider reported an error")
+                .to_owned();
+            let phase = if params.get("willRetry").and_then(Value::as_bool) == Some(true) {
+                state.phase.clone()
+            } else {
+                Phase::Failed
+            };
+            return fail(state, error, phase);
         }
         Some("turn/completed")
             if state.turn.is_some()
                 && params.pointer("/turn/id").and_then(Value::as_str) == state.turn.as_deref() =>
         {
+            if matches!(
+                state.phase,
+                Phase::Completed | Phase::Interrupted | Phase::Failed
+            ) {
+                return false;
+            }
             state.phase = match params.pointer("/turn/status").and_then(Value::as_str) {
                 Some("completed") => Phase::Completed,
                 Some("interrupted") => Phase::Interrupted,
@@ -138,6 +240,97 @@ pub(crate) fn notification(state: &mut Snapshot, value: &Value, request: &str) -
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn focus_names_and_directory_follow_the_dock_not_navigation() {
+        let mut model = crate::workspace::Model::default();
+        model
+            .apply(voyager_contract::Action::CreateVoyage {
+                name: "Alpha".into(),
+                cwd: "/alpha".into(),
+            })
+            .unwrap();
+        let voyage = model.layout.voyages[0].id.clone();
+        let fleet = model.layout.voyages[0].fleets[0].id.clone();
+        let placement = model.layout.voyages[0].fleets[0].vessels[0].clone();
+        model
+            .apply(voyager_contract::Action::CreateVoyage {
+                name: "Beta".into(),
+                cwd: "/beta".into(),
+            })
+            .unwrap();
+        model
+            .apply(voyager_contract::Action::Dock {
+                context: Context::Vessel {
+                    id: placement.id.clone(),
+                },
+            })
+            .unwrap();
+        let captured = focus(&model.layout, 42).unwrap();
+        assert_eq!(captured.scope, model.layout.context);
+        assert_eq!(
+            captured.path,
+            ["Workspace", "Alpha", "Workbench", "terminal"]
+        );
+        assert_eq!(captured.cwd.as_deref(), Some("/alpha"));
+        assert_eq!(captured.revision, 42);
+        model.layout.voyages[0].name = "Renamed".into();
+        assert_eq!(captured.path[1], "Alpha");
+        model.layout.context = Context::Fleet { id: fleet };
+        assert_eq!(
+            focus(&model.layout, 43).unwrap().path,
+            ["Workspace", "Renamed", "Workbench"]
+        );
+        model.layout.context = Context::Voyage { id: voyage };
+        assert_eq!(
+            focus(&model.layout, 44).unwrap().cwd.as_deref(),
+            Some("/alpha")
+        );
+        model.layout.voyages[0].portals.push(Vessel {
+            id: voyager_contract::PlacementId("portal".into()),
+            content: placement.content,
+        });
+        model.layout.context = Context::Portal {
+            id: voyager_contract::PlacementId("portal".into()),
+        };
+        assert_eq!(
+            focus(&model.layout, 45).unwrap().path,
+            ["Workspace", "Renamed", "terminal Portal"]
+        );
+        model.layout.context = Context::Workspace;
+        assert!(focus(&model.layout, 46).unwrap().cwd.is_none());
+    }
+
+    #[test]
+    fn pre_ack_overflow_retains_loss_and_the_actual_terminal_outcome() {
+        let mut state = Snapshot {
+            thread: Some("thread".into()),
+            phase: Phase::Working,
+            ..Snapshot::default()
+        };
+        let mut events = VecDeque::new();
+        for _ in 0..17 {
+            defer(
+                &mut state,
+                &mut events,
+                json!({"method":"item/agentMessage/delta","params":{"threadId":"thread","turnId":"turn","itemId":"answer","delta":"text"}}),
+            );
+        }
+        assert_eq!(events.len(), 16);
+        assert!(state.limited);
+        defer(
+            &mut state,
+            &mut events,
+            json!({"method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn","status":"completed","error":null}}}),
+        );
+        state.turn = Some("turn".into());
+        for event in events {
+            notification(&mut state, &event, "request");
+        }
+        assert_eq!(state.phase, Phase::Completed);
+        assert!(state.limited && state.error.is_some());
+        assert!(state.messages.is_empty());
+    }
 
     #[test]
     fn missing_provider_identity_cannot_become_a_visible_message() {
@@ -226,6 +419,8 @@ mod tests {
     #[test]
     fn connection_loss_preserves_a_confirmed_completed_turn() {
         let mut state = Snapshot {
+            thread: Some("private".into()),
+            turn: Some("turn".into()),
             phase: Phase::Completed,
             ..Snapshot::default()
         };
@@ -242,5 +437,17 @@ mod tests {
         );
         assert_eq!(state.phase, Phase::Completed);
         assert!(state.error.is_some());
+        notification(
+            &mut state,
+            &json!({"method":"error","params":{"threadId":"private","turnId":"turn","willRetry":false,"error":{"message":"Late native error"}}}),
+            "request",
+        );
+        assert_eq!(state.phase, Phase::Completed);
+        notification(
+            &mut state,
+            &json!({"method":"turn/completed","params":{"threadId":"private","turn":{"id":"turn","status":"failed","error":null}}}),
+            "request",
+        );
+        assert_eq!(state.phase, Phase::Completed);
     }
 }

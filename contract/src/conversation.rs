@@ -58,7 +58,18 @@ pub struct Message {
     pub request_id: String,
     pub role: Role,
     pub text: String,
-    pub context: Option<Context>,
+    pub context: Option<Focus>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Focus {
+    pub scope: Context,
+    pub path: Vec<String>,
+    pub cwd: Option<String>,
+    #[serde(with = "crate::decimal")]
+    #[schemars(with = "String")]
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

@@ -87,13 +87,42 @@
         }
       ]
     },
+    "Focus": {
+      "additionalProperties": false,
+      "properties": {
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/definitions/Context"
+        }
+      },
+      "required": [
+        "scope",
+        "path",
+        "revision"
+      ],
+      "type": "object"
+    },
     "Message": {
       "additionalProperties": false,
       "properties": {
         "context": {
           "anyOf": [
             {
-              "$ref": "#/definitions/Context"
+              "$ref": "#/definitions/Focus"
             },
             {
               "type": "null"

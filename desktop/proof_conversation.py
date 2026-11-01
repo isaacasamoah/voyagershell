@@ -45,7 +45,7 @@ def prove(
     type_text(
         "Count from one to one hundred in words. Use no tools."
         if journey == "conversation-interrupt"
-        else "Reply with four short sentences about a quiet ocean. Use no tools."
+        else "Reply with one short sentence about a quiet ocean. Use no tools."
     )
     capture("conversation-draft")
     native("key", 65293, True)
@@ -118,6 +118,10 @@ def prove(
         len(users) == 1 and answers and answers[0]["requestId"] == users[0]["requestId"]
     )
     assert answers[0]["context"] == users[0]["context"]
+    assert final["limited"] is False
+    assert users[0]["context"]["path"] == ["Workspace"]
+    assert users[0]["context"]["scope"] == {"kind": "workspace"}
+    assert users[0]["context"]["revision"].isdigit()
     capture("conversation-completed")
     (evidence / "conversation-final.json").write_text(json.dumps(final, indent=2))
     close()

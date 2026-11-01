@@ -1,13 +1,13 @@
 use crate::{
     client::Client as Workspace,
     codex::Codex,
-    conversation::{fail, notification},
+    conversation::{defer, fail, focus, notification},
 };
 use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc, Condvar, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -79,6 +79,7 @@ impl Client {
                 started: false,
                 pending: None,
                 sequence: 0,
+                model: "gpt-6.1-sol".into(),
                 effort: "high".into(),
                 active: String::new(),
                 interrupt: false,
@@ -187,6 +188,7 @@ struct Owner {
     started: bool,
     pending: Option<Pending>,
     sequence: u64,
+    model: String,
     effort: String,
     active: String,
     interrupt: bool,
@@ -319,6 +321,9 @@ impl Owner {
                 "Private connection unavailable; nothing was restarted or resubmitted".into(),
             );
         }
+        if !self.started {
+            (self.model, self.effort) = settings(&self.profile)?;
+        }
         let workspace = self.workspace.call(WorkspaceRequest {
             request_id: self.workspace.request_id(),
             expected_version: 0,
@@ -327,7 +332,7 @@ impl Owner {
         if workspace.status != Status::Applied || !workspace.fresh {
             return Err("Inspect the workspace before starting this conversation".into());
         }
-        let context = workspace.layout.context.clone();
+        let context = focus(&workspace.layout, workspace.version)?;
         self.active = request.request_id.clone();
         self.interrupt = false;
         self.deferred.clear();
@@ -421,37 +426,7 @@ impl Owner {
                         .as_mut()
                         .ok_or("Private provider unavailable")?
                         .write(json!({"method":"initialized"}))?;
-                    let config_path = self.profile.join("conversation.json");
-                    let config: Value = match fs::read(&config_path) {
-                        Ok(bytes) => serde_json::from_slice(&bytes)
-                            .map_err(|e| format!("Invalid conversation settings: {e}"))?,
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
-                        Err(e) => return Err(e.to_string()),
-                    };
-                    let model = config
-                        .get("model")
-                        .and_then(Value::as_str)
-                        .unwrap_or("gpt-6.1-sol");
-                    if config.get("model").is_some_and(|v| !v.is_string())
-                        || config.get("effort").is_some_and(|v| !v.is_string())
-                        || !config.is_object()
-                        || config.as_object().is_some_and(|object| {
-                            object.keys().any(|key| key != "model" && key != "effort")
-                        })
-                        || model.trim().is_empty()
-                        || model.len() > 128
-                    {
-                        return Err("Conversation settings require model and effort strings".into());
-                    }
-                    self.effort = config
-                        .get("effort")
-                        .and_then(Value::as_str)
-                        .unwrap_or("high")
-                        .to_owned();
-                    if self.effort.is_empty() || self.effort.len() > 32 {
-                        return Err("Invalid reasoning effort".into());
-                    }
-                    self.rpc("thread/start", json!({"model":model,"allowProviderModelFallback":false,"ephemeral":true,"cwd":self.profile.join("conversation"),"approvalPolicy":"never","sandbox":"read-only","config":{"model_reasoning_effort":self.effort},"baseInstructions":"You are Voyager, the human's concise private workspace administrator. Each request carries an explicit avatar context. Keyboard navigation does not change that context. Reply briefly and accurately. This first native text checkpoint has no application tools. Explain that limitation when asked to perform an action. Never claim an effect occurred. Do not execute shell commands, edit files, invoke MCP tools, create agents or change projects. Working Vessels perform project work. No native session restoration or automatic replay is permitted."}))
+                    self.rpc("thread/start", json!({"model":self.model,"allowProviderModelFallback":false,"ephemeral":true,"cwd":self.profile.join("conversation"),"approvalPolicy":"never","sandbox":"read-only","config":{"model_reasoning_effort":self.effort},"baseInstructions":"You are Voyager, the human's concise private workspace administrator. Each request carries an explicit avatar context. Keyboard navigation does not change that context. Reply briefly and accurately. This first native text checkpoint has no application tools. Explain that limitation when asked to perform an action. Never claim an effect occurred. Do not execute shell commands, edit files, invoke MCP tools, create agents or change projects. Working Vessels perform project work. No native session restoration or automatic replay is permitted."}))
                 }
                 "thread/start" => {
                     let thread = result
@@ -497,11 +472,8 @@ impl Owner {
             .as_ref()
             .is_some_and(|p| p.method == "turn/start")
         {
-            if self.deferred.len() >= 16 {
-                return Err("Provider exceeded the pre-acknowledgement event bound".into());
-            }
-            self.deferred.push_back(value);
-            Ok(())
+            self.projection
+                .edit(|state| defer(state, &mut self.deferred, value))
         } else {
             self.reduce(value)
         }
@@ -510,5 +482,75 @@ impl Owner {
     fn reduce(&self, value: Value) -> Result<(), String> {
         self.projection
             .edit(|state| notification(state, &value, &self.active))
+    }
+}
+
+fn settings(profile: &Path) -> Result<(String, String), String> {
+    let config: Value = match fs::read(profile.join("conversation.json")) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map_err(|e| format!("Invalid conversation settings: {e}"))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
+        Err(e) => return Err(e.to_string()),
+    };
+    let model = config
+        .get("model")
+        .and_then(Value::as_str)
+        .unwrap_or("gpt-6.1-sol");
+    let effort = config
+        .get("effort")
+        .and_then(Value::as_str)
+        .unwrap_or("high");
+    if !config.is_object()
+        || config
+            .as_object()
+            .is_some_and(|object| object.keys().any(|key| key != "model" && key != "effort"))
+        || config.get("model").is_some_and(|v| !v.is_string())
+        || config.get("effort").is_some_and(|v| !v.is_string())
+        || model.trim().is_empty()
+        || model.len() > 128
+        || effort.trim().is_empty()
+        || effort.len() > 32
+    {
+        return Err(
+            "Conversation settings require valid model and effort strings; no turn was submitted"
+                .into(),
+        );
+    }
+    Ok((model.into(), effort.into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn malformed_settings_can_be_corrected_before_any_runtime_starts() {
+        let profile =
+            std::env::temp_dir().join(format!("voyager-c1-settings-{}", std::process::id()));
+        fs::create_dir(&profile).unwrap();
+        assert_eq!(
+            settings(&profile).unwrap(),
+            ("gpt-6.1-sol".into(), "high".into())
+        );
+        for invalid in [
+            "{",
+            r#"{"effort":false}"#,
+            r#"{"model":""}"#,
+            r#"{"unexpected":true}"#,
+        ] {
+            fs::write(profile.join("conversation.json"), invalid).unwrap();
+            assert!(settings(&profile).is_err());
+        }
+        fs::write(
+            profile.join("conversation.json"),
+            r#"{"model":"gpt-6.1-sol","effort":"high"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            settings(&profile).unwrap(),
+            ("gpt-6.1-sol".into(), "high".into())
+        );
+        assert!(!profile.join("conversation").exists());
+        fs::remove_dir_all(profile).unwrap();
     }
 }
