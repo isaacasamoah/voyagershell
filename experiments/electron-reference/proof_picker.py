@@ -1,8 +1,14 @@
 import json
-from pathlib import Path
 
 from playwright.sync_api import expect
-from proof_common import content_directory, open_picker, processes, recorder, settled
+from proof_common import (
+    content_directory,
+    open_picker,
+    processes,
+    recorder,
+    settled,
+    reference_root,
+)
 
 
 def picker_journey(page, evidence, reject=True):
@@ -204,7 +210,7 @@ const {Core}=require('./core.cjs');
 """,
             session,
         ],
-        cwd=Path(__file__).resolve().parent,
+        cwd=reference_root(),
         check=True,
     )
     picker.get_by_role("button", name="Notes", exact=True).click()

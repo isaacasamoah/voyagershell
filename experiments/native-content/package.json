@@ -1,0 +1,24 @@
+{
+  "name": "voyagershell",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test.cjs portal-test.cjs organisation-test.cjs placement-test.cjs astronaut.test.cjs contract/validator-test.cjs",
+    "format:check": "prettier --check '*.cjs' '*.js' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'",
+    "format": "prettier --write '*.cjs' '*.js' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'",
+    "contract:generate": "node contract-build.cjs --write",
+    "contract:check": "node contract-build.cjs --check"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "electron": "44.10.0",
+    "json-schema-to-typescript": "16.0.0",
+    "prettier": "3.9.9"
+  }
+}
