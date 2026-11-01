@@ -5,14 +5,16 @@
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test.cjs portal-test.cjs organisation-test.cjs placement-test.cjs bindings-test.cjs astronaut.test.cjs",
-    "format:check": "prettier --check '*.cjs' '*.js' 'contract/generated/*.ts' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'",
-    "format": "prettier --write '*.cjs' '*.js' 'contract/generated/*.ts' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'",
+    "test": "node --test test.cjs portal-test.cjs organisation-test.cjs placement-test.cjs bindings-test.cjs content-test.cjs astronaut.test.cjs",
+    "format:check": "prettier --check '*.cjs' '*.js' '*.ts' 'contract/generated/*.ts' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'",
+    "format": "prettier --write '*.cjs' '*.js' '*.ts' 'contract/generated/*.ts' '*.html' '*.css' 'portal-defaults/**/*.{cjs,js,html,json,css}'",
     "contract:generate": "node contract-build.cjs --write",
     "contract:check": "node contract-build.cjs --check",
-    "contract:build": "node contract-build.cjs --build",
-    "pretest": "npm run contract:build && npm run typecheck",
-    "typecheck": "tsc --noEmit --strict --lib es2022 contract/generated/request.d.ts contract/generated/response.d.ts generated/validate.d.cts"
+    "build": "node build.cjs",
+    "typecheck": "tsc --project tsconfig.json",
+    "prestart": "npm run build",
+    "pretest": "npm run build",
+    "contract:build": "node contract-build.cjs --build"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",
@@ -21,6 +23,7 @@
   },
   "devDependencies": {
     "electron": "44.10.0",
+    "esbuild": "0.25.12",
     "json-schema-to-typescript": "16.0.0",
     "prettier": "3.9.9",
     "typescript": "5.9.3"

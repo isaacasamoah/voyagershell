@@ -14,7 +14,9 @@
     <script>
       let snapshot;
       async function load() {
-        snapshot = await portal.read();
+        const next = await portal.read();
+        if (snapshot?.version === next.version) return;
+        snapshot = next;
         document.querySelector("#title").value = snapshot.data.title || "";
         document.querySelector("#text").value = snapshot.data.text || "";
       }

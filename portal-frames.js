@@ -138,11 +138,37 @@
     )
       return;
     try {
-      const result = await api.call("portal-frame", {
-        ...message.input,
-        id: view.id,
-        action: message.op,
-      });
+      let result;
+      if (
+        message.op !== "action" &&
+        (message.op === "update" || !types.get(view.type)?.workspace)
+      ) {
+        const request = {
+          version: "1",
+          requestId: crypto.randomUUID(),
+          contentId: view.id,
+          operation: `content.${message.op}`,
+          ...(message.op === "update"
+            ? {
+                data: message.input?.data,
+                expectedRevision: message.input?.expected,
+              }
+            : {}),
+        };
+        const reply = await window.contentClient.call(request, view.id);
+        if (!["snapshot", "applied"].includes(reply.status))
+          throw Error(reply.message || "Unexpected content response");
+        result = {
+          data: reply.snapshot.data,
+          version: reply.snapshot.revision,
+          error: reply.snapshot.warning,
+        };
+      } else
+        result = await api.call("portal-frame", {
+          ...message.input,
+          id: view.id,
+          action: message.op,
+        });
       if (message.op === "inspect") {
         view.dataError = result.error;
         if (result.error) report(view, result.error);

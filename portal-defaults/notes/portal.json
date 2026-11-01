@@ -11,5 +11,17 @@
   "contract": {
     "title": "Heading",
     "text": "Plain text notes"
+  },
+  "stateSchema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": ["title", "text"]
   }
 }

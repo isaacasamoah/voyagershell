@@ -35,6 +35,7 @@ parser.add_argument("--portal-boundaries", action="store_true")
 parser.add_argument("--ux", action="store_true")
 parser.add_argument("--picker", action="store_true")
 parser.add_argument("--direct-controls", action="store_true")
+parser.add_argument("--content", action="store_true")
 parser.add_argument("--picker-rejection", action="store_true")
 parser.add_argument("--organisation", action="store_true")
 parser.add_argument(
@@ -141,6 +142,10 @@ with sync_playwright() as playwright:
         from proof_direct_controls import direct_controls_journey
 
         direct_controls_journey(page, evidence)
+    if args.content:
+        from proof_content import content_journey
+
+        content_journey(page, evidence)
     if args.ux:
         from proof_ux import chrome_journey
 

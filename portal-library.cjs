@@ -193,10 +193,15 @@ class PortalLibrary {
   write(id, data, expected) {
     const file = this.dataFile(id);
     if (hash(fs.readFileSync(file, "utf8")) !== expected)
-      throw Error("Portal data changed. Read it again before saving.");
+      throw Object.assign(
+        Error("Portal data changed. Read it again before saving."),
+        { code: "STALE_REVISION" },
+      );
     const text = JSON.stringify(data, null, 2) + "\n";
     if (Buffer.byteLength(text) > 1024 * 1024)
-      throw Error("Portal data exceeds 1 MiB.");
+      throw Object.assign(Error("Portal data exceeds 1 MiB."), {
+        code: "INVALID_DATA",
+      });
     atomic(file, text);
     return this.read(id);
   }
