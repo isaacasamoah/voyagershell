@@ -10,7 +10,7 @@ New Vessel and Split open a compact picker beside the control. It follows the li
 
 ## Run and interact
 
-Use Node 24, a Linux desktop and `hc` 0.1.16 on PATH. Chat and voice additionally need a configured Codex installation. Install dependencies and launch from this directory:
+Use Node 24, Rust, a Linux desktop and `hc` 0.1.16 on PATH. Chat and voice additionally need a configured Codex installation. Install dependencies and launch from this directory:
 
 ```sh
 npm ci
@@ -109,3 +109,22 @@ The initial main baseline has the latest tagged demo's runtime UI plus the conso
 The standalone checkout owns its avatar controller, tests and artwork. It does not load source from a neighbouring checkout. Its default starting folder is this repository. Existing profile/session naming remains unchanged. Dedicated session names must begin with voyager- and contain only lowercase letters, digits and hyphens.
 
 Before a native test interacts or issues Quit, the maintained fixture checks the CDP browser PID against its recorded launch, then verifies Linux process start identity, user, working directory, command, session and exact application page. A mismatched connection is refused before input or Browser.close. This Linux proving check is not a new production recovery system or another platform's evidence.
+
+## Typed content foundation, draft
+
+
+This first foundation increment gives ordinary content reads and all host-managed content writes one versioned contract. The small [Rust crate](contract/README.md) owns the wire types. Its locked exporter produces TypeScript declarations and standalone runtime validators. A typed application module checks caller scope, package state schema and revision before using the existing file writer. Electron remains the transport and viewer. Herdr Core remains the only process owner.
+
+The operations are content.describe, content.inspect and content.update. Requests contain version, requestId and contentId. Updates also contain data and expectedRevision. Caller authority and the frame's bound identity come from the application rather than request fields. Responses retain request/content identity. Rejected writes and uncertain outcomes also retain the attempted revision. The client verifies serialized replies and their identity. It does not retry an unconfirmed operation. Request IDs provide correlation, not durable duplicate suppression or safe replay.
+
+The existing avatar tool voyager_portal exposes describe for agents. Its update action calls the same typed write owner as embedded content. Source editing, uninstall/restore, workspace-enriched inspect and placement still use their explicit existing adapters. This is one migrated path, not a fully typed replacement of the application or a native renderer.
+
+Fresh Notes packages declare stateSchema for title and text. Agents can inspect that schema before editing. A schema-less installed package remains usable and is described as schema-less. Adding a compatible stateSchema through an ordinary live manifest edit opts it in without changing its ID, data or view source. Updating defaults never overwrites user packages. The existing contract field is descriptive guidance, not validation. A schema is not an executable sandbox.
+
+The write owner rejects a stale revision observed before replacement and leaves the file unchanged. Atomic replacement does not make its preceding hash check transactional against arbitrary external editors. External file editing remains supported. A failed readback after an actual replacement reports uncertainty rather than claiming the write failed. Invalid data may expose a previous valid snapshot with a warning. Notes avoids resetting an edit when a delayed refresh contains the same revision it has already saved.
+
+Run npm test, npm run typecheck and npm run format:check. The build checks declaration drift before emitting ignored runtime bundles. Run npm run contract:generate after an intentional Rust wire change and review the declaration diff. Generated bundles and third-party code do not enlarge the authored production budget.
+
+For the native Notes journey, build once, then run prove.py with --launch --content and a dedicated session, port and fresh evidence directory. It creates Notes through the picker, edits its actual field, injects a stale expected revision into one save, checks the visible rejection and unchanged file, then edits the same instance successfully. This uses an actual Electron/Core instance; injected rejection is a deterministic fault, not a concurrent human editing trial. Quit that dedicated candidate through the same fixture afterward. The preserved owner previews are separate and must not be used for destructive proving.
+
+The isolated X11 journey passed on 1 November. The first failed attempt had runner frame-wait ordering and cleanup-expression errors. The second caught a late same-revision refresh overwriting the next edit; the corrected third completed. Those failures remain evidence. Independent review found two Required issues that remain open: named state schemas can collide after a rescan, and ordinary agent inspect bypasses the typed reader and omits schema warnings. The corrective pass and final capability inventory are pending. The Notes journey above was observed in the original worktree before standalone extraction; it is not new native acceptance of this branch. No merge, owner-preview replacement, GPUI parity, audible voice or cross-platform result is claimed.

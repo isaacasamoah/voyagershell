@@ -1,10 +1,28 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { randomUUID } = require("node:crypto");
+const { ContentApplication } = require("./generated/content.cjs");
 
 class PortalHost {
   constructor(workspace, library) {
     this.workspace = workspace;
     this.library = library;
+    this.contentOwner = new ContentApplication({
+      describe: (id) => {
+        const place = workspace.portal(id);
+        if (place.portal.id !== id)
+          throw Error("Use the content ID, not a process address.");
+        const definition = library.definition(place.portal.type || "terminal");
+        return { typeId: definition.id, stateSchema: definition.stateSchema };
+      },
+      read: (id) => library.read(id),
+      write: (id, data, expected) => library.write(id, data, expected),
+      inFocus: (id) => workspace.containsPortal(id),
+    });
+  }
+
+  content(input, caller) {
+    return this.contentOwner.handle(input, caller);
   }
 
   async call(input, scoped = false, bound) {
@@ -72,6 +90,20 @@ class PortalHost {
     const definition = this.library.definition(
       current.portal.type || "terminal",
     );
+    if (action === "describe")
+      return this.content(
+        {
+          version: "1",
+          requestId: randomUUID(),
+          contentId: current.portal.id,
+          operation: "content.describe",
+        },
+        bound
+          ? { kind: "frame", contentId: bound }
+          : scoped
+            ? { kind: "agent" }
+            : { kind: "owner" },
+      );
     if (action === "inspect") {
       this.library.seed(id, definition.id);
       const snapshot = {
@@ -97,8 +129,32 @@ class PortalHost {
       }
       return snapshot;
     }
-    if (action === "update")
-      return this.library.write(id, input.data, input.expected);
+    if (action === "update") {
+      const result = this.content(
+        {
+          version: "1",
+          requestId: randomUUID(),
+          contentId: current.portal.id,
+          operation: "content.update",
+          data: input.data,
+          expectedRevision: input.expected,
+        },
+        bound
+          ? { kind: "frame", contentId: bound }
+          : scoped
+            ? { kind: "agent" }
+            : { kind: "owner" },
+      );
+      if (result.status !== "applied")
+        throw Object.assign(Error(result.message), {
+          code: result.code || result.status,
+        });
+      return {
+        data: result.snapshot.data,
+        version: result.snapshot.revision,
+        error: result.snapshot.warning,
+      };
+    }
     if (action === "action") {
       if (
         !definition.workspaceActions?.includes(input.kind) ||

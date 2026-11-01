@@ -373,6 +373,11 @@ app.whenReady().then(async () => {
         portals: library.catalog(),
       };
     if (method === "portal") return portalHost.call(input);
+    if (method === "content-frame")
+      return portalHost.content(input.request, {
+        kind: "frame",
+        contentId: input.boundContentId,
+      });
     if (method === "portal-frame")
       return portalHost.call(input, false, input.id);
     if (method === "portal-folder") {
