@@ -1,11 +1,13 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
+from proof_common import process_identity, verify_candidate
 
 
 root = Path(__file__).resolve().parent
@@ -44,6 +46,8 @@ parser.add_argument("--portals", action="store_true")
 parser.add_argument("--evidence", type=Path)
 parser.add_argument("--port", type=int, default=9473)
 args = parser.parse_args()
+if not re.fullmatch(r"voyager-[a-z0-9-]+", args.session):
+    parser.error("Use a dedicated session beginning with voyager-.")
 if args.evidence:
     evidence = args.evidence
     if args.launch:
@@ -74,18 +78,25 @@ if args.launch:
         process = subprocess.Popen(
             command, env=env, stdout=log, stderr=log, start_new_session=True
         )
-    (evidence / "launch.json").write_text(
-        json.dumps(
-            {"pid": process.pid, "command": command, "session": args.session}, indent=2
-        )
-    )
-    print(f"Native prototype PID {process.pid}")
+    launch = {"pid": process.pid, "command": command, "session": args.session}
+    launch_file = evidence / "launch.json"
+    launch_file.write_text(json.dumps(launch, indent=2))
     time.sleep(3)
+    if process.poll() is not None:
+        raise RuntimeError("Candidate exited before its identity could be verified")
+    launch["identity"] = process_identity(process.pid)
+    launch_file.write_text(json.dumps(launch, indent=2))
+    print(f"Native prototype PID {process.pid}")
 
 with sync_playwright() as playwright:
-    browser = playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
+    browser = playwright.chromium.connect_over_cdp(
+        f"http://127.0.0.1:{port}", timeout=10000
+    )
+    verify_candidate(browser, evidence, args.session, root)
     page = next(
-        page for page in browser.contexts[0].pages if page.url.endswith("/index.html")
+        page
+        for page in browser.contexts[0].pages
+        if page.url == (root / "index.html").as_uri()
     )
     if not (args.quit or args.startup_failure):
         page.wait_for_function(
