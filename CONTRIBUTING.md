@@ -17,6 +17,17 @@ Use a dedicated VOYAGER_WORKSPACE_SESSION for experiments. The default profile n
 
 On contract branches, also run npm run typecheck and npm run contract:check. The content Rust crate lives in contract/. When changing it, run cargo fmt --check, cargo test --locked and cargo clippy --locked --all-targets -- -D warnings from that directory. Keep lockfiles and generated declaration drift checks intact.
 
+The native header trial uses the root Cargo workspace. With the platform's GPUI development libraries available, run:
+
+```sh
+cargo fmt --all --check
+cargo test --workspace --locked
+cargo clippy --workspace --locked --all-targets -- -D warnings
+cargo build --release --locked -p voyager-desktop --bin voyager-shell
+```
+
+Its maintained native journey uses `python3 prove.py --native-mod-host --launch --session voyager-trial --evidence /absolute/new/evidence`. Supply `--desktop-env` only when the runner needs an explicit desktop environment record. The journey edits only its new isolated profile. A later `--quit` uses the same evidence directory and session. Captures require direct visual review; changed pixels alone do not establish the intended content. See [the native host guide](docs/native-content.md) for the current scope.
+
 Native journeys use the candidate revision's prove.py and focused modules. Supply a unique session, debugging port and new evidence directory. A later --quit uses that same evidence and candidate. Do not infer microphone audibility, compositor behavior or another operating system from an X11 test.
 
 CONSTRAINTS.md owns the complete acceptance-code inventory and review rules. Count shared helpers once, include temporary proving code and map production ranges actually exercised. Keep a fresh independent review and relevant negative control. A dependency install or green unit suite does not complete a user-facing increment.

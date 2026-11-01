@@ -2,6 +2,8 @@
 
 VoyagerShell is a configurable workspace for people and agents, built on Herdr Core. This is the canonical standalone repository for the current prototype. Electron presents the workspace; Herdr Core owns its terminal processes and screens. Native renderer parity and collaboration remain experiments.
 
+The separate [native header trial](docs/native-content.md) renders an editable JavaScript package through Rust and GPUI. Source/theme reload, startup-error correction and quit/reopen have passed real Linux/X11 checks. The native workspace, terminal, conversation and performance comparison remain unfinished.
+
 The 1 November UX candidate removes duplicate conversation controls, decorative dock buttons, layout/package toolbar buttons and the sidebar footer. One text control stays with the sidebar, or moves to the top bar when the sidebar is collapsed. Speech stays with the full-size avatar or its compact control location. The existing avatar animation and sound implementation is retained.
 
 The selected vocabulary is Voyage for a space, Fleet for a tab, Vessel for content inside a Fleet, and Portal for content attached across a Voyage. The current implementation still uses the older `realm`, `dimension` and `portal` storage and API names. Voyage-wide Portals and the new typed public contract are not implemented by this UX change.
