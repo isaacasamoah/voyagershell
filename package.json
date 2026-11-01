@@ -1,0 +1,16 @@
+{
+  "name": "voyagershell-native-build",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "contract:generate": "node contract-build.cjs --write",
+    "contract:check": "node contract-build.cjs --check",
+    "test": "node --test contract/validator-test.cjs",
+    "format:check": "prettier --check contract-build.cjs 'desktop/mods/**/*.{js,json}' 'desktop/themes/*.json'"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "json-schema-to-typescript": "16.0.0",
+    "prettier": "3.9.9"
+  }
+}
