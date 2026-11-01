@@ -49,6 +49,10 @@ Use feature/<name> or experiment/<name> branches with matching .worktrees/featur
 
 Each task worktree owns local SPEC.md, module specs, tasks/plan.md and tasks/todo.md. Exclude their exact paths through the common Git info/exclude. Do not commit or overwrite unfinished task records. Preserve them under the established Obsidian spec-history convention only after accepted completion and merge.
 
+Keep exploratory source under `experiments/<name>/`. The selected product structure is `contract/`, `app/`, `desktop/` and `content/`; promote only selected implementation into those groups through the shared Git workflow. Preserve active work and runnable demos during cleanup.
+
+For foundation specifications, plans, builds and reviews, read the selected initiative context and the [current/proposed architecture](/home/isaac/obsidian/Projects/voyagershellapp/explainer/walkthroughs/voyager-collaboration-tracer-bullet.html#architecture), including its common overview and the sections governing the assignment. The [original service architecture review](/home/isaac/obsidian/Projects/voyagershellapp/explainer/walkthroughs/service-restructure-review.html) supplies reference patterns for ownership, layers and contracts; it is not the current implementation. Carry these references into module briefs using the shared context-engineering skill.
+
 Use the existing maintained prove.py fixture. Tests, helpers, oneoffs and embedded programs all count under CONSTRAINTS.md. A source or unit check does not establish native behavior. Keep observed, inferred, proposed and unproved claims separate.
 
 Use the installed `rust-best-practices` wrapper for Rust implementation and `rust-review` alongside `code-review-and-quality` for Rust review. Keep source comment-free, including doc comments. Put invariants and unsafe reasoning in the owning technical document. Follow CONTRIBUTING.md for formatting, locked tests, strict Clippy and interface checks. Do not import upstream lint presets or dependencies merely because a skill lists them. Exercise the actual app journey and a relevant failure; Linux evidence does not establish another platform.
