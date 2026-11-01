@@ -20,6 +20,8 @@ use gpui_shell::{
     policy::{self, Policy},
 };
 use serde::Deserialize;
+use voyager_app::client::Client;
+use voyager_contract::Request;
 
 thread_local! { static LOADING: Cell<bool> = const { Cell::new(false) }; }
 
@@ -49,6 +51,12 @@ struct Theme {
     background: String,
     foreground: String,
     muted: String,
+    #[serde(default = "accent")]
+    accent: String,
+}
+
+fn accent() -> String {
+    "#c4b5fd".into()
 }
 
 fn theme(bytes: &[u8]) -> Result<Theme> {
@@ -57,6 +65,7 @@ fn theme(bytes: &[u8]) -> Result<Theme> {
         ("background", &value.background),
         ("foreground", &value.foreground),
         ("muted", &value.muted),
+        ("accent", &value.accent),
     ] {
         if color.len() != 7
             || !color.starts_with('#')
@@ -146,6 +155,7 @@ fn projection(value: &Theme) -> HostValue {
             HostValue::from(value.foreground.clone()),
         ),
         ("muted".into(), HostValue::from(value.muted.clone())),
+        ("accent".into(), HostValue::from(value.accent.clone())),
     ])
 }
 
@@ -153,6 +163,7 @@ fn load(
     runtime: &Rc<ShellRuntime>,
     package: &Path,
     current: &SharedTheme,
+    client: &Client,
     window: &mut Window,
     cx: &mut App,
 ) -> Result<Entity<ShellRoot>> {
@@ -164,7 +175,33 @@ fn load(
             .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))?;
         Ok(projection(value))
     });
-    let policy = Policy::new().with_host_module(module)?;
+    let identity = client.clone();
+    let calls = client.clone();
+    let workspace = HostModule::new("voyager_workspace")
+        .function("request_id", move |_| {
+            Ok(HostValue::from(identity.request_id()))
+        })
+        .async_function("call", move |arguments| {
+            let raw = arguments.string(0)?;
+            if raw.len() > 65536 {
+                return Err(gpui_shell::HostError::new(
+                    "Workspace request exceeds 64 KiB",
+                ));
+            }
+            let request = raw.to_owned();
+            let client = calls.clone();
+            Ok(async move {
+                let request: Request = serde_json::from_str(&request)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                let result = client.call(request).map_err(gpui_shell::HostError::new)?;
+                let encoded = serde_json::to_string(&result)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                Ok(HostValue::from(encoded))
+            })
+        });
+    let policy = Policy::new()
+        .with_host_module(module)?
+        .with_host_module(workspace)?;
     let _guard = LoadGuard::enter(policy)?;
     runtime.try_load(package, window, cx)
 }
@@ -178,16 +215,28 @@ pub struct Header {
     watch_error: Option<String>,
 }
 
+pub struct Setup {
+    pub package: PathBuf,
+    pub theme_path: PathBuf,
+    pub initial_theme: Vec<u8>,
+    pub initial_source: Result<Vec<(PathBuf, u64)>, String>,
+    pub client: Client,
+}
+
 impl Header {
     pub fn new(
         runtime: Rc<ShellRuntime>,
-        package: &Path,
-        theme_path: PathBuf,
-        initial_theme: Vec<u8>,
-        initial_source: Result<Vec<(PathBuf, u64)>, String>,
+        setup: Setup,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let Setup {
+            package,
+            theme_path,
+            initial_theme,
+            initial_source,
+            client,
+        } = setup;
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
         base.appearance = ThemeAppearance::Dark;
@@ -198,7 +247,7 @@ impl Header {
                 .map(|error| format!("{error:#}")),
             Err(error) => Some(format!("{error:#}")),
         };
-        let (root, load_error) = match load(&runtime, package, &current, window, cx) {
+        let (root, load_error) = match load(&runtime, &package, &current, &client, window, cx) {
             Ok(root) => (Some(root), None),
             Err(error) => (None, Some(format!("Header load failed: {error:#}"))),
         };
@@ -208,7 +257,6 @@ impl Header {
             None => (None, initial_source.as_ref().err().cloned()),
         };
         let mut retrying = root.is_none();
-        let package = package.to_path_buf();
         let handle = window.window_handle();
         let task = cx.spawn(async move |this, cx| {
             let mut prior_theme = Some(initial_theme);
@@ -275,7 +323,7 @@ impl Header {
                         if (changed_source && source_ready || valid_theme_change)
                             && header.root.is_none()
                         {
-                            match load(&runtime, &package, &current, window, cx) {
+                            match load(&runtime, &package, &current, &client, window, cx) {
                                 Ok(root) => {
                                     match runtime.watch(&root, window, cx) {
                                         Ok(watch) => header._watch = Some(watch),

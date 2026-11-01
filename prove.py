@@ -7,8 +7,10 @@ root = Path(__file__).resolve().parent
 for option, folder, module in [
     ("--native-mod-host", "native-content", "proof_native_mod_host"),
     ("--native-avatar", "gpui-avatar", "proof_native_avatar"),
+    ("--foundation", "native-content", "proof_native_mod_host"),
 ]:
     if option in sys.argv:
+        sys.path.insert(0, str(root / "desktop"))
         sys.path.insert(0, str(root / "experiments" / folder))
         importlib.import_module(module).run()
         break

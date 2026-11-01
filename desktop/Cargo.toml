@@ -16,3 +16,5 @@ gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "944803984c
 anyhow = "=1.0.103"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
+voyager-app = { path = "../app" }
+voyager-contract = { path = "../contract" }
