@@ -2,6 +2,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+pub mod conversation;
+
 macro_rules! id {
     ($name:ident) => {
         #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

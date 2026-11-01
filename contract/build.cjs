@@ -15,6 +15,7 @@ async function main() {
       "cargo",
       [
         "run",
+        "--release",
         "--quiet",
         "--locked",
         "-p",
@@ -57,6 +58,22 @@ export async function invoke(action, expectedVersion) {
 `;
   files["workspace.d.ts"] =
     'import type { Request } from "./request";\nimport type { Response } from "./response";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response>;\n';
+  files["conversation.js"] =
+    `import { call, request_id, snapshot } from "voyager_conversation";
+import { conversationRequest, conversationReply, conversationSnapshot } from "./validate.js";
+export async function send(action) {
+  const request = { requestId: request_id(), action };
+  if (!conversationRequest(request)) throw Error("Invalid conversation request");
+  const reply = JSON.parse(await call(JSON.stringify(request)));
+  if (!conversationReply(reply) || reply.requestId !== request.requestId) throw Error("Invalid conversation reply");
+  return reply;
+}
+export async function observe(after) {
+  const value = JSON.parse(await snapshot(after));
+  if (value !== null && !conversationSnapshot(value)) throw Error("Invalid conversation snapshot");
+  return value;
+}
+`;
   const directory = path.join(__dirname, "generated");
   if (mode === "--write") fs.mkdirSync(directory, { recursive: true });
   for (const [name, data] of Object.entries(files)) {
