@@ -1,0 +1,21 @@
+[package]
+name = "voyager-desktop"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "voyager-shell"
+path = "src/main.rs"
+
+[dependencies]
+gpui = { package = "gpui-pre", version = "=0.3.10" }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui-base = { git = "https://github.com/longbridge/gpui-kit", rev = "944803984cf0ba3111861d6e1aa9d6265c109ff9" }
+gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "944803984cf0ba3111861d6e1aa9d6265c109ff9", default-features = false, features = ["quickjs"] }
+anyhow = "=1.0.103"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+
+voyager-app = { path = "../app" }
+voyager-contract = { path = "../contract" }
