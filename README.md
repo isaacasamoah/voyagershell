@@ -1,47 +1,103 @@
-# VoyagerShell
+# Voyager Shell
 
-VoyagerShell is a configurable workspace for people and agents, built on Herdr Core. This is the canonical standalone repository for the current prototype. Electron presents the workspace; Herdr Core owns its terminal processes and screens. Native renderer parity and collaboration remain experiments.
+VoyagerShell is a workspace for people and coding agents, built on Herdr Core.
+Electron provides the workspace, a floating astronaut and text and voice chat.
+Herdr Core runs the terminal programs. Voyager brings their views, editable
+content and conversation together.
 
-The 1 November UX candidate removes duplicate conversation controls, decorative dock buttons, layout/package toolbar buttons and the sidebar footer. One text control stays with the sidebar, or moves to the top bar when the sidebar is collapsed. Speech stays with the full-size avatar or its compact control location. The existing avatar animation and sound implementation is retained.
+We build small, real experiments, try them ourselves, and share the results here.
 
-The selected vocabulary is Voyage for a space, Fleet for a tab, Vessel for content inside a Fleet, and Portal for content attached across a Voyage. The current implementation still uses the older `realm`, `dimension` and `portal` storage and API names. Voyage-wide Portals and the new typed public contract are not implemented by this UX change.
+## Vision
 
-New Vessel and Split open a compact picker beside the control. It follows the live content catalogue, supports keyboard choice and cancellation, and dismisses when the user changes workspace context or clicks into embedded content. Each opening captures its destination. A stale choice cannot create in a different Fleet.
+Let's go together. We're building VoyagerShell for agent-to-agent,
+agent-to-human and human-to-human collaboration alongside a strong solo dev flow.
 
-## Run and interact
+We want a workspace people can shape with their agents. A panel might hold a
+terminal, a live code diff, a walkthrough, a whiteboard or a view someone else
+has made. People and agents should be able to inspect that content, act on it
+and change how it works while the app is running.
 
-Use Node 24, a Linux desktop and `hc` 0.1.16 on PATH. Chat and voice additionally need a configured Codex installation. Install dependencies and launch from this directory:
+The longer-term direction is shared context and knowledge graphs that connect
+what a team learns, decides and builds. Messaging and voice would keep people
+and agents in conversation, with decisions available to the work they affect.
+These collaboration features are research, not part of the current build.
 
-```sh
-npm ci
-npm start
-```
+## Current build
 
-Use `VOYAGER_WORKSPACE_SESSION=voyager-another-name` for an isolated Core session. `VOYAGER_WORKSPACE_CWD` selects its initial folder. `VOYAGER_HC` and `VOYAGER_CODEX_BIN` select executable paths. Starting the same profile again restores its viewer; it does not submit a new agent task.
+This is a working Linux prototype. Voyages group related work. Each Voyage has
+Fleets as tabs, and each Fleet contains Vessels arranged in flexible splits.
+A Vessel can show a terminal program or editable web content.
 
-Use a Vessel's local corner split control, Ctrl+Shift+O/E, or the creation control in an empty Fleet to choose terminal, native agent CLI or editable content. Use the dividers to arrange it. Double-click a Voyage, Fleet or Vessel name to rename it in place, or focus its navigation item/header and press F2. Enter or blur saves; Escape cancels. Drag navigation items to reorder, or use Alt+Shift+Up/Down for Voyages and Alt+Shift+Left/Right for Fleets. Drag a Vessel header onto another header or Fleet. Hover another Voyage during the drag to reveal its Fleet destinations. Space picks up a focused Vessel header; Enter or Space places it on a Fleet. Movement preserves content identity, data and backend address. Activity presentation remains pending.
+- Choose a terminal, Codex, Claude or installed content type from the local split
+  picker. Native agent types use their installed command-line tools.
+- Drag a Vessel header to preview where it will go, then release to place it.
+  Move it within a Fleet or into another Fleet or Voyage without replacing its
+  process or data. Drag dividers to resize the views.
+- Double-click a Voyage, Fleet or Vessel name to rename it. Drag navigation items
+  to reorder them. Keyboard controls cover creation, movement and docking too.
+- Dock Voyager on Home, a Voyage, a Fleet or a Vessel to select its context.
+  Text and voice use that same focus. The interface shows where Voyager is docked.
+- Ask Voyager to save or load a Fleet layout, or change the Home overview.
+  Restoring a layout does not restart an ended agent program.
+- Close or minimise the workspace to leave its processes running and the avatar
+  floating on the desktop. Explicit application **Quit** stops its dedicated
+  Core session. Stopped agents are not automatically resumed. An uncertain start
+  or stop remains unresolved, without an automatic retry.
 
-Drag Voyager to a Voyage, Fleet, Vessel header or Home to change its context. For keyboard docking, focus the existing navigation item, Vessel header or Home and press Shift+Enter. Ctrl+J opens or closes text chat. Ctrl+B toggles the sidebar. Speech and text requests use the same avatar focus, while retaining the user's authority.
+Electron is the working renderer. A native GPUI renderer remains an experiment;
+we have not established equivalent UX or better performance as load increases.
+The [typed-content foundation](https://github.com/isaacasamoah/voyagershell/stack/6)
+is a separate, unfinished draft. The current build does not enforce delegated
+agent ranks or guarantee native same-turn steering.
 
-Closing the viewer leaves the Core session running and floats the desktop avatar. The standard application **Quit** action requests a stop for this dedicated session before exiting. A failed spawn can exit without a stop request. An unconfirmed startup or stop stays visibly unresolved and does not retry the effect. Stopped agent programs are not automatically resumed.
+## Talk to Voyager
 
-## Editable content
+Click the text control or press Ctrl+J to open the conversation beneath the
+avatar's home position. Press the soundwave to use voice. Voyager can inspect
+the selected workspace context, arrange Vessels, read process output, send input
+and edit cooperating content through named application tools.
 
-The existing package format uses these legacy paths and names:
+Docking changes the context and permitted targets for those tools. Home selects
+the whole workspace; a Voyage, Fleet or Vessel narrows it. The conversation can
+remember earlier exchanges, while each new request uses the current focus.
+Your authority stays the same when the avatar moves.
+
+The private Codex conversation is separate from agents running in Vessels.
+Receiving input is not proof that an agent completed a task. Use process output
+and content state to verify the result. Voyager does not automatically resubmit
+uncertain work.
+
+## Vessels and Portals
+
+A Vessel places content within a Fleet. A Portal will place content across a
+Voyage, staying available when you switch Fleets. Voyage-wide placement is part
+of the proposed design, not implemented yet.
+
+The current package format already supports live edits and reversible removal.
+It still uses the older `realm`, `dimension` and `portal` names in storage and
+APIs. Its web views can read and update their instance data. The companion can
+inspect that data and its declared contract within the avatar's focus.
+
+Source edits affect every instance of a package, so they require Home focus.
+Uninstall moves a package aside while keeping its data, placement and backend.
+Restore makes the same instances available again. Hiding a view or removing its
+package does not stop its backend process.
+
+<details>
+<summary>Create a content package</summary>
+
+Packages live under `portals/` in the selected session's Electron userData folder:
 
 ```text
 portals/
   packages/<type>/portal.json
   packages/<type>/view.html
-  packages/<type>/...assets or backend files
   data/<instance-id>.json
   layouts/<dimension-id>-<name>.json
   .uninstalled/<type>/
 ```
 
-The content folder is inside the selected session's Electron userData directory. The current UX removes the package/layout toolbar; this slice does not introduce a replacement menu. Existing named agent operations and file editing remain available.
-
-A web package needs a manifest and HTML entry:
+A web package needs a manifest and an HTML entry:
 
 ```json
 {
@@ -54,9 +110,12 @@ A web package needs a manifest and HTML entry:
 }
 ```
 
-Put the folder under `packages/` while the app runs. It appears in the content catalog. HTML, JavaScript and CSS edits reload applicable views. Invalid manifests retain the previous package. A view reload does not restart its backend process.
+Add its folder under `packages/` while the app runs. It appears in the content
+picker. HTML, JavaScript and CSS edits reload applicable views. Invalid manifests
+retain the prior valid package when available. Reloading a view leaves its
+backend running.
 
-The host injects Voyager styling and this browser interface:
+The host supplies Voyager styling and a browser interface:
 
 ```js
 const snapshot = await portal.read();
@@ -64,52 +123,105 @@ await portal.write({ text: "A new note" }, snapshot.version);
 portal.onChange(() => refresh());
 ```
 
-The version prevents a stale host write from overwriting newer host data. It is not a transaction against arbitrary external file writers. Invalid JSON reports an error and retains the last valid data when available.
+The version check rejects stale host writes. It is not a transaction against
+other programs editing the data file. Invalid JSON reports an error and keeps
+the prior valid data when available.
 
-Terminal packages use `renderer: "terminal"` and `argv`. Web packages may also specify a Core-owned backend command. `{package}` and `{data}` expand to its folder and data file. Opening a new instance or explicitly starting its backend launches the command. Restoring a layout does not restart an ended process. Hiding content or uninstalling its package does not stop that backend.
+Terminal packages use `renderer: "terminal"` and `argv`. Web packages can also
+name a Core-owned backend command. `{package}` and `{data}` expand to the package
+folder and instance data file. Creating an instance or explicitly starting its
+backend launches that command.
 
-The avatar's `voyager_portal` tool reads and updates content within its current focus. Source editing and package uninstall/restore require whole-workspace focus because they affect multiple instances. Uninstall moves the package into `.uninstalled/` while preserving its data, placement and backend. Restore makes those same instances available again.
+These packages support terminal programs and cooperating web views. Arbitrary
+native app windows are not automatically embeddable, and agents need explicit
+data and action interfaces to understand richer content. The broader typed
+contract and general action catalogue remain unfinished.
 
-These capabilities support cooperating browser content and terminal programs. Running a native GUI process does not automatically make its window embeddable or its meaning readable by an agent. Rich examples, explicit agent action contracts and voyage-wide placement are the next design work.
+</details>
 
-## Evidence and limits
+## Try it
 
-The maintained fixture is `prove.py`, extended by focused journey modules. Run `npm test` and `npm run format:check` here. `prove.py --ux` checks the quiet interface, keyboard/drag docking, control placement, stable terminal identity and Electron Quit in an isolated running candidate. It compares removed controls with the preserved preview through its local debugging endpoint.
+Use Node 24, a Linux desktop and [Herdr Core](https://github.com/herdrdev/herdr-core)
+with `hc` on PATH. The standalone verification used Core 0.1.16. Text and voice
+also need a configured Codex installation. Codex and Claude Vessels need their
+respective command-line tools on PATH.
 
-The Linux journeys passed on 1 November using Electron 44.10.0 and real Herdr Core. The organisation journey completed in stages within the same corrected instance after browser-driver setup errors; its run-history receipt retains those errors and the explicit drag cancellation used to clear a stuck driver gesture. It verified rename variants, pointer/keyboard placement, live backend and note identity, pinned avatar focus after a renderer reload, and a real stale-document save refusal. The maintained suite now has 16 passing tests. Quit was driven through Electron's `Browser.close` debugging command. OS menu and desktop keyboard activation remain unproved. Startup/uncertain-stop failure scenarios have an isolated boundary test; they are not native failure trials. This establishes neither macOS nor Windows behavior.
+```sh
+git clone https://github.com/isaacasamoah/voyagershell.git
+cd voyagershell
+npm ci
+VOYAGER_WORKSPACE_SESSION=voyager-try npm start
+```
 
-Independent review found no remaining Required source issue in this quiet-interface increment. The known quiet-interface proving inventory fits its scoped size rule. The inherited prototype's aggregate acceptance gate remains open. No active demo was replaced, no main-branch integration occurred and no production release is claimed.
+Reuse that session name to reopen its workspace. Closing the viewer leaves Core
+running; explicit Quit stops it. Reopening a stopped session does not resume its
+agent conversations or submit work for them.
 
-The picker journey passed in an isolated Electron/Core session after an owner-approved additional iframe-dismissal correction. Independent review verified focus remained in the embedded Notes field and a missing-close negative control reproduced the defect. The final journey also exercised live type changes, stale controls, a single terminal creation and an actual stale-save rejection without replay. The earlier failed attempts remain recorded. The known scoped picker inventory fits, while the inherited aggregate gate remains open.
+Use a Vessel's corner split control or Ctrl+Shift+O/E to open the content picker.
+Ctrl+Shift+T opens a Fleet. Ctrl+B toggles the sidebar. For keyboard docking,
+focus Home, a Voyage, a Fleet or a Vessel header and press Shift+Enter.
+Alt+Shift+H/J/K/L moves a Vessel beside a directional neighbour. Space picks up a
+focused Vessel header; Enter or Space places it on a Fleet. Escape cancels.
 
-## Direct-controls candidate
+`VOYAGER_WORKSPACE_SESSION` selects both the local profile and Core session.
+Names must begin with `voyager-` and use lowercase letters, digits and hyphens.
+`VOYAGER_WORKSPACE_CWD` selects the initial folder. `VOYAGER_HC` selects the Core
+executable, and `VOYAGER_CODEX_BIN` selects the private companion's Codex executable.
 
-The next candidate removes the fixed New Vessel/split toolbar and visible Move chooser. Drag a Vessel header to preview the exact destination half, then release to place it. Split choices appear near the upper-right header corner or with keyboard focus. Ctrl+Shift+O/E opens a side-by-side/top-bottom split picker and Ctrl+Shift+T opens a Fleet. Empty Fleets retain local creation. Alt+Shift+H/J/K/L rearranges beside a directional neighbour. Space on a focused header picks up a Vessel; Enter or Space on a Fleet places it, including another Voyage. Escape cancels.
+## Checks
 
-The native journey passed in stages in one corrected owned instance. It verified normal docking before failure tests, terminal text selection, web editing, cancelled/self-drop cleanup, both placement directions, retained process/data identity, empty-Fleet creation and keyboard movement. A real catalogue watcher update cancelled an active drag without a late move. A final deliberate stale-save rejection remained gated without replay. The earlier closed trial may explain the owner's docking report, but its timing was not matched, so that cause is unconfirmed.
+From the repository root:
 
-Independent source review has no remaining Required issue. Acceptance remains blocked by the written size rule: 2,879 normally formatted proof/bookkeeping lines exceed 2,781 mapped production lines by 98. Failed diagnostics and retired helpers remain counted. The inherited aggregate gate and physical OS keyboard/menu evidence are also open. This is a draft checkpoint, not accepted completion, a merge or a release. All disposable candidates were explicitly quit; the preserved demo remains unchanged.
+```sh
+npm run format:check
+npm test
+```
 
-## Consolidated proof checkpoint
+Normal tests use disposable fixtures without a desktop or model account.
+The maintained `prove.py` runner exercises a dedicated Electron/Core candidate,
+including picker dismissal, dragging, docking, retained process identity,
+stale-save rejection and explicit Quit. Give it a unique session, debugging port
+and fresh evidence directory. Use that same evidence directory for later Quit.
+Never point destructive proving at an owner's session. See
+[the contribution guide](CONTRIBUTING.md) and [build constraints](CONSTRAINTS.md).
 
-Isaac approved consolidating the verification after the tagged direct-controls prototype. Runtime source is unchanged. The maintained picker and direct-controls journeys now share recording, process snapshots, settlement and picker opening. Cross-Voyage keyboard carry, moved-source stale choices and actual watcher cancellation are maintained checks rather than separate successful review scripts. Historical resume-only branches belong to the earlier tagged fixture.
+The [standalone baseline review](https://github.com/isaacasamoah/voyagershell/pull/1)
+records passing isolated Xvfb/X11 journeys and the scoped proof-size check.
+The earlier [consolidation review](https://github.com/isaacasamoah/voyagershellapp/pull/77)
+retains the prior results and limits. Broader prototype acceptance, GNOME
+compositor behavior, physical OS menu and keyboard operation, audible voice,
+macOS and Windows remain unproved. Automated checks do not replace a person
+trying gestures and sound.
 
-The corrected full journey passed uninterrupted on an isolated Xvfb/X11 desktop with real Electron and Herdr Core. It asserted zero late move dispatches after watcher cancellation, preserved process/data identity, and ended with one actual stale-save rejection. The first full run is retained because its initial watcher assertion could miss an asynchronous move. The corrected second run and independent geometry mutation completed without a remaining Required issue. Eighteen unchanged boundary tests and formatting passed.
+## Source map
 
-The fresh scoped inventory is 2,425 normally formatted proof/bookkeeping lines against 2,781 mapped production-function/dispatch lines. It includes the retained first-run module, shared Quit helper, setup/cleanup, mutation, audit code and embedded programs. The older 2,879/2,781 result remains historical evidence, not a rewritten passing result. This scoped check does not close inherited aggregate acceptance or establish GNOME compositor behavior, physical OS keyboard/menu operation, audible voice, macOS or Windows. Both owner previews remain on their separate immutable source tags.
+| Location                                                                        | Responsibility                                                   |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `main.cjs`, `preload.cjs`                                                       | Electron windows, application requests and client checks         |
+| `core.cjs`                                                                      | Connection to the external Herdr Core runtime                    |
+| `workspace.cjs`, `organisation.js`, `placement.js`                              | Workspace state, organisation and layout interactions            |
+| `renderer.js`, `index.html`, `style.css`                                        | Workspace rendering and terminal views                           |
+| `companion.cjs`, `chat.js`, `voice.js`                                          | Private Codex conversation, named tools and voice                |
+| `portal-library.cjs`, `portal-host.cjs`, `portal-client.js`, `portal-frames.js` | Content packages, state, requests and embedded views             |
+| `portal-defaults/`                                                              | Shipped content packages                                         |
+| `astronaut.js`, `avatar-art.js`, `identity.js`, `floating.js`, `assets/`        | Avatar artwork, animation, docking presentation and desktop view |
+| `*-test.cjs`, `test.cjs`, `astronaut.test.cjs`                                  | Boundary and interaction tests                                   |
+| `prove.py`, `proof_*.py`                                                        | Maintained native proving fixture and journeys                   |
 
-Use the candidate's prove.py with --launch --picker --direct-controls and a dedicated --session, --port and --evidence directory. A new launch requires a fresh evidence directory. Later --quit uses that same directory and verified owned candidate. Do not run these destructive test journeys against an owner's session.
+Herdr Core owns processes and terminal screens. Voyager owns workspace
+presentation, content placement and application policy. We learn from the
+[Core guidance](https://github.com/herdrdev/herdr-core/blob/7a54c2975225a859b7e7d67302df5efc249fb9d0/AGENTS.md),
+[App guidance](https://github.com/herdrdev/herdr-app/blob/1581a587919dddd6f1efd5f78eb542c4b2b02cb5/AGENTS.md)
+and [agent-facing app guide](https://github.com/herdrdev/herdr-app/blob/1581a587919dddd6f1efd5f78eb542c4b2b02cb5/defaults/AGENTS.md).
+Those pinned development sources inform the design; they are not a claim about
+the installed Core version's exact source.
 
-## Standalone repository
+This repository preserves the workspace history extracted from
+[voyagershellapp](https://github.com/isaacasamoah/voyagershellapp). The original
+[tagged demos](https://github.com/isaacasamoah/voyagershellapp/releases) remain
+there, and the old web project is archived as
+[voyagershell-legacy](https://github.com/isaacasamoah/voyagershell-legacy).
+Voyager's own code uses the [MIT license](LICENSE).
 
-This repository extracts core-workspace history from voyagershellapp. Source tags named source/voyagershellapp-* identify historical extracted trees before standalone path adaptation; their original runnable releases remain in [voyagershellapp releases](https://github.com/isaacasamoah/voyagershellapp/releases). The original web application is preserved in [voyagershell-legacy](https://github.com/isaacasamoah/voyagershell-legacy).
-
-The initial main baseline has the latest tagged demo's runtime UI plus the consolidated proving fixture. Contract, binding and typed-content work stays on separate branches. The two typed-content review findings are not accepted or hidden by this repository move. No running demo or installed service is migrated automatically.
-
-The standalone checkout owns its avatar controller, tests and artwork. It does not load source from a neighbouring checkout. Its default starting folder is this repository. Existing profile/session naming remains unchanged. Dedicated session names must begin with voyager- and contain only lowercase letters, digits and hyphens.
-
-Before a native test interacts or issues Quit, the maintained fixture checks the CDP browser PID against its recorded launch, then verifies Linux process start identity, user, working directory, command, session and exact application page. A mismatched connection is refused before input or Browser.close. This Linux proving check is not a new production recovery system or another platform's evidence.
-
-## Learning from Herdr
-
-Herdr Core is an external Apache-2.0 runtime. Voyager's own code retains its MIT license. We learn from the [Core guidance](https://github.com/herdrdev/herdr-core/blob/7a54c2975225a859b7e7d67302df5efc249fb9d0/AGENTS.md), [App guidance](https://github.com/herdrdev/herdr-app/blob/1581a587919dddd6f1efd5f78eb542c4b2b02cb5/AGENTS.md) and [agent-facing app guide](https://github.com/herdrdev/herdr-app/blob/1581a587919dddd6f1efd5f78eb542c4b2b02cb5/defaults/AGENTS.md). These references explain the runtime/application boundary, small application core, extensible interface and release/compatibility practices. Their current development revisions are design references, not proof of the installed runtime's exact source. The local migration journey used hc 0.1.16.
+Read [the contribution guide](CONTRIBUTING.md). Reports of real workflows,
+failures and integration limits are welcome.
