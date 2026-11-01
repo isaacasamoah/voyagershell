@@ -1,9 +1,11 @@
 import { View, div } from "gpui-kit";
 import { projection } from "voyager_header";
 import { invoke } from "./workspace.js";
+import { Chat } from "./chat.js";
 
 export default class Workspace extends View {
   init(_props, cx) {
+    this.chat = new Chat(cx);
     this.version = "0";
     this.layout = null;
     this.busy = false;
@@ -129,6 +131,7 @@ export default class Workspace extends View {
   render() {
     const colors = projection();
     const shell = div()
+      .relative()
       .flex()
       .w_full()
       .h_full()
@@ -157,6 +160,7 @@ export default class Workspace extends View {
       .child(
         div().text_size(11).text_color(colors.muted).child("Let's Go Together"),
       )
+      .child(this.chat.toggleView(colors))
       .child(div().h(26))
       .child(
         this.action("Workspace", {
@@ -228,6 +232,9 @@ export default class Workspace extends View {
       body.child(div().text_size(11).text_color("#ffcad3").child(this.status));
       body.child(this.action("Refresh", { operation: "inspect" }));
     }
-    return shell.child(sidebar).child(body);
+    shell.child(sidebar).child(body);
+    if (this.chat.open)
+      shell.child(this.chat.render(colors, this.layout.context));
+    return shell;
   }
 }

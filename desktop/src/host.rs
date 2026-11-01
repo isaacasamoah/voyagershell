@@ -164,6 +164,7 @@ fn load(
     package: &Path,
     current: &SharedTheme,
     client: &Client,
+    conversation: &voyager_app::conversation_client::Client,
     window: &mut Window,
     cx: &mut App,
 ) -> Result<Entity<ShellRoot>> {
@@ -202,6 +203,7 @@ fn load(
     let policy = Policy::new()
         .with_host_module(module)?
         .with_host_module(workspace)?;
+    let policy = policy.with_host_module(crate::conversation::module(conversation.clone()))?;
     let _guard = LoadGuard::enter(policy)?;
     runtime.try_load(package, window, cx)
 }
@@ -221,6 +223,7 @@ pub struct Setup {
     pub initial_theme: Vec<u8>,
     pub initial_source: Result<Vec<(PathBuf, u64)>, String>,
     pub client: Client,
+    pub conversation: voyager_app::conversation_client::Client,
 }
 
 impl Header {
@@ -236,6 +239,7 @@ impl Header {
             initial_theme,
             initial_source,
             client,
+            conversation,
         } = setup;
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
@@ -247,7 +251,15 @@ impl Header {
                 .map(|error| format!("{error:#}")),
             Err(error) => Some(format!("{error:#}")),
         };
-        let (root, load_error) = match load(&runtime, &package, &current, &client, window, cx) {
+        let (root, load_error) = match load(
+            &runtime,
+            &package,
+            &current,
+            &client,
+            &conversation,
+            window,
+            cx,
+        ) {
             Ok(root) => (Some(root), None),
             Err(error) => (None, Some(format!("Header load failed: {error:#}"))),
         };
@@ -323,7 +335,15 @@ impl Header {
                         if (changed_source && source_ready || valid_theme_change)
                             && header.root.is_none()
                         {
-                            match load(&runtime, &package, &current, &client, window, cx) {
+                            match load(
+                                &runtime,
+                                &package,
+                                &current,
+                                &client,
+                                &conversation,
+                                window,
+                                cx,
+                            ) {
                                 Ok(root) => {
                                     match runtime.watch(&root, window, cx) {
                                         Ok(watch) => header._watch = Some(watch),
