@@ -6,7 +6,7 @@ document. The current view labels terminal connection as the next integration;
 it does not start a program or claim complete avatar, conversation or UX parity.
 
 `contract/` owns the Rust request, response, identity and layout types.
-`contract-build.cjs` generates declarations and strict runtime validators from
+`contract/build.cjs` generates declarations and strict runtime validators from
 those types. Layout revisions and the allocation counter cross JavaScript as
 decimal strings so a JavaScript number cannot round a Rust `u64`. Core's own
 document protocol still uses its native numeric revision field. Placement,

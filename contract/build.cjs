@@ -21,7 +21,11 @@ async function main() {
         "--bin",
         "export",
       ],
-      { cwd: __dirname, encoding: "utf8", maxBuffer: 1024 * 1024 },
+      {
+        cwd: path.join(__dirname, ".."),
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024,
+      },
     ),
   );
   const files = {};
@@ -56,7 +60,7 @@ export async function invoke(action, expectedVersion) {
 `;
   files["workspace.d.ts"] =
     'import type { Request } from "./request";\nimport type { Response } from "./response";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response>;\n';
-  const directory = path.join(__dirname, "contract/generated");
+  const directory = path.join(__dirname, "generated");
   if (mode === "--write") fs.mkdirSync(directory, { recursive: true });
   for (const [name, data] of Object.entries(files)) {
     const file = path.join(directory, name);
