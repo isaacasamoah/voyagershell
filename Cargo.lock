@@ -7698,6 +7698,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "voyager-contract"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "voyager-desktop"
 version = "0.1.0"
 dependencies = [
@@ -7708,6 +7717,8 @@ dependencies = [
  "gpui-shell",
  "serde",
  "serde_json",
+ "voyager-app",
+ "voyager-contract",
 ]
 
 [[package]]
