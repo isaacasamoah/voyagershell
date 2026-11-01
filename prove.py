@@ -3,8 +3,15 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
+
+if "--native-mod-host" in sys.argv:
+    from proof_native_mod_host import run
+
+    run()
+    raise SystemExit
 
 from playwright.sync_api import sync_playwright
 from proof_common import process_identity, verify_candidate
