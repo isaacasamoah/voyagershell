@@ -1,0 +1,4 @@
+[workspace]
+resolver = "3"
+members = ["desktop"]
+exclude = ["experiments/gpui-avatar", "experiments/native-content", "experiments/typed-content/contract"]
