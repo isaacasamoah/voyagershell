@@ -10,7 +10,7 @@ Rejections have an optional expected revision. The application must include the 
 
 Content data and its declared schema are JSON values because packages define their own data. The application must validate a declared package schema separately. A schema-less package must remain identifiable as such. These types do not establish application authority or make a declaration a sandbox.
 
-Run from experiments/core-workspace:
+Run from the repository root:
 
     cargo run --locked --manifest-path contract/Cargo.toml --bin export
     cargo fmt --check --manifest-path contract/Cargo.toml
