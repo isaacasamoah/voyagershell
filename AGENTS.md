@@ -22,3 +22,9 @@ Each task worktree owns local SPEC.md, module specs, tasks/plan.md and tasks/tod
 Use the existing maintained prove.py fixture. Tests, helpers, oneoffs and embedded programs all count under CONSTRAINTS.md. A source or unit check does not establish native behavior. Keep observed, inferred, proposed and unproved claims separate.
 
 The original demos and research records remain in voyagershellapp. Do not modify their sources, profiles or processes during work here. Human-facing documentation currently stays in the existing /home/isaac/obsidian/Projects/voyagershellapp project and its single collaboration walkthrough until Isaac chooses a documentation move. Do not create a second copy of that guide.
+
+## Learn from Herdr first
+
+Before designing runtime integration, extension APIs, agent guides, repository checks or release procedures, inspect the corresponding Herdr Core and Herdr App implementation and guidance. Start with their AGENTS.md, user-facing agent guides, schemas, tests and release recipes. Pin the inspected revisions when recording a decision.
+
+Keep Herdr Core's runtime boundary and one generated API. Learn from the app's small core, extensible interface, last-good live edits, compatibility checks and isolated proving. Record what we adopt and why, and where Voyager's intended UX requires a different choice. Upstream maintainers' approval rules, formatting and release machinery remain specific to their repositories; Isaac owns decisions here. Preserve this project's constraints and avoid copying upstream implementation as a shortcut.
