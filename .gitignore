@@ -7,3 +7,6 @@ evidence/
 __pycache__/
 *.log
 .DS_Store
+
+target/
+.ruff_cache/

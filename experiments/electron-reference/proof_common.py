@@ -5,16 +5,24 @@ from pathlib import Path
 from playwright.sync_api import expect
 
 
+def reference_root():
+    return Path(__file__).resolve().parent
+
+
 def process_identity(pid):
     process = Path(f"/proc/{pid}")
     key = b"VOYAGER_WORKSPACE_SESSION="
     session = next(
-        value[len(key) :].decode()
-        for value in (process / "environ").read_bytes().split(b"\0")
-        if value.startswith(key)
+        (
+            value[len(key) :].decode()
+            for value in (process / "environ").read_bytes().split(b"\0")
+            if value.startswith(key)
+        ),
+        None,
     )
     return {
         "uid": process.stat().st_uid,
+        "executable": str((process / "exe").resolve()),
         "cwd": str((process / "cwd").resolve()),
         "start": (process / "stat").read_text().rsplit(") ", 1)[1].split()[19],
         "command": (process / "cmdline").read_bytes().decode().split("\0")[:-1],
@@ -33,11 +41,20 @@ def verify_candidate(browser, evidence, session, root):
     if (
         actual != launch.get("identity")
         or actual["uid"] != os.getuid()
-        or actual["command"] != launch["command"]
-        or actual["session"] != session
-        or Path(actual["command"][1]).resolve() != root.resolve()
+        or Path(actual["executable"]) != Path(launch["command"][0]).resolve()
+        or Path(launch["command"][1]).resolve() != root.resolve()
     ):
         raise RuntimeError("Candidate process identity changed; no interaction allowed")
+    pages = [
+        page
+        for page in browser.contexts[0].pages
+        if page.url == (root / "index.html").as_uri()
+    ]
+    if (
+        len(pages) != 1
+        or pages[0].evaluate("api.call('boot').then(x => x.session)") != session
+    ):
+        raise RuntimeError("Candidate application session or page changed")
     (evidence / "verified-candidate.json").write_text(
         json.dumps({"pid": pid, "identity": actual}, indent=2)
     )
