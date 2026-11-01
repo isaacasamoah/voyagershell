@@ -144,7 +144,7 @@ app.whenReady().then(async () => {
     title: "Voyager",
     backgroundColor: "#111316",
     autoHideMenuBar: true,
-    icon: path.resolve(__dirname, "../../desktop/assets/idle.png"),
+    icon: path.resolve(__dirname, "assets/idle.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -271,7 +271,7 @@ app.whenReady().then(async () => {
   });
   workspace = new Workspace(
     core,
-    process.env.VOYAGER_WORKSPACE_CWD || path.resolve(__dirname, "../.."),
+    process.env.VOYAGER_WORKSPACE_CWD || path.resolve(__dirname),
     (value) => {
       publish("workspace", value);
       present();
