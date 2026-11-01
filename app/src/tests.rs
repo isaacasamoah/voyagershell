@@ -1,0 +1,114 @@
+use crate::workspace::Model;
+use voyager_contract::{Action, Axis, Context, FleetId};
+
+#[test]
+fn scoped_creation_and_split_keep_existing_identity() {
+    let mut model = Model::default();
+    model
+        .apply(Action::CreateVoyage {
+            name: "Voyager".into(),
+            cwd: "/tmp".into(),
+        })
+        .unwrap();
+    let voyage = &model.layout.voyages[0];
+    let fleet = voyage.fleets[0].id.clone();
+    let original = voyage.fleets[0].vessels[0].clone();
+    model
+        .apply(Action::Split {
+            fleet: fleet.clone(),
+            after: original.id.clone(),
+            axis: Axis::Horizontal,
+        })
+        .unwrap();
+    assert_eq!(model.layout.voyages[0].fleets[0].vessels.len(), 2);
+    assert_eq!(model.layout.voyages[0].fleets[0].vessels[0], original);
+    model
+        .apply(Action::Dock {
+            context: Context::Fleet { id: fleet },
+        })
+        .unwrap();
+    assert!(matches!(model.layout.context, Context::Fleet { .. }));
+}
+
+#[test]
+fn absent_target_cannot_change_layout() {
+    let mut model = Model::default();
+    let before = model.layout.clone();
+    assert!(
+        model
+            .apply(Action::SelectFleet {
+                id: FleetId("missing".into())
+            })
+            .is_err()
+    );
+    assert_eq!(model.layout, before);
+}
+
+#[test]
+fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
+    use crate::{client::Client, core::Core};
+    use voyager_contract::{Request, Status};
+    let session = format!("voyager-p1-test-{}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let call = |action, expected_version| {
+        client
+            .call(Request {
+                request_id: client.request_id(),
+                action,
+                expected_version,
+            })
+            .unwrap()
+    };
+    let initial = call(Action::Inspect, 0);
+    assert_eq!(initial.status, Status::Applied);
+    let voyage = initial.layout.voyages[0].id.clone();
+    let request = Request {
+        request_id: client.request_id(),
+        expected_version: initial.version,
+        action: Action::CreateFleet {
+            voyage,
+            name: "Second fleet".into(),
+        },
+    };
+    let saved = client.call(request.clone()).unwrap();
+    let duplicate = client.call(request.clone()).unwrap();
+    let mut changed = request.clone();
+    changed.action = Action::Inspect;
+    let refused_identity = client.call(changed).unwrap();
+    let stale = call(
+        Action::Dock {
+            context: Context::Workspace,
+        },
+        initial.version,
+    );
+    let final_state = call(Action::Inspect, 0);
+    let mut cleanup = Core::connect(&session).unwrap();
+    cleanup.rpc("doc.set", serde_json::json!({
+        "name": "voyager-layout-v1", "value": final_state.layout, "version": final_state.version,
+    })).unwrap();
+    let external_conflict = call(
+        Action::Dock {
+            context: Context::Workspace,
+        },
+        final_state.version,
+    );
+    let refreshed = call(Action::Inspect, 0);
+    let retained_outcome = client.call(request).unwrap();
+    let stopped = cleanup.rpc("server.stop", serde_json::json!({}));
+    cleanup.close().unwrap();
+    assert_eq!(saved.status, Status::Applied);
+    assert_eq!(saved, duplicate);
+    assert_eq!(refused_identity.status, Status::Rejected);
+    assert_eq!(stale.status, Status::Rejected);
+    assert_eq!(final_state.layout.voyages[0].fleets.len(), 2);
+    assert_eq!(external_conflict.status, Status::Rejected);
+    assert!(!external_conflict.fresh);
+    assert!(refreshed.fresh);
+    assert!(refreshed.version > final_state.version);
+    assert_eq!(retained_outcome.status, Status::Applied);
+    assert!(std::sync::Arc::ptr_eq(
+        &refreshed.layout,
+        &retained_outcome.layout
+    ));
+    assert!(stopped.is_ok());
+}
