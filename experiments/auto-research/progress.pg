@@ -1,0 +1,119 @@
+node Problem {
+  key: String @key
+  question: String
+  objective: String
+  context: String
+  revision: U32
+  protocol: String
+  limits: String
+}
+node Protocol {
+  key: String @key
+  title: String
+  method: String
+  qualification: String
+}
+node Criterion {
+  key: String @key
+  name: String
+  kind: enum(formal, numeric, rubric, preference)
+  role: enum(objective, constraint)
+  definition: String
+  evaluator: String
+  unit: String?
+}
+node Claim {
+  key: String @key
+  kind: enum(hypothesis, assumption, finding)
+  statement: String
+  scope: String
+}
+node Candidate {
+  key: String @key
+  label: String
+  content: String
+  kind: enum(baseline, proposal)
+}
+node Attempt {
+  key: String @key
+  method: String
+  status: enum(completed, failed, uncertain, cancelled)
+  scope: String
+  actor: String
+}
+node Evidence {
+  key: String @key
+  kind: enum(measurement, argument, counterexample, judgment, report, observation)
+  summary: String
+  numeric_value: F64?
+  unit: String?
+  value_text: String?
+  artifact: String
+  sha256: String
+  origin: enum(computed, human, model, reported, simulated)
+  assessor: String
+}
+node Assessment {
+  key: String @key
+  result: enum(supports, refutes, meets, violates, preferred, inconclusive, unreviewed)
+  statement: String
+  rationale: String
+  problem_revision: U32
+  protocol: String
+  review: enum(proposed, reviewed, rejected)
+  assessor: String
+  protocol_method: String
+  protocol_qualification: String
+  criterion_kind: String
+  criterion_role: String
+  criterion_definition: String
+  criterion_evaluator: String
+  criterion_unit: String?
+}
+node NextStep {
+  key: String @key
+  question: String
+  reason: String
+  expected_information: String
+  prerequisites: String
+  state: enum(open, claimed, done, withdrawn)
+  problem_revision: U32
+  protocol: String
+}
+node Participant {
+  key: String @key
+  name: String
+  kind: enum(human, agent)
+}
+node Progress {
+  key: String @key
+  summary: String
+  why_it_matters: String
+  contribution_requested: String
+  sequence: U32
+  problem_revision: U32
+  protocol: String
+}
+edge ProtocolOf: Protocol -> Problem
+edge UsesCriterion: Protocol -> Criterion
+edge ClaimIn: Claim -> Problem
+edge CandidateFor: Candidate -> Problem
+edge AttemptFor: Attempt -> Problem
+edge Tested: Attempt -> Candidate
+edge UsedProtocol: Attempt -> Protocol
+edge ProducedBy: Evidence -> Attempt
+edge Assesses: Assessment -> Problem
+edge Addresses: Assessment -> Criterion
+edge Cites: Assessment -> Evidence
+edge AboutClaim: Assessment -> Claim
+edge AboutCandidate: Assessment -> Candidate
+edge StepFor: NextStep -> Problem
+edge MotivatedBy: NextStep -> Assessment
+edge AfterStep: NextStep -> NextStep
+edge InterestedIn: Participant -> Criterion
+edge Updates: Progress -> Problem
+edge Changed: Progress -> Criterion
+edge ExplainedBy: Progress -> Assessment
+edge ContributedBy: Progress -> Participant
+edge DerivedFrom: Candidate -> Candidate
+edge Supersedes: Assessment -> Assessment

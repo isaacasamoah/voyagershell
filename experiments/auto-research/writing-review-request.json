@@ -1,0 +1,15 @@
+{
+  "original": "Research progress should be recorded clearly so that people who were not involved can understand what was tried, see the evidence, and decide how to contribute.",
+  "candidates": {
+    "A": "Record research attempts and evidence clearly so newcomers can understand the work and choose how to contribute.",
+    "B": "Share research so anyone can help.",
+    "C": "Only experts can contribute after every research result has been verified."
+  },
+  "criteria": [
+    "attempted work is recorded",
+    "newcomers understand the work",
+    "evidence is visible",
+    "people can choose a contribution"
+  ],
+  "required_output": "model-origin preserved/lost/reversed meanings and eligibility; no claimed human preference"
+}

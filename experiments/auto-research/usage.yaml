@@ -1,0 +1,109 @@
+version: 1
+name: general-research-progress
+status: proposed_usage_profile_with_exercised_query_bindings
+runtime_adapter: not_implemented
+structure:
+  cluster: cluster.yaml
+  schema: progress.pg
+use:
+  queries: progress.gq
+  roles:
+    problem: {node: Problem, identity: key, revision: revision, contract: protocol}
+    evaluation: {node: Protocol, method: method, qualification: qualification}
+    criterion: {node: Criterion, kind: kind, purpose: role, definition: definition, evaluator: evaluator}
+    claim: {node: Claim, optional: true, statement: statement, scope: scope}
+    candidate: {node: Candidate, content: content}
+    attempt: {node: Attempt, status: status, scope: scope, actor: actor}
+    evidence: {node: Evidence, artifact: artifact, digest: sha256, origin: origin, assessor: assessor}
+    assessment: {node: Assessment, result: result, review: review, rationale: rationale}
+    contribution: {node: NextStep, question: question, reason: reason, state: state}
+    participant: {node: Participant, identity: key, authenticated: false}
+    update: {node: Progress, cursor: sequence, explanation: why_it_matters, request: contribution_requested}
+  relations:
+    evaluation_scope: ProtocolOf
+    evaluation_criteria: UsesCriterion
+    attempt_scope: AttemptFor
+    attempt_method: UsedProtocol
+    evidence_source: ProducedBy
+    assessment_scope: Assesses
+    assessment_criterion: Addresses
+    assessment_evidence: Cites
+    contribution_scope: StepFor
+    contribution_dependencies: AfterStep
+    interests: InterestedIn
+    update_scope: Updates
+    update_subject: Changed
+    update_basis: ExplainedBy
+    update_author: ContributedBy
+  operations:
+    understand_problem: {queries: [research_brief, criteria, candidates, claims], parameter: problem}
+    inspect_attempts: {queries: [attempts, evidence, assessment_history], parameter: problem}
+    inspect_current_findings: {queries: [qualified_assessments], parameter: problem}
+    find_contribution: {queries: [next_contributions, ready_contributions], parameter: problem}
+    inspect_basis: {queries: [assessment_evidence, assessed_candidates], parameter: assessment}
+    inspect_dependencies: {queries: [contribution_dependencies], parameter: step}
+    receive_updates: {queries: [updates_for], parameters: [participant, after]}
+    inspect_update: {queries: [update_evidence], parameter: update}
+    revise_problem: {mutation: revise_problem, guard: expected_revision_and_increasing_revision}
+  deterministic_rules:
+    admission:
+      exercised: strict_append_rejects_duplicate_identity_and_schema_invalid_records
+      mechanism: omnigraph_load_append
+      limit: no_untrusted_submission_or_authenticated_write_boundary
+    evidence:
+      exercised: linked_artifact_digest_origin_and_assessor_are_retrievable
+      proposed: verify_artifact_availability_digest_and_source_before_reuse
+    qualification:
+      exercised: qualified_assessments
+      requires: reviewed_assessment_current_problem_contract_and_criterion_terms_with_cited_evidence
+      meaning: eligible_for_current_briefing_not_scientific_truth
+    readiness:
+      exercised: ready_contributions
+      requires: open_current_context_and_no_unfinished_structured_predecessor
+      grants_execution_permission: false
+    relevance:
+      exercised: updates_for
+      mechanism: declared_criterion_interest_and_sequence_cursor
+      limit: no_semantic_relevance_or_delivery_trial
+  judgment_rules:
+    semantic_fidelity:
+      exercised: recorded_independent_model_critique_under_writing_protocol
+      evidence_origin: model
+      initial_review: proposed
+    semantic_relevance_and_importance:
+      status: proposed
+      evaluator_role: Jev
+      model: jev-1.14.0
+      primitive: choice
+      inputs: [participant_interest, current_question, dependencies, assessment, cited_evidence]
+      instructions: Select the consequence of this update for this participant under the active research contract.
+      criteria:
+        changes_dependent_work: Evidence changes an assumption or decision used by an open contribution.
+        useful_context: Evidence informs the declared question without changing a known dependency.
+        unrelated: Evidence has no supported connection to the participant's declared work or interests.
+        insufficient_basis: The supplied record does not support a consequence judgment.
+      retain: [request_state, instructions, criteria, choice, probabilities, confidence, model, usage]
+      confidence_meaning: distribution_concentration_not_correctness
+      effect: proposed_attention_classification_no_authority_grant
+    preference:
+      status: unreviewed_in_trial
+      evaluator_role: relevant_human_readers
+      rule: preserve_audience_and_disagreement_do_not_treat_model_taste_as_human_preference
+  summaries:
+    status: proposed_automated_generation
+    evaluator_role: generative_model
+    inputs: [current_briefing, qualified_assessments, disputed_assessments, linked_evidence, open_contributions]
+    output_fields: [summary, why_it_matters, contribution_requested, evidence_references]
+    rule: cite_inputs_preserve_review_state_and_uncertainty_introduce_no_new_findings
+  delivery_and_authority:
+    status: proposed_beyond_local_retrieval
+    update_record: Progress
+    review_rule: proposed_findings_remain_proposed_until_the_selected_community_review_occurs
+    notification_rule: retain_recipient_reason_basis_and_delivery_outcome_if_delivery_is_added
+    authority: local_cli_trial_no_authenticated_authority_boundary
+    decisions: record_the_selected_contract_assessor_and_basis_no_automatic_vote_or_winner
+compatibility:
+  requirement: preserve_required_roles_or_explicitly_rebind_them_and_the_queries
+  new_domain: supply_problem_contract_criteria_and_evidence_as_data
+  renamed_or_changed_schema: update_this_mapping_and_stored_queries_then_repeat_the_handoff_trial
+  limit: no_arbitrary_schema_adapter_or_hidden_application_mapping_is_claimed
