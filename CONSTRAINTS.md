@@ -107,3 +107,20 @@ two useful examples. The actual product interface, a research solver, a job
 scheduler and live notification delivery are outside this experiment. Human
 usability, physical performance and frontier scientific discovery cannot be
 claimed from these bounded examples.
+
+## Research Voyage setup preview
+
+The next isolated increment shows a Voyage setup draft and a D3 view of the
+recorded research export. Graph structure and agent-use configuration stay
+separate. Exporting a draft does not create or activate a Voyage, graph or rule.
+The viewer must use actual trial records and expose node and edge metadata by
+selection, hover and keyboard focus. Invalid required inputs and an unreadable
+snapshot must produce visible failures. A changed draft must not silently
+replace the recorded graph.
+
+Use the same proving entry point with `--preview LOCAL_URL` and its focused
+`prove_preview.py` browser module. Count the new fixture, entry-point changes and
+reviewer helpers against only the new application code actually exercised.
+Unmodified D3 is a dependency, not authored source or proving code. The earlier
+graph trial retains its separately reviewed source and evidence. This preview
+does not establish a product integration or general schema adapter.

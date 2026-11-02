@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A research Voyage</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="preview.css">
+  <script src="d3.min.js" defer></script>
+  <script type="module" src="preview.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <span class="brand">Voyager / research</span>
+      <span class="badge">Local setup preview</span>
+      <h1>Start a research Voyage</h1>
+      <p>Describe the question, choose what the graph records, and make the rules for using it explicit.</p>
+    </header>
+    <p id="loading" role="status">Loading the recorded trial and its configuration.</p>
+    <p id="error" role="alert" hidden></p>
+    <div id="content" hidden>
+      <form id="setup" novalidate>
+        <section aria-labelledby="describe-heading">
+          <h2 id="describe-heading">1. Describe the Voyage</h2>
+          <div class="intro-fields">
+            <label>Voyage name<input id="voyage-name" value="Research together" required maxlength="120"></label>
+            <label>What do you want to find out?<textarea id="objective" rows="2" required>How can people share research so someone new can understand the evidence and contribute?</textarea></label>
+          </div>
+        </section>
+        <section aria-labelledby="configure-heading">
+          <h2 id="configure-heading">2. Configure the graph</h2>
+          <div class="layers">
+            <fieldset>
+              <legend>Graph structure</legend>
+              <p>What gets recorded: record types, their fields and the relations between them.</p>
+              <label>Inspect a record type<select id="record-type"></select></label>
+              <div id="type-fields" class="schema-summary"></div>
+              <details><summary>Edit the structure source</summary>
+                <label>progress.pg<textarea id="schema" rows="12" spellcheck="false" required></textarea></label>
+              </details>
+              <details open><summary>Role bindings</summary><dl id="bindings" class="bindings"></dl></details>
+              <details><summary>Edit role and relation bindings</summary>
+                <label>bindings.yaml<textarea id="binding-source" rows="12" spellcheck="false" required></textarea></label>
+              </details>
+            </fieldset>
+            <fieldset>
+              <legend>How agents use the graph</legend>
+              <p>The usage profile names admission checks, semantic judgments, importance, review and notification rules. It refers to the graph's bindings.</p>
+              <p class="small">Code checks revisions and prerequisites. Jev is proposed for semantic judgments. A generative model is proposed for grounded explanations. Review and notification policies remain explicit proposals.</p>
+              <details><summary>Edit agent-use rules</summary>
+                <label>usage.yaml<textarea id="usage" rows="12" spellcheck="false" required></textarea></label>
+              </details>
+              <details><summary>Inspect or edit the query implementation</summary>
+                <label>progress.gq<textarea id="queries" rows="12" spellcheck="false" required></textarea></label>
+              </details>
+            </fieldset>
+          </div>
+          <p class="boundary">This exports a draft. It does not create a Voyage or graph, activate rules, call a model or send notifications. Source edits need OmniGraph validation and an explicit usage adapter before execution.</p>
+          <div class="actions"><button type="submit">Export setup draft</button><a class="button secondary" href="#graph-section">Explore the recorded graph</a></div>
+          <p id="export-status" role="status"></p>
+        </section>
+      </form>
+      <section id="graph-section" aria-labelledby="graph-heading">
+        <div class="graph-heading"><div><h2 id="graph-heading">3. Explore recorded research</h2><p id="snapshot-source"></p></div><a href="export.jsonl" download>Download the raw graph</a></div>
+        <p>The mathematics example records a counterexample. The writing example keeps model critique and human preference separate. This is the existing trial snapshot. Draft edits above do not change it.</p>
+        <div class="toolbar">
+          <label>Show<select id="scope"><option value="all">Both examples</option><option value="math">Mathematics</option><option value="writing">Writing</option></select></label>
+          <label class="find">Find a node or edge<select id="find-record"><option value="">Choose a record</option></select></label>
+          <div class="zoom"><button id="zoom-in" type="button" aria-label="Zoom in">+</button><button id="zoom-out" type="button" aria-label="Zoom out">−</button><button id="reset-view" type="button">Reset view</button></div>
+        </div>
+        <p class="small"><span id="graph-count"></span> Hover for a preview. Select or focus a node or edge to inspect its metadata. Drag the background to pan.</p>
+        <div class="graph-layout">
+          <div class="canvas"><svg id="graph" viewBox="0 0 1000 580" role="group" aria-label="Recorded research graph"></svg></div>
+          <aside id="metadata" aria-labelledby="metadata-heading"><p id="selection-state" class="small" role="status"></p><h3 id="metadata-heading">Select a node or edge</h3><dl id="metadata-fields"></dl><div id="related"></div></aside>
+        </div>
+      </section>
+      <footer><p id="provenance"></p><p>The usage profile is a proposal. The trial demonstrates local recording, retrieval and one agent handoff. Human usability and community notification delivery remain unproved.</p></footer>
+    </div>
+  </main>
+</body>
+</html>
