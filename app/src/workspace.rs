@@ -1,6 +1,6 @@
 use voyager_contract::{
-    Action, Axis, Content, ContentId, Context, Fleet, FleetId, Layout, PlacementId, Split, Vessel,
-    Voyage, VoyageId,
+    Action, Axis, Content, ContentId, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget,
+    Split, Vessel, Voyage, VoyageId,
 };
 
 #[derive(Default)]
@@ -18,7 +18,7 @@ impl Model {
         Ok(format!("{prefix}-{}", self.layout.next_id))
     }
 
-    fn fleet(&mut self, name: String, cwd: String) -> Result<Fleet, String> {
+    fn placement(&mut self, cwd: String) -> Result<Vessel, String> {
         let content = ContentId(self.id("content")?);
         let placement = PlacementId(self.id("placement")?);
         self.layout.contents.push(Content {
@@ -27,14 +27,22 @@ impl Model {
             cwd,
             backend: None,
         });
+        Ok(Vessel {
+            id: placement,
+            content,
+            name: None,
+        })
+    }
+
+    fn fleet(&mut self, name: String, cwd: String) -> Result<Fleet, String> {
+        let placement = self.placement(cwd)?;
         Ok(Fleet {
             id: FleetId(self.id("fleet")?),
             name,
-            vessels: vec![Vessel {
-                id: placement.clone(),
-                content,
-            }],
-            root: Split::Leaf { placement },
+            root: Split::Leaf {
+                placement: placement.id.clone(),
+            },
+            vessels: vec![placement],
         })
     }
 
@@ -102,6 +110,67 @@ impl Model {
                 self.layout.selected_fleet = voyage.fleets.first().map(|f| f.id.clone());
                 self.layout.selected_voyage = Some(id);
             }
+            Action::CreatePortal { voyage } => {
+                let index = self
+                    .layout
+                    .voyages
+                    .iter()
+                    .position(|item| item.id == voyage)
+                    .ok_or("Voyage not found")?;
+                let cwd = self.layout.voyages[index]
+                    .fleets
+                    .first()
+                    .and_then(|fleet| fleet.vessels.first())
+                    .and_then(|placement| {
+                        self.layout
+                            .contents
+                            .iter()
+                            .find(|content| content.id == placement.content)
+                    })
+                    .map(|content| content.cwd.clone())
+                    .ok_or("Voyage has no working directory")?;
+                let placement = self.placement(cwd)?;
+                self.layout.voyages[index].portals.push(placement);
+            }
+            Action::Rename { target, name } => {
+                let name = name.trim().to_owned();
+                if name.is_empty() || name.len() > 128 {
+                    return Err("A name must contain 1 to 128 bytes".into());
+                }
+                match target {
+                    RenameTarget::Voyage { id } => {
+                        self.layout
+                            .voyages
+                            .iter_mut()
+                            .find(|item| item.id == id)
+                            .ok_or("Voyage not found")?
+                            .name = name
+                    }
+                    RenameTarget::Fleet { id } => {
+                        let (v, f) = self.fleet_index(&id).ok_or("Fleet not found")?;
+                        self.layout.voyages[v].fleets[f].name = name;
+                    }
+                    RenameTarget::Vessel { id } => {
+                        self.layout
+                            .voyages
+                            .iter_mut()
+                            .flat_map(|voyage| &mut voyage.fleets)
+                            .flat_map(|fleet| &mut fleet.vessels)
+                            .find(|item| item.id == id)
+                            .ok_or("Vessel not found")?
+                            .name = Some(name)
+                    }
+                    RenameTarget::Portal { id } => {
+                        self.layout
+                            .voyages
+                            .iter_mut()
+                            .flat_map(|voyage| &mut voyage.portals)
+                            .find(|item| item.id == id)
+                            .ok_or("Portal not found")?
+                            .name = Some(name)
+                    }
+                }
+            }
             Action::SelectFleet { id } => {
                 let (v, _) = self.fleet_index(&id).ok_or("Fleet not found")?;
                 self.layout.selected_voyage = Some(self.layout.voyages[v].id.clone());
@@ -155,6 +224,7 @@ impl Model {
                 target.vessels.push(Vessel {
                     id: placement,
                     content: new_content.clone(),
+                    name: None,
                 });
                 self.layout.contents.push(Content {
                     id: new_content,

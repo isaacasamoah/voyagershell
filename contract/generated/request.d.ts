@@ -13,6 +13,15 @@ export type Action =
       voyage: string;
     }
   | {
+      operation: "create-portal";
+      voyage: string;
+    }
+  | {
+      name: string;
+      operation: "rename";
+      target: RenameTarget;
+    }
+  | {
       after: string;
       axis: Axis;
       fleet: string;
@@ -29,6 +38,23 @@ export type Action =
   | {
       context: Context;
       operation: "dock";
+    };
+export type RenameTarget =
+  | {
+      id: string;
+      kind: "voyage";
+    }
+  | {
+      id: string;
+      kind: "fleet";
+    }
+  | {
+      id: string;
+      kind: "vessel";
+    }
+  | {
+      id: string;
+      kind: "portal";
     };
 export type Axis = "horizontal" | "vertical";
 export type Context =

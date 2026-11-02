@@ -1,9 +1,10 @@
 "use strict";
 export const request = validate10;
-const schema11 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"after":{"type":"string"},"axis":{"$ref":"#/definitions/Axis"},"fleet":{"type":"string"},"operation":{"const":"split","type":"string"}},"required":["operation","fleet","after","axis"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"}]},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"}},"required":["requestId","expectedVersion","action"],"title":"Request","type":"object"};
-const schema12 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"after":{"type":"string"},"axis":{"$ref":"#/definitions/Axis"},"fleet":{"type":"string"},"operation":{"const":"split","type":"string"}},"required":["operation","fleet","after","axis"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"}]};
-const schema13 = {"enum":["horizontal","vertical"],"type":"string"};
-const schema14 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema11 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Action":{"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-portal","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"after":{"type":"string"},"axis":{"$ref":"#/definitions/Axis"},"fleet":{"type":"string"},"operation":{"const":"split","type":"string"}},"required":["operation","fleet","after","axis"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"}]},"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"RenameTarget":{"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]}},"properties":{"action":{"$ref":"#/definitions/Action"},"expectedVersion":{"type":"string"},"requestId":{"type":"string"}},"required":["requestId","expectedVersion","action"],"title":"Request","type":"object"};
+const schema12 = {"oneOf":[{"additionalProperties":false,"properties":{"operation":{"const":"inspect","type":"string"}},"required":["operation"],"type":"object"},{"additionalProperties":false,"properties":{"cwd":{"type":"string"},"name":{"type":"string"},"operation":{"const":"create-voyage","type":"string"}},"required":["operation","name","cwd"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"create-fleet","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage","name"],"type":"object"},{"additionalProperties":false,"properties":{"operation":{"const":"create-portal","type":"string"},"voyage":{"type":"string"}},"required":["operation","voyage"],"type":"object"},{"additionalProperties":false,"properties":{"name":{"type":"string"},"operation":{"const":"rename","type":"string"},"target":{"$ref":"#/definitions/RenameTarget"}},"required":["operation","target","name"],"type":"object"},{"additionalProperties":false,"properties":{"after":{"type":"string"},"axis":{"$ref":"#/definitions/Axis"},"fleet":{"type":"string"},"operation":{"const":"split","type":"string"}},"required":["operation","fleet","after","axis"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-voyage","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"operation":{"const":"select-fleet","type":"string"}},"required":["operation","id"],"type":"object"},{"additionalProperties":false,"properties":{"context":{"$ref":"#/definitions/Context"},"operation":{"const":"dock","type":"string"}},"required":["operation","context"],"type":"object"}]};
+const schema13 = {"oneOf":[{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema14 = {"enum":["horizontal","vertical"],"type":"string"};
+const schema15 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
 
 function validate11(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 let vErrors = null;
@@ -327,7 +328,7 @@ const _errs24 = errors;
 if(errors === _errs24){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing3;
-if(((((data.operation === undefined) && (missing3 = "operation")) || ((data.fleet === undefined) && (missing3 = "fleet"))) || ((data.after === undefined) && (missing3 = "after"))) || ((data.axis === undefined) && (missing3 = "axis"))){
+if(((data.operation === undefined) && (missing3 = "operation")) || ((data.voyage === undefined) && (missing3 = "voyage"))){
 const err19 = {instancePath,schemaPath:"#/oneOf/3/required",keyword:"required",params:{missingProperty: missing3},message:"must have required property '"+missing3+"'"};
 if(vErrors === null){
 vErrors = [err19];
@@ -340,7 +341,7 @@ errors++;
 else {
 const _errs26 = errors;
 for(const key3 in data){
-if(!((((key3 === "after") || (key3 === "axis")) || (key3 === "fleet")) || (key3 === "operation"))){
+if(!((key3 === "operation") || (key3 === "voyage"))){
 const err20 = {instancePath,schemaPath:"#/oneOf/3/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key3},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err20];
@@ -353,15 +354,26 @@ break;
 }
 }
 if(_errs26 === errors){
-if(data.after !== undefined){
+if(data.operation !== undefined){
+let data7 = data.operation;
 const _errs27 = errors;
-if(typeof data.after !== "string"){
-const err21 = {instancePath:instancePath+"/after",schemaPath:"#/oneOf/3/properties/after/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(typeof data7 !== "string"){
+const err21 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/3/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err21];
 }
 else {
 vErrors.push(err21);
+}
+errors++;
+}
+if("create-portal" !== data7){
+const err22 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/3/properties/operation/const",keyword:"const",params:{allowedValue: "create-portal"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err22];
+}
+else {
+vErrors.push(err22);
 }
 errors++;
 }
@@ -371,21 +383,10 @@ else {
 var valid4 = true;
 }
 if(valid4){
-if(data.axis !== undefined){
-let data8 = data.axis;
+if(data.voyage !== undefined){
 const _errs29 = errors;
-if(typeof data8 !== "string"){
-const err22 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err22];
-}
-else {
-vErrors.push(err22);
-}
-errors++;
-}
-if(!((data8 === "horizontal") || (data8 === "vertical"))){
-const err23 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/enum",keyword:"enum",params:{allowedValues: schema13.enum},message:"must be equal to one of the allowed values"};
+if(typeof data.voyage !== "string"){
+const err23 = {instancePath:instancePath+"/voyage",schemaPath:"#/oneOf/3/properties/voyage/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -399,66 +400,17 @@ var valid4 = _errs29 === errors;
 else {
 var valid4 = true;
 }
-if(valid4){
-if(data.fleet !== undefined){
-const _errs32 = errors;
-if(typeof data.fleet !== "string"){
-const err24 = {instancePath:instancePath+"/fleet",schemaPath:"#/oneOf/3/properties/fleet/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+}
+}
+}
+else {
+const err24 = {instancePath,schemaPath:"#/oneOf/3/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err24];
 }
 else {
 vErrors.push(err24);
-}
-errors++;
-}
-var valid4 = _errs32 === errors;
-}
-else {
-var valid4 = true;
-}
-if(valid4){
-if(data.operation !== undefined){
-let data10 = data.operation;
-const _errs34 = errors;
-if(typeof data10 !== "string"){
-const err25 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/3/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err25];
-}
-else {
-vErrors.push(err25);
-}
-errors++;
-}
-if("split" !== data10){
-const err26 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/3/properties/operation/const",keyword:"const",params:{allowedValue: "split"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err26];
-}
-else {
-vErrors.push(err26);
-}
-errors++;
-}
-var valid4 = _errs34 === errors;
-}
-else {
-var valid4 = true;
-}
-}
-}
-}
-}
-}
-}
-else {
-const err27 = {instancePath,schemaPath:"#/oneOf/3/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err27];
-}
-else {
-vErrors.push(err27);
 }
 errors++;
 }
@@ -473,12 +425,59 @@ if(_valid0){
 valid0 = true;
 passing0 = 3;
 }
-const _errs36 = errors;
-if(errors === _errs36){
+const _errs31 = errors;
+if(errors === _errs31){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing4;
-if(((data.operation === undefined) && (missing4 = "operation")) || ((data.id === undefined) && (missing4 = "id"))){
-const err28 = {instancePath,schemaPath:"#/oneOf/4/required",keyword:"required",params:{missingProperty: missing4},message:"must have required property '"+missing4+"'"};
+if((((data.operation === undefined) && (missing4 = "operation")) || ((data.target === undefined) && (missing4 = "target"))) || ((data.name === undefined) && (missing4 = "name"))){
+const err25 = {instancePath,schemaPath:"#/oneOf/4/required",keyword:"required",params:{missingProperty: missing4},message:"must have required property '"+missing4+"'"};
+if(vErrors === null){
+vErrors = [err25];
+}
+else {
+vErrors.push(err25);
+}
+errors++;
+}
+else {
+const _errs33 = errors;
+for(const key4 in data){
+if(!(((key4 === "name") || (key4 === "operation")) || (key4 === "target"))){
+const err26 = {instancePath,schemaPath:"#/oneOf/4/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key4},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err26];
+}
+else {
+vErrors.push(err26);
+}
+errors++;
+break;
+}
+}
+if(_errs33 === errors){
+if(data.name !== undefined){
+const _errs34 = errors;
+if(typeof data.name !== "string"){
+const err27 = {instancePath:instancePath+"/name",schemaPath:"#/oneOf/4/properties/name/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err27];
+}
+else {
+vErrors.push(err27);
+}
+errors++;
+}
+var valid5 = _errs34 === errors;
+}
+else {
+var valid5 = true;
+}
+if(valid5){
+if(data.operation !== undefined){
+let data10 = data.operation;
+const _errs36 = errors;
+if(typeof data10 !== "string"){
+const err28 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/4/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -487,11 +486,8 @@ vErrors.push(err28);
 }
 errors++;
 }
-else {
-const _errs38 = errors;
-for(const key4 in data){
-if(!((key4 === "id") || (key4 === "operation"))){
-const err29 = {instancePath,schemaPath:"#/oneOf/4/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key4},message:"must NOT have additional properties"};
+if("rename" !== data10){
+const err29 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/4/properties/operation/const",keyword:"const",params:{allowedValue: "rename"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -499,14 +495,25 @@ else {
 vErrors.push(err29);
 }
 errors++;
-break;
 }
+var valid5 = _errs36 === errors;
 }
-if(_errs38 === errors){
-if(data.id !== undefined){
-const _errs39 = errors;
-if(typeof data.id !== "string"){
-const err30 = {instancePath:instancePath+"/id",schemaPath:"#/oneOf/4/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+else {
+var valid5 = true;
+}
+if(valid5){
+if(data.target !== undefined){
+let data11 = data.target;
+const _errs38 = errors;
+const _errs40 = errors;
+let valid7 = false;
+let passing1 = null;
+const _errs41 = errors;
+if(errors === _errs41){
+if(data11 && typeof data11 == "object" && !Array.isArray(data11)){
+let missing5;
+if(((data11.kind === undefined) && (missing5 = "kind")) || ((data11.id === undefined) && (missing5 = "id"))){
+const err30 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/0/required",keyword:"required",params:{missingProperty: missing5},message:"must have required property '"+missing5+"'"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -515,17 +522,11 @@ vErrors.push(err30);
 }
 errors++;
 }
-var valid6 = _errs39 === errors;
-}
 else {
-var valid6 = true;
-}
-if(valid6){
-if(data.operation !== undefined){
-let data12 = data.operation;
-const _errs41 = errors;
-if(typeof data12 !== "string"){
-const err31 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/4/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const _errs43 = errors;
+for(const key5 in data11){
+if(!((key5 === "id") || (key5 === "kind"))){
+const err31 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/0/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key5},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -533,9 +534,14 @@ else {
 vErrors.push(err31);
 }
 errors++;
+break;
 }
-if("select-voyage" !== data12){
-const err32 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/4/properties/operation/const",keyword:"const",params:{allowedValue: "select-voyage"},message:"must be equal to constant"};
+}
+if(_errs43 === errors){
+if(data11.id !== undefined){
+const _errs44 = errors;
+if(typeof data11.id !== "string"){
+const err32 = {instancePath:instancePath+"/target/id",schemaPath:"#/definitions/RenameTarget/oneOf/0/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -544,17 +550,17 @@ vErrors.push(err32);
 }
 errors++;
 }
-var valid6 = _errs41 === errors;
+var valid8 = _errs44 === errors;
 }
 else {
-var valid6 = true;
+var valid8 = true;
 }
-}
-}
-}
-}
-else {
-const err33 = {instancePath,schemaPath:"#/oneOf/4/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(valid8){
+if(data11.kind !== undefined){
+let data13 = data11.kind;
+const _errs46 = errors;
+if(typeof data13 !== "string"){
+const err33 = {instancePath:instancePath+"/target/kind",schemaPath:"#/definitions/RenameTarget/oneOf/0/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -563,23 +569,8 @@ vErrors.push(err33);
 }
 errors++;
 }
-}
-var _valid0 = _errs36 === errors;
-if(_valid0 && valid0){
-valid0 = false;
-passing0 = [passing0, 4];
-}
-else {
-if(_valid0){
-valid0 = true;
-passing0 = 4;
-}
-const _errs43 = errors;
-if(errors === _errs43){
-if(data && typeof data == "object" && !Array.isArray(data)){
-let missing5;
-if(((data.operation === undefined) && (missing5 = "operation")) || ((data.id === undefined) && (missing5 = "id"))){
-const err34 = {instancePath,schemaPath:"#/oneOf/5/required",keyword:"required",params:{missingProperty: missing5},message:"must have required property '"+missing5+"'"};
+if("voyage" !== data13){
+const err34 = {instancePath:instancePath+"/target/kind",schemaPath:"#/definitions/RenameTarget/oneOf/0/properties/kind/const",keyword:"const",params:{allowedValue: "voyage"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -588,11 +579,17 @@ vErrors.push(err34);
 }
 errors++;
 }
+var valid8 = _errs46 === errors;
+}
 else {
-const _errs45 = errors;
-for(const key5 in data){
-if(!((key5 === "id") || (key5 === "operation"))){
-const err35 = {instancePath,schemaPath:"#/oneOf/5/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key5},message:"must NOT have additional properties"};
+var valid8 = true;
+}
+}
+}
+}
+}
+else {
+const err35 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/0/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err35];
 }
@@ -600,14 +597,19 @@ else {
 vErrors.push(err35);
 }
 errors++;
-break;
 }
 }
-if(_errs45 === errors){
-if(data.id !== undefined){
-const _errs46 = errors;
-if(typeof data.id !== "string"){
-const err36 = {instancePath:instancePath+"/id",schemaPath:"#/oneOf/5/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+var _valid1 = _errs41 === errors;
+if(_valid1){
+valid7 = true;
+passing1 = 0;
+}
+const _errs48 = errors;
+if(errors === _errs48){
+if(data11 && typeof data11 == "object" && !Array.isArray(data11)){
+let missing6;
+if(((data11.kind === undefined) && (missing6 = "kind")) || ((data11.id === undefined) && (missing6 = "id"))){
+const err36 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/1/required",keyword:"required",params:{missingProperty: missing6},message:"must have required property '"+missing6+"'"};
 if(vErrors === null){
 vErrors = [err36];
 }
@@ -616,17 +618,11 @@ vErrors.push(err36);
 }
 errors++;
 }
-var valid7 = _errs46 === errors;
-}
 else {
-var valid7 = true;
-}
-if(valid7){
-if(data.operation !== undefined){
-let data14 = data.operation;
-const _errs48 = errors;
-if(typeof data14 !== "string"){
-const err37 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/5/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const _errs50 = errors;
+for(const key6 in data11){
+if(!((key6 === "id") || (key6 === "kind"))){
+const err37 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/1/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key6},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err37];
 }
@@ -634,9 +630,14 @@ else {
 vErrors.push(err37);
 }
 errors++;
+break;
 }
-if("select-fleet" !== data14){
-const err38 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/5/properties/operation/const",keyword:"const",params:{allowedValue: "select-fleet"},message:"must be equal to constant"};
+}
+if(_errs50 === errors){
+if(data11.id !== undefined){
+const _errs51 = errors;
+if(typeof data11.id !== "string"){
+const err38 = {instancePath:instancePath+"/target/id",schemaPath:"#/definitions/RenameTarget/oneOf/1/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err38];
 }
@@ -645,17 +646,17 @@ vErrors.push(err38);
 }
 errors++;
 }
-var valid7 = _errs48 === errors;
+var valid9 = _errs51 === errors;
 }
 else {
-var valid7 = true;
+var valid9 = true;
 }
-}
-}
-}
-}
-else {
-const err39 = {instancePath,schemaPath:"#/oneOf/5/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(valid9){
+if(data11.kind !== undefined){
+let data15 = data11.kind;
+const _errs53 = errors;
+if(typeof data15 !== "string"){
+const err39 = {instancePath:instancePath+"/target/kind",schemaPath:"#/definitions/RenameTarget/oneOf/1/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err39];
 }
@@ -664,23 +665,8 @@ vErrors.push(err39);
 }
 errors++;
 }
-}
-var _valid0 = _errs43 === errors;
-if(_valid0 && valid0){
-valid0 = false;
-passing0 = [passing0, 5];
-}
-else {
-if(_valid0){
-valid0 = true;
-passing0 = 5;
-}
-const _errs50 = errors;
-if(errors === _errs50){
-if(data && typeof data == "object" && !Array.isArray(data)){
-let missing6;
-if(((data.operation === undefined) && (missing6 = "operation")) || ((data.context === undefined) && (missing6 = "context"))){
-const err40 = {instancePath,schemaPath:"#/oneOf/6/required",keyword:"required",params:{missingProperty: missing6},message:"must have required property '"+missing6+"'"};
+if("fleet" !== data15){
+const err40 = {instancePath:instancePath+"/target/kind",schemaPath:"#/definitions/RenameTarget/oneOf/1/properties/kind/const",keyword:"const",params:{allowedValue: "fleet"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err40];
 }
@@ -689,11 +675,17 @@ vErrors.push(err40);
 }
 errors++;
 }
+var valid9 = _errs53 === errors;
+}
 else {
-const _errs52 = errors;
-for(const key6 in data){
-if(!((key6 === "context") || (key6 === "operation"))){
-const err41 = {instancePath,schemaPath:"#/oneOf/6/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key6},message:"must NOT have additional properties"};
+var valid9 = true;
+}
+}
+}
+}
+}
+else {
+const err41 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/1/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err41];
 }
@@ -701,22 +693,24 @@ else {
 vErrors.push(err41);
 }
 errors++;
-break;
 }
 }
-if(_errs52 === errors){
-if(data.context !== undefined){
-let data15 = data.context;
-const _errs53 = errors;
+var _valid1 = _errs48 === errors;
+if(_valid1 && valid7){
+valid7 = false;
+passing1 = [passing1, 1];
+}
+else {
+if(_valid1){
+valid7 = true;
+passing1 = 1;
+}
 const _errs55 = errors;
-let valid10 = false;
-let passing1 = null;
-const _errs56 = errors;
-if(errors === _errs56){
-if(data15 && typeof data15 == "object" && !Array.isArray(data15)){
+if(errors === _errs55){
+if(data11 && typeof data11 == "object" && !Array.isArray(data11)){
 let missing7;
-if((data15.kind === undefined) && (missing7 = "kind")){
-const err42 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/0/required",keyword:"required",params:{missingProperty: missing7},message:"must have required property '"+missing7+"'"};
+if(((data11.kind === undefined) && (missing7 = "kind")) || ((data11.id === undefined) && (missing7 = "id"))){
+const err42 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/2/required",keyword:"required",params:{missingProperty: missing7},message:"must have required property '"+missing7+"'"};
 if(vErrors === null){
 vErrors = [err42];
 }
@@ -726,10 +720,10 @@ vErrors.push(err42);
 errors++;
 }
 else {
-const _errs58 = errors;
-for(const key7 in data15){
-if(!(key7 === "kind")){
-const err43 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/0/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key7},message:"must NOT have additional properties"};
+const _errs57 = errors;
+for(const key7 in data11){
+if(!((key7 === "id") || (key7 === "kind"))){
+const err43 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/2/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key7},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err43];
 }
@@ -740,11 +734,11 @@ errors++;
 break;
 }
 }
-if(_errs58 === errors){
-if(data15.kind !== undefined){
-let data16 = data15.kind;
-if(typeof data16 !== "string"){
-const err44 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/0/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(_errs57 === errors){
+if(data11.id !== undefined){
+const _errs58 = errors;
+if(typeof data11.id !== "string"){
+const err44 = {instancePath:instancePath+"/target/id",schemaPath:"#/definitions/RenameTarget/oneOf/2/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err44];
 }
@@ -753,8 +747,17 @@ vErrors.push(err44);
 }
 errors++;
 }
-if("workspace" !== data16){
-const err45 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/0/properties/kind/const",keyword:"const",params:{allowedValue: "workspace"},message:"must be equal to constant"};
+var valid10 = _errs58 === errors;
+}
+else {
+var valid10 = true;
+}
+if(valid10){
+if(data11.kind !== undefined){
+let data17 = data11.kind;
+const _errs60 = errors;
+if(typeof data17 !== "string"){
+const err45 = {instancePath:instancePath+"/target/kind",schemaPath:"#/definitions/RenameTarget/oneOf/2/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err45];
 }
@@ -763,12 +766,8 @@ vErrors.push(err45);
 }
 errors++;
 }
-}
-}
-}
-}
-else {
-const err46 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/0/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if("vessel" !== data17){
+const err46 = {instancePath:instancePath+"/target/kind",schemaPath:"#/definitions/RenameTarget/oneOf/2/properties/kind/const",keyword:"const",params:{allowedValue: "vessel"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err46];
 }
@@ -777,18 +776,17 @@ vErrors.push(err46);
 }
 errors++;
 }
+var valid10 = _errs60 === errors;
 }
-var _valid1 = _errs56 === errors;
-if(_valid1){
-valid10 = true;
-passing1 = 0;
+else {
+var valid10 = true;
 }
-const _errs61 = errors;
-if(errors === _errs61){
-if(data15 && typeof data15 == "object" && !Array.isArray(data15)){
-let missing8;
-if(((data15.kind === undefined) && (missing8 = "kind")) || ((data15.id === undefined) && (missing8 = "id"))){
-const err47 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/1/required",keyword:"required",params:{missingProperty: missing8},message:"must have required property '"+missing8+"'"};
+}
+}
+}
+}
+else {
+const err47 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/2/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err47];
 }
@@ -797,11 +795,23 @@ vErrors.push(err47);
 }
 errors++;
 }
+}
+var _valid1 = _errs55 === errors;
+if(_valid1 && valid7){
+valid7 = false;
+passing1 = [passing1, 2];
+}
 else {
-const _errs63 = errors;
-for(const key8 in data15){
-if(!((key8 === "id") || (key8 === "kind"))){
-const err48 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/1/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key8},message:"must NOT have additional properties"};
+if(_valid1){
+valid7 = true;
+passing1 = 2;
+}
+const _errs62 = errors;
+if(errors === _errs62){
+if(data11 && typeof data11 == "object" && !Array.isArray(data11)){
+let missing8;
+if(((data11.kind === undefined) && (missing8 = "kind")) || ((data11.id === undefined) && (missing8 = "id"))){
+const err48 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/3/required",keyword:"required",params:{missingProperty: missing8},message:"must have required property '"+missing8+"'"};
 if(vErrors === null){
 vErrors = [err48];
 }
@@ -809,14 +819,12 @@ else {
 vErrors.push(err48);
 }
 errors++;
-break;
 }
-}
-if(_errs63 === errors){
-if(data15.id !== undefined){
+else {
 const _errs64 = errors;
-if(typeof data15.id !== "string"){
-const err49 = {instancePath:instancePath+"/context/id",schemaPath:"#/definitions/Context/oneOf/1/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+for(const key8 in data11){
+if(!((key8 === "id") || (key8 === "kind"))){
+const err49 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/3/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key8},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err49];
 }
@@ -824,18 +832,14 @@ else {
 vErrors.push(err49);
 }
 errors++;
+break;
 }
-var valid12 = _errs64 === errors;
 }
-else {
-var valid12 = true;
-}
-if(valid12){
-if(data15.kind !== undefined){
-let data18 = data15.kind;
-const _errs66 = errors;
-if(typeof data18 !== "string"){
-const err50 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/1/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(_errs64 === errors){
+if(data11.id !== undefined){
+const _errs65 = errors;
+if(typeof data11.id !== "string"){
+const err50 = {instancePath:instancePath+"/target/id",schemaPath:"#/definitions/RenameTarget/oneOf/3/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err50];
 }
@@ -844,8 +848,17 @@ vErrors.push(err50);
 }
 errors++;
 }
-if("voyage" !== data18){
-const err51 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/1/properties/kind/const",keyword:"const",params:{allowedValue: "voyage"},message:"must be equal to constant"};
+var valid11 = _errs65 === errors;
+}
+else {
+var valid11 = true;
+}
+if(valid11){
+if(data11.kind !== undefined){
+let data19 = data11.kind;
+const _errs67 = errors;
+if(typeof data19 !== "string"){
+const err51 = {instancePath:instancePath+"/target/kind",schemaPath:"#/definitions/RenameTarget/oneOf/3/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err51];
 }
@@ -854,17 +867,8 @@ vErrors.push(err51);
 }
 errors++;
 }
-var valid12 = _errs66 === errors;
-}
-else {
-var valid12 = true;
-}
-}
-}
-}
-}
-else {
-const err52 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/1/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if("portal" !== data19){
+const err52 = {instancePath:instancePath+"/target/kind",schemaPath:"#/definitions/RenameTarget/oneOf/3/properties/kind/const",keyword:"const",params:{allowedValue: "portal"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err52];
 }
@@ -873,23 +877,17 @@ vErrors.push(err52);
 }
 errors++;
 }
-}
-var _valid1 = _errs61 === errors;
-if(_valid1 && valid10){
-valid10 = false;
-passing1 = [passing1, 1];
+var valid11 = _errs67 === errors;
 }
 else {
-if(_valid1){
-valid10 = true;
-passing1 = 1;
+var valid11 = true;
 }
-const _errs68 = errors;
-if(errors === _errs68){
-if(data15 && typeof data15 == "object" && !Array.isArray(data15)){
-let missing9;
-if(((data15.kind === undefined) && (missing9 = "kind")) || ((data15.id === undefined) && (missing9 = "id"))){
-const err53 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/2/required",keyword:"required",params:{missingProperty: missing9},message:"must have required property '"+missing9+"'"};
+}
+}
+}
+}
+else {
+const err53 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf/3/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err53];
 }
@@ -898,11 +896,22 @@ vErrors.push(err53);
 }
 errors++;
 }
+}
+var _valid1 = _errs62 === errors;
+if(_valid1 && valid7){
+valid7 = false;
+passing1 = [passing1, 3];
+}
 else {
-const _errs70 = errors;
-for(const key9 in data15){
-if(!((key9 === "id") || (key9 === "kind"))){
-const err54 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/2/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key9},message:"must NOT have additional properties"};
+if(_valid1){
+valid7 = true;
+passing1 = 3;
+}
+}
+}
+}
+if(!valid7){
+const err54 = {instancePath:instancePath+"/target",schemaPath:"#/definitions/RenameTarget/oneOf",keyword:"oneOf",params:{passingSchemas: passing1},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
 vErrors = [err54];
 }
@@ -910,14 +919,30 @@ else {
 vErrors.push(err54);
 }
 errors++;
-break;
+}
+else {
+errors = _errs40;
+if(vErrors !== null){
+if(_errs40){
+vErrors.length = _errs40;
+}
+else {
+vErrors = null;
 }
 }
-if(_errs70 === errors){
-if(data15.id !== undefined){
-const _errs71 = errors;
-if(typeof data15.id !== "string"){
-const err55 = {instancePath:instancePath+"/context/id",schemaPath:"#/definitions/Context/oneOf/2/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+}
+var valid5 = _errs38 === errors;
+}
+else {
+var valid5 = true;
+}
+}
+}
+}
+}
+}
+else {
+const err55 = {instancePath,schemaPath:"#/oneOf/4/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err55];
 }
@@ -926,17 +951,23 @@ vErrors.push(err55);
 }
 errors++;
 }
-var valid13 = _errs71 === errors;
+}
+var _valid0 = _errs31 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 4];
 }
 else {
-var valid13 = true;
+if(_valid0){
+valid0 = true;
+passing0 = 4;
 }
-if(valid13){
-if(data15.kind !== undefined){
-let data20 = data15.kind;
-const _errs73 = errors;
-if(typeof data20 !== "string"){
-const err56 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/2/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const _errs69 = errors;
+if(errors === _errs69){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing9;
+if(((((data.operation === undefined) && (missing9 = "operation")) || ((data.fleet === undefined) && (missing9 = "fleet"))) || ((data.after === undefined) && (missing9 = "after"))) || ((data.axis === undefined) && (missing9 = "axis"))){
+const err56 = {instancePath,schemaPath:"#/oneOf/5/required",keyword:"required",params:{missingProperty: missing9},message:"must have required property '"+missing9+"'"};
 if(vErrors === null){
 vErrors = [err56];
 }
@@ -945,8 +976,11 @@ vErrors.push(err56);
 }
 errors++;
 }
-if("fleet" !== data20){
-const err57 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/2/properties/kind/const",keyword:"const",params:{allowedValue: "fleet"},message:"must be equal to constant"};
+else {
+const _errs71 = errors;
+for(const key9 in data){
+if(!((((key9 === "after") || (key9 === "axis")) || (key9 === "fleet")) || (key9 === "operation"))){
+const err57 = {instancePath,schemaPath:"#/oneOf/5/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key9},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err57];
 }
@@ -954,18 +988,14 @@ else {
 vErrors.push(err57);
 }
 errors++;
-}
-var valid13 = _errs73 === errors;
-}
-else {
-var valid13 = true;
+break;
 }
 }
-}
-}
-}
-else {
-const err58 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/2/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(_errs71 === errors){
+if(data.after !== undefined){
+const _errs72 = errors;
+if(typeof data.after !== "string"){
+const err58 = {instancePath:instancePath+"/after",schemaPath:"#/oneOf/5/properties/after/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err58];
 }
@@ -974,23 +1004,17 @@ vErrors.push(err58);
 }
 errors++;
 }
-}
-var _valid1 = _errs68 === errors;
-if(_valid1 && valid10){
-valid10 = false;
-passing1 = [passing1, 2];
+var valid12 = _errs72 === errors;
 }
 else {
-if(_valid1){
-valid10 = true;
-passing1 = 2;
+var valid12 = true;
 }
-const _errs75 = errors;
-if(errors === _errs75){
-if(data15 && typeof data15 == "object" && !Array.isArray(data15)){
-let missing10;
-if(((data15.kind === undefined) && (missing10 = "kind")) || ((data15.id === undefined) && (missing10 = "id"))){
-const err59 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/3/required",keyword:"required",params:{missingProperty: missing10},message:"must have required property '"+missing10+"'"};
+if(valid12){
+if(data.axis !== undefined){
+let data21 = data.axis;
+const _errs74 = errors;
+if(typeof data21 !== "string"){
+const err59 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err59];
 }
@@ -999,11 +1023,8 @@ vErrors.push(err59);
 }
 errors++;
 }
-else {
-const _errs77 = errors;
-for(const key10 in data15){
-if(!((key10 === "id") || (key10 === "kind"))){
-const err60 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/3/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key10},message:"must NOT have additional properties"};
+if(!((data21 === "horizontal") || (data21 === "vertical"))){
+const err60 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/enum",keyword:"enum",params:{allowedValues: schema14.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err60];
 }
@@ -1011,14 +1032,17 @@ else {
 vErrors.push(err60);
 }
 errors++;
-break;
 }
+var valid12 = _errs74 === errors;
 }
-if(_errs77 === errors){
-if(data15.id !== undefined){
-const _errs78 = errors;
-if(typeof data15.id !== "string"){
-const err61 = {instancePath:instancePath+"/context/id",schemaPath:"#/definitions/Context/oneOf/3/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+else {
+var valid12 = true;
+}
+if(valid12){
+if(data.fleet !== undefined){
+const _errs77 = errors;
+if(typeof data.fleet !== "string"){
+const err61 = {instancePath:instancePath+"/fleet",schemaPath:"#/oneOf/5/properties/fleet/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err61];
 }
@@ -1027,17 +1051,17 @@ vErrors.push(err61);
 }
 errors++;
 }
-var valid14 = _errs78 === errors;
+var valid12 = _errs77 === errors;
 }
 else {
-var valid14 = true;
+var valid12 = true;
 }
-if(valid14){
-if(data15.kind !== undefined){
-let data22 = data15.kind;
-const _errs80 = errors;
-if(typeof data22 !== "string"){
-const err62 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/3/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(valid12){
+if(data.operation !== undefined){
+let data23 = data.operation;
+const _errs79 = errors;
+if(typeof data23 !== "string"){
+const err62 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/5/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err62];
 }
@@ -1046,8 +1070,8 @@ vErrors.push(err62);
 }
 errors++;
 }
-if("vessel" !== data22){
-const err63 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/3/properties/kind/const",keyword:"const",params:{allowedValue: "vessel"},message:"must be equal to constant"};
+if("split" !== data23){
+const err63 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/5/properties/operation/const",keyword:"const",params:{allowedValue: "split"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err63];
 }
@@ -1056,17 +1080,19 @@ vErrors.push(err63);
 }
 errors++;
 }
-var valid14 = _errs80 === errors;
+var valid12 = _errs79 === errors;
 }
 else {
-var valid14 = true;
+var valid12 = true;
+}
+}
 }
 }
 }
 }
 }
 else {
-const err64 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/3/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err64 = {instancePath,schemaPath:"#/oneOf/5/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err64];
 }
@@ -1076,22 +1102,22 @@ vErrors.push(err64);
 errors++;
 }
 }
-var _valid1 = _errs75 === errors;
-if(_valid1 && valid10){
-valid10 = false;
-passing1 = [passing1, 3];
+var _valid0 = _errs69 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 5];
 }
 else {
-if(_valid1){
-valid10 = true;
-passing1 = 3;
+if(_valid0){
+valid0 = true;
+passing0 = 5;
 }
-const _errs82 = errors;
-if(errors === _errs82){
-if(data15 && typeof data15 == "object" && !Array.isArray(data15)){
-let missing11;
-if(((data15.kind === undefined) && (missing11 = "kind")) || ((data15.id === undefined) && (missing11 = "id"))){
-const err65 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/4/required",keyword:"required",params:{missingProperty: missing11},message:"must have required property '"+missing11+"'"};
+const _errs81 = errors;
+if(errors === _errs81){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing10;
+if(((data.operation === undefined) && (missing10 = "operation")) || ((data.id === undefined) && (missing10 = "id"))){
+const err65 = {instancePath,schemaPath:"#/oneOf/6/required",keyword:"required",params:{missingProperty: missing10},message:"must have required property '"+missing10+"'"};
 if(vErrors === null){
 vErrors = [err65];
 }
@@ -1101,10 +1127,10 @@ vErrors.push(err65);
 errors++;
 }
 else {
-const _errs84 = errors;
-for(const key11 in data15){
-if(!((key11 === "id") || (key11 === "kind"))){
-const err66 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/4/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key11},message:"must NOT have additional properties"};
+const _errs83 = errors;
+for(const key10 in data){
+if(!((key10 === "id") || (key10 === "operation"))){
+const err66 = {instancePath,schemaPath:"#/oneOf/6/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key10},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err66];
 }
@@ -1115,11 +1141,11 @@ errors++;
 break;
 }
 }
-if(_errs84 === errors){
-if(data15.id !== undefined){
-const _errs85 = errors;
-if(typeof data15.id !== "string"){
-const err67 = {instancePath:instancePath+"/context/id",schemaPath:"#/definitions/Context/oneOf/4/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(_errs83 === errors){
+if(data.id !== undefined){
+const _errs84 = errors;
+if(typeof data.id !== "string"){
+const err67 = {instancePath:instancePath+"/id",schemaPath:"#/oneOf/6/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err67];
 }
@@ -1128,17 +1154,17 @@ vErrors.push(err67);
 }
 errors++;
 }
-var valid15 = _errs85 === errors;
+var valid14 = _errs84 === errors;
 }
 else {
-var valid15 = true;
+var valid14 = true;
 }
-if(valid15){
-if(data15.kind !== undefined){
-let data24 = data15.kind;
-const _errs87 = errors;
-if(typeof data24 !== "string"){
-const err68 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/4/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(valid14){
+if(data.operation !== undefined){
+let data25 = data.operation;
+const _errs86 = errors;
+if(typeof data25 !== "string"){
+const err68 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/6/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err68];
 }
@@ -1147,8 +1173,8 @@ vErrors.push(err68);
 }
 errors++;
 }
-if("portal" !== data24){
-const err69 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/4/properties/kind/const",keyword:"const",params:{allowedValue: "portal"},message:"must be equal to constant"};
+if("select-voyage" !== data25){
+const err69 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/6/properties/operation/const",keyword:"const",params:{allowedValue: "select-voyage"},message:"must be equal to constant"};
 if(vErrors === null){
 vErrors = [err69];
 }
@@ -1157,17 +1183,17 @@ vErrors.push(err69);
 }
 errors++;
 }
-var valid15 = _errs87 === errors;
+var valid14 = _errs86 === errors;
 }
 else {
-var valid15 = true;
+var valid14 = true;
 }
 }
 }
 }
 }
 else {
-const err70 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/4/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err70 = {instancePath,schemaPath:"#/oneOf/6/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err70];
 }
@@ -1177,91 +1203,7 @@ vErrors.push(err70);
 errors++;
 }
 }
-var _valid1 = _errs82 === errors;
-if(_valid1 && valid10){
-valid10 = false;
-passing1 = [passing1, 4];
-}
-else {
-if(_valid1){
-valid10 = true;
-passing1 = 4;
-}
-}
-}
-}
-}
-if(!valid10){
-const err71 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf",keyword:"oneOf",params:{passingSchemas: passing1},message:"must match exactly one schema in oneOf"};
-if(vErrors === null){
-vErrors = [err71];
-}
-else {
-vErrors.push(err71);
-}
-errors++;
-}
-else {
-errors = _errs55;
-if(vErrors !== null){
-if(_errs55){
-vErrors.length = _errs55;
-}
-else {
-vErrors = null;
-}
-}
-}
-var valid8 = _errs53 === errors;
-}
-else {
-var valid8 = true;
-}
-if(valid8){
-if(data.operation !== undefined){
-let data25 = data.operation;
-const _errs89 = errors;
-if(typeof data25 !== "string"){
-const err72 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/6/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err72];
-}
-else {
-vErrors.push(err72);
-}
-errors++;
-}
-if("dock" !== data25){
-const err73 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/6/properties/operation/const",keyword:"const",params:{allowedValue: "dock"},message:"must be equal to constant"};
-if(vErrors === null){
-vErrors = [err73];
-}
-else {
-vErrors.push(err73);
-}
-errors++;
-}
-var valid8 = _errs89 === errors;
-}
-else {
-var valid8 = true;
-}
-}
-}
-}
-}
-else {
-const err74 = {instancePath,schemaPath:"#/oneOf/6/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err74];
-}
-else {
-vErrors.push(err74);
-}
-errors++;
-}
-}
-var _valid0 = _errs50 === errors;
+var _valid0 = _errs81 === errors;
 if(_valid0 && valid0){
 valid0 = false;
 passing0 = [passing0, 6];
@@ -1271,6 +1213,705 @@ if(_valid0){
 valid0 = true;
 passing0 = 6;
 }
+const _errs88 = errors;
+if(errors === _errs88){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing11;
+if(((data.operation === undefined) && (missing11 = "operation")) || ((data.id === undefined) && (missing11 = "id"))){
+const err71 = {instancePath,schemaPath:"#/oneOf/7/required",keyword:"required",params:{missingProperty: missing11},message:"must have required property '"+missing11+"'"};
+if(vErrors === null){
+vErrors = [err71];
+}
+else {
+vErrors.push(err71);
+}
+errors++;
+}
+else {
+const _errs90 = errors;
+for(const key11 in data){
+if(!((key11 === "id") || (key11 === "operation"))){
+const err72 = {instancePath,schemaPath:"#/oneOf/7/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key11},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err72];
+}
+else {
+vErrors.push(err72);
+}
+errors++;
+break;
+}
+}
+if(_errs90 === errors){
+if(data.id !== undefined){
+const _errs91 = errors;
+if(typeof data.id !== "string"){
+const err73 = {instancePath:instancePath+"/id",schemaPath:"#/oneOf/7/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err73];
+}
+else {
+vErrors.push(err73);
+}
+errors++;
+}
+var valid15 = _errs91 === errors;
+}
+else {
+var valid15 = true;
+}
+if(valid15){
+if(data.operation !== undefined){
+let data27 = data.operation;
+const _errs93 = errors;
+if(typeof data27 !== "string"){
+const err74 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/7/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err74];
+}
+else {
+vErrors.push(err74);
+}
+errors++;
+}
+if("select-fleet" !== data27){
+const err75 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/7/properties/operation/const",keyword:"const",params:{allowedValue: "select-fleet"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err75];
+}
+else {
+vErrors.push(err75);
+}
+errors++;
+}
+var valid15 = _errs93 === errors;
+}
+else {
+var valid15 = true;
+}
+}
+}
+}
+}
+else {
+const err76 = {instancePath,schemaPath:"#/oneOf/7/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err76];
+}
+else {
+vErrors.push(err76);
+}
+errors++;
+}
+}
+var _valid0 = _errs88 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 7];
+}
+else {
+if(_valid0){
+valid0 = true;
+passing0 = 7;
+}
+const _errs95 = errors;
+if(errors === _errs95){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing12;
+if(((data.operation === undefined) && (missing12 = "operation")) || ((data.context === undefined) && (missing12 = "context"))){
+const err77 = {instancePath,schemaPath:"#/oneOf/8/required",keyword:"required",params:{missingProperty: missing12},message:"must have required property '"+missing12+"'"};
+if(vErrors === null){
+vErrors = [err77];
+}
+else {
+vErrors.push(err77);
+}
+errors++;
+}
+else {
+const _errs97 = errors;
+for(const key12 in data){
+if(!((key12 === "context") || (key12 === "operation"))){
+const err78 = {instancePath,schemaPath:"#/oneOf/8/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key12},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err78];
+}
+else {
+vErrors.push(err78);
+}
+errors++;
+break;
+}
+}
+if(_errs97 === errors){
+if(data.context !== undefined){
+let data28 = data.context;
+const _errs98 = errors;
+const _errs100 = errors;
+let valid18 = false;
+let passing2 = null;
+const _errs101 = errors;
+if(errors === _errs101){
+if(data28 && typeof data28 == "object" && !Array.isArray(data28)){
+let missing13;
+if((data28.kind === undefined) && (missing13 = "kind")){
+const err79 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/0/required",keyword:"required",params:{missingProperty: missing13},message:"must have required property '"+missing13+"'"};
+if(vErrors === null){
+vErrors = [err79];
+}
+else {
+vErrors.push(err79);
+}
+errors++;
+}
+else {
+const _errs103 = errors;
+for(const key13 in data28){
+if(!(key13 === "kind")){
+const err80 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/0/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key13},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err80];
+}
+else {
+vErrors.push(err80);
+}
+errors++;
+break;
+}
+}
+if(_errs103 === errors){
+if(data28.kind !== undefined){
+let data29 = data28.kind;
+if(typeof data29 !== "string"){
+const err81 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/0/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err81];
+}
+else {
+vErrors.push(err81);
+}
+errors++;
+}
+if("workspace" !== data29){
+const err82 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/0/properties/kind/const",keyword:"const",params:{allowedValue: "workspace"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err82];
+}
+else {
+vErrors.push(err82);
+}
+errors++;
+}
+}
+}
+}
+}
+else {
+const err83 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/0/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err83];
+}
+else {
+vErrors.push(err83);
+}
+errors++;
+}
+}
+var _valid2 = _errs101 === errors;
+if(_valid2){
+valid18 = true;
+passing2 = 0;
+}
+const _errs106 = errors;
+if(errors === _errs106){
+if(data28 && typeof data28 == "object" && !Array.isArray(data28)){
+let missing14;
+if(((data28.kind === undefined) && (missing14 = "kind")) || ((data28.id === undefined) && (missing14 = "id"))){
+const err84 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/1/required",keyword:"required",params:{missingProperty: missing14},message:"must have required property '"+missing14+"'"};
+if(vErrors === null){
+vErrors = [err84];
+}
+else {
+vErrors.push(err84);
+}
+errors++;
+}
+else {
+const _errs108 = errors;
+for(const key14 in data28){
+if(!((key14 === "id") || (key14 === "kind"))){
+const err85 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/1/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key14},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err85];
+}
+else {
+vErrors.push(err85);
+}
+errors++;
+break;
+}
+}
+if(_errs108 === errors){
+if(data28.id !== undefined){
+const _errs109 = errors;
+if(typeof data28.id !== "string"){
+const err86 = {instancePath:instancePath+"/context/id",schemaPath:"#/definitions/Context/oneOf/1/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err86];
+}
+else {
+vErrors.push(err86);
+}
+errors++;
+}
+var valid20 = _errs109 === errors;
+}
+else {
+var valid20 = true;
+}
+if(valid20){
+if(data28.kind !== undefined){
+let data31 = data28.kind;
+const _errs111 = errors;
+if(typeof data31 !== "string"){
+const err87 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/1/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err87];
+}
+else {
+vErrors.push(err87);
+}
+errors++;
+}
+if("voyage" !== data31){
+const err88 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/1/properties/kind/const",keyword:"const",params:{allowedValue: "voyage"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err88];
+}
+else {
+vErrors.push(err88);
+}
+errors++;
+}
+var valid20 = _errs111 === errors;
+}
+else {
+var valid20 = true;
+}
+}
+}
+}
+}
+else {
+const err89 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/1/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err89];
+}
+else {
+vErrors.push(err89);
+}
+errors++;
+}
+}
+var _valid2 = _errs106 === errors;
+if(_valid2 && valid18){
+valid18 = false;
+passing2 = [passing2, 1];
+}
+else {
+if(_valid2){
+valid18 = true;
+passing2 = 1;
+}
+const _errs113 = errors;
+if(errors === _errs113){
+if(data28 && typeof data28 == "object" && !Array.isArray(data28)){
+let missing15;
+if(((data28.kind === undefined) && (missing15 = "kind")) || ((data28.id === undefined) && (missing15 = "id"))){
+const err90 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/2/required",keyword:"required",params:{missingProperty: missing15},message:"must have required property '"+missing15+"'"};
+if(vErrors === null){
+vErrors = [err90];
+}
+else {
+vErrors.push(err90);
+}
+errors++;
+}
+else {
+const _errs115 = errors;
+for(const key15 in data28){
+if(!((key15 === "id") || (key15 === "kind"))){
+const err91 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/2/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key15},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err91];
+}
+else {
+vErrors.push(err91);
+}
+errors++;
+break;
+}
+}
+if(_errs115 === errors){
+if(data28.id !== undefined){
+const _errs116 = errors;
+if(typeof data28.id !== "string"){
+const err92 = {instancePath:instancePath+"/context/id",schemaPath:"#/definitions/Context/oneOf/2/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err92];
+}
+else {
+vErrors.push(err92);
+}
+errors++;
+}
+var valid21 = _errs116 === errors;
+}
+else {
+var valid21 = true;
+}
+if(valid21){
+if(data28.kind !== undefined){
+let data33 = data28.kind;
+const _errs118 = errors;
+if(typeof data33 !== "string"){
+const err93 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/2/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err93];
+}
+else {
+vErrors.push(err93);
+}
+errors++;
+}
+if("fleet" !== data33){
+const err94 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/2/properties/kind/const",keyword:"const",params:{allowedValue: "fleet"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err94];
+}
+else {
+vErrors.push(err94);
+}
+errors++;
+}
+var valid21 = _errs118 === errors;
+}
+else {
+var valid21 = true;
+}
+}
+}
+}
+}
+else {
+const err95 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/2/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err95];
+}
+else {
+vErrors.push(err95);
+}
+errors++;
+}
+}
+var _valid2 = _errs113 === errors;
+if(_valid2 && valid18){
+valid18 = false;
+passing2 = [passing2, 2];
+}
+else {
+if(_valid2){
+valid18 = true;
+passing2 = 2;
+}
+const _errs120 = errors;
+if(errors === _errs120){
+if(data28 && typeof data28 == "object" && !Array.isArray(data28)){
+let missing16;
+if(((data28.kind === undefined) && (missing16 = "kind")) || ((data28.id === undefined) && (missing16 = "id"))){
+const err96 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/3/required",keyword:"required",params:{missingProperty: missing16},message:"must have required property '"+missing16+"'"};
+if(vErrors === null){
+vErrors = [err96];
+}
+else {
+vErrors.push(err96);
+}
+errors++;
+}
+else {
+const _errs122 = errors;
+for(const key16 in data28){
+if(!((key16 === "id") || (key16 === "kind"))){
+const err97 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/3/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key16},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err97];
+}
+else {
+vErrors.push(err97);
+}
+errors++;
+break;
+}
+}
+if(_errs122 === errors){
+if(data28.id !== undefined){
+const _errs123 = errors;
+if(typeof data28.id !== "string"){
+const err98 = {instancePath:instancePath+"/context/id",schemaPath:"#/definitions/Context/oneOf/3/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err98];
+}
+else {
+vErrors.push(err98);
+}
+errors++;
+}
+var valid22 = _errs123 === errors;
+}
+else {
+var valid22 = true;
+}
+if(valid22){
+if(data28.kind !== undefined){
+let data35 = data28.kind;
+const _errs125 = errors;
+if(typeof data35 !== "string"){
+const err99 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/3/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err99];
+}
+else {
+vErrors.push(err99);
+}
+errors++;
+}
+if("vessel" !== data35){
+const err100 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/3/properties/kind/const",keyword:"const",params:{allowedValue: "vessel"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err100];
+}
+else {
+vErrors.push(err100);
+}
+errors++;
+}
+var valid22 = _errs125 === errors;
+}
+else {
+var valid22 = true;
+}
+}
+}
+}
+}
+else {
+const err101 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/3/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err101];
+}
+else {
+vErrors.push(err101);
+}
+errors++;
+}
+}
+var _valid2 = _errs120 === errors;
+if(_valid2 && valid18){
+valid18 = false;
+passing2 = [passing2, 3];
+}
+else {
+if(_valid2){
+valid18 = true;
+passing2 = 3;
+}
+const _errs127 = errors;
+if(errors === _errs127){
+if(data28 && typeof data28 == "object" && !Array.isArray(data28)){
+let missing17;
+if(((data28.kind === undefined) && (missing17 = "kind")) || ((data28.id === undefined) && (missing17 = "id"))){
+const err102 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/4/required",keyword:"required",params:{missingProperty: missing17},message:"must have required property '"+missing17+"'"};
+if(vErrors === null){
+vErrors = [err102];
+}
+else {
+vErrors.push(err102);
+}
+errors++;
+}
+else {
+const _errs129 = errors;
+for(const key17 in data28){
+if(!((key17 === "id") || (key17 === "kind"))){
+const err103 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/4/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key17},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err103];
+}
+else {
+vErrors.push(err103);
+}
+errors++;
+break;
+}
+}
+if(_errs129 === errors){
+if(data28.id !== undefined){
+const _errs130 = errors;
+if(typeof data28.id !== "string"){
+const err104 = {instancePath:instancePath+"/context/id",schemaPath:"#/definitions/Context/oneOf/4/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err104];
+}
+else {
+vErrors.push(err104);
+}
+errors++;
+}
+var valid23 = _errs130 === errors;
+}
+else {
+var valid23 = true;
+}
+if(valid23){
+if(data28.kind !== undefined){
+let data37 = data28.kind;
+const _errs132 = errors;
+if(typeof data37 !== "string"){
+const err105 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/4/properties/kind/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err105];
+}
+else {
+vErrors.push(err105);
+}
+errors++;
+}
+if("portal" !== data37){
+const err106 = {instancePath:instancePath+"/context/kind",schemaPath:"#/definitions/Context/oneOf/4/properties/kind/const",keyword:"const",params:{allowedValue: "portal"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err106];
+}
+else {
+vErrors.push(err106);
+}
+errors++;
+}
+var valid23 = _errs132 === errors;
+}
+else {
+var valid23 = true;
+}
+}
+}
+}
+}
+else {
+const err107 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf/4/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err107];
+}
+else {
+vErrors.push(err107);
+}
+errors++;
+}
+}
+var _valid2 = _errs127 === errors;
+if(_valid2 && valid18){
+valid18 = false;
+passing2 = [passing2, 4];
+}
+else {
+if(_valid2){
+valid18 = true;
+passing2 = 4;
+}
+}
+}
+}
+}
+if(!valid18){
+const err108 = {instancePath:instancePath+"/context",schemaPath:"#/definitions/Context/oneOf",keyword:"oneOf",params:{passingSchemas: passing2},message:"must match exactly one schema in oneOf"};
+if(vErrors === null){
+vErrors = [err108];
+}
+else {
+vErrors.push(err108);
+}
+errors++;
+}
+else {
+errors = _errs100;
+if(vErrors !== null){
+if(_errs100){
+vErrors.length = _errs100;
+}
+else {
+vErrors = null;
+}
+}
+}
+var valid16 = _errs98 === errors;
+}
+else {
+var valid16 = true;
+}
+if(valid16){
+if(data.operation !== undefined){
+let data38 = data.operation;
+const _errs134 = errors;
+if(typeof data38 !== "string"){
+const err109 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/8/properties/operation/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err109];
+}
+else {
+vErrors.push(err109);
+}
+errors++;
+}
+if("dock" !== data38){
+const err110 = {instancePath:instancePath+"/operation",schemaPath:"#/oneOf/8/properties/operation/const",keyword:"const",params:{allowedValue: "dock"},message:"must be equal to constant"};
+if(vErrors === null){
+vErrors = [err110];
+}
+else {
+vErrors.push(err110);
+}
+errors++;
+}
+var valid16 = _errs134 === errors;
+}
+else {
+var valid16 = true;
+}
+}
+}
+}
+}
+else {
+const err111 = {instancePath,schemaPath:"#/oneOf/8/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err111];
+}
+else {
+vErrors.push(err111);
+}
+errors++;
+}
+}
+var _valid0 = _errs95 === errors;
+if(_valid0 && valid0){
+valid0 = false;
+passing0 = [passing0, 8];
+}
+else {
+if(_valid0){
+valid0 = true;
+passing0 = 8;
+}
+}
+}
 }
 }
 }
@@ -1278,12 +1919,12 @@ passing0 = 6;
 }
 }
 if(!valid0){
-const err75 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+const err112 = {instancePath,schemaPath:"#/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
 if(vErrors === null){
-vErrors = [err75];
+vErrors = [err112];
 }
 else {
-vErrors.push(err75);
+vErrors.push(err112);
 }
 errors++;
 validate11.errors = vErrors;
@@ -1375,16 +2016,16 @@ return errors === 0;
 }
 
 export const response = validate13;
-const schema15 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Content":{"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Fleet":{"additionalProperties":false,"properties":{"id":{"type":"string"},"name":{"type":"string"},"root":{"$ref":"#/definitions/Split"},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"}},"required":["id","name","vessels","root"],"type":"object"},"Layout":{"additionalProperties":false,"properties":{"contents":{"items":{"$ref":"#/definitions/Content"},"type":"array"},"context":{"$ref":"#/definitions/Context"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","contents","context","nextId"],"type":"object"},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"}},"required":["kind","axis","first","second"],"type":"object"}]},"Status":{"enum":["applied","rejected","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"content":{"type":"string"},"id":{"type":"string"}},"required":["id","content"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"portals":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"}},"required":["id","name","fleets","portals"],"type":"object"}},"properties":{"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh"],"title":"Response","type":"object"};
-const schema25 = {"enum":["applied","rejected","uncertain"],"type":"string"};
-const schema16 = {"additionalProperties":false,"properties":{"contents":{"items":{"$ref":"#/definitions/Content"},"type":"array"},"context":{"$ref":"#/definitions/Context"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","contents","context","nextId"],"type":"object"};
-const schema17 = {"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
-const schema18 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
-const schema19 = {"additionalProperties":false,"properties":{"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"portals":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"}},"required":["id","name","fleets","portals"],"type":"object"};
-const schema23 = {"additionalProperties":false,"properties":{"content":{"type":"string"},"id":{"type":"string"}},"required":["id","content"],"type":"object"};
-const schema20 = {"additionalProperties":false,"properties":{"id":{"type":"string"},"name":{"type":"string"},"root":{"$ref":"#/definitions/Split"},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"}},"required":["id","name","vessels","root"],"type":"object"};
-const schema21 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"}},"required":["kind","axis","first","second"],"type":"object"}]};
-const schema22 = {"enum":["horizontal","vertical"],"type":"string"};
+const schema16 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"Axis":{"enum":["horizontal","vertical"],"type":"string"},"Content":{"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"},"Context":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]},"Fleet":{"additionalProperties":false,"properties":{"id":{"type":"string"},"name":{"type":"string"},"root":{"$ref":"#/definitions/Split"},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"}},"required":["id","name","vessels","root"],"type":"object"},"Layout":{"additionalProperties":false,"properties":{"contents":{"items":{"$ref":"#/definitions/Content"},"type":"array"},"context":{"$ref":"#/definitions/Context"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","contents","context","nextId"],"type":"object"},"Split":{"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"}},"required":["kind","axis","first","second"],"type":"object"}]},"Status":{"enum":["applied","rejected","uncertain"],"type":"string"},"Vessel":{"additionalProperties":false,"properties":{"content":{"type":"string"},"id":{"type":"string"},"name":{"type":["string","null"]}},"required":["id","content"],"type":"object"},"Voyage":{"additionalProperties":false,"properties":{"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"portals":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"}},"required":["id","name","fleets","portals"],"type":"object"}},"properties":{"fresh":{"type":"boolean"},"layout":{"$ref":"#/definitions/Layout"},"message":{"type":["string","null"]},"requestId":{"type":"string"},"status":{"$ref":"#/definitions/Status"},"version":{"type":"string"}},"required":["requestId","status","version","layout","fresh"],"title":"Response","type":"object"};
+const schema26 = {"enum":["applied","rejected","uncertain"],"type":"string"};
+const schema17 = {"additionalProperties":false,"properties":{"contents":{"items":{"$ref":"#/definitions/Content"},"type":"array"},"context":{"$ref":"#/definitions/Context"},"nextId":{"type":"string"},"selectedFleet":{"type":["string","null"]},"selectedVoyage":{"type":["string","null"]},"voyages":{"items":{"$ref":"#/definitions/Voyage"},"type":"array"}},"required":["voyages","contents","context","nextId"],"type":"object"};
+const schema18 = {"additionalProperties":false,"properties":{"backend":{"type":["string","null"]},"cwd":{"type":"string"},"id":{"type":"string"},"typeId":{"type":"string"}},"required":["id","typeId","cwd"],"type":"object"};
+const schema19 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"workspace","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"voyage","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"fleet","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"vessel","type":"string"}},"required":["kind","id"],"type":"object"},{"additionalProperties":false,"properties":{"id":{"type":"string"},"kind":{"const":"portal","type":"string"}},"required":["kind","id"],"type":"object"}]};
+const schema20 = {"additionalProperties":false,"properties":{"fleets":{"items":{"$ref":"#/definitions/Fleet"},"type":"array"},"id":{"type":"string"},"name":{"type":"string"},"portals":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"}},"required":["id","name","fleets","portals"],"type":"object"};
+const schema24 = {"additionalProperties":false,"properties":{"content":{"type":"string"},"id":{"type":"string"},"name":{"type":["string","null"]}},"required":["id","content"],"type":"object"};
+const schema21 = {"additionalProperties":false,"properties":{"id":{"type":"string"},"name":{"type":"string"},"root":{"$ref":"#/definitions/Split"},"vessels":{"items":{"$ref":"#/definitions/Vessel"},"type":"array"}},"required":["id","name","vessels","root"],"type":"object"};
+const schema22 = {"oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"leaf","type":"string"},"placement":{"type":"string"}},"required":["kind","placement"],"type":"object"},{"additionalProperties":false,"properties":{"axis":{"$ref":"#/definitions/Axis"},"first":{"$ref":"#/definitions/Split"},"kind":{"const":"branch","type":"string"},"second":{"$ref":"#/definitions/Split"}},"required":["kind","axis","first","second"],"type":"object"}]};
+const schema23 = {"enum":["horizontal","vertical"],"type":"string"};
 const wrapper0 = {validate: validate17};
 
 function validate17(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
@@ -1533,7 +2174,7 @@ vErrors.push(err8);
 errors++;
 }
 if(!((data2 === "horizontal") || (data2 === "vertical"))){
-const err9 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/enum",keyword:"enum",params:{allowedValues: schema22.enum},message:"must be equal to one of the allowed values"};
+const err9 = {instancePath:instancePath+"/axis",schemaPath:"#/definitions/Axis/enum",keyword:"enum",params:{allowedValues: schema23.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -1733,7 +2374,7 @@ return false;
 else {
 const _errs12 = errors;
 for(const key1 in data4){
-if(!((key1 === "content") || (key1 === "id"))){
+if(!(((key1 === "content") || (key1 === "id")) || (key1 === "name"))){
 validate16.errors = [{instancePath:instancePath+"/vessels/" + i0,schemaPath:"#/definitions/Vessel/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -1762,6 +2403,20 @@ var valid3 = _errs15 === errors;
 }
 else {
 var valid3 = true;
+}
+if(valid3){
+if(data4.name !== undefined){
+let data7 = data4.name;
+const _errs17 = errors;
+if((typeof data7 !== "string") && (data7 !== null)){
+validate16.errors = [{instancePath:instancePath+"/vessels/" + i0+"/name",schemaPath:"#/definitions/Vessel/properties/name/type",keyword:"type",params:{type: schema24.properties.name.type},message:"must be string,null"}];
+return false;
+}
+var valid3 = _errs17 === errors;
+}
+else {
+var valid3 = true;
+}
 }
 }
 }
@@ -1899,7 +2554,7 @@ return false;
 else {
 const _errs14 = errors;
 for(const key1 in data5){
-if(!((key1 === "content") || (key1 === "id"))){
+if(!(((key1 === "content") || (key1 === "id")) || (key1 === "name"))){
 validate15.errors = [{instancePath:instancePath+"/portals/" + i1,schemaPath:"#/definitions/Vessel/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"}];
 return false;
 break;
@@ -1928,6 +2583,20 @@ var valid4 = _errs17 === errors;
 }
 else {
 var valid4 = true;
+}
+if(valid4){
+if(data5.name !== undefined){
+let data8 = data5.name;
+const _errs19 = errors;
+if((typeof data8 !== "string") && (data8 !== null)){
+validate15.errors = [{instancePath:instancePath+"/portals/" + i1+"/name",schemaPath:"#/definitions/Vessel/properties/name/type",keyword:"type",params:{type: schema24.properties.name.type},message:"must be string,null"}];
+return false;
+}
+var valid4 = _errs19 === errors;
+}
+else {
+var valid4 = true;
+}
 }
 }
 }
@@ -2022,7 +2691,7 @@ if(data1.backend !== undefined){
 let data2 = data1.backend;
 const _errs8 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-validate14.errors = [{instancePath:instancePath+"/contents/" + i0+"/backend",schemaPath:"#/definitions/Content/properties/backend/type",keyword:"type",params:{type: schema17.properties.backend.type},message:"must be string,null"}];
+validate14.errors = [{instancePath:instancePath+"/contents/" + i0+"/backend",schemaPath:"#/definitions/Content/properties/backend/type",keyword:"type",params:{type: schema18.properties.backend.type},message:"must be string,null"}];
 return false;
 }
 var valid3 = _errs8 === errors;
@@ -2625,7 +3294,7 @@ if(data.selectedFleet !== undefined){
 let data17 = data.selectedFleet;
 const _errs54 = errors;
 if((typeof data17 !== "string") && (data17 !== null)){
-validate14.errors = [{instancePath:instancePath+"/selectedFleet",schemaPath:"#/properties/selectedFleet/type",keyword:"type",params:{type: schema16.properties.selectedFleet.type},message:"must be string,null"}];
+validate14.errors = [{instancePath:instancePath+"/selectedFleet",schemaPath:"#/properties/selectedFleet/type",keyword:"type",params:{type: schema17.properties.selectedFleet.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs54 === errors;
@@ -2638,7 +3307,7 @@ if(data.selectedVoyage !== undefined){
 let data18 = data.selectedVoyage;
 const _errs56 = errors;
 if((typeof data18 !== "string") && (data18 !== null)){
-validate14.errors = [{instancePath:instancePath+"/selectedVoyage",schemaPath:"#/properties/selectedVoyage/type",keyword:"type",params:{type: schema16.properties.selectedVoyage.type},message:"must be string,null"}];
+validate14.errors = [{instancePath:instancePath+"/selectedVoyage",schemaPath:"#/properties/selectedVoyage/type",keyword:"type",params:{type: schema17.properties.selectedVoyage.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs56 === errors;
@@ -2742,7 +3411,7 @@ if(data.message !== undefined){
 let data2 = data.message;
 const _errs5 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-validate13.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema15.properties.message.type},message:"must be string,null"}];
+validate13.errors = [{instancePath:instancePath+"/message",schemaPath:"#/properties/message/type",keyword:"type",params:{type: schema16.properties.message.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs5 === errors;
@@ -2771,7 +3440,7 @@ validate13.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definiti
 return false;
 }
 if(!(((data4 === "applied") || (data4 === "rejected")) || (data4 === "uncertain"))){
-validate13.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema25.enum},message:"must be equal to one of the allowed values"}];
+validate13.errors = [{instancePath:instancePath+"/status",schemaPath:"#/definitions/Status/enum",keyword:"enum",params:{allowedValues: schema26.enum},message:"must be equal to one of the allowed values"}];
 return false;
 }
 var valid0 = _errs9 === errors;

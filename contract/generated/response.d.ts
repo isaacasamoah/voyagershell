@@ -69,4 +69,5 @@ export interface Fleet {
 export interface Vessel {
   content: string;
   id: string;
+  name?: string | null;
 }
