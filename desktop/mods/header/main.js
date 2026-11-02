@@ -5,6 +5,7 @@ import { invoke, openTerminal } from "./workspace.js";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { Terminal, TerminalState } from "voyager_native";
 import { Chat } from "./chat.js";
+import { Notes } from "voyager_content_view";
 import { homeOverview } from "./home.js";
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
@@ -175,13 +176,19 @@ export default class Workspace extends View {
     for (const voyage of this.layout.voyages) {
       retain({ kind: "voyage", id: voyage.id }, voyage.name);
       for (const portal of voyage.portals)
-        retain({ kind: "portal", id: portal.id }, portal.name || "Terminal");
+        retain({ kind: "portal", id: portal.id }, this.contentName(portal));
       for (const fleet of voyage.fleets) {
         retain({ kind: "fleet", id: fleet.id }, fleet.name);
         for (const vessel of fleet.vessels)
-          retain({ kind: "vessel", id: vessel.id }, vessel.name || "Terminal");
+          retain({ kind: "vessel", id: vessel.id }, this.contentName(vessel));
       }
     }
+  }
+  contentName(placement) {
+    const type = this.layout?.contents.find(
+      (content) => content.id === placement.content,
+    )?.typeId;
+    return placement.name || (type === "notes" ? "Notes" : "Terminal");
   }
   visibleVessels(fleet) {
     if (!fleet) return [];
@@ -220,6 +227,7 @@ export default class Workspace extends View {
       const content = layout.contents.find(
         (item) => item.id === vessel.content,
       );
+      if (content?.typeId !== "terminal") continue;
       if (
         content?.backend &&
         !content.startPending &&
@@ -671,7 +679,7 @@ export default class Workspace extends View {
                   this.startDrag("vessel", placement.id, event, cx);
               })
               .child(
-                this.action(placement.name || "Terminal", null, false, scope),
+                this.action(this.contentName(placement), null, false, scope),
               ),
           )
           .children(
@@ -719,13 +727,15 @@ export default class Workspace extends View {
           .flex_1()
           .min_h(0)
           .child(
-            terminal
-              ? Terminal.new(terminal).size_full()
-              : div()
-                  .p(20)
-                  .text_size(12)
-                  .text_color(colors.muted)
-                  .child(this.terminalStatus(content)),
+            content.typeId === "notes"
+              ? Notes.new(content.id, { contentId: content.id })
+              : terminal
+                ? Terminal.new(terminal).size_full()
+                : div()
+                    .p(20)
+                    .text_size(12)
+                    .text_color(colors.muted)
+                    .child(this.terminalStatus(content)),
           ),
       )
       .children(

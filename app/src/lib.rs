@@ -1,5 +1,6 @@
 mod administrator;
 pub mod client;
+pub mod content;
 pub mod core;
 mod process;
 mod scope;

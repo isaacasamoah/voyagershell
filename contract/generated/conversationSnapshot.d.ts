@@ -60,6 +60,11 @@ export type Action =
       voyage: string;
     }
   | {
+      destination: ContentDestination;
+      operation: "create-content";
+      typeId: string;
+    }
+  | {
       name: string;
       operation: "rename";
       target: RenameTarget;
@@ -100,6 +105,18 @@ export type Action =
       context: Context;
       operation: "dock";
     };
+export type ContentDestination =
+  | {
+      after: string;
+      axis: Axis;
+      fleet: string;
+      kind: "vessel";
+    }
+  | {
+      kind: "portal";
+      voyage: string;
+    };
+export type Axis = "horizontal" | "vertical";
 export type RenameTarget =
   | {
       id: string;
@@ -117,7 +134,6 @@ export type RenameTarget =
       id: string;
       kind: "portal";
     };
-export type Axis = "horizontal" | "vertical";
 export type Side = "left" | "right" | "top" | "bottom";
 export type ProcessAction =
   | {

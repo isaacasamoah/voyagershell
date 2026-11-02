@@ -91,3 +91,8 @@ the raw declaration hash and the transitive imported-module slice. The slice is
 checked without skipping library declarations. The pinned Shell's invalid
 `ElementBounds` extension is converted to an equivalent intersection only when
 its expected exact form appears. Missing or changed declarations fail the check.
+
+Notes is a separate live-editable JavaScript package. It is not yet inside this
+strict TypeScript gate. Its actual private input and host declarations are
+exported separately with `export-script-types --notes`, and it cannot import the
+Header's broader native registry. See [native Notes](content.md).

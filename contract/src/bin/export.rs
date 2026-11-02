@@ -17,7 +17,10 @@ fn main() {
             "conversationSnapshot":schema::<conversation::Snapshot>(),
             "workspaceTool":schema::<voyager_contract::administrator::WorkspaceInput>(),
             "processTool":schema::<voyager_contract::administrator::ProcessInput>(),
-            "processResponse":schema::<voyager_contract::administrator::ProcessResponse>()}),
+            "processResponse":schema::<voyager_contract::administrator::ProcessResponse>(),
+            "contentRequest":schema::<voyager_contract::content::Request>(),
+            "contentResponse":schema::<voyager_contract::content::Response>(),
+            "notes":schema::<voyager_contract::content::Notes>()}),
     ) {
         Ok(value) => println!("{value}"),
         Err(error) => {

@@ -341,6 +341,7 @@ impl Client {
                                                 Action::CreateVoyage { .. }
                                                     | Action::CreateFleet { .. }
                                                     | Action::CreatePortal { .. }
+                                                    | Action::CreateContent { .. }
                                                     | Action::Split { .. }
                                             )
                                         {

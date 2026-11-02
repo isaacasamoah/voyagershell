@@ -1,6 +1,9 @@
 mod arrangement;
+mod content_budget;
 mod conversation;
 mod host;
+mod notes;
+mod notes_input;
 mod script_types;
 mod terminal;
 mod terminal_screen;
@@ -11,7 +14,7 @@ use gpui::{
     App, AppContext, Bounds, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions, point, px,
     size,
 };
-use gpui_shell::{AppAssets, ShellRuntime};
+use gpui_shell::{AppAssets, ShellRoot, ShellRuntime};
 use std::{
     env,
     fs::{self, OpenOptions},
@@ -99,6 +102,20 @@ fn run() -> Result<()> {
         &package.join("conversation.js"),
         include_str!("../../contract/generated/conversation.js"),
     )?;
+    let notes_package = profile.join("mods/notes");
+    seed(
+        &notes_package.join("main.js"),
+        include_str!("../../content/notes/main.js"),
+    )?;
+    seed(
+        &notes_package.join("mod.json"),
+        include_str!("../../content/notes/mod.json"),
+    )?;
+    seed(
+        &notes_package.join("validate.js"),
+        include_str!("../../contract/generated/validate.js"),
+    )?;
+    let content_owner = voyager_app::content::Owner::open(&profile)?;
     let manifest: serde_json::Value = serde_json::from_slice(&fs::read(package.join("mod.json"))?)
         .context("Reading header manifest")?;
     if manifest.get("entry").and_then(serde_json::Value::as_str) != Some("main.js")
@@ -168,6 +185,15 @@ fn run() -> Result<()> {
                     return;
                 }
             };
+            let notes = match notes::Host::new(notes_package.clone(), content_owner, client.clone())
+            {
+                Ok(notes) => notes,
+                Err(error) => {
+                    eprintln!("Notes runtime failed: {error:#}");
+                    cx.quit();
+                    return;
+                }
+            };
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                     point(px(180.), px(130.)),
@@ -181,7 +207,7 @@ fn run() -> Result<()> {
                 ..Default::default()
             };
             if let Err(error) = cx.open_window(options, |window, cx| {
-                cx.new(|cx| {
+                let header = cx.new(|cx| {
                     host::Header::new(
                         runtime,
                         host::Setup {
@@ -192,11 +218,13 @@ fn run() -> Result<()> {
                             client,
                             viewers,
                             conversation,
+                            notes,
                         },
                         window,
                         cx,
                     )
-                })
+                });
+                cx.new(|cx| ShellRoot::new(header.into(), window, cx))
             }) {
                 eprintln!("Native window failed: {error}");
                 cx.quit();

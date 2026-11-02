@@ -21,6 +21,8 @@ A Voyage is a workspace. A Fleet is a tab within it. A Vessel places content ins
 
 This native candidate creates and names Voyages, Fleets and placements. A Core-backed shell can appear inside a Fleet or as a persistent Voyage Portal. The current combined candidate remains under review. Its terminal grid and private process controls have separately reviewed providers; their combined behavior still needs native verification.
 
+The Notes integration adds the retained package and data owner to the working workspace source, with the same type in a Vessel or Portal. Its native journey and combined proof-size review are pending. Agent data updates and the full package lifecycle remain separate. See [native Notes](docs/content.md) for the precise boundary and limits.
+
 The foundation will retain the established avatar, docking, animation, original sounds, private chat and real voice while making contracts and state ownership explicit. Their integration remains unfinished. Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks and [experiments/README.md](experiments/README.md) for retained source and current limits. Browser/game and collaboration extensions follow the working foundation.
 
 ## Development

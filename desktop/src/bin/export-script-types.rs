@@ -1,5 +1,7 @@
 #[path = "../arrangement.rs"]
 mod arrangement;
+#[path = "../notes_input.rs"]
+mod notes_input;
 #[path = "../script_types.rs"]
 mod script_types;
 #[path = "../terminal.rs"]
@@ -13,6 +15,16 @@ use anyhow::Result;
 use gpui_shell::{COMPONENT_REGISTRY_API_VERSION, ComponentRegistry};
 
 fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--notes") {
+        let mut declarations = gpui_shell::type_declarations(&notes_input::registry()?);
+        declarations.push_str(&format!(
+            "\ndeclare module {:?} {{\n{}\n}}\n",
+            script_types::CONTENT_MODULE,
+            script_types::CONTENT
+        ));
+        print!("{declarations}");
+        return Ok(());
+    }
     let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, "voyager_native")?;
     text::register(&mut registry)?;
     arrangement::register(&mut registry)?;
@@ -21,6 +33,10 @@ fn main() -> Result<()> {
     for (name, body) in [
         (script_types::HEADER_MODULE, script_types::HEADER),
         (script_types::WORKSPACE_MODULE, script_types::WORKSPACE),
+        (
+            script_types::CONTENT_VIEW_MODULE,
+            script_types::CONTENT_VIEW,
+        ),
         (
             script_types::CONVERSATION_MODULE,
             script_types::CONVERSATION,

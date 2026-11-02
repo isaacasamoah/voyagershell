@@ -2,6 +2,85 @@ use crate::workspace::Model;
 use voyager_contract::{Action, Axis, Context, FleetId};
 
 #[test]
+fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
+    let mut model = Model::default();
+    model
+        .apply(Action::CreateVoyage {
+            name: "Notes".into(),
+            cwd: "/tmp".into(),
+        })
+        .unwrap();
+    let voyage = model.layout.voyages[0].id.clone();
+    let fleet = model.layout.voyages[0].fleets[0].id.clone();
+    let first = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+    let terminal = model.layout.contents[0].clone();
+    let create = |destination| {
+        serde_json::from_value::<Action>(serde_json::json!({
+            "operation":"create-content", "typeId":"notes", "destination":destination
+        }))
+        .unwrap()
+    };
+    let vessel = create(
+        serde_json::json!({"kind":"vessel","fleet":fleet,"after":first,"axis":"horizontal"}),
+    );
+    assert!(
+        crate::scope::check(
+            &std::sync::Arc::new(model.layout.clone()),
+            Some(&Context::Vessel { id: first }),
+            &vessel
+        )
+        .is_ok()
+    );
+    model.apply(vessel).unwrap();
+    let notes = model.layout.contents.last().unwrap().clone();
+    assert_eq!(notes.type_id, "notes");
+    assert!(notes.backend.is_none());
+    model
+        .apply(create(serde_json::json!({"kind":"portal","voyage":voyage})))
+        .unwrap();
+    let portal = model.layout.voyages[0].portals[0].clone();
+    let projected = std::sync::Arc::new(model.layout.clone());
+    assert!(
+        crate::scope::check(
+            &projected,
+            Some(&Context::Fleet { id: fleet.clone() }),
+            &create(serde_json::json!({"kind":"portal","voyage":voyage}))
+        )
+        .is_err()
+    );
+    let before_invalid = model.layout.clone();
+    assert!(
+        model
+            .apply(Action::CreateContent {
+                type_id: "unknown".into(),
+                destination: voyager_contract::ContentDestination::Portal {
+                    voyage: voyage.clone()
+                }
+            })
+            .is_err()
+    );
+    assert_eq!(model.layout, before_invalid);
+    assert_ne!(portal.content, notes.id);
+    assert_eq!(model.layout.contents[0], terminal);
+    assert_eq!(
+        model
+            .layout
+            .contents
+            .iter()
+            .filter(|content| content.type_id == "notes")
+            .count(),
+        2
+    );
+    model
+        .apply(Action::CreateFleet {
+            voyage,
+            name: "Elsewhere".into(),
+        })
+        .unwrap();
+    assert_eq!(model.layout.voyages[0].portals[0], portal);
+}
+
+#[test]
 fn home_and_saved_layouts_respect_captured_scope() {
     let mut model = Model::default();
     model

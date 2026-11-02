@@ -435,6 +435,7 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::CreateVoyage { .. } => "Voyage created",
             Action::CreateFleet { .. } => "Fleet created",
             Action::CreatePortal { .. } => "Voyage Portal created",
+            Action::CreateContent { .. } => "Content created",
             Action::Rename { .. } => "Name changed",
             Action::Split { .. } => "Vessel split",
             Action::MoveVessel { .. } => "Vessel moved",

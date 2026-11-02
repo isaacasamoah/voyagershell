@@ -12,7 +12,7 @@ function fixture(
   const layout = {
     selectedVoyage: "voyage",
     selectedFleet: "fleet",
-    contents: [{ id: "content", backend: null }],
+    contents: [{ id: "content", typeId: "terminal", backend: null }],
     voyages: [
       {
         id: "voyage",
@@ -87,6 +87,15 @@ function fixture(
     actions,
   };
 }
+
+test("Notes placements never open a terminal, including owner-created content", async () => {
+  const { view, task, layout, count } = fixture("applied");
+  layout.contents[0].typeId = "notes";
+  await view.prepare(task, false, new Set(), new Set(["content"]));
+  assert.equal(count(), 0);
+  assert.equal(view.openings.size, 0);
+  assert.equal(view.terminals.size, 0);
+});
 
 test("explicit Refresh retries a known refusal after inspection", async () => {
   const { view, task, cx, pending, count } = fixture("rejected");
@@ -244,6 +253,11 @@ test("explicit Refresh never repeats an uncertain start", async () => {
 test("a Voyage Portal retains its terminal view while Fleets change", async () => {
   const { view, task, layout, count } = fixture("applied");
   layout.voyages[0].portals.push({ id: "portal", content: "portal-content" });
+  layout.contents.push({
+    id: "portal-content",
+    typeId: "terminal",
+    backend: null,
+  });
   await view.prepare(task);
   assert.ok(
     view.terminals.has("portal-content"),
@@ -262,6 +276,11 @@ test("a known refusal reconciles revision and permits another visible Portal", a
     content === "content" ? "rejected" : "applied",
   );
   layout.voyages[0].portals.push({ id: "portal", content: "portal-content" });
+  layout.contents.push({
+    id: "portal-content",
+    typeId: "terminal",
+    backend: null,
+  });
   await assert.rejects(view.prepare(task), /open failed/);
   assert.equal(
     view.version,
@@ -393,9 +412,9 @@ test("Home never starts content and loaded layouts prepare only visible bound co
   ];
   layout.voyages[0].portals = [{ id: "portal", content: "unbound-portal" }];
   layout.contents = [
-    { id: "live", backend: "t1" },
-    { id: "unbound", backend: null },
-    { id: "unbound-portal", backend: null },
+    { id: "live", typeId: "terminal", backend: "t1" },
+    { id: "unbound", typeId: "terminal", backend: null },
+    { id: "unbound-portal", typeId: "terminal", backend: null },
   ];
   layout.view = "home";
   await view.prepare(task, true);
@@ -412,7 +431,7 @@ test("only a newly created workspace starts an unbound initial terminal", async 
       "applied",
       created,
     );
-    layout.contents = [{ id: "content", backend: null }];
+    layout.contents = [{ id: "content", typeId: "terminal", backend: null }];
     view.run({ operation: "inspect" }, cx);
     await pending[0];
     assert.equal(count(), created ? 1 : 0);
@@ -433,8 +452,8 @@ test("new content does not start an older unbound placement", async () => {
   const fleet = layout.voyages[0].fleets[0];
   fleet.vessels.push({ content: "new" });
   layout.contents = [
-    { id: "content", backend: null },
-    { id: "new", backend: null },
+    { id: "content", typeId: "terminal", backend: null },
+    { id: "new", typeId: "terminal", backend: null },
   ];
   await view.prepare(task, true, new Set(), new Set(["new"]));
   assert.deepEqual(opened, ["new"]);
@@ -535,7 +554,7 @@ test("owner-created content is prepared without starting older unbound content",
     { id: "old", content: "content" },
     { id: "new", content: "new" },
   ];
-  layout.contents.push({ id: "new", backend: null });
+  layout.contents.push({ id: "new", typeId: "terminal", backend: null });
   view.run({ operation: "inspect" }, cx);
   await pending[0];
   assert.deepEqual(opened, ["new"]);

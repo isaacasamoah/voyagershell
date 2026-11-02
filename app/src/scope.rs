@@ -1,5 +1,7 @@
 use std::sync::Arc;
-use voyager_contract::{Action, Context, Fleet, Layout, RenameTarget, Split, Voyage};
+use voyager_contract::{
+    Action, ContentDestination, Context, Fleet, Layout, RenameTarget, Split, Voyage,
+};
 
 pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layout> {
     let Some(scope) = scope.filter(|scope| **scope != Context::Workspace) else {
@@ -142,6 +144,15 @@ pub(crate) fn check(
         Action::CreatePortal { voyage } => {
             matches!(scope, Context::Voyage { id } if id == voyage)
         }
+        Action::CreateContent { destination, .. } => match destination {
+            ContentDestination::Vessel {
+                fleet: id, after, ..
+            } => fleet(id)
+                .is_some_and(|fleet| fleet.vessels.iter().any(|vessel| &vessel.id == after)),
+            ContentDestination::Portal { voyage } => {
+                matches!(scope, Context::Voyage { id } if id == voyage)
+            }
+        },
         Action::Rename { target, .. } => match target {
             RenameTarget::Voyage { id } => {
                 matches!(scope, Context::Voyage { id: visible } if visible == id)
