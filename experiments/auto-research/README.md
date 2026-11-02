@@ -2,8 +2,9 @@
 
 This isolated experiment records and shares research progress. It supplies a
 domain-neutral graph configuration and a reproducible trial with two examples:
-an arithmetic claim and a meaning-preserving sentence rewrite. It implements
-no application interface, research solver, scheduler or notification service.
+an arithmetic claim and a meaning-preserving sentence rewrite. It does not
+integrate with Voyager or implement a research solver, scheduler or notification
+service. The separate browser preview below shows setup and recorded data.
 
 `cluster.yaml` declares the graph. `progress.pg` defines its records and
 `progress.gq` defines its reads plus a conditional problem-revision operation.
@@ -92,6 +93,54 @@ The [hardware-program cookbook](https://github.com/ModernRelay/omnigraph-cookboo
 informed definitions/runs, measurable criteria, review baselines and stale
 verification. Company-brain informed provenance and contested assessments.
 This experiment's source was authored independently.
+
+## Preview a research Voyage and its graph
+
+The local browser example has a Voyage name and question, separate graph and
+agent-use editors, a draft export, and a D3 view of the recorded trial. Select,
+hover or focus a node or edge to inspect its metadata. Filter the two examples
+or use the record picker to find a specific assessment or contribution.
+
+Obtain the unmodified D3 7.9.0 bundle from the CDN linked by D3's
+[getting-started guide](https://d3js.org/getting-started). Keep this dependency
+outside the repository:
+
+```sh
+curl --fail --location https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js --output /tmp/d3-7.9.0.min.js
+sha256sum /tmp/d3-7.9.0.min.js
+python3 serve_preview.py --record /tmp/new-research-trial --d3 /tmp/d3-7.9.0.min.js --port 18747
+```
+
+The inspected bundle's SHA-256 is
+`f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539`.
+Open the printed loopback URL. The server freezes copies of the selected export,
+configuration and browser source in a temporary directory. It exposes static
+files, with no graph, model or notification operation. Stop this server when
+finished; no installation or login startup is added.
+
+The setup download preserves graph structure and agent-use rules separately.
+For this preview, the recorded profile's roles and relations become the
+separate `bindings.yaml` draft under graph structure. Its agent-use draft
+explicitly refers to that file. Editing bindings and editing policy never
+silently change each other. This decomposition defines an inspectable draft
+format; it does not establish a new executable profile format or adapter.
+It has `active: false` and `engine_validated: false`. Draft edits never modify
+the recorded graph. The source summaries recognize this profile's syntax for
+inspection; they are not an OmniGraph or YAML validator. Explicit validation,
+role mapping and an execution adapter remain necessary before using a draft.
+
+With the Python Playwright package and Chrome available, the same proving
+entry point exercises both the graph trial and browser journey:
+
+```sh
+python3 prove.py --binary /path/to/omnigraph --review /path/to/writing-review.json --output /tmp/new-browser-trial --preview http://127.0.0.1:18747/
+```
+
+The browser fixture covers selection, hover, focus, relation traversal, filters,
+zoom, independent source edits, draft download, blank-objective refusal and a
+malformed-snapshot failure, including revealing a reclosed invalid editor.
+Screenshots and request observations remain in the
+new output directory. No real Voyage or hosted graph is created by the preview.
 
 `TRIAL.md` owns the bounded question and evidence limits. Runtime data, model
 review evidence and reports stay outside Git. New research domains enter as

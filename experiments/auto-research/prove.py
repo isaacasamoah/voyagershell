@@ -11,6 +11,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--binary", required=True, type=Path)
 parser.add_argument("--output", required=True, type=Path)
 parser.add_argument("--review", required=True, type=Path)
+parser.add_argument("--preview")
 args = parser.parse_args()
 source = Path(__file__).resolve().parent
 output = args.output.resolve()
@@ -128,4 +129,7 @@ summary = {"status": "supported in the bounded local trial", "examples": 2,
            "source_hashes": {name: hashlib.sha256((source / name).read_bytes()).hexdigest()
                              for name in ["cluster.yaml", "progress.pg", "progress.gq", "examples.jsonl", "trial_data.py", "prove.py"]}}
 (output / "summary.json").write_text(json.dumps(summary, indent=2))
+if args.preview:
+    from prove_preview import prove
+    prove(args.preview, output)
 print(json.dumps({"output": str(output), **summary}))
