@@ -47,8 +47,9 @@ async function main() {
     Object.fromEntries(Object.keys(schemas).map((name) => [name, name])),
   );
   files["package.json"] = '{"type":"module"}\n';
-  files["workspace.js"] = `import { call, request_id } from "voyager_workspace";
-import { request as validateRequest, response as validateResponse } from "./validate.js";
+  files["workspace.js"] =
+    `import { call, request_id, terminal_open } from "voyager_workspace";
+import { request as validateRequest, response as validateResponse, terminalRequest as validateTerminalRequest, terminalResponse as validateTerminalResponse } from "./validate.js";
 export async function invoke(action, expectedVersion) {
   const request = { requestId: request_id(), expectedVersion, action };
   if (!validateRequest(request)) throw Error("Invalid workspace request");
@@ -57,9 +58,17 @@ export async function invoke(action, expectedVersion) {
     throw Error("Invalid workspace response");
   return response;
 }
+export async function openTerminal(contentId, expectedVersion) {
+  const request = { requestId: request_id(), contentId, expectedVersion };
+  if (!validateTerminalRequest(request)) throw Error("Invalid terminal request");
+  const response = JSON.parse(await terminal_open(JSON.stringify(request)));
+  if (!validateTerminalResponse(response) || response.requestId !== request.requestId || response.contentId !== contentId)
+    throw Error("Terminal result unconfirmed; do not repeat the request");
+  return response;
+}
 `;
   files["workspace.d.ts"] =
-    'import type { Request } from "./request";\nimport type { Response } from "./response";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response>;\n';
+    'import type { Request } from "./request";\nimport type { Response } from "./response";\nimport type { TerminalResponse } from "./terminalResponse";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response>;\nexport function openTerminal(contentId: string, expectedVersion: string): Promise<TerminalResponse>;\n';
   const directory = path.join(__dirname, "generated");
   if (mode === "--write") fs.mkdirSync(directory, { recursive: true });
   for (const [name, data] of Object.entries(files)) {

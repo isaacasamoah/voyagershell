@@ -1,0 +1,892 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CoreMessages",
+  "type": "object",
+  "definitions": {
+    "RunParams": {
+      "type": "object",
+      "properties": {
+        "argv": {
+          "default": [],
+          "description": "Program and arguments, or a template name and its task. With neither\nargv nor line: that machine's own shell.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "caller": {
+          "description": "Who is calling (`HC_TERMINAL_ID` inside a terminal).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "description": "Working directory (default: where hc runs; through the API, the core's;\nwith --on, that machine's home).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "die_with_parent": {
+          "default": false,
+          "description": "Ignored: children end with their parent unless `outlive_parent`.",
+          "type": "boolean"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Set on top of the core's environment. Clients pass their terminal\nidentity here (TERM, TERM_PROGRAM, COLORTERM).",
+          "type": "object"
+        },
+        "keep": {
+          "default": false,
+          "description": "Replace lost programs with a shell in place, never re-run the original command.",
+          "type": "boolean"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Labels, key=value (repeatable).",
+          "type": "object"
+        },
+        "line": {
+          "description": "A shell line instead of argv, run by that machine's shell (`sh -c`;\nWindows `%COMSPEC% /d /s /c`). The CLI sends one string with spaces or\nshell signs as a line.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Name, unique among live terminals: 1-32 of a-z 0-9 - _ .",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_notify": {
+          "default": false,
+          "description": "Don't type notes about it into its parent.",
+          "type": "boolean"
+        },
+        "no_parent": {
+          "default": false,
+          "description": "No parent, even when started from a terminal.",
+          "type": "boolean"
+        },
+        "on": {
+          "description": "Run it on another machine (see `hc machine ls`); its address is `machine/t7`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outlive_parent": {
+          "default": false,
+          "description": "Keep it running when its parent's program ends (by default it ends too).",
+          "type": "boolean"
+        },
+        "parent": {
+          "description": "Parent terminal (default: the terminal it is started from).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rm": {
+          "default": false,
+          "description": "Remove it right after it exits (once a waiting parent has the exit code).",
+          "type": "boolean"
+        },
+        "timeout": {
+          "description": "Seconds before a wait checks in, leaving it running (default: config\n`wait_timeout`, else 180).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "wait": {
+          "default": false,
+          "description": "Then wait until it is not working, like `terminal.wait`, and return its\noutput (the CLI waits unless --bg).",
+          "type": "boolean"
+        }
+      },
+      "required": []
+    },
+    "AttachParams": {
+      "type": "object",
+      "properties": {
+        "caller": {
+          "default": null,
+          "description": "Who is calling (`HC_TERMINAL_ID` inside a terminal): never itself.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cols": {
+          "description": "The viewer's size in cells.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "display": {
+          "$ref": "#/definitions/Display",
+          "default": {
+            "bg": null,
+            "cell": null,
+            "cursor": null,
+            "fg": null
+          },
+          "description": "The viewer's own colors and cell size, used to answer display queries."
+        },
+        "history": {
+          "default": 0,
+          "description": "Scrollback lines to show first (main screen only).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "observe": {
+          "default": false,
+          "description": "Watch only: never type or resize.",
+          "type": "boolean"
+        },
+        "resumed": {
+          "default": false,
+          "description": "Back after a dropped line: sets the size only once active again.",
+          "type": "boolean"
+        },
+        "rows": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "terminal": {
+          "description": "The terminal: `t7`, a name, or `machine/t7`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cols",
+        "rows",
+        "terminal"
+      ]
+    },
+    "RunResult": {
+      "properties": {
+        "address": {
+          "description": "`t7`: this terminal forever on this core.",
+          "type": "string"
+        },
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cols": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "created_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "die_with_parent": {
+          "default": false,
+          "type": "boolean"
+        },
+        "exit_code": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "finished_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "first_message": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/FirstMessage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Template runs: whether the first message went in."
+        },
+        "foreground": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Foreground"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What runs in it right now and where (null once it has finished)."
+        },
+        "identity": {
+          "default": "",
+          "description": "Which terminal the program believes it runs in (TERM_PROGRAM and\nversion), fixed at start; XTVERSION answers with it.",
+          "type": "string"
+        },
+        "keep": {
+          "default": false,
+          "description": "Replace a lost program with this machine’s shell, in place. Exit with a code and kill remain final.",
+          "type": "boolean"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notify": {
+          "default": false,
+          "description": "Its parent gets notes about it (see `--no-notify`).",
+          "type": "boolean"
+        },
+        "output": {
+          "description": "With `wait`: its text then, like `terminal.read` (the screen, plus\nhistory unless it is a full-screen app).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent": {
+          "default": null,
+          "description": "The terminal that started it (`t3`), set once at start.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "paste_gap_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why its program ended or is pending (`spawn_pending` means its initial\nspawn timed out, but the holder may still be starting it):\nexited, killed, server_stop, host_shutdown (Windows\nis ending the session, including logout), signaled (a kept program\ndied by signal without an exit code), holder_lost (its holder\ndied), stopped_by_restart (nothing ran it any more after a restart).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "records": {
+          "additionalProperties": {
+            "$ref": "#/definitions/Status"
+          },
+          "description": "Other 7501 records by id (programs reporting on several things).",
+          "type": "object"
+        },
+        "reported": {
+          "default": false,
+          "description": "Whether the program ever sent a 7501 report.",
+          "type": "boolean"
+        },
+        "rm": {
+          "default": false,
+          "description": "Removed right after it exits (once a waiting parent has the exit code).",
+          "type": "boolean"
+        },
+        "rows": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "screen": {
+          "description": "\"exact\", or \"inexact\" after a core crash (older history may be missing).",
+          "type": "string"
+        },
+        "signal": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "\"live\" or \"finished\".",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Status"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The program's own word for what it's doing (OSC 7501 root record);\nnull if it never said, or after it exited."
+        },
+        "status_ms": {
+          "default": null,
+          "description": "When that word last changed, ms since the epoch; null if it never said.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stop": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "submit": {
+          "description": "Template overrides: the key that submits a message, the stop key, the pause\nbetween paste and submit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "template": {
+          "default": null,
+          "description": "The template that started it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "default": "",
+          "type": "string"
+        },
+        "turn": {
+          "default": 0,
+          "description": "Goes up each time the status leaves `working`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "wait": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WaitResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "With `wait`: how the wait ended (exit, a status, or timeout: still running)."
+        }
+      },
+      "required": [
+        "address",
+        "labels",
+        "argv",
+        "cwd",
+        "state",
+        "created_ms",
+        "screen",
+        "cols",
+        "rows"
+      ],
+      "type": "object"
+    },
+    "Display": {
+      "description": "What a viewer's own terminal looks like, reported by the client.",
+      "properties": {
+        "bg": {
+          "description": "Default background as `#rrggbb`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cell": {
+          "description": "Cell size in pixels: `[width, height]`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "cursor": {
+          "description": "Cursor color as `#rrggbb`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fg": {
+          "description": "Default foreground as `#rrggbb`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "AttachResult": {
+      "properties": {
+        "channel": {
+          "description": "Stream channel: first paint, then live bytes. Send keys as DATA on it;\nRESIZE, FOCUS, FACTS, CREDIT and CLOSE frames control it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "terminal": {
+          "$ref": "#/definitions/Terminal"
+        }
+      },
+      "required": [
+        "channel",
+        "terminal"
+      ],
+      "type": "object"
+    },
+    "FirstMessage": {
+      "properties": {
+        "reason": {
+          "description": "Why it was not sent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sent": {
+          "type": "boolean"
+        },
+        "started": {
+          "description": "Whether the agent started working on it (see terminal.send).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "turn": {
+          "description": "The turn when it went in (see terminal.send).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sent"
+      ],
+      "type": "object"
+    },
+    "Foreground": {
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cwd": {
+          "description": "Its working directory now (resolved by the OS).",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name as the OS has it (`node`, `vim`, `sh`).",
+          "type": "string"
+        },
+        "pid": {
+          "description": "The foreground process group's leader.",
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid",
+        "name",
+        "argv",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "description": "One 7501 record. Words are the program's own; nothing is translated.",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "permission, question or auth (blocked only, when the program said).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "msg": {
+          "type": "string"
+        },
+        "progress": {
+          "description": "0..100 (working or blocked, when the program said).",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "idle, working, done, blocked or error.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    },
+    "WaitResult": {
+      "properties": {
+        "children": {
+          "description": "With `children`: one result per child it reports on.",
+          "items": {
+            "$ref": "#/definitions/WaitResult"
+          },
+          "type": "array"
+        },
+        "ended": {
+          "description": "False on timeout: a check-in, the terminal is still running.",
+          "type": "boolean"
+        },
+        "exit_code": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "from": {
+          "description": "With a message: the sender's address (the text is already in your input);\nnull when a person sent it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "status, exit (including program loss in a kept terminal), output, timeout,\nor not_started (after a send: it did not start working; a plain wait\nstill follows that send's turn); with\n`children`: children; message (someone messaged the waiter, any\nwait); for each child in `children`: status, exit, or running (still\nworking).",
+          "type": "string"
+        },
+        "signal": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "The exact word the program reported (current word on timeout or output).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "terminal": {
+          "type": "string"
+        },
+        "turn": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "terminal",
+        "ended",
+        "reason",
+        "turn",
+        "children"
+      ],
+      "type": "object"
+    },
+    "Terminal": {
+      "properties": {
+        "address": {
+          "description": "`t7`: this terminal forever on this core.",
+          "type": "string"
+        },
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cols": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "created_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "die_with_parent": {
+          "default": false,
+          "type": "boolean"
+        },
+        "exit_code": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "finished_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "foreground": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Foreground"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What runs in it right now and where (null once it has finished)."
+        },
+        "identity": {
+          "default": "",
+          "description": "Which terminal the program believes it runs in (TERM_PROGRAM and\nversion), fixed at start; XTVERSION answers with it.",
+          "type": "string"
+        },
+        "keep": {
+          "default": false,
+          "description": "Replace a lost program with this machine’s shell, in place. Exit with a code and kill remain final.",
+          "type": "boolean"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notify": {
+          "default": false,
+          "description": "Its parent gets notes about it (see `--no-notify`).",
+          "type": "boolean"
+        },
+        "parent": {
+          "default": null,
+          "description": "The terminal that started it (`t3`), set once at start.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "paste_gap_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why its program ended or is pending (`spawn_pending` means its initial\nspawn timed out, but the holder may still be starting it):\nexited, killed, server_stop, host_shutdown (Windows\nis ending the session, including logout), signaled (a kept program\ndied by signal without an exit code), holder_lost (its holder\ndied), stopped_by_restart (nothing ran it any more after a restart).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "records": {
+          "additionalProperties": {
+            "$ref": "#/definitions/Status"
+          },
+          "description": "Other 7501 records by id (programs reporting on several things).",
+          "type": "object"
+        },
+        "reported": {
+          "default": false,
+          "description": "Whether the program ever sent a 7501 report.",
+          "type": "boolean"
+        },
+        "rm": {
+          "default": false,
+          "description": "Removed right after it exits (once a waiting parent has the exit code).",
+          "type": "boolean"
+        },
+        "rows": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "screen": {
+          "description": "\"exact\", or \"inexact\" after a core crash (older history may be missing).",
+          "type": "string"
+        },
+        "signal": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "\"live\" or \"finished\".",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Status"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The program's own word for what it's doing (OSC 7501 root record);\nnull if it never said, or after it exited."
+        },
+        "status_ms": {
+          "default": null,
+          "description": "When that word last changed, ms since the epoch; null if it never said.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stop": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "submit": {
+          "description": "Template overrides: the key that submits a message, the stop key, the pause\nbetween paste and submit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "template": {
+          "default": null,
+          "description": "The template that started it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "default": "",
+          "type": "string"
+        },
+        "turn": {
+          "default": 0,
+          "description": "Goes up each time the status leaves `working`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "address",
+        "labels",
+        "argv",
+        "cwd",
+        "state",
+        "created_ms",
+        "screen",
+        "cols",
+        "rows"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "runParams": {
+      "$ref": "#/definitions/RunParams"
+    },
+    "runResult": {
+      "$ref": "#/definitions/RunResult"
+    },
+    "attachParams": {
+      "$ref": "#/definitions/AttachParams"
+    },
+    "attachResult": {
+      "$ref": "#/definitions/AttachResult"
+    }
+  }
+}

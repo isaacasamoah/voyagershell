@@ -17,9 +17,11 @@ Use a fresh dedicated session for trials. Existing demo profiles, runtime state 
 
 ## Workspace and content
 
-A Voyage is a workspace. A Fleet is a tab within it. A Vessel places content inside a Fleet; a Portal places content across a Voyage. One content implementation serves both scopes. The preserved prototype uses legacy names internally; true voyage-wide Portals remain foundation work.
+A Voyage is a workspace. A Fleet is a tab within it. A Vessel places content inside a Fleet; a Portal places content across a Voyage. One content implementation serves both scopes. The preserved Electron prototype uses legacy names internally.
 
-The foundation will retain the established avatar, docking, animation, original sounds, private chat and real voice while making contracts and state ownership explicit. Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks and [experiments/README.md](experiments/README.md) for retained source and current limits. Browser/game and collaboration extensions follow the working foundation.
+This native candidate creates and names Voyages, Fleets and placements. A Core-backed shell can appear inside a Fleet or as a persistent Voyage Portal. Its combined checkpoint remains under review. The current fixed-size plain-text terminal does not yet provide full terminal behavior.
+
+The foundation will retain the established avatar, docking, animation, original sounds, private chat and real voice while making contracts and state ownership explicit. Their integration remains unfinished. Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks and [experiments/README.md](experiments/README.md) for retained source and current limits. Browser/game and collaboration extensions follow the working foundation.
 
 ## Development
 

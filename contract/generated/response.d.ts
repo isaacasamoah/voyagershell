@@ -52,6 +52,7 @@ export interface Content {
   backend?: string | null;
   cwd: string;
   id: string;
+  startPending?: string | null;
   typeId: string;
 }
 export interface Voyage {

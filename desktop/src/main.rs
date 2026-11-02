@@ -1,4 +1,5 @@
 mod host;
+mod terminal;
 mod text;
 
 use anyhow::{Context as _, Result, bail};
@@ -96,6 +97,7 @@ fn run() -> Result<()> {
         session.clone(),
         env::current_dir()?.to_string_lossy().into_owned(),
     );
+    let viewers = terminal::Viewers::default();
     gpui_platform::application()
         .with_assets(assets)
         .run(move |cx: &mut App| {
@@ -112,6 +114,11 @@ fn run() -> Result<()> {
             };
             if let Err(error) = text::register(&mut registry) {
                 eprintln!("Native text registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = terminal::register(&mut registry, viewers.clone()) {
+                eprintln!("Terminal registration: {error}");
                 cx.quit();
                 return;
             }
@@ -156,6 +163,7 @@ fn run() -> Result<()> {
                             initial_theme,
                             initial_source,
                             client,
+                            viewers,
                         },
                         window,
                         cx,

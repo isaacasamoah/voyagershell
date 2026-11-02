@@ -1,7 +1,8 @@
 import { View, div } from "gpui-kit";
 import { projection } from "voyager_header";
-import { invoke } from "./workspace.js";
+import { invoke, openTerminal } from "./workspace.js";
 import { NameState, Name } from "voyager_native";
+import { Terminal, TerminalState } from "voyager_native";
 
 export default class Workspace extends View {
   init(_props, cx) {
@@ -12,6 +13,8 @@ export default class Workspace extends View {
     this.focus = cx.focus_handle();
     this.names = new Map();
     this.status = "Opening workspace";
+    this.terminals = new Map();
+    this.openings = new Map();
     this.run({ operation: "inspect" }, cx);
   }
 
@@ -30,30 +33,20 @@ export default class Workspace extends View {
       let result = null;
       try {
         result = await invoke(action, this.version);
-        this.version = result.version;
-        this.layout = result.layout;
-        this.fresh = result.fresh;
-        this.status = result.message || "";
-        const retain = (target, name) => {
-          const key = JSON.stringify(target);
-          if (!this.names.has(key))
-            this.names.set(key, { focus: task.focus_handle(), name });
-          else this.names.get(key).name = name;
-        };
-        for (const voyage of this.layout.voyages) {
-          retain({ kind: "voyage", id: voyage.id }, voyage.name);
-          for (const portal of voyage.portals)
-            retain(
-              { kind: "portal", id: portal.id },
-              portal.name || "Terminal",
-            );
-          for (const fleet of voyage.fleets) {
-            retain({ kind: "fleet", id: fleet.id }, fleet.name);
-            for (const vessel of fleet.vessels)
-              retain(
-                { kind: "vessel", id: vessel.id },
-                vessel.name || "Terminal",
-              );
+        this.acceptSnapshot(result, task);
+        if (
+          action.operation === "inspect" &&
+          result.status === "applied" &&
+          result.fresh
+        ) {
+          for (const [content, outcome] of this.openings)
+            if (outcome.status === "rejected") this.openings.delete(content);
+        }
+        if (result.status === "applied" && result.fresh) {
+          try {
+            await this.prepare(task);
+          } catch (error) {
+            this.status = error.message;
           }
         }
       } catch (error) {
@@ -62,7 +55,7 @@ export default class Workspace extends View {
       }
       this.busy = false;
       if (done) done(result, task);
-      if (result?.status === "applied" && result.fresh) {
+      if (result?.status === "applied" && this.fresh) {
         if (this.editing?.pending) {
           this.editing.pending = false;
           this.saveName(this.editing, task);
@@ -82,6 +75,84 @@ export default class Workspace extends View {
       task.notify();
     });
     cx.notify();
+  }
+
+  acceptSnapshot(result, task) {
+    this.version = result.version;
+    this.layout = result.layout;
+    this.fresh = result.fresh;
+    this.status = result.message || "";
+    const retain = (target, name) => {
+      const key = JSON.stringify(target);
+      if (!this.names.has(key))
+        this.names.set(key, { focus: task.focus_handle(), name });
+      else this.names.get(key).name = name;
+    };
+    for (const voyage of this.layout.voyages) {
+      retain({ kind: "voyage", id: voyage.id }, voyage.name);
+      for (const portal of voyage.portals)
+        retain({ kind: "portal", id: portal.id }, portal.name || "Terminal");
+      for (const fleet of voyage.fleets) {
+        retain({ kind: "fleet", id: fleet.id }, fleet.name);
+        for (const vessel of fleet.vessels)
+          retain({ kind: "vessel", id: vessel.id }, vessel.name || "Terminal");
+      }
+    }
+  }
+
+  async prepare(task) {
+    const voyage = this.layout.voyages.find(
+      (item) => item.id === this.layout.selectedVoyage,
+    );
+    const fleet = voyage?.fleets.find(
+      (item) => item.id === this.layout.selectedFleet,
+    );
+    const errors = [];
+    for (const vessel of [
+      ...(fleet?.vessels || []),
+      ...(voyage?.portals || []),
+    ]) {
+      if (this.openings.has(vessel.content)) continue;
+      this.openings.set(vessel.content, { status: "pending" });
+      let opened;
+      try {
+        opened = await openTerminal(vessel.content, this.version);
+      } catch (error) {
+        this.openings.set(vessel.content, {
+          status: "uncertain",
+          message: error.message,
+        });
+        this.fresh = false;
+        throw error;
+      }
+      this.openings.set(vessel.content, opened);
+      if (opened.status === "applied")
+        this.terminals.set(vessel.content, TerminalState.new(vessel.content));
+      const current = await invoke({ operation: "inspect" }, this.version);
+      this.acceptSnapshot(current, task);
+      if (current.status !== "applied" || !current.fresh)
+        throw Error(
+          this.status ||
+            "Workspace refresh is unconfirmed after the terminal request.",
+        );
+      if (opened.status !== "applied")
+        errors.push(opened.message || opened.status);
+      task.notify();
+    }
+    if (errors.length) throw Error(errors[0]);
+  }
+
+  terminalStatus(content) {
+    if (content.startPending)
+      return "Terminal start is unconfirmed. Inspect before trying again.";
+    const outcome = this.openings.get(content.id);
+    if (outcome?.status === "rejected")
+      return `Terminal unavailable: ${outcome.message || "Request refused"}`;
+    if (outcome?.status === "uncertain")
+      return `Terminal connection is unconfirmed: ${outcome.message || "No confirmation received"}`;
+    if (outcome?.status === "applied")
+      return "Terminal attached. View unavailable.";
+    return "Connecting terminal";
   }
 
   closeName(editing, cx) {
@@ -254,12 +325,15 @@ export default class Workspace extends View {
       .child(
         div()
           .flex_1()
-          .p(20)
-          .text_size(12)
-          .text_color(colors.muted)
-          .child(content.cwd)
+          .min_h(0)
           .child(
-            div().mt(12).child("Terminal connection is the next integration."),
+            this.terminals.has(content.id)
+              ? Terminal.new(this.terminals.get(content.id)).size_full()
+              : div()
+                  .p(20)
+                  .text_size(12)
+                  .text_color(colors.muted)
+                  .child(this.terminalStatus(content)),
           ),
       )
       .child(
@@ -277,9 +351,6 @@ export default class Workspace extends View {
     const colors = projection();
     const shell = div()
       .track_focus(this.focus)
-      .on_mouse_down("left", () => {
-        if (!this.editing) this.focus.focus();
-      })
       .on_key_down((event, cx) => {
         if (event.key === "escape" && this.editing && !this.editing.saving) {
           const focus = this.names.get(

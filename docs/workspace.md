@@ -1,10 +1,11 @@
 # Native workspace boundary
 
-The native workspace checkpoint creates, selects and renames Voyages and Fleets,
-splits a placement and sets explicit dock context. A Voyage-wide Portal uses the
-same placement/content interface and remains present across Fleet selection. Herdr Core stores the versioned layout
-document. The current view labels terminal connection as the next integration;
-it does not start a program or claim complete avatar, conversation or UX parity.
+The native workspace creates, selects and renames Voyages and Fleets, splits a
+placement and sets explicit dock context. Voyage-wide Portals use the same
+placement/content interface and remain present across Fleet selection. Herdr Core
+stores the versioned layout. This branch integrates the independently reviewed
+terminal and placement providers; the combined native behavior is under review.
+Full avatar, conversation and UX parity remain open.
 
 `contract/` owns the Rust request, response, identity and layout types.
 `contract/build.cjs` generates declarations and strict runtime validators from
@@ -19,9 +20,9 @@ It publishes a proposal only after Core confirms the save. Confirmed snapshots
 are immutable and shared by Rust responses; a new layout proposal makes one
 copy at the transaction boundary, outside rendering and input callbacks.
 `app/src/core.rs`
-owns the single CLI bridge to the selected dedicated session. The bridge uses
-Core's plain JSON-RPC protocol for documents; streamed terminal attachment has
-not been implemented in this checkpoint.
+owns the single CLI bridge to the selected dedicated session. Its framed
+connection carries document RPC and terminal viewer channels together. The
+terminal's start and attachment boundary is described in [terminal.md](terminal.md).
 
 The channel holds at most eight pending calls. A client timeout reports an
 unconfirmed result and never retries it. The actor keeps the accepted request

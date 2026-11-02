@@ -62,6 +62,8 @@ pub struct Content {
     pub type_id: String,
     pub cwd: String,
     pub backend: Option<CoreTerminalId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_pending: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -164,6 +166,25 @@ pub enum Status {
     Applied,
     Rejected,
     Uncertain,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TerminalRequest {
+    pub request_id: String,
+    pub content_id: ContentId,
+    #[serde(with = "decimal")]
+    #[schemars(with = "String")]
+    pub expected_version: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TerminalResponse {
+    pub request_id: String,
+    pub content_id: ContentId,
+    pub status: Status,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

@@ -20,12 +20,31 @@ use gpui_shell::{
     policy::{self, Policy},
 };
 use serde::Deserialize;
-use voyager_app::client::Client;
+use voyager_app::{
+    client::Client,
+    core::{Error, Viewer},
+};
 use voyager_contract::Request;
+
+use crate::terminal::Viewers;
 
 thread_local! { static LOADING: Cell<bool> = const { Cell::new(false) }; }
 
 type SharedTheme = Rc<RefCell<Result<Theme>>>;
+
+fn install_viewer(viewers: &Viewers, content: &str, viewer: Viewer) -> Result<(), Error> {
+    let mut viewers = viewers
+        .lock()
+        .map_err(|error| Error::Uncertain(error.to_string()))?;
+    viewer.ensure_open()?;
+    if let Some(old) = viewers.get(content)
+        && !old.same_channel(&viewer)
+    {
+        old.close()?;
+    }
+    viewers.insert(content.into(), viewer);
+    Ok(())
+}
 
 struct LoadGuard;
 
@@ -164,6 +183,7 @@ fn load(
     package: &Path,
     current: &SharedTheme,
     client: &Client,
+    viewers: &Viewers,
     window: &mut Window,
     cx: &mut App,
 ) -> Result<Entity<ShellRoot>> {
@@ -177,6 +197,8 @@ fn load(
     });
     let identity = client.clone();
     let calls = client.clone();
+    let terminal_client = client.clone();
+    let terminal_viewers = viewers.clone();
     let workspace = HostModule::new("voyager_workspace")
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
@@ -195,6 +217,51 @@ fn load(
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
                 let result = client.call(request).map_err(gpui_shell::HostError::new)?;
                 let encoded = serde_json::to_string(&result)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                Ok(HostValue::from(encoded))
+            })
+        })
+        .async_function("terminal_open", move |arguments| {
+            let raw = arguments.string(0)?;
+            if raw.len() > 1024 {
+                return Err(gpui_shell::HostError::new("Terminal request too large"));
+            }
+            let request: voyager_contract::TerminalRequest = serde_json::from_str(raw)
+                .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+            if request.request_id.is_empty()
+                || request.request_id.len() > 128
+                || request.content_id.0.is_empty()
+                || request.content_id.0.len() > 128
+            {
+                return Err(gpui_shell::HostError::new("Invalid terminal request"));
+            }
+            let client = terminal_client.clone();
+            let viewers = terminal_viewers.clone();
+            Ok(async move {
+                let result = client.terminal(
+                    request.content_id.clone(),
+                    request.request_id.clone(),
+                    request.expected_version,
+                );
+                let result = result
+                    .and_then(|viewer| install_viewer(&viewers, &request.content_id.0, viewer));
+                let (status, message) = match result {
+                    Ok(()) => (voyager_contract::Status::Applied, None),
+                    Err(voyager_app::core::Error::Rejected { kind, message }) => (
+                        voyager_contract::Status::Rejected,
+                        Some(format!("{kind}: {message}")),
+                    ),
+                    Err(voyager_app::core::Error::Uncertain(message)) => {
+                        (voyager_contract::Status::Uncertain, Some(message))
+                    }
+                };
+                let response = voyager_contract::TerminalResponse {
+                    request_id: request.request_id,
+                    content_id: request.content_id,
+                    status,
+                    message,
+                };
+                let encoded = serde_json::to_string(&response)
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
                 Ok(HostValue::from(encoded))
             })
@@ -221,6 +288,7 @@ pub struct Setup {
     pub initial_theme: Vec<u8>,
     pub initial_source: Result<Vec<(PathBuf, u64)>, String>,
     pub client: Client,
+    pub viewers: Viewers,
 }
 
 impl Header {
@@ -236,6 +304,7 @@ impl Header {
             initial_theme,
             initial_source,
             client,
+            viewers,
         } = setup;
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
@@ -247,10 +316,11 @@ impl Header {
                 .map(|error| format!("{error:#}")),
             Err(error) => Some(format!("{error:#}")),
         };
-        let (root, load_error) = match load(&runtime, &package, &current, &client, window, cx) {
-            Ok(root) => (Some(root), None),
-            Err(error) => (None, Some(format!("Header load failed: {error:#}"))),
-        };
+        let (root, load_error) =
+            match load(&runtime, &package, &current, &client, &viewers, window, cx) {
+                Ok(root) => (Some(root), None),
+                Err(error) => (None, Some(format!("Header load failed: {error:#}"))),
+            };
         let (watch, watch_error) = match root.as_ref().map(|root| runtime.watch(root, window, cx)) {
             Some(Ok(watch)) => (Some(watch), None),
             Some(Err(error)) => (None, Some(format!("Header reload unavailable: {error:#}"))),
@@ -323,7 +393,8 @@ impl Header {
                         if (changed_source && source_ready || valid_theme_change)
                             && header.root.is_none()
                         {
-                            match load(&runtime, &package, &current, &client, window, cx) {
+                            match load(&runtime, &package, &current, &client, &viewers, window, cx)
+                            {
                                 Ok(root) => {
                                     match runtime.watch(&root, window, cx) {
                                         Ok(watch) => header._watch = Some(watch),
@@ -393,7 +464,7 @@ impl Render for Header {
 
 #[cfg(test)]
 mod tests {
-    use super::{source_snapshot, theme};
+    use super::{install_viewer, source_snapshot, theme};
     use std::fs;
 
     #[test]
@@ -426,5 +497,91 @@ mod tests {
         );
         let error = theme(b"{ broken").err().expect("invalid JSON");
         assert!(format!("{error:#}").contains("line 1"));
+    }
+
+    #[test]
+    fn stale_receipt_cannot_replace_a_live_viewer() {
+        use crate::terminal::Viewers;
+        use std::{
+            thread,
+            time::{Duration, Instant},
+        };
+        use voyager_app::{
+            client::Client,
+            core::{Core, Error},
+        };
+        use voyager_contract::{Action, Request};
+
+        let session = format!("voyager-stale-viewer-test-{}", std::process::id());
+        let client = Client::open(session.clone(), "/tmp".into());
+        let inspect = || {
+            client
+                .call(Request {
+                    request_id: client.request_id(),
+                    expected_version: 0,
+                    action: Action::Inspect,
+                })
+                .unwrap()
+        };
+        let first_layout = inspect();
+        let content = first_layout.layout.contents[0].id.clone();
+        let request = client.request_id();
+        let first = client
+            .terminal(content.clone(), request.clone(), first_layout.version)
+            .unwrap();
+        let viewers = Viewers::default();
+        install_viewer(&viewers, &content.0, first).unwrap();
+        let current_layout = inspect();
+        let second_request = client.request_id();
+        let second = client
+            .terminal(
+                content.clone(),
+                second_request.clone(),
+                current_layout.version,
+            )
+            .unwrap();
+        install_viewer(&viewers, &content.0, second.clone()).unwrap();
+        let repeated = client
+            .terminal(content.clone(), request, first_layout.version)
+            .unwrap();
+        let result = install_viewer(&viewers, &content.0, repeated);
+        let retained = viewers
+            .lock()
+            .unwrap()
+            .get(&content.0)
+            .unwrap()
+            .same_channel(&second);
+        let current = client
+            .terminal(content.clone(), second_request, current_layout.version)
+            .unwrap();
+        let same_current = install_viewer(&viewers, &content.0, current).is_ok();
+        let input = second.input(b"printf 'receipt_%s\\n' 'viewer_ok'\n".to_vec());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut output = Vec::new();
+        while Instant::now() < deadline
+            && !output
+                .windows(b"receipt_viewer_ok".len())
+                .any(|part| part == b"receipt_viewer_ok")
+        {
+            match second.take(65536) {
+                Ok(bytes) if !bytes.is_empty() => {
+                    second.credit(bytes.len() as u32).unwrap();
+                    output.extend(bytes);
+                }
+                Ok(_) => thread::sleep(Duration::from_millis(10)),
+                Err(_) => break,
+            }
+        }
+        let mut cleanup = Core::connect(&session).unwrap();
+        let stopped = cleanup.rpc("server.stop", serde_json::json!({}));
+        cleanup.close().unwrap();
+        assert!(stopped.is_ok());
+        assert!(matches!(result, Err(Error::Rejected { kind, .. }) if kind == "viewer_expired"));
+        assert!(retained && same_current && input.is_ok());
+        assert!(
+            output
+                .windows(b"receipt_viewer_ok".len())
+                .any(|part| part == b"receipt_viewer_ok")
+        );
     }
 }

@@ -1,6 +1,6 @@
 # Building VoyagerShell
 
-This repository is the standalone successor to the core-workspace prototype in voyagershellapp. It contains the Electron workspace and its local content packages. Herdr Core is an external dependency, not copied implementation code.
+This repository is the standalone successor to the core-workspace prototype in voyagershellapp. The native candidate uses Rust application code and GPUI views. The Electron workspace and its local content packages remain under experiments/electron-reference/. Herdr Core is an external dependency, not copied implementation code.
 
 Use Node 24 and the hc command on PATH. The latest migration proof uses Herdr Core 0.1.16. Codex is needed only for real companion chat or voice. Ordinary tests do not call a model.
 
@@ -33,7 +33,15 @@ cargo build --release --locked -p voyager-desktop --bin voyager-shell
 python prove.py --foundation --journey workspace --launch --session voyager-unique-name --evidence /absolute/new/evidence --desktop-env /absolute/desktop-environment.json
 ```
 
-The current workspace checkpoint is described in [docs/workspace.md](docs/workspace.md). It does not yet render or run terminals. Do not use its layout checkpoint as acceptance of the full foundation. Performance measurements use the resulting `target/release/voyager-shell` and record the exact artifact and workload. Debug build timings do not establish release runtime performance.
+The current workspace checkpoint is described in [docs/workspace.md](docs/workspace.md). Its Core-backed shell works in a Fleet Vessel or persistent Voyage Portal. The current terminal is a fixed 80-by-24 plain-text view; full terminal behavior and integrated avatar/chat remain unfinished. The combined checkpoint is under review. Performance measurements use the resulting `target/release/voyager-shell` and record the exact artifact and workload. Debug build timings do not establish release runtime performance.
+
+The focused native terminal journey uses the same maintained fixture:
+
+```sh
+python prove.py --foundation --journey portal-terminal --launch --binary target/release/voyager-shell --session voyager-unique-name --evidence /absolute/new/evidence --desktop-env /absolute/desktop-environment.json
+```
+
+This journey verifies shell input/output, known refusal and explicit Refresh, retained Portal process identity across Fleet changes, rename-to-terminal focus and a refused sibling that must not block the Portal. Its final cleanup explicitly stops only its dedicated Core session after the application quits. It does not establish the application's full Quit lifecycle.
 
 CONSTRAINTS.md owns the complete acceptance-code inventory and review rules. Count shared helpers once, include temporary proving code and map production ranges actually exercised. Keep a fresh independent review and relevant negative control. A dependency install or green unit suite does not complete a user-facing increment.
 

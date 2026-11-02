@@ -26,6 +26,7 @@ impl Model {
             type_id: "terminal".into(),
             cwd,
             backend: None,
+            start_pending: None,
         });
         Ok(Vessel {
             id: placement,
@@ -231,6 +232,7 @@ impl Model {
                     type_id: "terminal".into(),
                     cwd,
                     backend: None,
+                    start_pending: None,
                 });
             }
         }
