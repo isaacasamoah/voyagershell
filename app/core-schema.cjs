@@ -3,13 +3,24 @@ const { createHash } = require("node:crypto");
 const { readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
 
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonical(value[key])]),
+  );
+}
 const raw = execFileSync("hc", ["schema", "--json"]);
-const digest = createHash("sha256").update(raw).digest("hex");
+const schema = JSON.parse(raw);
+const digest = createHash("sha256")
+  .update(JSON.stringify(canonical(schema)))
+  .digest("hex");
 if (
-  digest !== "42b43a1bf63f87f785b5ad20a79e22484bd51f81bdca3729fde1a17e3f993ee3"
+  digest !== "043843b5609ef31bf80c6a52b803c0738be6f7c125c5921b8c39e4a4e994aa28"
 )
   throw Error("Core schema differs from the reviewed 0.1.16 schema");
-const schema = JSON.parse(raw);
 const definitions = {};
 const references = new Set();
 function convert(value) {
