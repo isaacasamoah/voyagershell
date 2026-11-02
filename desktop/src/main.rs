@@ -95,13 +95,22 @@ fn run() -> Result<()> {
         session.clone(),
         env::current_dir()?.to_string_lossy().into_owned(),
     );
+    let viewers = terminal::Viewers::default();
     gpui_platform::application()
         .with_assets(assets)
         .run(move |cx: &mut App| {
-            gpui_shell::init(cx);
+            let registry = match terminal::registry(viewers.clone()) {
+                Ok(registry) => registry,
+                Err(error) => {
+                    eprintln!("Terminal registry failed: {error}");
+                    cx.quit();
+                    return;
+                }
+            };
+            gpui_shell::init_with_components(cx, &registry);
             cx.on_action(|_: &Quit, cx| cx.quit());
             cx.bind_keys([KeyBinding::new("ctrl-q", Quit, None)]);
-            let runtime = match ShellRuntime::new(cx) {
+            let runtime = match ShellRuntime::new_with_components(cx, registry) {
                 Ok(runtime) => runtime,
                 Err(error) => {
                     eprintln!("Script runtime failed: {error:#}");
@@ -131,6 +140,7 @@ fn run() -> Result<()> {
                             initial_theme,
                             initial_source,
                             client,
+                            viewers,
                         },
                         window,
                         cx,
@@ -157,3 +167,5 @@ fn main() {
         std::process::exit(1);
     }
 }
+
+mod terminal;

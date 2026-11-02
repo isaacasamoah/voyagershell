@@ -1,6 +1,7 @@
 import { View, div } from "gpui-kit";
 import { projection } from "voyager_header";
-import { invoke } from "./workspace.js";
+import { Terminal, TerminalState } from "voyager_terminal";
+import { invoke, openTerminal } from "./workspace.js";
 
 export default class Workspace extends View {
   init(_props, cx) {
@@ -8,6 +9,9 @@ export default class Workspace extends View {
     this.layout = null;
     this.busy = false;
     this.status = "Opening workspace";
+    this.terminals = new Map();
+    this.attempted = new Set();
+    this.refused = new Set();
     this.run({ operation: "inspect" }, cx);
   }
 
@@ -20,6 +24,15 @@ export default class Workspace extends View {
         this.version = result.version;
         this.layout = result.layout;
         this.status = result.message || "";
+        if (
+          action.operation === "inspect" &&
+          result.status === "applied" &&
+          result.fresh
+        ) {
+          for (const content of this.refused) this.attempted.delete(content);
+          this.refused.clear();
+        }
+        if (result.status === "applied") await this.prepare(task);
       } catch (error) {
         this.status = error.message;
       }
@@ -27,6 +40,29 @@ export default class Workspace extends View {
       task.notify();
     });
     cx.notify();
+  }
+
+  async prepare(task) {
+    const voyage = this.layout.voyages.find(
+      (item) => item.id === this.layout.selectedVoyage,
+    );
+    const fleet = voyage?.fleets.find(
+      (item) => item.id === this.layout.selectedFleet,
+    );
+    for (const vessel of fleet?.vessels || []) {
+      if (this.attempted.has(vessel.content)) continue;
+      this.attempted.add(vessel.content);
+      const opened = await openTerminal(vessel.content, this.version);
+      if (opened.status === "rejected") this.refused.add(vessel.content);
+      if (opened.status !== "applied")
+        throw Error(opened.message || opened.status);
+      this.terminals.set(vessel.content, TerminalState.new(vessel.content));
+      const current = await invoke({ operation: "inspect" }, this.version);
+      this.version = current.version;
+      this.layout = current.layout;
+      this.status = current.message || "";
+      task.notify();
+    }
   }
 
   action(label, action, selected = false) {
@@ -100,12 +136,21 @@ export default class Workspace extends View {
       .child(
         div()
           .flex_1()
-          .p(20)
-          .text_size(12)
-          .text_color(colors.muted)
-          .child(content.cwd)
+          .min_h(0)
           .child(
-            div().mt(12).child("Terminal connection is the next integration."),
+            this.terminals.has(content.id)
+              ? Terminal.new(this.terminals.get(content.id)).size_full()
+              : div()
+                  .p(20)
+                  .text_size(12)
+                  .text_color(colors.muted)
+                  .child(
+                    content.startPending
+                      ? `Start unconfirmed: ${content.startPending}`
+                      : this.status && this.attempted.has(content.id)
+                        ? "Terminal unavailable"
+                        : "Connecting terminal",
+                  ),
           ),
       )
       .child(

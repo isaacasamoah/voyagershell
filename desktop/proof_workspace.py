@@ -3,7 +3,23 @@ import subprocess
 import time
 
 
+def core_rpc(session, env, method, params):
+    request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+    result = subprocess.run(
+        ["hc", "connect", "--session", session],
+        input=request + "\n", text=True, capture_output=True, env=env, check=True,
+        timeout=5,
+    )
+    reply = json.loads(result.stdout.splitlines()[-1])
+    assert "result" in reply, reply
+    return reply["result"]
+
+
 def prove(*, native, capture, geometry, close, start_frame, evidence, session, env, journey):
+    if journey == "terminal":
+        from proof_terminal import terminal
+
+        return terminal(native, capture, geometry, close, evidence, session, env)
     if journey == "workspace-unavailable":
         for _ in range(30):
             frame = capture("workspace-core-unavailable")
@@ -15,15 +31,7 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
         return ["core-unavailable-captured-for-visual-review", "native-quit"]
 
     def rpc(method, params):
-        request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
-        result = subprocess.run(
-            ["hc", "connect", "--session", session],
-            input=request + "\n", text=True, capture_output=True, env=env, check=True,
-            timeout=5,
-        )
-        reply = json.loads(result.stdout.splitlines()[-1])
-        assert "result" in reply, reply
-        return reply["result"]
+        return core_rpc(session, env, method, params)
 
     def state():
         return rpc("doc.get", {"name": "voyager-layout-v1"})
