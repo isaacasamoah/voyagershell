@@ -19,3 +19,8 @@ serde = { version = "1", features = ["derive"] }
 voyager-app = { path = "../app" }
 voyager-contract = { path = "../contract" }
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "83634421c232385f9fd7c61f454961341453d661" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+async-io = "=2.6.0"
+raw-window-handle = "=0.6.2"
+x11rb = "=0.13.2"

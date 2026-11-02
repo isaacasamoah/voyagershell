@@ -7864,15 +7864,18 @@ name = "voyager-desktop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-io",
  "gpui-base",
  "gpui-pre",
  "gpui-pre-platform",
  "gpui-shell",
  "libghostty-vt",
+ "raw-window-handle",
  "serde",
  "serde_json",
  "voyager-app",
  "voyager-contract",
+ "x11rb",
 ]
 
 [[package]]
