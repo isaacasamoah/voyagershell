@@ -59,9 +59,9 @@ use gpui::{
     ParentElement as _, Styled as _, Subscription, Task, Window, div, px,
 };
 use gpui_shell::{
-    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
+    ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDataValue, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
-    MaterializeRequest, RegistryError, StateDescriptor,
+    MaterializeRequest, RegistryError, StateDescriptor, StateMethodDescriptor,
 };
 use libghostty_vt::key::{self, Key, Mods};
 use std::{
@@ -495,34 +495,71 @@ impl ComponentMaterializer for TerminalMaterializer {
 }
 
 pub fn register(registry: &mut ComponentRegistry, viewers: Viewers) -> Result<(), RegistryError> {
-    registry.register_state(StateDescriptor::new(
-        "TerminalState",
-        "TerminalState",
-        vec![ArgumentDescriptor::new("content", ArgumentSchema::String)],
-        move |args, window, cx: &mut App| {
-            let [ComponentArgument::String(id)] = args else {
-                return Err("Terminal requires content identity".into());
-            };
-            let viewer = viewers
-                .lock()
-                .map_err(|e| e.to_string())?
-                .get(id)
-                .cloned()
-                .ok_or_else(|| "Terminal is not attached".to_string())?;
-            let screen = Screen::new(80, 24).map_err(|e| e.to_string())?;
-            let font = cx
-                .text_system()
-                .resolve_font(&gpui::font("DejaVu Sans Mono"));
-            let cell_width = cx
-                .text_system()
-                .advance(font, px(13.), 'M')
-                .map_err(|error| error.to_string())?
-                .width;
-            Ok(Box::new(cx.new(|cx| {
-                Pane::new(screen, viewer, cell_width, window, cx)
-            })))
-        },
-    ))?;
+    let remembered = Arc::new(Mutex::new(None::<Option<FocusHandle>>));
+    let remembered_focus = remembered.clone();
+    registry.register_state(
+        StateDescriptor::new(
+            "TerminalState",
+            "TerminalState",
+            vec![ArgumentDescriptor::new("content", ArgumentSchema::String)],
+            move |args, window, cx: &mut App| {
+                let [ComponentArgument::String(id)] = args else {
+                    return Err("Terminal requires content identity".into());
+                };
+                let viewer = viewers
+                    .lock()
+                    .map_err(|e| e.to_string())?
+                    .get(id)
+                    .cloned()
+                    .ok_or_else(|| "Terminal is not attached".to_string())?;
+                let screen = Screen::new(80, 24).map_err(|e| e.to_string())?;
+                let font = cx
+                    .text_system()
+                    .resolve_font(&gpui::font("DejaVu Sans Mono"));
+                let cell_width = cx
+                    .text_system()
+                    .advance(font, px(13.), 'M')
+                    .map_err(|error| error.to_string())?
+                    .width;
+                Ok(Box::new(cx.new(|cx| {
+                    Pane::new(screen, viewer, cell_width, window, cx)
+                })))
+            },
+        )
+        .with_methods(vec![
+            StateMethodDescriptor::new::<Entity<Pane>>(
+                "rememberFocus",
+                "(): boolean",
+                move |pane, args, window, cx| {
+                    anyhow::ensure!(args.is_empty(), "rememberFocus takes no arguments");
+                    let current = window.focused(cx);
+                    let eligible = current.is_none() || pane.read(cx).focus.is_focused(window);
+                    *remembered
+                        .lock()
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))? =
+                        eligible.then_some(current);
+                    Ok(ComponentDataValue::Boolean(eligible))
+                },
+            ),
+            StateMethodDescriptor::new::<Entity<Pane>>(
+                "focusIfUnchanged",
+                "(): void",
+                move |pane, args, window, cx| {
+                    anyhow::ensure!(args.is_empty(), "focusIfUnchanged takes no arguments");
+                    let previous = remembered_focus
+                        .lock()
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+                        .take();
+                    if window.is_window_active()
+                        && previous.is_some_and(|focus| focus == window.focused(cx))
+                    {
+                        pane.read(cx).focus.clone().focus(window, cx);
+                    }
+                    Ok(ComponentDataValue::Null)
+                },
+            ),
+        ]),
+    )?;
     registry.register(
         ComponentDescriptor::new("Terminal", Arc::new(TerminalMaterializer)).with_constructors(
             vec![ConstructorDescriptor::new(

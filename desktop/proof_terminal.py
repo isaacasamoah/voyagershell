@@ -5,7 +5,7 @@ import time
 
 from PIL import ImageChops
 
-from proof_workspace import core_rpc
+from proof_workspace import core_rpc, named_button
 
 
 def terminal(
@@ -489,7 +489,7 @@ def terminal(
         assert ImageChops.difference(
             before_recovered_input, recovered_frame
         ).getbbox(), "Recovered terminal input did not change visible pixels"
-        click(275, 30)
+        click(*named_button(native, evidence, "Workbench"))
         time.sleep(0.3)
         click(350, 190)
         type_text("exit\n")
@@ -574,7 +574,7 @@ def terminal(
                 "terminal focus after rename blur",
             )
             capture("portal-terminal-name-blur-focus")
-            click(375, 30)
+            click(*named_button(native, evidence, "Fleet 2"))
             switched = wait_for(
                 lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
                 lambda value: (
@@ -637,7 +637,7 @@ def terminal(
                 lambda value: "voyagerportalafterrefusal" in value["text"].splitlines(),
                 "live Portal after refused sibling and view reload",
             )
-            click(375, 30)
+            click(*named_button(native, evidence, "Fleet 2"))
             wait_for(
                 lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
                 lambda value: (

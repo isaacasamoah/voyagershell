@@ -1,3 +1,4 @@
+mod arrangement;
 mod conversation;
 mod host;
 mod terminal;
@@ -131,6 +132,11 @@ fn run() -> Result<()> {
             }
             if let Err(error) = terminal::register(&mut registry, viewers.clone()) {
                 eprintln!("Terminal registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = arrangement::register(&mut registry) {
+                eprintln!("Arrangement registration: {error}");
                 cx.quit();
                 return;
             }

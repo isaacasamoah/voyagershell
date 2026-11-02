@@ -45,6 +45,13 @@ function fixture() {
   const Workspace = vm.runInNewContext(`${source}\nWorkspace`, {
     View: class {},
     div,
+    Button: {
+      new() {
+        const button = div();
+        button.sourceKind = "native-button";
+        return button;
+      },
+    },
     NameState: { new: state },
     Name: { new: div },
     Chat: vm.runInNewContext(
@@ -101,11 +108,16 @@ test("F2 targets are tab stops and a plus name keeps its accessible name", async
     target,
   );
   assert.equal(button.accessibility_label, "+");
+  assert.equal(button.sourceKind, "native-button");
   assert.equal(button.tab_stop, true);
   assert.equal(
     view.action("+", null, false, { kind: "portal", id: "portal-1" })
       .accessibility_label,
     "+",
+  );
+  assert.notEqual(
+    view.action("Refresh", { operation: "inspect" }).sourceKind,
+    "native-button",
   );
   button.on_key_down({ key: "f2" }, cx);
   assert.ok(view.editing);

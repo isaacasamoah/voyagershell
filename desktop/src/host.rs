@@ -489,8 +489,35 @@ impl Render for Header {
 
 #[cfg(test)]
 mod tests {
-    use super::{install_viewer, source_snapshot, theme};
+    use super::{ShellRuntime, install_viewer, source_snapshot, theme};
     use std::fs;
+
+    #[test]
+    fn workspace_builtin_imports_link_in_real_quickjs() {
+        let directory = std::env::temp_dir().join(format!(
+            "voyager-arrangement-imports-{}",
+            std::process::id()
+        ));
+        let source = include_str!("../mods/header/main.js")
+            .lines()
+            .filter(|line| {
+                !line.starts_with("import ")
+                    || line.ends_with("from \"gpui-kit\";")
+                    || line.ends_with("from \"gpui-base\";")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let source = format!(
+            "{source}\nButton.new('navigation-test').justify_start().line_height(1.618034);"
+        );
+        fs::create_dir(&directory).unwrap();
+        fs::write(directory.join("main.js"), source).unwrap();
+        let runtime = ShellRuntime::new_isolated().unwrap();
+        runtime.set_editor_files(false);
+        let loaded = runtime.load_application(&directory, "main.js");
+        fs::remove_dir_all(directory).unwrap();
+        loaded.map(drop).unwrap();
+    }
 
     #[test]
     fn source_snapshot_tracks_edits_additions_and_removals() {

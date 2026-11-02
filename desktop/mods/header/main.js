@@ -1,7 +1,8 @@
 import { View, div } from "gpui-kit";
+import { Button } from "gpui-base";
 import { projection } from "voyager_header";
 import { invoke, openTerminal } from "./workspace.js";
-import { NameState, Name } from "voyager_native";
+import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { Terminal, TerminalState } from "voyager_native";
 import { Chat } from "./chat.js";
 
@@ -21,10 +22,15 @@ export default class Workspace extends View {
     this.status = "Opening workspace";
     this.terminals = new Map();
     this.openings = new Map();
+    this.focused = null;
+    this.splitHover = null;
+    this.pendingShortcuts = [];
+    this.drag = null;
     this.run({ operation: "inspect" }, cx);
   }
 
   run(action, cx, done) {
+    this.drag = null;
     if (this.busy) {
       if (this.editing?.saving) {
         if (["select-voyage", "select-fleet"].includes(action.operation))
@@ -35,9 +41,28 @@ export default class Workspace extends View {
       return;
     }
     if (action.operation === "inspect") this.refreshRequested = false;
+    const changesSelection = [
+      "create-fleet",
+      "select-fleet",
+      "create-voyage",
+      "select-voyage",
+    ].includes(action.operation);
+    const oldVoyage = this.layout?.voyages.find(
+      (item) => item.id === this.layout.selectedVoyage,
+    );
+    const oldFleet = oldVoyage?.fleets.find(
+      (item) => item.id === this.layout.selectedFleet,
+    );
+    const transferFocus =
+      changesSelection &&
+      !!oldFleet?.vessels.some(
+        (vessel) =>
+          this.terminals.get(vessel.content)?.rememberFocus() === true,
+      );
     this.busy = true;
     cx.spawn(async (task) => {
       let result = null;
+      let prepared = false;
       try {
         result = await invoke(action, this.version);
         this.acceptSnapshot(result, task);
@@ -52,6 +77,18 @@ export default class Workspace extends View {
         if (result.status === "applied" && result.fresh) {
           try {
             await this.prepare(task);
+            prepared = true;
+            if (transferFocus) {
+              const voyage = this.layout.voyages.find(
+                (item) => item.id === this.layout.selectedVoyage,
+              );
+              const fleet = voyage?.fleets.find(
+                (item) => item.id === this.layout.selectedFleet,
+              );
+              this.terminals
+                .get(fleet?.vessels[0]?.content)
+                ?.focusIfUnchanged();
+            }
           } catch (error) {
             this.status = error.message;
           }
@@ -80,12 +117,16 @@ export default class Workspace extends View {
         this.afterRename = null;
       }
       task.notify();
-      if (this.refreshRequested) this.run({ operation: "inspect" }, task);
+      if (!prepared) this.pendingShortcuts = [];
+      if (!this.busy && this.refreshRequested)
+        this.run({ operation: "inspect" }, task);
+      else if (!this.busy) this.flushShortcuts(task, prepared);
     });
     cx.notify();
   }
 
   acceptSnapshot(result, task) {
+    this.drag = null;
     this.version = result.version;
     this.layout = result.layout;
     this.fresh = result.fresh;
@@ -212,6 +253,155 @@ export default class Workspace extends View {
     cx.notify();
   }
 
+  startDrag(kind, id, event, cx) {
+    if (this.busy || this.editing) return;
+    this.drag = {
+      kind,
+      id,
+      version: this.version,
+      voyage: this.layout.selectedVoyage,
+      fleet: this.layout.selectedFleet,
+      x: event.position.x,
+      y: event.position.y,
+      moved: false,
+    };
+    cx.notify();
+  }
+
+  moveDrag(x, y, cx) {
+    if (!this.drag?.moved && Math.hypot(x - this.drag.x, y - this.drag.y) > 7) {
+      this.focus.focus();
+      this.drag.moved = true;
+      cx.notify();
+    }
+  }
+
+  targetDrag(kind, id, event, cx) {
+    if (!this.drag?.moved || this.drag.kind !== kind || this.drag.id === id)
+      return;
+    const { x, y, width, height } = event.bounds;
+    if (width <= 0 || height <= 0) return;
+    let side;
+    if (kind === "vessel") {
+      const distances = [
+        (event.position.x - x) / width,
+        1 - (event.position.x - x) / width,
+        (event.position.y - y) / height,
+        1 - (event.position.y - y) / height,
+      ];
+      side = ["left", "right", "top", "bottom"][
+        distances.indexOf(Math.min(...distances))
+      ];
+    } else {
+      side =
+        kind === "voyage"
+          ? event.position.y < y + height / 2
+          : event.position.x < x + width / 2;
+    }
+    if (this.drag.target !== id || this.drag.side !== side) {
+      Object.assign(this.drag, {
+        target: id,
+        side,
+        bounds: { x, y, width, height },
+      });
+      cx.notify();
+    } else this.drag.bounds = { x, y, width, height };
+  }
+
+  finishDrag(x, y, cx) {
+    if (!this.drag) return;
+    const { kind, id, moved, target, side, bounds, version, voyage, fleet } =
+      this.drag;
+    this.drag = null;
+    if (
+      moved &&
+      version === this.version &&
+      voyage === this.layout?.selectedVoyage &&
+      fleet === this.layout?.selectedFleet &&
+      target &&
+      bounds &&
+      x >= bounds.x &&
+      x < bounds.x + bounds.width &&
+      y >= bounds.y &&
+      y < bounds.y + bounds.height
+    ) {
+      this.run(
+        kind === "vessel"
+          ? { operation: "move-vessel", id, target, side }
+          : {
+              operation: kind === "voyage" ? "move-voyage" : "move-fleet",
+              id,
+              target,
+              before: side,
+            },
+        cx,
+      );
+    }
+    cx.notify();
+  }
+
+  shortcut(event, cx) {
+    if (this.editing) return;
+    const { control, shift, alt, platform } = event.modifiers;
+    if (
+      (!control && !platform) ||
+      (control && platform) ||
+      !shift ||
+      alt ||
+      event.modifiers.function
+    )
+      return;
+    const key = event.key.toLowerCase();
+    if (!["o", "e", "t"].includes(key)) return;
+    if (this.busy) {
+      this.pendingShortcuts.push(key);
+      cx.stop_propagation();
+      return;
+    }
+    this.dispatchShortcut(key, cx);
+    cx.stop_propagation();
+  }
+
+  flushShortcuts(cx, applied) {
+    if (!applied) this.pendingShortcuts = [];
+    const key = this.pendingShortcuts.shift();
+    if (key) this.dispatchShortcut(key, cx);
+  }
+
+  dispatchShortcut(key, cx) {
+    const voyage = this.layout?.voyages.find(
+      (item) => item.id === this.layout.selectedVoyage,
+    );
+    const fleet = voyage?.fleets.find(
+      (item) => item.id === this.layout.selectedFleet,
+    );
+    if (!voyage || !fleet) return;
+    if (key === "t") {
+      this.run(
+        {
+          operation: "create-fleet",
+          voyage: voyage.id,
+          name: `Fleet ${voyage.fleets.length + 1}`,
+        },
+        cx,
+      );
+    } else {
+      const vessel =
+        fleet.vessels.find((item) => item.id === this.focused) ||
+        fleet.vessels[0];
+      if (!vessel) return;
+      this.run(
+        {
+          operation: "split",
+          fleet: fleet.id,
+          after: vessel.id,
+          axis: key === "o" ? "horizontal" : "vertical",
+        },
+        cx,
+      );
+    }
+  }
+
   action(label, action, selected = false, rename = null) {
     const colors = projection();
     const key = JSON.stringify(rename);
@@ -226,7 +416,13 @@ export default class Workspace extends View {
         .h(32)
         .on_mouse_down_out(() => this.focus.focus())
         .child(Name.new(this.editing.state));
-    const button = div()
+    const button = (
+      rename && ["voyage", "fleet"].includes(rename.kind)
+        ? Button.new(`navigation-${rename.kind}-${rename.id}`)
+            .justify_start()
+            .line_height(1.618034)
+        : div()
+    )
       .role("button")
       .accessibility_label(
         action?.operation === "create-fleet"
@@ -243,11 +439,14 @@ export default class Workspace extends View {
       .bg(selected ? "#23232d" : "#00000000")
       .on_click((event, cx) => {
         if (focus) focus.focus();
-        else this.focus.focus();
+        else if (!["create-fleet", "inspect"].includes(action?.operation))
+          this.focus.focus();
         if (event.click_count === 2 && rename) this.editName(rename, label, cx);
         else if (action) this.run(action, cx);
       })
       .child(label);
+    if (["create-fleet", "inspect"].includes(action?.operation))
+      button.on_mouse_down("left", (_event, cx) => cx.stop_propagation());
     if (focus)
       button
         .track_focus(focus)
@@ -306,13 +505,28 @@ export default class Workspace extends View {
       (item) => item.id === placement.content,
     );
     return div()
+      .relative()
       .flex()
       .flex_col()
       .flex_1()
       .min_w(0)
       .min_h(0)
       .rounded(8)
+      .border_1()
+      .border_color(
+        this.drag?.kind === "vessel" &&
+          (this.drag.id === placement.id || this.drag.target === placement.id)
+          ? "#b3d2e5"
+          : "#00000000",
+      )
       .bg("#14161a")
+      .on_mouse_down("left", () => {
+        if (scope.kind === "vessel") this.focused = placement.id;
+      })
+      .on_mouse_move((event, cx) => {
+        if (scope.kind === "vessel")
+          this.targetDrag("vessel", placement.id, event, cx);
+      })
       .child(
         div()
           .flex()
@@ -324,9 +538,51 @@ export default class Workspace extends View {
               .flex_1()
               .text_size(11)
               .text_color(colors.muted)
+              .on_mouse_down("left", (event, cx) => {
+                if (scope.kind === "vessel")
+                  this.startDrag("vessel", placement.id, event, cx);
+              })
               .child(
                 this.action(placement.name || "Terminal", null, false, scope),
               ),
+          )
+          .children(
+            split
+              ? [
+                  div()
+                    .id(`split-zone-${placement.id}`)
+                    .w(90)
+                    .h(32)
+                    .flex()
+                    .items_center()
+                    .on_hover((hovered, cx) => {
+                      this.splitHover = hovered ? placement.id : null;
+                      cx.notify();
+                    })
+                    .children(
+                      this.splitHover === placement.id
+                        ? [
+                            Button.new(`split-horizontal-${placement.id}`)
+                              .accessibility_label(
+                                "Split this Vessel side by side",
+                              )
+                              .child("◫")
+                              .on_click((_event, cx) =>
+                                this.run({ ...split, axis: "horizontal" }, cx),
+                              ),
+                            Button.new(`split-vertical-${placement.id}`)
+                              .accessibility_label(
+                                "Split this Vessel top and bottom",
+                              )
+                              .child("⬒")
+                              .on_click((_event, cx) =>
+                                this.run({ ...split, axis: "vertical" }, cx),
+                              ),
+                          ]
+                        : [],
+                    ),
+                ]
+              : [],
           )
           .child(this.dock(scope)),
       )
@@ -344,14 +600,32 @@ export default class Workspace extends View {
                   .child(this.terminalStatus(content)),
           ),
       )
-      .child(
-        div()
-          .flex()
-          .items_center()
-          .px(12)
-          .py(8)
-          .child(div().flex_1())
-          .children(split ? [this.action("+", split)] : []),
+      .children(
+        this.drag?.kind === "vessel" &&
+          this.drag.target === placement.id &&
+          this.drag.bounds
+          ? [
+              div()
+                .absolute()
+                .left(
+                  this.drag.side === "right" ? this.drag.bounds.width / 2 : 0,
+                )
+                .top(
+                  this.drag.side === "bottom" ? this.drag.bounds.height / 2 : 0,
+                )
+                .w(
+                  ["left", "right"].includes(this.drag.side)
+                    ? this.drag.bounds.width / 2
+                    : this.drag.bounds.width,
+                )
+                .h(
+                  ["top", "bottom"].includes(this.drag.side)
+                    ? this.drag.bounds.height / 2
+                    : this.drag.bounds.height,
+                )
+                .bg("#b3d2e525"),
+            ]
+          : [],
       );
   }
 
@@ -360,6 +634,12 @@ export default class Workspace extends View {
     const shell = div()
       .track_focus(this.focus)
       .on_key_down((event, cx) => {
+        if (event.key === "escape" && this.drag) {
+          this.drag = null;
+          cx.notify();
+          cx.stop_propagation();
+          return;
+        }
         if (event.key === "escape" && this.editing && !this.editing.saving) {
           const focus = this.names.get(
             JSON.stringify(this.editing.target),
@@ -367,7 +647,9 @@ export default class Workspace extends View {
           this.closeName(this.editing, cx);
           focus.focus();
           cx.stop_propagation();
+          return;
         }
+        this.shortcut(event, cx);
       })
       .relative()
       .flex()
@@ -409,8 +691,35 @@ export default class Workspace extends View {
     for (const item of this.layout.voyages) {
       sidebar.child(
         div()
+          .relative()
           .flex()
           .items_center()
+          .border_1()
+          .border_color(
+            this.drag?.kind === "voyage" &&
+              (this.drag.id === item.id || this.drag.target === item.id)
+              ? "#b3d2e5"
+              : "#00000000",
+          )
+          .on_mouse_down("left", (event, cx) =>
+            this.startDrag("voyage", item.id, event, cx),
+          )
+          .on_mouse_move((event, cx) =>
+            this.targetDrag("voyage", item.id, event, cx),
+          )
+          .children(
+            this.drag?.kind === "voyage" && this.drag.target === item.id
+              ? [
+                  div()
+                    .absolute()
+                    .left(0)
+                    .top(this.drag.side ? 0 : this.drag.bounds.height - 2)
+                    .w(this.drag.bounds.width)
+                    .h(2)
+                    .bg("#b3d2e5"),
+                ]
+              : [],
+          )
           .child(
             div()
               .flex_1()
@@ -445,8 +754,35 @@ export default class Workspace extends View {
     for (const item of voyage?.fleets || []) {
       tabs.child(
         div()
+          .relative()
           .flex()
           .items_center()
+          .border_1()
+          .border_color(
+            this.drag?.kind === "fleet" &&
+              (this.drag.id === item.id || this.drag.target === item.id)
+              ? "#b3d2e5"
+              : "#00000000",
+          )
+          .on_mouse_down("left", (event, cx) =>
+            this.startDrag("fleet", item.id, event, cx),
+          )
+          .on_mouse_move((event, cx) =>
+            this.targetDrag("fleet", item.id, event, cx),
+          )
+          .children(
+            this.drag?.kind === "fleet" && this.drag.target === item.id
+              ? [
+                  div()
+                    .absolute()
+                    .top(0)
+                    .left(this.drag.side ? 0 : this.drag.bounds.width - 2)
+                    .w(2)
+                    .h(this.drag.bounds.height)
+                    .bg("#b3d2e5"),
+                ]
+              : [],
+          )
           .child(
             this.action(
               item.name,
@@ -495,6 +831,22 @@ export default class Workspace extends View {
       body.child(div().text_size(11).text_color("#ffcad3").child(this.status));
       body.child(this.action("Refresh", { operation: "inspect" }));
     }
+    if (this.drag)
+      shell.child(
+        ArrangementCapture.new((kind, x, y, cx) => {
+          if (!this.drag) return;
+          if (kind === "cancel") {
+            this.drag = null;
+            cx.notify();
+            return;
+          }
+          if (kind === "move") {
+            this.moveDrag(x, y, cx);
+            return;
+          }
+          this.finishDrag(x, y, cx);
+        }),
+      );
     shell.child(sidebar).child(body);
     if (this.chat.open)
       shell.child(this.chat.render(colors, this.layout.context));
