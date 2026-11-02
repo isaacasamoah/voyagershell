@@ -23,7 +23,7 @@ This native candidate creates and names Voyages, Fleets and placements. A Core-b
 
 The foundation will retain the established avatar, docking, animation, original sounds, private chat and real voice while making contracts and state ownership explicit. Their integration remains unfinished. Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks and [experiments/README.md](experiments/README.md) for retained source and current limits. Browser/game and collaboration extensions follow the working foundation.
 
-The selected-program Stop contract and Core owner are being reviewed separately from whole-session Quit. Their source tests do not establish the native interaction. See [conversation tools](docs/conversation.md).
+Selected-program Stop has passed its native private-Chat journey. The selected terminal ends with its final screen retained, while another terminal and a separate Core session remain running. Whole-session Quit remains unfinished. See [conversation tools](docs/conversation.md).
 
 ## Development
 

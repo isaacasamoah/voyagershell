@@ -151,9 +151,15 @@ kill schema accepts a terminal address but no expected PID, so this is not an
 atomic compare-and-kill guarantee against external Core mutations. The inspected
 Core source is herdrdev/herdr-core at e07c2a1bedd62cf4787ee026ee23ee79c7d95491,
 api.rs terminal_kill and runtime.rs kill. Its bounded escalation can return a
-still-live record. Source tests do not establish the native Stop interaction or
-the complete shutdown of every possible detached descendant. Native verification,
-independent review and the proof-size gate remain required for this candidate.
+still-live record. The Linux native checkpoint now exercises one explicit Stop
+through private Chat, an ordered read of the same ended terminal and a process
+list showing its sibling remains live. The final screen and placement are retained,
+and a separately owned Core program keeps the same running identity before trial
+cleanup. One Stop is dispatched and its result remains bound to the original
+request and context. The maintained fixture also verifies recorded process exits
+and dedicated socket removal after its explicit cleanup. This establishes the
+selected-program journey, not full application Quit or a complete census of every
+possible detached descendant.
 
 The Core generator accepts an optional saved-schema path after --write or
 --check. It retains the complete canonical 0.1.16 hash guard and the original
