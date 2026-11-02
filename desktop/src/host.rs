@@ -178,12 +178,17 @@ fn projection(value: &Theme) -> HostValue {
     ])
 }
 
+struct WorkspaceBinding {
+    client: Client,
+    viewers: Viewers,
+}
+
 fn load(
     runtime: &Rc<ShellRuntime>,
     package: &Path,
     current: &SharedTheme,
-    client: &Client,
-    viewers: &Viewers,
+    workspace_binding: &WorkspaceBinding,
+    conversation: &voyager_app::conversation_client::Client,
     window: &mut Window,
     cx: &mut App,
 ) -> Result<Entity<ShellRoot>> {
@@ -195,6 +200,8 @@ fn load(
             .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))?;
         Ok(projection(value))
     });
+    let client = &workspace_binding.client;
+    let viewers = &workspace_binding.viewers;
     let identity = client.clone();
     let calls = client.clone();
     let terminal_client = client.clone();
@@ -269,6 +276,7 @@ fn load(
     let policy = Policy::new()
         .with_host_module(module)?
         .with_host_module(workspace)?;
+    let policy = policy.with_host_module(crate::conversation::module(conversation.clone()))?;
     let _guard = LoadGuard::enter(policy)?;
     runtime.try_load(package, window, cx)
 }
@@ -289,6 +297,7 @@ pub struct Setup {
     pub initial_source: Result<Vec<(PathBuf, u64)>, String>,
     pub client: Client,
     pub viewers: Viewers,
+    pub conversation: voyager_app::conversation_client::Client,
 }
 
 impl Header {
@@ -305,7 +314,9 @@ impl Header {
             initial_source,
             client,
             viewers,
+            conversation,
         } = setup;
+        let workspace_binding = WorkspaceBinding { client, viewers };
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
         base.appearance = ThemeAppearance::Dark;
@@ -316,11 +327,18 @@ impl Header {
                 .map(|error| format!("{error:#}")),
             Err(error) => Some(format!("{error:#}")),
         };
-        let (root, load_error) =
-            match load(&runtime, &package, &current, &client, &viewers, window, cx) {
-                Ok(root) => (Some(root), None),
-                Err(error) => (None, Some(format!("Header load failed: {error:#}"))),
-            };
+        let (root, load_error) = match load(
+            &runtime,
+            &package,
+            &current,
+            &workspace_binding,
+            &conversation,
+            window,
+            cx,
+        ) {
+            Ok(root) => (Some(root), None),
+            Err(error) => (None, Some(format!("Header load failed: {error:#}"))),
+        };
         let (watch, watch_error) = match root.as_ref().map(|root| runtime.watch(root, window, cx)) {
             Some(Ok(watch)) => (Some(watch), None),
             Some(Err(error)) => (None, Some(format!("Header reload unavailable: {error:#}"))),
@@ -393,8 +411,15 @@ impl Header {
                         if (changed_source && source_ready || valid_theme_change)
                             && header.root.is_none()
                         {
-                            match load(&runtime, &package, &current, &client, &viewers, window, cx)
-                            {
+                            match load(
+                                &runtime,
+                                &package,
+                                &current,
+                                &workspace_binding,
+                                &conversation,
+                                window,
+                                cx,
+                            ) {
                                 Ok(root) => {
                                     match runtime.watch(&root, window, cx) {
                                         Ok(watch) => header._watch = Some(watch),

@@ -17,7 +17,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal"])
+    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "conversation", "conversation-interrupt", "conversation-administrator"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -48,6 +48,8 @@ def run():
         env.update(json.loads((evidence / "launch.json").read_text())["desktopEnvironment"])
     env.pop("WAYLAND_DISPLAY", None)
     env["VOYAGER_WORKSPACE_SESSION"] = args.session
+    if args.journey and args.journey.startswith("conversation"):
+        env["VOYAGER_CONVERSATION_EVIDENCE"] = str(evidence / "conversation.json")
     if args.journey == "workspace-unavailable":
         env["VOYAGER_HC"] = "/bin/false"
     profile = evidence / "profile"
@@ -224,7 +226,8 @@ def run():
             close()
             passed.append("native-quit")
         elif args.foundation:
-            import proof_workspace
+            import importlib
+            proof_workspace = importlib.import_module("proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace")
 
             passed.extend(proof_workspace.prove(
                 native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame,

@@ -47,6 +47,10 @@ function fixture() {
     div,
     NameState: { new: state },
     Name: { new: div },
+    Chat: vm.runInNewContext(
+      `${workspaceSource("VOYAGER_CHAT_SOURCE", "class", "chat.js")}\nChat`,
+      { InputState: { new: state } },
+    ),
     projection: () => ({}),
     invoke(action) {
       calls.push(action);

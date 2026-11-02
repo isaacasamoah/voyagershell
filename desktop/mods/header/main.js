@@ -3,15 +3,21 @@ import { projection } from "voyager_header";
 import { invoke, openTerminal } from "./workspace.js";
 import { NameState, Name } from "voyager_native";
 import { Terminal, TerminalState } from "voyager_native";
+import { Chat } from "./chat.js";
 
 export default class Workspace extends View {
   init(_props, cx) {
+    this.chat = new Chat(cx, () => {
+      this.refreshRequested = true;
+      if (!this.busy) this.run({ operation: "inspect" }, cx);
+    });
     this.version = "0";
     this.layout = null;
     this.busy = false;
     this.fresh = false;
     this.focus = cx.focus_handle();
     this.names = new Map();
+    this.refreshRequested = false;
     this.status = "Opening workspace";
     this.terminals = new Map();
     this.openings = new Map();
@@ -28,6 +34,7 @@ export default class Workspace extends View {
       }
       return;
     }
+    if (action.operation === "inspect") this.refreshRequested = false;
     this.busy = true;
     cx.spawn(async (task) => {
       let result = null;
@@ -73,6 +80,7 @@ export default class Workspace extends View {
         this.afterRename = null;
       }
       task.notify();
+      if (this.refreshRequested) this.run({ operation: "inspect" }, task);
     });
     cx.notify();
   }
@@ -361,6 +369,7 @@ export default class Workspace extends View {
           cx.stop_propagation();
         }
       })
+      .relative()
       .flex()
       .w_full()
       .h_full()
@@ -389,6 +398,7 @@ export default class Workspace extends View {
       .child(
         div().text_size(11).text_color(colors.muted).child("Let's Go Together"),
       )
+      .child(this.chat.toggleView(colors))
       .child(div().h(26))
       .child(
         this.action("Workspace", {
@@ -485,6 +495,9 @@ export default class Workspace extends View {
       body.child(div().text_size(11).text_color("#ffcad3").child(this.status));
       body.child(this.action("Refresh", { operation: "inspect" }));
     }
-    return shell.child(sidebar).child(body);
+    shell.child(sidebar).child(body);
+    if (this.chat.open)
+      shell.child(this.chat.render(colors, this.layout.context));
+    return shell;
   }
 }

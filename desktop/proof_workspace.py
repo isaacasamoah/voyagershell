@@ -25,6 +25,14 @@ def core_rpc(session, env, method, params):
 def prove(
     *, native, capture, geometry, close, start_frame, evidence, session, env, journey
 ):
+    if journey.startswith("conversation"):
+        from proof_conversation import prove as conversation
+
+        return conversation(
+            native=native, capture=capture, geometry=geometry, close=close,
+            start_frame=start_frame, evidence=evidence, session=session, env=env,
+            journey=journey,
+        )
     if journey in ("terminal", "portal-terminal"):
         from proof_terminal import terminal
 

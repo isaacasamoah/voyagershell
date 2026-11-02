@@ -4,6 +4,7 @@ const { execFileSync } = require("node:child_process");
 const { compile } = require("json-schema-to-typescript");
 const Ajv = require("ajv");
 const standalone = require("ajv/dist/standalone").default;
+const repository = path.resolve(__dirname, "..");
 
 async function main() {
   const mode = process.argv[2];
@@ -14,6 +15,7 @@ async function main() {
       "cargo",
       [
         "run",
+        "--release",
         "--quiet",
         "--locked",
         "-p",
@@ -69,6 +71,22 @@ export async function openTerminal(contentId, expectedVersion) {
 `;
   files["workspace.d.ts"] =
     'import type { Request } from "./request";\nimport type { Response } from "./response";\nimport type { TerminalResponse } from "./terminalResponse";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response>;\nexport function openTerminal(contentId: string, expectedVersion: string): Promise<TerminalResponse>;\n';
+  files["conversation.js"] =
+    `import { call, request_id, snapshot } from "voyager_conversation";
+import { conversationRequest, conversationReply, conversationSnapshot } from "./validate.js";
+export async function send(action) {
+  const request = { requestId: request_id(), action };
+  if (!conversationRequest(request)) throw Error("Invalid conversation request");
+  const reply = JSON.parse(await call(JSON.stringify(request)));
+  if (!conversationReply(reply) || reply.requestId !== request.requestId) throw Error("Invalid conversation reply");
+  return reply;
+}
+export async function observe(after) {
+  const value = JSON.parse(await snapshot(after));
+  if (value !== null && !conversationSnapshot(value)) throw Error("Invalid conversation snapshot");
+  return value;
+}
+`;
   const directory = path.join(__dirname, "generated");
   if (mode === "--write") fs.mkdirSync(directory, { recursive: true });
   for (const [name, data] of Object.entries(files)) {

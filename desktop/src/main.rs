@@ -1,3 +1,4 @@
+mod conversation;
 mod host;
 mod terminal;
 mod text;
@@ -79,6 +80,14 @@ fn run() -> Result<()> {
         &package.join("workspace.js"),
         include_str!("../../contract/generated/workspace.js"),
     )?;
+    seed(
+        &package.join("chat.js"),
+        include_str!("../mods/header/chat.js"),
+    )?;
+    seed(
+        &package.join("conversation.js"),
+        include_str!("../../contract/generated/conversation.js"),
+    )?;
     let manifest: serde_json::Value = serde_json::from_slice(&fs::read(package.join("mod.json"))?)
         .context("Reading header manifest")?;
     if manifest.get("entry").and_then(serde_json::Value::as_str) != Some("main.js")
@@ -98,6 +107,8 @@ fn run() -> Result<()> {
         env::current_dir()?.to_string_lossy().into_owned(),
     );
     let viewers = terminal::Viewers::default();
+    let conversation =
+        voyager_app::conversation_client::Client::open(profile.clone(), client.clone());
     gpui_platform::application()
         .with_assets(assets)
         .run(move |cx: &mut App| {
@@ -164,6 +175,7 @@ fn run() -> Result<()> {
                             initial_source,
                             client,
                             viewers,
+                            conversation,
                         },
                         window,
                         cx,
