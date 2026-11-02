@@ -1,6 +1,9 @@
 import json
 import time
 from pathlib import Path
+from secrets import token_hex
+
+from proof_workspace import core_rpc
 
 
 def prove(
@@ -39,11 +42,22 @@ def prove(
     idle = wait(lambda state: state["phase"] == "idle", 5)
     assert idle["thread"] is None, "Opening chat started the provider"
     capture("conversation-open")
+    administrator = journey == "conversation-administrator"
+    if administrator:
+        fixture = evidence / "profile/conversation/administrator-read.txt"
+        fixture.parent.mkdir(parents=True, exist_ok=True)
+        marker = token_hex(8)
+        fixture.write_text(marker)
+        initial = core_rpc(
+            "doc.get", {"name": "voyager-layout-v1"}, session=session, env=env
+        )
     click(150, 637)
     time.sleep(0.2)
     capture("conversation-focused")
     type_text(
-        "Count from one to one hundred in words. Use no tools."
+        "Use your native file read tool to read administrator-read.txt in your current directory. Then use voyager_workspace to inspect the workspace and create exactly one Fleet named Native admin inside the existing Voyage. Report the file marker and actual result briefly. Do not change project files or launch agents."
+        if administrator
+        else "Count from one to one hundred in words. Use no tools."
         if journey == "conversation-interrupt"
         else "Reply with one short sentence about a quiet ocean. Use no tools."
     )
@@ -55,13 +69,15 @@ def prove(
     for process in Path("/proc").glob("[0-9]*"):
         try:
             if process.joinpath("cwd").resolve() == evidence / "profile/conversation":
+                stat = process.joinpath("stat").read_text().rsplit(") ", 1)[1].split()
                 providers.append(
                     {
                         "pid": int(process.name),
-                        "start": process.joinpath("stat")
-                        .read_text()
-                        .rsplit(") ", 1)[1]
-                        .split()[19],
+                        "start": stat[19],
+                        "parent": int(stat[1]),
+                        "uid": process.stat().st_uid,
+                        "executable": str(process.joinpath("exe").resolve()),
+                        "cwd": str(process.joinpath("cwd").resolve()),
                     }
                 )
         except (FileNotFoundError, PermissionError):
@@ -122,9 +138,54 @@ def prove(
     assert users[0]["context"]["path"] == ["Workspace"]
     assert users[0]["context"]["scope"] == {"kind": "workspace"}
     assert users[0]["context"]["revision"].isdigit()
+    if administrator:
+        assert marker in " ".join(message["text"] for message in answers), (
+            "Native file inspection did not return the undisclosed fixture marker"
+        )
+        assert all(message["text"].startswith("oru:") for message in answers), answers
+        tools = [message for message in final["messages"] if message["role"] == "tool"]
+        assert len(tools) >= 2 and all(
+            message["tool"]["status"] == "applied" for message in tools
+        ), tools
+        assert any(message["text"] == "Fleet created" for message in tools)
+        assert all(
+            message["tool"]["name"] == "voyager_workspace"
+            and message["tool"]["callId"] == message["id"]
+            and message["tool"]["callbackIds"]
+            and message["tool"]["requestId"]
+            and message["tool"]["version"].isdigit()
+            for message in tools
+        )
+        assert all(
+            message["context"] == users[0]["context"]
+            and message["requestId"] == users[0]["requestId"]
+            for message in tools
+        )
+        observed = core_rpc(
+            "doc.get", {"name": "voyager-layout-v1"}, session=session, env=env
+        )
+        voyage = observed["value"]["voyages"][0]
+        assert (
+            len(voyage["fleets"]) == 2 and voyage["fleets"][1]["name"] == "Native admin"
+        ), observed
+        assert voyage["fleets"][0] == initial["value"]["voyages"][0]["fleets"][0]
+        (evidence / "administrator-owner.json").write_text(
+            json.dumps(observed, indent=2)
+        )
+        click(64, 108)
+        capture("administrator-native-workspace-effect")
     capture("conversation-completed")
     (evidence / "conversation-final.json").write_text(json.dumps(final, indent=2))
     close()
+    if administrator:
+        core_rpc("server.stop", {}, session=session, env=env)
+        for provider in providers:
+            path = Path("/proc") / str(provider["pid"])
+            assert (
+                not path.exists()
+                or path.joinpath("stat").read_text().rsplit(") ", 1)[1].split()[0]
+                == "Z"
+            ), "Owned provider survived Quit"
     return [
         "native-private-text-completed",
         "matching-thread-turn-request-context",

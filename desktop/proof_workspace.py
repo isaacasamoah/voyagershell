@@ -1,6 +1,25 @@
 import json
 import subprocess
 import time
+from functools import partial
+
+
+def core_rpc(method, params, *, session, env):
+    request = json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    )
+    result = subprocess.run(
+        ["hc", "connect", "--session", session],
+        input=request + "\n",
+        text=True,
+        capture_output=True,
+        env=env,
+        check=True,
+        timeout=5,
+    )
+    reply = json.loads(result.stdout.splitlines()[-1])
+    assert "result" in reply, reply
+    return reply["result"]
 
 
 def prove(
@@ -16,22 +35,7 @@ def prove(
         close()
         return ["core-unavailable-captured-for-visual-review", "native-quit"]
 
-    def rpc(method, params):
-        request = json.dumps(
-            {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-        )
-        result = subprocess.run(
-            ["hc", "connect", "--session", session],
-            input=request + "\n",
-            text=True,
-            capture_output=True,
-            env=env,
-            check=True,
-            timeout=5,
-        )
-        reply = json.loads(result.stdout.splitlines()[-1])
-        assert "result" in reply, reply
-        return reply["result"]
+    rpc = partial(core_rpc, session=session, env=env)
 
     def state():
         return rpc("doc.get", {"name": "voyager-layout-v1"})
