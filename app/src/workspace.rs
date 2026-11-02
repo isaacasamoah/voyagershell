@@ -26,6 +26,7 @@ impl Model {
             type_id: "terminal".into(),
             cwd,
             backend: None,
+            start_pending: None,
         });
         Ok(Fleet {
             id: FleetId(self.id("fleet")?),
@@ -161,6 +162,7 @@ impl Model {
                     type_id: "terminal".into(),
                     cwd,
                     backend: None,
+                    start_pending: None,
                 });
             }
         }
