@@ -9120,8 +9120,7 @@ checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 [[package]]
 name = "xim-ctext"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ac61a7062c40f3c37b6e82eeeef835d5cc7824b632a72784a89b3963c33284c"
+source = "git+https://github.com/herdrdev/herdr-app?rev=1581a587919dddd6f1efd5f78eb542c4b2b02cb5#1581a587919dddd6f1efd5f78eb542c4b2b02cb5"
 dependencies = [
  "encoding_rs",
 ]

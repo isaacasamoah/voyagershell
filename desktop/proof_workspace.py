@@ -33,7 +33,7 @@ def prove(
             start_frame=start_frame, evidence=evidence, session=session, env=env,
             journey=journey,
         )
-    if journey in ("terminal", "portal-terminal"):
+    if journey in ("terminal", "portal-terminal", "terminal-grid"):
         from proof_terminal import terminal
 
         return terminal(
@@ -45,6 +45,7 @@ def prove(
             session,
             env,
             portals=journey == "portal-terminal",
+            grid=journey == "terminal-grid",
         )
     if journey == "workspace-unavailable":
         for _ in range(30):

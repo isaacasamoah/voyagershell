@@ -16,6 +16,7 @@ use std::{
 
 const VIEW_LIMIT: usize = 1024 * 1024;
 const TOTAL_LIMIT: usize = 16 * 1024 * 1024;
+pub const MAX_INPUT_BYTES: usize = 65536;
 
 #[derive(Clone, Debug)]
 pub enum Error {
@@ -130,7 +131,7 @@ impl Viewer {
     }
 
     pub fn input(&self, bytes: Vec<u8>) -> Result<(), Error> {
-        if bytes.len() > 65536 {
+        if bytes.len() > MAX_INPUT_BYTES {
             return Err(Error::Rejected {
                 kind: "too_large".into(),
                 message: "Terminal input exceeds 64 KiB".into(),
@@ -141,6 +142,31 @@ impl Viewer {
 
     pub fn focus(&self, focused: bool) -> Result<(), Error> {
         self.send(&self.control, 4, vec![u8::from(focused)])
+    }
+
+    pub fn resize(&self, cols: u16, rows: u16) -> Result<(), Error> {
+        let mut payload = Vec::with_capacity(4);
+        payload.extend_from_slice(&cols.to_le_bytes());
+        payload.extend_from_slice(&rows.to_le_bytes());
+        self.send(&self.control, 3, payload)
+    }
+
+    pub fn display(
+        &self,
+        width: u32,
+        height: u32,
+        fg: String,
+        bg: String,
+        cursor: Option<String>,
+    ) -> Result<(), Error> {
+        self.send(
+            &self.control,
+            5,
+            serde_json::to_vec(
+                &json!({ "cell": [width, height], "fg": fg, "bg": bg, "cursor": cursor }),
+            )
+            .map_err(|error| Error::Uncertain(error.to_string()))?,
+        )
     }
 
     pub fn close(&self) -> Result<(), Error> {
@@ -506,5 +532,38 @@ impl Drop for Core {
         if let Err(error) = self.child.wait() {
             eprintln!("Core bridge wait failed: {error}");
         }
+    }
+}
+
+#[cfg(test)]
+mod resize_tests {
+    use super::{Streams, Viewer};
+    use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
+
+    #[test]
+    fn viewer_queues_core_size_and_display_facts_on_its_channel() {
+        let (control, received) = mpsc::sync_channel(2);
+        let (input, _) = mpsc::sync_channel(1);
+        let viewer = Viewer {
+            channel: 7,
+            streams: Arc::new(Mutex::new(Streams::default())),
+            input,
+            control,
+            connected: Arc::new(AtomicBool::new(true)),
+        };
+        viewer.resize(120, 38).unwrap();
+        viewer
+            .display(9, 18, "#eeeeee".into(), "#111111".into(), None)
+            .unwrap();
+        let size = received.recv().unwrap();
+        assert_eq!(
+            (size.channel, size.kind, size.payload),
+            (7, 3, vec![120, 0, 38, 0])
+        );
+        let facts = received.recv().unwrap();
+        assert_eq!((facts.channel, facts.kind), (7, 5));
+        let data: serde_json::Value = serde_json::from_slice(&facts.payload).unwrap();
+        assert_eq!(data["cell"], serde_json::json!([9, 18]));
+        assert_eq!(data["fg"], "#eeeeee");
     }
 }

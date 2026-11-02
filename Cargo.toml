@@ -2,3 +2,6 @@
 resolver = "3"
 members = ["contract", "app", "desktop"]
 exclude = ["experiments/gpui-avatar", "experiments/native-content", "experiments/typed-content/contract"]
+
+[patch.crates-io]
+xim-ctext = { git = "https://github.com/herdrdev/herdr-app", rev = "1581a587919dddd6f1efd5f78eb542c4b2b02cb5" }

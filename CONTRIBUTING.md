@@ -33,7 +33,7 @@ cargo build --release --locked -p voyager-desktop --bin voyager-shell
 python prove.py --foundation --journey workspace --launch --session voyager-unique-name --evidence /absolute/new/evidence --desktop-env /absolute/desktop-environment.json
 ```
 
-The current workspace checkpoint is described in [docs/workspace.md](docs/workspace.md). Its Core-backed shell works in a Fleet Vessel or persistent Voyage Portal. The current terminal is a fixed 80-by-24 plain-text view; full terminal behavior and integrated avatar/chat remain unfinished. The combined checkpoint is under review. Performance measurements use the resulting `target/release/voyager-shell` and record the exact artifact and workload. Debug build timings do not establish release runtime performance.
+The current workspace checkpoint is described in [docs/workspace.md](docs/workspace.md). Its Core-backed shell works in a Fleet Vessel or persistent Voyage Portal. The terminal-grid candidate demonstrated native colored Unicode, alternate screen and dynamic sizing, as described in [docs/terminal.md](docs/terminal.md). Its continuation adds selection, clipboard and native composition source, with the actual native journeys and proof-size gate still open. Full terminal behavior and integrated avatar/chat remain unfinished. The combined checkpoint is under review. Performance measurements use the resulting `target/release/voyager-shell` and record the exact artifact and workload. Debug build timings do not establish release runtime performance.
 
 The focused native terminal journey uses the same maintained fixture:
 

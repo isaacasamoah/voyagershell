@@ -1,6 +1,7 @@
 mod conversation;
 mod host;
 mod terminal;
+mod terminal_screen;
 mod text;
 
 use anyhow::{Context as _, Result, bail};
