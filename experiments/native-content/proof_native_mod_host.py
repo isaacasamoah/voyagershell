@@ -28,6 +28,7 @@ def run():
     parser.add_argument("--session", required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--desktop-env", type=Path)
+    parser.add_argument("--window-origin", nargs=2, type=int)
     parser.add_argument("--public-snapshot", type=Path)
     args = parser.parse_args()
     if args.journey == "conversation-scroll":
@@ -136,6 +137,11 @@ def run():
         assert args.session in execute("xdotool", "getwindowname", record["window"])
 
     verify()
+    if args.window_origin is not None:
+        before = execute("xdotool", "getwindowgeometry", "--shell", record["window"])
+        execute("xdotool", "windowmove", "--sync", record["window"], *map(str, args.window_origin))
+        after = execute("xdotool", "getwindowgeometry", "--shell", record["window"])
+        (evidence / "window-origin.json").write_text(json.dumps({"requested": args.window_origin, "before": before, "after": after}, indent=2))
     execute("xdotool", "windowactivate", "--sync", record["window"])
     pointer = subprocess.Popen(
         ["/usr/bin/python3", str(root / "proof_native_input.py")]

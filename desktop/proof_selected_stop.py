@@ -31,7 +31,7 @@ def prove(
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             value = get()
-            if predicate(value):
+            if value is not None and predicate(value):
                 return value
             time.sleep(0.1)
         raise AssertionError(f"Timed out waiting for {label}: {value}")
@@ -73,6 +73,14 @@ def prove(
         )
         target = initial["value"]["contents"][0]
         assert capture("stop-initial").size == (1450, 940)
+        click(350, 220)
+        app_pid = json.loads((evidence / "launch.json").read_text())["pid"]
+        focused = wait(
+            lambda: native("fields", app_pid, ["Terminal"], "window")["fields"],
+            lambda fields: len(fields) == 1 and fields[0]["focused"],
+            "the clicked native terminal focus",
+        )
+        (evidence / "stop-initial-focus.json").write_text(json.dumps(focused, indent=2))
         chord(native, "e")
         before = wait(
             document,
@@ -123,7 +131,8 @@ def prove(
         click(64, 108)
 
         def conversation():
-            return json.loads((evidence / "conversation.json").read_text())
+            path = evidence / "conversation.json"
+            return json.loads(path.read_text()) if path.exists() else None
 
         idle = wait(
             conversation, lambda item: item["phase"] == "idle", "idle private chat"
