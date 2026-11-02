@@ -521,6 +521,108 @@
       ],
       "type": "string"
     },
+    "ProcessAction": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "lines": {
+              "maximum": 160,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "operation": {
+              "const": "read",
+              "type": "string"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "lines"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "send",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "interrupt",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "RenameTarget": {
       "oneOf": [
         {
@@ -618,11 +720,49 @@
       ],
       "type": "string"
     },
+    "ToolAction": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/Action"
+            },
+            "tool": {
+              "const": "workspace",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/ProcessAction"
+            },
+            "tool": {
+              "const": "process",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "action"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "ToolOutcome": {
       "additionalProperties": false,
       "properties": {
         "action": {
-          "$ref": "#/definitions/Action"
+          "$ref": "#/definitions/ToolAction"
         },
         "callId": {
           "type": "string"

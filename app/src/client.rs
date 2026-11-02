@@ -14,11 +14,17 @@ use std::{
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use voyager_contract::administrator::{ProcessRequest, ProcessResponse};
 use voyager_contract::{
     Action, ContentId, Context, CoreTerminalId, Layout, Request, Response, Status, TerminalRequest,
 };
 
 enum Message {
+    Process {
+        scope: Context,
+        request: ProcessRequest,
+        reply: SyncSender<Arc<ProcessResponse>>,
+    },
     Workspace {
         request: Request,
         scope: Option<Context>,
@@ -63,8 +69,99 @@ impl Client {
             let mut unconfirmed = HashMap::<String, String>::new();
             let mut terminal_requests: VecDeque<(TerminalRequest, Result<Viewer, Error>)> =
                 VecDeque::new();
+            let mut process_requests: VecDeque<(Context, ProcessRequest, Arc<ProcessResponse>)> =
+                VecDeque::new();
             while let Ok(message) = receiver.recv() {
                 let (request, scope, reply) = match message {
+                    Message::Process {
+                        scope,
+                        request,
+                        reply,
+                    } => {
+                        let previous = process_requests
+                            .iter()
+                            .find(|(_, prior, _)| prior.request_id == request.request_id);
+                        let mut response = ProcessResponse {
+                            request_id: request.request_id.clone(),
+                            status: Status::Rejected,
+                            version,
+                            fresh,
+                            output: None,
+                            message: None,
+                        };
+                        if let Some((prior_scope, prior, result)) = previous {
+                            let outcome = if prior == &request && prior_scope == &scope {
+                                Arc::clone(result)
+                            } else {
+                                response.message = Some("Process request identity was reused with different arguments or scope".into());
+                                Arc::new(response)
+                            };
+                            let _ = reply.send(outcome);
+                            continue;
+                        }
+                        let result = if request.request_id.is_empty()
+                            || request.request_id.len() > 128
+                        {
+                            Err(rejected("Invalid process request identity".into()))
+                        } else if receipts
+                            .iter()
+                            .any(|(prior, _, _)| prior.request_id == request.request_id)
+                            || terminal_requests
+                                .iter()
+                                .any(|(prior, _)| prior.request_id == request.request_id)
+                        {
+                            Err(rejected(
+                                "This request identity belongs to another operation".into(),
+                            ))
+                        } else if !fresh || version != request.input.expected_version {
+                            Err(rejected(
+                                "Inspect the current workspace revision before using processes"
+                                    .into(),
+                            ))
+                        } else {
+                            match core.as_mut() {
+                                    Ok(core) => load(core).and_then(|(current, revision, _)| {
+                                        layout = Arc::new(current);
+                                        version = revision;
+                                        if version != request.input.expected_version {
+                                            return Err(rejected("Workspace revision changed before process dispatch; inspect again".into()));
+                                        }
+                                        crate::process::run(core, &layout, &scope, &request.input.action)
+                                    }),
+                                    Err(error) => Err(error.clone()),
+                                }
+                        };
+                        match result {
+                            Ok(output) => {
+                                match serde_json::to_vec(&output) {
+                                    Ok(bytes) if bytes.len() <= 24 * 1024 => {
+                                        response.status = Status::Applied;
+                                        response.output = Some(output);
+                                    }
+                                    _ if matches!(output, voyager_contract::administrator::ProcessOutput::Send { .. } | voyager_contract::administrator::ProcessOutput::Interrupt { .. }) => {
+                                        response.status = Status::Applied;
+                                        response.message = Some("The requested process input was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
+                                    }
+                                    _ => response.message = Some("Process result exceeds the tool response limit. Inspect a narrower focus or read less history.".into()),
+                                }
+                            }
+                            Err(Error::Rejected { message, .. }) => response.message = Some(message),
+                            Err(Error::Uncertain(message)) => {
+                                fresh = false;
+                                response.status = Status::Uncertain;
+                                response.message = Some(message);
+                            }
+                        }
+                        response.version = version;
+                        response.fresh = fresh;
+                        let outcome = Arc::new(response);
+                        process_requests.push_back((scope, request, Arc::clone(&outcome)));
+                        if process_requests.len() > 32 {
+                            process_requests.pop_front();
+                        }
+                        let _ = reply.send(outcome);
+                        continue;
+                    }
                     Message::Workspace {
                         request,
                         scope,
@@ -93,6 +190,13 @@ impl Client {
                                         .into(),
                                 ))
                             }
+                        } else if process_requests
+                            .iter()
+                            .any(|(_, prior, _)| prior.request_id == request_id)
+                        {
+                            Err(rejected(
+                                "This request identity belongs to a process operation".into(),
+                            ))
                         } else if request_id.is_empty() || request_id.len() > 128 {
                             Err(rejected("Invalid terminal request identity".into()))
                         } else if !fresh {
@@ -140,6 +244,15 @@ impl Client {
                     created_workspace: false,
                     message: None,
                 };
+                if process_requests
+                    .iter()
+                    .any(|(_, prior, _)| prior.request_id == request.request_id)
+                {
+                    response.message =
+                        Some("This request identity belongs to a process operation".into());
+                    let _ = reply.send(response);
+                    continue;
+                }
                 if let Some((previous, previous_scope, result)) = receipts
                     .iter()
                     .find(|(r, _, _)| r.request_id == request.request_id)
@@ -280,6 +393,28 @@ impl Client {
 
     pub fn scoped_call(&self, scope: Context, request: Request) -> Result<Response, CallError> {
         self.bound_call(Some(scope), request)
+    }
+
+    pub fn process(
+        &self,
+        scope: Context,
+        request: ProcessRequest,
+    ) -> Result<Arc<ProcessResponse>, CallError> {
+        let (reply, receive) = mpsc::sync_channel(1);
+        self.sender
+            .try_send(Message::Process {
+                scope,
+                request,
+                reply,
+            })
+            .map_err(|_| {
+                CallError::Rejected(
+                    "Workspace busy or unavailable; no process request was queued".into(),
+                )
+            })?;
+        receive.recv_timeout(Duration::from_secs(25)).map_err(|_| {
+            CallError::Unconfirmed("Process result unconfirmed; do not repeat the request".into())
+        })
     }
 
     fn bound_call(&self, scope: Option<Context>, request: Request) -> Result<Response, CallError> {

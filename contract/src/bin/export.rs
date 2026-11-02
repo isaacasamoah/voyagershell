@@ -15,7 +15,9 @@ fn main() {
             "conversationRequest":schema::<conversation::Request>(),
             "conversationReply":schema::<conversation::Reply>(),
             "conversationSnapshot":schema::<conversation::Snapshot>(),
-            "workspaceTool":schema::<voyager_contract::administrator::WorkspaceInput>()}),
+            "workspaceTool":schema::<voyager_contract::administrator::WorkspaceInput>(),
+            "processTool":schema::<voyager_contract::administrator::ProcessInput>(),
+            "processResponse":schema::<voyager_contract::administrator::ProcessResponse>()}),
     ) {
         Ok(value) => println!("{value}"),
         Err(error) => {

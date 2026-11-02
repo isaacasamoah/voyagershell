@@ -19,6 +19,15 @@ export type Context =
       kind: "portal";
     };
 export type Role = "user" | "assistant" | "tool";
+export type ToolAction =
+  | {
+      action: Action;
+      tool: "workspace";
+    }
+  | {
+      action: ProcessAction;
+      tool: "process";
+    };
 export type Action =
   | {
       operation: "inspect";
@@ -110,6 +119,29 @@ export type RenameTarget =
     };
 export type Axis = "horizontal" | "vertical";
 export type Side = "left" | "right" | "top" | "bottom";
+export type ProcessAction =
+  | {
+      operation: "list";
+    }
+  | {
+      contentId: string;
+      lines: number;
+      operation: "read";
+      terminalId: string;
+    }
+  | {
+      contentId: string;
+      operation: "send";
+      pid: number;
+      terminalId: string;
+      text: string;
+    }
+  | {
+      contentId: string;
+      operation: "interrupt";
+      pid: number;
+      terminalId: string;
+    };
 export type CallbackId =
   | {
       kind: "string";
@@ -148,7 +180,7 @@ export interface Focus {
   scope: Context;
 }
 export interface ToolOutcome {
-  action: Action;
+  action: ToolAction;
   callId: string;
   callbackIds: CallbackId[];
   name: string;

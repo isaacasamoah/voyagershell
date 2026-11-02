@@ -180,6 +180,123 @@
         "terminal"
       ]
     },
+    "ListParams": {
+      "type": "object",
+      "properties": {
+        "all": {
+          "default": false,
+          "description": "Include finished terminals.",
+          "type": "boolean"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Only terminals carrying all of these labels (repeatable).",
+          "type": "object"
+        }
+      },
+      "required": []
+    },
+    "ReadParams": {
+      "type": "object",
+      "properties": {
+        "caller": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lines": {
+          "default": 0,
+          "description": "Lines of history above the screen.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "terminal": {
+          "description": "The terminal: `t7`, a name, or `machine/t7`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "terminal"
+      ]
+    },
+    "SendParams": {
+      "type": "object",
+      "properties": {
+        "caller": {
+          "description": "Who is sending (`HC_TERMINAL_ID`, else the calling process's parent), so a\nbare wait from the same caller waits for this send's turn.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "force": {
+          "default": false,
+          "description": "Type even if the program is blocked (it may answer its dialog).",
+          "type": "boolean"
+        },
+        "if": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IdleOrWorking"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only type if the status is exactly this."
+        },
+        "terminal": {
+          "description": "The terminal: `t7`, a name, or `machine/t7`.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Pasted, then submitted with Enter.",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "With wait: seconds before it checks in (default: config, else 180).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "wait": {
+          "default": false,
+          "description": "Then wait for the turn this send started.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "terminal",
+        "text"
+      ]
+    },
+    "InterruptParams": {
+      "type": "object",
+      "properties": {
+        "terminal": {
+          "description": "The terminal: `t7`, a name, or `machine/t7`.",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Seconds to watch for an effect (default 10).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "terminal"
+      ]
+    },
     "RunResult": {
       "properties": {
         "address": {
@@ -485,6 +602,127 @@
       "required": [
         "channel",
         "terminal"
+      ],
+      "type": "object"
+    },
+    "ListResult": {
+      "properties": {
+        "hidden_finished": {
+          "description": "Finished terminals left out (see `all`).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "machines": {
+          "description": "Machines added here and their lines: one that is not connected is\nlisted here, not waited on.",
+          "items": {
+            "$ref": "#/definitions/MachineView"
+          },
+          "type": "array"
+        },
+        "terminals": {
+          "description": "This machine's terminals, then each connected machine's (`machine/t7`).",
+          "items": {
+            "$ref": "#/definitions/Terminal"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "terminals",
+        "hidden_finished",
+        "machines"
+      ],
+      "type": "object"
+    },
+    "ReadResult": {
+      "properties": {
+        "complete": {
+          "description": "False when part of what was asked for may be missing.",
+          "type": "boolean"
+        },
+        "how": {
+          "description": "\"screen\", \"history\", or \"stitched\" (a full-screen app, read by scrolling it).",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "why": {
+          "description": "Why only the screen: \"working\" (a full-screen app isn't scrolled while\nit works; read again once it stops).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "text",
+        "complete",
+        "how"
+      ],
+      "type": "object"
+    },
+    "IdleOrWorking": {
+      "enum": [
+        "idle",
+        "working"
+      ],
+      "type": "string"
+    },
+    "SendResult": {
+      "properties": {
+        "started": {
+          "description": "Whether it went `working` within a few seconds; null when it doesn't\nreport status, so nobody can tell.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "The program's status word when the text went in (null: it never said).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turn": {
+          "description": "The turn when the text went in.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "wait": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WaitResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "With `wait`: how that turn ended."
+        }
+      },
+      "required": [
+        "turn"
+      ],
+      "type": "object"
+    },
+    "InterruptResult": {
+      "properties": {
+        "key": {
+          "description": "The key sent: esc for programs that report status, else ctrl+c.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "stopped (left working, or a shell got its prompt back), exited,\nstill_working (no change in time), or unknown (it doesn't report status).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome",
+        "key"
       ],
       "type": "object"
     },
@@ -871,6 +1109,76 @@
         "screen",
         "cols",
         "rows"
+      ],
+      "type": "object"
+    },
+    "MachineView": {
+      "description": "A machine as `machine ls` and `ls` show it: its profile and its line now.",
+      "properties": {
+        "host": {
+          "description": "What that core calls itself (its hostname).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The other core's permanent id.",
+          "type": "string"
+        },
+        "name": {
+          "description": "What this core calls it: `rohan` in `rohan/t7`.",
+          "type": "string"
+        },
+        "session": {
+          "description": "The hc session there (null: its default).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "since_ms": {
+          "description": "Since when it is not connected (ms since the epoch).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "connecting, connected, needs_login or unreachable.",
+          "type": "string"
+        },
+        "target": {
+          "description": "How it is reached: an ssh target, or (`via`) a command.",
+          "type": "string"
+        },
+        "temporary": {
+          "default": false,
+          "description": "Short-lived (a sandbox for a task): clients may show it apart from the\nmachines that stay. hc treats it like any other.",
+          "type": "boolean"
+        },
+        "version": {
+          "description": "Its hc version when last seen.",
+          "type": "string"
+        },
+        "via": {
+          "default": false,
+          "description": "`target` is a command that runs a shell line there, given as its last\nargument, like ssh (a provider's own CLI, ssh with its options).",
+          "type": "boolean"
+        },
+        "why": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "target",
+        "id",
+        "host",
+        "version",
+        "state"
       ],
       "type": "object"
     }

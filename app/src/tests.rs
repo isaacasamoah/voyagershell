@@ -604,3 +604,232 @@ fn home_navigation_does_not_change_explicit_context_or_create_content() {
     assert_eq!(model.layout.contents, contents);
     assert_eq!(model.layout.view, voyager_contract::WorkspaceView::Home);
 }
+
+#[test]
+fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
+    use crate::{client::Client, core::Core};
+    use std::{
+        panic, thread,
+        time::{Duration, Instant},
+    };
+    use voyager_contract::{
+        ContentId, Request, Status,
+        administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest},
+    };
+    let session = format!("voyager-c2-process-test-{}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let checked = panic::catch_unwind(|| {
+        let inspect = || {
+            client
+                .call(Request {
+                    request_id: client.request_id(),
+                    expected_version: 0,
+                    action: Action::Inspect,
+                })
+                .unwrap()
+        };
+        let initial = inspect();
+        let content = initial.layout.contents[0].id.clone();
+        let _viewer = client
+            .terminal(content.clone(), client.request_id(), initial.version)
+            .unwrap();
+        let bound = inspect();
+        let revision = std::cell::Cell::new(bound.version);
+        let process = |action| ProcessRequest {
+            request_id: client.request_id(),
+            input: ProcessInput {
+                expected_version: revision.get(),
+                action,
+            },
+        };
+        let list = client
+            .process(Context::Workspace, process(ProcessAction::List))
+            .unwrap();
+        let Some(ProcessOutput::List { processes, .. }) = &list.output else {
+            panic!("Missing actual process list: {list:?}")
+        };
+        let target = processes
+            .iter()
+            .find(|item| item.content_id == content)
+            .unwrap()
+            .clone();
+        let pid = target.pid.unwrap();
+        let send = |content_id, text| ProcessAction::Send {
+            content_id,
+            terminal_id: target.terminal_id.clone(),
+            pid,
+            text,
+        };
+        let mut external = Core::connect(&session).unwrap();
+        let bumped = external.rpc("doc.set", serde_json::json!({"name":"voyager-layout-v1","version":bound.version,"value":bound.layout})).unwrap();
+        let stale = client
+            .process(
+                Context::Workspace,
+                process(send(content.clone(), "printf 'FORG%s\\n' ED".into())),
+            )
+            .unwrap();
+        assert_eq!(stale.status, Status::Rejected);
+        assert!(
+            stale
+                .message
+                .as_deref()
+                .unwrap()
+                .contains("revision changed")
+        );
+        assert_eq!(stale.version, bumped["version"].as_u64().unwrap());
+        revision.set(inspect().version);
+        let mut moved = (*bound.layout).clone();
+        moved.contents[0].backend = Some(voyager_contract::CoreTerminalId("t999999".into()));
+        let changed = external.rpc("doc.set", serde_json::json!({"name":"voyager-layout-v1","version":bumped["version"],"value":moved})).unwrap();
+        let external_refusal = client
+            .process(
+                Context::Workspace,
+                process(send(content.clone(), "printf 'FORG%s\\n' ED".into())),
+            )
+            .unwrap();
+        assert_eq!(external_refusal.status, Status::Rejected);
+        assert_eq!(
+            external_refusal.version,
+            changed["version"].as_u64().unwrap()
+        );
+        external.rpc("doc.set", serde_json::json!({"name":"voyager-layout-v1","version":changed["version"],"value":bound.layout})).unwrap();
+        revision.set(inspect().version);
+        let refused = client
+            .process(
+                Context::Workspace,
+                process(send(
+                    ContentId("outside".into()),
+                    "printf 'FORG%s\\n' ED".into(),
+                )),
+            )
+            .unwrap();
+        assert_eq!(refused.status, Status::Rejected);
+        let wrong_pid = ProcessAction::Send {
+            content_id: content.clone(),
+            terminal_id: target.terminal_id.clone(),
+            pid: 0,
+            text: "printf 'FORG%s\\n' ED".into(),
+        };
+        assert_eq!(
+            client
+                .process(Context::Workspace, process(wrong_pid))
+                .unwrap()
+                .status,
+            Status::Rejected
+        );
+        let scope = Context::Vessel {
+            id: initial.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+        };
+        let request = process(send(content.clone(), "printf 'C2_%s\\n' PROCESS".into()));
+        let sent = client.process(scope.clone(), request.clone()).unwrap();
+        assert_eq!(sent.status, Status::Applied);
+        let replay = client.process(scope.clone(), request.clone()).unwrap();
+        assert!(std::sync::Arc::ptr_eq(&sent, &replay));
+        let changed = ProcessRequest {
+            input: ProcessInput {
+                action: send(content.clone(), "printf 'FORG%s\\n' ED".into()),
+                ..request.input.clone()
+            },
+            ..request
+        };
+        assert_eq!(
+            client.process(scope.clone(), changed).unwrap().status,
+            Status::Rejected
+        );
+        let read = || {
+            client
+                .process(
+                    scope.clone(),
+                    process(ProcessAction::Read {
+                        content_id: content.clone(),
+                        terminal_id: target.terminal_id.clone(),
+                        lines: 160,
+                    }),
+                )
+                .unwrap()
+        };
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let response = read();
+            let Some(ProcessOutput::Read { text, .. }) = &response.output else {
+                panic!("Missing terminal read")
+            };
+            assert!(!text.lines().any(|line| line == "FORGED"));
+            if text.lines().any(|line| line == "C2_PROCESS") {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "Submitted input produced no real output"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            client
+                .process(
+                    scope.clone(),
+                    process(send(content.clone(), "sleep 30".into()))
+                )
+                .unwrap()
+                .status,
+            Status::Applied
+        );
+        let started = Instant::now() + Duration::from_secs(10);
+        loop {
+            let running = read();
+            if matches!(&running.output, Some(ProcessOutput::Read { target, .. }) if target.foreground.as_deref() == Some("sleep"))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < started,
+                "Submitted sleep was not observed running"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        let interrupted = client
+            .process(
+                scope.clone(),
+                process(ProcessAction::Interrupt {
+                    content_id: content.clone(),
+                    terminal_id: target.terminal_id.clone(),
+                    pid,
+                }),
+            )
+            .unwrap();
+        assert!(
+            matches!(&interrupted.output, Some(ProcessOutput::Interrupt { key, outcome, .. }) if key == "ctrl+c" && outcome == "stopped"),
+            "{interrupted:?}"
+        );
+        assert_eq!(
+            client
+                .process(scope.clone(), process(send(content.clone(), "exit".into())))
+                .unwrap()
+                .status,
+            Status::Applied
+        );
+        loop {
+            let response = read();
+            if matches!(&response.output, Some(ProcessOutput::Read { target, .. }) if target.state == "finished")
+            {
+                break;
+            }
+            assert!(Instant::now() < deadline, "Shell did not finish");
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(read().status, Status::Applied);
+        assert_eq!(
+            client
+                .process(
+                    scope,
+                    process(send(content, "printf 'FORG%s\\n' ED".into()))
+                )
+                .unwrap()
+                .status,
+            Status::Rejected
+        );
+    });
+    let mut cleanup = Core::connect(&session).unwrap();
+    cleanup.rpc("server.stop", serde_json::json!({})).unwrap();
+    checked.unwrap();
+}

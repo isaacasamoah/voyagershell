@@ -59,3 +59,51 @@ test("generated wire validator rejects a forged caller and malformed split", asy
     false,
   );
 });
+
+test("process schema keeps integer bounds and excludes caller authority", async () => {
+  const { processTool } = await import("./generated/validate.js");
+  const request = {
+    expectedVersion: "1",
+    action: {
+      operation: "send",
+      contentId: "content-1",
+      terminalId: "t1",
+      pid: 10,
+      text: "hello",
+    },
+  };
+  assert.equal(processTool(request), true);
+  for (const pid of [-1, 0.5, 4294967296])
+    assert.equal(
+      processTool({ ...request, action: { ...request.action, pid } }),
+      false,
+    );
+  assert.equal(
+    processTool({ ...request, scope: { kind: "workspace" } }),
+    false,
+  );
+  assert.equal(
+    processTool({
+      expectedVersion: "1",
+      action: {
+        operation: "read",
+        contentId: "content-1",
+        terminalId: "t1",
+        lines: 160,
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    processTool({
+      expectedVersion: "1",
+      action: {
+        operation: "read",
+        contentId: "content-1",
+        terminalId: "t1",
+        lines: 161,
+      },
+    }),
+    false,
+  );
+});

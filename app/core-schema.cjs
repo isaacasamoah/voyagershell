@@ -12,7 +12,9 @@ function canonical(value) {
       .map((key) => [key, canonical(value[key])]),
   );
 }
-const raw = execFileSync("hc", ["schema", "--json"]);
+const raw = process.argv[3]
+  ? readFileSync(process.argv[3])
+  : execFileSync("hc", ["schema", "--json"]);
 const schema = JSON.parse(raw);
 const digest = createHash("sha256")
   .update(JSON.stringify(canonical(schema)))
@@ -40,6 +42,10 @@ function convert(value) {
 for (const [method, name] of [
   ["terminal.run", "RunParams"],
   ["terminal.attach", "AttachParams"],
+  ["terminal.list", "ListParams"],
+  ["terminal.read", "ReadParams"],
+  ["terminal.send", "SendParams"],
+  ["terminal.interrupt", "InterruptParams"],
 ]) {
   const entry = schema.methods.find((item) => item.name === method);
   if (!entry) throw Error(`Core method missing: ${method}`);
