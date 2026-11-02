@@ -48,9 +48,77 @@ current view does not render Kitty graphics and does not acknowledge them as
 displayed. Core owns focus reports; Voyager sends the FOCUS frame once per
 focus transition.
 
-The first candidate renders an 80 by 24 text grid. Styling, dynamic resizing,
-full input and selection behavior, and performance remain later work and are
-not implied by the initial shell journey. A successful build is not acceptance.
+The grid candidate retains Ghostty's cell graphemes, colors, styles and cursor
+state. Its measured monospace cell size and painted pane bounds determine the
+local grid. A deferred resize queues Core RESIZE and display FACTS on the same
+viewer; queue pressure retains the latest size for a nonblocking retry. The
+existing 64 KiB and 2 ms limits govern VT parsing, not complete snapshot or
+paint time. Ghostty's dirty-row flags and row identities retain unchanged cell
+arrays and shared text across updates. A full snapshot is prepared before dirty
+flags are cleared; presentation then reads the retained data. Blink, overline
+and exact underline variants are not yet rendered.
+
+Initial terminal colors and the eight named ANSI colors follow the existing
+Electron reference. Faint text blends its foreground at the reference renderer's
+50 percent opacity while preserving the cell background. Ghostty's cell color
+queries resolve the stored foreground and background independently; Voyager
+applies the inverse attribute after those queries. The cursor uses its reported
+color, including the reference default.
+
+The initial release demonstrated a shell's colored wide Unicode glyph in the
+alternate screen, native window resize from 101 by 41 to 88 by 35, and the same
+terminal address and numeric PID. That result remains bounded: it did not prove
+all full-screen applications, a coding agent, selection, clipboard, IME, hidden
+output, compositor timing, another platform or the complete terminal module.
+Its proof-size gate remains held.
+
+The continuation separates native stream/focus/resize mechanics in terminal.rs,
+the VT screen and cache in terminal_screen.rs, presentation and pointer routing
+in terminal_view.rs, and operating-system text composition in terminal_input.rs.
+These are private native implementation modules behind the same registration
+boundary. No application contract, process owner or terminal parser was added.
+
+Selection uses Ghostty's tracked grid references and gesture operations. A
+selection change updates the selected column ranges separately from the retained
+cell arrays. The native background uses the reference selection color
+#53506a88. Copy formats the selected terminal text with wrapping removed; paste
+uses Ghostty's current bracketed-paste mode and sanitization. Linux uses
+Ctrl+Shift+C and Ctrl+Shift+V, while macOS uses its Command key. Clipboard text
+whose encoded form exceeds the existing 64 KiB terminal input limit is refused
+before invoking the input callback. Bracketed-paste markers count toward that
+limit. One accepted callback is not a claim of an atomic PTY write. Ctrl+C continues to be terminal input. Wheel input preserves fractional
+scroll movement; typing returns the viewport to the current screen.
+
+GPUI's native input handler retains a local UTF-16 composition preview and draws
+it at the actual terminal cursor. The running program receives only committed UTF-8
+text. Composition is limited to 64 KiB and one preview line, and candidate-window
+positioning uses the same font shaping as the preview. Terminal output is not
+an editable document: native replacement ranges refer to the active preview,
+and committed text goes to the existing terminal input path. Blur cancels the
+local preview. Operating-system IME activation and composition still require a
+real input-method journey; reducer tests and Unicode keysyms cannot prove it.
+
+Hidden terminal entities keep consuming the same bounded stream into their VT
+state. Output no longer constructs cell arrays in the stream callback. The next
+visible render snapshots the current screen, retaining unchanged rows. A pending
+geometry change can finish its one resize snapshot, but hidden output does not
+run a repeating snapshot or paint loop. Input and control retain their existing
+separate bounded queues. This is a source mechanism, not a measured latency or
+memory result.
+
+Each continuing pump iteration explicitly suspends its foreground future once
+before consuming another ready token. A queued token alone does not suspend an
+async task. The one-shot yield wakes its continuation and returns Pending once;
+it adds no idle polling or timer. Disconnect and completion return directly.
+This gives the event loop an opportunity to handle input and frames, but actual
+saturated-output responsiveness and latency still require native evidence.
+
+The extended maintained terminal-grid journey is prepared for native selection,
+copy/paste, continued hidden output, focused input in another Fleet, restored
+input to the same terminal, and actual split sizing. It has not run against the
+continuation source. The first corrective release remains pending independent
+source review. Performance, native agent behavior, additional terminal styles,
+complete lifecycle and platform acceptance remain open.
 
 `app/core-schema.cjs` extracts the used terminal run and attach types from the
 installed Core 0.1.16 schema, checking its SHA-256 before generating the Rust

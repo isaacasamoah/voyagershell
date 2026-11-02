@@ -16,10 +16,10 @@ def core_rpc(session, env, method, params):
 
 
 def prove(*, native, capture, geometry, close, start_frame, evidence, session, env, journey):
-    if journey in ("terminal", "portal-terminal"):
+    if journey in ("terminal", "portal-terminal", "terminal-grid"):
         from proof_terminal import terminal
 
-        return terminal(native, capture, geometry, close, evidence, session, env, portals=journey == "portal-terminal")
+        return terminal(native, capture, geometry, close, evidence, session, env, portals=journey == "portal-terminal", grid=journey == "terminal-grid")
     if journey == "workspace-unavailable":
         for _ in range(30):
             frame = capture("workspace-core-unavailable")
