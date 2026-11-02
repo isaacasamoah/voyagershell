@@ -78,20 +78,33 @@ class Pointer:
         x = float(x) / float(device_scale)
         y = float(y) / float(device_scale)
         matches = [
-            (stream, (x - position[0]) * scale, (y - position[1]) * scale)
+            (stream, position, size, scale)
             for stream, position, size, scale in self.streams
             if position[0] <= x < position[0] + size[0]
             and position[1] <= y < position[1] + size[1]
         ]
         if len(matches) != 1:
             raise ValueError("Pointer target is outside the monitor layout")
+        stream, position, size, scale = matches[0]
+        sent = [(x - position[0]) * scale, (y - position[1]) * scale]
+        before = time.monotonic()
         self.invoke(
             self.session,
             remote + ".Session",
             "NotifyPointerMotionAbsolute",
-            GLib.Variant("(sdd)", matches[0]),
+            GLib.Variant("(sdd)", (stream, *sent)),
         )
+        acknowledged = time.monotonic()
         time.sleep(0.08)
+        return {
+            "stream": stream,
+            "position": list(position),
+            "size": list(size),
+            "scale": scale,
+            "sent": sent,
+            "before": before,
+            "acknowledged": acknowledged,
+        }
 
     def button(self, pressed):
         self.invoke(

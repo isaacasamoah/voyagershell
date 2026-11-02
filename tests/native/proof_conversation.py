@@ -1,9 +1,493 @@
 import json
+import subprocess
+import sys
 import time
 from pathlib import Path
 from secrets import token_hex
 
+from PIL import ImageChops
+
 from proof_workspace import core_rpc, named_button
+
+
+def provider_processes(evidence):
+    providers = []
+    for process in Path("/proc").glob("[0-9]*"):
+        try:
+            if process.joinpath("cwd").resolve() == evidence / "profile/conversation":
+                stat = process.joinpath("stat").read_text().rsplit(") ", 1)[1].split()
+                providers.append(
+                    {
+                        "pid": int(process.name),
+                        "start": stat[19],
+                        "parent": int(stat[1]),
+                        "uid": process.stat().st_uid,
+                        "executable": str(process.joinpath("exe").resolve()),
+                        "cwd": str(process.joinpath("cwd").resolve()),
+                    }
+                )
+        except (FileNotFoundError, PermissionError):
+            pass
+    return providers
+
+
+def conversation_ux(
+    *, native, capture, geometry, close, evidence, session, env, click, type_text, read
+):
+    pid = json.loads((evidence / "launch.json").read_text())["pid"]
+    providers = []
+    errors = []
+    original_clipboard = None
+    clipboard_written = set()
+    clipboard_mutated = False
+
+    def document():
+        return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+
+    def wait(get, predicate, label, seconds=15):
+        end = time.monotonic() + seconds
+        value = None
+        while time.monotonic() < end:
+            value = get()
+            if value is not None and predicate(value):
+                return value
+            time.sleep(0.1)
+        raise AssertionError(f"Timed out waiting for {label}: {value}")
+
+    def fields(name):
+        return native("fields", pid, [name], "window")["fields"]
+
+    def input_value():
+        matches = fields("Message Voyager")
+        (evidence / "conversation-ux-input-fields.json").write_text(
+            json.dumps(matches, indent=2)
+        )
+        return matches[0] if len(matches) == 1 else None
+
+    def focus_input():
+        native("focus", pid, "Message Voyager", 0)
+        wait(input_value, lambda item: item["focused"], "focused chat input")
+
+    def clipboard_output():
+        return subprocess.run(
+            ["xsel", "--clipboard", "--output", "--selectionTimeout", "2000"],
+            env=env,
+            capture_output=True,
+            check=True,
+            timeout=4,
+        ).stdout
+
+    def clipboard_write(value):
+        nonlocal clipboard_mutated
+        assert clipboard_output() in clipboard_written, "Clipboard changed externally"
+        clipboard_mutated = True
+        clipboard_written.add(value)
+        subprocess.run(
+            ["xsel", "--clipboard", "--input"],
+            input=value,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=True,
+            timeout=4,
+        )
+        wait(clipboard_output, lambda current: current == value, "clipboard write", 5)
+
+    def copied_text(expected):
+        focus_input()
+        sentinel = ("voyager-clipboard-" + token_hex(16)).encode()
+        clipboard_write(sentinel)
+        native("key", 65507, True)
+        for key in (ord("a"), ord("c")):
+            native("key", key, True)
+            native("key", key, False)
+        native("key", 65507, False)
+        native("key", 65367, True)
+        native("key", 65367, False)
+        clipboard_written.add(expected.encode())
+        copied = wait(
+            clipboard_output, lambda value: value != sentinel, "editor copy", 5
+        )
+        assert copied == expected.encode(), "Copied editor text did not match"
+
+    try:
+        initial = wait(
+            document,
+            lambda doc: bool(doc["value"]["contents"][0].get("backend")),
+            "bound terminal",
+        )
+        fleet = initial["value"]["selectedFleet"]
+        vessel = initial["value"]["voyages"][0]["fleets"][0]["vessels"][0]["id"]
+        target = wait(
+            lambda: fields("Vessel dock"),
+            lambda items: (
+                len(items) == 1 and items[0]["width"] > 0 and items[0]["height"] > 0
+            ),
+            "Vessel dock",
+        )
+        native("focus", pid, "Vessel dock", 0)
+        wait(
+            lambda: fields("Vessel dock"),
+            lambda items: len(items) == 1 and items[0]["focused"],
+            "focused Vessel dock",
+        )
+        native("key", 65505, True)
+        native("key", 65293, True)
+        native("key", 65293, False)
+        native("key", 65505, False)
+        scoped = wait(
+            document,
+            lambda doc: doc["value"]["context"] == {"kind": "vessel", "id": vessel},
+            "Vessel context",
+        )
+        click(*named_button(native, evidence, "Chat"))
+        idle = wait(read, lambda state: state["phase"] == "idle", "idle chat")
+        assert idle["thread"] is None
+        wayland_env = dict(env, WAYLAND_DISPLAY=env["VOYAGER_PROOF_WAYLAND_DISPLAY"])
+        types = (
+            subprocess.run(
+                ["wl-paste", "--list-types"],
+                env=wayland_env,
+                capture_output=True,
+                check=True,
+                timeout=4,
+            )
+            .stdout.decode()
+            .splitlines()
+        )
+        advertised = types
+        transfer_targets = {
+            "SAVE_TARGETS",
+            "TARGETS",
+            "INCR",
+            "DELETE",
+            "MULTIPLE",
+            "TIMESTAMP",
+        }
+        types = [kind for kind in types if kind not in transfer_targets]
+        assert types and all(
+            kind in {"UTF8_STRING", "TEXT", "STRING"}
+            or kind.lower() in {"text/plain", "text/plain;charset=utf-8"}
+            for kind in types
+        ), f"Clipboard is not known plain text: {types}"
+        original_clipboard = clipboard_output()
+        original_clipboard.decode("utf-8")
+        representations = []
+        for kind in types:
+            try:
+                result = subprocess.run(
+                    ["wl-paste", "--no-newline", "--type", kind],
+                    env=wayland_env,
+                    capture_output=True,
+                    check=False,
+                    timeout=4,
+                )
+                representations.append(
+                    {
+                        "type": kind,
+                        "length": len(result.stdout),
+                        "match": result.returncode == 0
+                        and result.stdout == original_clipboard,
+                    }
+                )
+            except subprocess.TimeoutExpired:
+                representations.append({"type": kind, "length": None, "match": False})
+        (evidence / "conversation-ux-clipboard-types.json").write_text(
+            json.dumps(
+                {
+                    "advertisedTypes": advertised,
+                    "xselLength": len(original_clipboard),
+                    "representations": representations,
+                    "restores": "text bytes only; MIME aliases and owner are not preserved",
+                },
+                indent=2,
+            )
+        )
+        assert any(
+            item["match"]
+            and item["type"].lower() in {"text/plain", "text/plain;charset=utf-8"}
+            for item in representations
+        ), "No canonical Wayland plain-text representation matched X11"
+        clipboard_written.add(original_clipboard)
+        try:
+            wait(
+                input_value,
+                lambda item: item["width"] > 0 and item["height"] > 0,
+                "chat input",
+            )
+        except AssertionError:
+            try:
+                all_fields = native("fields", pid, None, "window")["fields"]
+                (evidence / "conversation-ux-all-fields.json").write_text(
+                    json.dumps(all_fields, indent=2)
+                )
+            except Exception as error:
+                print(f"Accessibility diagnostic failed: {error}", file=sys.stderr)
+            raise
+        focus_input()
+        prompt = (
+            "Reply with twelve short numbered lines about a quiet ocean. Use no tools."
+        )
+        type_text(prompt)
+        copied_text(prompt)
+        capture("conversation-ux-vessel-draft")
+        click(*named_button(native, evidence, "Send"))
+        wait(read, lambda state: state["turn"] is not None, "started turn")
+        providers = wait(
+            lambda: provider_processes(evidence), bool, "provider identity"
+        )
+        (evidence / "provider-processes.json").write_text(
+            json.dumps(providers, indent=2)
+        )
+        final = wait(
+            read,
+            lambda state: state["phase"] in ("completed", "failed", "unconfirmed"),
+            "completed turn",
+            90,
+        )
+        assert (
+            final["phase"] == "completed"
+            and final["thread"]
+            and final["turn"]
+            and final["model"]
+            and not final["limited"]
+        ), final
+        users = [message for message in final["messages"] if message["role"] == "user"]
+        answers = [
+            message for message in final["messages"] if message["role"] == "assistant"
+        ]
+        assert len(users) == 1 and users[0]["text"] == prompt and answers
+        assert all(answer["text"].strip() for answer in answers), answers
+        assert all(
+            answer["requestId"] == users[0]["requestId"]
+            and answer["context"] == users[0]["context"]
+            for answer in answers
+        )
+        assert (
+            users[0]["context"]["scope"] == scoped["value"]["context"]
+            and users[0]["context"]["revision"].isdigit()
+        )
+        assert not [
+            message for message in final["messages"] if message["role"] == "tool"
+        ]
+        assert sum(len(answer["text"].splitlines()) for answer in answers) >= 12, (
+            answers
+        )
+        scroll_layout = document()
+        core_before = core_rpc(session, env, "server.status", {})
+        terminal_id = initial["value"]["contents"][0]["backend"]
+        terminal_before = core_rpc(
+            session, env, "terminal.get", {"terminal": terminal_id}
+        )
+        field = input_value()
+        bounds = geometry()
+        width, height = int(bounds["WIDTH"]), int(bounds["HEIGHT"])
+        x = field["x"] + field["width"] / 2
+        y = field["y"] - 100
+        assert 0 < x < width and 0 < y < height, field
+        native("move", int(bounds["X"]) + round(x), int(bounds["Y"]) + round(y), 2)
+        frames = [capture("conversation-ux-scroll-start")]
+        crop = (
+            round(field["x"] * frames[0].width / width),
+            round(max(0, field["y"] - 250) * frames[0].height / height),
+            round((field["x"] + field["width"]) * frames[0].width / width),
+            round((field["y"] - 20) * frames[0].height / height),
+        )
+        assert crop[0] < crop[2] and crop[1] < crop[3], crop
+        differences = {}
+        for direction, delta in (("down", 96), ("up", -96)):
+            for _ in range(8):
+                native("scroll", delta, 0)
+                time.sleep(0.08)
+            native("scroll", 0, 1)
+            time.sleep(0.3)
+            frames.append(capture("conversation-ux-scroll-" + direction))
+            differences[direction] = ImageChops.difference(
+                frames[-2].crop(crop), frames[-1].crop(crop)
+            ).getbbox()
+            assert differences[direction], differences
+        core_after = core_rpc(session, env, "server.status", {})
+        terminal_after = core_rpc(
+            session, env, "terminal.get", {"terminal": terminal_id}
+        )
+        assert document() == scroll_layout
+        assert (core_before["pid"], core_before["core"]["id"]) == (
+            core_after["pid"],
+            core_after["core"]["id"],
+        )
+        assert terminal_before["pid"] == terminal_after["pid"]
+        assert read()["messages"] == final["messages"]
+        (evidence / "conversation-ux-scroll.json").write_text(
+            json.dumps(
+                {
+                    "field": field,
+                    "point": [x, y],
+                    "crop": crop,
+                    "differences": differences,
+                    "layout": scroll_layout,
+                    "coreBefore": core_before,
+                    "coreAfter": core_after,
+                    "terminalBefore": terminal_before,
+                    "terminalAfter": terminal_after,
+                },
+                indent=2,
+            )
+        )
+        draft = "Keep this draft"
+        focus_input()
+        type_text(draft)
+        copied_text(draft)
+        click(*named_button(native, evidence, "Toggle sidebar"))
+        collapsed = wait(
+            document,
+            lambda doc: doc["value"]["context"] == {"kind": "fleet", "id": fleet},
+            "collapsed Fleet context",
+        )
+        copied_text(draft)
+        capture("conversation-ux-collapsed")
+        toggles = wait(
+            lambda: fields("Close chat"),
+            lambda items: (
+                len(items) == 2
+                and all(
+                    item["role"] in ("push button", "button")
+                    and item["width"] > 0
+                    and item["height"] > 0
+                    for item in items
+                )
+            ),
+            "two Close chat controls",
+        )
+        toggles.sort(key=lambda item: item["width"])
+        assert toggles[0]["width"] < toggles[1]["width"], toggles
+        fleet_dock = wait(
+            lambda: fields("Fleet dock"),
+            lambda items: len(items) == 1 and items[0]["height"] > 0,
+            "compact Fleet dock",
+        )[0]
+        assert toggles[1]["y"] >= fleet_dock["y"] + fleet_dock["height"], (
+            "Compact chat overlaps its Fleet dock"
+        )
+        toggle = toggles[0]
+        click(
+            (toggle["x"] + toggle["width"] / 2) / 2,
+            (toggle["y"] + toggle["height"] / 2) / 2,
+        )
+        wait(lambda: fields("Message Voyager"), lambda items: not items, "closed chat")
+        click(*named_button(native, evidence, "Chat"))
+        copied_text(draft)
+        capture("conversation-ux-reopened")
+        click(*named_button(native, evidence, "Toggle sidebar"))
+        expanded = wait(
+            document,
+            lambda doc: doc["value"]["context"] == {"kind": "workspace"},
+            "expanded Workspace context",
+        )
+        copied_text(draft)
+        after = read()
+        assert (
+            len([message for message in after["messages"] if message["role"] == "user"])
+            == 1
+        )
+        assert after["thread"] == final["thread"] and after["turn"] == final["turn"]
+        assert after["messages"] == final["messages"]
+        capture("conversation-ux-expanded")
+        click(*named_button(native, evidence, "Home"))
+        home = wait(document, lambda doc: doc["value"].get("view") == "home", "Home")
+        assert home["value"]["context"] == expanded["value"]["context"]
+        assert home["value"]["contents"] == expanded["value"]["contents"]
+        copied_text(draft)
+        home_chat = read()
+        assert home_chat["messages"] == final["messages"]
+        assert (
+            home_chat["thread"] == final["thread"]
+            and home_chat["turn"] == final["turn"]
+        )
+        capture("conversation-ux-home")
+        (evidence / "conversation-ux-observed.json").write_text(
+            json.dumps(
+                {
+                    "target": target,
+                    "initial": initial,
+                    "scoped": scoped,
+                    "collapsed": collapsed,
+                    "expanded": expanded,
+                    "home": home,
+                    "final": final,
+                    "after": after,
+                    "closeControls": toggles,
+                    "fleetDock": fleet_dock,
+                },
+                indent=2,
+            )
+        )
+        return [
+            "native-vessel-scoped-turn",
+            "native-live-chat-scroll-both-directions",
+            "collapsed-chat-draft-reopened",
+            "expanded-history-retained",
+            "home-retained-chat-and-context",
+        ]
+    finally:
+        primary = sys.exc_info()[0] is not None
+        observations = []
+        if original_clipboard is not None and clipboard_mutated:
+            try:
+                clipboard_write(original_clipboard)
+            except Exception as error:
+                errors.append(f"clipboard restore: {error}")
+        try:
+            for provider in provider_processes(evidence):
+                if provider not in providers:
+                    providers.append(provider)
+        except Exception as error:
+            errors.append(f"provider scan: {error}")
+
+        def stop_core():
+            socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
+            if socket.is_socket():
+                core_rpc(session, env, "server.stop", {})
+
+        for name, action in (("quit", close), ("core", stop_core)):
+            try:
+                action()
+            except Exception as error:
+                errors.append(f"{name}: {error}")
+        for provider in providers:
+            path = Path("/proc") / str(provider["pid"])
+            try:
+                for _ in range(50):
+                    if not path.exists():
+                        observations.append({"provider": provider, "state": "absent"})
+                        break
+                    stat = path.joinpath("stat").read_text().rsplit(") ", 1)[1].split()
+                    if stat[19] != provider["start"] or stat[0] == "Z":
+                        observations.append(
+                            {
+                                "provider": provider,
+                                "state": "reused"
+                                if stat[19] != provider["start"]
+                                else "zombie",
+                            }
+                        )
+                        break
+                    time.sleep(0.1)
+                else:
+                    errors.append(f"provider survived Quit: {provider}")
+            except FileNotFoundError:
+                observations.append({"provider": provider, "state": "absent"})
+            except Exception as error:
+                errors.append(f"provider observation: {error}")
+        try:
+            (evidence / "conversation-ux-cleanup.json").write_text(
+                json.dumps({"errors": errors, "providers": observations}, indent=2)
+            )
+        except Exception as error:
+            errors.append(f"cleanup receipt: {error}")
+        if errors and primary:
+            print(f"Conversation cleanup errors: {errors}", file=sys.stderr)
+        if errors and not primary:
+            raise AssertionError(f"Conversation cleanup failed: {errors}")
 
 
 def prove(
@@ -35,6 +519,20 @@ def prove(
         for character in text:
             native("key", ord(character), True)
             native("key", ord(character), False)
+
+    if journey == "conversation-ux":
+        return conversation_ux(
+            native=native,
+            capture=capture,
+            geometry=geometry,
+            close=close,
+            evidence=evidence,
+            session=session,
+            env=env,
+            click=click,
+            type_text=type_text,
+            read=read,
+        )
 
     process_case = journey == "conversation-process"
     administrator = journey in ("conversation-administrator", "conversation-process")
@@ -117,23 +615,7 @@ def prove(
             time.sleep(0.05)
         (evidence / "process-job-ready.json").write_text(json.dumps(job, indent=2))
         capture("administrator-process-job-ready")
-    providers = []
-    for process in Path("/proc").glob("[0-9]*"):
-        try:
-            if process.joinpath("cwd").resolve() == evidence / "profile/conversation":
-                stat = process.joinpath("stat").read_text().rsplit(") ", 1)[1].split()
-                providers.append(
-                    {
-                        "pid": int(process.name),
-                        "start": stat[19],
-                        "parent": int(stat[1]),
-                        "uid": process.stat().st_uid,
-                        "executable": str(process.joinpath("exe").resolve()),
-                        "cwd": str(process.joinpath("cwd").resolve()),
-                    }
-                )
-        except (FileNotFoundError, PermissionError):
-            pass
+    providers = provider_processes(evidence)
     assert providers, "Native provider process identity was not observed"
     (evidence / "provider-processes.json").write_text(json.dumps(providers, indent=2))
     if journey == "conversation-interrupt":

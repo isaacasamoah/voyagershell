@@ -51,27 +51,40 @@ def fields(pid, names=("Note title", "Note text"), coordinate_space="screen"):
         visited += 1
         assert visited <= 512, "Unexpectedly large candidate accessibility tree"
         name = node.get_name()
-        if name in names:
+        if names is None or name in names:
             coordinates = {
                 "screen": Atspi.CoordType.SCREEN,
                 "window": Atspi.CoordType.WINDOW,
             }
-            rectangle = node.get_component_iface().get_extents(
-                coordinates[coordinate_space]
-            )
-            value = node.get_text_iface().get_text(0, -1) if node.is_text() else None
+            try:
+                rectangle = node.get_component_iface().get_extents(
+                    coordinates[coordinate_space]
+                )
+            except Exception:
+                if names is not None:
+                    raise
+                rectangle = None
+            try:
+                value = (
+                    node.get_text_iface().get_text(0, -1) if node.is_text() else None
+                )
+            except Exception:
+                if names is not None:
+                    raise
+                value = None
             metadata = {
                 "name": name,
                 "role": node.get_role_name(),
+                "description": node.get_description(),
                 "value": value,
-                "x": rectangle.x,
-                "y": rectangle.y,
-                "width": rectangle.width,
-                "height": rectangle.height,
+                "x": rectangle.x if rectangle else None,
+                "y": rectangle.y if rectangle else None,
+                "width": rectangle.width if rectangle else None,
+                "height": rectangle.height if rectangle else None,
                 "focused": node.get_state_set().contains(Atspi.StateType.FOCUSED),
             }
             result.append((node, metadata))
         pending.extend(
             node.get_child_at_index(index) for index in range(node.get_child_count())
         )
-    return sorted(result, key=lambda item: (item[1]["x"], item[1]["y"]))
+    return sorted(result, key=lambda item: (item[1]["x"] or 0, item[1]["y"] or 0))

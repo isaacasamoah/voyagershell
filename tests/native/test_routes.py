@@ -1,6 +1,8 @@
 import importlib
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -41,6 +43,9 @@ class Routes(unittest.TestCase):
     def test_each_explicit_route_keeps_its_driver_help(self):
         for route, option in [
             ("--foundation", "conversation-stop"),
+            ("--foundation", "conversation-ux"),
+            ("--foundation", "avatar"),
+            ("--foundation", "portal-avatar"),
             ("--native-mod-host", "--notes-case"),
             ("--native-avatar", "--reduced-motion"),
             ("--reference", "--direct-controls"),
@@ -49,6 +54,52 @@ class Routes(unittest.TestCase):
                 result = self.run_cli(route, "--help")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(option, result.stdout)
+
+    def test_avatar_routes_require_compositor_before_launch(self):
+        for route in ("avatar", "portal-avatar"):
+            result = self.run_cli(
+                "--foundation",
+                "--journey",
+                route,
+                "--session",
+                "voyager-route-test",
+                "--evidence",
+                "/tmp/unused-avatar-route-test",
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("require compositor capture", result.stderr)
+
+    def test_avatar_routes_refuse_fixed_core_socket_before_launch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for route in ("avatar", "portal-avatar", "conversation-ux"):
+                environment = dict(os.environ, HC_SOCKET="/tmp/not-a-test-session")
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(ROOT / "prove.py"),
+                        "--foundation",
+                        "--journey",
+                        route,
+                        "--compositor",
+                        "--launch",
+                        "--binary",
+                        sys.executable,
+                        "--session",
+                        "voyager-route-test",
+                        "--evidence",
+                        str(Path(directory) / route),
+                    ],
+                    cwd=ROOT,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    timeout=15,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("unset HC_SOCKET before launch", result.stderr)
+                self.assertFalse(
+                    (Path(directory) / route / "launch-pending.json").exists()
+                )
 
     def test_moved_paths_keep_native_helpers_and_legacy_candidate_identity(self):
         driver = importlib.import_module("proof_native_mod_host")
@@ -64,6 +115,7 @@ class Routes(unittest.TestCase):
             "proof_terminal",
             "proof_terminal_agent",
             "proof_selected_stop",
+            "proof_avatar",
             "proof_conversation",
             "proof_conversation_scroll",
         ):
