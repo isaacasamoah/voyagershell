@@ -45,6 +45,13 @@ function fixture() {
   const Workspace = vm.runInNewContext(`${source}\nWorkspace`, {
     View: class {},
     div,
+    Button: {
+      new() {
+        const button = div();
+        button.sourceKind = "native-button";
+        return button;
+      },
+    },
     NameState: { new: state },
     Name: { new: div },
     Chat: vm.runInNewContext(
@@ -101,11 +108,16 @@ test("F2 targets are tab stops and a plus name keeps its accessible name", async
     target,
   );
   assert.equal(button.accessibility_label, "+");
+  assert.equal(button.sourceKind, "native-button");
   assert.equal(button.tab_stop, true);
   assert.equal(
     view.action("+", null, false, { kind: "portal", id: "portal-1" })
       .accessibility_label,
     "+",
+  );
+  assert.notEqual(
+    view.action("Refresh", { operation: "inspect" }).sourceKind,
+    "native-button",
   );
   button.on_key_down({ key: "f2" }, cx);
   assert.ok(view.editing);
@@ -177,4 +189,25 @@ test("an edit back to the old label after refresh is a new intent", async () => 
   assert.equal(calls.at(-1).operation, "rename");
   assert.equal(calls.at(-1).name, "Original");
   await reply();
+});
+
+test("missing owner references fail with explicit invariant errors", async () => {
+  const { view, cx, reply, layout } = fixture();
+  await reply();
+  assert.throws(
+    () => view.pane({ kind: "leaf", placement: "missing" }, { vessels: [] }),
+    /Split placement is unavailable/,
+  );
+  layout.contents = [];
+  assert.throws(
+    () =>
+      view.content({ content: "missing" }, { kind: "vessel", id: "missing" }),
+    /Placement content is unavailable/,
+  );
+  view.editName({ kind: "fleet", id: "missing" }, "Original", cx);
+  view.editing.state.text = "Changed";
+  assert.throws(
+    () => view.editing.state.events.blur(null, cx),
+    /Rename target has no retained name/,
+  );
 });

@@ -5,7 +5,8 @@ use voyager_contract::conversation::Request;
 pub fn module(client: Client) -> HostModule {
     let identity = client.clone();
     let calls = client.clone();
-    HostModule::new("voyager_conversation")
+    HostModule::new(crate::script_types::CONVERSATION_MODULE)
+        .declarations(crate::script_types::CONVERSATION)
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
         })

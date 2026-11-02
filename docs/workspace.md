@@ -72,3 +72,22 @@ including its document schema and plain/framed protocol; GPUI Shell at
 including asynchronous host functions and retained views. The accepted native
 header supplies hosting and last-good reload behavior. This checkpoint does not
 claim new platform support or a measured performance improvement.
+
+## Script authoring and checking
+
+The repository authors the workspace composition, Home and chat in TypeScript.
+The profile receives the emitted JavaScript through the existing seed-once and
+live-edit path. Contract generation produces typed workspace and conversation
+wrappers alongside their runtime validators. Run `npm run contract:generate` after
+changing contracts and `npm run scripts:generate` after changing composition or
+native registrations. `npm test` checks strict types and emitted-file drift before
+the controller and validator tests. This headless check requires the Rust toolchain
+and GPUI's native linker libraries; it does not create a window or establish native
+interaction behavior.
+
+The exporter obtains declarations from the real Name, Terminal and arrangement
+registrations, plus declarations attached to the runtime host modules. It retains
+the raw declaration hash and the transitive imported-module slice. The slice is
+checked without skipping library declarations. The pinned Shell's invalid
+`ElementBounds` extension is converted to an equivalent intersection only when
+its expected exact form appears. Missing or changed declarations fail the check.

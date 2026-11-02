@@ -8,6 +8,7 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
     let mut scoped = Layout {
         context: scope.clone(),
         next_id: layout.next_id,
+        view: layout.view.clone(),
         ..Layout::default()
     };
     for voyage in &layout.voyages {
@@ -63,6 +64,20 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
         })
         .cloned()
         .collect();
+    if matches!(scope, Context::Voyage { .. } | Context::Fleet { .. }) {
+        scoped.saved_layouts = layout
+            .saved_layouts
+            .iter()
+            .filter(|saved| {
+                scoped
+                    .voyages
+                    .iter()
+                    .flat_map(|voyage| &voyage.fleets)
+                    .any(|fleet| fleet.id == saved.fleet)
+            })
+            .cloned()
+            .collect();
+    }
     scoped.selected_voyage = layout
         .selected_voyage
         .as_ref()
@@ -102,8 +117,25 @@ pub(crate) fn check(
             .find(|fleet| &fleet.id == id)
     };
     let allowed = match action {
-        Action::Inspect | Action::Dock { .. } => true,
+        Action::Inspect | Action::Dock { .. } | Action::Home => true,
+        Action::SaveLayout { fleet: id, .. } | Action::LoadLayout { fleet: id, .. } => {
+            matches!(scope, Context::Voyage { .. } | Context::Fleet { .. }) && fleet(id).is_some()
+        }
         Action::CreateVoyage { .. } => false,
+        Action::MoveVoyage { .. } => false,
+        Action::MoveFleet { id, target, .. } => {
+            matches!(scope, Context::Voyage { .. })
+                && fleet(id).is_some()
+                && fleet(target).is_some()
+        }
+        Action::MoveVessel { id, target, .. } => scoped
+            .voyages
+            .iter()
+            .flat_map(|voyage| &voyage.fleets)
+            .any(|fleet| {
+                fleet.vessels.iter().any(|item| &item.id == id)
+                    && fleet.vessels.iter().any(|item| &item.id == target)
+            }),
         Action::CreateFleet { voyage, .. } | Action::SelectVoyage { id: voyage } => {
             matches!(scope, Context::Voyage { id } if id == voyage)
         }

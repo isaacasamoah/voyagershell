@@ -14,6 +14,42 @@ test("generated wire validator rejects a forged caller and malformed split", asy
     request({
       ...valid,
       action: {
+        operation: "move-voyage",
+        id: "v1",
+        target: "v2",
+        before: true,
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    request({
+      ...valid,
+      action: {
+        operation: "move-fleet",
+        id: "f1",
+        target: "f2",
+        before: "yes",
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    request({
+      ...valid,
+      action: {
+        operation: "move-vessel",
+        id: "p1",
+        target: "p2",
+        side: "diagonal",
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    request({
+      ...valid,
+      action: {
         operation: "split",
         fleet: "fleet-1",
         after: "placement-1",

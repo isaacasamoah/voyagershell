@@ -1,8 +1,17 @@
 from pathlib import Path
 
 
-def process_identity(pid):
+def process_identity(pid, *, metadata_only=False):
     process = Path(f"/proc/{pid}")
+    if metadata_only:
+        return {
+            "uid": process.stat().st_uid,
+            "start": process.joinpath("stat")
+            .read_text()
+            .rsplit(") ", 1)[1]
+            .split()[19],
+            "executable": str(process.joinpath("exe").resolve(strict=True)),
+        }
     key = b"VOYAGER_WORKSPACE_SESSION="
     session = next(
         value[len(key) :].decode()

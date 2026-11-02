@@ -4,6 +4,61 @@ import time
 from pathlib import Path
 
 
+def chord(native, character):
+    native("key", 65507, True)
+    native("key", 65505, True)
+    native("key", ord(character), True)
+    native("key", ord(character), False)
+    native("key", 65505, False)
+    native("key", 65507, False)
+
+
+def named_button(native, evidence, name, edge=None):
+    owner = json.loads((evidence / "launch.json").read_text())["pid"]
+    path = evidence / "named-buttons.json"
+    targets = json.loads(path.read_text()) if path.exists() else []
+    deadline = time.monotonic() + 5
+    while True:
+        fields = native("fields", owner, [name], "window")["fields"]
+        (evidence / "named-button-last.json").write_text(
+            json.dumps({"name": name, "fields": fields}, indent=2)
+        )
+        if (
+            len(fields) == 1
+            and fields[0]["width"] > 0
+            and fields[0]["height"] > 0
+            and fields[0]["role"] in ("push button", "button")
+        ):
+            break
+        assert time.monotonic() < deadline, f"No unique native button {name}: {fields}"
+        time.sleep(0.05)
+    item = fields[0]
+    targets.append(item)
+    path.write_text(json.dumps(targets, indent=2))
+    x = item["x"] + (2 if edge == "left" else item["width"] / 2)
+    y = item["y"] + (2 if edge == "top" else item["height"] / 2)
+    return x / 2, y / 2
+
+
+def create_voyage(capture, click, evidence):
+    frame = capture("before-create-voyage")
+    assert frame.size == (1450, 940), (
+        "The measured +Voyage position needs the observed viewport"
+    )
+    (evidence / "create-voyage-point.json").write_text(
+        json.dumps(
+            {
+                "capture": "before-create-voyage",
+                "measuredFrom": "/var/tmp/voyager-working-core-layouts-01/layouts-stopped-terminal-compositor.png",
+                "viewport": list(frame.size),
+                "point": [65, 302],
+            },
+            indent=2,
+        )
+    )
+    click(65, 302)
+
+
 def core_rpc(session, env, method, params):
     request = json.dumps(
         {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
@@ -29,8 +84,14 @@ def prove(
         from proof_conversation import prove as conversation
 
         return conversation(
-            native=native, capture=capture, geometry=geometry, close=close,
-            start_frame=start_frame, evidence=evidence, session=session, env=env,
+            native=native,
+            capture=capture,
+            geometry=geometry,
+            close=close,
+            start_frame=start_frame,
+            evidence=evidence,
+            session=session,
+            env=env,
             journey=journey,
         )
     if journey in ("terminal", "portal-terminal", "terminal-grid"):
@@ -107,6 +168,22 @@ def prove(
         assert before == after, "Schema check changed dedicated Core identity"
     assert len(initial["value"]["voyages"]) == 1, "Use a new isolated workspace"
     original = initial["value"]["voyages"][0]
+    if journey == "layouts":
+        return layouts(native, capture, click, wait, state, rpc, close, start_frame, original, width, height, evidence)
+    if journey == "arrangement":
+        return arrangement(
+            native,
+            capture,
+            geometry,
+            click,
+            wait,
+            state,
+            rpc,
+            close,
+            width,
+            height,
+            evidence,
+        )
     if journey == "placement":
         return placement(
             native,
@@ -127,7 +204,7 @@ def prove(
     click(367, 30)
     created = wait(lambda layout: len(layout["voyages"][0]["fleets"]) == 2)
     second = created["value"]["voyages"][0]["fleets"][1]
-    click(width - 40, height - 37)
+    chord(native, "o")
     split = wait(lambda layout: len(layout["voyages"][0]["fleets"][1]["vessels"]) == 2)
     assert (
         split["value"]["voyages"][0]["fleets"][1]["vessels"][0] == second["vessels"][0]
@@ -136,18 +213,18 @@ def prove(
     click(width - 40, 80)
     docked = wait(lambda layout: layout["context"]["kind"] == "vessel")
     context = docked["value"]["context"]
-    click(275, 30)
+    click(*named_button(native, evidence, "Workbench"))
     selected = wait(
         lambda layout: layout["selectedFleet"] == original["fleets"][0]["id"]
     )
     assert selected["value"]["context"] == context, (
         "Navigation changed explicit context"
     )
-    click(65, 233)
+    create_voyage(capture, click, evidence)
     added = wait(lambda layout: len(layout["voyages"]) == 2)
     capture("workspace-new-voyage")
     assert added["value"]["context"] == context
-    click(80, 186)
+    click(*named_button(native, evidence, original["name"]))
     selected = wait(lambda layout: layout["selectedVoyage"] == original["id"])
     bumped = rpc(
         "doc.set",
@@ -167,7 +244,7 @@ def prove(
     capture("workspace-stale-refused")
     (evidence / "workspace-stale.json").write_text(json.dumps(refused, indent=2))
     click(270, height - 30)
-    click(width - 40, height - 37)
+    chord(native, "o")
     repaired = wait(
         lambda layout: len(layout["voyages"][0]["fleets"][0]["vessels"]) == 2
     )
@@ -182,6 +259,185 @@ def prove(
         "context-independent-of-navigation",
         "stale-layout-refused-and-refreshed",
         "saved-workspace-reopened",
+        "native-quit",
+    ]
+
+
+def arrangement(
+    native, capture, geometry, click, wait, state, rpc, close, width, height, evidence
+):
+    def key(value):
+        native("key", value, True)
+        native("key", value, False)
+
+    def move(x, y):
+        bounds = geometry()
+        native(
+            "move", int(bounds["X"]) + round(x * 2), int(bounds["Y"]) + round(y * 2), 2
+        )
+
+    def drag(source, target, cancel=False):
+        move(*source)
+        native("button", True)
+        try:
+            for step in range(1, 16):
+                move(
+                    source[0] + (target[0] - source[0]) * step / 15,
+                    source[1] + (target[1] - source[1]) * step / 15,
+                )
+            capture("arrangement-preview")
+            if cancel:
+                screen = rpc("terminal.read", {"terminal": address})["text"]
+                (evidence / "arrangement-escape-pending.json").write_text(
+                    json.dumps({"address": address, "screen": screen}, indent=2)
+                )
+                assert not any(
+                    line.startswith("ESCSTATUS:") for line in screen.splitlines()
+                ), "Escape input check finished before cancellation"
+                key(65307)
+        finally:
+            native("button", False)
+
+    ready = wait(lambda layout: layout["contents"] and layout["contents"][0]["backend"])
+    address = ready["value"]["contents"][0]["backend"]
+    pid = rpc("terminal.get", {"terminal": address})["pid"]
+    assert pid
+    click(350, 190)
+    chord(native, "o")
+    split = wait(
+        lambda layout: (
+            len(layout["voyages"][0]["fleets"][0]["vessels"]) == 2
+            and all(content["backend"] for content in layout["contents"])
+        )
+    )
+    fleet = split["value"]["voyages"][0]["fleets"][0]
+    first = fleet["vessels"][0]["id"]
+    second = fleet["vessels"][1]["id"]
+    capture("arrangement-before")
+    drag((width - 150, 90), (240, height / 2))
+    moved = wait(
+        lambda layout: (
+            (root := layout["voyages"][0]["fleets"][0]["root"])["kind"] == "branch"
+            and root["axis"] == "horizontal"
+            and root["first"].get("placement") == second
+            and root["second"].get("placement") == first
+        )
+    )
+    assert moved["value"]["contents"] == split["value"]["contents"]
+    assert moved["value"]["context"] == split["value"]["context"]
+    assert rpc("terminal.get", {"terminal": address})["pid"] == pid
+    click(width - 150, 190)
+    for (
+        character
+    ) in "printf 'ESC%s\\n' WAIT; read -rsn1 -t 5 x; printf 'ESC%s:%s\\n' STATUS $?":
+        key(ord(character))
+    key(65293)
+    for _ in range(50):
+        if (
+            "ESCWAIT"
+            in rpc("terminal.read", {"terminal": address})["text"].splitlines()
+        ):
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("Terminal did not enter the Escape input check")
+    drag((350, 90), (width - 150, 150), cancel=True)
+    assert state() == moved
+    for _ in range(70):
+        if (
+            "ESCSTATUS:142"
+            in rpc("terminal.read", {"terminal": address})["text"].splitlines()
+        ):
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError(
+            "Escape reached the terminal or the input check did not finish"
+        )
+    capture("arrangement-after-escape")
+    drag((350, 90), (370, 100))
+    assert state() == moved
+    capture("arrangement-after-self-drop")
+    drag((350, 90), (width + 10, height / 2))
+    assert state() == moved
+    capture("arrangement-after-outside-release")
+    click(width - 150, 190)
+    for character in "printf 'ARRANGED\\n'":
+        key(ord(character))
+    key(65293)
+    for _ in range(50):
+        if (
+            "ARRANGED"
+            in rpc("terminal.read", {"terminal": address})["text"].splitlines()
+        ):
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("Moved terminal did not receive real input")
+    chord(native, "t")
+    added = wait(
+        lambda layout: (
+            len(layout["voyages"][0]["fleets"]) == 2
+            and all(content["backend"] for content in layout["contents"])
+        )
+    )
+    first_fleet, second_fleet = [
+        item["id"] for item in added["value"]["voyages"][0]["fleets"]
+    ]
+    drag(
+        named_button(native, evidence, "Fleet 2"),
+        named_button(native, evidence, "Workbench", "left"),
+    )
+    reordered = wait(
+        lambda layout: (
+            [item["id"] for item in layout["voyages"][0]["fleets"]]
+            == [second_fleet, first_fleet]
+        )
+    )
+    assert reordered["value"]["contents"] == added["value"]["contents"]
+    create_voyage(capture, click, evidence)
+    added_voyage = wait(
+        lambda layout: (
+            len(layout["voyages"]) == 2
+            and all(content["backend"] for content in layout["contents"])
+        )
+    )
+    first_voyage, second_voyage = [
+        item["id"] for item in added_voyage["value"]["voyages"]
+    ]
+    drag(
+        named_button(native, evidence, "Voyage 2"),
+        named_button(native, evidence, "Voyager", "top"),
+    )
+    reordered_voyages = wait(
+        lambda layout: (
+            [item["id"] for item in layout["voyages"]] == [second_voyage, first_voyage]
+        )
+    )
+    assert reordered_voyages["value"]["contents"] == added_voyage["value"]["contents"]
+    assert rpc("terminal.get", {"terminal": address})["pid"] == pid
+    capture("arrangement-complete")
+    (evidence / "arrangement-observed.json").write_text(
+        json.dumps(
+            {
+                "before": split,
+                "moved": moved,
+                "fleets": reordered,
+                "voyages": reordered_voyages,
+                "address": address,
+                "pid": pid,
+            },
+            indent=2,
+        )
+    )
+    close()
+    rpc("server.stop", {})
+    return [
+        "real-terminal-split",
+        "vessel-move-and-cancel",
+        "moved-terminal-input",
+        "fleet-reorder",
+        "voyage-reorder",
         "native-quit",
     ]
 
@@ -245,14 +501,14 @@ def placement(
     capture("placement-portal-created")
     click(width - 40, 80)
     wait(lambda layout: layout["context"] == {"kind": "portal", "id": portal["id"]})
-    rename(275, 30, "Native Fleet")
+    rename(*named_button(native, evidence, "Workbench"), "Native Fleet")
     wait(lambda layout: layout["voyages"][0]["fleets"][0]["name"] == "Native Fleet")
-    rename(70, 186, "Native Voyage")
+    rename(*named_button(native, evidence, "Voyager"), "Native Voyage")
     wait(lambda layout: layout["voyages"][0]["name"] == "Native Voyage")
-    rename(275, 30, "Blur Fleet", "blur")
+    rename(*named_button(native, evidence, "Native Fleet"), "Blur Fleet", "blur")
     wait(lambda layout: layout["voyages"][0]["fleets"][0]["name"] == "Blur Fleet")
     capture("placement-blur-saved")
-    click(70, 186)
+    click(*named_button(native, evidence, "Native Voyage"))
     key(65289)
     native("key", 65505, True)
     try:
@@ -302,8 +558,8 @@ def placement(
     assert delayed != source
     source_path.write_text(delayed)
     time.sleep(1)
-    click(275, 30)
-    click(275, 30)
+    click(*named_button(native, evidence, "Blur Fleet"))
+    click(*named_button(native, evidence, "Blur Fleet"))
     assert state()["value"]["selectedFleet"] == switched["value"]["selectedFleet"]
     capture("placement-editor-during-pending-selection")
     replace("Slow Fleet")
@@ -311,7 +567,7 @@ def placement(
     wait(lambda layout: layout["voyages"][0]["fleets"][0]["name"] == "Slow Fleet")
     source_path.write_text(source)
     time.sleep(0.6)
-    rename(275, 30, "Discarded Fleet", "escape")
+    rename(*named_button(native, evidence, "Slow Fleet"), "Discarded Fleet", "escape")
     time.sleep(0.3)
     assert state()["value"]["voyages"][0]["fleets"][0]["name"] == "Slow Fleet"
     capture("placement-rename-cancelled")
@@ -331,5 +587,175 @@ def placement(
         "rename-during-controlled-pending-selection",
         "changed-draft-escape-cancelled",
         "saved-placement-reopened",
+        "native-quit",
+    ]
+
+def layouts(
+    native,
+    capture,
+    click,
+    wait,
+    state,
+    rpc,
+    close,
+    start_frame,
+    original,
+    width,
+    height,
+    evidence,
+):
+    from PIL import ImageChops
+
+    owner = json.loads((evidence / "launch.json").read_text())["pid"]
+
+    def field(name, focused=False):
+        for _ in range(50):
+            matches = native("fields", owner, [name], "window")["fields"]
+            if (
+                len(matches) == 1
+                and matches[0]["width"] > 0
+                and matches[0]["height"] > 0
+                and (not focused or matches[0]["focused"])
+            ):
+                return matches[0]
+            time.sleep(0.1)
+        raise AssertionError(f"Native control unavailable: {name}")
+
+    def press(name):
+        item = field(name)
+        click((item["x"] + item["width"] / 2) / 2, (item["y"] + item["height"] / 2) / 2)
+
+    def key(value):
+        native("key", value, True)
+        native("key", value, False)
+
+    def ids():
+        return sorted(
+            item["address"] for item in rpc("terminal.list", {"all": True})["terminals"]
+        )
+
+    wait(lambda layout: layout["contents"] and layout["contents"][0]["backend"])
+    click(350, 190)
+    chord(native, "o")
+    two = wait(
+        lambda layout: (
+            len(layout["contents"]) == 2
+            and all(item["backend"] for item in layout["contents"])
+        )
+    )
+    click(width - 40, 80)
+    docked = wait(lambda layout: layout["context"]["kind"] == "vessel")
+    context = docked["value"]["context"]
+    fleet = original["fleets"][0]["id"]
+    saved_root = two["value"]["voyages"][0]["fleets"][0]["root"]
+    press("Fleet layouts")
+    press("Save Fleet layout")
+    field("Name", focused=True)
+    for character in "Focus":
+        key(ord(character))
+    key(65293)
+    wait(
+        lambda layout: any(
+            item["fleet"] == fleet and item["name"] == "Focus"
+            for item in layout["savedLayouts"]
+        )
+    )
+    press("Fleet layouts")
+    click(350, 190)
+    chord(native, "o")
+    three = wait(
+        lambda layout: (
+            len(layout["contents"]) == 3
+            and all(item["backend"] for item in layout["contents"])
+        )
+    )
+    backends = {item["id"]: item["backend"] for item in three["value"]["contents"]}
+    stopped_address = two["value"]["contents"][0]["backend"]
+    processes = {
+        address: rpc("terminal.get", {"terminal": address})["pid"]
+        for address in backends.values()
+        if address != stopped_address
+    }
+    assert all(processes.values())
+    click(350, 190)
+    for character in "exit":
+        key(ord(character))
+    key(65293)
+    for _ in range(50):
+        stopped = rpc("terminal.get", {"terminal": stopped_address})
+        if stopped["state"] == "finished":
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("The selected shell did not finish")
+    capture("layouts-stopped-terminal")
+    terminals_before = ids()
+    press("Fleet layouts")
+    press("Load Focus")
+    loaded = wait(
+        lambda layout: layout["voyages"][0]["fleets"][0]["root"] == saved_root
+    )
+    assert {
+        item["id"]: item["backend"] for item in loaded["value"]["contents"]
+    } == backends
+    assert len(loaded["value"]["voyages"][0]["fleets"][0]["vessels"]) == 3
+    assert loaded["value"]["context"] == context and ids() == terminals_before
+    assert {
+        address: rpc("terminal.get", {"terminal": address})["pid"]
+        for address in processes
+    } == processes
+    assert rpc("terminal.get", {"terminal": stopped_address})["state"] == "finished"
+    capture("layouts-restored")
+    press("Save Fleet layout")
+    field("Name", focused=True)
+    for character in "Overview":
+        key(ord(character))
+    press("Home")
+    home = wait(lambda layout: layout["view"] == "home")
+    assert any(
+        item["fleet"] == fleet and item["name"] == "Overview"
+        for item in home["value"]["savedLayouts"]
+    )
+    assert home["value"]["context"] == context and ids() == terminals_before
+    before = capture("home-overview")
+    source_path = evidence / "profile/mods/header/home.js"
+    source = source_path.read_text()
+    edited = source.replace("Your Voyages and Fleets", "My workspace overview")
+    assert edited != source
+    temporary = source_path.with_name("home.js.tmp")
+    temporary.write_text(edited)
+    temporary.replace(source_path)
+    for _ in range(30):
+        after = capture("home-customized")
+        if ImageChops.difference(before, after).getbbox():
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("Home edit did not become visible")
+    assert ids() == terminals_before and state()["value"]["context"] == context
+    press("Open Fleet Workbench")
+    selected = wait(
+        lambda layout: layout["view"] == "fleet" and layout["selectedFleet"] == fleet
+    )
+    assert selected["value"]["context"] == context and ids() == terminals_before
+    capture("layouts-returned")
+    saved = state()
+    close()
+    start_frame("layouts-reopened")
+    assert state() == saved and source_path.read_text() == edited
+    assert {
+        address: rpc("terminal.get", {"terminal": address})["pid"]
+        for address in processes
+    } == processes
+    assert rpc("terminal.get", {"terminal": stopped_address})["state"] == "finished"
+    close()
+    rpc("server.stop", {})
+    return [
+        "saved-fleet-tree-with-finished-terminal",
+        "restored-identity-and-context",
+        "name-blur-then-home",
+        "editable-home-overview",
+        "home-navigation-no-new-process",
+        "saved-layout-reopened",
         "native-quit",
     ]

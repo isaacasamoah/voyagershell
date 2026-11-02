@@ -26,6 +26,15 @@ pub enum Axis {
     Vertical,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Context {
@@ -106,6 +115,22 @@ pub struct Voyage {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceView {
+    Home,
+    #[default]
+    Fleet,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SavedLayout {
+    pub fleet: FleetId,
+    pub name: String,
+    pub root: Split,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Layout {
     pub voyages: Vec<Voyage>,
@@ -113,6 +138,10 @@ pub struct Layout {
     pub selected_voyage: Option<VoyageId>,
     pub selected_fleet: Option<FleetId>,
     pub context: Context,
+    #[serde(default)]
+    pub view: WorkspaceView,
+    #[serde(default)]
+    pub saved_layouts: Vec<SavedLayout>,
     #[serde(with = "decimal")]
     #[schemars(with = "String")]
     pub next_id: u64,
@@ -122,6 +151,15 @@ pub struct Layout {
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
     Inspect,
+    Home,
+    SaveLayout {
+        fleet: FleetId,
+        name: String,
+    },
+    LoadLayout {
+        fleet: FleetId,
+        name: String,
+    },
     CreateVoyage {
         name: String,
         cwd: String,
@@ -141,6 +179,21 @@ pub enum Action {
         fleet: FleetId,
         after: PlacementId,
         axis: Axis,
+    },
+    MoveVessel {
+        id: PlacementId,
+        target: PlacementId,
+        side: Side,
+    },
+    MoveVoyage {
+        id: VoyageId,
+        target: VoyageId,
+        before: bool,
+    },
+    MoveFleet {
+        id: FleetId,
+        target: FleetId,
+        before: bool,
     },
     SelectVoyage {
         id: VoyageId,
@@ -200,6 +253,8 @@ pub struct Response {
     pub version: u64,
     pub layout: Arc<Layout>,
     pub fresh: bool,
+    pub created_workspace: bool,
+    pub created_contents: Vec<ContentId>,
     pub message: Option<String>,
 }
 

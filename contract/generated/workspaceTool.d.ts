@@ -3,6 +3,19 @@ export type Action =
       operation: "inspect";
     }
   | {
+      operation: "home";
+    }
+  | {
+      fleet: string;
+      name: string;
+      operation: "save-layout";
+    }
+  | {
+      fleet: string;
+      name: string;
+      operation: "load-layout";
+    }
+  | {
       cwd: string;
       name: string;
       operation: "create-voyage";
@@ -26,6 +39,24 @@ export type Action =
       axis: Axis;
       fleet: string;
       operation: "split";
+    }
+  | {
+      id: string;
+      operation: "move-vessel";
+      side: Side;
+      target: string;
+    }
+  | {
+      before: boolean;
+      id: string;
+      operation: "move-voyage";
+      target: string;
+    }
+  | {
+      before: boolean;
+      id: string;
+      operation: "move-fleet";
+      target: string;
     }
   | {
       id: string;
@@ -57,6 +88,7 @@ export type RenameTarget =
       kind: "portal";
     };
 export type Axis = "horizontal" | "vertical";
+export type Side = "left" | "right" | "top" | "bottom";
 export type Context =
   | {
       kind: "workspace";

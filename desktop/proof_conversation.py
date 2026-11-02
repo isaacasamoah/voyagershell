@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 from secrets import token_hex
 
-from proof_workspace import core_rpc
+from proof_workspace import core_rpc, named_button
 
 
 def prove(
@@ -36,14 +36,37 @@ def prove(
             native("key", ord(character), True)
             native("key", ord(character), False)
 
+    process_case = journey == "conversation-process"
+    administrator = journey in ("conversation-administrator", "conversation-process")
+    if process_case:
+        deadline = time.monotonic() + 15
+        while True:
+            before_home = core_rpc(
+                session, env, "doc.get", {"name": "voyager-layout-v1"}
+            )
+            if before_home["value"]["contents"] and before_home["value"]["contents"][
+                0
+            ].get("backend"):
+                break
+            assert time.monotonic() < deadline, "Initial real terminal was not bound"
+            time.sleep(0.05)
+        prior_terminals = core_rpc(session, env, "terminal.list", {"all": True})
+        click(*named_button(native, evidence, "Home"))
+        while True:
+            home = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+            if home["value"].get("view") == "home":
+                break
+            assert time.monotonic() < deadline, "Home did not open"
+            time.sleep(0.05)
+        assert home["value"]["context"] == before_home["value"]["context"]
+        assert home["value"]["contents"] == before_home["value"]["contents"]
+        capture("administrator-home-before-turn")
     if not (evidence / "conversation-open.png").exists():
         time.sleep(0.5)
         click(64, 108)
     idle = wait(lambda state: state["phase"] == "idle", 5)
     assert idle["thread"] is None, "Opening chat started the provider"
     capture("conversation-open")
-    process_case = journey == "conversation-process"
-    administrator = journey in ("conversation-administrator", "conversation-process")
     if administrator:
         fixture = evidence / "profile/conversation/administrator-read.txt"
         fixture.parent.mkdir(parents=True, exist_ok=True)
@@ -196,6 +219,50 @@ def prove(
             for message in tools
         )
         observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        if process_case:
+            deadline = time.monotonic() + 15
+            while True:
+                observed = core_rpc(
+                    session, env, "doc.get", {"name": "voyager-layout-v1"}
+                )
+                voyages = observed["value"]["voyages"]
+                if len(voyages[0]["fleets"]) == 2:
+                    created_id = voyages[0]["fleets"][1]["vessels"][0]["content"]
+                    created = next(
+                        item
+                        for item in observed["value"]["contents"]
+                        if item["id"] == created_id
+                    )
+                    if created.get("backend"):
+                        break
+                assert time.monotonic() < deadline, (
+                    "Created Fleet terminal was not bound"
+                )
+                time.sleep(0.05)
+            old = {
+                item["id"]: item.get("backend")
+                for item in before_home["value"]["contents"]
+            }
+            assert all(
+                next(
+                    item for item in observed["value"]["contents"] if item["id"] == key
+                ).get("backend")
+                == value
+                for key, value in old.items()
+            )
+            terminals = core_rpc(session, env, "terminal.list", {"all": True})
+            before_ids = {item["address"] for item in prior_terminals["terminals"]}
+            after_ids = {item["address"] for item in terminals["terminals"]}
+            assert (
+                after_ids - before_ids == {created["backend"]}
+                and before_ids <= after_ids
+            )
+            (evidence / "administrator-created-backend.json").write_text(
+                json.dumps(
+                    {"created": created, "before": prior_terminals, "after": terminals},
+                    indent=2,
+                )
+            )
         voyage = observed["value"]["voyages"][0]
         assert (
             len(voyage["fleets"]) == 2 and voyage["fleets"][1]["name"] == "Native admin"
@@ -251,6 +318,14 @@ def prove(
                 json.dumps({"terminal": original, "read": output}, indent=2)
             )
         capture("administrator-completed-chat")
+        bounds = geometry()
+        native("move", int(bounds["X"]) + 300, int(bounds["Y"]) + 650, 2)
+        for _ in range(8):
+            native("scroll", 96, 0)
+            time.sleep(0.08)
+        native("scroll", 0, 1)
+        time.sleep(0.3)
+        capture("administrator-scrolled-answer")
         click(64, 108)
         capture("administrator-native-workspace-effect")
         if process_case:

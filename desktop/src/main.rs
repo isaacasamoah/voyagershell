@@ -1,5 +1,7 @@
+mod arrangement;
 mod conversation;
 mod host;
+mod script_types;
 mod terminal;
 mod terminal_screen;
 mod text;
@@ -72,6 +74,14 @@ fn run() -> Result<()> {
         &package.join("mod.json"),
         include_str!("../mods/header/mod.json"),
     )?;
+    seed(
+        &package.join("home.js"),
+        include_str!("../mods/header/home.js"),
+    )?;
+    seed(
+        &package.join("AGENTS.md"),
+        include_str!("../mods/header/AGENTS.md"),
+    )?;
     seed(&theme, include_str!("../themes/voyager.json"))?;
     seed(
         &package.join("validate.js"),
@@ -131,6 +141,11 @@ fn run() -> Result<()> {
             }
             if let Err(error) = terminal::register(&mut registry, viewers.clone()) {
                 eprintln!("Terminal registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = arrangement::register(&mut registry) {
+                eprintln!("Arrangement registration: {error}");
                 cx.quit();
                 return;
             }

@@ -41,6 +41,7 @@ enum Message {
 struct Outcome {
     status: Status,
     message: Option<String>,
+    created_workspace: bool,
 }
 
 #[derive(Debug)]
@@ -66,6 +67,7 @@ impl Client {
             let mut fresh = false;
             let mut receipts: VecDeque<(Request, Option<Context>, Outcome)> = VecDeque::new();
             let mut unconfirmed = HashMap::<String, String>::new();
+            let mut created_contents = Vec::<ContentId>::new();
             let mut terminal_requests: VecDeque<(TerminalRequest, Result<Viewer, Error>)> =
                 VecDeque::new();
             let mut process_requests: VecDeque<(Context, ProcessRequest, Arc<ProcessResponse>)> =
@@ -208,6 +210,13 @@ impl Client {
                             ))
                         } else if let Some(message) = unconfirmed.get(&content.0) {
                             Err(Error::Uncertain(message.clone()))
+                        } else if created_contents.contains(&content)
+                            && !visible_content(&layout, &content)
+                        {
+                            Err(rejected(
+                                "Created content is not currently visible; no terminal was started"
+                                    .into(),
+                            ))
                         } else {
                             match core.as_mut() {
                                 Ok(core) => open_terminal(
@@ -216,13 +225,14 @@ impl Client {
                                     &mut version,
                                     &mut fresh,
                                     &mut unconfirmed,
-                                    &content,
-                                    &request_id,
+                                    &mut created_contents,
+                                    &request,
                                 ),
                                 Err(error) => Err(error.clone()),
                             }
                         };
                         if previous.is_none() {
+                            settle_created_content(&mut created_contents, &content, &result);
                             terminal_requests.push_back((request, result.clone()));
                             if terminal_requests.len() > 32 {
                                 terminal_requests.pop_front();
@@ -240,6 +250,8 @@ impl Client {
                     version,
                     layout: crate::scope::project(&layout, scope.as_ref()),
                     fresh,
+                    created_workspace: false,
+                    created_contents: eligible_contents(&layout, scope.as_ref(), &created_contents),
                     message: None,
                 };
                 if process_requests
@@ -258,6 +270,7 @@ impl Client {
                     if previous == &request && previous_scope == &scope {
                         response.status = result.status.clone();
                         response.message = result.message.clone();
+                        response.created_workspace = result.created_workspace;
                         let _ = reply.send(response);
                         continue;
                     }
@@ -282,10 +295,18 @@ impl Client {
                                             })
                                             .map_err(rejected)?;
                                         revision = save(core, &candidate.layout, revision)?;
+                                        response.created_workspace = true;
                                     }
                                     unconfirmed.retain(|id, _| {
                                         candidate.layout.contents.iter().any(|item| {
                                             &item.id.0 == id && item.start_pending.is_some()
+                                        })
+                                    });
+                                    created_contents.retain(|id| {
+                                        candidate.layout.contents.iter().any(|item| {
+                                            &item.id == id
+                                                && item.backend.is_none()
+                                                && item.start_pending.is_none()
                                         })
                                     });
                                     layout = Arc::new(candidate.layout);
@@ -314,6 +335,29 @@ impl Client {
                                     .map_err(rejected)
                                     .and_then(|()| {
                                         let revision = save(core, &candidate.layout, version)?;
+                                        if scope.is_some()
+                                            && matches!(
+                                                request.action,
+                                                Action::CreateVoyage { .. }
+                                                    | Action::CreateFleet { .. }
+                                                    | Action::CreatePortal { .. }
+                                                    | Action::Split { .. }
+                                            )
+                                        {
+                                            created_contents.extend(
+                                                candidate
+                                                    .layout
+                                                    .contents
+                                                    .iter()
+                                                    .filter(|item| {
+                                                        !layout
+                                                            .contents
+                                                            .iter()
+                                                            .any(|old| old.id == item.id)
+                                                    })
+                                                    .map(|item| item.id.clone()),
+                                            );
+                                        }
                                         layout = Arc::new(candidate.layout);
                                         version = revision;
                                         Ok(())
@@ -338,6 +382,8 @@ impl Client {
                 }
                 response.version = version;
                 response.layout = crate::scope::project(&layout, scope.as_ref());
+                response.created_contents =
+                    eligible_contents(&layout, scope.as_ref(), &created_contents);
                 response.fresh = fresh;
                 receipts.push_back((
                     request,
@@ -345,6 +391,7 @@ impl Client {
                     Outcome {
                         status: response.status.clone(),
                         message: response.message.clone(),
+                        created_workspace: response.created_workspace,
                     },
                 ));
                 if receipts.len() > 32 {
@@ -451,15 +498,87 @@ impl Client {
     }
 }
 
+fn settle_created_content(
+    pending: &mut Vec<ContentId>,
+    content: &ContentId,
+    result: &Result<Viewer, Error>,
+) {
+    if matches!(result, Err(Error::Uncertain(_))) {
+        pending.retain(|item| item != content);
+    }
+}
+
+fn visible_content(layout: &Layout, content: &ContentId) -> bool {
+    if layout.view == voyager_contract::WorkspaceView::Home {
+        return false;
+    }
+    let Some(voyage) = layout
+        .voyages
+        .iter()
+        .find(|voyage| Some(&voyage.id) == layout.selected_voyage.as_ref())
+    else {
+        return false;
+    };
+    if voyage
+        .portals
+        .iter()
+        .any(|portal| &portal.content == content)
+    {
+        return true;
+    }
+    let Some(fleet) = voyage
+        .fleets
+        .iter()
+        .find(|fleet| Some(&fleet.id) == layout.selected_fleet.as_ref())
+    else {
+        return false;
+    };
+    fn contains(
+        tree: &voyager_contract::Split,
+        fleet: &voyager_contract::Fleet,
+        content: &ContentId,
+    ) -> bool {
+        match tree {
+            voyager_contract::Split::Leaf { placement } => fleet
+                .vessels
+                .iter()
+                .any(|vessel| &vessel.id == placement && &vessel.content == content),
+            voyager_contract::Split::Branch { first, second, .. } => {
+                contains(first, fleet, content) || contains(second, fleet, content)
+            }
+        }
+    }
+    contains(&fleet.root, fleet, content)
+}
+
+fn eligible_contents(
+    layout: &Arc<Layout>,
+    scope: Option<&Context>,
+    pending: &[ContentId],
+) -> Vec<ContentId> {
+    let projection = crate::scope::project(layout, scope);
+    pending
+        .iter()
+        .filter(|id| {
+            projection.contents.iter().any(|item| {
+                &item.id == *id && item.backend.is_none() && item.start_pending.is_none()
+            })
+        })
+        .cloned()
+        .collect()
+}
+
 fn open_terminal(
     core: &mut Core,
     layout: &mut Arc<Layout>,
     version: &mut u64,
     fresh: &mut bool,
     unconfirmed: &mut HashMap<String, String>,
-    content: &ContentId,
-    request_id: &str,
+    created_contents: &mut Vec<ContentId>,
+    request: &TerminalRequest,
 ) -> Result<Viewer, Error> {
+    let content = &request.content_id;
+    let request_id = &request.request_id;
     let target = layout
         .contents
         .iter()
@@ -511,7 +630,11 @@ fn open_terminal(
                 });
             }
         }
-        let started = match core.rpc("terminal.run", params) {
+        let run = core.rpc("terminal.run", params);
+        if !matches!(run, Err(Error::Rejected { .. })) {
+            created_contents.retain(|item| item != content);
+        }
+        let started = match run {
             Ok(value) => match serde_json::from_value::<RunResult>(value) {
                 Ok(result) => result,
                 Err(error) => {
@@ -652,6 +775,22 @@ fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
 #[cfg(test)]
 mod terminal_outcome_tests {
     use super::*;
+
+    #[test]
+    fn uncertain_start_discards_only_its_automatic_eligibility() {
+        let first = ContentId("first".into());
+        let other = ContentId("other".into());
+        let mut pending = vec![first.clone(), other.clone()];
+        let refused = Err(Error::Rejected {
+            kind: "refused".into(),
+            message: "not started".into(),
+        });
+        settle_created_content(&mut pending, &first, &refused);
+        assert_eq!(pending, vec![first.clone(), other.clone()]);
+        let uncertain = Err(Error::Uncertain("marker cleanup not confirmed".into()));
+        settle_created_content(&mut pending, &first, &uncertain);
+        assert_eq!(pending, vec![other]);
+    }
 
     #[test]
     fn known_finished_attach_is_not_an_unconfirmed_start() {

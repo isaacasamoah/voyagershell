@@ -20,6 +20,61 @@
         {
           "additionalProperties": false,
           "properties": {
+            "operation": {
+              "const": "home",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fleet": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "save-layout",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "fleet",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fleet": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "load-layout",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "fleet",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "cwd": {
               "type": "string"
             },
@@ -119,6 +174,81 @@
             "fleet",
             "after",
             "axis"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "move-vessel",
+              "type": "string"
+            },
+            "side": {
+              "$ref": "#/definitions/Side"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "target",
+            "side"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "before": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "move-voyage",
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "target",
+            "before"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "before": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "move-fleet",
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "target",
+            "before"
           ],
           "type": "object"
         },
@@ -338,6 +468,15 @@
           "type": "object"
         }
       ]
+    },
+    "Side": {
+      "enum": [
+        "left",
+        "right",
+        "top",
+        "bottom"
+      ],
+      "type": "string"
     }
   },
   "properties": {
