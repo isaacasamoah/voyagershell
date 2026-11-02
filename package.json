@@ -5,7 +5,7 @@
   "scripts": {
     "contract:generate": "node contract/build.cjs --write",
     "contract:check": "node contract/build.cjs --check",
-    "test": "node --test contract/validator-test.cjs",
+    "test": "node --test contract/validator-test.cjs desktop/rename-test.cjs",
     "format:check": "prettier --check contract/build.cjs 'desktop/mods/**/*.{js,json}' 'desktop/themes/*.json'"
   },
   "devDependencies": {
