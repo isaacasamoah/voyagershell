@@ -97,6 +97,10 @@ export type Action =
       operation: "select-fleet";
     }
   | {
+      id: string;
+      operation: "reveal-vessel";
+    }
+  | {
       context: Context;
       operation: "dock";
     };

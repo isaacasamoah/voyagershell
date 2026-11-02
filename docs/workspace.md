@@ -91,3 +91,11 @@ the raw declaration hash and the transitive imported-module slice. The slice is
 checked without skipping library declarations. The pinned Shell's invalid
 `ElementBounds` extension is converted to an equivalent intersection only when
 its expected exact form appears. Missing or changed declarations fail the check.
+
+Go there for a hidden Vessel uses its existing placement identity. The workspace
+owner selects that Vessel's original Voyage and Fleet, keeps the current split
+tree intact and adds the hidden leaf beside it only when absent. It does not
+change the captured avatar context, content, backend or ID counter, and an
+unknown placement is refused before mutation. Requests from a captured scope
+remain limited to the Vessel visible in that scope's projection. The combined
+native interaction and process identity still require the real journey.

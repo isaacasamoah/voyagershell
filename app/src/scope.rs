@@ -162,6 +162,12 @@ pub(crate) fn check(
                 .flat_map(|voyage| &voyage.portals)
                 .any(|portal| &portal.id == id),
         },
+        Action::RevealVessel { id } => scoped
+            .voyages
+            .iter()
+            .flat_map(|voyage| &voyage.fleets)
+            .flat_map(|fleet| &fleet.vessels)
+            .any(|vessel| &vessel.id == id),
         Action::SelectFleet { id } => fleet(id).is_some(),
         Action::Split {
             fleet: id, after, ..

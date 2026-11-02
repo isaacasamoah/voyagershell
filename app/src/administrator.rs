@@ -448,6 +448,7 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::MoveFleet { .. } => "Fleet reordered",
             Action::SelectVoyage { .. } => "Voyage selected",
             Action::SelectFleet { .. } => "Fleet selected",
+            Action::RevealVessel { .. } => "Vessel revealed",
             Action::Dock { .. } => "Focus changed",
         }
         .into(),

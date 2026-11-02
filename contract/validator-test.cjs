@@ -11,6 +11,21 @@ test("generated wire validator rejects a forged caller and malformed split", asy
   assert.equal(request(valid), true);
   assert.equal(request({ ...valid, role: "owner" }), false);
   assert.equal(
+    request({ ...valid, action: { operation: "reveal-vessel", id: "p1" } }),
+    true,
+  );
+  assert.equal(
+    request({ ...valid, action: { operation: "reveal-vessel", id: 12 } }),
+    false,
+  );
+  assert.equal(
+    request({
+      ...valid,
+      action: { operation: "reveal-vessel", id: "p1", fleet: "other" },
+    }),
+    false,
+  );
+  assert.equal(
     request({
       ...valid,
       action: {

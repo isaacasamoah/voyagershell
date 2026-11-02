@@ -201,6 +201,9 @@ pub enum Action {
     SelectFleet {
         id: FleetId,
     },
+    RevealVessel {
+        id: PlacementId,
+    },
     Dock {
         context: Context,
     },
