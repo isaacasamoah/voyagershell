@@ -1,4 +1,5 @@
 mod host;
+mod text;
 
 use anyhow::{Context as _, Result, bail};
 use gpui::{
@@ -98,10 +99,34 @@ fn run() -> Result<()> {
     gpui_platform::application()
         .with_assets(assets)
         .run(move |cx: &mut App| {
-            gpui_shell::init(cx);
+            let mut registry = match gpui_shell::ComponentRegistry::new(
+                gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+                "voyager_native",
+            ) {
+                Ok(registry) => registry,
+                Err(error) => {
+                    eprintln!("Native registry: {error}");
+                    cx.quit();
+                    return;
+                }
+            };
+            if let Err(error) = text::register(&mut registry) {
+                eprintln!("Native text registration: {error}");
+                cx.quit();
+                return;
+            }
+            let registry = match registry.freeze() {
+                Ok(registry) => registry,
+                Err(error) => {
+                    eprintln!("Native registry: {error}");
+                    cx.quit();
+                    return;
+                }
+            };
+            gpui_shell::init_with_components(cx, &registry);
             cx.on_action(|_: &Quit, cx| cx.quit());
             cx.bind_keys([KeyBinding::new("ctrl-q", Quit, None)]);
-            let runtime = match ShellRuntime::new(cx) {
+            let runtime = match ShellRuntime::new_with_components(cx, registry) {
                 Ok(runtime) => runtime,
                 Err(error) => {
                     eprintln!("Script runtime failed: {error:#}");
