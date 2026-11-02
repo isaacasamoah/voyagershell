@@ -5,16 +5,21 @@ import { Chat } from "./chat.js";
 
 export default class Workspace extends View {
   init(_props, cx) {
-    this.chat = new Chat(cx);
+    this.chat = new Chat(cx, () => {
+      this.refreshRequested = true;
+      if (!this.busy) this.run({ operation: "inspect" }, cx);
+    });
     this.version = "0";
     this.layout = null;
     this.busy = false;
+    this.refreshRequested = false;
     this.status = "Opening workspace";
     this.run({ operation: "inspect" }, cx);
   }
 
   run(action, cx) {
     if (this.busy) return;
+    if (action.operation === "inspect") this.refreshRequested = false;
     this.busy = true;
     cx.spawn(async (task) => {
       try {
@@ -27,6 +32,7 @@ export default class Workspace extends View {
       }
       this.busy = false;
       task.notify();
+      if (this.refreshRequested) this.run({ operation: "inspect" }, task);
     });
     cx.notify();
   }

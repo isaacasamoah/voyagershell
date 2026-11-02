@@ -25,9 +25,11 @@ impl Codex {
                     "--listen",
                     "stdio://",
                     "-c",
-                    "features.shell_tool=false",
+                    "features.shell_tool=true",
                     "-c",
                     "features.multi_agent=false",
+                    "-c",
+                    "features.multi_agent_v2=false",
                 ])
                 .current_dir(cwd)
                 .stdin(Stdio::piped())

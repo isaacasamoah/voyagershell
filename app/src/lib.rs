@@ -1,3 +1,4 @@
+mod administrator;
 pub mod client;
 pub mod core;
 mod scope;

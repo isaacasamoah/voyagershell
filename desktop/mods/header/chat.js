@@ -3,12 +3,14 @@ import { Input, InputState } from "gpui-base";
 import { observe, send } from "./conversation.js";
 
 export class Chat {
-  constructor(cx) {
+  constructor(cx, workspaceChanged) {
     this.open = false;
     this.observing = false;
     this.pending = false;
     this.state = null;
     this.error = "";
+    this.workspaceChanged = workspaceChanged;
+    this.lastEffect = "";
     this.input = InputState.new({ placeholder: "Message Voyager" });
     this.input.on("submit", (_event, cx) => this.submit(cx));
   }
@@ -23,6 +25,17 @@ export class Chat {
             const next = await observe(this.state?.version ?? null);
             if (next) {
               this.state = next;
+              const effect = next.messages.findLast(
+                (message) =>
+                  message.tool && message.tool.action.operation !== "inspect",
+              );
+              const identity = effect
+                ? JSON.stringify([effect.requestId, effect.id])
+                : "";
+              if (identity && identity !== this.lastEffect) {
+                this.lastEffect = identity;
+                this.workspaceChanged();
+              }
               task.notify();
             }
             await task.sleep(50);
@@ -101,7 +114,13 @@ export class Chat {
             div()
               .text_size(10)
               .text_color(colors.muted)
-              .child(message.role === "user" ? "You" : "Voyager"),
+              .child(
+                message.role === "user"
+                  ? "You"
+                  : message.role === "tool"
+                    ? "Workspace"
+                    : "Voyager",
+              ),
           )
           .child(
             div()
