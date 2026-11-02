@@ -26,6 +26,15 @@ pub enum Axis {
     Vertical,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Context {
@@ -141,6 +150,21 @@ pub enum Action {
         fleet: FleetId,
         after: PlacementId,
         axis: Axis,
+    },
+    MoveVessel {
+        id: PlacementId,
+        target: PlacementId,
+        side: Side,
+    },
+    MoveVoyage {
+        id: VoyageId,
+        target: VoyageId,
+        before: bool,
+    },
+    MoveFleet {
+        id: FleetId,
+        target: FleetId,
+        before: bool,
     },
     SelectVoyage {
         id: VoyageId,

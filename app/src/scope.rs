@@ -104,6 +104,20 @@ pub(crate) fn check(
     let allowed = match action {
         Action::Inspect | Action::Dock { .. } => true,
         Action::CreateVoyage { .. } => false,
+        Action::MoveVoyage { .. } => false,
+        Action::MoveFleet { id, target, .. } => {
+            matches!(scope, Context::Voyage { .. })
+                && fleet(id).is_some()
+                && fleet(target).is_some()
+        }
+        Action::MoveVessel { id, target, .. } => scoped
+            .voyages
+            .iter()
+            .flat_map(|voyage| &voyage.fleets)
+            .any(|fleet| {
+                fleet.vessels.iter().any(|item| &item.id == id)
+                    && fleet.vessels.iter().any(|item| &item.id == target)
+            }),
         Action::CreateFleet { voyage, .. } | Action::SelectVoyage { id: voyage } => {
             matches!(scope, Context::Voyage { id } if id == voyage)
         }

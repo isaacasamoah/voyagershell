@@ -1,6 +1,6 @@
 use voyager_contract::{
     Action, Axis, Content, ContentId, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget,
-    Split, Vessel, Voyage, VoyageId,
+    Side, Split, Vessel, Voyage, VoyageId,
 };
 
 #[derive(Default)]
@@ -235,8 +235,138 @@ impl Model {
                     start_pending: None,
                 });
             }
+            Action::MoveVessel { id, target, side } => {
+                let fleet = self
+                    .layout
+                    .voyages
+                    .iter_mut()
+                    .flat_map(|voyage| &mut voyage.fleets)
+                    .find(|fleet| {
+                        fleet.vessels.iter().any(|vessel| vessel.id == id)
+                            && fleet.vessels.iter().any(|vessel| vessel.id == target)
+                    })
+                    .ok_or("Both Vessels must belong to the same Fleet")?;
+                if id == target {
+                    return Ok(());
+                }
+                let (root, removed) = remove_leaf(fleet.root.clone(), &id);
+                let mut root = root.ok_or("The source Vessel has no destination")?;
+                if !removed || !insert_leaf(&mut root, &target, &id, side) {
+                    return Err("Vessel placement is not in the Fleet layout".into());
+                }
+                fleet.root = root;
+            }
+            Action::MoveVoyage { id, target, before } => {
+                let source = self
+                    .layout
+                    .voyages
+                    .iter()
+                    .position(|item| item.id == id)
+                    .ok_or("Voyage not found")?;
+                let destination = self
+                    .layout
+                    .voyages
+                    .iter()
+                    .position(|item| item.id == target)
+                    .ok_or("Destination Voyage not found")?;
+                reorder(&mut self.layout.voyages, source, destination, before);
+            }
+            Action::MoveFleet { id, target, before } => {
+                let voyage = self
+                    .layout
+                    .voyages
+                    .iter_mut()
+                    .find(|voyage| {
+                        voyage.fleets.iter().any(|item| item.id == id)
+                            && voyage.fleets.iter().any(|item| item.id == target)
+                    })
+                    .ok_or("Both Fleets must belong to the same Voyage")?;
+                let source = voyage
+                    .fleets
+                    .iter()
+                    .position(|item| item.id == id)
+                    .ok_or("Fleet not found")?;
+                let destination = voyage
+                    .fleets
+                    .iter()
+                    .position(|item| item.id == target)
+                    .ok_or("Destination Fleet not found")?;
+                reorder(&mut voyage.fleets, source, destination, before);
+            }
         }
         Ok(())
+    }
+}
+
+fn reorder<T>(items: &mut Vec<T>, source: usize, destination: usize, before: bool) {
+    if source == destination {
+        return;
+    }
+    let item = items.remove(source);
+    let destination = destination - usize::from(source < destination);
+    items.insert(destination + usize::from(!before), item);
+}
+
+fn remove_leaf(root: Split, id: &PlacementId) -> (Option<Split>, bool) {
+    match root {
+        Split::Leaf { placement } if &placement == id => (None, true),
+        Split::Leaf { .. } => (Some(root), false),
+        Split::Branch {
+            axis,
+            first,
+            second,
+        } => {
+            let (first, removed) = remove_leaf(*first, id);
+            let (second, removed) = if removed {
+                (Some(*second), true)
+            } else {
+                remove_leaf(*second, id)
+            };
+            let root = match (first, second) {
+                (Some(first), Some(second)) => Some(Split::Branch {
+                    axis,
+                    first: Box::new(first),
+                    second: Box::new(second),
+                }),
+                (Some(child), None) | (None, Some(child)) => Some(child),
+                (None, None) => None,
+            };
+            (root, removed)
+        }
+    }
+}
+
+fn insert_leaf(root: &mut Split, target: &PlacementId, id: &PlacementId, side: Side) -> bool {
+    match root {
+        Split::Leaf { placement } if placement == target => {
+            let (axis, before) = match side {
+                Side::Left => (Axis::Horizontal, true),
+                Side::Right => (Axis::Horizontal, false),
+                Side::Top => (Axis::Vertical, true),
+                Side::Bottom => (Axis::Vertical, false),
+            };
+            let source = Split::Leaf {
+                placement: id.clone(),
+            };
+            let destination = Split::Leaf {
+                placement: target.clone(),
+            };
+            let (first, second) = if before {
+                (source, destination)
+            } else {
+                (destination, source)
+            };
+            *root = Split::Branch {
+                axis,
+                first: Box::new(first),
+                second: Box::new(second),
+            };
+            true
+        }
+        Split::Branch { first, second, .. } => {
+            insert_leaf(first, target, id, side) || insert_leaf(second, target, id, side)
+        }
+        _ => false,
     }
 }
 

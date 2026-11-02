@@ -2,6 +2,131 @@ use crate::workspace::Model;
 use voyager_contract::{Action, Axis, Context, FleetId};
 
 #[test]
+fn direct_arrangement_preserves_content_and_rejects_invalid_targets() {
+    use voyager_contract::{PlacementId, Side, VoyageId};
+    let mut model = Model::default();
+    for name in ["First", "Second"] {
+        model
+            .apply(Action::CreateVoyage {
+                name: name.into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+    }
+    let first = model.layout.voyages[0].id.clone();
+    let second = model.layout.voyages[1].id.clone();
+    model
+        .apply(Action::CreateFleet {
+            voyage: first.clone(),
+            name: "Next".into(),
+        })
+        .unwrap();
+    let fleet_a = model.layout.voyages[0].fleets[0].id.clone();
+    let fleet_b = model.layout.voyages[0].fleets[1].id.clone();
+    let original = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+    model
+        .apply(Action::Split {
+            fleet: fleet_a.clone(),
+            after: original.clone(),
+            axis: Axis::Horizontal,
+        })
+        .unwrap();
+    let other = model.layout.voyages[0].fleets[0].vessels[1].id.clone();
+    let contents = model.layout.contents.clone();
+    let context = model.layout.context.clone();
+    model
+        .apply(Action::MoveVessel {
+            id: other,
+            target: original,
+            side: Side::Left,
+        })
+        .unwrap();
+    model
+        .apply(Action::MoveFleet {
+            id: fleet_b.clone(),
+            target: fleet_a,
+            before: true,
+        })
+        .unwrap();
+    model
+        .apply(Action::MoveVoyage {
+            id: second.clone(),
+            target: first,
+            before: true,
+        })
+        .unwrap();
+    assert_eq!(model.layout.voyages[0].id, second);
+    assert_eq!(model.layout.voyages[1].fleets[0].id, fleet_b);
+    assert_eq!(model.layout.contents, contents);
+    assert_eq!(model.layout.context, context);
+    let before = model.layout.clone();
+    let missing = VoyageId("missing".into());
+    assert!(
+        model
+            .apply(Action::MoveVoyage {
+                id: missing.clone(),
+                target: missing,
+                before: true
+            })
+            .is_err()
+    );
+    assert_eq!(model.layout, before);
+    let missing_placement = PlacementId("missing".into());
+    assert!(
+        model
+            .apply(Action::MoveVessel {
+                id: missing_placement.clone(),
+                target: missing_placement,
+                side: Side::Left
+            })
+            .is_err()
+    );
+    let foreign_fleet = model.layout.voyages[0].fleets[0].id.clone();
+    assert!(
+        model
+            .apply(Action::MoveFleet {
+                id: fleet_b.clone(),
+                target: foreign_fleet,
+                before: true
+            })
+            .is_err()
+    );
+    assert_eq!(model.layout, before);
+    let scoped = std::sync::Arc::new(model.layout.clone());
+    assert!(
+        crate::scope::check(
+            &scoped,
+            Some(&Context::Voyage { id: second.clone() }),
+            &Action::MoveVoyage {
+                id: second.clone(),
+                target: model.layout.voyages[1].id.clone(),
+                before: false
+            }
+        )
+        .is_err()
+    );
+    let voyage = model.layout.voyages[1].id.clone();
+    let selected_fleet = model.layout.voyages[1].fleets[0].id.clone();
+    let sibling_fleet = model.layout.voyages[1].fleets[1].id.clone();
+    let move_fleet = Action::MoveFleet {
+        id: selected_fleet.clone(),
+        target: sibling_fleet,
+        before: false,
+    };
+    assert!(
+        crate::scope::check(&scoped, Some(&Context::Voyage { id: voyage }), &move_fleet).is_ok()
+    );
+    assert!(
+        crate::scope::check(
+            &scoped,
+            Some(&Context::Fleet { id: selected_fleet }),
+            &move_fleet
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn scoped_creation_and_split_keep_existing_identity() {
     let mut model = Model::default();
     model

@@ -29,6 +29,24 @@ export type Action =
     }
   | {
       id: string;
+      operation: "move-vessel";
+      side: Side;
+      target: string;
+    }
+  | {
+      before: boolean;
+      id: string;
+      operation: "move-voyage";
+      target: string;
+    }
+  | {
+      before: boolean;
+      id: string;
+      operation: "move-fleet";
+      target: string;
+    }
+  | {
+      id: string;
       operation: "select-voyage";
     }
   | {
@@ -57,6 +75,7 @@ export type RenameTarget =
       kind: "portal";
     };
 export type Axis = "horizontal" | "vertical";
+export type Side = "left" | "right" | "top" | "bottom";
 export type Context =
   | {
       kind: "workspace";

@@ -129,6 +129,81 @@
               "type": "string"
             },
             "operation": {
+              "const": "move-vessel",
+              "type": "string"
+            },
+            "side": {
+              "$ref": "#/definitions/Side"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "target",
+            "side"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "before": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "move-voyage",
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "target",
+            "before"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "before": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "move-fleet",
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "target",
+            "before"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
               "const": "select-voyage",
               "type": "string"
             }
@@ -338,6 +413,15 @@
           "type": "object"
         }
       ]
+    },
+    "Side": {
+      "enum": [
+        "left",
+        "right",
+        "top",
+        "bottom"
+      ],
+      "type": "string"
     }
   },
   "properties": {
