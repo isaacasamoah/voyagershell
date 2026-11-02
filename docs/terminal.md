@@ -127,3 +127,14 @@ binding uses [libghostty-rs at 8363442](https://github.com/Uzaaft/libghostty-rs/
 which builds Ghostty's VT library and requires the matching Zig toolchain.
 Core protocol behavior is based on
 [Core e07c2a1](https://github.com/herdrdev/herdr-core/tree/e07c2a1bedd62cf4787ee026ee23ee79c7d95491).
+
+The terminal chooses its font once when the pane is created. It prefers the
+reference's DejaVu Sans Mono, then an available monospace family, and uses the
+same family for cell width, displayed text and input-composition positioning.
+On the observed Linux host DejaVu Sans Mono is absent and the reference's
+monospace fallback is Noto Sans Mono. Without an explicit available mono family,
+GPUI's general fallback can select a proportional font; using the advance of its
+wide `M` for every cell makes narrow letters appear widely spaced. If no named
+mono family is available, the earlier DejaVu request remains the last resort.
+This source correction has not established native visual parity. The existing
+18-pixel row height remains unchanged until a matched reference measurement.

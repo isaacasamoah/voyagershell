@@ -156,7 +156,7 @@ impl EntityInputHandler for Pane {
                 gpui::px(13.),
                 &[gpui::TextRun {
                     len: prefix.len(),
-                    font: gpui::font("DejaVu Sans Mono"),
+                    font: gpui::font(self.font_family.clone()),
                     ..Default::default()
                 }],
                 None,

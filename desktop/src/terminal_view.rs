@@ -211,7 +211,7 @@ impl Render for Pane {
             .min_w_0()
             .min_h_0()
             .p(px(8.))
-            .font_family("DejaVu Sans Mono")
+            .font_family(self.font_family.clone())
             .text_size(px(13.))
             .line_height(height)
             .text_color(gpui::rgb(0xcdd0d6))
