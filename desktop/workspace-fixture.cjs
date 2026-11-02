@@ -1,6 +1,9 @@
 const fs = require("node:fs");
 
-module.exports = function workspaceSource(environmentKey, declaration = "class") {
+module.exports = function workspaceSource(
+  environmentKey,
+  declaration = "class",
+) {
   return fs
     .readFileSync(
       process.env[environmentKey] || `${__dirname}/mods/header/main.js`,
