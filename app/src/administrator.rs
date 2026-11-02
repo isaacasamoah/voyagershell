@@ -59,7 +59,7 @@ pub(crate) fn catalog() -> Result<Value, String> {
     .map_err(|error| error.to_string())?;
     Ok(json!([
         {"type":"function","name":"voyager_workspace","description":"Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.","inputSchema":schema},
-        {"type":"function","name":"voyager_process","description":"Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact contentId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter; interrupt uses its native stop key and is a separate explicit action. Both require the inspected running PID. Input submitted does not mean work completed. Do not interrupt, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Stop/content tools are unavailable.","inputSchema":process_schema}
+        {"type":"function","name":"voyager_process","description":"Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact contentId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Content tools are unavailable.","inputSchema":process_schema}
     ]))
 }
 
@@ -421,6 +421,12 @@ fn process_text(status: &Status, output: Option<&ProcessOutput>, message: Option
         Some(ProcessOutput::Interrupt { outcome, .. }) => {
             format!("Interrupt submitted; Core reports {outcome}")
         }
+        Some(ProcessOutput::Stop { observed, .. }) => if observed.state == "finished" {
+            "Program ended"
+        } else {
+            "Stop requested; Core still reports running"
+        }
+        .into(),
         None => message.unwrap_or("Process operation applied").into(),
     }
 }

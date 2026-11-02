@@ -37,6 +37,11 @@ test("process schema keeps integer bounds and excludes caller authority", async 
     },
   };
   assert.equal(processTool(request), true);
+  const { text, ...target } = request.action;
+  assert.equal(
+    processTool({ ...request, action: { ...target, operation: "stop" } }),
+    true,
+  );
   for (const pid of [-1, 0.5, 4294967296])
     assert.equal(
       processTool({ ...request, action: { ...request.action, pid } }),

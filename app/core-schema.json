@@ -297,6 +297,25 @@
         "terminal"
       ]
     },
+    "KillParams": {
+      "type": "object",
+      "properties": {
+        "caller": {
+          "description": "Who is calling; a parent looking at its child has seen its news.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "terminal": {
+          "description": "The terminal: `t7`, a name, or `machine/t7`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "terminal"
+      ]
+    },
     "RunResult": {
       "properties": {
         "address": {
@@ -726,172 +745,6 @@
       ],
       "type": "object"
     },
-    "FirstMessage": {
-      "properties": {
-        "reason": {
-          "description": "Why it was not sent.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sent": {
-          "type": "boolean"
-        },
-        "started": {
-          "description": "Whether the agent started working on it (see terminal.send).",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "turn": {
-          "description": "The turn when it went in (see terminal.send).",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "sent"
-      ],
-      "type": "object"
-    },
-    "Foreground": {
-      "properties": {
-        "argv": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "cwd": {
-          "description": "Its working directory now (resolved by the OS).",
-          "type": "string"
-        },
-        "name": {
-          "description": "Its name as the OS has it (`node`, `vim`, `sh`).",
-          "type": "string"
-        },
-        "pid": {
-          "description": "The foreground process group's leader.",
-          "format": "int32",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "pid",
-        "name",
-        "argv",
-        "cwd"
-      ],
-      "type": "object"
-    },
-    "Status": {
-      "description": "One 7501 record. Words are the program's own; nothing is translated.",
-      "properties": {
-        "app": {
-          "type": "string"
-        },
-        "kind": {
-          "description": "permission, question or auth (blocked only, when the program said).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "msg": {
-          "type": "string"
-        },
-        "progress": {
-          "description": "0..100 (working or blocked, when the program said).",
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "state": {
-          "description": "idle, working, done, blocked or error.",
-          "type": "string"
-        },
-        "title": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "type": "object"
-    },
-    "WaitResult": {
-      "properties": {
-        "children": {
-          "description": "With `children`: one result per child it reports on.",
-          "items": {
-            "$ref": "#/definitions/WaitResult"
-          },
-          "type": "array"
-        },
-        "ended": {
-          "description": "False on timeout: a check-in, the terminal is still running.",
-          "type": "boolean"
-        },
-        "exit_code": {
-          "format": "int32",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "from": {
-          "description": "With a message: the sender's address (the text is already in your input);\nnull when a person sent it.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "reason": {
-          "description": "status, exit (including program loss in a kept terminal), output, timeout,\nor not_started (after a send: it did not start working; a plain wait\nstill follows that send's turn); with\n`children`: children; message (someone messaged the waiter, any\nwait); for each child in `children`: status, exit, or running (still\nworking).",
-          "type": "string"
-        },
-        "signal": {
-          "format": "int32",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "status": {
-          "description": "The exact word the program reported (current word on timeout or output).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "terminal": {
-          "type": "string"
-        },
-        "turn": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "terminal",
-        "ended",
-        "reason",
-        "turn",
-        "children"
-      ],
-      "type": "object"
-    },
     "Terminal": {
       "properties": {
         "address": {
@@ -1109,6 +962,172 @@
         "screen",
         "cols",
         "rows"
+      ],
+      "type": "object"
+    },
+    "FirstMessage": {
+      "properties": {
+        "reason": {
+          "description": "Why it was not sent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sent": {
+          "type": "boolean"
+        },
+        "started": {
+          "description": "Whether the agent started working on it (see terminal.send).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "turn": {
+          "description": "The turn when it went in (see terminal.send).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sent"
+      ],
+      "type": "object"
+    },
+    "Foreground": {
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cwd": {
+          "description": "Its working directory now (resolved by the OS).",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name as the OS has it (`node`, `vim`, `sh`).",
+          "type": "string"
+        },
+        "pid": {
+          "description": "The foreground process group's leader.",
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid",
+        "name",
+        "argv",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "description": "One 7501 record. Words are the program's own; nothing is translated.",
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "permission, question or auth (blocked only, when the program said).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "msg": {
+          "type": "string"
+        },
+        "progress": {
+          "description": "0..100 (working or blocked, when the program said).",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "idle, working, done, blocked or error.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    },
+    "WaitResult": {
+      "properties": {
+        "children": {
+          "description": "With `children`: one result per child it reports on.",
+          "items": {
+            "$ref": "#/definitions/WaitResult"
+          },
+          "type": "array"
+        },
+        "ended": {
+          "description": "False on timeout: a check-in, the terminal is still running.",
+          "type": "boolean"
+        },
+        "exit_code": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "from": {
+          "description": "With a message: the sender's address (the text is already in your input);\nnull when a person sent it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "status, exit (including program loss in a kept terminal), output, timeout,\nor not_started (after a send: it did not start working; a plain wait\nstill follows that send's turn); with\n`children`: children; message (someone messaged the waiter, any\nwait); for each child in `children`: status, exit, or running (still\nworking).",
+          "type": "string"
+        },
+        "signal": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "The exact word the program reported (current word on timeout or output).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "terminal": {
+          "type": "string"
+        },
+        "turn": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "terminal",
+        "ended",
+        "reason",
+        "turn",
+        "children"
       ],
       "type": "object"
     },

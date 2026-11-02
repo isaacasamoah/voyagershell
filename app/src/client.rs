@@ -137,9 +137,9 @@ impl Client {
                                         response.status = Status::Applied;
                                         response.output = Some(output);
                                     }
-                                    _ if matches!(output, voyager_contract::administrator::ProcessOutput::Send { .. } | voyager_contract::administrator::ProcessOutput::Interrupt { .. }) => {
+                                    _ if matches!(output, voyager_contract::administrator::ProcessOutput::Send { .. } | voyager_contract::administrator::ProcessOutput::Interrupt { .. } | voyager_contract::administrator::ProcessOutput::Stop { .. }) => {
                                         response.status = Status::Applied;
-                                        response.message = Some("The requested process input was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
+                                        response.message = Some("The requested process operation was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
                                     }
                                     _ => response.message = Some("Process result exceeds the tool response limit. Inspect a narrower focus or read less history.".into()),
                                 }

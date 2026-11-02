@@ -55,6 +55,12 @@ pub enum ProcessAction {
         #[schemars(transform = standard_integer)]
         pid: u32,
     },
+    Stop {
+        content_id: ContentId,
+        terminal_id: CoreTerminalId,
+        #[schemars(transform = standard_integer)]
+        pid: u32,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -108,6 +114,10 @@ pub enum ProcessOutput {
         target: ProcessInfo,
         key: String,
         outcome: String,
+    },
+    Stop {
+        target: ProcessInfo,
+        observed: ProcessInfo,
     },
 }
 

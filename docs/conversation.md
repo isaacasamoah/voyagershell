@@ -110,8 +110,8 @@ type and full numeric precision through the script layer. New tool outcomes caus
 one read refresh of the workspace view, queued behind a current UI operation.
 That refresh does not repeat an effect or introduce an idle polling loop.
 
-The process catalogue has list, read, send and interrupt operations. List and read
-retain access to known-ended bound terminals without a PID. Send and interrupt
+The process catalogue has list, read, send, interrupt and selected-program stop operations. List and read
+retain access to known-ended bound terminals without a PID. Send, interrupt and stop
 require the inspected content ID, exact Core terminal address and live PID.
 Process inspection also reports Core's actual optional foreground program name,
 without arguments or an inferred work state. Every operation uses the same Client queue and physical Core connection as the
@@ -134,7 +134,26 @@ status, turn and optional started result. It establishes submission, not task
 completion. Interrupt is a separate explicit Core operation and returns the
 actual key and observed outcome, including unknown or still_working. The
 application never combines interrupt and send, retries an uncertain effect,
-resumes or restarts a program. Stop remains a separate gated lifecycle operation.
+resumes or restarts a program. Selected Stop has a separate T4 checkpoint;
+whole-session Quit and reopen retain their separate lifecycle gates.
+
+Selected Stop uses Core's terminal.kill, not server.stop or OS signals from
+Voyager. It ends that terminal's program and descendants; Interrupt remains the
+program's stop key without escalation. The request carries the inspected content,
+terminal and PID, while the result retains both the inspected target and Core's
+observed record. Only a finished record is described as "Program ended". A live
+record with the same PID is reported as still running. A malformed response,
+unexpected terminal/PID/state or lost confirmation is unconfirmed and is never
+automatically repeated. The placement, backend address and final screen remain.
+
+The application rechecks the running PID immediately before dispatch. Core's
+kill schema accepts a terminal address but no expected PID, so this is not an
+atomic compare-and-kill guarantee against external Core mutations. The inspected
+Core source is herdrdev/herdr-core at e07c2a1bedd62cf4787ee026ee23ee79c7d95491,
+api.rs terminal_kill and runtime.rs kill. Its bounded escalation can return a
+still-live record. Source tests do not establish the native Stop interaction or
+the complete shutdown of every possible detached descendant. Native verification,
+independent review and the proof-size gate remain required for this candidate.
 
 The Core generator accepts an optional saved-schema path after --write or
 --check. It retains the complete canonical 0.1.16 hash guard and the original

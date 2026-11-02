@@ -34,6 +34,20 @@ fn info(content: &ContentId, terminal: Terminal) -> ProcessInfo {
     }
 }
 
+fn stop_result(target: ProcessInfo, observed: ProcessInfo) -> Result<ProcessOutput, Error> {
+    if observed.terminal_id != target.terminal_id
+        || !matches!(observed.state.as_str(), "live" | "finished")
+        || observed.pid.is_some_and(|pid| Some(pid) != target.pid)
+        || observed.state == "live" && observed.pid.is_none()
+    {
+        return Err(Error::Uncertain(
+            "Core stop returned an unexpected terminal, process identity or state; do not repeat"
+                .into(),
+        ));
+    }
+    Ok(ProcessOutput::Stop { target, observed })
+}
+
 pub(crate) fn run(
     core: &mut Core,
     layout: &Arc<Layout>,
@@ -57,6 +71,11 @@ pub(crate) fn run(
             ..
         }
         | ProcessAction::Interrupt {
+            content_id,
+            terminal_id,
+            ..
+        }
+        | ProcessAction::Stop {
             content_id,
             terminal_id,
             ..
@@ -149,6 +168,15 @@ pub(crate) fn run(
                     outcome: interrupted.outcome,
                 })
             }
+            ProcessAction::Stop { pid, .. } => {
+                if target.state != "live" || *pid == 0 || target.pid != Some(*pid) {
+                    return Err(refused(
+                        "The inspected running process identity has changed or ended; no stop was sent",
+                    ));
+                }
+                let observed = decoded(core.rpc("terminal.kill", json!({"terminal":address.0}))?)?;
+                stop_result(target, info(content, observed))
+            }
             ProcessAction::List => Err(refused("This operation does not target one terminal")),
         }
     } else {
@@ -179,5 +207,59 @@ pub(crate) fn run(
             processes,
             unavailable,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stop_result_distinguishes_observed_states_from_unconfirmed_results() {
+        let target = ProcessInfo {
+            content_id: ContentId("content-1".into()),
+            terminal_id: CoreTerminalId("t1".into()),
+            pid: Some(23),
+            cwd: "/tmp".into(),
+            state: "live".into(),
+            foreground: None,
+        };
+        assert!(matches!(
+            stop_result(target.clone(), target.clone()),
+            Ok(ProcessOutput::Stop { observed, .. }) if observed.state == "live"
+        ));
+        let mut observed = target.clone();
+        observed.pid = Some(24);
+        assert!(matches!(
+            stop_result(target.clone(), observed),
+            Err(Error::Uncertain(_))
+        ));
+        let mut observed = target.clone();
+        observed.pid = None;
+        assert!(matches!(
+            stop_result(target.clone(), observed),
+            Err(Error::Uncertain(_))
+        ));
+        let mut observed = target.clone();
+        observed.state = "finished".into();
+        assert!(matches!(
+            stop_result(target.clone(), observed.clone()),
+            Ok(ProcessOutput::Stop { observed, .. }) if observed.state == "finished"
+        ));
+        observed.terminal_id = CoreTerminalId("t2".into());
+        assert!(matches!(
+            stop_result(target.clone(), observed),
+            Err(Error::Uncertain(_))
+        ));
+        let mut observed = target.clone();
+        observed.state = "unrecognized".into();
+        assert!(matches!(
+            stop_result(target, observed),
+            Err(Error::Uncertain(_))
+        ));
+        assert!(matches!(
+            decoded::<Terminal>(json!({})),
+            Err(Error::Uncertain(_))
+        ));
     }
 }

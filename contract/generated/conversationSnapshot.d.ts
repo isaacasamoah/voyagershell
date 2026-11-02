@@ -109,6 +109,12 @@ export type ProcessAction =
       operation: "interrupt";
       pid: number;
       terminalId: string;
+    }
+  | {
+      contentId: string;
+      operation: "stop";
+      pid: number;
+      terminalId: string;
     };
 export type CallbackId =
   | {
