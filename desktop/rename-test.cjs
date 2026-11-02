@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const workspaceSource = require("./workspace-fixture.cjs");
 const vm = require("node:vm");
 const { test } = require("node:test");
 
@@ -41,13 +41,7 @@ function fixture() {
     focus() {},
     release() {},
   });
-  const source = fs
-    .readFileSync(
-      process.env.VOYAGER_RENAME_SOURCE || `${__dirname}/mods/header/main.js`,
-      "utf8",
-    )
-    .replace(/^import .*;\n/gm, "")
-    .replace("export default class", "class");
+  const source = workspaceSource("VOYAGER_RENAME_SOURCE");
   const Workspace = vm.runInNewContext(`${source}\nWorkspace`, {
     View: class {},
     div,

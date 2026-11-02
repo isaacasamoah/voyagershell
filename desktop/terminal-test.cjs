@@ -1,16 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const workspaceSource = require("./workspace-fixture.cjs");
 const { test } = require("node:test");
 
 function fixture(status, inspected = "applied") {
-  const source = fs
-    .readFileSync(
-      process.env.VOYAGER_WORKSPACE_SOURCE ||
-        `${__dirname}/mods/header/main.js`,
-      "utf8",
-    )
-    .replace(/^import .*;\n/gm, "")
-    .replace("export default class", "return class");
+  const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
   const layout = {
     selectedVoyage: "voyage",
     selectedFleet: "fleet",

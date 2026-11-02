@@ -8,7 +8,7 @@
     "core-schema:generate": "node app/core-schema.cjs --write",
     "core-schema:check": "node app/core-schema.cjs --check",
     "test": "node --test contract/validator-test.cjs desktop/terminal-test.cjs desktop/rename-test.cjs",
-    "format:check": "prettier --check contract/build.cjs app/core-schema.cjs 'desktop/*-test.cjs' 'desktop/mods/**/*.{js,json}' 'desktop/themes/*.json'"
+    "format:check": "prettier --check contract/build.cjs app/core-schema.cjs 'desktop/*.cjs' 'desktop/mods/**/*.{js,json}' 'desktop/themes/*.json'"
   },
   "devDependencies": {
     "ajv": "8.20.0",
