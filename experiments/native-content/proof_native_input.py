@@ -86,6 +86,15 @@ try:
                     "NotifyKeyboardKeysym",
                     GLib.Variant("(ub)", (args[1], args[2])),
                 )
+            elif action == "scroll":
+                call(
+                    session,
+                    service + ".Session",
+                    "NotifyPointerAxis",
+                    GLib.Variant(
+                        "(ddu)", (0.0, float(args[1]), args[2] if len(args) > 2 else 1)
+                    ),
+                )
             else:
                 raise ValueError("Unsupported native input action")
             print(json.dumps(result), flush=True)

@@ -49,14 +49,14 @@ def create_voyage(capture, click, evidence):
         json.dumps(
             {
                 "capture": "before-create-voyage",
-                "measuredFrom": "/var/tmp/voyager-arrangement-initial-02/before-close-compositor.png",
+                "measuredFrom": "/var/tmp/voyager-working-core-layouts-01/layouts-stopped-terminal-compositor.png",
                 "viewport": list(frame.size),
-                "point": [65, 278],
+                "point": [65, 302],
             },
             indent=2,
         )
     )
-    click(65, 278)
+    click(65, 302)
 
 
 def core_rpc(session, env, method, params):

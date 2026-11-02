@@ -17,7 +17,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-process"])
+    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-process", "terminal-agent", "conversation-scroll"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -28,7 +28,13 @@ def run():
     parser.add_argument("--session", required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--desktop-env", type=Path)
+    parser.add_argument("--public-snapshot", type=Path)
     args = parser.parse_args()
+    if args.journey == "conversation-scroll":
+        if args.public_snapshot is None or not args.public_snapshot.is_absolute() or not args.public_snapshot.is_file():
+            parser.error("conversation-scroll requires an absolute public Snapshot file")
+    elif args.public_snapshot is not None:
+        parser.error("--public-snapshot is only for conversation-scroll")
     if not re.fullmatch(r"voyager-[a-z0-9-]+", args.session):
         parser.error("Use a dedicated voyager- session")
     root = Path(__file__).resolve().parent
@@ -47,6 +53,9 @@ def run():
     elif not args.launch:
         env.update(json.loads((evidence / "launch.json").read_text())["desktopEnvironment"])
     env.pop("WAYLAND_DISPLAY", None)
+    env.pop("VOYAGER_PROOF_PUBLIC_SNAPSHOT", None)
+    if args.journey == "conversation-scroll":
+        env["VOYAGER_PROOF_PUBLIC_SNAPSHOT"] = str(args.public_snapshot)
     env["VOYAGER_WORKSPACE_SESSION"] = args.session
     if args.journey and args.journey.startswith("conversation"):
         env["VOYAGER_CONVERSATION_EVIDENCE"] = str(evidence / "conversation.json")
@@ -128,7 +137,10 @@ def run():
     input_targets = []
 
     def native(*action):
-        if args.foundation and action[0] in ("key", "button") and action[-1] is True:
+        if args.foundation and (
+            action[0] == "scroll"
+            or action[0] in ("key", "button") and action[-1] is True
+        ):
             verify()
             if action[0] == "key":
                 target = execute("xdotool", "getwindowfocus")
@@ -227,7 +239,8 @@ def run():
             passed.append("native-quit")
         elif args.foundation:
             import importlib
-            proof_workspace = importlib.import_module("proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace")
+            module = "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey == "terminal-agent" else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
+            proof_workspace = importlib.import_module(module)
 
             passed.extend(proof_workspace.prove(
                 native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame,
