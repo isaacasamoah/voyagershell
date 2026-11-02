@@ -1,6 +1,6 @@
 use schemars::{JsonSchema, Schema, generate::SchemaSettings};
 use serde_json::json;
-use voyager_contract::{Request, Response};
+use voyager_contract::{Request, Response, TerminalRequest, TerminalResponse};
 
 fn schema<T: JsonSchema>() -> Schema {
     SchemaSettings::draft07()
@@ -10,7 +10,7 @@ fn schema<T: JsonSchema>() -> Schema {
 
 fn main() {
     match serde_json::to_string_pretty(
-        &json!({"request":schema::<Request>(),"response":schema::<Response>()}),
+        &json!({"request":schema::<Request>(),"response":schema::<Response>(),"terminalRequest":schema::<TerminalRequest>(),"terminalResponse":schema::<TerminalResponse>()}),
     ) {
         Ok(value) => println!("{value}"),
         Err(error) => {

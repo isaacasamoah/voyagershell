@@ -24,6 +24,12 @@
         "id": {
           "type": "string"
         },
+        "startPending": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "typeId": {
           "type": "string"
         }
