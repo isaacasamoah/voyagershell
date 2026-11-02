@@ -13,6 +13,11 @@ from PIL import Image, ImageChops
 from proof_process import process_identity
 
 
+def candidate_directory(foundation):
+    repository = Path(__file__).resolve().parents[2]
+    return repository if foundation else repository / "experiments/native-content"
+
+
 def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
@@ -39,7 +44,9 @@ def run():
     if not re.fullmatch(r"voyager-[a-z0-9-]+", args.session):
         parser.error("Use a dedicated voyager- session")
     root = Path(__file__).resolve().parent
-    candidate_root = root.parents[1] if args.foundation else root
+    candidate_root = candidate_directory(args.foundation)
+    if not args.foundation:
+        sys.path.append(str(candidate_root))
     binary = args.binary.resolve()
     if args.launch and not binary.is_file():
         raise RuntimeError("Native header capability has not been built")
