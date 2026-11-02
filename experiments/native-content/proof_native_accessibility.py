@@ -9,17 +9,26 @@ def enabled(value=None):
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     args = ("org.a11y.Status", "IsEnabled")
     method = "Get" if value is None else "Set"
-    variant = GLib.Variant("(ss)", args) if value is None else GLib.Variant(
-        "(ssv)", (*args, GLib.Variant("b", value))
+    variant = (
+        GLib.Variant("(ss)", args)
+        if value is None
+        else GLib.Variant("(ssv)", (*args, GLib.Variant("b", value)))
     )
     result = bus.call_sync(
-        "org.a11y.Bus", "/org/a11y/bus", "org.freedesktop.DBus.Properties",
-        method, variant, None, Gio.DBusCallFlags.NONE, 3000, None,
+        "org.a11y.Bus",
+        "/org/a11y/bus",
+        "org.freedesktop.DBus.Properties",
+        method,
+        variant,
+        None,
+        Gio.DBusCallFlags.NONE,
+        3000,
+        None,
     )
     return result.unpack()[0] if value is None else enabled()
 
 
-def fields(pid):
+def fields(pid, names=("Note title", "Note text"), coordinate_space="screen"):
     Atspi.init()
     desktop = Atspi.get_desktop(0)
     for _ in range(30):
@@ -42,8 +51,14 @@ def fields(pid):
         visited += 1
         assert visited <= 512, "Unexpectedly large candidate accessibility tree"
         name = node.get_name()
-        if name in ("Note title", "Note text"):
-            rectangle = node.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+        if name in names:
+            coordinates = {
+                "screen": Atspi.CoordType.SCREEN,
+                "window": Atspi.CoordType.WINDOW,
+            }
+            rectangle = node.get_component_iface().get_extents(
+                coordinates[coordinate_space]
+            )
             value = node.get_text_iface().get_text(0, -1) if node.is_text() else None
             metadata = {
                 "name": name,

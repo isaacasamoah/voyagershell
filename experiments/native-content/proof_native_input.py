@@ -10,8 +10,15 @@ service = "org.gnome.Mutter.RemoteDesktop"
 
 def call(path, interface, method, args=None, bus_name=service):
     return bus.call_sync(
-        bus_name, path, interface, method, args,
-        None, Gio.DBusCallFlags.NONE, 3000, None,
+        bus_name,
+        path,
+        interface,
+        method,
+        args,
+        None,
+        Gio.DBusCallFlags.NONE,
+        3000,
+        None,
     )
 
 
@@ -48,21 +55,35 @@ try:
                     accessibility_before = enabled()
                     if not accessibility_before:
                         assert enabled(True), "Accessibility could not be enabled"
-                matches = fields(args[1])
+                names = (
+                    args[2]
+                    if action == "fields" and len(args) > 2
+                    else ("Note title", "Note text")
+                )
+                coordinates = (
+                    args[3] if action == "fields" and len(args) > 3 else "screen"
+                )
+                matches = fields(args[1], names, coordinates)
                 if action == "fields":
                     result["fields"] = [metadata for _, metadata in matches]
                 else:
                     for _ in range(30):
-                        targets = [item for item in matches if item[1]["name"] == args[2]]
+                        targets = [
+                            item for item in matches if item[1]["name"] == args[2]
+                        ]
                         if len(targets) > args[3]:
                             break
                         time.sleep(0.1)
                         matches = fields(args[1])
-                    assert len(targets) > args[3], "Native editor did not become accessible"
+                    assert len(targets) > args[3], (
+                        "Native editor did not become accessible"
+                    )
                     assert targets[args[3]][0].get_component_iface().grab_focus()
             elif action == "key":
                 call(
-                    session, service + ".Session", "NotifyKeyboardKeysym",
+                    session,
+                    service + ".Session",
+                    "NotifyKeyboardKeysym",
                     GLib.Variant("(ub)", (args[1], args[2])),
                 )
             else:
@@ -79,7 +100,12 @@ finally:
 
         if not accessibility_before:
             enabled(False)
-        print(json.dumps({
-            "accessibilityBefore": accessibility_before,
-            "accessibilityAfter": enabled(),
-        }), flush=True)
+        print(
+            json.dumps(
+                {
+                    "accessibilityBefore": accessibility_before,
+                    "accessibilityAfter": enabled(),
+                }
+            ),
+            flush=True,
+        )
