@@ -14,7 +14,8 @@ fn main() {
         &json!({"request":schema::<Request>(),"response":schema::<Response>(),
             "conversationRequest":schema::<conversation::Request>(),
             "conversationReply":schema::<conversation::Reply>(),
-            "conversationSnapshot":schema::<conversation::Snapshot>()}),
+            "conversationSnapshot":schema::<conversation::Snapshot>(),
+            "workspaceTool":schema::<voyager_contract::administrator::WorkspaceInput>()}),
     ) {
         Ok(value) => println!("{value}"),
         Err(error) => {

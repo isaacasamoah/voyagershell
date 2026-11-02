@@ -190,6 +190,7 @@ pub(crate) fn notification(state: &mut Snapshot, value: &Value, request: &str) -
                     role: Role::Assistant,
                     text: text.into(),
                     context,
+                    tool: None,
                 });
             }
         }

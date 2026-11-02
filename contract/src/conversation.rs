@@ -49,6 +49,7 @@ pub enum Phase {
 pub enum Role {
     User,
     Assistant,
+    Tool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -59,6 +60,32 @@ pub struct Message {
     pub role: Role,
     pub text: String,
     pub context: Option<Focus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<ToolOutcome>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ToolOutcome {
+    pub name: String,
+    pub call_id: String,
+    pub callback_ids: Vec<CallbackId>,
+    pub request_id: String,
+    pub action: crate::Action,
+    pub status: crate::Status,
+    pub version: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "lowercase",
+    deny_unknown_fields
+)]
+pub enum CallbackId {
+    String(String),
+    Integer(#[schemars(regex(pattern = "^-?[0-9]+$"))] String),
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

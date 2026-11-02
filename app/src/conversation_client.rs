@@ -349,6 +349,7 @@ impl Owner {
                 role: Role::User,
                 text: text.clone(),
                 context: Some(context),
+                tool: None,
             });
             state.phase = Phase::Starting;
             state.turn = None;
