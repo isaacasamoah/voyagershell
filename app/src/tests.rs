@@ -112,3 +112,62 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     ));
     assert!(stopped.is_ok());
 }
+
+#[test]
+fn administrator_scope_refuses_another_voyage_without_changing_it() {
+    use crate::{client::Client, core::Core};
+    use voyager_contract::{Request, Status};
+    let session = format!("voyager-c2-scope-test-{}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let call = |action, expected_version| {
+        client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version,
+                action,
+            })
+            .unwrap()
+    };
+    let initial = call(Action::Inspect, 0);
+    let scope = Context::Voyage {
+        id: initial.layout.voyages[0].id.clone(),
+    };
+    let other = call(
+        Action::CreateVoyage {
+            name: "Other".into(),
+            cwd: "/tmp".into(),
+        },
+        initial.version,
+    );
+    let other_id = other.layout.voyages[1].id.clone();
+    let inspect = client
+        .scoped_call(
+            scope.clone(),
+            Request {
+                request_id: client.request_id(),
+                expected_version: 0,
+                action: Action::Inspect,
+            },
+        )
+        .unwrap();
+    let refused = client
+        .scoped_call(
+            scope,
+            Request {
+                request_id: client.request_id(),
+                expected_version: inspect.version,
+                action: Action::CreateFleet {
+                    voyage: other_id,
+                    name: "Outside".into(),
+                },
+            },
+        )
+        .unwrap();
+    let observed = call(Action::Inspect, 0);
+    let mut cleanup = Core::connect(&session).unwrap();
+    cleanup.rpc("server.stop", serde_json::json!({})).unwrap();
+    cleanup.close().unwrap();
+    assert_eq!(inspect.layout.voyages.len(), 1);
+    assert_eq!(refused.status, Status::Rejected);
+    assert_eq!(observed.layout.voyages[1].fleets.len(), 1);
+}

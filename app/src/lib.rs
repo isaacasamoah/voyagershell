@@ -1,5 +1,6 @@
 pub mod client;
 pub mod core;
+mod scope;
 pub mod workspace;
 
 #[cfg(test)]

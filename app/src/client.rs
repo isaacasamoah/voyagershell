@@ -13,16 +13,23 @@ use std::{
     thread,
     time::Duration,
 };
-use voyager_contract::{Action, Layout, Request, Response, Status};
+use voyager_contract::{Action, Context, Layout, Request, Response, Status};
 
 struct Message {
     request: Request,
+    scope: Option<Context>,
     reply: SyncSender<Response>,
 }
 
 struct Outcome {
     status: Status,
     message: Option<String>,
+}
+
+#[derive(Debug)]
+pub enum CallError {
+    Rejected(String),
+    Unconfirmed(String),
 }
 
 #[derive(Clone)]
@@ -39,22 +46,22 @@ impl Client {
             let mut layout = Arc::new(Layout::default());
             let mut version = 0;
             let mut fresh = false;
-            let mut receipts: VecDeque<(Request, Outcome)> = VecDeque::new();
+            let mut receipts: VecDeque<(Request, Option<Context>, Outcome)> = VecDeque::new();
             while let Ok(message) = receiver.recv() {
                 let request = message.request;
                 let mut response = Response {
                     request_id: request.request_id.clone(),
                     status: Status::Rejected,
                     version,
-                    layout: Arc::clone(&layout),
+                    layout: crate::scope::project(&layout, message.scope.as_ref()),
                     fresh,
                     message: None,
                 };
-                if let Some((previous, result)) = receipts
+                if let Some((previous, scope, result)) = receipts
                     .iter()
-                    .find(|(r, _)| r.request_id == request.request_id)
+                    .find(|(r, _, _)| r.request_id == request.request_id)
                 {
-                    if previous == &request {
+                    if previous == &request && scope == &message.scope {
                         response.status = result.status.clone();
                         response.message = result.message.clone();
                         let _ = message.reply.send(response);
@@ -68,7 +75,7 @@ impl Client {
                     let inspecting = matches!(request.action, Action::Inspect);
                     let result = match core.as_mut() {
                         Err(error) => Err(error.clone()),
-                        Ok(core) => {
+                        Ok(core) => (|| {
                             if matches!(request.action, Action::Inspect) {
                                 load(core).and_then(|(loaded, revision, missing)| {
                                     let mut candidate = Model { layout: loaded };
@@ -85,6 +92,12 @@ impl Client {
                                     layout = Arc::new(candidate.layout);
                                     version = revision;
                                     fresh = true;
+                                    crate::scope::check(
+                                        &layout,
+                                        message.scope.as_ref(),
+                                        &request.action,
+                                    )
+                                    .map_err(rejected)?;
                                     Ok(())
                                 })
                             } else if !fresh {
@@ -96,6 +109,12 @@ impl Client {
                                     "Layout changed; inspect it before making a new request".into(),
                                 ))
                             } else {
+                                crate::scope::check(
+                                    &layout,
+                                    message.scope.as_ref(),
+                                    &request.action,
+                                )
+                                .map_err(rejected)?;
                                 let mut candidate = Model {
                                     layout: (*layout).clone(),
                                 };
@@ -109,7 +128,7 @@ impl Client {
                                         Ok(())
                                     })
                             }
-                        }
+                        })(),
                     };
                     match result {
                         Ok(()) => response.status = Status::Applied,
@@ -127,10 +146,11 @@ impl Client {
                     }
                 }
                 response.version = version;
-                response.layout = Arc::clone(&layout);
+                response.layout = crate::scope::project(&layout, message.scope.as_ref());
                 response.fresh = fresh;
                 receipts.push_back((
                     request,
+                    message.scope,
                     Outcome {
                         status: response.status.clone(),
                         message: response.message.clone(),
@@ -161,13 +181,29 @@ impl Client {
     }
 
     pub fn call(&self, request: Request) -> Result<Response, String> {
+        self.bound_call(None, request).map_err(|error| match error {
+            CallError::Rejected(message) | CallError::Unconfirmed(message) => message,
+        })
+    }
+
+    pub fn scoped_call(&self, scope: Context, request: Request) -> Result<Response, CallError> {
+        self.bound_call(Some(scope), request)
+    }
+
+    fn bound_call(&self, scope: Option<Context>, request: Request) -> Result<Response, CallError> {
         let (reply, receive) = mpsc::sync_channel(1);
         self.sender
-            .try_send(Message { request, reply })
-            .map_err(|_| "Workspace busy or unavailable; nothing was queued".to_string())?;
-        receive
-            .recv_timeout(Duration::from_secs(20))
-            .map_err(|_| "Workspace result unconfirmed; do not repeat the request".to_string())
+            .try_send(Message {
+                request,
+                scope,
+                reply,
+            })
+            .map_err(|_| {
+                CallError::Rejected("Workspace busy or unavailable; nothing was queued".into())
+            })?;
+        receive.recv_timeout(Duration::from_secs(20)).map_err(|_| {
+            CallError::Unconfirmed("Workspace result unconfirmed; do not repeat the request".into())
+        })
     }
 }
 
