@@ -1,0 +1,10 @@
+version: 1
+metadata:
+  name: general-research-progress
+state:
+  backend: cluster
+  lock: true
+graphs:
+  research:
+    schema: progress.pg
+    queries: progress.gq

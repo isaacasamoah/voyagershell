@@ -1,0 +1,242 @@
+query research_brief($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $v: Protocol
+    $v protocolOf $p
+    $v.key = $p.protocol
+  }
+  return {
+    $p.key as key, $p.question as question, $p.objective as objective, $p.context as context, $p.revision as revision,
+    $p.limits as limits, $v.key as protocol, $v.method as method, $v.qualification as qualification
+  }
+}
+query criteria($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $v: Protocol
+    $v protocolOf $p
+    $v.key = $p.protocol
+    $v usesCriterion $c
+  }
+  return { $c.key as key, $c.name as name, $c.kind as kind, $c.role as role, $c.definition as definition, $c.evaluator as evaluator, $c.unit as unit }
+  order { $c.key asc }
+  limit 100
+}
+query candidates($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $c candidateFor $p
+  }
+  return { $c.key as key, $c.label as label, $c.kind as kind, $c.content as content }
+  order { $c.key asc }
+  limit 100
+}
+query claims($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $c claimIn $p
+  }
+  return { $c.key as key, $c.kind as kind, $c.statement as statement, $c.scope as scope }
+  order { $c.key asc }
+  limit 100
+}
+query attempts($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $a attemptFor $p
+    $a usedProtocol $v
+  }
+  return { $a.key as key, $a.method as method, $a.status as status, $a.scope as scope, $a.actor as actor, $v.key as protocol }
+  order { $a.key asc }
+  limit 100
+}
+query evidence($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $a attemptFor $p
+    $e producedBy $a
+  }
+  return {
+    $e.key as key, $e.kind as kind, $e.summary as summary, $e.numeric_value as numeric_value, $e.unit as unit, $e.value_text as value_text,
+    $e.artifact as artifact, $e.sha256 as sha256, $e.origin as origin, $e.assessor as assessor, $a.key as attempt, $a.status as status
+  }
+  order { $e.key asc }
+  limit 100
+}
+query assessment_history($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $a assesses $p
+    $a addresses $c
+    $v: Protocol
+    $v.key = $p.protocol
+    $v protocolOf $p
+  }
+  return {
+    $a.key as key, $a.result as result, $a.statement as statement, $a.rationale as rationale, $a.review as review, $a.assessor as assessor,
+    $a.protocol as protocol, $a.problem_revision as problem_revision, $c.key as criterion,
+    $a.protocol = $p.protocol and $a.problem_revision = $p.revision as context_current,
+    $a.protocol_method = $v.method and $a.protocol_qualification = $v.qualification as protocol_content_current,
+    $a.criterion_kind = $c.kind and $a.criterion_role = $c.role
+      and $a.criterion_definition = $c.definition and $a.criterion_evaluator = $c.evaluator
+      and ($a.criterion_unit = $c.unit or ($a.criterion_unit is null and $c.unit is null)) as criterion_content_current
+  }
+  order { $a.key asc }
+  limit 100
+}
+query qualified_assessments($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $a: Assessment { review: "reviewed" }
+    $a assesses $p
+    $a.protocol = $p.protocol
+    $a.problem_revision = $p.revision
+    $a addresses $c
+    $v: Protocol
+    $v protocolOf $p
+    $v.key = $p.protocol
+    $v usesCriterion $c
+    $a.protocol_method = $v.method
+    $a.protocol_qualification = $v.qualification
+    $a.criterion_kind = $c.kind
+    $a.criterion_role = $c.role
+    $a.criterion_definition = $c.definition
+    $a.criterion_evaluator = $c.evaluator
+    $a.criterion_unit = $c.unit or ($a.criterion_unit is null and $c.unit is null)
+    $a cites $e
+    not {
+      $new supersedes $a
+      $new.review = "reviewed"
+      $new.protocol = $p.protocol
+      $new.problem_revision = $p.revision
+    }
+  }
+  return { $a.key as key, $a.result as result, $a.statement as statement, $a.rationale as rationale, $c.name as criterion, $e.key as evidence, $e.origin as origin, $e.artifact as artifact, $a.assessor as assessor }
+  order { $a.key asc }
+  limit 100
+}
+query next_contributions($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $s: NextStep { state: "open" }
+    $s stepFor $p
+  }
+  return {
+    $s.key as key, $s.question as question, $s.reason as reason, $s.expected_information as expected_information, $s.prerequisites as prerequisites,
+    $s.protocol = $p.protocol and $s.problem_revision = $p.revision as context_current
+  }
+  order { $s.key asc }
+  limit 25
+}
+query updates_for($participant: String, $after: U32) {
+  match {
+    $who: Participant { key: $participant }
+    $who interestedIn $c
+    $u changed $c
+    $u updates $p
+    $u contributedBy $author
+    $u.sequence > $after
+  }
+  return {
+    $u.key as key, $u.sequence as sequence, $p.key as problem, $u.summary as summary, $u.why_it_matters as why_it_matters,
+    $u.contribution_requested as contribution_requested, $c.name as declared_interest, $author.name as contributor,
+    $u.protocol = $p.protocol and $u.problem_revision = $p.revision as context_current
+  }
+  order { $u.sequence asc }
+  limit 25
+}
+query update_evidence($update: String) {
+  match {
+    $u: Progress { key: $update }
+    $u explainedBy $a
+    $a cites $e
+  }
+  return { $u.key as key, $a.key as assessment, $a.result as result, $a.review as review, $a.rationale as rationale, $e.key as evidence, $e.origin as origin, $e.artifact as artifact, $e.sha256 as sha256 }
+  order { $e.key asc }
+  limit 25
+}
+query assessment_evidence($assessment: String) {
+  match {
+    $a: Assessment { key: $assessment }
+    $a cites $e
+    $e producedBy $run
+    $run usedProtocol $v
+  }
+  return {
+    $a.key as key, $a.protocol as assessed_protocol, $a.problem_revision as problem_revision,
+    $e.key as evidence, $e.summary as summary, $e.artifact as artifact, $e.sha256 as sha256, $e.origin as origin,
+    $run.key as attempt, $run.status as status, $run.method as method, $run.scope as scope,
+    $v.key as execution_protocol
+  }
+  order { $e.key asc }
+  limit 100
+}
+query assessed_candidates($assessment: String) {
+  match {
+    $a: Assessment { key: $assessment }
+    $a aboutCandidate $c
+  }
+  return { $a.key as key, $c.key as candidate, $c.label as label, $c.kind as kind, $c.content as content }
+  order { $c.key asc }
+  limit 100
+}
+query hypothesis_evidence($claim: String) {
+  match {
+    $c: Claim { key: $claim }
+    $a aboutClaim $c
+    $a assesses $p
+    $a cites $e
+  }
+  return {
+    $c.statement as statement, $c.scope as scope, $a.key as assessment, $a.result as result, $a.review as review,
+    $a.rationale as rationale, $e.key as evidence, $e.origin as origin,
+    $a.protocol = $p.protocol and $a.problem_revision = $p.revision as context_current
+  }
+  order { $a.key asc }
+  limit 100
+}
+query ungrounded_assessments() {
+  match {
+    $a: Assessment
+    not { $a cites $_ }
+  }
+  return { $a.key as key, $a.statement as statement, $a.review as review }
+  order { $a.key asc }
+  limit 100
+}
+query contribution_dependencies($step: String) {
+  match {
+    $s: NextStep { key: $step }
+    $s afterStep $prior
+  }
+  return { $s.key as key, $prior.key as prerequisite, $prior.question as question, $prior.state as state }
+  order { $prior.key asc }
+  limit 25
+}
+query ready_contributions($problem: String) {
+  match {
+    $p: Problem { key: $problem }
+    $s: NextStep { state: "open" }
+    $s stepFor $p
+    $s.protocol = $p.protocol
+    $s.problem_revision = $p.revision
+    not { $s afterStep $prior  $prior.state != "done" }
+  }
+  return {
+    $s.key as key, $s.question as question, $s.reason as reason,
+    $s.expected_information as expected_information, $s.prerequisites as prerequisites
+  }
+  order { $s.key asc }
+  limit 25
+}
+query revise_problem($problem: String, $expected: U32, $revision: U32, $protocol: String,
+                     $question: String, $objective: String, $context: String, $limits: String) {
+  update Problem set {
+    revision: $revision,
+    protocol: $protocol,
+    question: $question,
+    objective: $objective,
+    context: $context,
+    limits: $limits
+  } where key = $problem and revision = $expected and $revision > $expected
+}

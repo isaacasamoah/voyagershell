@@ -84,3 +84,26 @@ pass. Keep private evidence and account data outside Git.
 The test-size and shared-fixture rules are initially enforced by recorded review,
 not by a claimed CI coverage measure. A later automated check must preserve the
 same scope and must not mistake file ownership for exercised behavior.
+
+## General research progress graph experiment
+
+The owned experiment is `experiments/auto-research`. Its new graph configuration
+and stored queries are the executable source for this increment. Count only
+schema definitions and query ranges actually loaded or exercised in the trial.
+The proving command is `python3 experiments/auto-research/prove.py --binary PATH
+--review RECORDED_REVIEW_JSON --output NEW_OUTPUT_PATH`. Its example preparation and verification helpers, plus any
+one-off or reviewer programs used for acceptance, count as proving code.
+Unmodified OmniGraph binaries and upstream source count on neither side.
+
+The graph must accept new research domains as data. Numeric experiments, formal
+arguments, simulations and subjective assessments retain their different
+meanings. No required hypothesis, scalar score, automatic winner or automatic
+execution may be introduced as a shortcut. An uncertain or failed attempt has
+no invented zero-quality score. A changed evaluation contract invalidates the
+qualification of earlier assessments until they are reassessed.
+
+This increment proves capture, retrieval, export and participant handoff, with
+two useful examples. The actual product interface, a research solver, a job
+scheduler and live notification delivery are outside this experiment. Human
+usability, physical performance and frontier scientific discovery cannot be
+claimed from these bounded examples.

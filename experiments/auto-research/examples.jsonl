@@ -1,0 +1,48 @@
+{"type": "Problem", "data": {"key": "math", "question": "Is n*n+n+41 prime for every nonnegative integer?", "objective": "Find a checkable counterexample or establish what remains unproved.", "context": "Bounded arithmetic research example. Trial participant profiles are not live community accounts.", "revision": 1, "protocol": "math-v1", "limits": "Exact search through n=100; absence of a witness is not a proof."}}
+{"type": "Protocol", "data": {"key": "math-v1", "title": "Exact bounded search and factor witnesses", "method": "Evaluate the polynomial and seek an integer divisor by trial division.", "qualification": "One verified factor witness refutes the universal claim. A bounded search without a witness is inconclusive."}}
+{"edge": "ProtocolOf", "id": "ProtocolOf:math-v1:math", "from": "math-v1", "to": "math"}
+{"type": "Criterion", "data": {"key": "prime-everywhere", "name": "Primality of every claimed value", "kind": "formal", "role": "objective", "definition": "A valid n>=0 and proper factorization of n*n+n+41 refute the universal claim.", "evaluator": "trial-division-v1 plus independent multiplication check", "unit": null}}
+{"edge": "UsesCriterion", "id": "UsesCriterion:math-v1:prime-everywhere", "from": "math-v1", "to": "prime-everywhere"}
+{"type": "Claim", "data": {"key": "prime-claim", "kind": "hypothesis", "statement": "n*n+n+41 is prime for every integer n>=0.", "scope": "All nonnegative integers, not only a sampled range."}}
+{"edge": "ClaimIn", "id": "ClaimIn:prime-claim:math", "from": "prime-claim", "to": "math"}
+{"type": "Candidate", "data": {"key": "polynomial", "label": "Original polynomial claim", "content": "f(n)=n*n+n+41", "kind": "baseline"}}
+{"edge": "CandidateFor", "id": "CandidateFor:polynomial:math", "from": "polynomial", "to": "math"}
+{"type": "Problem", "data": {"key": "writing", "question": "Can this sentence be shorter while preserving its meaning?", "objective": "Find concise faithful candidates and retain reader preference as a separate judgment.", "context": "Research progress should be recorded clearly so that people who were not involved can understand what was tried, see the evidence, and decide how to contribute.", "revision": 1, "protocol": "writing-v1", "limits": "Three rewrites; word count is measured; model judgment is not human preference."}}
+{"type": "Protocol", "data": {"key": "writing-v1", "title": "Meaning before brevity", "method": "Measure whitespace-delimited words, assess preserved obligations, then request reader preference.", "qualification": "Retain attempted work, newcomer understanding, visible evidence and deciding how to contribute. No automatic winner from word count."}}
+{"edge": "ProtocolOf", "id": "ProtocolOf:writing-v1:writing", "from": "writing-v1", "to": "writing"}
+{"type": "Criterion", "data": {"key": "fidelity", "name": "Preservation of meaning", "kind": "rubric", "role": "constraint", "definition": "Check all four stated obligations and reject added or reversed obligations.", "evaluator": "Attributable model assessment; human review still available.", "unit": null}}
+{"edge": "UsesCriterion", "id": "UsesCriterion:writing-v1:fidelity", "from": "writing-v1", "to": "fidelity"}
+{"type": "Criterion", "data": {"key": "word-count", "name": "Sentence length", "kind": "numeric", "role": "objective", "definition": "Whitespace-delimited words. Lower count is useful only among faithful candidates.", "evaluator": "split-words-v1", "unit": "words"}}
+{"edge": "UsesCriterion", "id": "UsesCriterion:writing-v1:word-count", "from": "writing-v1", "to": "word-count"}
+{"type": "Criterion", "data": {"key": "reader-preference", "name": "Reader preference", "kind": "preference", "role": "objective", "definition": "Target readers compare eligible candidates with a reason; disagreement remains visible.", "evaluator": "Human readers, not yet consulted.", "unit": null}}
+{"edge": "UsesCriterion", "id": "UsesCriterion:writing-v1:reader-preference", "from": "writing-v1", "to": "reader-preference"}
+{"type": "Candidate", "data": {"key": "original", "label": "Original sentence", "content": "Research progress should be recorded clearly so that people who were not involved can understand what was tried, see the evidence, and decide how to contribute.", "kind": "baseline"}}
+{"edge": "CandidateFor", "id": "CandidateFor:original:writing", "from": "original", "to": "writing"}
+{"type": "Candidate", "data": {"key": "A", "label": "Rewrite A", "content": "Record research attempts and evidence clearly so newcomers can understand the work and choose how to contribute.", "kind": "proposal"}}
+{"edge": "CandidateFor", "id": "CandidateFor:A:writing", "from": "A", "to": "writing"}
+{"edge": "DerivedFrom", "id": "DerivedFrom:A:original", "from": "A", "to": "original"}
+{"type": "Candidate", "data": {"key": "B", "label": "Rewrite B", "content": "Share research so anyone can help.", "kind": "proposal"}}
+{"edge": "CandidateFor", "id": "CandidateFor:B:writing", "from": "B", "to": "writing"}
+{"edge": "DerivedFrom", "id": "DerivedFrom:B:original", "from": "B", "to": "original"}
+{"type": "Candidate", "data": {"key": "C", "label": "Rewrite C", "content": "Only experts can contribute after every research result has been verified.", "kind": "proposal"}}
+{"edge": "CandidateFor", "id": "CandidateFor:C:writing", "from": "C", "to": "writing"}
+{"edge": "DerivedFrom", "id": "DerivedFrom:C:original", "from": "C", "to": "original"}
+{"type": "Participant", "data": {"key": "record-author", "name": "Autoresearch record author", "kind": "agent"}}
+{"type": "Participant", "data": {"key": "math-reader", "name": "Formal-evidence subscriber, trial profile", "kind": "agent"}}
+{"type": "Participant", "data": {"key": "writing-reader", "name": "Writing subscriber, trial profile", "kind": "agent"}}
+{"type": "Participant", "data": {"key": "unrelated-reader", "name": "Unrelated subscriber, negative control", "kind": "agent"}}
+{"type": "Participant", "data": {"key": "newcomer", "name": "Returning participant, trial profile", "kind": "agent"}}
+{"type": "Participant", "data": {"key": "peer-reviewer", "name": "Active-collaboration chat, model assessor", "kind": "agent"}}
+{"edge": "InterestedIn", "id": "InterestedIn:math-reader:prime-everywhere", "from": "math-reader", "to": "prime-everywhere"}
+{"edge": "InterestedIn", "id": "InterestedIn:writing-reader:fidelity", "from": "writing-reader", "to": "fidelity"}
+{"edge": "InterestedIn", "id": "InterestedIn:writing-reader:reader-preference", "from": "writing-reader", "to": "reader-preference"}
+{"edge": "InterestedIn", "id": "InterestedIn:newcomer:prime-everywhere", "from": "newcomer", "to": "prime-everywhere"}
+{"edge": "InterestedIn", "id": "InterestedIn:newcomer:fidelity", "from": "newcomer", "to": "fidelity"}
+{"edge": "InterestedIn", "id": "InterestedIn:newcomer:reader-preference", "from": "newcomer", "to": "reader-preference"}
+{"type": "NextStep", "data": {"key": "math-next", "question": "Which revised question is worth testing after the counterexample?", "reason": "The original universal claim cannot stand after a valid counterexample.", "expected_information": "Distinguish useful restricted claims or revised formulas from the refuted universal claim.", "prerequisites": "Read the factor witness; agree a new scope before computing.", "state": "open", "problem_revision": 1, "protocol": "math-v1"}}
+{"edge": "StepFor", "id": "StepFor:math-next:math", "from": "math-next", "to": "math"}
+{"type": "NextStep", "data": {"key": "fidelity-review", "question": "Does rewrite A preserve the intended meaning for the author?", "reason": "A model assessment cannot establish the author's interpretation or reader preference.", "expected_information": "Find any lost obligation before comparing style.", "prerequisites": "Inspect original, A and the recorded model judgment.", "state": "open", "problem_revision": 1, "protocol": "writing-v1"}}
+{"edge": "StepFor", "id": "StepFor:fidelity-review:writing", "from": "fidelity-review", "to": "writing"}
+{"type": "NextStep", "data": {"key": "reader-review", "question": "Which faithful rewrite do target readers prefer, and why?", "reason": "Word count cannot decide literary preference.", "expected_information": "Collect attributable preferences without erasing disagreement.", "prerequisites": "First resolve the fidelity review; then ask actual readers.", "state": "open", "problem_revision": 1, "protocol": "writing-v1"}}
+{"edge": "StepFor", "id": "StepFor:reader-review:writing", "from": "reader-review", "to": "writing"}
+{"edge": "AfterStep", "id": "AfterStep:reader-review:fidelity-review", "from": "reader-review", "to": "fidelity-review"}
