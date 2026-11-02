@@ -17,7 +17,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable"])
+    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -123,7 +123,20 @@ def run():
         stderr=(evidence / "pointer.log").open("a"),
     )
 
+    input_targets = []
+
     def native(*action):
+        if args.foundation and action[0] in ("key", "button") and action[-1] is True:
+            verify()
+            if action[0] == "key":
+                target = execute("xdotool", "getwindowfocus")
+            else:
+                location = dict(line.split("=", 1) for line in execute("xdotool", "getmouselocation", "--shell").splitlines())
+                target = location["WINDOW"]
+            owner = int(execute("xdotool", "getwindowpid", target))
+            input_targets.append({"action": action, "window": target, "pid": owner})
+            (evidence / "input-targets.json").write_text(json.dumps(input_targets, indent=2))
+            assert owner == record["pid"], "Native input target is not the owned candidate"
         pointer.stdin.write(json.dumps(action) + "\n")
         pointer.stdin.flush()
         result = json.loads(pointer.stdout.readline())

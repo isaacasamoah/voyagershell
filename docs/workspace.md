@@ -1,7 +1,8 @@
 # Native workspace boundary
 
-The native workspace checkpoint creates and selects Voyages and Fleets, splits a
-placement and sets explicit dock context. Herdr Core stores the versioned layout
+The native workspace checkpoint creates, selects and renames Voyages and Fleets,
+splits a placement and sets explicit dock context. A Voyage-wide Portal uses the
+same placement/content interface and remains present across Fleet selection. Herdr Core stores the versioned layout
 document. The current view labels terminal connection as the next integration;
 it does not start a program or claim complete avatar, conversation or UX parity.
 
@@ -44,6 +45,15 @@ Switching a Voyage or Fleet changes navigation, not the explicit avatar context.
 The scope controls in this checkpoint set that context; they are not the final
 animated avatar interaction. Rust owns effects and GPUI draws the view. There
 is no browser engine in this runtime.
+
+Voyage, Fleet, Vessel and Portal names edit in place. Double-click or focus the
+name with Tab and press F2. Enter or leaving the field saves; Escape cancels a
+changed draft. An empty name reports the error and restores the existing label.
+A pending selection does not discard a double-click. The submitted name stays
+bound to its target; an unconfirmed name is not sent again on blur or Enter.
+An explicit Refresh can confirm the latest label before a distinct new edit.
+Queued navigation after a rename follows the latest selected destination and is
+cleared if its prerequisite is refused or unconfirmed.
 
 The Linux native fixture drives actual mouse actions, checks the saved Core
 document and captures the rendered result. An external document edit makes the
