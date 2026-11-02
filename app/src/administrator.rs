@@ -3,11 +3,14 @@ use serde_json::{Value, json};
 use std::{sync::mpsc, thread};
 use voyager_contract::{
     Action, Request, Status,
-    administrator::WorkspaceInput,
+    administrator::{
+        ProcessAction, ProcessInput, ProcessOutput, ProcessRequest, ToolAction, WorkspaceInput,
+    },
     conversation::{CallbackId, Focus, ToolOutcome},
 };
 
 struct Receipt {
+    tool: String,
     call: String,
     arguments: Option<Value>,
     replies: Vec<Value>,
@@ -20,7 +23,7 @@ pub(crate) struct Work {
     call: String,
     context: Focus,
     request_id: String,
-    action: Action,
+    action: ToolAction,
     receive: mpsc::Receiver<EffectResult>,
 }
 
@@ -50,9 +53,14 @@ pub(crate) fn catalog() -> Result<Value, String> {
         "../../contract/generated/workspaceTool.schema.json"
     ))
     .map_err(|error| error.to_string())?;
-    Ok(
-        json!([{"type":"function","name":"voyager_workspace","description":"Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No terminal execution or project/content-file edits. The application supplies request identity and authority.","inputSchema":schema}]),
-    )
+    let process_schema: Value = serde_json::from_str(include_str!(
+        "../../contract/generated/processTool.schema.json"
+    ))
+    .map_err(|error| error.to_string())?;
+    Ok(json!([
+        {"type":"function","name":"voyager_workspace","description":"Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.","inputSchema":schema},
+        {"type":"function","name":"voyager_process","description":"Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact contentId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter; interrupt uses its native stop key and is a separate explicit action. Both require the inspected running PID. Input submitted does not mean work completed. Do not interrupt, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Stop/content tools are unavailable.","inputSchema":process_schema}
+    ]))
 }
 
 fn result(success: bool, text: String) -> Value {
@@ -77,6 +85,7 @@ impl Tools {
 
     fn reject(
         &mut self,
+        tool: &str,
         id: Value,
         call: &str,
         arguments: Option<Value>,
@@ -84,6 +93,7 @@ impl Tools {
     ) -> Option<Value> {
         let reply = refusal(id.clone(), message);
         self.receipts.push(Receipt {
+            tool: tool.into(),
             call: call.into(),
             arguments,
             replies: vec![id],
@@ -115,10 +125,11 @@ impl Tools {
             );
         }
         let params = &value["params"];
+        let tool = params["tool"].as_str().unwrap_or_default();
         let matches = value["method"] == "item/tool/call"
             && thread.is_some_and(|thread| !thread.is_empty() && params["threadId"] == thread)
             && turn.is_some_and(|turn| !turn.is_empty() && params["turnId"] == turn)
-            && params["tool"] == "voyager_workspace"
+            && matches!(tool, "voyager_workspace" | "voyager_process")
             && params.get("namespace").is_none_or(Value::is_null);
         let call = params["callId"].as_str().unwrap_or_default();
         if !matches || call.is_empty() || call.len() > 128 {
@@ -156,10 +167,11 @@ impl Tools {
                     "Changed tool call identity; nothing was repeated",
                 ));
             }
-            if receipt
-                .arguments
-                .as_ref()
-                .is_some_and(|arguments| arguments != &params["arguments"])
+            if receipt.tool != tool
+                || receipt
+                    .arguments
+                    .as_ref()
+                    .is_some_and(|arguments| arguments != &params["arguments"])
             {
                 if receipt.waiting.contains(&id) {
                     return None;
@@ -187,86 +199,109 @@ impl Tools {
         let arguments =
             (params["arguments"].to_string().len() <= 8192).then(|| params["arguments"].clone());
         let Some(arguments) = arguments else {
-            return self.reject(id, call, None, "Tool arguments exceed 8 KiB. This call ID remains refused; use a new call for a different request.");
+            return self.reject(tool, id, call, None, "Tool arguments exceed 8 KiB. This call ID remains refused; use a new call for a different request.");
         };
         if !active || context.is_none() || self.busy() {
             return self.reject(
+                tool,
                 id,
                 call,
                 Some(arguments),
                 "No active tool capacity; nothing was dispatched",
             );
         }
-        let input = serde_json::from_value::<WorkspaceInput>(arguments.clone())
-            .map_err(|error| error.to_string());
-        let input = match input {
-            Ok(input)
-                if !self.uncertain || matches!(input.action, voyager_contract::Action::Inspect) =>
-            {
-                input
-            }
+        let parsed = match tool {
+            "voyager_workspace" => serde_json::from_value::<WorkspaceInput>(arguments.clone())
+                .map(|input| (input.expected_version, ToolAction::Workspace(input.action))),
+            _ => serde_json::from_value::<ProcessInput>(arguments.clone())
+                .map(|input| (input.expected_version, ToolAction::Process(input.action))),
+        };
+        let (expected_version, action) = match parsed {
+            Ok(input) if !self.uncertain || reads(&input.1) => input,
             Ok(_) => {
                 return self.reject(
+                    tool,
                     id,
                     call,
                     Some(arguments),
                     "An earlier effect is unconfirmed. Inspect and report it; do not replay it.",
                 );
             }
-            Err(error) => return self.reject(id, call, Some(arguments), &error),
+            Err(error) => return self.reject(tool, id, call, Some(arguments), &error.to_string()),
         };
         let context = context.cloned()?;
-        let request = Request {
-            request_id: workspace.request_id(),
-            expected_version: input.expected_version,
-            action: input.action,
-        };
-        let request_id = request.request_id.clone();
-        let action = request.action.clone();
+        let request_id = workspace.request_id();
         let client = workspace.clone();
         let scope = context.scope.clone();
+        let effect_action = action.clone();
+        let effect_id = request_id.clone();
         let (send, receive) = mpsc::sync_channel(1);
         thread::spawn(move || {
-            let effect_action = request.action.clone();
-            let result = match client.scoped_call(scope, request) {
-                Ok(response) => {
-                    let text = outcome_text(
-                        &effect_action,
-                        &response.status,
-                        response.message.as_deref(),
-                    );
-                    let full = serde_json::to_string(&response).unwrap_or_else(|_| text.clone());
-                    let output = if full.len() <= 24 * 1024 {
-                        full
-                    } else {
-                        json!({"requestId":response.request_id,"status":response.status,"version":response.version.to_string(),"fresh":response.fresh,"message":format!("{text}. Layout omitted because it exceeds the tool response bound. Inspect a narrower focus for details.")}).to_string()
+            let result = match effect_action {
+                ToolAction::Workspace(action) => {
+                    let request = Request {
+                        request_id: effect_id,
+                        expected_version,
+                        action: action.clone(),
                     };
-                    EffectResult {
-                        value: result(response.status == Status::Applied, output),
-                        text,
-                        status: response.status,
-                        version: Some(response.version.to_string()),
+                    match client.scoped_call(scope, request) {
+                        Ok(response) => {
+                            let text = outcome_text(
+                                &action,
+                                &response.status,
+                                response.message.as_deref(),
+                            );
+                            let full =
+                                serde_json::to_string(&response).unwrap_or_else(|_| text.clone());
+                            let output = if full.len() <= 24 * 1024 {
+                                full
+                            } else {
+                                json!({"requestId":response.request_id,"status":response.status,"version":response.version.to_string(),"fresh":response.fresh,"message":format!("{text}. Layout omitted because it exceeds the tool response bound. Inspect a narrower focus for details.")}).to_string()
+                            };
+                            EffectResult {
+                                value: result(response.status == Status::Applied, output),
+                                text,
+                                status: response.status,
+                                version: Some(response.version.to_string()),
+                            }
+                        }
+                        Err(error) => failed(error, "Workspace"),
                     }
                 }
-                Err(CallError::Rejected(error)) => EffectResult {
-                    value: result(false, format!("Rejected before dispatch: {error}")),
-                    text: format!("Workspace request refused: {error}"),
-                    status: Status::Rejected,
-                    version: None,
-                },
-                Err(CallError::Unconfirmed(error)) => EffectResult {
-                    value: result(
-                        false,
-                        format!("Workspace result unconfirmed; do not repeat. {error}"),
-                    ),
-                    text: format!("Workspace result unconfirmed; do not repeat. {error}"),
-                    status: Status::Uncertain,
-                    version: None,
-                },
+                ToolAction::Process(action) => {
+                    let request = ProcessRequest {
+                        request_id: effect_id,
+                        input: ProcessInput {
+                            expected_version,
+                            action,
+                        },
+                    };
+                    match client.process(scope, request) {
+                        Ok(response) => {
+                            let text = process_text(
+                                &response.status,
+                                response.output.as_ref(),
+                                response.message.as_deref(),
+                            );
+                            let value = result(
+                                response.status == Status::Applied,
+                                serde_json::to_string(&response).unwrap_or_else(|_| text.clone()),
+                            );
+                            EffectResult {
+                                value,
+                                text,
+                                status: response.status.clone(),
+                                version: Some(response.version.to_string()),
+                            }
+                        }
+                        Err(error) => failed(error, "Process"),
+                    }
+                }
             };
             let _ = send.send(result);
         });
         self.receipts.push(Receipt {
+            tool: tool.into(),
             call: call.into(),
             arguments: Some(arguments),
             replies: vec![id.clone()],
@@ -307,7 +342,7 @@ impl Tools {
             .find(|receipt| receipt.call == work.call)?;
         receipt.result = Some(result.value.clone());
         let outcome = ToolOutcome {
-            name: "voyager_workspace".into(),
+            name: receipt.tool.clone(),
             call_id: work.call,
             callback_ids: receipt
                 .waiting
@@ -332,6 +367,61 @@ impl Tools {
             text: result.text,
             context: work.context,
         })
+    }
+}
+
+fn reads(action: &ToolAction) -> bool {
+    matches!(
+        action,
+        ToolAction::Workspace(Action::Inspect)
+            | ToolAction::Process(ProcessAction::List | ProcessAction::Read { .. })
+    )
+}
+
+fn failed(error: CallError, label: &str) -> EffectResult {
+    let (status, text) = match error {
+        CallError::Rejected(message) => (
+            Status::Rejected,
+            format!("{label} request refused: {message}"),
+        ),
+        CallError::Unconfirmed(message) => (
+            Status::Uncertain,
+            format!("{label} result unconfirmed; do not repeat. {message}"),
+        ),
+    };
+    EffectResult {
+        value: result(false, text.clone()),
+        text,
+        status,
+        version: None,
+    }
+}
+
+fn process_text(status: &Status, output: Option<&ProcessOutput>, message: Option<&str>) -> String {
+    if *status != Status::Applied {
+        return format!(
+            "Process request {}: {}",
+            if *status == Status::Uncertain {
+                "unconfirmed; do not repeat"
+            } else {
+                "refused"
+            },
+            message.unwrap_or("The result was not confirmed")
+        );
+    }
+    match output {
+        Some(ProcessOutput::List { .. }) => "Processes inspected".into(),
+        Some(ProcessOutput::Read { limited, .. }) => if *limited {
+            "Terminal read, output shortened"
+        } else {
+            "Terminal read"
+        }
+        .into(),
+        Some(ProcessOutput::Send { .. }) => "Input submitted".into(),
+        Some(ProcessOutput::Interrupt { outcome, .. }) => {
+            format!("Interrupt submitted; Core reports {outcome}")
+        }
+        None => message.unwrap_or("Process operation applied").into(),
     }
 }
 
@@ -456,6 +546,19 @@ mod tests {
                 .is_none()
         );
         let inspection = completed(&mut tools);
+        let mut changed_tool = callback.clone();
+        changed_tool["id"] = "changed-tool".into();
+        changed_tool["params"]["tool"] = "voyager_process".into();
+        let wrong_tool = tools
+            .callback(
+                &changed_tool,
+                Some("thread"),
+                Some("turn"),
+                true,
+                Some(&focus),
+                &workspace,
+            )
+            .unwrap();
         let numeric_id = serde_json::to_value(&inspection.outcome.callback_ids).unwrap();
         let observed: Response = serde_json::from_str(
             inspection.replies[0]["result"]["contentItems"][0]["text"]
@@ -562,9 +665,57 @@ mod tests {
                 action: Action::Inspect,
             })
             .unwrap();
+        let process_callback = json!({"id":"process-callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"process-call","tool":"voyager_process","arguments":{"expectedVersion":final_state.version.to_string(),"action":{"operation":"list"}}}});
+        assert!(
+            tools
+                .callback(
+                    &process_callback,
+                    Some("thread"),
+                    Some("turn"),
+                    true,
+                    Some(&focus),
+                    &workspace
+                )
+                .is_none()
+        );
+        let processes = completed(&mut tools);
+        let mut oversized = process_callback.clone();
+        oversized["id"] = "oversized-process".into();
+        oversized["params"]["callId"] = "oversized-process".into();
+        oversized["params"]["arguments"] = json!({"expectedVersion":final_state.version.to_string(),"action":{"operation":"send","contentId":"none","terminalId":"t1","pid":1,"text":"x".repeat(8192)}});
+        let large_refusal = tools
+            .callback(
+                &oversized,
+                Some("thread"),
+                Some("turn"),
+                true,
+                Some(&focus),
+                &workspace,
+            )
+            .unwrap();
+        oversized["params"]["arguments"] = process_callback["params"]["arguments"].clone();
+        let replacement_refusal = tools
+            .callback(
+                &oversized,
+                Some("thread"),
+                Some("turn"),
+                true,
+                Some(&focus),
+                &workspace,
+            )
+            .unwrap();
         let mut cleanup = crate::core::Core::connect(&session).unwrap();
         cleanup.rpc("server.stop", json!({})).unwrap();
         cleanup.close().unwrap();
+        assert_eq!(wrong_tool["result"]["success"], false);
+        assert_eq!(processes.outcome.name, "voyager_process");
+        assert_eq!(processes.outcome.status, Status::Applied);
+        assert!(matches!(
+            processes.outcome.action,
+            ToolAction::Process(ProcessAction::List)
+        ));
+        assert_eq!(large_refusal["result"]["success"], false);
+        assert_eq!(replacement_refusal["result"], large_refusal["result"]);
         assert!(invalid_identity && refused && untouched && duplicate_pending);
         assert_eq!(effect.replies[0]["id"], "callback-two");
         assert_eq!(
@@ -586,7 +737,7 @@ mod tests {
         assert_eq!(changed["result"]["success"], false);
         assert_eq!(final_state.layout.voyages[0].fleets.len(), 2);
         assert_eq!(final_state.layout.voyages[0].fleets[1].name, "Delegated");
-        assert_eq!(tools.receipts.len(), 3);
+        assert_eq!(tools.receipts.len(), 5);
     }
 
     #[test]

@@ -27,7 +27,9 @@ export class Chat {
               this.state = next;
               const effect = next.messages.findLast(
                 (message) =>
-                  message.tool && message.tool.action.operation !== "inspect",
+                  message.tool?.status === "applied" &&
+                  message.tool.action.tool === "workspace" &&
+                  message.tool.action.action.operation !== "inspect",
               );
               const identity = effect
                 ? JSON.stringify([effect.requestId, effect.id])

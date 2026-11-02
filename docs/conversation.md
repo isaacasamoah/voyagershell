@@ -21,9 +21,10 @@ the human request's original focus. The workspace actor checks that scope before
 an effect and projects its responses to that same scope. Docking can change focus
 when the human requests it, but cannot retarget an already accepted request.
 The private provider cannot supply a different owner, scope or request identity.
-Process interaction still waits for the integrated accepted terminal owner.
-Content updates still wait for their accepted content provider. Neither capability
-is advertised here or simulated with native shell commands.
+The current process-integration candidate adds voyager_process alongside the
+accepted workspace catalogue. Its source and owned-Core checks are under review;
+the combined native/account journey is not yet accepted. Content updates still
+wait for their accepted provider and are not advertised or simulated.
 
 Rust binds a new request to the actual workspace context at Send. Its descriptor
 contains the original scope and IDs, readable Voyage/Fleet/content path, matching
@@ -108,3 +109,39 @@ literal strings; integer values use decimal strings to preserve their original
 type and full numeric precision through the script layer. New tool outcomes cause
 one read refresh of the workspace view, queued behind a current UI operation.
 That refresh does not repeat an effect or introduce an idle polling loop.
+
+The process catalogue has list, read, send and interrupt operations. List and read
+retain access to known-ended bound terminals without a PID. Send and interrupt
+require the inspected content ID, exact Core terminal address and live PID.
+Process inspection also reports Core's actual optional foreground program name,
+without arguments or an inferred work state. Every operation uses the same Client queue and physical Core connection as the
+workspace. The owner reads the actual current document revision and mapping
+before dispatch, checks the externally captured scope and refuses a stale
+revision. Cached results retain request, scope and payload identity. A changed
+tool name under an existing provider call ID is also refused. No view needs to
+remain visible for a bound terminal to be inspected or addressed.
+
+All callback arguments together remain limited to 8 KiB. The lower owner input
+ceiling remains 64 KiB and does not enlarge that callback budget. Read adds at
+most 160 history lines; the UI projection may shorten its text and marks that
+limit. Core's complete/how/why fields remain distinct from the application
+limit. The owner bounds serialized process output to 24 KiB before the callback
+envelope. A large read/list reports its limit; a confirmed submission is not falsely
+reported as refused just because its details exceed the display budget.
+
+Send uses Core's actual paste-and-submit operation and returns its observed
+status, turn and optional started result. It establishes submission, not task
+completion. Interrupt is a separate explicit Core operation and returns the
+actual key and observed outcome, including unknown or still_working. The
+application never combines interrupt and send, retries an uncertain effect,
+resumes or restarts a program. Stop remains a separate gated lifecycle operation.
+
+The Core generator accepts an optional saved-schema path after --write or
+--check. It retains the complete canonical 0.1.16 hash guard and the original
+run/attach shapes. Generated types add only the process methods now used. Core's
+ListResult schema declares machines required, but its serializer omits an empty
+machines list. The process adapter therefore requires and decodes only the
+terminals array into the generated Terminal type and ignores unused federation
+metadata. It does not change the upstream schema. New integer fields emit
+standard integer/minimum/maximum constraints in place of nonstandard uint32
+format annotations; strict validators still reject fractions and overflow.

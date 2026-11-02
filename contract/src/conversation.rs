@@ -71,7 +71,7 @@ pub struct ToolOutcome {
     pub call_id: String,
     pub callback_ids: Vec<CallbackId>,
     pub request_id: String,
-    pub action: crate::Action,
+    pub action: crate::administrator::ToolAction,
     pub status: crate::Status,
     pub version: Option<String>,
 }
