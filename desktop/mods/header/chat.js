@@ -1,5 +1,6 @@
-import { div } from "gpui-kit";
-import { Input, InputState } from "gpui-base";
+import { div, svg } from "gpui-kit";
+import { Button } from "gpui-base";
+import { Composer, ComposerState } from "voyager_native";
 import { observe, send } from "./conversation.js";
 export class Chat {
   constructor(cx, workspaceChanged) {
@@ -10,7 +11,7 @@ export class Chat {
     this.error = "";
     this.workspaceChanged = workspaceChanged;
     this.lastEffect = "";
-    this.input = InputState.new({ placeholder: "Message Voyager" });
+    this.input = ComposerState.new("Message Voyager");
     this.input.on("submit", (_event, cx) => this.submit(cx));
   }
   toggle(cx) {
@@ -73,26 +74,48 @@ export class Chat {
     cx.notify();
   }
   button(label, callback, colors) {
-    return div()
-      .role("button")
+    return Button.new(`chat-${label.toLowerCase().replaceAll(" ", "-")}`)
       .accessibility_label(label)
-      .px(10)
-      .py(8)
-      .rounded(6)
-      .text_size(12)
+      .h(26)
+      .px(8)
+      .py(0)
+      .rounded(5)
+      .text_size(11)
       .text_color(colors.muted)
       .on_click((_event, cx) => callback(cx))
       .child(label);
   }
   toggleView(colors) {
-    return this.button(
-      this.open ? "Close chat" : "Chat",
-      (cx) => this.toggle(cx),
-      colors,
-    );
+    return Button.new("chat-toggle")
+      .accessibility_label(this.open ? "Close chat" : "Chat")
+      .w(24)
+      .h(24)
+      .p(3)
+      .rounded(5)
+      .text_color(this.open ? colors.accent : colors.muted)
+      .on_click((_event, cx) => this.toggle(cx))
+      .child(svg("chat.svg").w(18).h(16));
   }
-  render(colors, context) {
-    if (!this.open) return null;
+  render(colors, context, compact = false) {
+    const panel = div()
+      .id("voyager-chat")
+      .flex()
+      .flex_col()
+      .w_full()
+      .h(this.open ? 380 : 0)
+      .min_h(this.open ? 210 : 0)
+      .max_h(this.open ? (compact ? "100%" : "40%") : 0)
+      .opacity(this.open ? 1 : 0)
+      .transition("height", 220)
+      .transition("opacity", 180)
+      .overflow_hidden()
+      .mt(this.open && !compact ? -8 : 0)
+      .mb(this.open && !compact ? 14 : 0)
+      .rounded(10)
+      .bg(compact ? "#16181c" : "#10121580")
+      .border_1()
+      .border_color(this.open ? "#ffffff0c" : "#00000000");
+    if (!this.open) return panel;
     const messages = div()
       .id("voyager-chat-messages")
       .flex()
@@ -100,7 +123,8 @@ export class Chat {
       .flex_1()
       .min_h(0)
       .overflow_y_scroll()
-      .gap(14);
+      .px(16)
+      .gap(16);
     for (const message of this.state?.messages || []) {
       messages.child(
         div()
@@ -109,7 +133,7 @@ export class Chat {
           .gap(5)
           .child(
             div()
-              .text_size(10)
+              .text_size(8)
               .text_color(colors.muted)
               .child(
                 message.role === "user"
@@ -121,7 +145,8 @@ export class Chat {
           )
           .child(
             div()
-              .text_size(13)
+              .text_size(11)
+              .line_height(1.8)
               .text_color(colors.foreground)
               .child(message.text),
           ),
@@ -130,28 +155,20 @@ export class Chat {
     const phase = this.state?.phase || "idle";
     const active = phase === "starting" || phase === "working";
     const error = this.error || this.state?.error;
-    const panel = div()
-      .absolute()
-      .left(14)
-      .top(118)
-      .w(342)
-      .h(600)
-      .flex()
-      .flex_col()
-      .gap(14)
-      .p(18)
-      .rounded(12)
-      .bg(colors.background)
-      .border_1()
-      .border_color(colors.muted)
+    panel
       .child(
         div()
           .flex()
           .items_center()
+          .h(44)
+          .flex_shrink_0()
+          .px(12)
+          .border_b_1()
+          .border_color("#7a9bac25")
           .child(
             div()
               .flex_1()
-              .text_size(13)
+              .text_size(11)
               .text_color(colors.foreground)
               .child("Voyager"),
           )
@@ -159,6 +176,8 @@ export class Chat {
       )
       .child(
         div()
+          .px(16)
+          .py(6)
           .text_size(10)
           .text_color(colors.muted)
           .child(`Context: ${context?.kind || "workspace"}`),
@@ -166,7 +185,9 @@ export class Chat {
       .child(messages)
       .child(
         div()
-          .text_size(10)
+          .px(16)
+          .py(6)
+          .text_size(9)
           .text_color(colors.muted)
           .child(
             this.state?.limited
@@ -187,19 +208,26 @@ export class Chat {
           .text_color(colors.muted)
           .child("Showing recent messages"),
       );
-    return panel
-      .child(Input.new(this.input).accessibility_label("Message Voyager"))
-      .child(
-        div()
-          .flex()
-          .justify_end()
-          .child(
-            this.button(
-              active ? "Interrupt" : "Send",
-              (cx) => this.submit(cx, active),
-              colors,
+    return panel.child(
+      div()
+        .mx(12)
+        .mb(12)
+        .border_1()
+        .border_color("#ffffff14")
+        .rounded(12)
+        .child(Composer.new(this.input))
+        .child(
+          div()
+            .flex()
+            .justify_end()
+            .child(
+              this.button(
+                active ? "Interrupt" : "Send",
+                (cx) => this.submit(cx, active),
+                colors,
+              ),
             ),
-          ),
-      );
+        ),
+    );
   }
 }

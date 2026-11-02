@@ -165,6 +165,27 @@
             "outcome"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "observed": {
+              "$ref": "#/definitions/ProcessInfo"
+            },
+            "operation": {
+              "const": "stop",
+              "type": "string"
+            },
+            "target": {
+              "$ref": "#/definitions/ProcessInfo"
+            }
+          },
+          "required": [
+            "operation",
+            "target",
+            "observed"
+          ],
+          "type": "object"
         }
       ]
     },

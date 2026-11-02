@@ -101,6 +101,33 @@
             "pid"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "stop",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid"
+          ],
+          "type": "object"
         }
       ]
     }

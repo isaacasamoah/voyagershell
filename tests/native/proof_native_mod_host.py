@@ -13,11 +13,16 @@ from PIL import Image, ImageChops
 from proof_process import process_identity
 
 
+def candidate_directory(foundation):
+    repository = Path(__file__).resolve().parents[2]
+    return repository if foundation else repository / "experiments/native-content"
+
+
 def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-process", "terminal-agent", "conversation-scroll"])
+    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-process", "conversation-ux", "terminal-agent", "conversation-scroll", "conversation-stop", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -28,8 +33,11 @@ def run():
     parser.add_argument("--session", required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--desktop-env", type=Path)
+    parser.add_argument("--window-origin", nargs=2, type=int)
     parser.add_argument("--public-snapshot", type=Path)
     args = parser.parse_args()
+    if args.journey in ("avatar", "portal-avatar") and not args.compositor:
+        parser.error("Avatar journeys require compositor capture")
     if args.journey == "conversation-scroll":
         if args.public_snapshot is None or not args.public_snapshot.is_absolute() or not args.public_snapshot.is_file():
             parser.error("conversation-scroll requires an absolute public Snapshot file")
@@ -38,7 +46,9 @@ def run():
     if not re.fullmatch(r"voyager-[a-z0-9-]+", args.session):
         parser.error("Use a dedicated voyager- session")
     root = Path(__file__).resolve().parent
-    candidate_root = root.parents[1] if args.foundation else root
+    candidate_root = candidate_directory(args.foundation)
+    if not args.foundation:
+        sys.path.append(str(candidate_root))
     binary = args.binary.resolve()
     if args.launch and not binary.is_file():
         raise RuntimeError("Native header capability has not been built")
@@ -52,7 +62,29 @@ def run():
         env.update(json.loads(args.desktop_env.read_text())[1]["env"])
     elif not args.launch:
         env.update(json.loads((evidence / "launch.json").read_text())["desktopEnvironment"])
-    env.pop("WAYLAND_DISPLAY", None)
+    wayland_display = env.pop("WAYLAND_DISPLAY", None)
+    env.pop("VOYAGER_PROOF_WAYLAND_DISPLAY", None)
+    if args.journey == "conversation-ux" and wayland_display:
+        env["VOYAGER_PROOF_WAYLAND_DISPLAY"] = wayland_display
+    if args.journey in ("conversation-stop", "conversation-ux"):
+        if env.get("HC_SOCKET"):
+            raise RuntimeError("Selected Stop requires an unset HC_SOCKET before launch")
+        env.pop("HC_SESSION", None)
+        env.pop("HC_TERMINAL_ID", None)
+        if args.launch:
+            for selected in ((args.session, args.session + "-other") if args.journey == "conversation-stop" else (args.session,)):
+                socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
+                if socket.exists():
+                    raise RuntimeError("Selected Stop requires two fresh dedicated Core sessions")
+    if args.journey in ("avatar", "portal-avatar"):
+        if env.get("HC_SOCKET"):
+            raise RuntimeError("Avatar journeys require an unset HC_SOCKET before launch")
+        env.pop("HC_SESSION", None)
+        env.pop("HC_TERMINAL_ID", None)
+        if args.launch:
+            socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (args.session + ".sock")
+            if socket.exists():
+                raise RuntimeError("Avatar journeys require a fresh dedicated Core session")
     env.pop("VOYAGER_PROOF_PUBLIC_SNAPSHOT", None)
     if args.journey == "conversation-scroll":
         env["VOYAGER_PROOF_PUBLIC_SNAPSHOT"] = str(args.public_snapshot)
@@ -82,9 +114,14 @@ def run():
             process = subprocess.Popen(
                 command, cwd=candidate_root, env=env, stdout=log, stderr=log, start_new_session=True
             )
-        (evidence / "launch-pending.json").write_text(json.dumps({
-            "pid": process.pid, "command": command, "session": args.session,
-        }, indent=2))
+        pending = {"pid": process.pid, "command": command, "session": args.session}
+        pending_path = evidence / "launch-pending.json"
+        pending_path.write_text(json.dumps(pending, indent=2))
+        try:
+            pending["identity"] = identify(process.pid)
+        except (OSError, ValueError, KeyError, StopIteration) as error:
+            pending["identityError"] = str(error)
+        pending_path.write_text(json.dumps(pending, indent=2))
         for _ in range(100):
             if process.poll() is not None:
                 raise RuntimeError("Native candidate exited before its window")
@@ -126,6 +163,11 @@ def run():
         assert args.session in execute("xdotool", "getwindowname", record["window"])
 
     verify()
+    if args.window_origin is not None:
+        before = execute("xdotool", "getwindowgeometry", "--shell", record["window"])
+        execute("xdotool", "windowmove", "--sync", record["window"], *map(str, args.window_origin))
+        after = execute("xdotool", "getwindowgeometry", "--shell", record["window"])
+        (evidence / "window-origin.json").write_text(json.dumps({"requested": args.window_origin, "before": before, "after": after}, indent=2))
     execute("xdotool", "windowactivate", "--sync", record["window"])
     pointer = subprocess.Popen(
         ["/usr/bin/python3", str(root / "proof_native_input.py")]
@@ -176,14 +218,17 @@ def run():
 
     capture_sequence = 0
 
-    def capture(name):
+    def capture(name, window=None):
         nonlocal capture_sequence
         capture_sequence += 1
         verify()
         path = evidence / f"{name}.png"
-        execute("import", "-window", record["window"], str(path))
+        window = record["window"] if window is None else window
+        assert int(execute("xdotool", "getwindowpid", window)) == record["pid"]
+        if not args.compositor or args.journey not in ("avatar", "portal-avatar"):
+            execute("import", "-window", window, str(path))
         if args.compositor:
-            bounds = geometry()
+            bounds = geometry(window)
             crop = [int(bounds[key]) for key in ("X", "Y", "WIDTH", "HEIGHT")]
             canonical = evidence / f"{name}-compositor.png"
             path = evidence / f"{name}-compositor-{capture_sequence}.png"
@@ -204,10 +249,12 @@ def run():
         temporary.write_text(value)
         os.replace(temporary, path)
 
-    def geometry():
+    def geometry(window=None):
         verify()
+        window = record["window"] if window is None else window
+        assert int(execute("xdotool", "getwindowpid", window)) == record["pid"]
         return dict(line.split("=") for line in execute(
-            "xdotool", "getwindowgeometry", "--shell", record["window"]
+            "xdotool", "getwindowgeometry", "--shell", window
         ).splitlines())
 
     def resize_window():
@@ -239,7 +286,7 @@ def run():
             passed.append("native-quit")
         elif args.foundation:
             import importlib
-            module = "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey == "terminal-agent" else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
+            module = "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey == "terminal-agent" else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
             proof_workspace = importlib.import_module(module)
 
             passed.extend(proof_workspace.prove(

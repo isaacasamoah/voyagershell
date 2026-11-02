@@ -102,6 +102,10 @@ export type Action =
       operation: "select-fleet";
     }
   | {
+      id: string;
+      operation: "reveal-vessel";
+    }
+  | {
       context: Context;
       operation: "dock";
     };
@@ -155,6 +159,12 @@ export type ProcessAction =
   | {
       contentId: string;
       operation: "interrupt";
+      pid: number;
+      terminalId: string;
+    }
+  | {
+      contentId: string;
+      operation: "stop";
       pid: number;
       terminalId: string;
     };

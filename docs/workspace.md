@@ -96,3 +96,27 @@ Notes is a separate live-editable JavaScript package. It is not yet inside this
 strict TypeScript gate. Its actual private input and host declarations are
 exported separately with `export-script-types --notes`, and it cannot import the
 Header's broader native registry. See [native Notes](content.md).
+
+Go there for a hidden Vessel uses its existing placement identity. The workspace
+owner selects that Vessel's original Voyage and Fleet, keeps the current split
+tree intact and adds the hidden leaf beside it only when absent. It does not
+change the captured avatar context, content, backend or ID counter, and an
+unknown placement is refused before mutation. Requests from a captured scope
+remain limited to the Vessel visible in that scope's projection. The integrated
+Linux journey verifies the revealed Vessel's same live PID and process start.
+
+Name and Composer share the native text adapter in desktop/src/text.rs. Each
+retains one gpui-base InputState and supplies accessibility metadata through that
+editor. The current Linux bridge exposes its label and focus but lacks the Text
+interface needed for an external accessibility text read. Name keeps its initial text and rename
+events. Composer uses its constructor string as the placeholder and accessible
+label, with an initially empty buffer. Chat keeps that same state through its
+open, close and sidebar placements. This adapter addresses the pinned Shell
+Input materializer's omitted accessibility metadata; it does not introduce
+another editor or change the conversation/provider contract. The integrated
+native chat journey verifies typing, one actual provider turn and draft retention
+through native clipboard copy, independently of the missing Text interface.
+Compact chat is anchored below the Fleet row and uses the opaque sidebar surface
+to keep terminal output from crossing its text. The regular sidebar keeps its
+original translucent surface. Following the newest reply automatically remains
+an open parity requirement.

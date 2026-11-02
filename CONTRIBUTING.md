@@ -17,7 +17,9 @@ Use a dedicated VOYAGER_WORKSPACE_SESSION for experiments. The default profile n
 
 On contract branches, also run npm run typecheck and npm run contract:check. The earlier experimental content Rust crate lives in experiments/typed-content/contract/. When changing it, run cargo fmt --check, cargo test --locked and cargo clippy --locked --all-targets -- -D warnings from that directory. Keep lockfiles and generated declaration drift checks intact.
 
-Native journeys use the candidate revision's prove.py and focused modules. Supply a unique session, debugging port and new evidence directory. A later --quit uses that same evidence and candidate. Do not infer microphone audibility, compositor behavior or another operating system from an X11 test.
+Native journeys use the candidate revision's prove.py and focused modules in tests/native/. Choose exactly one route: --foundation for the current native app, --reference for the retained Electron fixture, or --native-mod-host/--native-avatar for the named historical experiments. There is no default route. `python prove.py --help` describes those choices; append --help to a route for its driver options. Supply a unique session, debugging port and new evidence directory. A later --quit uses that same explicit route, evidence and candidate. Do not infer microphone audibility, compositor behavior or another operating system from an X11 test.
+
+The non-launch dispatcher/path checks use `python -m unittest discover -s tests/native -p test_routes.py`. They check mode refusal, help and source paths. They do not establish a native journey. Keep historical avatar/Notes experiment source in experiments/ and new product journeys with the current shared native helpers in tests/native/.
 
 The selected native workspace uses one root Cargo workspace and build-only Node dependencies:
 

@@ -1018,3 +1018,123 @@ fn scoped_creation_eligibility_is_consumed_and_never_replayed() {
     checked.unwrap();
     assert!(stopped.is_ok());
 }
+
+#[test]
+fn reveal_hidden_vessel_keeps_identity_context_and_original_fleet() {
+    let mut model = Model::default();
+    model
+        .apply(Action::CreateVoyage {
+            name: "One".into(),
+            cwd: "/tmp".into(),
+        })
+        .unwrap();
+    let voyage = model.layout.voyages[0].id.clone();
+    let fleet = model.layout.voyages[0].fleets[0].id.clone();
+    let first = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+    model
+        .apply(Action::SaveLayout {
+            fleet: fleet.clone(),
+            name: "One".into(),
+        })
+        .unwrap();
+    model
+        .apply(Action::Split {
+            fleet: fleet.clone(),
+            after: first,
+            axis: Axis::Horizontal,
+        })
+        .unwrap();
+    let hidden = model.layout.voyages[0].fleets[0].vessels[1].clone();
+    let content = model
+        .layout
+        .contents
+        .iter_mut()
+        .find(|item| item.id == hidden.content)
+        .unwrap();
+    content.backend = Some(voyager_contract::CoreTerminalId("retained-backend".into()));
+    model
+        .apply(Action::LoadLayout {
+            fleet: fleet.clone(),
+            name: "One".into(),
+        })
+        .unwrap();
+    let tree = model.layout.voyages[0].fleets[0].root.clone();
+    model
+        .apply(Action::Dock {
+            context: Context::Vessel {
+                id: hidden.id.clone(),
+            },
+        })
+        .unwrap();
+    model
+        .apply(Action::CreateVoyage {
+            name: "Other".into(),
+            cwd: "/tmp".into(),
+        })
+        .unwrap();
+    let before_unknown = model.layout.clone();
+    assert!(
+        model
+            .apply(Action::RevealVessel {
+                id: voyager_contract::PlacementId("missing".into())
+            })
+            .is_err()
+    );
+    assert_eq!(model.layout, before_unknown);
+    let contents = model.layout.contents.clone();
+    let next_id = model.layout.next_id;
+    let scoped = std::sync::Arc::new(model.layout.clone());
+    assert!(
+        crate::scope::check(
+            &scoped,
+            Some(&Context::Vessel {
+                id: hidden.id.clone()
+            }),
+            &Action::RevealVessel {
+                id: hidden.id.clone()
+            }
+        )
+        .is_ok()
+    );
+    assert!(
+        crate::scope::check(
+            &scoped,
+            Some(&Context::Voyage {
+                id: model.layout.voyages[1].id.clone()
+            }),
+            &Action::RevealVessel {
+                id: hidden.id.clone()
+            }
+        )
+        .is_err()
+    );
+    model
+        .apply(Action::RevealVessel {
+            id: hidden.id.clone(),
+        })
+        .unwrap();
+    assert_eq!(model.layout.selected_voyage, Some(voyage));
+    assert_eq!(model.layout.selected_fleet, Some(fleet));
+    assert_eq!(
+        model.layout.context,
+        Context::Vessel {
+            id: hidden.id.clone()
+        }
+    );
+    assert_eq!(model.layout.contents, contents);
+    assert_eq!(model.layout.next_id, next_id);
+    assert_eq!(model.layout.voyages[0].fleets[0].vessels[1], hidden);
+    assert_eq!(
+        model.layout.voyages[0].fleets[0].root,
+        voyager_contract::Split::Branch {
+            axis: Axis::Horizontal,
+            first: Box::new(tree),
+            second: Box::new(voyager_contract::Split::Leaf {
+                placement: hidden.id.clone()
+            })
+        }
+    );
+    let once = model.layout.clone();
+    model.apply(Action::RevealVessel { id: hidden.id }).unwrap();
+    assert_eq!(model.layout, once);
+}

@@ -39,7 +39,7 @@ try:
             if action in ("move", "button", "capture"):
                 assert pointer is not None, "Pointer session was not prepared"
                 if action == "move":
-                    pointer.move(*args[1:])
+                    result["move"] = pointer.move(*args[1:])
                 elif action == "capture":
                     result["capture"] = pointer.capture(*args[1:])
                 else:
@@ -60,6 +60,8 @@ try:
                     if action == "fields" and len(args) > 2
                     else ("Note title", "Note text")
                 )
+                if action == "focus":
+                    names = (args[2],)
                 coordinates = (
                     args[3] if action == "fields" and len(args) > 3 else "screen"
                 )
@@ -74,7 +76,7 @@ try:
                         if len(targets) > args[3]:
                             break
                         time.sleep(0.1)
-                        matches = fields(args[1])
+                        matches = fields(args[1], names)
                     assert len(targets) > args[3], (
                         "Native editor did not become accessible"
                     )

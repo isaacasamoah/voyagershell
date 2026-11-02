@@ -243,6 +243,40 @@ impl Model {
                 self.layout.selected_fleet = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
             }
+            Action::RevealVessel { id } => {
+                let (v, f) = self
+                    .layout
+                    .voyages
+                    .iter()
+                    .enumerate()
+                    .find_map(|(v, voyage)| {
+                        voyage
+                            .fleets
+                            .iter()
+                            .position(|fleet| fleet.vessels.iter().any(|vessel| vessel.id == id))
+                            .map(|f| (v, f))
+                    })
+                    .ok_or("Vessel not found")?;
+                let voyage = self.layout.voyages[v].id.clone();
+                let fleet = &mut self.layout.voyages[v].fleets[f];
+                let fleet_id = fleet.id.clone();
+                if !contains_leaf(&fleet.root, &id) {
+                    let first = std::mem::replace(
+                        &mut fleet.root,
+                        Split::Leaf {
+                            placement: id.clone(),
+                        },
+                    );
+                    fleet.root = Split::Branch {
+                        axis: Axis::Horizontal,
+                        first: Box::new(first),
+                        second: Box::new(Split::Leaf { placement: id }),
+                    };
+                }
+                self.layout.selected_voyage = Some(voyage);
+                self.layout.selected_fleet = Some(fleet_id);
+                self.layout.view = WorkspaceView::Fleet;
+            }
             Action::Dock { context } => {
                 let exists = match &context {
                     Context::Workspace => true,
@@ -361,6 +395,15 @@ impl Model {
             }
         }
         Ok(())
+    }
+}
+
+fn contains_leaf(root: &Split, id: &PlacementId) -> bool {
+    match root {
+        Split::Leaf { placement } => placement == id,
+        Split::Branch { first, second, .. } => {
+            contains_leaf(first, id) || contains_leaf(second, id)
+        }
     }
 }
 

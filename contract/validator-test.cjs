@@ -11,6 +11,21 @@ test("generated wire validator rejects a forged caller and malformed split", asy
   assert.equal(request(valid), true);
   assert.equal(request({ ...valid, role: "owner" }), false);
   assert.equal(
+    request({ ...valid, action: { operation: "reveal-vessel", id: "p1" } }),
+    true,
+  );
+  assert.equal(
+    request({ ...valid, action: { operation: "reveal-vessel", id: 12 } }),
+    false,
+  );
+  assert.equal(
+    request({
+      ...valid,
+      action: { operation: "reveal-vessel", id: "p1", fleet: "other" },
+    }),
+    false,
+  );
+  assert.equal(
     request({
       ...valid,
       action: {
@@ -73,6 +88,11 @@ test("process schema keeps integer bounds and excludes caller authority", async 
     },
   };
   assert.equal(processTool(request), true);
+  const { text, ...target } = request.action;
+  assert.equal(
+    processTool({ ...request, action: { ...target, operation: "stop" } }),
+    true,
+  );
   for (const pid of [-1, 0.5, 4294967296])
     assert.equal(
       processTool({ ...request, action: { ...request.action, pid } }),

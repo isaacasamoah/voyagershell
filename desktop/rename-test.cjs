@@ -56,7 +56,7 @@ function fixture() {
     Name: { new: div },
     Chat: vm.runInNewContext(
       `${workspaceSource("VOYAGER_CHAT_SOURCE", "class", "chat.js")}\nChat`,
-      { InputState: { new: state } },
+      { ComposerState: { new: state } },
     ),
     projection: () => ({}),
     invoke(action) {
@@ -83,6 +83,12 @@ function fixture() {
   return { view, cx, target, calls, reply, layout };
 }
 
+test("chat retains its named native composer and submit event", () => {
+  const { view } = fixture();
+  assert.equal(view.chat.input.text, "Message Voyager");
+  assert.equal(typeof view.chat.input.events.submit, "function");
+});
+
 test("ordinary blur commits once", async () => {
   const { view, cx, target, calls, reply } = fixture();
   await reply();
@@ -96,6 +102,18 @@ test("ordinary blur commits once", async () => {
   assert.equal(calls.length, 2);
   await reply();
   assert.equal(view.editing, null);
+});
+
+test("default terminal chrome stays quiet while custom names and rename remain", async () => {
+  const { view, cx, reply } = fixture();
+  await reply();
+  const target = { kind: "vessel", id: "vessel-1" };
+  const terminal = view.action("Terminal", null, false, target);
+  assert.equal(terminal.child, "");
+  assert.equal(terminal.accessibility_label, "Terminal");
+  assert.equal(view.action("Build", null, false, target).child, "Build");
+  terminal.on_click({ click_count: 2 }, cx);
+  assert.equal(view.editing.state.text, "Terminal");
 });
 
 test("F2 targets are tab stops and a plus name keeps its accessible name", async () => {

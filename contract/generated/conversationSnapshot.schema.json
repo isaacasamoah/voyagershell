@@ -310,6 +310,23 @@
         {
           "additionalProperties": false,
           "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "reveal-vessel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "context": {
               "$ref": "#/definitions/Context"
             },
@@ -669,6 +686,33 @@
             },
             "operation": {
               "const": "interrupt",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "stop",
               "type": "string"
             },
             "pid": {

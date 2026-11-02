@@ -1,6 +1,9 @@
 import { View, div } from "gpui-kit";
 import { Button } from "gpui-base";
 import { projection } from "voyager_header";
+import { Brand, Layer, Target } from "voyager_avatar";
+import { take_result, window_epoch } from "voyager_avatar";
+import { response as validateResponse } from "./validate.js";
 import { invoke, openTerminal } from "./workspace.js";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { Terminal, TerminalState } from "voyager_native";
@@ -17,6 +20,9 @@ export default class Workspace extends View {
       if (!this.busy) this.run({ operation: "inspect" }, cx);
     });
     this.version = "0";
+    this.sidebar = true;
+    this.dockReceipt = "";
+    this.dockEpoch = "";
     this.layout = null;
     this.busy = false;
     this.fresh = false;
@@ -68,6 +74,7 @@ export default class Workspace extends View {
           this.terminals.get(vessel.content)?.rememberFocus() === true,
       );
     this.busy = true;
+    const dockEpoch = action.operation === "dock" ? window_epoch() : "";
     const previousContents = new Set(
       this.layout?.contents?.map((item) => item.id) || [],
     );
@@ -76,9 +83,18 @@ export default class Workspace extends View {
       let prepared = false;
       try {
         result = await invoke(action, this.version);
-        this.acceptSnapshot(result, task);
+        const accepted = this.acceptSnapshot(result, task);
+        if (
+          accepted &&
+          action.operation === "dock" &&
+          result.status === "applied"
+        ) {
+          this.dockReceipt = result.requestId;
+          this.dockEpoch = dockEpoch;
+        }
         const retry = new Set();
         if (
+          accepted &&
           action.operation === "inspect" &&
           result.status === "applied" &&
           result.fresh
@@ -89,7 +105,7 @@ export default class Workspace extends View {
               retry.add(content);
             }
         }
-        if (result.status === "applied" && result.fresh) {
+        if (accepted && result.status === "applied" && result.fresh) {
           try {
             const creates = [
               "create-voyage",
@@ -163,6 +179,11 @@ export default class Workspace extends View {
   }
   acceptSnapshot(result, task) {
     this.drag = null;
+    if (BigInt(result.version) < BigInt(this.version)) {
+      if (result.status !== "applied")
+        this.status = result.message || result.status;
+      return false;
+    }
     this.version = result.version;
     this.layout = result.layout;
     this.fresh = result.fresh;
@@ -183,6 +204,27 @@ export default class Workspace extends View {
           retain({ kind: "vessel", id: vessel.id }, this.contentName(vessel));
       }
     }
+    return true;
+  }
+  target(id, scope, child, fallback = false) {
+    return Target.new(id, { scope: JSON.stringify(scope), fallback }).child(
+      child,
+    );
+  }
+  layer(shell, layout) {
+    return Layer.new("avatar-layer", {
+      dockReceipt: this.dockReceipt,
+      dockEpoch: this.dockEpoch,
+      version: this.version,
+      scope: JSON.stringify(layout.context),
+      layoutKey: JSON.stringify([
+        this.sidebar,
+        layout.view,
+        layout.selectedVoyage,
+        layout.selectedFleet,
+        this.version,
+      ]),
+    }).child(shell);
   }
   contentName(placement) {
     const type = this.layout?.contents.find(
@@ -489,6 +531,9 @@ export default class Workspace extends View {
     const colors = projection();
     const key = JSON.stringify(rename);
     const focus = this.names.get(key)?.focus;
+    const fleet = rename?.kind === "fleet";
+    const voyage = rename?.kind === "voyage";
+    const placement = rename?.kind === "vessel" || rename?.kind === "portal";
     if (
       rename &&
       this.editing &&
@@ -500,8 +545,9 @@ export default class Workspace extends View {
         .on_mouse_down_out(() => this.focus.focus())
         .child(Name.new(this.editing.state));
     const button = (
-      rename && ["voyage", "fleet"].includes(rename.kind)
-        ? Button.new(`navigation-${rename.kind}-${rename.id}`)
+      (rename && ["voyage", "fleet"].includes(rename.kind)) ||
+      (action && !["inspect", "create-fleet"].includes(action.operation))
+        ? Button.new(`navigation-${key}-${JSON.stringify(action)}`)
             .justify_start()
             .line_height(1.618034)
         : div()
@@ -514,12 +560,13 @@ export default class Workspace extends View {
             ? "Split Vessel"
             : label,
       )
-      .px(12)
-      .py(9)
-      .rounded(6)
-      .text_size(12)
-      .text_color(selected ? colors.foreground : colors.muted)
-      .bg(selected ? "#23232d" : "#00000000")
+      .h(fleet ? 45 : placement ? 35 : 38)
+      .px(fleet ? 15 : 10)
+      .py(0)
+      .rounded(fleet ? 0 : 5)
+      .text_size(fleet ? 11 : placement ? 10 : 13)
+      .text_color(selected ? "#ded8ef" : colors.muted)
+      .bg(selected && voyage ? "#c0b1f00b" : "#00000000")
       .on_click((event, cx) => {
         if (focus) focus.focus();
         else if (!["create-fleet", "inspect"].includes(action?.operation || ""))
@@ -527,7 +574,7 @@ export default class Workspace extends View {
         if (event.click_count === 2 && rename) this.editName(rename, label, cx);
         else if (action) this.run(action, cx);
       })
-      .child(label);
+      .child(placement && label === "Terminal" ? "" : label);
     if (["create-fleet", "inspect"].includes(action?.operation || ""))
       button.on_mouse_down("left", (_event, cx) => cx.stop_propagation());
     if (focus)
@@ -594,6 +641,35 @@ export default class Workspace extends View {
     }
     return controls;
   }
+  sidebarToggle(fleet) {
+    return Button.new("toggle-sidebar")
+      .accessibility_label("Toggle sidebar")
+      .w(30)
+      .h(30)
+      .child("◧")
+      .on_click((_event, cx) => {
+        if (this.busy || !fleet) return;
+        this.sidebar = !this.sidebar;
+        this.run(
+          {
+            operation: "dock",
+            context: this.sidebar
+              ? { kind: "workspace" }
+              : { kind: "fleet", id: fleet.id },
+          },
+          cx,
+        );
+      });
+  }
+  statusView() {
+    return div()
+      .flex()
+      .flex_col()
+      .px(12)
+      .py(6)
+      .child(div().text_size(11).text_color("#ffcad3").child(this.status))
+      .child(this.action("Refresh", { operation: "inspect" }));
+  }
   dock(context) {
     const colors = projection();
     const layout = this.layout;
@@ -640,133 +716,159 @@ export default class Workspace extends View {
     );
     if (!content) throw Error("Placement content is unavailable.");
     const terminal = this.terminals.get(content.id);
-    return div()
-      .relative()
-      .flex()
-      .flex_col()
-      .flex_1()
-      .min_w(0)
-      .min_h(0)
-      .rounded(8)
-      .border_1()
-      .border_color(
-        this.drag?.kind === "vessel" &&
-          (this.drag.id === placement.id || this.drag.target === placement.id)
-          ? "#b3d2e5"
-          : "#00000000",
-      )
-      .bg("#14161a")
-      .on_mouse_down("left", () => {
-        if (scope.kind === "vessel") this.focused = placement.id;
-      })
-      .on_mouse_move((event, cx) => {
-        if (scope.kind === "vessel")
-          this.targetDrag("vessel", placement.id, event, cx);
-      })
-      .child(
-        div()
-          .flex()
-          .items_center()
-          .px(16)
-          .py(10)
-          .child(
-            div()
-              .flex_1()
-              .text_size(11)
-              .text_color(colors.muted)
-              .on_mouse_down("left", (event, cx) => {
-                if (scope.kind === "vessel")
-                  this.startDrag("vessel", placement.id, event, cx);
-              })
-              .child(
-                this.action(this.contentName(placement), null, false, scope),
-              ),
-          )
-          .children(
-            split
-              ? [
-                  div()
-                    .id(`split-zone-${placement.id}`)
-                    .w(90)
-                    .h(32)
-                    .flex()
-                    .items_center()
-                    .on_hover((hovered, cx) => {
-                      this.splitHover = hovered ? placement.id : null;
-                      cx.notify();
-                    })
-                    .children(
-                      this.splitHover === placement.id
-                        ? [
-                            Button.new(`split-horizontal-${placement.id}`)
-                              .accessibility_label(
-                                "Split this Vessel side by side",
-                              )
-                              .child("◫")
-                              .on_click((_event, cx) =>
-                                this.run({ ...split, axis: "horizontal" }, cx),
-                              ),
-                            Button.new(`split-vertical-${placement.id}`)
-                              .accessibility_label(
-                                "Split this Vessel top and bottom",
-                              )
-                              .child("⬒")
-                              .on_click((_event, cx) =>
-                                this.run({ ...split, axis: "vertical" }, cx),
-                              ),
-                          ]
-                        : [],
-                    ),
-                ]
-              : [],
-          )
-          .child(this.dock(scope)),
-      )
-      .child(
-        div()
-          .flex_1()
-          .min_h(0)
-          .child(
-            content.typeId === "notes"
-              ? Notes.new(content.id, { contentId: content.id })
-              : terminal
-                ? Terminal.new(terminal).size_full()
-                : div()
-                    .p(20)
-                    .text_size(12)
-                    .text_color(colors.muted)
-                    .child(this.terminalStatus(content)),
-          ),
-      )
-      .children(
-        this.drag?.kind === "vessel" &&
-          this.drag.target === placement.id &&
-          this.drag.bounds
-          ? [
+    return this.target(
+      `${scope.kind}-${placement.id}`,
+      scope,
+      div()
+        .relative()
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_w(0)
+        .min_h(0)
+        .rounded(3)
+        .border_1()
+        .border_color(
+          this.drag?.kind === "vessel" &&
+            (this.drag.id === placement.id || this.drag.target === placement.id)
+            ? "#b3d2e5"
+            : this.focused === placement.id
+              ? "#b07af560"
+              : "#00000000",
+        )
+        .bg(colors.background)
+        .on_mouse_down("left", (_event, cx) => {
+          this.focused = placement.id;
+          cx.notify();
+        })
+        .on_mouse_move((event, cx) => {
+          if (scope.kind === "vessel")
+            this.targetDrag("vessel", placement.id, event, cx);
+        })
+        .child(
+          div()
+            .flex()
+            .items_center()
+            .h(35)
+            .flex_shrink_0()
+            .px(5)
+            .child(
               div()
-                .absolute()
-                .left(
-                  this.drag.side === "right" ? this.drag.bounds.width / 2 : 0,
-                )
-                .top(
-                  this.drag.side === "bottom" ? this.drag.bounds.height / 2 : 0,
-                )
-                .w(
-                  this.drag.side === "left" || this.drag.side === "right"
-                    ? this.drag.bounds.width / 2
-                    : this.drag.bounds.width,
-                )
-                .h(
-                  this.drag.side === "top" || this.drag.side === "bottom"
-                    ? this.drag.bounds.height / 2
-                    : this.drag.bounds.height,
-                )
-                .bg("#b3d2e525"),
-            ]
-          : [],
-      );
+                .flex_1()
+                .text_size(11)
+                .text_color(colors.muted)
+                .on_mouse_down("left", (event, cx) => {
+                  if (scope.kind === "vessel")
+                    this.startDrag("vessel", placement.id, event, cx);
+                })
+                .child(
+                  this.action(this.contentName(placement), null, false, scope),
+                ),
+            )
+            .children(
+              split
+                ? [
+                    div()
+                      .id(`split-zone-${placement.id}`)
+                      .w(90)
+                      .h(35)
+                      .flex()
+                      .items_center()
+                      .on_hover((hovered, cx) => {
+                        this.splitHover = hovered ? placement.id : null;
+                        cx.notify();
+                      })
+                      .children(
+                        this.splitHover === placement.id
+                          ? [
+                              Button.new(`split-horizontal-${placement.id}`)
+                                .accessibility_label(
+                                  "Split this Vessel side by side",
+                                )
+                                .child("◫")
+                                .on_click((_event, cx) =>
+                                  this.run(
+                                    { ...split, axis: "horizontal" },
+                                    cx,
+                                  ),
+                                ),
+                              Button.new(`split-vertical-${placement.id}`)
+                                .accessibility_label(
+                                  "Split this Vessel top and bottom",
+                                )
+                                .child("⬒")
+                                .on_click((_event, cx) =>
+                                  this.run({ ...split, axis: "vertical" }, cx),
+                                ),
+                            ]
+                          : [],
+                      ),
+                  ]
+                : [],
+            )
+            .child(this.dock(scope)),
+        )
+        .child(
+          div()
+            .flex_1()
+            .min_h(0)
+            .child(
+              content.typeId === "notes"
+                ? Notes.new(content.id, { contentId: content.id })
+                : terminal
+                  ? Terminal.new(terminal).size_full()
+                  : div()
+                      .p(20)
+                      .text_size(12)
+                      .text_color(colors.muted)
+                      .child(this.terminalStatus(content)),
+            ),
+        )
+        .children(
+          this.drag?.kind === "vessel" &&
+            this.drag.target === placement.id &&
+            this.drag.bounds
+            ? [
+                div()
+                  .absolute()
+                  .left(
+                    this.drag.side === "right" ? this.drag.bounds.width / 2 : 0,
+                  )
+                  .top(
+                    this.drag.side === "bottom"
+                      ? this.drag.bounds.height / 2
+                      : 0,
+                  )
+                  .w(
+                    this.drag.side === "left" || this.drag.side === "right"
+                      ? this.drag.bounds.width / 2
+                      : this.drag.bounds.width,
+                  )
+                  .h(
+                    this.drag.side === "top" || this.drag.side === "bottom"
+                      ? this.drag.bounds.height / 2
+                      : this.drag.bounds.height,
+                  )
+                  .bg("#b3d2e525"),
+              ]
+            : [],
+        ),
+    );
   }
-  render() {
+  render(cx) {
+    try {
+      const raw = take_result();
+      if (raw !== null) {
+        const result = JSON.parse(raw);
+        if (!validateResponse(result))
+          throw Error("Invalid native dock response");
+        const accepted = this.acceptSnapshot(result, cx);
+        if (accepted && result.status === "applied")
+          this.dockReceipt = result.requestId;
+      }
+    } catch (error) {
+      this.status = errorMessage(error);
+    }
     const colors = projection();
     const shell = div()
       .track_focus(this.focus)
@@ -800,6 +902,7 @@ export default class Workspace extends View {
       .flex()
       .w_full()
       .h_full()
+      .text_size(13)
       .bg(colors.background)
       .text_color(colors.foreground);
     const layout = this.layout;
@@ -818,75 +921,114 @@ export default class Workspace extends View {
     const sidebar = div()
       .flex()
       .flex_col()
-      .w(220)
-      .p(18)
-      .gap(8)
+      .w(280)
+      .flex_shrink_0()
+      .px(12)
+      .border_r_1()
+      .border_color("#ffffff0c")
       .bg("#16181c")
-      .child(div().text_size(23).child("Voyager"))
       .child(
-        div().text_size(11).text_color(colors.muted).child("Let's Go Together"),
-      )
-      .child(this.chat.toggleView(colors))
-      .child(div().h(26))
-      .child(
-        Button.new("home-navigation")
-          .accessibility_label("Home")
-          .child("Home")
-          .on_click((_event, cx) => this.run({ operation: "home" }, cx)),
-      )
-      .child(
-        this.action("Workspace", {
-          operation: "dock",
-          context: { kind: "workspace" },
-        }),
-      );
-    for (const item of layout.voyages) {
-      sidebar.child(
         div()
           .relative()
-          .flex()
-          .items_center()
-          .border_1()
-          .border_color(
-            this.drag?.kind === "voyage" &&
-              (this.drag.id === item.id || this.drag.target === item.id)
-              ? "#b3d2e5"
-              : "#00000000",
-          )
-          .on_mouse_down("left", (event, cx) =>
-            this.startDrag("voyage", item.id, event, cx),
-          )
-          .on_mouse_move((event, cx) =>
-            this.targetDrag("voyage", item.id, event, cx),
-          )
-          .children(
-            this.drag?.kind === "voyage" &&
-              this.drag.target === item.id &&
-              this.drag.bounds
-              ? [
-                  div()
-                    .absolute()
-                    .left(0)
-                    .top(this.drag.side ? 0 : this.drag.bounds.height - 2)
-                    .w(this.drag.bounds.width)
-                    .h(2)
-                    .bg("#b3d2e5"),
-                ]
-              : [],
+          .w(200)
+          .h(202)
+          .flex_shrink_0()
+          .mt(12)
+          .mb(14)
+          .mx(27.5)
+          .child(
+            this.target(
+              "workspace-dock",
+              { kind: "workspace" },
+              Brand.new("brand", {}),
+            ),
           )
           .child(
             div()
-              .flex_1()
-              .child(
-                this.action(
-                  item.name,
-                  { operation: "select-voyage", id: item.id },
-                  item.id === voyage?.id,
-                  { kind: "voyage", id: item.id },
-                ),
-              ),
-          )
-          .child(this.dock({ kind: "voyage", id: item.id })),
+              .absolute()
+              .bottom(0)
+              .left(88)
+              .child(this.chat.toggleView(colors)),
+          ),
+      );
+    const chat = this.chat.render(colors, layout.context, !this.sidebar);
+    if (chat && this.sidebar) sidebar.child(chat);
+    const compactChat = () => {
+      if (!this.sidebar && chat)
+        shell.child(
+          div().absolute().left(12).top(107).w(256).h(380).child(chat),
+        );
+    };
+    sidebar.child(
+      Button.new("home-navigation")
+        .accessibility_label("Home")
+        .h(38)
+        .px(10)
+        .justify_start()
+        .mb(26)
+        .text_size(13)
+        .child("Home")
+        .on_click((_event, cx) => this.run({ operation: "home" }, cx)),
+    );
+    sidebar.child(
+      div().px(10).pb(8).text_size(10).text_color("#92939d").child("VOYAGES"),
+    );
+    for (const item of layout.voyages) {
+      sidebar.child(
+        div()
+          .h(42)
+          .flex_shrink_0()
+          .child(
+            this.target(
+              `voyage-${item.id}`,
+              { kind: "voyage", id: item.id },
+              div()
+                .relative()
+                .flex()
+                .items_center()
+                .border_1()
+                .border_color(
+                  this.drag?.kind === "voyage" &&
+                    (this.drag.id === item.id || this.drag.target === item.id)
+                    ? "#b3d2e5"
+                    : "#00000000",
+                )
+                .on_mouse_down("left", (event, cx) =>
+                  this.startDrag("voyage", item.id, event, cx),
+                )
+                .on_mouse_move((event, cx) =>
+                  this.targetDrag("voyage", item.id, event, cx),
+                )
+                .children(
+                  this.drag?.kind === "voyage" &&
+                    this.drag.target === item.id &&
+                    this.drag.bounds
+                    ? [
+                        div()
+                          .absolute()
+                          .left(0)
+                          .top(this.drag.side ? 0 : this.drag.bounds.height - 2)
+                          .w(this.drag.bounds.width)
+                          .h(2)
+                          .bg("#b3d2e5"),
+                      ]
+                    : [],
+                )
+                .child(
+                  div()
+                    .flex_1()
+                    .child(
+                      this.action(
+                        item.name,
+                        { operation: "select-voyage", id: item.id },
+                        item.id === voyage?.id,
+                        { kind: "voyage", id: item.id },
+                      ),
+                    ),
+                )
+                .child(this.dock({ kind: "voyage", id: item.id })),
+            ),
+          ),
       );
     }
     sidebar.child(
@@ -897,64 +1039,158 @@ export default class Workspace extends View {
       }),
     );
     sidebar.child(div().flex_1());
-    sidebar.child(
-      div()
-        .text_size(10)
-        .text_color(colors.muted)
-        .child(`Context: ${layout.context.kind}`),
-    );
-    const body = div().flex().flex_col().flex_1().min_w(0).p(12).gap(10);
-    if (layout.view === "home") {
-      body.child(homeOverview(layout, (action, cx) => this.run(action, cx)));
-      shell.child(sidebar).child(body);
-      const chat = this.chat.render(colors, layout.context);
-      if (chat) shell.child(chat);
-      return shell;
+    const body = div().flex().flex_col().flex_1().min_w(0).min_h(0);
+    const context = layout.context;
+    const visibleContext =
+      context.kind === "workspace" || context.kind === "voyage"
+        ? this.sidebar
+        : layout.view === "home"
+          ? false
+          : context.kind === "fleet"
+            ? !!voyage?.fleets.some((item) => item.id === context.id)
+            : context.kind === "vessel"
+              ? this.visibleVessels(fleet).some(
+                  (item) => item.id === context.id,
+                )
+              : !!voyage?.portals.some((item) => item.id === context.id);
+    let goThere;
+    if (context.kind === "fleet")
+      goThere = { operation: "select-fleet", id: context.id };
+    else if (context.kind === "voyage")
+      goThere = { operation: "select-voyage", id: context.id };
+    else if (context.kind === "vessel") {
+      goThere = { operation: "reveal-vessel", id: context.id };
+    } else if (context.kind === "portal") {
+      const original = layout.voyages.find((item) =>
+        item.portals.some((portal) => portal.id === context.id),
+      );
+      if (original) goThere = { operation: "select-voyage", id: original.id };
     }
-    const tabs = div().flex().items_center().gap(6);
+    body.child(
+      div()
+        .flex()
+        .items_center()
+        .h(52)
+        .flex_shrink_0()
+        .px(18)
+        .gap(12)
+        .border_b_1()
+        .border_color("#ffffff0c")
+        .child(this.sidebarToggle(fleet))
+        .child(
+          div()
+            .text_size(11)
+            .text_color(colors.muted)
+            .child(layout.view === "home" ? "Home" : voyage?.name || "Voyager"),
+        )
+        .child(div().flex_1())
+        .child(
+          div()
+            .text_size(10)
+            .text_color(colors.muted)
+            .child(`Context: ${context.kind}`),
+        )
+        .children(!this.sidebar ? [this.chat.toggleView(colors)] : []),
+    );
+    if (layout.view === "home") {
+      if (!visibleContext) {
+        body.child(
+          div()
+            .w(48)
+            .h(45)
+            .child(this.target("out-of-view-avatar", context, div(), true)),
+        );
+        if (goThere) body.child(this.action("Go there", goThere));
+      }
+      body.child(
+        div()
+          .flex()
+          .flex_col()
+          .flex_1()
+          .min_h(0)
+          .p(20)
+          .child(homeOverview(layout, (action, cx) => this.run(action, cx))),
+      );
+      if (this.sidebar) shell.child(sidebar);
+      shell.child(body);
+      if (this.status) body.child(this.statusView());
+      compactChat();
+      return this.layer(shell, layout);
+    }
+    const tabs = div().flex().items_center().min_w(0).gap(8);
+    if (!visibleContext)
+      tabs.child(
+        div()
+          .w(48)
+          .h(45)
+          .child(this.target("out-of-view-avatar", context, div(), true)),
+      );
     for (const item of voyage?.fleets || []) {
       tabs.child(
         div()
-          .relative()
-          .flex()
-          .items_center()
-          .border_1()
-          .border_color(
-            this.drag?.kind === "fleet" &&
-              (this.drag.id === item.id || this.drag.target === item.id)
-              ? "#b3d2e5"
-              : "#00000000",
-          )
-          .on_mouse_down("left", (event, cx) =>
-            this.startDrag("fleet", item.id, event, cx),
-          )
-          .on_mouse_move((event, cx) =>
-            this.targetDrag("fleet", item.id, event, cx),
-          )
-          .children(
-            this.drag?.kind === "fleet" &&
-              this.drag.target === item.id &&
-              this.drag.bounds
-              ? [
-                  div()
-                    .absolute()
-                    .top(0)
-                    .left(this.drag.side ? 0 : this.drag.bounds.width - 2)
-                    .w(2)
-                    .h(this.drag.bounds.height)
-                    .bg("#b3d2e5"),
-                ]
-              : [],
-          )
+          .w(160)
+          .h(45)
           .child(
-            this.action(
-              item.name,
-              { operation: "select-fleet", id: item.id },
-              item.id === fleet?.id,
+            this.target(
+              `fleet-${item.id}`,
               { kind: "fleet", id: item.id },
+              div()
+                .relative()
+                .flex()
+                .items_center()
+                .h_full()
+                .border_1()
+                .border_color(
+                  this.drag?.kind === "fleet" &&
+                    (this.drag.id === item.id || this.drag.target === item.id)
+                    ? "#b3d2e5"
+                    : "#00000000",
+                )
+                .on_mouse_down("left", (event, cx) =>
+                  this.startDrag("fleet", item.id, event, cx),
+                )
+                .on_mouse_move((event, cx) =>
+                  this.targetDrag("fleet", item.id, event, cx),
+                )
+                .children(
+                  this.drag?.kind === "fleet" &&
+                    this.drag.target === item.id &&
+                    this.drag.bounds
+                    ? [
+                        div()
+                          .absolute()
+                          .top(0)
+                          .left(this.drag.side ? 0 : this.drag.bounds.width - 2)
+                          .w(2)
+                          .h(this.drag.bounds.height)
+                          .bg("#b3d2e5"),
+                      ]
+                    : [],
+                )
+                .child(
+                  this.action(
+                    item.name,
+                    { operation: "select-fleet", id: item.id },
+                    item.id === fleet?.id,
+                    { kind: "fleet", id: item.id },
+                  ),
+                )
+                .child(this.dock({ kind: "fleet", id: item.id }))
+                .children(
+                  item.id === fleet?.id
+                    ? [
+                        div()
+                          .absolute()
+                          .bottom(0)
+                          .left(13)
+                          .right(13)
+                          .h(1)
+                          .bg("#b3a3db"),
+                      ]
+                    : [],
+                ),
             ),
-          )
-          .child(this.dock({ kind: "fleet", id: item.id })),
+          ),
       );
     }
     if (voyage)
@@ -975,7 +1211,20 @@ export default class Workspace extends View {
             cx.notify();
           }),
       );
-    body.child(tabs);
+    body.child(
+      div()
+        .flex()
+        .items_center()
+        .h(45)
+        .flex_shrink_0()
+        .px(10)
+        .gap(3)
+        .border_b_1()
+        .border_color("#ffffff0c")
+        .child(tabs),
+    );
+    if (!visibleContext && goThere)
+      body.child(this.action("Go there", goThere));
     if (fleet && this.layoutMenu === fleet.id)
       body.child(this.layoutControls(fleet));
     if (fleet) {
@@ -983,7 +1232,9 @@ export default class Workspace extends View {
         .flex()
         .flex_1()
         .min_h(0)
-        .gap(8)
+        .px(7)
+        .py(5)
+        .gap(6)
         .child(this.pane(fleet.root, fleet));
       if (voyage && voyage.portals.length) {
         const portals = div().flex().flex_col().w(340).gap(8);
@@ -1002,10 +1253,7 @@ export default class Workspace extends View {
           voyage: voyage.id,
         }),
       );
-    if (this.status) {
-      body.child(div().text_size(11).text_color("#ffcad3").child(this.status));
-      body.child(this.action("Refresh", { operation: "inspect" }));
-    }
+    if (this.status) body.child(this.statusView());
     if (this.drag)
       shell.child(
         ArrangementCapture.new((kind, x, y, cx) => {
@@ -1022,9 +1270,9 @@ export default class Workspace extends View {
           this.finishDrag(x, y, cx);
         }),
       );
-    shell.child(sidebar).child(body);
-    const chat = this.chat.render(colors, layout.context);
-    if (chat) shell.child(chat);
-    return shell;
+    if (this.sidebar) shell.child(sidebar);
+    shell.child(body);
+    compactChat();
+    return this.layer(shell, layout);
   }
 }

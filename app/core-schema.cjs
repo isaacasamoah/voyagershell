@@ -46,6 +46,7 @@ for (const [method, name] of [
   ["terminal.read", "ReadParams"],
   ["terminal.send", "SendParams"],
   ["terminal.interrupt", "InterruptParams"],
+  ["terminal.kill", "KillParams"],
 ]) {
   const entry = schema.methods.find((item) => item.name === method);
   if (!entry) throw Error(`Core method missing: ${method}`);

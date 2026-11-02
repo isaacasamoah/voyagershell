@@ -40,3 +40,13 @@ export function theme(): {
     accent: import("gpui-kit").Color;
 };
 "#;
+
+pub const AVATAR_MODULE: &str = "voyager_avatar";
+
+pub const AVATAR: &str = r#"
+export const Brand: { new: (id: string, props: Record<string, never>) => import("gpui-kit").NativeElement };
+export const Layer: { new: (id: string, props: { dockReceipt: string; dockEpoch: string; version: string; scope: string; layoutKey: string }) => import("gpui-kit").NativeElement };
+export const Target: { new: (id: string, props: { scope: string; fallback: boolean }) => import("gpui-kit").NativeElement };
+export function window_epoch(): string;
+export function take_result(): string | null;
+"#;

@@ -25,6 +25,11 @@ export type ProcessOutput =
       operation: "interrupt";
       outcome: string;
       target: ProcessInfo;
+    }
+  | {
+      observed: ProcessInfo;
+      operation: "stop";
+      target: ProcessInfo;
     };
 export type Status = "applied" | "rejected" | "uncertain";
 

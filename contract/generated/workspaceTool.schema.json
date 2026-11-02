@@ -310,6 +310,23 @@
         {
           "additionalProperties": false,
           "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "reveal-vessel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "context": {
               "$ref": "#/definitions/Context"
             },

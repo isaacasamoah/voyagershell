@@ -13,15 +13,18 @@ use gpui_shell::{
     input_token_state_methods,
 };
 
-struct Name;
+struct Text {
+    composer: bool,
+}
 
-impl ComponentMaterializer for Name {
+impl ComponentMaterializer for Text {
     fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
-        ensure!(request.children_len() == 0, "Name accepts no children");
+        let name = if self.composer { "Composer" } else { "Name" };
+        ensure!(request.children_len() == 0, "{name} accepts no children");
         let argument = request
             .payload()
             .downcast_ref::<ComponentArgument>()
-            .context("Name requires retained state")?;
+            .with_context(|| format!("{name} requires retained state"))?;
         let state = request.with_state::<Entity<InputState>, _>(argument, Clone::clone)?;
         let focus = state.clone();
         let frame = InputBase::new(request.element_id().clone())
@@ -29,13 +32,28 @@ impl ComponentMaterializer for Name {
             .w_full()
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 focus.update(cx, |state, cx| state.focus(window, cx));
-            })
-            .child(Input::new(&state));
+            });
+        let frame = if self.composer {
+            frame.flex().items_center()
+        } else {
+            frame
+        };
+        let frame = frame.child(Input::new(&state));
         request.finish(frame)
     }
 }
 
 pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
+    register_text(registry, "Name", "NameState", false)?;
+    register_text(registry, "Composer", "ComposerState", true)
+}
+
+fn register_text(
+    registry: &mut ComponentRegistry,
+    component: &'static str,
+    state_name: &'static str,
+    composer: bool,
+) -> Result<(), RegistryError> {
     let mut methods = input_token_state_methods();
     methods.push(StateMethodDescriptor::new::<Entity<InputState>>(
         "focus",
@@ -48,19 +66,28 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     ));
     registry.register_state(
         StateDescriptor::new(
-            "NameState",
-            "NameState",
+            state_name,
+            state_name,
             vec![ArgumentDescriptor::new("value", ArgumentSchema::String)],
-            |args, window, cx| {
+            move |args, window, cx| {
                 let [ComponentArgument::String(value)] = args else {
-                    return Err("Name requires text".into());
+                    return Err(format!("{component} requires text"));
                 };
                 let value = value.clone();
                 Ok(Box::new(cx.new(|cx| {
-                    let mut state = InputState::new(window, cx).default_value(value);
+                    let mut state = if composer {
+                        InputState::new(window, cx).placeholder(value.clone())
+                    } else {
+                        InputState::new(window, cx).default_value(value.clone())
+                    };
                     state.set_accessibility(
-                        InputAccessibility::new(Some(Role::TextInput))
-                            .with_label(Some("Name".into())),
+                        InputAccessibility::new(Some(Role::TextInput)).with_label(Some(
+                            if composer {
+                                value.into()
+                            } else {
+                                "Name".into()
+                            },
+                        )),
                     );
                     state
                 })))
@@ -70,18 +97,18 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
         .with_input_events::<InputMode>(),
     )?;
     registry.register(
-        ComponentDescriptor::new("Name", Arc::new(Name)).with_constructors(vec![
+        ComponentDescriptor::new(component, Arc::new(Text { composer })).with_constructors(vec![
             ConstructorDescriptor::new(
-                "Name",
+                component,
                 vec![ArgumentDescriptor::new(
                     "state",
-                    ArgumentSchema::Entity("NameState"),
+                    ArgumentSchema::Entity(state_name),
                 )],
-                |args| match args {
+                move |args| match args {
                     [argument @ ComponentArgument::Entity { .. }] => {
                         Ok(ComponentPayload::new(argument.clone()))
                     }
-                    _ => Err("Name requires NameState".into()),
+                    _ => Err(format!("{component} requires {state_name}")),
                 },
             ),
         ]),

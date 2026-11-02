@@ -139,9 +139,9 @@ impl Client {
                                         response.status = Status::Applied;
                                         response.output = Some(output);
                                     }
-                                    _ if matches!(output, voyager_contract::administrator::ProcessOutput::Send { .. } | voyager_contract::administrator::ProcessOutput::Interrupt { .. }) => {
+                                    _ if matches!(output, voyager_contract::administrator::ProcessOutput::Send { .. } | voyager_contract::administrator::ProcessOutput::Interrupt { .. } | voyager_contract::administrator::ProcessOutput::Stop { .. }) => {
                                         response.status = Status::Applied;
-                                        response.message = Some("The requested process input was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
+                                        response.message = Some("The requested process operation was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
                                     }
                                     _ => response.message = Some("Process result exceeds the tool response limit. Inspect a narrower focus or read less history.".into()),
                                 }
@@ -345,18 +345,10 @@ impl Client {
                                                     | Action::Split { .. }
                                             )
                                         {
-                                            created_contents.extend(
-                                                candidate
-                                                    .layout
-                                                    .contents
-                                                    .iter()
-                                                    .filter(|item| {
-                                                        !layout
-                                                            .contents
-                                                            .iter()
-                                                            .any(|old| old.id == item.id)
-                                                    })
-                                                    .map(|item| item.id.clone()),
+                                            record_created_terminals(
+                                                &mut created_contents,
+                                                &layout,
+                                                &candidate.layout,
                                             );
                                         }
                                         layout = Arc::new(candidate.layout);
@@ -552,6 +544,18 @@ fn visible_content(layout: &Layout, content: &ContentId) -> bool {
     contains(&fleet.root, fleet, content)
 }
 
+fn record_created_terminals(pending: &mut Vec<ContentId>, previous: &Layout, current: &Layout) {
+    pending.extend(
+        current
+            .contents
+            .iter()
+            .filter(|item| {
+                item.type_id == "terminal" && !previous.contents.iter().any(|old| old.id == item.id)
+            })
+            .map(|item| item.id.clone()),
+    );
+}
+
 fn eligible_contents(
     layout: &Arc<Layout>,
     scope: Option<&Context>,
@@ -562,7 +566,10 @@ fn eligible_contents(
         .iter()
         .filter(|id| {
             projection.contents.iter().any(|item| {
-                &item.id == *id && item.backend.is_none() && item.start_pending.is_none()
+                &item.id == *id
+                    && item.type_id == "terminal"
+                    && item.backend.is_none()
+                    && item.start_pending.is_none()
             })
         })
         .cloned()
@@ -776,6 +783,55 @@ fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
 #[cfg(test)]
 mod terminal_outcome_tests {
     use super::*;
+
+    #[test]
+    fn automatic_terminal_eligibility_excludes_notes() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Voyage".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let fleet = model.layout.voyages[0].fleets[0].id.clone();
+        let after = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+        let terminal = model.layout.contents[0].id.clone();
+        let previous = model.layout.clone();
+        model
+            .apply(Action::CreateContent {
+                type_id: "notes".into(),
+                destination: voyager_contract::ContentDestination::Vessel {
+                    fleet: fleet.clone(),
+                    after: after.clone(),
+                    axis: voyager_contract::Axis::Horizontal,
+                },
+            })
+            .unwrap();
+        let notes = model.layout.contents.last().unwrap().id.clone();
+        let mut pending = vec![terminal.clone()];
+        record_created_terminals(&mut pending, &previous, &model.layout);
+        assert_eq!(pending, vec![terminal.clone()]);
+        let previous = model.layout.clone();
+        model
+            .apply(Action::CreateContent {
+                type_id: "terminal".into(),
+                destination: voyager_contract::ContentDestination::Vessel {
+                    fleet,
+                    after,
+                    axis: voyager_contract::Axis::Vertical,
+                },
+            })
+            .unwrap();
+        let new_terminal = model.layout.contents.last().unwrap().id.clone();
+        record_created_terminals(&mut pending, &previous, &model.layout);
+        assert_eq!(pending, vec![terminal.clone(), new_terminal.clone()]);
+        let layout = Arc::new(model.layout);
+        pending.push(notes);
+        assert_eq!(
+            eligible_contents(&layout, None, &pending),
+            vec![terminal, new_terminal]
+        );
+    }
 
     #[test]
     fn uncertain_start_discards_only_its_automatic_eligibility() {

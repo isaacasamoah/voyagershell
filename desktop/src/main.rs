@@ -1,9 +1,12 @@
 mod arrangement;
+mod avatar;
+mod avatar_motion;
 mod content_budget;
 mod conversation;
 mod host;
 mod notes;
 mod notes_input;
+mod platform;
 mod script_types;
 mod terminal;
 mod terminal_screen;
@@ -97,6 +100,10 @@ fn run() -> Result<()> {
     seed(
         &package.join("chat.js"),
         include_str!("../mods/header/chat.js"),
+    )?;
+    seed(
+        &package.join("chat.svg"),
+        include_str!("../mods/header/chat.svg"),
     )?;
     seed(
         &package.join("conversation.js"),
@@ -207,6 +214,7 @@ fn run() -> Result<()> {
                 ..Default::default()
             };
             if let Err(error) = cx.open_window(options, |window, cx| {
+                let avatar = avatar::Binding::new(client.clone(), window, cx);
                 let header = cx.new(|cx| {
                     host::Header::new(
                         runtime,
@@ -219,6 +227,7 @@ fn run() -> Result<()> {
                             viewers,
                             conversation,
                             notes,
+                            avatar,
                         },
                         window,
                         cx,

@@ -2,6 +2,8 @@ use crate::terminal_screen::{Cell, Grid, Screen, Select};
 use anyhow::Result;
 use std::rc::Rc;
 
+#[path = "terminal_font.rs"]
+mod font;
 #[path = "terminal_input.rs"]
 mod input;
 #[path = "terminal_view.rs"]
@@ -92,6 +94,7 @@ struct Pane {
     viewer: Viewer,
     focus: FocusHandle,
     grid: Option<Grid>,
+    font_family: gpui::SharedString,
     cell_width: gpui::Pixels,
     cell_height: gpui::Pixels,
     geometry: Rc<std::cell::Cell<Option<GridSize>>>,
@@ -114,6 +117,7 @@ impl Pane {
     fn new(
         screen: Screen,
         viewer: Viewer,
+        font_family: gpui::SharedString,
         cell_width: gpui::Pixels,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -161,6 +165,7 @@ impl Pane {
             viewer,
             focus,
             grid: None,
+            font_family,
             cell_width,
             cell_height: px(18.),
             geometry: Rc::new(std::cell::Cell::new(None)),
@@ -513,16 +518,18 @@ pub fn register(registry: &mut ComponentRegistry, viewers: Viewers) -> Result<()
                     .cloned()
                     .ok_or_else(|| "Terminal is not attached".to_string())?;
                 let screen = Screen::new(80, 24).map_err(|e| e.to_string())?;
+                let names = cx.text_system().all_font_names();
+                let font_family: gpui::SharedString = font::family(&names).to_owned().into();
                 let font = cx
                     .text_system()
-                    .resolve_font(&gpui::font("DejaVu Sans Mono"));
+                    .resolve_font(&gpui::font(font_family.clone()));
                 let cell_width = cx
                     .text_system()
                     .advance(font, px(13.), 'M')
                     .map_err(|error| error.to_string())?
                     .width;
                 Ok(Box::new(cx.new(|cx| {
-                    Pane::new(screen, viewer, cell_width, window, cx)
+                    Pane::new(screen, viewer, font_family, cell_width, window, cx)
                 })))
             },
         )

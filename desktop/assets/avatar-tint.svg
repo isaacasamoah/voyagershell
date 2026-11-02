@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 94 94">
+  <defs><linearGradient id="tint" x1="10.058188063494%" y1="-7.042819102789%" x2="89.941811936506%" y2="107.042819102789%">
+    <stop offset="0" stop-color="#30343b" stop-opacity="0.850980392157"/>
+    <stop offset="0.5" stop-color="#1c2027" stop-opacity="0.721568627451"/>
+    <stop offset="1" stop-color="#252831" stop-opacity="0.8"/>
+  </linearGradient></defs>
+  <circle cx="47" cy="47" r="47" fill="url(#tint)"/>
+</svg>
