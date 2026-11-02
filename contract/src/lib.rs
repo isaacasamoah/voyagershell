@@ -69,6 +69,17 @@ pub struct Content {
 pub struct Vessel {
     pub id: PlacementId,
     pub content: ContentId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum RenameTarget {
+    Voyage { id: VoyageId },
+    Fleet { id: FleetId },
+    Vessel { id: PlacementId },
+    Portal { id: PlacementId },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -112,6 +123,13 @@ pub enum Action {
     },
     CreateFleet {
         voyage: VoyageId,
+        name: String,
+    },
+    CreatePortal {
+        voyage: VoyageId,
+    },
+    Rename {
+        target: RenameTarget,
         name: String,
     },
     Split {

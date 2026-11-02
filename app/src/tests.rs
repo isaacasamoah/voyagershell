@@ -112,3 +112,47 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     ));
     assert!(stopped.is_ok());
 }
+
+#[test]
+fn a_voyage_portal_retains_its_identity_while_fleets_change() {
+    use voyager_contract::RenameTarget;
+    let mut model = Model::default();
+    model
+        .apply(Action::CreateVoyage {
+            name: "Workspace".into(),
+            cwd: "/tmp".into(),
+        })
+        .unwrap();
+    let voyage = model.layout.voyages[0].id.clone();
+    model
+        .apply(Action::CreatePortal {
+            voyage: voyage.clone(),
+        })
+        .unwrap();
+    let portal = model.layout.voyages[0].portals[0].clone();
+    model
+        .apply(Action::Rename {
+            target: RenameTarget::Portal {
+                id: portal.id.clone(),
+            },
+            name: "Voyage terminal".into(),
+        })
+        .unwrap();
+    model
+        .apply(Action::CreateFleet {
+            voyage,
+            name: "Second".into(),
+        })
+        .unwrap();
+    let retained = &model.layout.voyages[0].portals[0];
+    assert_eq!(retained.id, portal.id);
+    assert_eq!(retained.content, portal.content);
+    assert_eq!(retained.name.as_deref(), Some("Voyage terminal"));
+    model
+        .apply(Action::Dock {
+            context: Context::Portal { id: portal.id },
+        })
+        .unwrap();
+    assert!(matches!(model.layout.context, Context::Portal { .. }));
+    assert_eq!(model.layout.contents.len(), 3);
+}
