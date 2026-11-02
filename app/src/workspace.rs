@@ -1,6 +1,6 @@
 use voyager_contract::{
     Action, Axis, Content, ContentId, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget,
-    Side, Split, Vessel, Voyage, VoyageId,
+    SavedLayout, Side, Split, Vessel, Voyage, VoyageId, WorkspaceView,
 };
 
 #[derive(Default)]
@@ -64,6 +64,48 @@ impl Model {
     pub fn apply(&mut self, action: Action) -> Result<(), String> {
         match action {
             Action::Inspect => (),
+            Action::Home => self.layout.view = WorkspaceView::Home,
+            Action::SaveLayout { fleet, name } => {
+                let name = name.trim().to_owned();
+                if name.is_empty() || name.len() > 128 {
+                    return Err("A layout name must contain 1 to 128 bytes".into());
+                }
+                let (v, f) = self.fleet_index(&fleet).ok_or("Fleet not found")?;
+                let saved = SavedLayout {
+                    fleet: fleet.clone(),
+                    name: name.clone(),
+                    root: self.layout.voyages[v].fleets[f].root.clone(),
+                };
+                if let Some(existing) = self
+                    .layout
+                    .saved_layouts
+                    .iter_mut()
+                    .find(|item| item.fleet == fleet && item.name == name)
+                {
+                    *existing = saved;
+                } else {
+                    self.layout.saved_layouts.push(saved);
+                }
+            }
+            Action::LoadLayout { fleet, name } => {
+                let (v, f) = self.fleet_index(&fleet).ok_or("Fleet not found")?;
+                let root = self
+                    .layout
+                    .saved_layouts
+                    .iter()
+                    .find(|item| item.fleet == fleet && item.name == name.trim())
+                    .ok_or("Saved layout not found for this Fleet")?
+                    .root
+                    .clone();
+                let mut seen = Vec::new();
+                validate_saved(
+                    &root,
+                    &self.layout.voyages[v].fleets[f],
+                    &self.layout.contents,
+                    &mut seen,
+                )?;
+                self.layout.voyages[v].fleets[f].root = root;
+            }
             Action::CreateVoyage { name, cwd } => {
                 if name.trim().is_empty() || !std::path::Path::new(&cwd).is_absolute() {
                     return Err("A Voyage needs a name and absolute working directory".into());
@@ -72,6 +114,7 @@ impl Model {
                 let fleet = self.fleet("Workbench".into(), cwd)?;
                 self.layout.selected_voyage = Some(id.clone());
                 self.layout.selected_fleet = Some(fleet.id.clone());
+                self.layout.view = WorkspaceView::Fleet;
                 self.layout.voyages.push(Voyage {
                     id,
                     name,
@@ -99,6 +142,7 @@ impl Model {
                 let fleet = self.fleet(name, cwd)?;
                 self.layout.selected_voyage = Some(voyage);
                 self.layout.selected_fleet = Some(fleet.id.clone());
+                self.layout.view = WorkspaceView::Fleet;
                 self.layout.voyages[index].fleets.push(fleet);
             }
             Action::SelectVoyage { id } => {
@@ -110,6 +154,7 @@ impl Model {
                     .ok_or("Voyage not found")?;
                 self.layout.selected_fleet = voyage.fleets.first().map(|f| f.id.clone());
                 self.layout.selected_voyage = Some(id);
+                self.layout.view = WorkspaceView::Fleet;
             }
             Action::CreatePortal { voyage } => {
                 let index = self
@@ -176,6 +221,7 @@ impl Model {
                 let (v, _) = self.fleet_index(&id).ok_or("Fleet not found")?;
                 self.layout.selected_voyage = Some(self.layout.voyages[v].id.clone());
                 self.layout.selected_fleet = Some(id);
+                self.layout.view = WorkspaceView::Fleet;
             }
             Action::Dock { context } => {
                 let exists = match &context {
@@ -367,6 +413,36 @@ fn insert_leaf(root: &mut Split, target: &PlacementId, id: &PlacementId, side: S
             insert_leaf(first, target, id, side) || insert_leaf(second, target, id, side)
         }
         _ => false,
+    }
+}
+
+fn validate_saved(
+    root: &Split,
+    fleet: &Fleet,
+    contents: &[Content],
+    seen: &mut Vec<PlacementId>,
+) -> Result<(), String> {
+    match root {
+        Split::Leaf { placement } => {
+            if seen.contains(placement) {
+                return Err("Saved layout repeats a placement".into());
+            }
+            seen.push(placement.clone());
+            let vessel = fleet
+                .vessels
+                .iter()
+                .find(|item| &item.id == placement)
+                .ok_or("Saved placement no longer belongs to this Fleet")?;
+            contents
+                .iter()
+                .find(|item| item.id == vessel.content)
+                .ok_or("Saved content not found")?;
+            Ok(())
+        }
+        Split::Branch { first, second, .. } => {
+            validate_saved(first, fleet, contents, seen)?;
+            validate_saved(second, fleet, contents, seen)
+        }
     }
 }
 

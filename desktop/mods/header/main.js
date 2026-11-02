@@ -5,6 +5,7 @@ import { invoke, openTerminal } from "./workspace.js";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { Terminal, TerminalState } from "voyager_native";
 import { Chat } from "./chat.js";
+import { homeOverview } from "./home.js";
 
 export default class Workspace extends View {
   init(_props, cx) {
@@ -32,8 +33,12 @@ export default class Workspace extends View {
   run(action, cx, done) {
     this.drag = null;
     if (this.busy) {
-      if (this.editing?.saving) {
-        if (["select-voyage", "select-fleet"].includes(action.operation))
+      if (action.operation === "save-layout" && this.savingLayout) {
+        this.pendingLayout = action;
+      } else if (this.editing?.saving || this.savingLayout) {
+        if (
+          ["home", "select-voyage", "select-fleet"].includes(action.operation)
+        )
           this.afterRename = action;
         else this.status = "Wait for the name change to finish.";
         cx.notify();
@@ -55,28 +60,48 @@ export default class Workspace extends View {
     );
     const transferFocus =
       changesSelection &&
-      !!oldFleet?.vessels.some(
+      this.visibleVessels(oldFleet).some(
         (vessel) =>
           this.terminals.get(vessel.content)?.rememberFocus() === true,
       );
     this.busy = true;
+    const previousContents = new Set(
+      this.layout?.contents?.map((item) => item.id) || [],
+    );
     cx.spawn(async (task) => {
       let result = null;
       let prepared = false;
       try {
         result = await invoke(action, this.version);
         this.acceptSnapshot(result, task);
+        const retry = new Set();
         if (
           action.operation === "inspect" &&
           result.status === "applied" &&
           result.fresh
         ) {
           for (const [content, outcome] of this.openings)
-            if (outcome.status === "rejected") this.openings.delete(content);
+            if (outcome.status === "rejected") {
+              this.openings.delete(content);
+              retry.add(content);
+            }
         }
         if (result.status === "applied" && result.fresh) {
           try {
-            await this.prepare(task);
+            const creates = [
+              "create-voyage",
+              "create-fleet",
+              "create-portal",
+              "split",
+            ].includes(action.operation);
+            const allowed = new Set(
+              creates
+                ? this.layout.contents
+                    .filter((item) => !previousContents.has(item.id))
+                    .map((item) => item.id)
+                : [],
+            );
+            await this.prepare(task, !result.createdWorkspace, retry, allowed);
             prepared = true;
             if (transferFocus) {
               const voyage = this.layout.voyages.find(
@@ -86,7 +111,7 @@ export default class Workspace extends View {
                 (item) => item.id === this.layout.selectedFleet,
               );
               this.terminals
-                .get(fleet?.vessels[0]?.content)
+                .get(this.visibleVessels(fleet)[0]?.content)
                 ?.focusIfUnchanged();
             }
           } catch (error) {
@@ -100,7 +125,13 @@ export default class Workspace extends View {
       this.busy = false;
       if (done) done(result, task);
       if (result?.status === "applied" && this.fresh) {
-        if (this.editing?.pending) {
+        if (this.pendingLayout) {
+          const next = this.pendingLayout;
+          this.pendingLayout = null;
+          this.run(next, task, () => {
+            this.savingLayout = false;
+          });
+        } else if (this.editing?.pending) {
           this.editing.pending = false;
           this.saveName(this.editing, task);
         } else if (this.afterRename) {
@@ -109,6 +140,11 @@ export default class Workspace extends View {
           this.run(next, task);
         }
       } else {
+        if (this.pendingLayout) {
+          this.pendingLayout = null;
+          this.savingLayout = false;
+          this.status += " Layout was not saved.";
+        }
         if (this.editing?.pending) {
           this.editing.pending = false;
           this.editing.saving = false;
@@ -149,7 +185,28 @@ export default class Workspace extends View {
     }
   }
 
-  async prepare(task) {
+  visibleVessels(fleet) {
+    if (!fleet) return [];
+    if (!fleet.root) return fleet.vessels;
+    const visible = new Set();
+    const collect = (tree) => {
+      if (tree.kind === "leaf") visible.add(tree.placement);
+      else {
+        collect(tree.first);
+        collect(tree.second);
+      }
+    };
+    collect(fleet.root);
+    return fleet.vessels.filter((vessel) => visible.has(vessel.id));
+  }
+
+  async prepare(
+    task,
+    existingOnly = false,
+    retry = new Set(),
+    allowed = new Set(),
+  ) {
+    if (this.layout.view === "home") return;
     const voyage = this.layout.voyages.find(
       (item) => item.id === this.layout.selectedVoyage,
     );
@@ -158,9 +215,28 @@ export default class Workspace extends View {
     );
     const errors = [];
     for (const vessel of [
-      ...(fleet?.vessels || []),
+      ...this.visibleVessels(fleet),
       ...(voyage?.portals || []),
     ]) {
+      const content = this.layout.contents?.find(
+        (item) => item.id === vessel.content,
+      );
+      if (
+        content?.backend &&
+        !content.startPending &&
+        this.openings.get(vessel.content)?.status === "unbound"
+      )
+        this.openings.delete(vessel.content);
+      if (
+        existingOnly &&
+        (!content?.backend || content.startPending) &&
+        !retry.has(vessel.content) &&
+        !allowed.has(vessel.content)
+      ) {
+        if (!this.openings.has(vessel.content))
+          this.openings.set(vessel.content, { status: "unbound" });
+        continue;
+      }
       if (this.openings.has(vessel.content)) continue;
       this.openings.set(vessel.content, { status: "pending" });
       let opened;
@@ -201,6 +277,8 @@ export default class Workspace extends View {
       return `Terminal connection is unconfirmed: ${outcome.message || "No confirmation received"}`;
     if (outcome?.status === "applied")
       return "Terminal attached. View unavailable.";
+    if (outcome?.status === "unbound") return "No terminal is bound.";
+    if (!content.backend && !outcome) return "No terminal is bound.";
     return "Connecting terminal";
   }
 
@@ -386,9 +464,9 @@ export default class Workspace extends View {
         cx,
       );
     } else {
+      const visible = this.visibleVessels(fleet);
       const vessel =
-        fleet.vessels.find((item) => item.id === this.focused) ||
-        fleet.vessels[0];
+        visible.find((item) => item.id === this.focused) || visible[0];
       if (!vessel) return;
       this.run(
         {
@@ -458,6 +536,60 @@ export default class Workspace extends View {
           }
         });
     return button;
+  }
+
+  saveLayout(fleet, cx) {
+    if (this.layoutName || this.savingLayout) return;
+    const state = NameState.new("");
+    const editing = { state, fleet, submitted: false };
+    this.layoutName = editing;
+    const finish = (_event, task) => {
+      if (this.layoutName !== editing || editing.submitted) return;
+      editing.submitted = true;
+      const name = state.value().trim();
+      this.layoutName = null;
+      state.release();
+      if (name) {
+        this.savingLayout = true;
+        this.run({ operation: "save-layout", fleet, name }, task, () => {
+          this.savingLayout = false;
+        });
+      } else this.status = "A layout name is required.";
+      task.notify();
+    };
+    state.on("submit", finish);
+    state.on("blur", finish);
+    state.focus();
+    cx.notify();
+  }
+
+  layoutControls(fleet) {
+    const controls = div().flex().flex_col().gap(4);
+    if (this.layoutName?.fleet === fleet.id) {
+      controls.child(Name.new(this.layoutName.state));
+    } else {
+      controls.child(
+        Button.new(`save-layout-${fleet.id}`)
+          .accessibility_label("Save Fleet layout")
+          .child("Save layout")
+          .on_click((_event, cx) => this.saveLayout(fleet.id, cx)),
+      );
+    }
+    for (const saved of this.layout.savedLayouts || []) {
+      if (saved.fleet !== fleet.id) continue;
+      controls.child(
+        Button.new(`load-layout-${fleet.id}-${saved.name}`)
+          .accessibility_label(`Load ${saved.name}`)
+          .child(saved.name)
+          .on_click((_event, cx) =>
+            this.run(
+              { operation: "load-layout", fleet: fleet.id, name: saved.name },
+              cx,
+            ),
+          ),
+      );
+    }
+    return controls;
   }
 
   dock(context) {
@@ -640,6 +772,14 @@ export default class Workspace extends View {
           cx.stop_propagation();
           return;
         }
+        if (event.key === "escape" && this.layoutName) {
+          const { state } = this.layoutName;
+          this.layoutName = null;
+          state.release();
+          cx.notify();
+          cx.stop_propagation();
+          return;
+        }
         if (event.key === "escape" && this.editing && !this.editing.saving) {
           const focus = this.names.get(
             JSON.stringify(this.editing.target),
@@ -682,6 +822,12 @@ export default class Workspace extends View {
       )
       .child(this.chat.toggleView(colors))
       .child(div().h(26))
+      .child(
+        Button.new("home-navigation")
+          .accessibility_label("Home")
+          .child("Home")
+          .on_click((_event, cx) => this.run({ operation: "home" }, cx)),
+      )
       .child(
         this.action("Workspace", {
           operation: "dock",
@@ -750,6 +896,15 @@ export default class Workspace extends View {
         .child(`Context: ${this.layout.context.kind}`),
     );
     const body = div().flex().flex_col().flex_1().min_w(0).p(12).gap(10);
+    if (this.layout.view === "home") {
+      body.child(
+        homeOverview(this.layout, (action, cx) => this.run(action, cx)),
+      );
+      shell.child(sidebar).child(body);
+      if (this.chat.open)
+        shell.child(this.chat.render(colors, this.layout.context));
+      return shell;
+    }
     const tabs = div().flex().items_center().gap(6);
     for (const item of voyage?.fleets || []) {
       tabs.child(
@@ -802,7 +957,19 @@ export default class Workspace extends View {
           name: `Fleet ${voyage.fleets.length + 1}`,
         }),
       );
+    if (fleet)
+      tabs.child(
+        Button.new(`fleet-layouts-${fleet.id}`)
+          .accessibility_label("Fleet layouts")
+          .child("⋯")
+          .on_click((_event, cx) => {
+            this.layoutMenu = this.layoutMenu === fleet.id ? null : fleet.id;
+            cx.notify();
+          }),
+      );
     body.child(tabs);
+    if (fleet && this.layoutMenu === fleet.id)
+      body.child(this.layoutControls(fleet));
     if (fleet) {
       const area = div()
         .flex()

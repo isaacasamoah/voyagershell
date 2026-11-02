@@ -2,11 +2,12 @@ const assert = require("node:assert/strict");
 const workspaceSource = require("./workspace-fixture.cjs");
 const { test } = require("node:test");
 
-function fixture(status, inspected = "applied") {
+function fixture(status, inspected = "applied", createdWorkspace = false) {
   const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
   const layout = {
     selectedVoyage: "voyage",
     selectedFleet: "fleet",
+    contents: [{ id: "content", backend: null }],
     voyages: [
       {
         id: "voyage",
@@ -17,6 +18,7 @@ function fixture(status, inspected = "applied") {
   };
   let opened = 0;
   let version = 1;
+  const actions = [];
   const Workspace = new Function(
     "View",
     "invoke",
@@ -25,12 +27,16 @@ function fixture(status, inspected = "applied") {
     source,
   )(
     class {},
-    async () => ({
-      status: inspected,
-      version: String(version),
-      layout,
-      fresh: inspected === "applied",
-    }),
+    async (action) => {
+      actions.push(action.operation);
+      return {
+        status: inspected,
+        version: String(version),
+        layout,
+        fresh: inspected === "applied",
+        createdWorkspace,
+      };
+    },
     async (content) => {
       opened += 1;
       version += 1;
@@ -72,6 +78,7 @@ function fixture(status, inspected = "applied") {
     layout,
     count: () => opened,
     version: () => String(version),
+    actions,
   };
 }
 
@@ -335,7 +342,7 @@ test("shortcuts wait in order for a confirmed workspace action", async () => {
 test("pending shortcut intents run only after success and stop after failed preparation", async () => {
   const modifiers = { control: true, shift: true, alt: false, platform: false };
   for (const status of ["applied", "rejected", "uncertain"]) {
-    const { view, cx, pending } = fixture(status);
+    const { view, cx, pending } = fixture(status, "applied", true);
     view.layout.voyages[0].fleets[0].vessels[0].id = "first";
     view.run({ operation: "inspect" }, cx);
     view.shortcut({ key: "o", modifiers }, cx);
@@ -364,4 +371,129 @@ test("refused and uncertain workspace outcomes discard unsent shortcuts", async 
     assert.equal(count(), 0);
     assert.deepEqual(view.pendingShortcuts, []);
   }
+});
+
+test("Home never starts content and loaded layouts prepare only visible bound content", async () => {
+  const opened = [];
+  const { view, task, layout } = fixture((content) => {
+    opened.push(content);
+    return "applied";
+  });
+  const fleet = layout.voyages[0].fleets[0];
+  fleet.root = { kind: "leaf", placement: "shown" };
+  fleet.vessels = [
+    { id: "shown", content: "live" },
+    { id: "hidden", content: "unbound" },
+  ];
+  layout.voyages[0].portals = [{ id: "portal", content: "unbound-portal" }];
+  layout.contents = [
+    { id: "live", backend: "t1" },
+    { id: "unbound", backend: null },
+    { id: "unbound-portal", backend: null },
+  ];
+  layout.view = "home";
+  await view.prepare(task, true);
+  assert.deepEqual(opened, []);
+  layout.view = "fleet";
+  await view.prepare(task, true);
+  assert.deepEqual(opened, ["live"]);
+});
+
+test("only a newly created workspace starts an unbound initial terminal", async () => {
+  for (const created of [false, true]) {
+    const { view, cx, pending, layout, count } = fixture(
+      "applied",
+      "applied",
+      created,
+    );
+    layout.contents = [{ id: "content", backend: null }];
+    view.run({ operation: "inspect" }, cx);
+    await pending[0];
+    assert.equal(count(), created ? 1 : 0);
+    if (!created)
+      assert.equal(
+        view.terminalStatus(layout.contents[0]),
+        "No terminal is bound.",
+      );
+  }
+});
+
+test("new content does not start an older unbound placement", async () => {
+  const opened = [];
+  const { view, task, layout } = fixture((content) => {
+    opened.push(content);
+    return "applied";
+  });
+  const fleet = layout.voyages[0].fleets[0];
+  fleet.vessels.push({ content: "new" });
+  layout.contents = [
+    { id: "content", backend: null },
+    { id: "new", backend: null },
+  ];
+  await view.prepare(task, true, new Set(), new Set(["new"]));
+  assert.deepEqual(opened, ["new"]);
+  layout.contents[0].backend = "externally-bound";
+  await view.prepare(task, true);
+  assert.deepEqual(opened, ["new", "content"]);
+});
+
+test("navigation waits for a layout save and is cleared on refusal or uncertainty", async () => {
+  for (const status of ["applied", "rejected", "uncertain"]) {
+    const { view, cx, pending, layout } = fixture("applied", status);
+    layout.contents = [];
+    view.savingLayout = true;
+    view.run(
+      { operation: "save-layout", fleet: "fleet", name: "Focus" },
+      cx,
+      () => {
+        view.savingLayout = false;
+      },
+    );
+    view.run({ operation: "home" }, cx);
+    await pending[0];
+    if (pending[1]) await pending[1];
+    assert.equal(pending.length, status === "applied" ? 2 : 1);
+    assert.equal(view.afterRename, null);
+  }
+});
+
+test("Home is retained while an entity rename is saving", () => {
+  const { view, cx } = fixture("applied");
+  view.busy = true;
+  view.editing = { saving: true };
+  view.run({ operation: "home" }, cx);
+  assert.deepEqual(view.afterRename, { operation: "home" });
+});
+
+test("a pending layout save cannot open another name editor", () => {
+  const { view, cx } = fixture("applied");
+  view.savingLayout = true;
+  view.saveLayout("fleet", cx);
+  assert.equal(view.layoutName, undefined);
+});
+
+test("a layout save begun during an existing request waits before navigation", async () => {
+  const { view, cx, pending, layout, actions } = fixture("applied");
+  layout.contents = [];
+  view.run({ operation: "inspect" }, cx);
+  view.savingLayout = true;
+  view.run({ operation: "save-layout", fleet: "fleet", name: "Focus" }, cx);
+  view.run({ operation: "home" }, cx);
+  for (let index = 0; index < pending.length; index++) await pending[index];
+  assert.deepEqual(actions, ["inspect", "save-layout", "home"]);
+});
+
+test("layout shortcuts ignore a retained hidden Vessel", () => {
+  const { view, cx, layout } = fixture("applied");
+  const fleet = layout.voyages[0].fleets[0];
+  fleet.vessels = [
+    { id: "hidden", content: "old" },
+    { id: "visible", content: "content" },
+  ];
+  fleet.root = { kind: "leaf", placement: "visible" };
+  view.focused = "hidden";
+  const calls = [];
+  view.run = (action) => calls.push(action);
+  view.dispatchShortcut("o", cx);
+  assert.equal(calls[0].after, "visible");
 });

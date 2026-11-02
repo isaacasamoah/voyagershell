@@ -339,6 +339,9 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
     match status {
         Status::Applied => match action {
             Action::Inspect => "Workspace inspected",
+            Action::Home => "Home opened",
+            Action::SaveLayout { .. } => "Fleet layout saved",
+            Action::LoadLayout { .. } => "Fleet layout loaded",
             Action::CreateVoyage { .. } => "Voyage created",
             Action::CreateFleet { .. } => "Fleet created",
             Action::CreatePortal { .. } => "Voyage Portal created",

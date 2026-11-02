@@ -20,6 +20,61 @@
         {
           "additionalProperties": false,
           "properties": {
+            "operation": {
+              "const": "home",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fleet": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "save-layout",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "fleet",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fleet": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "load-layout",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "fleet",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "cwd": {
               "type": "string"
             },

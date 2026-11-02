@@ -168,6 +168,8 @@ def prove(
         assert before == after, "Schema check changed dedicated Core identity"
     assert len(initial["value"]["voyages"]) == 1, "Use a new isolated workspace"
     original = initial["value"]["voyages"][0]
+    if journey == "layouts":
+        return layouts(native, capture, click, wait, state, rpc, close, start_frame, original, width, height, evidence)
     if journey == "arrangement":
         return arrangement(
             native,
@@ -585,5 +587,175 @@ def placement(
         "rename-during-controlled-pending-selection",
         "changed-draft-escape-cancelled",
         "saved-placement-reopened",
+        "native-quit",
+    ]
+
+def layouts(
+    native,
+    capture,
+    click,
+    wait,
+    state,
+    rpc,
+    close,
+    start_frame,
+    original,
+    width,
+    height,
+    evidence,
+):
+    from PIL import ImageChops
+
+    owner = json.loads((evidence / "launch.json").read_text())["pid"]
+
+    def field(name, focused=False):
+        for _ in range(50):
+            matches = native("fields", owner, [name], "window")["fields"]
+            if (
+                len(matches) == 1
+                and matches[0]["width"] > 0
+                and matches[0]["height"] > 0
+                and (not focused or matches[0]["focused"])
+            ):
+                return matches[0]
+            time.sleep(0.1)
+        raise AssertionError(f"Native control unavailable: {name}")
+
+    def press(name):
+        item = field(name)
+        click((item["x"] + item["width"] / 2) / 2, (item["y"] + item["height"] / 2) / 2)
+
+    def key(value):
+        native("key", value, True)
+        native("key", value, False)
+
+    def ids():
+        return sorted(
+            item["address"] for item in rpc("terminal.list", {"all": True})["terminals"]
+        )
+
+    wait(lambda layout: layout["contents"] and layout["contents"][0]["backend"])
+    click(350, 190)
+    chord(native, "o")
+    two = wait(
+        lambda layout: (
+            len(layout["contents"]) == 2
+            and all(item["backend"] for item in layout["contents"])
+        )
+    )
+    click(width - 40, 80)
+    docked = wait(lambda layout: layout["context"]["kind"] == "vessel")
+    context = docked["value"]["context"]
+    fleet = original["fleets"][0]["id"]
+    saved_root = two["value"]["voyages"][0]["fleets"][0]["root"]
+    press("Fleet layouts")
+    press("Save Fleet layout")
+    field("Name", focused=True)
+    for character in "Focus":
+        key(ord(character))
+    key(65293)
+    wait(
+        lambda layout: any(
+            item["fleet"] == fleet and item["name"] == "Focus"
+            for item in layout["savedLayouts"]
+        )
+    )
+    press("Fleet layouts")
+    click(350, 190)
+    chord(native, "o")
+    three = wait(
+        lambda layout: (
+            len(layout["contents"]) == 3
+            and all(item["backend"] for item in layout["contents"])
+        )
+    )
+    backends = {item["id"]: item["backend"] for item in three["value"]["contents"]}
+    stopped_address = two["value"]["contents"][0]["backend"]
+    processes = {
+        address: rpc("terminal.get", {"terminal": address})["pid"]
+        for address in backends.values()
+        if address != stopped_address
+    }
+    assert all(processes.values())
+    click(350, 190)
+    for character in "exit":
+        key(ord(character))
+    key(65293)
+    for _ in range(50):
+        stopped = rpc("terminal.get", {"terminal": stopped_address})
+        if stopped["state"] == "finished":
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("The selected shell did not finish")
+    capture("layouts-stopped-terminal")
+    terminals_before = ids()
+    press("Fleet layouts")
+    press("Load Focus")
+    loaded = wait(
+        lambda layout: layout["voyages"][0]["fleets"][0]["root"] == saved_root
+    )
+    assert {
+        item["id"]: item["backend"] for item in loaded["value"]["contents"]
+    } == backends
+    assert len(loaded["value"]["voyages"][0]["fleets"][0]["vessels"]) == 3
+    assert loaded["value"]["context"] == context and ids() == terminals_before
+    assert {
+        address: rpc("terminal.get", {"terminal": address})["pid"]
+        for address in processes
+    } == processes
+    assert rpc("terminal.get", {"terminal": stopped_address})["state"] == "finished"
+    capture("layouts-restored")
+    press("Save Fleet layout")
+    field("Name", focused=True)
+    for character in "Overview":
+        key(ord(character))
+    press("Home")
+    home = wait(lambda layout: layout["view"] == "home")
+    assert any(
+        item["fleet"] == fleet and item["name"] == "Overview"
+        for item in home["value"]["savedLayouts"]
+    )
+    assert home["value"]["context"] == context and ids() == terminals_before
+    before = capture("home-overview")
+    source_path = evidence / "profile/mods/header/home.js"
+    source = source_path.read_text()
+    edited = source.replace("Your Voyages and Fleets", "My workspace overview")
+    assert edited != source
+    temporary = source_path.with_name("home.js.tmp")
+    temporary.write_text(edited)
+    temporary.replace(source_path)
+    for _ in range(30):
+        after = capture("home-customized")
+        if ImageChops.difference(before, after).getbbox():
+            break
+        time.sleep(0.1)
+    else:
+        raise AssertionError("Home edit did not become visible")
+    assert ids() == terminals_before and state()["value"]["context"] == context
+    press("Open Fleet Workbench")
+    selected = wait(
+        lambda layout: layout["view"] == "fleet" and layout["selectedFleet"] == fleet
+    )
+    assert selected["value"]["context"] == context and ids() == terminals_before
+    capture("layouts-returned")
+    saved = state()
+    close()
+    start_frame("layouts-reopened")
+    assert state() == saved and source_path.read_text() == edited
+    assert {
+        address: rpc("terminal.get", {"terminal": address})["pid"]
+        for address in processes
+    } == processes
+    assert rpc("terminal.get", {"terminal": stopped_address})["state"] == "finished"
+    close()
+    rpc("server.stop", {})
+    return [
+        "saved-fleet-tree-with-finished-terminal",
+        "restored-identity-and-context",
+        "name-blur-then-home",
+        "editable-home-overview",
+        "home-navigation-no-new-process",
+        "saved-layout-reopened",
         "native-quit",
     ]

@@ -168,6 +168,13 @@
         "nextId": {
           "type": "string"
         },
+        "savedLayouts": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/SavedLayout"
+          },
+          "type": "array"
+        },
         "selectedFleet": {
           "type": [
             "string",
@@ -179,6 +186,14 @@
             "string",
             "null"
           ]
+        },
+        "view": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WorkspaceView"
+            }
+          ],
+          "default": "fleet"
         },
         "voyages": {
           "items": {
@@ -192,6 +207,26 @@
         "contents",
         "context",
         "nextId"
+      ],
+      "type": "object"
+    },
+    "SavedLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "fleet": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "root": {
+          "$ref": "#/definitions/Split"
+        }
+      },
+      "required": [
+        "fleet",
+        "name",
+        "root"
       ],
       "type": "object"
     },
@@ -300,9 +335,19 @@
         "portals"
       ],
       "type": "object"
+    },
+    "WorkspaceView": {
+      "enum": [
+        "home",
+        "fleet"
+      ],
+      "type": "string"
     }
   },
   "properties": {
+    "createdWorkspace": {
+      "type": "boolean"
+    },
     "fresh": {
       "type": "boolean"
     },
@@ -330,7 +375,8 @@
     "status",
     "version",
     "layout",
-    "fresh"
+    "fresh",
+    "createdWorkspace"
   ],
   "title": "Response",
   "type": "object"

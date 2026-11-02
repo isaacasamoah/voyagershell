@@ -73,6 +73,14 @@ fn run() -> Result<()> {
         &package.join("mod.json"),
         include_str!("../mods/header/mod.json"),
     )?;
+    seed(
+        &package.join("home.js"),
+        include_str!("../mods/header/home.js"),
+    )?;
+    seed(
+        &package.join("AGENTS.md"),
+        include_str!("../mods/header/AGENTS.md"),
+    )?;
     seed(&theme, include_str!("../themes/voyager.json"))?;
     seed(
         &package.join("validate.js"),

@@ -30,9 +30,11 @@ export type Split =
       second: Split;
     };
 export type Axis = "horizontal" | "vertical";
+export type WorkspaceView = "home" | "fleet";
 export type Status = "applied" | "rejected" | "uncertain";
 
 export interface Response {
+  createdWorkspace: boolean;
   fresh: boolean;
   layout: Layout;
   message?: string | null;
@@ -44,8 +46,10 @@ export interface Layout {
   contents: Content[];
   context: Context;
   nextId: string;
+  savedLayouts?: SavedLayout[];
   selectedFleet?: string | null;
   selectedVoyage?: string | null;
+  view?: WorkspaceView & string;
   voyages: Voyage[];
 }
 export interface Content {
@@ -54,6 +58,11 @@ export interface Content {
   id: string;
   startPending?: string | null;
   typeId: string;
+}
+export interface SavedLayout {
+  fleet: string;
+  name: string;
+  root: Split;
 }
 export interface Voyage {
   fleets: Fleet[];

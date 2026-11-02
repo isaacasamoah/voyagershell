@@ -24,6 +24,19 @@ export type Action =
       operation: "inspect";
     }
   | {
+      operation: "home";
+    }
+  | {
+      fleet: string;
+      name: string;
+      operation: "save-layout";
+    }
+  | {
+      fleet: string;
+      name: string;
+      operation: "load-layout";
+    }
+  | {
       cwd: string;
       name: string;
       operation: "create-voyage";

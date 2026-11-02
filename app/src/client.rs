@@ -35,6 +35,7 @@ enum Message {
 struct Outcome {
     status: Status,
     message: Option<String>,
+    created_workspace: bool,
 }
 
 #[derive(Debug)]
@@ -136,6 +137,7 @@ impl Client {
                     version,
                     layout: crate::scope::project(&layout, scope.as_ref()),
                     fresh,
+                    created_workspace: false,
                     message: None,
                 };
                 if let Some((previous, previous_scope, result)) = receipts
@@ -145,6 +147,7 @@ impl Client {
                     if previous == &request && previous_scope == &scope {
                         response.status = result.status.clone();
                         response.message = result.message.clone();
+                        response.created_workspace = result.created_workspace;
                         let _ = reply.send(response);
                         continue;
                     }
@@ -169,6 +172,7 @@ impl Client {
                                             })
                                             .map_err(rejected)?;
                                         revision = save(core, &candidate.layout, revision)?;
+                                        response.created_workspace = true;
                                     }
                                     unconfirmed.retain(|id, _| {
                                         candidate.layout.contents.iter().any(|item| {
@@ -232,6 +236,7 @@ impl Client {
                     Outcome {
                         status: response.status.clone(),
                         message: response.message.clone(),
+                        created_workspace: response.created_workspace,
                     },
                 ));
                 if receipts.len() > 32 {
