@@ -29,6 +29,7 @@ function fixture(
     "invoke",
     "openTerminal",
     "TerminalState",
+    "window_epoch",
     source,
   )(
     class {},
@@ -36,6 +37,7 @@ function fixture(
       actions.push(action.operation);
       return {
         status: inspected,
+        requestId: "dock-receipt",
         version: String(version),
         layout,
         fresh: inspected === "applied",
@@ -52,6 +54,7 @@ function fixture(
       };
     },
     { new: () => ({}) },
+    () => "9",
   );
   const view = new Workspace();
   Object.assign(view, {
@@ -559,4 +562,156 @@ test("a non-Error open rejection remains uncertain and is not replayed", async (
   view.run({ operation: "inspect" }, cx);
   await pending.at(-1);
   assert.equal(count(), 1, "An unknown rejection caused an uncertain replay");
+});
+
+test("Home presents the retained out-of-view avatar without docking or starting content", () => {
+  const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
+  const targets = [];
+  const nodes = [];
+  function div() {
+    const calls = {};
+    const node = new Proxy(calls, {
+      get(target, name) {
+        if (name === "calls") return target;
+        return (...args) => {
+          target[name] = args;
+          return node;
+        };
+      },
+    });
+    nodes.push(node);
+    return node;
+  }
+  const component = { new: () => div() };
+  const target = {
+    new(id, props) {
+      targets.push({ id, ...props });
+      return div();
+    },
+  };
+  const layers = [];
+  const layer = {
+    new(id, props) {
+      layers.push({ id, ...props });
+      return div();
+    },
+  };
+  const Workspace = new Function(
+    "View",
+    "div",
+    "Button",
+    "projection",
+    "Brand",
+    "Layer",
+    "Target",
+    "take_result",
+    "homeOverview",
+    source,
+  )(
+    class {},
+    div,
+    component,
+    () => ({ background: "bg", foreground: "fg", muted: "muted" }),
+    component,
+    layer,
+    target,
+    () => null,
+    () => div(),
+  );
+  const view = new Workspace();
+  const context = { kind: "vessel", id: "vessel" };
+  Object.assign(view, {
+    version: "7",
+    sidebar: true,
+    dockReceipt: "",
+    dockEpoch: "",
+    fresh: true,
+    layout: {
+      view: "home",
+      context,
+      selectedVoyage: "voyage",
+      selectedFleet: "fleet",
+      contents: [{ id: "content", cwd: "/tmp" }],
+      voyages: [
+        {
+          id: "voyage",
+          name: "Voyage",
+          portals: [],
+          fleets: [
+            {
+              id: "fleet",
+              name: "Fleet",
+              vessels: [{ id: "vessel", content: "content" }],
+            },
+          ],
+        },
+      ],
+    },
+    focus: { focus() {} },
+    names: new Map(),
+    status: "Avatar unavailable",
+    editing: null,
+    drag: null,
+    layoutName: null,
+    chat: { toggleView: div, render: () => null },
+  });
+  const actions = [];
+  view.run = (action) => actions.push(action);
+  view.render({});
+  assert.ok(
+    nodes.some((node) => node.calls.child?.[0] === "Avatar unavailable"),
+  );
+  assert.ok(
+    nodes.some((node) => node.calls.accessibility_label?.[0] === "Refresh"),
+  );
+  assert.deepEqual(JSON.parse(layers[0].scope), context);
+  assert.ok(
+    targets.some(
+      (item) =>
+        item.id === "out-of-view-avatar" &&
+        item.fallback &&
+        JSON.parse(item.scope).id === "vessel",
+    ),
+  );
+  assert.deepEqual(actions, []);
+  const goThere = nodes.find((node) => node.calls.child?.[0] === "Go there");
+  assert.ok(goThere);
+  goThere.calls.on_click[0]({ click_count: 1 }, {});
+  assert.deepEqual(actions, [{ operation: "reveal-vessel", id: "vessel" }]);
+});
+
+test("a confirmed dock retains its request and initiating window epoch", async () => {
+  const { view, cx, pending } = fixture("applied");
+  view.run({ operation: "dock", context: { kind: "workspace" } }, cx);
+  await pending.at(-1);
+  assert.equal(view.dockReceipt, "dock-receipt");
+  assert.equal(view.dockEpoch, "9");
+});
+
+test("a delayed request cannot rewind a newer native dock snapshot", async () => {
+  const { view, cx, task, pending, layout, count } = fixture("applied");
+  view.run({ operation: "inspect" }, cx);
+  const latest = { ...layout, context: { kind: "workspace" } };
+  const response = {
+    status: "applied",
+    fresh: true,
+    version: "8",
+    layout: latest,
+  };
+  view.acceptSnapshot(response, task);
+  await pending.at(-1);
+  assert.equal(view.version, "8");
+  assert.equal(view.layout, latest);
+  assert.equal(count(), 0, "A stale response prepared a terminal");
+  view.acceptSnapshot(
+    {
+      ...response,
+      version: "7",
+      status: "uncertain",
+      message: "Unconfirmed request",
+    },
+    task,
+  );
+  assert.equal(view.version, "8");
+  assert.equal(view.status, "Unconfirmed request");
 });

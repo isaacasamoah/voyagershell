@@ -181,6 +181,7 @@ fn projection(value: &Theme) -> HostValue {
 struct WorkspaceBinding {
     client: Client,
     viewers: Viewers,
+    avatar: crate::avatar::Binding,
 }
 
 fn load(
@@ -280,6 +281,7 @@ fn load(
         .with_host_module(module)?
         .with_host_module(workspace)?;
     let policy = policy.with_host_module(crate::conversation::module(conversation.clone()))?;
+    let policy = policy.with_host_module(workspace_binding.avatar.module())?;
     let _guard = LoadGuard::enter(policy)?;
     runtime.try_load(package, window, cx)
 }
@@ -287,6 +289,7 @@ fn load(
 pub struct Header {
     root: Option<Entity<ShellRoot>>,
     _watch: Option<Watcher>,
+    _avatar: Option<gpui::Subscription>,
     _task: Task<()>,
     load_error: Option<String>,
     theme_error: Option<String>,
@@ -301,6 +304,7 @@ pub struct Setup {
     pub client: Client,
     pub viewers: Viewers,
     pub conversation: voyager_app::conversation_client::Client,
+    pub avatar: crate::avatar::Binding,
 }
 
 impl Header {
@@ -318,8 +322,13 @@ impl Header {
             client,
             viewers,
             conversation,
+            avatar,
         } = setup;
-        let workspace_binding = WorkspaceBinding { client, viewers };
+        let workspace_binding = WorkspaceBinding {
+            client,
+            viewers,
+            avatar,
+        };
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
         base.appearance = ThemeAppearance::Dark;
@@ -342,6 +351,9 @@ impl Header {
             Ok(root) => (Some(root), None),
             Err(error) => (None, Some(format!("Header load failed: {error:#}"))),
         };
+        let avatar_observe = root
+            .as_ref()
+            .map(|root| workspace_binding.avatar.observe(root, cx));
         let (watch, watch_error) = match root.as_ref().map(|root| runtime.watch(root, window, cx)) {
             Some(Ok(watch)) => (Some(watch), None),
             Some(Err(error)) => (None, Some(format!("Header reload unavailable: {error:#}"))),
@@ -424,6 +436,8 @@ impl Header {
                                 cx,
                             ) {
                                 Ok(root) => {
+                                    header._avatar =
+                                        Some(workspace_binding.avatar.observe(&root, cx));
                                     match runtime.watch(&root, window, cx) {
                                         Ok(watch) => header._watch = Some(watch),
                                         Err(error) => {
@@ -454,6 +468,7 @@ impl Header {
         Self {
             root,
             _watch: watch,
+            _avatar: avatar_observe,
             _task: task,
             load_error,
             theme_error,

@@ -20,6 +20,7 @@ fn main() -> Result<()> {
     let mut declarations = gpui_shell::type_declarations(&registry.freeze()?);
     for (name, body) in [
         (script_types::HEADER_MODULE, script_types::HEADER),
+        (script_types::AVATAR_MODULE, script_types::AVATAR),
         (script_types::WORKSPACE_MODULE, script_types::WORKSPACE),
         (
             script_types::CONVERSATION_MODULE,

@@ -99,22 +99,22 @@ The candidate restores the previous native demo's unchanged brand bitmap and
 two-stop Home and non-Home circle gradients, as selected by Isaac. The current
 GPUI public element API does not supply the Electron reference's live backdrop
 blur and saturation. The restored gradient does not establish that material
-parity. The travelling
-popup path is source-prepared and still needs actual desktop video, release
-geometry and cross-window docking proof. Assets currently resolve from the build checkout; relocation or a
+parity. The travelling popup completed the bounded native cross-window docking
+and release-geometry journey in the working terminal app. Full material, motion
+and audible-sound parity remain unaccepted. Assets currently resolve from the build checkout; relocation or a
 packaged artifact is not established here. The independently accepted P3 provider
 supplies actual Voyage-owned Portals and the shared content renderer. Portal
-targets and Go there now use that owner data; their integrated native avatar
-journey has not run yet. Name focus handles grow only in application-result tasks
+targets and Go there now use that owner data and passed the integrated native
+journey. Name focus handles grow only in application-result tasks
 or a rename event, never while processing a native context result during render.
 
-## Working-core integration proposal
+## Working-core integration
 
-This worktree proposes the same controller with the working-core workspace,
-terminal and private-chat hosts. It has not been released or exercised as one
-native app. The Home overview preserves the captured context. When its target
-is outside the visible Home view, the proposal reuses the existing compact
-out-of-view target and Go there action; its placement requires owner review.
+The same controller runs with the working-core workspace, terminal and
+private-chat hosts. The combined release completed the bounded native docking,
+floating, restoration and Portal journey. The Home overview preserves the
+captured context. When its target is outside the visible Home view, it reuses
+the existing compact out-of-view target and Go there action.
 No Dock or terminal start follows from selecting Home.
 
 The earlier unexpected floating startups remain unexplained. The retained P4
