@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023"],
+    "strict": true,
+    "noEmitOnError": true,
+    "removeComments": true,
+    "useDefineForClassFields": false,
+    "rootDir": "..",
+    "outDir": "../target/script-types/emitted",
+    "rootDirs": ["mods/header", "../contract/generated"],
+    "types": []
+  },
+  "files": [
+    "mods/header/main.ts",
+    "../contract/generated/workspace.ts",
+    "../contract/generated/conversation.ts",
+    "mods/header/home.ts",
+    "mods/header/chat.ts",
+    "../target/script-types/gpui-kit.d.ts"
+  ]
+}

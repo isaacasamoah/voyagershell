@@ -254,6 +254,7 @@ pub struct Response {
     pub layout: Arc<Layout>,
     pub fresh: bool,
     pub created_workspace: bool,
+    pub created_contents: Vec<ContentId>,
     pub message: Option<String>,
 }
 

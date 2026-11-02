@@ -1,0 +1,10 @@
+export function conversationReply(data: unknown): data is import("./conversationReply").Reply;
+export function conversationRequest(data: unknown): data is import("./conversationRequest").Request;
+export function conversationSnapshot(data: unknown): data is import("./conversationSnapshot").Snapshot;
+export function processResponse(data: unknown): data is import("./processResponse").ProcessResponse;
+export function processTool(data: unknown): data is import("./processTool").ProcessInput;
+export function request(data: unknown): data is import("./request").Request;
+export function response(data: unknown): data is import("./response").Response;
+export function terminalRequest(data: unknown): data is import("./terminalRequest").TerminalRequest;
+export function terminalResponse(data: unknown): data is import("./terminalResponse").TerminalResponse;
+export function workspaceTool(data: unknown): data is import("./workspaceTool").WorkspaceInput;

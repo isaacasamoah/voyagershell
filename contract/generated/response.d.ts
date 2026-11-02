@@ -34,6 +34,7 @@ export type WorkspaceView = "home" | "fleet";
 export type Status = "applied" | "rejected" | "uncertain";
 
 export interface Response {
+  createdContents: string[];
   createdWorkspace: boolean;
   fresh: boolean;
   layout: Layout;

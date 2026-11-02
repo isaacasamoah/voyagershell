@@ -48,3 +48,10 @@ CONSTRAINTS.md owns the complete acceptance-code inventory and review rules. Cou
 Make one logical change per PR. Preserve the existing MIT license and source attribution. Local task specs/plans remain untracked. Do not commit profiles, screenshots, transcripts or credentials. Merging, installation and replacing a demo are separate owner decisions.
 
 The native avatar and content experiments are retained under experiments/gpui-avatar/ and experiments/native-content/. Their Cargo manifests build those experiments only; they do not establish the working foundation. Shared original artwork lives in desktop/assets. Use the root prove.py native routes with an explicitly selected isolated binary/session. Native performance measurements require cargo build --release and the resulting target/release executable, with the exact artifact and all helper processes recorded.
+
+`npm test` checks the current TypeScript composition and generated JavaScript
+before its Node tests. It runs the headless Rust declaration exporter and needs
+the native linker libraries. After contract changes run `npm run contract:generate`;
+after composition or registration changes run `npm run scripts:generate`.
+The profile's seeded JavaScript remains independently editable. See
+[script authoring](docs/workspace.md#script-authoring-and-checking).

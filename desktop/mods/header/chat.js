@@ -1,7 +1,6 @@
 import { div } from "gpui-kit";
 import { Input, InputState } from "gpui-base";
 import { observe, send } from "./conversation.js";
-
 export class Chat {
   constructor(cx, workspaceChanged) {
     this.open = false;
@@ -14,7 +13,6 @@ export class Chat {
     this.input = InputState.new({ placeholder: "Message Voyager" });
     this.input.on("submit", (_event, cx) => this.submit(cx));
   }
-
   toggle(cx) {
     this.open = !this.open;
     if (this.open && !this.observing) {
@@ -43,7 +41,7 @@ export class Chat {
             await task.sleep(50);
           }
         } catch (error) {
-          this.error = error.message;
+          this.error = error instanceof Error ? error.message : String(error);
           task.notify();
         }
         this.observing = false;
@@ -51,7 +49,6 @@ export class Chat {
     }
     cx.notify();
   }
-
   submit(cx, interrupt = false) {
     if (this.pending) return;
     const text = this.input.value();
@@ -63,18 +60,18 @@ export class Chat {
         const result = await send(
           interrupt ? { operation: "interrupt" } : { operation: "send", text },
         );
-        if (result.delivery !== "accepted") this.error = result.error;
+        if (result.delivery !== "accepted")
+          this.error = result.error || "Request refused";
         else if (!interrupt && this.input.value() === text)
           this.input.set_value("");
       } catch (error) {
-        this.error = error.message;
+        this.error = error instanceof Error ? error.message : String(error);
       }
       this.pending = false;
       task.notify();
     });
     cx.notify();
   }
-
   button(label, callback, colors) {
     return div()
       .role("button")
@@ -87,7 +84,6 @@ export class Chat {
       .on_click((_event, cx) => callback(cx))
       .child(label);
   }
-
   toggleView(colors) {
     return this.button(
       this.open ? "Close chat" : "Chat",
@@ -95,7 +91,6 @@ export class Chat {
       colors,
     );
   }
-
   render(colors, context) {
     if (!this.open) return null;
     const messages = div()

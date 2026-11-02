@@ -193,20 +193,23 @@ fn load(
     cx: &mut App,
 ) -> Result<Entity<ShellRoot>> {
     let readable = current.clone();
-    let module = HostModule::new("voyager_header").function("projection", move |_| {
-        let value = readable.borrow();
-        let value = value
-            .as_ref()
-            .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))?;
-        Ok(projection(value))
-    });
+    let module = HostModule::new(crate::script_types::HEADER_MODULE)
+        .declarations(crate::script_types::HEADER)
+        .function("projection", move |_| {
+            let value = readable.borrow();
+            let value = value
+                .as_ref()
+                .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))?;
+            Ok(projection(value))
+        });
     let client = &workspace_binding.client;
     let viewers = &workspace_binding.viewers;
     let identity = client.clone();
     let calls = client.clone();
     let terminal_client = client.clone();
     let terminal_viewers = viewers.clone();
-    let workspace = HostModule::new("voyager_workspace")
+    let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)
+        .declarations(crate::script_types::WORKSPACE)
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
         })

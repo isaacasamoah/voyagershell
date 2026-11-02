@@ -6,7 +6,9 @@ import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { Terminal, TerminalState } from "voyager_native";
 import { Chat } from "./chat.js";
 import { homeOverview } from "./home.js";
-
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
 export default class Workspace extends View {
   init(_props, cx) {
     this.chat = new Chat(cx, () => {
@@ -29,7 +31,6 @@ export default class Workspace extends View {
     this.drag = null;
     this.run({ operation: "inspect" }, cx);
   }
-
   run(action, cx, done) {
     this.drag = null;
     if (this.busy) {
@@ -52,11 +53,12 @@ export default class Workspace extends View {
       "create-voyage",
       "select-voyage",
     ].includes(action.operation);
-    const oldVoyage = this.layout?.voyages.find(
-      (item) => item.id === this.layout.selectedVoyage,
+    const oldLayout = this.layout;
+    const oldVoyage = oldLayout?.voyages.find(
+      (item) => item.id === oldLayout.selectedVoyage,
     );
     const oldFleet = oldVoyage?.fleets.find(
-      (item) => item.id === this.layout.selectedFleet,
+      (item) => item.id === oldLayout?.selectedFleet,
     );
     const transferFocus =
       changesSelection &&
@@ -94,32 +96,30 @@ export default class Workspace extends View {
               "create-portal",
               "split",
             ].includes(action.operation);
-            const allowed = new Set(
-              creates
-                ? this.layout.contents
-                    .filter((item) => !previousContents.has(item.id))
-                    .map((item) => item.id)
-                : [],
-            );
+            const allowed = new Set(result.createdContents);
+            if (creates)
+              for (const item of result.layout.contents)
+                if (!previousContents.has(item.id)) allowed.add(item.id);
             await this.prepare(task, !result.createdWorkspace, retry, allowed);
             prepared = true;
             if (transferFocus) {
-              const voyage = this.layout.voyages.find(
-                (item) => item.id === this.layout.selectedVoyage,
+              const current = this.layout;
+              const voyage = current?.voyages.find(
+                (item) => item.id === current.selectedVoyage,
               );
               const fleet = voyage?.fleets.find(
-                (item) => item.id === this.layout.selectedFleet,
+                (item) => item.id === current?.selectedFleet,
               );
-              this.terminals
-                .get(this.visibleVessels(fleet)[0]?.content)
-                ?.focusIfUnchanged();
+              const target = this.visibleVessels(fleet)[0];
+              if (target)
+                this.terminals.get(target.content)?.focusIfUnchanged();
             }
           } catch (error) {
-            this.status = error.message;
+            this.status = errorMessage(error);
           }
         }
       } catch (error) {
-        this.status = error.message;
+        this.status = errorMessage(error);
         this.fresh = false;
       }
       this.busy = false;
@@ -160,7 +160,6 @@ export default class Workspace extends View {
     });
     cx.notify();
   }
-
   acceptSnapshot(result, task) {
     this.drag = null;
     this.version = result.version;
@@ -169,9 +168,9 @@ export default class Workspace extends View {
     this.status = result.message || "";
     const retain = (target, name) => {
       const key = JSON.stringify(target);
-      if (!this.names.has(key))
-        this.names.set(key, { focus: task.focus_handle(), name });
-      else this.names.get(key).name = name;
+      const retained = this.names.get(key);
+      if (retained) retained.name = name;
+      else this.names.set(key, { focus: task.focus_handle(), name });
     };
     for (const voyage of this.layout.voyages) {
       retain({ kind: "voyage", id: voyage.id }, voyage.name);
@@ -184,7 +183,6 @@ export default class Workspace extends View {
       }
     }
   }
-
   visibleVessels(fleet) {
     if (!fleet) return [];
     if (!fleet.root) return fleet.vessels;
@@ -199,26 +197,27 @@ export default class Workspace extends View {
     collect(fleet.root);
     return fleet.vessels.filter((vessel) => visible.has(vessel.id));
   }
-
   async prepare(
     task,
     existingOnly = false,
     retry = new Set(),
     allowed = new Set(),
   ) {
-    if (this.layout.view === "home") return;
-    const voyage = this.layout.voyages.find(
-      (item) => item.id === this.layout.selectedVoyage,
+    const layout = this.layout;
+    if (!layout) throw Error("Workspace snapshot is unavailable.");
+    if (layout.view === "home") return;
+    const voyage = layout.voyages.find(
+      (item) => item.id === layout.selectedVoyage,
     );
     const fleet = voyage?.fleets.find(
-      (item) => item.id === this.layout.selectedFleet,
+      (item) => item.id === layout.selectedFleet,
     );
     const errors = [];
     for (const vessel of [
       ...this.visibleVessels(fleet),
       ...(voyage?.portals || []),
     ]) {
-      const content = this.layout.contents?.find(
+      const content = layout.contents.find(
         (item) => item.id === vessel.content,
       );
       if (
@@ -245,7 +244,7 @@ export default class Workspace extends View {
       } catch (error) {
         this.openings.set(vessel.content, {
           status: "uncertain",
-          message: error.message,
+          message: errorMessage(error),
         });
         this.fresh = false;
         throw error;
@@ -266,7 +265,6 @@ export default class Workspace extends View {
     }
     if (errors.length) throw Error(errors[0]);
   }
-
   terminalStatus(content) {
     if (content.startPending)
       return "Terminal start is unconfirmed. Inspect before trying again.";
@@ -281,15 +279,14 @@ export default class Workspace extends View {
     if (!content.backend && !outcome) return "No terminal is bound.";
     return "Connecting terminal";
   }
-
   closeName(editing, cx) {
     if (this.editing !== editing) return;
     this.editing = null;
     editing.state.release();
     cx.notify();
   }
-
   saveName(editing, cx) {
+    if (editing.name === undefined) throw Error("No submitted name.");
     this.run(
       { operation: "rename", target: editing.target, name: editing.name },
       cx,
@@ -301,7 +298,6 @@ export default class Workspace extends View {
       },
     );
   }
-
   editName(target, value, cx) {
     if (this.editing) return;
     const state = NameState.new(value);
@@ -310,7 +306,9 @@ export default class Workspace extends View {
     const finish = (_event, cx) => {
       if (this.editing !== editing || editing.saving) return;
       editing.name = state.value().trim();
-      const current = this.names.get(JSON.stringify(target)).name;
+      const retained = this.names.get(JSON.stringify(target));
+      if (!retained) throw Error("Rename target has no retained name.");
+      const current = retained.name;
       if (!editing.name || editing.name === current) {
         if (!editing.name) this.status = "A name is required.";
         this.closeName(editing, cx);
@@ -330,9 +328,8 @@ export default class Workspace extends View {
     state.focus();
     cx.notify();
   }
-
   startDrag(kind, id, event, cx) {
-    if (this.busy || this.editing) return;
+    if (this.busy || this.editing || !this.layout) return;
     this.drag = {
       kind,
       id,
@@ -345,15 +342,17 @@ export default class Workspace extends View {
     };
     cx.notify();
   }
-
   moveDrag(x, y, cx) {
-    if (!this.drag?.moved && Math.hypot(x - this.drag.x, y - this.drag.y) > 7) {
+    if (
+      this.drag &&
+      !this.drag.moved &&
+      Math.hypot(x - this.drag.x, y - this.drag.y) > 7
+    ) {
       this.focus.focus();
       this.drag.moved = true;
       cx.notify();
     }
   }
-
   targetDrag(kind, id, event, cx) {
     if (!this.drag?.moved || this.drag.kind !== kind || this.drag.id === id)
       return;
@@ -385,7 +384,6 @@ export default class Workspace extends View {
       cx.notify();
     } else this.drag.bounds = { x, y, width, height };
   }
-
   finishDrag(x, y, cx) {
     if (!this.drag) return;
     const { kind, id, moved, target, side, bounds, version, voyage, fleet } =
@@ -398,28 +396,29 @@ export default class Workspace extends View {
       fleet === this.layout?.selectedFleet &&
       target &&
       bounds &&
+      ((kind === "vessel" && typeof side === "string") ||
+        (kind !== "vessel" && typeof side === "boolean")) &&
       x >= bounds.x &&
       x < bounds.x + bounds.width &&
       y >= bounds.y &&
       y < bounds.y + bounds.height
     ) {
       this.run(
-        kind === "vessel"
+        kind === "vessel" && typeof side === "string"
           ? { operation: "move-vessel", id, target, side }
           : {
               operation: kind === "voyage" ? "move-voyage" : "move-fleet",
               id,
               target,
-              before: side,
+              before: side === true,
             },
         cx,
       );
     }
     cx.notify();
   }
-
   shortcut(event, cx) {
-    if (this.editing) return;
+    if (this.editing || this.layoutName) return;
     const { control, shift, alt, platform } = event.modifiers;
     if (
       (!control && !platform) ||
@@ -439,19 +438,18 @@ export default class Workspace extends View {
     this.dispatchShortcut(key, cx);
     cx.stop_propagation();
   }
-
   flushShortcuts(cx, applied) {
     if (!applied) this.pendingShortcuts = [];
     const key = this.pendingShortcuts.shift();
     if (key) this.dispatchShortcut(key, cx);
   }
-
   dispatchShortcut(key, cx) {
-    const voyage = this.layout?.voyages.find(
-      (item) => item.id === this.layout.selectedVoyage,
+    const layout = this.layout;
+    const voyage = layout?.voyages.find(
+      (item) => item.id === layout.selectedVoyage,
     );
     const fleet = voyage?.fleets.find(
-      (item) => item.id === this.layout.selectedFleet,
+      (item) => item.id === layout?.selectedFleet,
     );
     if (!voyage || !fleet) return;
     if (key === "t") {
@@ -479,7 +477,6 @@ export default class Workspace extends View {
       );
     }
   }
-
   action(label, action, selected = false, rename = null) {
     const colors = projection();
     const key = JSON.stringify(rename);
@@ -517,27 +514,26 @@ export default class Workspace extends View {
       .bg(selected ? "#23232d" : "#00000000")
       .on_click((event, cx) => {
         if (focus) focus.focus();
-        else if (!["create-fleet", "inspect"].includes(action?.operation))
+        else if (!["create-fleet", "inspect"].includes(action?.operation || ""))
           this.focus.focus();
         if (event.click_count === 2 && rename) this.editName(rename, label, cx);
         else if (action) this.run(action, cx);
       })
       .child(label);
-    if (["create-fleet", "inspect"].includes(action?.operation))
+    if (["create-fleet", "inspect"].includes(action?.operation || ""))
       button.on_mouse_down("left", (_event, cx) => cx.stop_propagation());
     if (focus)
       button
         .track_focus(focus)
         .tab_stop(true)
         .on_key_down((event, cx) => {
-          if (event.key === "f2") {
+          if (event.key === "f2" && rename) {
             this.editName(rename, label, cx);
             cx.stop_propagation();
           }
         });
     return button;
   }
-
   saveLayout(fleet, cx) {
     if (this.layoutName || this.savingLayout) return;
     const state = NameState.new("");
@@ -562,7 +558,6 @@ export default class Workspace extends View {
     state.focus();
     cx.notify();
   }
-
   layoutControls(fleet) {
     const controls = div().flex().flex_col().gap(4);
     if (this.layoutName?.fleet === fleet.id) {
@@ -575,7 +570,7 @@ export default class Workspace extends View {
           .on_click((_event, cx) => this.saveLayout(fleet.id, cx)),
       );
     }
-    for (const saved of this.layout.savedLayouts || []) {
+    for (const saved of this.layout?.savedLayouts || []) {
       if (saved.fleet !== fleet.id) continue;
       controls.child(
         Button.new(`load-layout-${fleet.id}-${saved.name}`)
@@ -591,11 +586,11 @@ export default class Workspace extends View {
     }
     return controls;
   }
-
   dock(context) {
     const colors = projection();
-    const selected =
-      JSON.stringify(context) === JSON.stringify(this.layout.context);
+    const layout = this.layout;
+    if (!layout) throw Error("Workspace snapshot is unavailable.");
+    const selected = JSON.stringify(context) === JSON.stringify(layout.context);
     return div()
       .role("button")
       .accessibility_label(`Dock to ${context.kind}`)
@@ -607,7 +602,6 @@ export default class Workspace extends View {
       .on_click((_event, cx) => this.run({ operation: "dock", context }, cx))
       .child(selected ? "●" : "○");
   }
-
   pane(tree, fleet) {
     const colors = projection();
     if (tree.kind === "branch") {
@@ -619,6 +613,7 @@ export default class Workspace extends View {
         .child(this.pane(tree.second, fleet));
     }
     const placement = fleet.vessels.find((item) => item.id === tree.placement);
+    if (!placement) throw Error("Split placement is unavailable.");
     return this.content(
       placement,
       { kind: "vessel", id: placement.id },
@@ -630,12 +625,13 @@ export default class Workspace extends View {
       },
     );
   }
-
   content(placement, scope, split = null) {
     const colors = projection();
-    const content = this.layout.contents.find(
+    const content = this.layout?.contents.find(
       (item) => item.id === placement.content,
     );
+    if (!content) throw Error("Placement content is unavailable.");
+    const terminal = this.terminals.get(content.id);
     return div()
       .relative()
       .flex()
@@ -723,8 +719,8 @@ export default class Workspace extends View {
           .flex_1()
           .min_h(0)
           .child(
-            this.terminals.has(content.id)
-              ? Terminal.new(this.terminals.get(content.id)).size_full()
+            terminal
+              ? Terminal.new(terminal).size_full()
               : div()
                   .p(20)
                   .text_size(12)
@@ -746,12 +742,12 @@ export default class Workspace extends View {
                   this.drag.side === "bottom" ? this.drag.bounds.height / 2 : 0,
                 )
                 .w(
-                  ["left", "right"].includes(this.drag.side)
+                  this.drag.side === "left" || this.drag.side === "right"
                     ? this.drag.bounds.width / 2
                     : this.drag.bounds.width,
                 )
                 .h(
-                  ["top", "bottom"].includes(this.drag.side)
+                  this.drag.side === "top" || this.drag.side === "bottom"
                     ? this.drag.bounds.height / 2
                     : this.drag.bounds.height,
                 )
@@ -760,7 +756,6 @@ export default class Workspace extends View {
           : [],
       );
   }
-
   render() {
     const colors = projection();
     const shell = div()
@@ -781,9 +776,9 @@ export default class Workspace extends View {
           return;
         }
         if (event.key === "escape" && this.editing && !this.editing.saving) {
-          const focus = this.names.get(
-            JSON.stringify(this.editing.target),
-          ).focus;
+          const retained = this.names.get(JSON.stringify(this.editing.target));
+          if (!retained) throw Error("Rename target has no retained focus.");
+          const focus = retained.focus;
           this.closeName(this.editing, cx);
           focus.focus();
           cx.stop_propagation();
@@ -797,17 +792,18 @@ export default class Workspace extends View {
       .h_full()
       .bg(colors.background)
       .text_color(colors.foreground);
-    if (!this.layout?.voyages.length)
+    const layout = this.layout;
+    if (!layout?.voyages.length)
       return shell
         .flex_col()
         .p(24)
         .child(this.status || "Workspace unavailable")
         .child(this.action("Refresh", { operation: "inspect" }));
-    const voyage = this.layout.voyages.find(
-      (item) => item.id === this.layout.selectedVoyage,
+    const voyage = layout.voyages.find(
+      (item) => item.id === layout.selectedVoyage,
     );
     const fleet = voyage?.fleets.find(
-      (item) => item.id === this.layout.selectedFleet,
+      (item) => item.id === layout.selectedFleet,
     );
     const sidebar = div()
       .flex()
@@ -834,7 +830,7 @@ export default class Workspace extends View {
           context: { kind: "workspace" },
         }),
       );
-    for (const item of this.layout.voyages) {
+    for (const item of layout.voyages) {
       sidebar.child(
         div()
           .relative()
@@ -854,7 +850,9 @@ export default class Workspace extends View {
             this.targetDrag("voyage", item.id, event, cx),
           )
           .children(
-            this.drag?.kind === "voyage" && this.drag.target === item.id
+            this.drag?.kind === "voyage" &&
+              this.drag.target === item.id &&
+              this.drag.bounds
               ? [
                   div()
                     .absolute()
@@ -884,8 +882,8 @@ export default class Workspace extends View {
     sidebar.child(
       this.action("+ Voyage", {
         operation: "create-voyage",
-        name: `Voyage ${this.layout.voyages.length + 1}`,
-        cwd: this.layout.contents[0].cwd,
+        name: `Voyage ${layout.voyages.length + 1}`,
+        cwd: layout.contents[0].cwd,
       }),
     );
     sidebar.child(div().flex_1());
@@ -893,16 +891,14 @@ export default class Workspace extends View {
       div()
         .text_size(10)
         .text_color(colors.muted)
-        .child(`Context: ${this.layout.context.kind}`),
+        .child(`Context: ${layout.context.kind}`),
     );
     const body = div().flex().flex_col().flex_1().min_w(0).p(12).gap(10);
-    if (this.layout.view === "home") {
-      body.child(
-        homeOverview(this.layout, (action, cx) => this.run(action, cx)),
-      );
+    if (layout.view === "home") {
+      body.child(homeOverview(layout, (action, cx) => this.run(action, cx)));
       shell.child(sidebar).child(body);
-      if (this.chat.open)
-        shell.child(this.chat.render(colors, this.layout.context));
+      const chat = this.chat.render(colors, layout.context);
+      if (chat) shell.child(chat);
       return shell;
     }
     const tabs = div().flex().items_center().gap(6);
@@ -926,7 +922,9 @@ export default class Workspace extends View {
             this.targetDrag("fleet", item.id, event, cx),
           )
           .children(
-            this.drag?.kind === "fleet" && this.drag.target === item.id
+            this.drag?.kind === "fleet" &&
+              this.drag.target === item.id &&
+              this.drag.bounds
               ? [
                   div()
                     .absolute()
@@ -977,7 +975,7 @@ export default class Workspace extends View {
         .min_h(0)
         .gap(8)
         .child(this.pane(fleet.root, fleet));
-      if (voyage.portals.length) {
+      if (voyage && voyage.portals.length) {
         const portals = div().flex().flex_col().w(340).gap(8);
         for (const placement of voyage.portals)
           portals.child(
@@ -1015,8 +1013,8 @@ export default class Workspace extends View {
         }),
       );
     shell.child(sidebar).child(body);
-    if (this.chat.open)
-      shell.child(this.chat.render(colors, this.layout.context));
+    const chat = this.chat.render(colors, layout.context);
+    if (chat) shell.child(chat);
     return shell;
   }
 }

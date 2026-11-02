@@ -190,3 +190,24 @@ test("an edit back to the old label after refresh is a new intent", async () => 
   assert.equal(calls.at(-1).name, "Original");
   await reply();
 });
+
+test("missing owner references fail with explicit invariant errors", async () => {
+  const { view, cx, reply, layout } = fixture();
+  await reply();
+  assert.throws(
+    () => view.pane({ kind: "leaf", placement: "missing" }, { vessels: [] }),
+    /Split placement is unavailable/,
+  );
+  layout.contents = [];
+  assert.throws(
+    () =>
+      view.content({ content: "missing" }, { kind: "vessel", id: "missing" }),
+    /Placement content is unavailable/,
+  );
+  view.editName({ kind: "fleet", id: "missing" }, "Original", cx);
+  view.editing.state.text = "Changed";
+  assert.throws(
+    () => view.editing.state.events.blur(null, cx),
+    /Rename target has no retained name/,
+  );
+});

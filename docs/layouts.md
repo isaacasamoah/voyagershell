@@ -28,3 +28,12 @@ Saving or loading a Fleet arrangement requires that the entire Fleet is in that
 captured scope. Scoped snapshots expose saved arrangements only for complete
 Fleets in the projection. Home changes the displayed view without changing that
 scope, and chat remains available while Home is displayed.
+
+When the private administrator successfully creates content, the workspace owner
+keeps an in-memory list of those exact new content IDs after the document save.
+The native view uses that list only for automatic preparation of currently visible
+content. Home retains the eligibility without starting anything. A successful or
+unconfirmed start consumes it; a known refusal remains eligible for explicit
+Refresh. Inspecting, replaying a receipt, or reopening a workspace does not mint
+eligibility for older unbound content. This list is not an authority grant and
+is not persisted as a process-recovery mechanism.

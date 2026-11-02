@@ -345,6 +345,12 @@
     }
   },
   "properties": {
+    "createdContents": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "createdWorkspace": {
       "type": "boolean"
     },
@@ -376,7 +382,8 @@
     "version",
     "layout",
     "fresh",
-    "createdWorkspace"
+    "createdWorkspace",
+    "createdContents"
   ],
   "title": "Response",
   "type": "object"

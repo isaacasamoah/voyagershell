@@ -1,6 +1,6 @@
 # VoyagerShell
 
-VoyagerShell is a configurable workspace for people and agents, built on Herdr Core. The native foundation is being developed in Rust and GPUI, with JavaScript composing native views. Herdr Core owns terminals and programs. Voyager owns the workspace, content placement and explicit avatar context.
+VoyagerShell is a configurable workspace for people and agents, built on Herdr Core. The native foundation is being developed in Rust and GPUI, with TypeScript-authored composition running as JavaScript. Herdr Core owns terminals and programs. Voyager owns the workspace, content placement and explicit avatar context.
 
 The working Electron prototype is preserved in [experiments/electron-reference](experiments/electron-reference/README.md). The native avatar, content-host and earlier typed-content work are organised under [experiments](experiments/README.md), with their acceptance limits recorded. This source reorganisation does not complete the native application or establish a performance improvement.
 
@@ -19,7 +19,7 @@ Use a fresh dedicated session for trials. Existing demo profiles, runtime state 
 
 A Voyage is a workspace. A Fleet is a tab within it. A Vessel places content inside a Fleet; a Portal places content across a Voyage. One content implementation serves both scopes. The preserved Electron prototype uses legacy names internally.
 
-This native candidate creates and names Voyages, Fleets and placements. A Core-backed shell can appear inside a Fleet or as a persistent Voyage Portal. Its combined checkpoint remains under review. The current fixed-size plain-text terminal does not yet provide full terminal behavior.
+This native candidate creates and names Voyages, Fleets and placements. A Core-backed shell can appear inside a Fleet or as a persistent Voyage Portal. The current combined candidate remains under review. Its terminal grid and private process controls have separately reviewed providers; their combined behavior still needs native verification.
 
 The foundation will retain the established avatar, docking, animation, original sounds, private chat and real voice while making contracts and state ownership explicit. Their integration remains unfinished. Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks and [experiments/README.md](experiments/README.md) for retained source and current limits. Browser/game and collaboration extensions follow the working foundation.
 

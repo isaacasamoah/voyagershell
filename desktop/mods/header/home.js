@@ -1,6 +1,5 @@
 import { div } from "gpui-kit";
 import { Button } from "gpui-base";
-
 export function homeOverview(layout, navigate) {
   const overview = div().flex().flex_col().flex_1().gap(12).p(18);
   overview.child(div().text_size(22).child("Home"));

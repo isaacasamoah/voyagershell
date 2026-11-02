@@ -1,6 +1,7 @@
 mod arrangement;
 mod conversation;
 mod host;
+mod script_types;
 mod terminal;
 mod terminal_screen;
 mod text;

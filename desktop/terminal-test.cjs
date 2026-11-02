@@ -2,7 +2,12 @@ const assert = require("node:assert/strict");
 const workspaceSource = require("./workspace-fixture.cjs");
 const { test } = require("node:test");
 
-function fixture(status, inspected = "applied", createdWorkspace = false) {
+function fixture(
+  status,
+  inspected = "applied",
+  createdWorkspace = false,
+  createdContents = [],
+) {
   const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
   const layout = {
     selectedVoyage: "voyage",
@@ -35,6 +40,7 @@ function fixture(status, inspected = "applied", createdWorkspace = false) {
         layout,
         fresh: inspected === "applied",
         createdWorkspace,
+        createdContents,
       };
     },
     async (content) => {
@@ -496,4 +502,61 @@ test("layout shortcuts ignore a retained hidden Vessel", () => {
   view.run = (action) => calls.push(action);
   view.dispatchShortcut("o", cx);
   assert.equal(calls[0].after, "visible");
+});
+
+test("workspace shortcuts leave the layout-name editor alone", () => {
+  const { view, cx } = fixture("applied");
+  view.layoutName = { state: {}, fleet: "fleet", submitted: false };
+  const calls = [];
+  view.run = (action) => calls.push(action);
+  view.shortcut(
+    {
+      key: "o",
+      modifiers: { control: true, shift: true, alt: false, platform: false },
+    },
+    cx,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("owner-created content is prepared without starting older unbound content", async () => {
+  const opened = [];
+  const { view, cx, pending, layout } = fixture(
+    (content) => {
+      opened.push(content);
+      return "applied";
+    },
+    "applied",
+    false,
+    ["new"],
+  );
+  const fleet = layout.voyages[0].fleets[0];
+  fleet.vessels = [
+    { id: "old", content: "content" },
+    { id: "new", content: "new" },
+  ];
+  layout.contents.push({ id: "new", backend: null });
+  view.run({ operation: "inspect" }, cx);
+  await pending[0];
+  assert.deepEqual(opened, ["new"]);
+});
+
+test("a non-Error open rejection remains uncertain and is not replayed", async () => {
+  const { view, task, cx, pending, count } = fixture(
+    () => {
+      throw "lost confirmation";
+    },
+    "applied",
+    true,
+  );
+  view.run({ operation: "inspect" }, cx);
+  await pending.at(-1);
+  assert.equal(view.busy, false);
+  assert.equal(view.status, "lost confirmation");
+  assert.equal(view.openings.get("content").status, "uncertain");
+  assert.equal(view.openings.get("content").message, "lost confirmation");
+  assert.equal(view.fresh, false);
+  view.run({ operation: "inspect" }, cx);
+  await pending.at(-1);
+  assert.equal(count(), 1, "An unknown rejection caused an uncertain replay");
 });

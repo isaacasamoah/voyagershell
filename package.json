@@ -7,12 +7,15 @@
     "contract:check": "node contract/build.cjs --check",
     "core-schema:generate": "node app/core-schema.cjs --write",
     "core-schema:check": "node app/core-schema.cjs --check",
-    "test": "node --test contract/validator-test.cjs desktop/terminal-test.cjs desktop/rename-test.cjs",
-    "format:check": "prettier --check contract/build.cjs app/core-schema.cjs 'desktop/*.cjs' 'desktop/mods/**/*.{js,json}' 'desktop/themes/*.json'"
+    "test": "npm run typecheck && node --test contract/validator-test.cjs desktop/terminal-test.cjs desktop/rename-test.cjs desktop/typecheck-test.cjs",
+    "format:check": "prettier --check contract/build.cjs app/core-schema.cjs 'desktop/*.{cjs,json}' 'desktop/mods/**/*.{ts,js,json}' 'desktop/themes/*.json'",
+    "typecheck": "node desktop/typecheck.cjs --check",
+    "scripts:generate": "node desktop/typecheck.cjs --write"
   },
   "devDependencies": {
     "ajv": "8.20.0",
     "json-schema-to-typescript": "16.0.0",
-    "prettier": "3.9.9"
+    "prettier": "3.9.9",
+    "typescript": "5.9.3"
   }
 }

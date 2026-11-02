@@ -19,6 +19,12 @@ fn home_and_saved_layouts_respect_captured_scope() {
             name: "Focus".into(),
         })
         .unwrap();
+    model
+        .apply(Action::CreatePortal {
+            voyage: voyage.clone(),
+        })
+        .unwrap();
+    let portal = model.layout.voyages[0].portals[0].id.clone();
     let layout = std::sync::Arc::new(model.layout.clone());
     for scope in [
         Context::Voyage { id: voyage },
@@ -50,7 +56,7 @@ fn home_and_saved_layouts_respect_captured_scope() {
             &layout,
             Some(&narrow),
             &Action::LoadLayout {
-                fleet,
+                fleet: fleet.clone(),
                 name: "Focus".into()
             }
         )
@@ -58,6 +64,24 @@ fn home_and_saved_layouts_respect_captured_scope() {
     );
     assert!(
         crate::scope::project(&layout, Some(&narrow))
+            .saved_layouts
+            .is_empty()
+    );
+    let portal_scope = Context::Portal { id: portal };
+    assert!(crate::scope::check(&layout, Some(&portal_scope), &Action::Home).is_ok());
+    assert!(
+        crate::scope::check(
+            &layout,
+            Some(&portal_scope),
+            &Action::LoadLayout {
+                fleet,
+                name: "Focus".into()
+            }
+        )
+        .is_err()
+    );
+    assert!(
+        crate::scope::project(&layout, Some(&portal_scope))
             .saved_layouts
             .is_empty()
     );
@@ -832,4 +856,86 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
     let mut cleanup = Core::connect(&session).unwrap();
     cleanup.rpc("server.stop", serde_json::json!({})).unwrap();
     checked.unwrap();
+}
+
+#[test]
+fn scoped_creation_eligibility_is_consumed_and_never_replayed() {
+    use crate::{client::Client, core::Core};
+    use voyager_contract::{Request, Status};
+    let session = format!("voyager-created-eligibility-{}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let inspect = || Request {
+            request_id: client.request_id(),
+            expected_version: 0,
+            action: Action::Inspect,
+        };
+        let initial = client.call(inspect()).unwrap();
+        let old = initial.layout.contents[0].id.clone();
+        assert!(initial.created_contents.is_empty());
+        let voyage = initial.layout.voyages[0].id.clone();
+        let request = Request {
+            request_id: client.request_id(),
+            expected_version: initial.version,
+            action: Action::CreateFleet {
+                voyage: voyage.clone(),
+                name: "Agent Fleet".into(),
+            },
+        };
+        let created = client
+            .scoped_call(Context::Voyage { id: voyage.clone() }, request.clone())
+            .unwrap();
+        assert_eq!(created.status, Status::Applied);
+        let new = created
+            .layout
+            .contents
+            .iter()
+            .find(|item| item.id != old)
+            .unwrap()
+            .id
+            .clone();
+        let home = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: created.version,
+                action: Action::Home,
+            })
+            .unwrap();
+        assert_eq!(home.created_contents, vec![new.clone()]);
+        let hidden = client.terminal(new.clone(), client.request_id(), home.version);
+        assert!(matches!(hidden, Err(crate::core::Error::Rejected { .. })));
+        let fleet = created.layout.selected_fleet.clone().unwrap();
+        let visible = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: home.version,
+                action: Action::SelectFleet { id: fleet },
+            })
+            .unwrap();
+        assert_eq!(visible.created_contents, vec![new.clone()]);
+        let viewer = client
+            .terminal(new.clone(), client.request_id(), visible.version)
+            .unwrap();
+        drop(viewer);
+        let after = client.call(inspect()).unwrap();
+        assert!(after.created_contents.is_empty());
+        let replay = client
+            .scoped_call(Context::Voyage { id: voyage }, request)
+            .unwrap();
+        assert!(replay.created_contents.is_empty());
+        let reopened = Client::open(session.clone(), "/tmp".into());
+        let observed = reopened
+            .call(Request {
+                request_id: reopened.request_id(),
+                expected_version: 0,
+                action: Action::Inspect,
+            })
+            .unwrap();
+        assert!(observed.created_contents.is_empty());
+    }));
+    let mut core = Core::connect(&session).unwrap();
+    let stopped = core.rpc("server.stop", serde_json::json!({}));
+    core.close().unwrap();
+    checked.unwrap();
+    assert!(stopped.is_ok());
 }
