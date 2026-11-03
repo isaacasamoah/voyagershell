@@ -3,14 +3,12 @@ import { Button } from "gpui-base";
 import { Composer, ComposerState } from "voyager_native";
 import { observe, send } from "./conversation.js";
 export class Chat {
-  constructor(cx, workspaceChanged) {
+  constructor(cx) {
     this.open = false;
     this.observing = false;
     this.pending = false;
     this.state = null;
     this.error = "";
-    this.workspaceChanged = workspaceChanged;
-    this.lastEffect = "";
     this.input = ComposerState.new("Message Voyager");
     this.input.on("submit", (_event, cx) => this.submit(cx));
   }
@@ -24,19 +22,6 @@ export class Chat {
             const next = await observe(this.state?.version ?? null);
             if (next) {
               this.state = next;
-              const effect = next.messages.findLast(
-                (message) =>
-                  message.tool?.status === "applied" &&
-                  message.tool.action.tool === "workspace" &&
-                  message.tool.action.action.operation !== "inspect",
-              );
-              const identity = effect
-                ? JSON.stringify([effect.requestId, effect.id])
-                : "";
-              if (identity && identity !== this.lastEffect) {
-                this.lastEffect = identity;
-                this.workspaceChanged();
-              }
               task.notify();
             }
             await task.sleep(50);
