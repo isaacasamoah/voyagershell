@@ -1,10 +1,10 @@
 # Native Notes integration
 
 The integration candidate uses one Notes package in Fleet Vessels and Voyage
-Portals. It has source checks, not integrated native acceptance yet. The earlier
-standalone Notes proving-size failure remains recorded. Conditional integration
-uses the unchanged combined-foundation cap and does not accept the agent or
-live-authoring lifecycle work.
+Portals. Its seventeen-stage Linux native journey passes on the combined
+workspace candidate. The earlier standalone Notes proving-size failure remains
+recorded. Conditional integration still requires the unchanged combined-foundation
+cap and does not accept the agent or live-authoring lifecycle work.
 
 `contract/src/content.rs` owns the versioned Notes request, response and data types.
 The existing generator exports their validators beside the workspace and
@@ -27,8 +27,9 @@ Each has its own captured `voyager_content` module, application generation,
 controller and Watcher. The host retains the controller but embeds its public
 `content()` view beneath the single window overlay root. The existing accessibility
 activation and overlay invalidation route is retained. This follows the corrected
-Notes provider; multi-instance native accessibility remains a required integration
-check. The VM has an additional fixed memory cost that has not been measured.
+Notes provider. The integrated journey observes both instances through native
+accessibility and also edits with accessibility disabled. The VM has an additional
+fixed memory cost that has not been measured.
 
 The private host accepts the request ID and expected revision beside the JSON.
 It validates those small identity fields and reserves the existing request/byte
@@ -54,16 +55,21 @@ TypeScript composition gate. Its actual private declarations are available throu
 The Header's broader registry is not a substitute for those declarations.
 The emitted JavaScript and live customization path remain available.
 
-Actual agent data updates, live refresh with dirty-draft preservation,
-remove/restore and complete generation/lifecycle acceptance remain separate work.
-The native integration still needs the complete A/B, stale/invalid/forged,
-known-refusal repair, uncertain no-replay, delayed hydration, accessibility,
-resize and dirty-sibling parity journeys in both placement scopes. Source and
-headless checks do not establish those native results.
+The real native journey covers save/reopen, stale and forged refusal, delayed
+hydration, uncertain confirmation without replay, body resizing and independent
+draft/focus retention. Switching Fleets retains the same Portal and data. Native
+input still reaches the original Core terminal afterward. The sibling pixel checks
+cover its measured title, body and status area, not the whole Portal header or
+desktop. Earlier failed fixture attempts remain recorded separately.
+
+Actual agent data updates, live refresh after an agent write, remove/restore,
+strict Notes authoring, complete generation/lifecycle and aggregate proof-size
+acceptance remain separate work. These native checks establish no performance
+gain, another platform or complete avatar/voice parity.
 
 Source basis is the retained Voyager Notes provider, GPUI Shell at
-[`9448039`](https://github.com/longbridge/gpui-kit/tree/944803984cf0ba3111861d6e1aa9d6265c109ff9),
+[the pinned GPUI Shell source](https://github.com/longbridge/gpui-kit/tree/944803984cf0ba3111861d6e1aa9d6265c109ff9),
 and Herdr App at
-[`1581a58`](https://github.com/herdrdev/herdr-app/tree/1581a587919dddd6f1efd5f78eb542c4b2b02cb5).
+[the pinned Herdr App source](https://github.com/herdrdev/herdr-app/tree/1581a587919dddd6f1efd5f78eb542c4b2b02cb5).
 The integration uses supported isolated runtimes, host components and retained
 views. It adds no browser engine or second Core connection.

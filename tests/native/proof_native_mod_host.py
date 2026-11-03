@@ -22,7 +22,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-process", "conversation-ux", "terminal-agent", "conversation-scroll", "conversation-stop", "avatar", "portal-avatar"])
+    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "notes", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-process", "conversation-ux", "terminal-agent", "conversation-scroll", "conversation-stop", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -38,6 +38,8 @@ def run():
     args = parser.parse_args()
     if args.journey in ("avatar", "portal-avatar") and not args.compositor:
         parser.error("Avatar journeys require compositor capture")
+    if args.journey == "notes" and not args.compositor:
+        parser.error("Notes journey requires compositor capture")
     if args.journey == "conversation-scroll":
         if args.public_snapshot is None or not args.public_snapshot.is_absolute() or not args.public_snapshot.is_file():
             parser.error("conversation-scroll requires an absolute public Snapshot file")
@@ -76,15 +78,15 @@ def run():
                 socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
                 if socket.exists():
                     raise RuntimeError("Selected Stop requires two fresh dedicated Core sessions")
-    if args.journey in ("avatar", "portal-avatar"):
+    if args.journey in ("avatar", "portal-avatar", "notes"):
         if env.get("HC_SOCKET"):
-            raise RuntimeError("Avatar journeys require an unset HC_SOCKET before launch")
+            raise RuntimeError("This journey requires an unset HC_SOCKET before launch")
         env.pop("HC_SESSION", None)
         env.pop("HC_TERMINAL_ID", None)
         if args.launch:
             socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (args.session + ".sock")
             if socket.exists():
-                raise RuntimeError("Avatar journeys require a fresh dedicated Core session")
+                raise RuntimeError("This journey requires a fresh dedicated Core session")
     env.pop("VOYAGER_PROOF_PUBLIC_SNAPSHOT", None)
     if args.journey == "conversation-scroll":
         env["VOYAGER_PROOF_PUBLIC_SNAPSHOT"] = str(args.public_snapshot)
@@ -109,16 +111,23 @@ def run():
         identity["artifact"] = [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns]
         return identity
 
-    def launch():
+    pending_process = None
+    pending_identity = None
+
+    def launch_candidate():
+        nonlocal pending_process, pending_identity
         with (evidence / "native.log").open("a") as log:
             process = subprocess.Popen(
                 command, cwd=candidate_root, env=env, stdout=log, stderr=log, start_new_session=True
             )
+        pending_process = process
+        pending_identity = None
         pending = {"pid": process.pid, "command": command, "session": args.session}
         pending_path = evidence / "launch-pending.json"
         pending_path.write_text(json.dumps(pending, indent=2))
         try:
             pending["identity"] = identify(process.pid)
+            pending_identity = pending["identity"]
         except (OSError, ValueError, KeyError, StopIteration) as error:
             pending["identityError"] = str(error)
         pending_path.write_text(json.dumps(pending, indent=2))
@@ -152,7 +161,55 @@ def run():
         launch_file.write_text(json.dumps(record, indent=2))
         return record
 
-    record = launch() if args.launch else json.loads(launch_file.read_text())
+    def cleanup_launch_failure():
+        errors = []
+        process = pending_process
+        if process is not None and process.poll() is None:
+            try:
+                actual = identify(process.pid)
+                assert pending_identity is not None and actual == pending_identity
+                assert actual["uid"] == os.getuid() and actual["cwd"] == str(candidate_root)
+                assert actual["session"] == args.session and actual["command"] == command
+                assert actual["executable"] == str(binary)
+                process.terminate()
+                process.wait(timeout=5)
+            except Exception as error:
+                errors.append(f"unverified or surviving candidate {process.pid}: {error}")
+        try:
+            (evidence / "launch-failure-cleanup.json").write_text(json.dumps({"errors": errors}, indent=2))
+        except OSError as error:
+            errors.append(f"cleanup receipt: {error}")
+        if errors:
+            print(f"Launch cleanup errors: {errors}", file=sys.stderr)
+
+    def cleanup_initial_core():
+        if args.journey == "notes" and pending_process is not None and pending_process.poll() is not None:
+            try:
+                from proof_workspace import core_rpc
+
+                socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (args.session + ".sock")
+                if socket.is_socket():
+                    core_rpc(args.session, env, "server.stop", {})
+                    for _ in range(50):
+                        if not socket.exists():
+                            break
+                        time.sleep(0.1)
+                    assert not socket.exists(), "Dedicated Core socket survived cleanup"
+            except Exception as error:
+                print(f"Initial Notes Core cleanup failed: {error}", file=sys.stderr)
+
+    def launch():
+        try:
+            return launch_candidate()
+        except BaseException:
+            cleanup_launch_failure()
+            raise
+
+    try:
+        record = launch() if args.launch else json.loads(launch_file.read_text())
+    except BaseException:
+        cleanup_initial_core()
+        raise
 
     def verify():
         actual = identify(record["pid"])
@@ -162,19 +219,35 @@ def run():
         assert int(execute("xdotool", "getwindowpid", record["window"])) == record["pid"]
         assert args.session in execute("xdotool", "getwindowname", record["window"])
 
-    verify()
-    if args.window_origin is not None:
+    origin_sequence = 0
+
+    def apply_window_origin():
+        nonlocal origin_sequence
+        if args.window_origin is None:
+            return
+        verify()
         before = execute("xdotool", "getwindowgeometry", "--shell", record["window"])
         execute("xdotool", "windowmove", "--sync", record["window"], *map(str, args.window_origin))
         after = execute("xdotool", "getwindowgeometry", "--shell", record["window"])
-        (evidence / "window-origin.json").write_text(json.dumps({"requested": args.window_origin, "before": before, "after": after}, indent=2))
-    execute("xdotool", "windowactivate", "--sync", record["window"])
-    pointer = subprocess.Popen(
-        ["/usr/bin/python3", str(root / "proof_native_input.py")]
-        + (["--pointer"] if args.notes or args.foundation else []), env=env, text=True,
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        stderr=(evidence / "pointer.log").open("a"),
-    )
+        origin_sequence += 1
+        suffix = "" if origin_sequence == 1 else f"-{origin_sequence}"
+        (evidence / f"window-origin{suffix}.json").write_text(json.dumps({"requested": args.window_origin, "before": before, "after": after}, indent=2))
+
+    try:
+        verify()
+        apply_window_origin()
+        execute("xdotool", "windowactivate", "--sync", record["window"])
+        pointer = subprocess.Popen(
+            ["/usr/bin/python3", str(root / "proof_native_input.py")]
+            + (["--pointer"] if args.notes or args.foundation else []), env=env, text=True,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=(evidence / "pointer.log").open("a"),
+        )
+    except BaseException:
+        if args.launch:
+            cleanup_launch_failure()
+            cleanup_initial_core()
+        raise
 
     input_targets = []
 
@@ -225,7 +298,7 @@ def run():
         path = evidence / f"{name}.png"
         window = record["window"] if window is None else window
         assert int(execute("xdotool", "getwindowpid", window)) == record["pid"]
-        if not args.compositor or args.journey not in ("avatar", "portal-avatar"):
+        if not args.compositor or args.journey not in ("avatar", "portal-avatar", "notes"):
             execute("import", "-window", window, str(path))
         if args.compositor:
             bounds = geometry(window)
@@ -240,9 +313,14 @@ def run():
     def start_frame(name):
         nonlocal record
         record = launch()
-        execute("xdotool", "windowactivate", "--sync", record["window"])
-        time.sleep(0.5)
-        return capture(name)
+        try:
+            apply_window_origin()
+            execute("xdotool", "windowactivate", "--sync", record["window"])
+            time.sleep(0.5)
+            return capture(name)
+        except BaseException:
+            cleanup_launch_failure()
+            raise
 
     def save(path, value):
         temporary = path.with_name(path.name + ".tmp")
@@ -286,14 +364,13 @@ def run():
             passed.append("native-quit")
         elif args.foundation:
             import importlib
-            module = "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey == "terminal-agent" else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
+            module = "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey == "terminal-agent" else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
             proof_workspace = importlib.import_module(module)
 
-            passed.extend(proof_workspace.prove(
-                native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame,
-                evidence=evidence, session=args.session, env=env,
-                journey=args.journey,
-            ))
+            options = dict(native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame, evidence=evidence, session=args.session, env=env, journey=args.journey)
+            if args.journey == "notes":
+                options.update(profile=profile, pid=lambda: record["pid"], resize_window=resize_window)
+            passed.extend(proof_workspace.prove(**options))
         elif args.notes:
             import proof_native_notes
 
@@ -366,16 +443,43 @@ def run():
         completed = True
         print(json.dumps({"passed": passed, "visualReviewRequired": True}))
     finally:
+        primary = sys.exc_info()[0] is not None
+        primary_error = str(sys.exc_info()[1])
+        cleanup_errors = []
+        try:
+            pointer.stdin.close()
+            input_status = pointer.wait(timeout=20)
+            if input_status:
+                cleanup_errors.append(f"Native input exited {input_status}; see pointer.log")
+        except Exception as error:
+            cleanup_errors.append(f"Native input cleanup: {error}")
+            if pointer.poll() is None:
+                try:
+                    pointer.kill()
+                    pointer.wait(timeout=5)
+                except Exception as stop_error:
+                    cleanup_errors.append(f"Native input reap: {stop_error}")
+        try:
+            cleanup = "native-input-quit-cleanup.json" if args.quit else "native-input-cleanup.json"
+            if pointer.poll() is not None:
+                (evidence / cleanup).write_text(pointer.stdout.read())
+            else:
+                cleanup_errors.append("Native input still running; receipt unavailable")
+        except Exception as error:
+            cleanup_errors.append(f"Native input receipt: {error}")
         check_file = "quit-checks.json" if args.quit else "checks.json"
         (evidence / check_file).write_text(json.dumps({
             "passed": passed, "reloadObservedUpperBoundMs": timings,
-            "completed": completed, "error": str(sys.exc_info()[1]),
+            "completed": completed and not cleanup_errors, "error": primary_error,
+            "cleanupErrors": cleanup_errors,
             "visualReviewRequired": True,
         }, indent=2))
-        pointer.stdin.close()
-        pointer.wait(timeout=5)
-        cleanup = "native-input-quit-cleanup.json" if args.quit else "native-input-cleanup.json"
-        (evidence / cleanup).write_text(pointer.stdout.read())
+        if cleanup_errors:
+            message = f"Native input cleanup failed: {cleanup_errors}"
+            if primary:
+                print(message, file=sys.stderr)
+            else:
+                raise RuntimeError(message)
 
 
 if __name__ == "__main__":
