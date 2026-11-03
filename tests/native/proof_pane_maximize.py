@@ -220,6 +220,77 @@ def maximize(
         ordinary_input(
             index, "maximize-final-mapping-" + str(index), explicit_refocus=True
         )
+    target = panes()[1]
+    frames = fields("Vessel dock", 3)
+    candidates = [frame for frame in frames if pane_candidates([target], frame)]
+    assert len(candidates) == 1, candidates
+    frame = candidates[0]
+    away = panes()[0]
+    move(away["x"] + away["width"] / 2, away["y"] + away["height"] / 2)
+    native("focus", owner, "Vessel dock", frames.index(frame))
+    wait(
+        lambda: fields("Vessel dock", 3),
+        lambda items: items[frames.index(frame)]["focused"],
+        "the intended Vessel dock focused without activation",
+    )
+    trace = []
+    for step in range(9):
+        snapshot = native("fields", owner, None, "window")["fields"]
+        trace.append(snapshot)
+        save("maximize-tab-navigation", {"steps": trace, "frame": frame})
+        buttons = pane_candidates(
+            [
+                item
+                for item in snapshot
+                if item["name"] == "Maximize Vessel" and item["focused"]
+            ],
+            frame,
+        )
+        if len(buttons) == 1:
+            assert buttons[0]["role"] in ("button", "push button")
+            break
+        assert not any(
+            item["role"] == "terminal" and item["focused"] for item in snapshot
+        ), "Tab reached a terminal before the maximize button"
+        assert step < 8, "Maximize button was not reached within eight Tabs"
+        native("key", 65289, True)
+        native("key", 65289, False)
+    assert document()["value"] == baseline["value"]
+    capture("maximize-tab-focused-arrow")
+    native("key", 65293, True)
+    native("key", 65293, False)
+    wait(
+        document,
+        lambda doc: fleet(doc).get("maximizedPlacement") == selected,
+        "Enter maximized the selected Vessel",
+    )
+    maximized_frame = fields("Vessel dock", 1)[0]
+    focused_restore = wait(
+        lambda: pane_candidates(
+            native("fields", owner, ["Restore Vessel"], "window")["fields"],
+            maximized_frame,
+        ),
+        lambda items: len(items) == 1 and items[0]["focused"],
+        "the same keyboard button now focused as Restore",
+    )
+    save(
+        "maximize-enter-focused-restore",
+        {"document": verify(True), "fields": focused_restore},
+    )
+    capture("maximize-enter-focused-restore")
+    native("key", 65293, True)
+    native("key", 65293, False)
+    wait(
+        document,
+        lambda doc: not fleet(doc).get("maximizedPlacement"),
+        "Enter restored the selected Vessel",
+    )
+    assert settled() == rectangles
+    save(
+        "maximize-enter-restored",
+        {"document": verify(False), "fields": fields("Vessel dock", 3)},
+    )
+    capture("maximize-enter-restored")
     save(
         "maximize-preserved",
         {
@@ -236,6 +307,7 @@ def maximize(
         "corner-maximize-different-pane-without-focus-repair",
         "keyboard-restore-and-maximize-without-focus-repair",
         "corner-restore-retains-the-accepted-three-leaf-tree",
+        "tab-visible-button-and-enter-maximize-restore-with-pointer-away",
         "original-processes-context-layouts-and-pane-mapping-retained",
         "native-quit-and-recorded-owned-exits",
     ]
