@@ -1,11 +1,12 @@
 # Native Notes integration
 
-The integration candidate uses one Notes package in Fleet Vessels and Voyage
-Portals. The earlier combined workspace artifact passed its seventeen-stage Linux
-native journey. The retained native edit-session changes below are source-only
-and have not been built or tried as a native application. The earlier standalone Notes proving-size failure remains
-recorded. Conditional integration still requires the unchanged combined-foundation
-cap and does not accept the agent or live-authoring lifecycle work.
+The native candidate uses one Notes package in Fleet Vessels and Voyage Portals.
+The integrated Linux configuration journey demonstrates independent settings,
+real assistant updates arriving with Chat closed, a retained dirty sibling and
+persistence after explicit Quit and cold reopen. The earlier edit/reload and
+remove/restore journey retains its separate artifact, before the current Quit
+semantics. Those observations do not accept the whole content lifecycle,
+resource limits or combined-foundation proving-code cap.
 
 `contract/src/content.rs` owns the versioned Notes request, response and data types.
 The existing generator exports their validators beside the workspace and
@@ -74,9 +75,10 @@ confirmation. Those remain part of the integrated native journey.
 The Header-only `voyager_content_view.descriptions()` binding returns typed
 contract data as JSON from background host work, within the existing content
 envelope limit. It does not extend the private Notes registry. The catalogue and
-existing bound Describe are source-tested; the creation picker has not yet been
-wired to this binding or observed in a native trial. Existing Notes appearance,
-editing and profile JavaScript are unchanged by this source increment.
+bound Describe use the same owner. The creation picker reads this catalogue to
+check Notes availability; its direct Notes selection still needs its own native
+journey. The configuration journey creates Notes through actual administrator
+tools. Personal package JavaScript remains independently editable.
 
 The source adds explicit remove-content-package and restore-content-package
 workspace actions. Native administration and an administrator captured at whole
@@ -109,9 +111,10 @@ never replayed. The prior revision() read remains available for personal Header
 source; new composition uses notice().
 
 The filesystem/availability and notice changes have source tests and a separately
-recorded Core-backed package receipt/scope test. The new native lifetime path is
-not yet native-tested. The earlier seventeen-stage Notes result remains tied to
-its own artifact and the legacy controller it exercised.
+recorded Core-backed package receipt/scope test. The retained edit/reload and remove/restore path has a separate Linux native
+receipt. That older fixture still assumes its earlier Quit semantics and must
+be adapted before rerunning against current product Quit. The earlier
+seventeen-stage Notes result also remains tied to its own legacy controller.
 
 ## Retained editors and staged source replacement
 
@@ -195,9 +198,9 @@ candidate has its captured voyager_content module and application generation.
 The host renders the published ScriptView beneath the existing single window
 ShellRoot and retains the accessibility activation/overlay invalidation route.
 The older native journey observed the legacy inputs with accessibility enabled
-and disabled. The new retained editor/native staging path needs matched native
-input and screenshot evidence. Neither VM memory nor repeated-edit retention has
-been measured.
+and disabled. The retained editor/staging path has separate native edit/error/repair captures.
+The current configuration path has matched native input and captures with a dirty
+sibling. Neither result measures VM memory or repeated-edit retention.
 
 The private host accepts the request ID and expected revision beside the JSON.
 It validates those small identity fields and reserves the existing request/byte

@@ -45,11 +45,13 @@ python prove.py --foundation --journey portal-terminal --launch --binary target/
 
 This journey verifies shell input/output, known refusal and explicit Refresh, retained Portal process identity across Fleet changes, rename-to-terminal focus and a refused sibling that must not block the Portal. Its final cleanup explicitly stops only its dedicated Core session after the application quits. It does not establish the application's full Quit lifecycle.
 
-The source-only `terminal-reported-status` journey uses two ordinary Fleets and
+The `terminal-reported-status` journey uses two ordinary Fleets and
 literal OSC 7501 shell reports, with Chat closed and no Refresh. It requires
 `--compositor` for word-by-word native review when static AX text is unavailable.
 Its cleanup observes product Quit and recorded exits without a later Core call.
-This route has not yet run on a candidate and does not establish agent reporting.
+Its bounded Linux run checks the reported words, clear/child-only/nonreporting
+unknown and hidden-Fleet arrival. Constructed shell reports do not establish
+that every agent integration emits them or that a reported done means success.
 
 CONSTRAINTS.md owns the complete acceptance-code inventory and review rules. Count shared helpers once, include temporary proving code and map production ranges actually exercised. Keep a fresh independent review and relevant negative control. A dependency install or green unit suite does not complete a user-facing increment.
 
