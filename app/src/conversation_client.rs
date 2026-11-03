@@ -208,7 +208,7 @@ struct Owner {
     active: String,
     interrupt: bool,
     deferred: VecDeque<Visible>,
-    callbacks: VecDeque<ToolCall>,
+    callbacks: VecDeque<Box<ToolCall>>,
     profile: PathBuf,
     workspace: Workspace,
     receipts: VecDeque<(Request, Reply)>,

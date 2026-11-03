@@ -142,7 +142,7 @@ pub(crate) enum Event {
         outcome: Outcome,
     },
     Visible(Visible),
-    Tool(ToolCall),
+    Tool(Box<ToolCall>),
     CallbackError {
         id: Value,
         code: i64,

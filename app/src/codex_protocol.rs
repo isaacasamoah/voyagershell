@@ -116,7 +116,7 @@ pub(crate) fn decode(value: Value, pending: Option<(u64, Operation)>) -> Option<
                 message: "Unsupported private provider callback; nothing was dispatched".into(),
             });
         }
-        return Some(Event::Tool(ToolCall {
+        return Some(Event::Tool(Box::new(ToolCall {
             id: id.clone(),
             thread: text(params, "threadId").unwrap_or_default(),
             turn: text(params, "turnId").unwrap_or_default(),
@@ -127,7 +127,7 @@ pub(crate) fn decode(value: Value, pending: Option<(u64, Operation)>) -> Option<
                 .filter(|value| !value.is_null())
                 .cloned(),
             arguments: params["arguments"].clone(),
-        }));
+        })));
     }
     let thread = text(params, "threadId")?;
     let event = match method {
