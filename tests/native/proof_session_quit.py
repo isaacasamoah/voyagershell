@@ -245,7 +245,14 @@ def prove(
             "visible private composer",
         )
         native("focus", launch()["pid"], "Message Voyager", 0)
+        focused = wait(
+            lambda: fields("Message Voyager"),
+            lambda items: len(items) == 1 and items[0]["focused"],
+            "focused private composer",
+        )
+        save("quit-composer-focus.json", focused)
         type_text(prompt)
+        capture("quit-private-draft")
         key(65293)
         wait(lambda: provider_processes(evidence), bool, "the owned private provider")
         observed["providersEarly"] = record_providers(executable)
