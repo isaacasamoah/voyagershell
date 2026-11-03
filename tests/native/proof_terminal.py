@@ -10,6 +10,7 @@ from secrets import token_hex
 from PIL import ImageChops
 
 from proof_workspace import core_rpc, named_button
+from proof_process import observe_core_exit
 
 LEGACY_DIV_HEADER = "7da0b1f9fde04137d20867e64b35fcc1eedb7a5b9be0ba4002031f78320e0909"
 
@@ -1069,27 +1070,17 @@ def terminal(
                 }
             )
         try:
+            result = observe_core_exit(
+                session, env, owned if reported else (), seconds=15 if reported else 5
+            )
             if reported:
-                from proof_session_quit import exit_observation
-
-                def observed_exit():
-                    value = exit_observation(owned, socket)
-                    (evidence / "reported-status-exits.json").write_text(
-                        json.dumps(value, indent=2)
-                    )
-                    return value
-
-                wait_for(
-                    observed_exit,
-                    lambda item: item["complete"],
-                    "recorded Quit exits and socket absence",
+                (evidence / "reported-status-exits.json").write_text(
+                    json.dumps(result, indent=2)
                 )
-            else:
-                rpc("server.stop", {})
         except Exception as error:
             cleanup_failures.append(
                 {
-                    "action": "recorded-quit-exits" if reported else "owned-core-stop",
+                    "action": "recorded-quit-exits" if reported else "owned-core-exit",
                     "type": type(error).__name__,
                     "message": str(error),
                 }

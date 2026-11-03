@@ -7,6 +7,7 @@ from pathlib import Path
 from PIL import ImageChops
 
 from proof_workspace import core_rpc
+from proof_process import observe_core_exit
 
 
 def prove(
@@ -154,7 +155,7 @@ def prove(
     finally:
         for operation, effect in (
             ("native-quit", close),
-            ("dedicated-core-stop", lambda: rpc("server.stop", {})),
+            ("dedicated-core-exit", lambda: observe_core_exit(session, env)),
         ):
             try:
                 effect()

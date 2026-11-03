@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from proof_foundation_notes import notes
-from proof_process import process_identity
+from proof_process import process_identity, observe_core_exit
 from proof_workspace import chord, core_rpc
 
 
@@ -570,18 +570,9 @@ def prove(
                 errors.append({"sourceRestore": repr(error)})
         if core is not None:
             try:
-                current = rpc("server.status", {})
-                assert (current["pid"], current["core"]["id"]) == (
-                    core["pid"],
-                    core["core"]["id"],
-                )
-                assert (
-                    process_identity(core["pid"], metadata_only=True)
-                    == owned[str(core["pid"])]
-                )
-                rpc("server.stop", {})
+                observe_core_exit(session, env)
             except Exception as error:
-                errors.append({"coreStop": repr(error)})
+                errors.append({"coreExit": repr(error)})
         deadline = time.monotonic() + 10
         while True:
             survivors = []
@@ -618,5 +609,5 @@ def prove(
         "same-window-saved-proportions",
         "stale-gesture-restores-native-geometry",
         "original-processes-context-and-input-retained",
-        "native-quit-and-owned-core-stop",
+        "native-quit-and-recorded-owned-exits",
     ]

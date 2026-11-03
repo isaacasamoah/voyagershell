@@ -8,7 +8,7 @@ from secrets import token_hex
 
 from proof_clipboard import Clipboard
 from proof_conversation import chat_close_point, package_turn, provider_processes
-from proof_foundation_notes import notes, setup_source, stop_owned, wait
+from proof_foundation_notes import notes, setup_source, observe_owned_exit, wait
 from proof_process import process_identity
 from proof_workspace import core_rpc, named_button
 
@@ -448,7 +448,7 @@ def prove(
                 clipboard.write(original_clipboard)
             except Exception as error:
                 errors.append(f"clipboard restore: {error}")
-        stop_owned(owned, session, env, wait, errors)
+        observe_owned_exit(owned, session, env, wait, errors)
         try:
             receipt(
                 "notes-lifetime-cleanup",

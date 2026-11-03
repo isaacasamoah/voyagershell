@@ -217,11 +217,11 @@ def run():
     def cleanup_initial_core():
         if args.journey in ("notes", "notes-lifetime") and pending_process is not None and pending_process.poll() is not None:
             try:
-                from proof_workspace import core_rpc
+                from proof_workspace import stop_existing_core
 
                 socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (args.session + ".sock")
                 if socket.is_socket():
-                    core_rpc(args.session, env, "server.stop", {})
+                    stop_existing_core(args.session, env)
                     for _ in range(50):
                         if not socket.exists():
                             break

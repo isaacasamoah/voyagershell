@@ -8,6 +8,7 @@ from PIL import ImageChops
 
 from proof_workspace import core_rpc, named_button
 from proof_clipboard import Clipboard
+from proof_process import observe_core_exit
 
 
 def provider_processes(evidence):
@@ -370,12 +371,10 @@ def conversation_ux(
         except Exception as error:
             errors.append(f"provider scan: {error}")
 
-        def stop_core():
-            socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
-            if socket.is_socket():
-                core_rpc(session, env, "server.stop", {})
+        def observe_core():
+            observe_core_exit(session, env)
 
-        for name, action in (("quit", close), ("core", stop_core)):
+        for name, action in (("quit", close), ("core exit", observe_core)):
             try:
                 action()
             except Exception as error:
@@ -903,7 +902,7 @@ def prove(
         (evidence / "owned-shells.json").write_text(json.dumps(shells, indent=2))
     close()
     if administrator or content_case:
-        core_rpc(session, env, "server.stop", {})
+        observe_core_exit(session, env)
         for provider in providers:
             path = Path("/proc") / str(provider["pid"])
             assert (

@@ -10,6 +10,7 @@ from proof_avatar_window import floating_windows
 from proof_conversation import chat_close_point, provider_processes
 from proof_terminal_agent import process_record
 from proof_workspace import core_rpc, named_button
+from proof_process import exit_observation
 
 
 def pane_candidates(items, bounds, excluded=None):
@@ -29,30 +30,6 @@ def pane_candidates(items, bounds, excluded=None):
         and contains(bounds, item)
         and (excluded is None or not contains(excluded, item))
     ]
-
-
-def exit_observation(owned, socket, root=Path("/proc")):
-    processes = []
-    for item in owned:
-        try:
-            stat = (
-                (root / str(item["pid"]) / "stat")
-                .read_text()
-                .rsplit(") ", 1)[1]
-                .split()
-            )
-            state = "pid-reused" if stat[19] != item["start"] else stat[0]
-        except FileNotFoundError:
-            state = "absent"
-        processes.append({**item, "observedState": state})
-    return {
-        "processes": processes,
-        "socketAbsent": not socket.exists(),
-        "complete": not socket.exists()
-        and all(
-            item["observedState"] in ("absent", "pid-reused") for item in processes
-        ),
-    }
 
 
 def prove(

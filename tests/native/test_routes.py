@@ -23,6 +23,51 @@ class Routes(unittest.TestCase):
         self.assertEqual(pane_candidates(items, portal), [right])
         self.assertEqual(len(pane_candidates(items, vessel)), 2)
 
+    def test_cleanup_observes_without_connecting_or_repeating_stop(self):
+        from proof_process import observe_core_exit
+        from proof_workspace import core_rpc
+
+        with tempfile.TemporaryDirectory() as directory:
+            socket = Path(directory, "herdr-core", "owned.sock")
+            socket.parent.mkdir()
+            socket.touch()
+            environment = {"XDG_RUNTIME_DIR": directory}
+            with self.assertRaisesRegex(AssertionError, "runtime directory"):
+                observe_core_exit("owned", {"XDG_RUNTIME_DIR": "relative"})
+            with self.assertRaisesRegex(AssertionError, "unconfirmed"):
+                observe_core_exit("owned", environment, seconds=0)
+            with (
+                patch("proof_workspace.subprocess.run") as execute,
+                patch(
+                    "proof_process.time.sleep", side_effect=lambda _: socket.unlink()
+                ),
+            ):
+                self.assertTrue(observe_core_exit("owned", environment)["complete"])
+                self.assertTrue(observe_core_exit("owned", environment)["socketAbsent"])
+                with self.assertRaisesRegex(AssertionError, "existing-only"):
+                    core_rpc("owned", environment, "server.stop", {})
+                execute.assert_not_called()
+
+    def test_deliberate_stop_uses_the_pinned_existing_only_cli(self):
+        from proof_workspace import stop_existing_core
+
+        environment = {"XDG_RUNTIME_DIR": "/run/user/42", "HC_TERMINAL_ID": "t1"}
+        with patch("proof_workspace.subprocess.run") as execute:
+            execute.return_value.stdout = '{"stopped":false}\n'
+            self.assertEqual(
+                stop_existing_core("owned", environment), {"stopped": False}
+            )
+            self.assertEqual(
+                execute.call_args.args[0], ["hc", "--json", "server", "stop"]
+            )
+            actual = execute.call_args.kwargs["env"]
+            self.assertEqual(actual["HC_SOCKET"], "/run/user/42/herdr-core/owned.sock")
+            self.assertEqual(actual["HC_SESSION"], "owned")
+            self.assertNotIn("HC_TERMINAL_ID", actual)
+            execute.return_value.stdout = "{}"
+            with self.assertRaisesRegex(AssertionError, "stop acknowledgement"):
+                stop_existing_core("owned", environment)
+
     def test_session_quit_requires_recorded_exits_and_socket_absence(self):
         from proof_session_quit import exit_observation
 

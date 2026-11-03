@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from secrets import randbelow, token_hex
 
-from proof_process import process_identity
+from proof_process import process_identity, observe_core_exit
 from proof_workspace import core_rpc, named_button
 
 
@@ -302,10 +302,10 @@ def prove(
         except Exception as cleanup_error:
             errors.append({"operation": "quit", "error": str(cleanup_error)})
         try:
-            if socket is not None and socket.is_socket():
-                rpc("server.stop", {})
+            if socket is not None:
+                observe_core_exit(session, env)
         except Exception as cleanup_error:
-            errors.append({"operation": "core-stop", "error": str(cleanup_error)})
+            errors.append({"operation": "core-exit", "error": str(cleanup_error)})
         exits = []
         recorded = []
         if "original" in observed:

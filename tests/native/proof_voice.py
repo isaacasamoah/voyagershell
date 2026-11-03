@@ -1,9 +1,10 @@
 import json
+import sys
 import time
-from pathlib import Path
 
 from proof_conversation import provider_processes
 from proof_workspace import core_rpc, named_button
+from proof_process import observe_core_exit
 
 
 def prove(
@@ -108,16 +109,27 @@ def prove(
             )
         )
         capture("voice-stopped-terminal-live")
-        close()
         opened = False
+        close()
         return [
             "native-account-audio-connected",
             "same-audio-session-across-sidebar-change",
             "native-audio-stop-retains-terminal",
         ]
     finally:
+        primary = sys.exc_info()[0] is not None
+        errors = []
         if opened:
-            close()
-        socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
-        if socket.exists():
-            core_rpc(session, env, "server.stop", {})
+            opened = False
+            try:
+                close()
+            except Exception as error:
+                errors.append(f"Quit: {error}")
+        try:
+            observe_core_exit(session, env)
+        except Exception as error:
+            errors.append(f"Core exit: {error}")
+        if errors and primary:
+            print(f"Voice cleanup errors: {errors}", file=sys.stderr)
+        if errors and not primary:
+            raise AssertionError(errors)

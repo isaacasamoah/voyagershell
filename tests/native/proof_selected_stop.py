@@ -4,8 +4,9 @@ import shutil
 import time
 from pathlib import Path
 
-from proof_workspace import chord, core_rpc, named_button
+from proof_workspace import chord, core_rpc, named_button, stop_existing_core
 from proof_conversation import chat_close_point
+from proof_process import observe_core_exit
 
 
 def prove(
@@ -272,11 +273,9 @@ def prove(
                 socket = (
                     Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
                 )
-                if socket.is_socket():
-                    rpc("server.stop", {}, selected)
-                wait(
-                    socket.exists, lambda exists: not exists, "dedicated socket exit", 5
-                )
+                if selected != session and socket.is_socket():
+                    stop_existing_core(selected, env)
+                observe_core_exit(selected, env)
             except Exception as error:
                 errors.append(f"Core cleanup {selected}: {error}")
         for identity in list(owned.values()) + providers:

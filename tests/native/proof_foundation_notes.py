@@ -8,7 +8,7 @@ from pathlib import Path
 from secrets import token_hex
 
 from proof_workspace import chord, core_rpc, named_button
-from proof_process import process_identity
+from proof_process import process_identity, observe_core_exit
 
 spec = importlib.util.spec_from_file_location(
     "proof_native_notes",
@@ -47,19 +47,11 @@ def wait(get, predicate, label, seconds=20):
     raise AssertionError(f"Timed out waiting for {label}: {value}")
 
 
-def stop_owned(owned, session, env, wait, errors):
+def observe_owned_exit(owned, session, env, wait, errors):
     try:
-        socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
-        if socket.is_socket():
-            core_rpc(session, env, "server.stop", {})
-        wait(
-            socket.exists,
-            lambda exists: not exists,
-            "dedicated Core socket exit",
-            5,
-        )
+        observe_core_exit(session, env)
     except Exception as error:
-        errors.append(f"stop dedicated Core: {error}")
+        errors.append(f"dedicated Core exit: {error}")
     for name, identity in owned.items():
 
         def exited():
@@ -554,7 +546,7 @@ def prove(
                 notes.atomic(notes_path, fresh_notes)
             except Exception as error:
                 errors.append(f"restore fresh Notes source: {error}")
-        stop_owned(owned, session, env, wait, errors)
+        observe_owned_exit(owned, session, env, wait, errors)
         try:
             (evidence / "notes-cleanup.json").write_text(
                 json.dumps(

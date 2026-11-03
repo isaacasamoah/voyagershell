@@ -2,12 +2,12 @@ import copy
 import json
 import sys
 import time
-from pathlib import Path
 
 from PIL import ImageChops
 
 from proof_workspace import core_rpc, named_button
 from proof_clipboard import Clipboard
+from proof_process import observe_core_exit
 
 
 def prove(
@@ -350,12 +350,10 @@ def prove(
                 errors.append(f"quit: {error}")
         if original is not None:
             package.write_bytes(original)
-        socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
-        if socket.exists():
-            try:
-                core_rpc(session, env, "server.stop", {})
-            except Exception as error:
-                errors.append(f"Core cleanup: {error}")
+        try:
+            observe_core_exit(session, env)
+        except Exception as error:
+            errors.append(f"Core exit: {error}")
         (evidence / "canvas-cleanup.json").write_text(
             json.dumps({"errors": errors}, indent=2)
         )

@@ -3,6 +3,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from proof_process import observe_core_exit
+
 
 def chord(native, character):
     native("key", 65507, True)
@@ -59,7 +61,7 @@ def create_voyage(capture, click, evidence):
     click(65, 302)
 
 
-def core_rpc(session, env, method, params):
+def core_environment(session, env):
     runtime = env.get("XDG_RUNTIME_DIR")
     assert runtime and Path(runtime).is_absolute(), (
         "Core proof needs its actual runtime directory"
@@ -69,6 +71,27 @@ def core_rpc(session, env, method, params):
         HC_SESSION=session,
         HC_SOCKET=str(Path(runtime) / "herdr-core" / (session + ".sock")),
     )
+    return pinned
+
+
+def stop_existing_core(session, env):
+    result = subprocess.run(
+        ["hc", "--json", "server", "stop"],
+        text=True,
+        capture_output=True,
+        env=core_environment(session, env),
+        check=True,
+        timeout=5,
+    )
+    acknowledgement = json.loads(result.stdout)
+    assert isinstance(acknowledgement.get("stopped"), bool), (
+        "Invalid stop acknowledgement"
+    )
+    return acknowledgement
+
+
+def core_rpc(session, env, method, params):
+    assert method != "server.stop", "Use the explicit existing-only stop before Quit"
     request = json.dumps(
         {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     )
@@ -77,7 +100,7 @@ def core_rpc(session, env, method, params):
         input=request + "\n",
         text=True,
         capture_output=True,
-        env=pinned,
+        env=core_environment(session, env),
         check=True,
         timeout=5,
     )
@@ -136,6 +159,9 @@ def prove(
     def rpc(method, params):
         return core_rpc(session, env, method, params)
 
+    def observe_exit():
+        return observe_core_exit(session, env)
+
     def state():
         return rpc("doc.get", {"name": "voyager-layout-v1"})
 
@@ -192,6 +218,7 @@ def prove(
             state,
             rpc,
             close,
+            observe_exit,
             start_frame,
             original,
             width,
@@ -208,6 +235,7 @@ def prove(
             state,
             rpc,
             close,
+            observe_exit,
             width,
             height,
             evidence,
@@ -221,6 +249,7 @@ def prove(
             state,
             rpc,
             close,
+            observe_exit,
             start_frame,
             original,
             width,
@@ -281,7 +310,7 @@ def prove(
     start_frame("workspace-reopened")
     assert state() == repaired, "Reopening changed the saved workspace"
     close()
-    rpc("server.stop", {})
+    observe_exit()
     return [
         "native-create-select-split-dock",
         "context-independent-of-navigation",
@@ -327,7 +356,18 @@ def arrangement_panes(fields, fleet, contents):
 
 
 def arrangement(
-    native, capture, geometry, click, wait, state, rpc, close, width, height, evidence
+    native,
+    capture,
+    geometry,
+    click,
+    wait,
+    state,
+    rpc,
+    close,
+    observe_exit,
+    width,
+    height,
+    evidence,
 ):
     owner = json.loads((evidence / "launch.json").read_text())["pid"]
     mappings = []
@@ -543,7 +583,7 @@ def arrangement(
         )
     )
     close()
-    rpc("server.stop", {})
+    observe_exit()
     return [
         "real-terminal-split",
         "vessel-move-and-cancel",
@@ -562,6 +602,7 @@ def placement(
     state,
     rpc,
     close,
+    observe_exit,
     start_frame,
     original,
     width,
@@ -688,7 +729,7 @@ def placement(
     start_frame("placement-reopened")
     assert state() == saved
     close()
-    rpc("server.stop", {})
+    observe_exit()
     return [
         "real-voyage-portal",
         "enter-and-blur-save",
@@ -711,6 +752,7 @@ def layouts(
     state,
     rpc,
     close,
+    observe_exit,
     start_frame,
     original,
     width,
@@ -862,7 +904,7 @@ def layouts(
     } == processes
     assert rpc("terminal.get", {"terminal": stopped_address})["state"] == "finished"
     close()
-    rpc("server.stop", {})
+    observe_exit()
     return [
         "saved-fleet-tree-with-finished-terminal",
         "restored-identity-and-context",
