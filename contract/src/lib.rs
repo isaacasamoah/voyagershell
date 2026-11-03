@@ -253,6 +253,12 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         launch: Option<launch::Launch>,
     },
+    StartNewShell {
+        #[serde(rename = "contentId")]
+        content_id: ContentId,
+        #[serde(rename = "expectedBackend")]
+        expected_backend: CoreTerminalId,
+    },
     RemoveContentPackage {
         #[serde(rename = "typeId")]
         type_id: String,
@@ -339,7 +345,15 @@ pub struct TerminalResponse {
     pub request_id: String,
     pub content_id: ContentId,
     pub status: Status,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<TerminalReason>,
     pub message: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum TerminalReason {
+    Ended,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

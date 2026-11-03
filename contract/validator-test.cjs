@@ -1,6 +1,21 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 
+test("new-shell intent names its current content and backend without a saved launch", async () => {
+  const { request, terminalResponse } = await import("./generated/validate.js");
+  const intent = {
+    requestId: "new-shell",
+    expectedVersion: "4",
+    action: { operation: "start-new-shell", contentId: "content", expectedBackend: "t1" },
+  };
+  assert.equal(request(intent), true);
+  assert.equal(request({ ...intent, action: { ...intent.action, launch: { kind: "codex" } } }), false);
+  assert.equal(request({ ...intent, action: { ...intent.action, expectedBackend: 1 } }), false);
+  const outcome = { requestId: "open", contentId: "content", status: "rejected", reason: "ended", message: "Finished" };
+  assert.equal(terminalResponse(outcome), true);
+  assert.equal(terminalResponse({ ...outcome, reason: "lost" }), false);
+});
+
 test("content tools contain data and revision but no actor authority", async () => {
   const { contentTool } = await import("./generated/validate.js");
   const input = {
