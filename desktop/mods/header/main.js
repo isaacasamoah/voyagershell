@@ -1131,7 +1131,12 @@ export default class Workspace extends View {
             .bg("#b3d2e5"),
         );
       sidebar.child(
-        this.sidebar ? this.target(`voyage-${item.id}`, scope, row) : row,
+        this.sidebar
+          ? div()
+              .h(42)
+              .flex_shrink_0()
+              .child(this.target(`voyage-${item.id}`, scope, row))
+          : row,
       );
     }
     if (!this.sidebar)
