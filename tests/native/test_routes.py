@@ -1,3 +1,4 @@
+import ast
 import importlib
 import os
 import subprocess
@@ -11,6 +12,57 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Routes(unittest.TestCase):
+    def test_uncertain_quit_is_not_submitted_again_by_cleanup(self):
+        for name, flag, initial in (
+            ("proof_terminal.py", "quit_attempted", False),
+            ("proof_canvas.py", "opened", True),
+            ("proof_foundation_notes.py", "opened", True),
+            ("proof_notes_lifetime.py", "opened", True),
+        ):
+            tree = ast.parse((Path(__file__).parent / name).read_text())
+            calls = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "close"
+            ]
+            pairs = []
+            for node in ast.walk(tree):
+                for _, value in ast.iter_fields(node):
+                    if not isinstance(value, list):
+                        continue
+                    for first, second in zip(value, value[1:]):
+                        pair = [first, second]
+                        if any(item in calls for item in pair) and any(
+                            isinstance(item, ast.Assign)
+                            and any(
+                                isinstance(target, ast.Name) and target.id == flag
+                                for target in item.targets
+                            )
+                            for item in pair
+                        ):
+                            pairs.append(pair)
+            self.assertEqual(len(pairs), len(calls), name)
+            self.assertTrue(pairs, name)
+            for pair in pairs:
+                with self.subTest(source=name, line=pair[0].lineno):
+                    attempts = []
+
+                    def close():
+                        attempts.append("Quit")
+                        raise RuntimeError("unconfirmed Quit")
+
+                    state = {flag: initial, "close": close}
+                    code = compile(ast.Module(body=pair, type_ignores=[]), name, "exec")
+                    with self.assertRaisesRegex(RuntimeError, "unconfirmed Quit"):
+                        exec(code, state)
+                    if state[flag] == initial:
+                        with self.assertRaisesRegex(RuntimeError, "unconfirmed Quit"):
+                            exec(code, state)
+                    self.assertEqual(attempts, ["Quit"])
+
     def test_quit_pane_selection_excludes_the_overlay_from_the_vessel(self):
         from proof_session_quit import pane_candidates
 

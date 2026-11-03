@@ -122,8 +122,8 @@ def prove(
         terminal_screen("early")
         capture("canvas-initial")
         if journey == "canvas-input":
-            close()
             opened = False
+            close()
             original = package.read_bytes()
             (evidence / "canvas-input-original.js").write_bytes(original)
             source = original.decode()
@@ -206,8 +206,8 @@ def prove(
                 json.dumps(observations, indent=2)
             )
             button("Close workspace layout")
-            close()
             opened = False
+            close()
             return ["native-canvas-input-observation-only"]
         button("Workspace layout")
         wait(
@@ -328,8 +328,8 @@ def prove(
         assert any(delta and delta[3] - delta[1] > 30 for delta in deltas), (
             "Editor text did not scroll"
         )
-        close()
         opened = False
+        close()
         return [
             "native-canvas-edit-and-refusal",
             "native-canvas-move-retains-work",
@@ -345,6 +345,7 @@ def prove(
                 errors.append(f"clipboard restore: {error}")
         if opened:
             try:
+                opened = False
                 close()
             except Exception as error:
                 errors.append(f"quit: {error}")

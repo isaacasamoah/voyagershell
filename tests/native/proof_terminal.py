@@ -144,7 +144,7 @@ def terminal(
             time.sleep(0.1)
         raise AssertionError(f"Timed out waiting for {label}")
 
-    closed = False
+    quit_attempted = False
     composing = False
     primary_failure = None
     try:
@@ -765,8 +765,8 @@ def terminal(
                     indent=2,
                 )
             )
+            quit_attempted = True
             close()
-            closed = True
             return [
                 "real-shell-grid-resize",
                 "alternate-screen-colored-unicode",
@@ -1008,8 +1008,8 @@ def terminal(
                 "unrelated navigation after unresolved refusal",
             )
             capture("portal-terminal-refusal-navigation")
+        quit_attempted = True
         close()
-        closed = True
         return [
             "real-shell-input-output-exit",
             "known-refusal-explicit-refresh",
@@ -1046,7 +1046,7 @@ def terminal(
         raise
     finally:
         cleanup_failures = []
-        if not closed and composing:
+        if not quit_attempted and composing:
             try:
                 key(65307)
                 time.sleep(0.1)
@@ -1059,7 +1059,8 @@ def terminal(
                     }
                 )
         try:
-            if not closed:
+            if not quit_attempted:
+                quit_attempted = True
                 close()
         except Exception as error:
             cleanup_failures.append(

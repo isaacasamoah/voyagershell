@@ -101,8 +101,8 @@ def prove(
     def close_current():
         nonlocal opened
         if opened:
-            close()
             opened = False
+            close()
 
     def start_current(name):
         nonlocal opened

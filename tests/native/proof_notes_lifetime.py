@@ -92,8 +92,8 @@ def prove(
     def stop():
         nonlocal opened
         if opened:
-            close()
             opened = False
+            close()
 
     def start(name):
         nonlocal opened

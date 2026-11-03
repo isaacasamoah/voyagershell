@@ -372,5 +372,5 @@ def prove(
         "direct-native-worker-and-retained-sibling"
         if direct
         else "retained-shell-backend-and-agent-identity",
-        "native-quit-and-dedicated-core-stop-receipt",
+        "native-quit-and-observed-owned-exits",
     ]
