@@ -27,6 +27,22 @@ export type Size =
       pixels: number;
     };
 export type Region = "sidebar" | "fleet-strip" | "active-fleet" | "portals" | "context-bar";
+export type Launch =
+  | {
+      kind: "terminal";
+    }
+  | {
+      effort?: Effort & string;
+      kind: "codex";
+      model?: string;
+      permissions?: Permissions & string;
+    }
+  | {
+      argv: string[];
+      kind: "program";
+    };
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type Context =
   | {
       kind: "workspace";
@@ -94,6 +110,7 @@ export interface Content {
   backend?: string | null;
   cwd: string;
   id: string;
+  launch?: Launch | null;
   startPending?: string | null;
   typeId: string;
 }

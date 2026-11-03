@@ -73,6 +73,7 @@ export type Action =
     }
   | {
       destination: ContentDestination;
+      launch?: Launch | null;
       operation: "create-content";
       typeId: string;
     }
@@ -171,6 +172,22 @@ export type ContentDestination =
       voyage: string;
     };
 export type Axis = "horizontal" | "vertical";
+export type Launch =
+  | {
+      kind: "terminal";
+    }
+  | {
+      effort?: Effort & string;
+      kind: "codex";
+      model?: string;
+      permissions?: Permissions & string;
+    }
+  | {
+      argv: string[];
+      kind: "program";
+    };
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type RenameTarget =
   | {
       id: string;
