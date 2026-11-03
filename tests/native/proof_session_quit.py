@@ -575,7 +575,6 @@ def prove(
                 }
             capture(f"quit-new-{kind.lower()}-shell")
             if kind == "Vessel":
-                click(*named_button(native, evidence, "Refresh"))
                 deadline = time.monotonic() + 1
                 while time.monotonic() < deadline:
                     assert document()["value"] == changed["value"]
@@ -586,7 +585,7 @@ def prove(
                         if item["state"] == "live"
                     ] == [program["address"]], listed
                     time.sleep(0.1)
-                attempt["refreshObservation"] = {
+                attempt["ambientObservation"] = {
                     "document": document(),
                     "terminals": listed,
                     "minimumSeconds": 1,
