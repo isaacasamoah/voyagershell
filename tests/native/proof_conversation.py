@@ -1,5 +1,4 @@
 import json
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -933,3 +932,109 @@ def prove(
             "native-quit",
         ]
     )
+
+
+def package_turn(*, native, pid, evidence, wait, type_text, operation, context, owned):
+    assert operation in ("remove", "restore") and context == {"kind": "workspace"}
+
+    def read():
+        path = evidence / "conversation.json"
+        return json.loads(path.read_text()) if path.exists() else None
+
+    before = wait(
+        read,
+        lambda state: state["phase"] in ("idle", "completed"),
+        "ready private conversation",
+    )
+    prior = {
+        message["requestId"]
+        for message in before["messages"]
+        if message["role"] == "user"
+    }
+    fields = native("fields", pid, ["Message Voyager"], "window")["fields"]
+    assert len(fields) == 1 and fields[0]["width"] > 0 and fields[0]["height"] > 0
+    native("focus", pid, "Message Voyager", 0)
+    wait(
+        lambda: native("fields", pid, ["Message Voyager"], "window")["fields"],
+        lambda values: len(values) == 1 and values[0]["focused"],
+        "focused private composer",
+    )
+    prompt = f"Use voyager_workspace to inspect this workspace once, then perform exactly one {operation}-content-package action with typeId notes. Keep all content, data, canvas, context, programs and source files unchanged. Use no other tools or effects. Never repeat an uncertain action. Report the actual package outcome briefly."
+    type_text(prompt)
+    native("key", 65293, True)
+    native("key", 65293, False)
+    submitted = wait(
+        read,
+        lambda state: any(
+            message["role"] == "user" and message["requestId"] not in prior
+            for message in state["messages"]
+        ),
+        "new submitted package request",
+    )
+    user = next(
+        message
+        for message in submitted["messages"]
+        if message["role"] == "user" and message["requestId"] not in prior
+    )
+    assert user["text"] == prompt and user["context"]["scope"] == context
+    providers = wait(
+        lambda: provider_processes(evidence), bool, "actual private provider", 20
+    )
+    for provider in providers:
+        owned[f"provider-{provider['pid']}-{provider['start']}"] = provider
+    final = wait(
+        read,
+        lambda state: (
+            state["phase"] in ("completed", "failed", "unconfirmed")
+            and any(
+                message["role"] == "user" and message["requestId"] == user["requestId"]
+                for message in state["messages"]
+            )
+        ),
+        "package turn completed without replay",
+        90,
+    )
+    (evidence / ("notes-lifetime-package-" + operation + ".json")).write_text(
+        json.dumps(final, indent=2)
+    )
+    assert final["phase"] == "completed" and final["thread"] and final["turn"]
+    assert not final["limited"]
+    assert (
+        len(
+            [
+                message
+                for message in final["messages"]
+                if message["role"] == "user" and message["requestId"] not in prior
+            ]
+        )
+        == 1
+    )
+    tools = [
+        message
+        for message in final["messages"]
+        if message["role"] == "tool" and message["requestId"] == user["requestId"]
+    ]
+    assert [message["tool"]["action"]["action"]["operation"] for message in tools] == [
+        "inspect",
+        operation + "-content-package",
+    ]
+    assert len({message["id"] for message in tools}) == len(tools)
+    assert len({message["tool"]["requestId"] for message in tools}) == len(tools)
+    assert all(
+        message["context"] == user["context"]
+        and message["tool"]["name"] == "voyager_workspace"
+        and message["tool"]["status"] == "applied"
+        and message["tool"]["callId"] == message["id"]
+        and message["tool"]["requestId"]
+        and message["tool"]["callbackIds"]
+        and message["tool"]["version"].isdigit()
+        for message in tools
+    )
+    assert tools[1]["tool"]["action"]["action"]["typeId"] == "notes"
+    assert any(
+        message["role"] == "assistant"
+        and message["requestId"] == user["requestId"]
+        and message["text"]
+        for message in final["messages"]
+    )
+    return final

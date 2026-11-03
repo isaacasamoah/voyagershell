@@ -34,6 +34,7 @@ class Routes(unittest.TestCase):
             ):
                 for journey in (
                     "canvas",
+                    "notes-lifetime",
                     "conversation-voice",
                     "conversation-content",
                     "terminal-agent-create",
@@ -115,6 +116,7 @@ class Routes(unittest.TestCase):
             ("--foundation", "avatar"),
             ("--foundation", "portal-avatar"),
             ("--foundation", "notes"),
+            ("--foundation", "notes-lifetime"),
             ("--foundation", "split-resize"),
             ("--native-mod-host", "--notes-case"),
             ("--native-avatar", "--reduced-motion"),
@@ -126,7 +128,13 @@ class Routes(unittest.TestCase):
                 self.assertIn(option, result.stdout)
 
     def test_avatar_routes_require_compositor_before_launch(self):
-        for route in ("avatar", "portal-avatar", "notes", "split-resize"):
+        for route in (
+            "avatar",
+            "portal-avatar",
+            "notes",
+            "notes-lifetime",
+            "split-resize",
+        ):
             result = self.run_cli(
                 "--foundation",
                 "--journey",
@@ -139,7 +147,7 @@ class Routes(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
                 "requires compositor capture"
-                if route in ("notes", "split-resize")
+                if route in ("notes", "notes-lifetime", "split-resize")
                 else "require compositor capture",
                 result.stderr,
             )
@@ -151,6 +159,7 @@ class Routes(unittest.TestCase):
                 "portal-avatar",
                 "conversation-ux",
                 "notes",
+                "notes-lifetime",
                 "split-resize",
             ):
                 environment = dict(os.environ, HC_SOCKET="/tmp/not-a-test-session")
@@ -198,6 +207,7 @@ class Routes(unittest.TestCase):
             "proof_selected_stop",
             "proof_avatar",
             "proof_foundation_notes",
+            "proof_notes_lifetime",
             "proof_split_resize",
             "proof_conversation",
             "proof_conversation_scroll",
@@ -326,6 +336,37 @@ class Routes(unittest.TestCase):
                         )
         finally:
             proof.notes.source_control = original
+
+    def test_notes_lifetime_source_variants_preserve_real_editor_composition(self):
+        proof = importlib.import_module("proof_notes_lifetime")
+        source = (ROOT / "content/notes/main.js").read_text()
+        setup = proof.lifetime_setup((ROOT / "desktop/mods/header/main.js").read_text())
+        self.assertEqual(setup.count('operation: "create-content"'), 2)
+        self.assertEqual(
+            setup.count('operation: "update-canvas"'),
+            (ROOT / "desktop/mods/header/main.js")
+            .read_text()
+            .count('operation: "update-canvas"')
+            + 1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "setup.mjs"
+            path.write_text(setup)
+            subprocess.run(["node", "--check", str(path)], check=True, timeout=5)
+        for case in ("valid", "parse", "render", "component"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                variant = proof.source_variant(source, case, "LIFETIME_MARKER")
+                self.assertIn("RetainedTitleState", variant)
+                self.assertIn("RetainedBodyState", variant)
+                self.assertIn("SessionState.new()", variant)
+                path = Path(directory) / "variant.mjs"
+                path.write_text(variant)
+                result = subprocess.run(
+                    ["node", "--check", str(path)], capture_output=True, timeout=5
+                )
+                self.assertEqual(result.returncode == 0, case != "parse")
+        with self.assertRaises(AssertionError):
+            proof.source_variant(source + source, "valid", "duplicate")
 
     def test_notes_sibling_region_covers_both_editors_and_status(self):
         from PIL import Image
