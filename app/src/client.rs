@@ -91,6 +91,16 @@ pub enum CallError {
     Unconfirmed(String),
 }
 
+pub(crate) struct PendingCall(mpsc::Receiver<Response>);
+
+impl PendingCall {
+    pub(crate) fn wait(self) -> Result<Response, CallError> {
+        self.0.recv_timeout(Duration::from_secs(20)).map_err(|_| {
+            CallError::Unconfirmed("Workspace result unconfirmed; do not repeat the request".into())
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct Client {
     sender: async_channel::Sender<Message>,
@@ -759,6 +769,25 @@ impl Client {
     }
 
     fn bound_call(&self, scope: Option<Context>, request: Request) -> Result<Response, CallError> {
+        self.queue_workspace(scope, request)?.wait()
+    }
+
+    pub(crate) fn queue_inspection(&self) -> Result<PendingCall, CallError> {
+        self.queue_workspace(
+            None,
+            Request {
+                request_id: self.request_id(),
+                expected_version: 0,
+                action: Action::Inspect,
+            },
+        )
+    }
+
+    fn queue_workspace(
+        &self,
+        scope: Option<Context>,
+        request: Request,
+    ) -> Result<PendingCall, CallError> {
         let (reply, receive) = mpsc::sync_channel(1);
         self.sender
             .try_send(Message::Workspace {
@@ -769,9 +798,7 @@ impl Client {
             .map_err(|_| {
                 CallError::Rejected("Workspace busy or unavailable; nothing was queued".into())
             })?;
-        receive.recv_timeout(Duration::from_secs(20)).map_err(|_| {
-            CallError::Unconfirmed("Workspace result unconfirmed; do not repeat the request".into())
-        })
+        Ok(PendingCall(receive))
     }
 
     pub fn terminal(
@@ -808,6 +835,44 @@ fn check_content_size(request: &voyager_contract::content::Request) -> Result<()
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod voice_scope_tests {
+    use super::*;
+
+    #[test]
+    fn voice_inspection_enters_the_owner_queue_before_later_navigation() {
+        let (sender, receive) = async_channel::bounded(8);
+        let client = Client {
+            sender,
+            sequence: Arc::new(AtomicU64::new(0)),
+            identity: "voice-scope-test".into(),
+        };
+        let _inspection = client.queue_inspection().unwrap();
+        let _later = client
+            .queue_workspace(
+                None,
+                Request {
+                    request_id: "later-navigation".into(),
+                    expected_version: 0,
+                    action: Action::Dock {
+                        context: Context::Workspace,
+                    },
+                },
+            )
+            .unwrap();
+        let Message::Workspace { request, scope, .. } = receive.try_recv().unwrap() else {
+            panic!("Expected the voice inspection");
+        };
+        assert!(matches!(request.action, Action::Inspect));
+        assert_eq!(request.expected_version, 0);
+        assert!(scope.is_none());
+        let Message::Workspace { request, .. } = receive.try_recv().unwrap() else {
+            panic!("Expected later navigation");
+        };
+        assert_eq!(request.request_id, "later-navigation");
+    }
 }
 
 fn settle_created_content(
