@@ -237,6 +237,13 @@ def prove(
         executable = Path(command).resolve(strict=True)
         left, right = randbelow(70) + 20, randbelow(70) + 20
         prompt = f"Compute {left} * {right}. Reply with exactly 'oru: ' followed by the integer. Use no tools and make no changes."
+        wait(
+            lambda: fields("Message Voyager"),
+            lambda items: (
+                len(items) == 1 and items[0]["width"] > 0 and items[0]["height"] > 0
+            ),
+            "visible private composer",
+        )
         native("focus", launch()["pid"], "Message Voyager", 0)
         type_text(prompt)
         click(*named_button(native, evidence, "Send"))
