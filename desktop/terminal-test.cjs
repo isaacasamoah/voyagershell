@@ -693,7 +693,6 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "homeOverview",
     "workspace_notice",
     "composeCanvas",
-    "vesselFrame",
     "reported_activity",
     "validateReportedActivity",
     "vesselFrame",
@@ -717,7 +716,6 @@ test("Home presents the retained out-of-view avatar without docking or starting 
         .replace(/^import [\s\S]*?;\n/gm, "")
         .replaceAll("export function", "function") + "\nreturn composeCanvas;",
     )(div),
-    (node) => node,
     () => {
       activityReads += 1;
       return JSON.stringify({
