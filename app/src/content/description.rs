@@ -2,7 +2,7 @@ use super::{INITIAL_NOTES, manifest, state_schema};
 use std::path::Path;
 use voyager_contract::content::{
     Actions, Availability, Backend, Catalog, DataDescription, Description, NativeHost, NativeView,
-    Placement,
+    NotesConfiguration, Placement,
 };
 
 struct Implementation {
@@ -97,10 +97,46 @@ fn installed_schema(package: &Path) -> Result<Option<serde_json::Value>, String>
     state_schema(&manifest)
 }
 
+pub(crate) fn configuration(packages: &Path) -> Result<Option<DataDescription>, String> {
+    for package in ["notes", "header"] {
+        let path = packages.join(package);
+        if installed_schema(&path).is_err() {
+            return Ok(None);
+        }
+        if manifest(&path)?
+            .get("contentConfiguration")
+            .and_then(serde_json::Value::as_u64)
+            != Some(1)
+        {
+            return Ok(None);
+        }
+    }
+    Ok(Some(DataDescription {
+        schema: Some(
+            serde_json::from_str(include_str!(
+                "../../../contract/generated/notesConfiguration.schema.json"
+            ))
+            .map_err(|error| error.to_string())?,
+        ),
+        defaults: serde_json::to_value(NotesConfiguration::default())
+            .map_err(|error| error.to_string())?,
+    }))
+}
+
 pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
     let kind = implementation(type_id)?;
-    let input_schema: serde_json::Value =
+    let mut input_schema: serde_json::Value =
         serde_json::from_str(kind.input).map_err(|error| error.to_string())?;
+    let configuration = (kind.type_id == "notes")
+        .then(|| configuration(packages))
+        .transpose()?
+        .flatten();
+    if configuration.is_none()
+        && let Some(actions) =
+            input_schema["definitions"][kind.action_definition]["oneOf"].as_array_mut()
+    {
+        actions.retain(|action| action["properties"]["operation"]["const"] != "configure");
+    }
     let names = input_schema["definitions"][kind.action_definition]["oneOf"]
         .as_array()
         .ok_or("Content action schema is unavailable")?
@@ -161,7 +197,7 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
             component: kind.component.into(),
         },
         placements: vec![Placement::Fleet, Placement::Voyage],
-        configuration: None,
+        configuration,
         state,
         actions,
         backend: kind.backend,
@@ -184,6 +220,7 @@ pub fn discover(packages: &Path) -> Result<Catalog, String> {
             if kind.state.is_some() {
                 kind.availability = Availability::Unavailable { reason: "Content description exceeds the catalogue limit; its state and action details were not included".into() };
                 kind.state = None;
+                kind.configuration = None;
                 kind.actions = None;
             }
         }

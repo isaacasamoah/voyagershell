@@ -24,6 +24,9 @@ impl Dispatch {
             Self::Workspace(action) => ToolAction::Workspace(action.clone()),
             Self::Process(action) => ToolAction::Process(action.clone()),
             Self::Content(action) => ToolAction::Content(match action {
+                Content::Configure { content_id, .. } => Receipt::Configure {
+                    content_id: content_id.clone(),
+                },
                 Content::Describe { content_id } => Receipt::Describe {
                     content_id: content_id.clone(),
                 },
@@ -108,7 +111,7 @@ pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
         },
         ToolDefinition {
             name: "voyager_content",
-            description: "Describe, inspect and update an existing Notes instance only inside the immutable captured focus. Inspect workspace for expectedVersion and exact contentId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-content initializes new Notes. Never repeat an uncertain update. The application supplies request identity and actor scope outside arguments.",
+            description: "Describe, inspect, configure and update an existing Notes instance only inside the immutable captured focus. Inspect workspace for expectedVersion and exact contentId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-content initializes new Notes. Configure showHeading only when Describe declares configuration; use the inspected configuration workspaceVersion as expectedVersion. Configuration leaves the title/text revision unchanged. Never repeat an uncertain write. The application supplies request identity and actor scope outside arguments.",
             schema: content_schema,
         },
     ])
@@ -386,7 +389,7 @@ impl Tools {
                     }
                 }
                 Dispatch::Content(action) => {
-                    let request = crate::content::request(action, effect_id);
+                    let request = crate::content::request(action, effect_id, expected_version);
                     match client.content(
                         crate::content::Access::Agent {
                             scope,
@@ -490,6 +493,16 @@ fn content_result(response: &voyager_contract::content::Response) -> EffectResul
     use voyager_contract::content::Response;
     let (status, id, revision, warning) = match response {
         Response::Described { content_id, .. } => (Status::Applied, content_id, None, None),
+        Response::Configured {
+            content_id,
+            workspace_version,
+            ..
+        } => (
+            Status::Applied,
+            content_id,
+            Some(workspace_version.to_string()),
+            None,
+        ),
         Response::Snapshot {
             content_id,
             snapshot,
@@ -655,6 +668,7 @@ mod tests {
             version: Version::V1,
             request_id: "read".into(),
             content_id: voyager_contract::ContentId("notes".into()),
+            configuration: None,
             snapshot: Snapshot {
                 content_id: voyager_contract::ContentId("notes".into()),
                 revision: "revision".into(),

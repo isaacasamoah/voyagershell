@@ -16,7 +16,9 @@ use std::{
 };
 use voyager_contract::{
     ContentId,
-    content::{Notes, Request, Response, Snapshot, Version},
+    content::{
+        ConfigurationSnapshot, Notes, NotesConfiguration, Request, Response, Snapshot, Version,
+    },
 };
 
 pub const LIMIT: usize = 1024 * 1024;
@@ -127,6 +129,11 @@ pub fn identity(request: &Request) -> (&ContentId, &str, Option<&str>) {
             content_id,
             request_id,
             ..
+        }
+        | Request::Configure {
+            content_id,
+            request_id,
+            ..
         } => (content_id, request_id, None),
         Request::Update {
             content_id,
@@ -137,9 +144,23 @@ pub fn identity(request: &Request) -> (&ContentId, &str, Option<&str>) {
     }
 }
 
-pub fn request(action: voyager_contract::content::Action, request_id: String) -> Request {
+pub fn request(
+    action: voyager_contract::content::Action,
+    request_id: String,
+    expected_version: u64,
+) -> Request {
     use voyager_contract::content::Action;
     match action {
+        Action::Configure {
+            content_id,
+            configuration,
+        } => Request::Configure {
+            version: Version::V1,
+            request_id,
+            content_id,
+            expected_version,
+            configuration,
+        },
         Action::Describe { content_id } => Request::Describe {
             version: Version::V1,
             request_id,
@@ -185,7 +206,7 @@ pub(crate) fn bounded_response(request: &Request, response: Response) -> Respons
     }
     if matches!(
         response,
-        Response::Applied { .. } | Response::Uncertain { .. }
+        Response::Applied { .. } | Response::Configured { .. } | Response::Uncertain { .. }
     ) {
         let (id, request_id, expected) = identity(request);
         Response::Uncertain {
@@ -235,36 +256,82 @@ pub(crate) fn run(
     access: &Access,
     request: Request,
 ) -> Response {
-    let (id, _, _) = identity(&request);
-    let admitted = (|| {
-        let scope = match access {
-            Access::View(binding) => {
-                if binding.id() != id {
-                    return Err("That content is outside this view".into());
-                }
-                None
-            }
-            Access::Agent {
-                scope,
-                expected_version,
-            } => {
-                if *expected_version != version {
-                    return Err(
-                        "Workspace revision changed; inspect before content dispatch".into(),
-                    );
-                }
-                Some(scope)
-            }
-        };
-        member(layout, scope, id)?;
-        owner
-            .register_existing(id)
-            .map_err(|error| error.to_string())
-    })();
-    match admitted {
-        Ok(binding) => owner.call(&binding, request),
-        Err(message) => reject(&request, message),
+    let binding = match admit(owner, layout, version, access, &request) {
+        Ok(binding) => binding,
+        Err(message) => return reject(&request, message),
+    };
+    let metadata = match configuration(owner, layout, identity(&request).0, version) {
+        Ok(metadata) => metadata,
+        Err(error) => return reject(&request, error),
+    };
+    let mut response = owner.call(&binding, request);
+    if let Response::Snapshot { configuration, .. } = &mut response {
+        *configuration = metadata;
     }
+    response
+}
+
+pub(crate) fn admit(
+    owner: &mut Owner,
+    layout: &std::sync::Arc<voyager_contract::Layout>,
+    version: u64,
+    access: &Access,
+    request: &Request,
+) -> Result<Binding, String> {
+    let (id, _, _) = identity(request);
+    let scope = match access {
+        Access::View(binding) => {
+            if binding.id() != id {
+                return Err("That content is outside this view".into());
+            }
+            None
+        }
+        Access::Agent {
+            scope,
+            expected_version,
+        } => {
+            if *expected_version != version {
+                return Err("Workspace revision changed; inspect before content dispatch".into());
+            }
+            Some(scope)
+        }
+    };
+    member(layout, scope, id)?;
+    owner
+        .register_existing(id)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn configuration(
+    owner: &Owner,
+    layout: &voyager_contract::Layout,
+    id: &ContentId,
+    version: u64,
+) -> Result<Option<ConfigurationSnapshot>, String> {
+    let packages = owner.root.parent().expect("profile root").join("mods");
+    if description::configuration(&packages)?.is_none() {
+        return Ok(None);
+    }
+    let content = layout
+        .contents
+        .iter()
+        .find(|content| content.id == *id)
+        .ok_or("Content is unavailable")?;
+    let configuration = content
+        .configuration
+        .as_ref()
+        .map(|configuration| {
+            serde_json::from_value::<NotesConfiguration>(serde_json::Value::Object(
+                configuration.clone(),
+            ))
+        })
+        .transpose()
+        .map_err(|error| format!("Stored Notes configuration is invalid: {error}"))?
+        .unwrap_or_default();
+    Ok(Some(ConfigurationSnapshot {
+        configuration,
+        workspace_version: version,
+    }))
 }
 
 pub(crate) fn initialize_created(
@@ -471,9 +538,10 @@ impl Owner {
         response
     }
 
-    fn notify(&mut self, response: &Response) {
-        if let Response::Applied { content_id, .. } | Response::Uncertain { content_id, .. } =
-            response
+    pub(crate) fn notify(&mut self, response: &Response) {
+        if let Response::Applied { content_id, .. }
+        | Response::Configured { content_id, .. }
+        | Response::Uncertain { content_id, .. } = response
             && let Some((version, listener)) = self.changes.get_mut(&content_id.0)
         {
             *version = version.saturating_add(1);
@@ -484,28 +552,12 @@ impl Owner {
     }
 
     fn dispatch(&mut self, binding: &Binding, request: Request) -> Response {
-        let (id, request_id, expected) = match &request {
-            Request::Describe {
-                content_id,
-                request_id,
-                ..
-            }
-            | Request::Inspect {
-                content_id,
-                request_id,
-                ..
-            } => (content_id.clone(), request_id.clone(), None),
-            Request::Update {
-                content_id,
-                request_id,
-                expected_revision,
-                ..
-            } => (
-                content_id.clone(),
-                request_id.clone(),
-                Some(expected_revision.clone()),
-            ),
-        };
+        let (id, request_id, expected) = identity(&request);
+        let (id, request_id, expected) = (
+            id.clone(),
+            request_id.to_owned(),
+            expected.map(str::to_owned),
+        );
         let rejected = |message: String| Response::Rejected {
             version: Version::V1,
             request_id: request_id.clone(),
@@ -517,6 +569,9 @@ impl Owner {
             return rejected("That content is outside this view".into());
         }
         match request {
+            Request::Configure { .. } => {
+                rejected("Configuration requires the workspace owner".into())
+            }
             Request::Describe { .. } => match describe(
                 &self.root.parent().expect("profile root").join("mods"),
                 "notes",
@@ -533,6 +588,7 @@ impl Owner {
                         content_id: id,
                         schema_declared: schema.is_some(),
                         state_schema: schema,
+                        configuration: description.configuration,
                     }
                 }
                 Err(error) => rejected(format!("State schema unavailable: {error}")),
@@ -543,6 +599,7 @@ impl Owner {
                     request_id,
                     content_id: id,
                     snapshot,
+                    configuration: None,
                 },
                 Err(error) => rejected(error),
             },

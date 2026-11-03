@@ -1,5 +1,10 @@
 export type Action =
   | {
+      configuration: NotesConfiguration;
+      contentId: string;
+      operation: "configure";
+    }
+  | {
       contentId: string;
       operation: "describe";
     }
@@ -17,6 +22,9 @@ export type Action =
 export interface Input {
   action: Action;
   expectedVersion: string;
+}
+export interface NotesConfiguration {
+  showHeading: boolean;
 }
 export interface Notes {
   text: string;

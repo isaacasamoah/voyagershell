@@ -81,6 +81,27 @@ pub struct Notes {
     pub text: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NotesConfiguration {
+    pub show_heading: bool,
+}
+
+impl Default for NotesConfiguration {
+    fn default() -> Self {
+        Self { show_heading: true }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConfigurationSnapshot {
+    pub configuration: NotesConfiguration,
+    #[serde(with = "crate::decimal")]
+    #[schemars(with = "String")]
+    pub workspace_version: u64,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "operation",
@@ -89,6 +110,10 @@ pub struct Notes {
     deny_unknown_fields
 )]
 pub enum Action {
+    Configure {
+        content_id: ContentId,
+        configuration: NotesConfiguration,
+    },
     Describe {
         content_id: ContentId,
     },
@@ -110,6 +135,9 @@ pub enum Action {
     deny_unknown_fields
 )]
 pub enum Receipt {
+    Configure {
+        content_id: ContentId,
+    },
     Describe {
         content_id: ContentId,
     },
@@ -138,6 +166,16 @@ pub struct Input {
     deny_unknown_fields
 )]
 pub enum Request {
+    #[serde(rename = "content.configure")]
+    Configure {
+        version: Version,
+        request_id: String,
+        content_id: ContentId,
+        #[serde(with = "crate::decimal")]
+        #[schemars(with = "String")]
+        expected_version: u64,
+        configuration: NotesConfiguration,
+    },
     #[serde(rename = "content.describe")]
     Describe {
         version: Version,
@@ -195,6 +233,8 @@ pub enum Response {
         content_id: ContentId,
         schema_declared: bool,
         state_schema: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        configuration: Option<DataDescription>,
     },
     #[serde(rename = "snapshot")]
     Snapshot {
@@ -202,6 +242,18 @@ pub enum Response {
         request_id: String,
         content_id: ContentId,
         snapshot: Snapshot,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        configuration: Option<ConfigurationSnapshot>,
+    },
+    #[serde(rename = "configured")]
+    Configured {
+        version: Version,
+        request_id: String,
+        content_id: ContentId,
+        configuration: NotesConfiguration,
+        #[serde(with = "crate::decimal")]
+        #[schemars(with = "String")]
+        workspace_version: u64,
     },
     #[serde(rename = "applied")]
     Applied {
@@ -226,4 +278,21 @@ pub enum Response {
         expected_revision: String,
         message: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn configuration_request_requires_a_boolean_and_rejects_unknown_fields() {
+        let request = serde_json::json!({"operation":"content.configure", "version":"1", "requestId":"configure", "contentId":"note", "expectedVersion":"3", "configuration":{"showHeading":false}});
+        assert!(serde_json::from_value::<super::Request>(request.clone()).is_ok());
+        for configuration in [
+            serde_json::json!({"showHeading":"false"}),
+            serde_json::json!({"showHeading":false,"extra":true}),
+        ] {
+            let mut invalid = request.clone();
+            invalid["configuration"] = configuration;
+            assert!(serde_json::from_value::<super::Request>(invalid).is_err());
+        }
+    }
 }

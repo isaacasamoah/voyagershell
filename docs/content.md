@@ -34,12 +34,42 @@ native Notes host also reports its own VM setup failure without quitting the app
 or pretending that a Notes editor loaded. Ready metadata is not native rendering
 evidence.
 
-Neither type currently has a separate configuration operation, so configuration
-is explicitly absent. Action names come from the existing generated tool schema;
-the capability lookup refuses unknown actions, including configure. It does not
-dispatch an action or replace the existing caller, revision or receipt checks.
-The workspace validates a requested type through the shared lookup, rather than
-its own list of type names. The native factory still owns actual view creation.
+Notes has one typed presentation setting, `showHeading`, which defaults to true
+and controls the existing NOTES eyebrow. Configuration is advertised and accepted
+only when the installed Notes and Header manifests both declare numeric
+`contentConfiguration: 1`. Older personal packages retain their default Notes
+behavior and omit the configuration capability. The generated action schema and
+names omit configure when that capability is unavailable. Discovery grants no
+authority and dispatch retains the same bound caller and scope checks.
+
+Accepted configuration is an optional object on the stable Content record in the
+existing Core workspace document. The Client content queue checks fresh membership,
+caller scope and the inspected workspace version, then uses the existing document
+CAS. It saves no separate file or revision. A configured result identifies the
+instance, accepted value and actual resulting workspace version. Confirmed saves
+update the actor's workspace and publish both workspace and affected content
+notifications before returning. Duplicate requests reuse their original receipt;
+changed identity, stale versions, unsupported bundles and effects after Quit refuse.
+Post-dispatch uncertainty keeps its receipt and invalidates only for a read. It
+never resubmits the configuration or claims a confirmed workspace version. A later
+content read that discovers a changed Core workspace version also publishes that
+observed version to the workspace listener. It leaves the earlier receipt unchanged.
+
+Inspect returns optional configuration metadata beside the data snapshot. The
+metadata comes from the fresh workspace, independently of last-good Notes data.
+Title/text revisions and dirty drafts remain separate. Missing stored configuration
+means the default. Unknown fields and non-Boolean values refuse at the typed
+content boundary. The current compatible Header/Notes bundle is required after
+saving configuration. Loading an older strict Header may expose its own validation
+or load error; source, data and configuration remain preserved until an explicit
+compatible package update or restore. There is no migration, reseeding or response
+stripping.
+
+The configuration owner has Core-backed checks for persistence, both notices,
+independent data, stale/scope/capability refusal, duplicate identity and fresh
+configuration over last-good data. These checks do not establish native heading
+rendering, retained dirty-editor behavior or configuration-specific lost Core
+confirmation. Those remain part of the integrated native journey.
 
 The Header-only `voyager_content_view.descriptions()` binding returns typed
 contract data as JSON from background host work, within the existing content

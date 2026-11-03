@@ -42,6 +42,13 @@
             "null"
           ]
         },
+        "configuration": {
+          "additionalProperties": true,
+          "type": [
+            "object",
+            "null"
+          ]
+        },
         "cwd": {
           "type": "string"
         },

@@ -128,6 +128,8 @@ pub struct Content {
     pub cwd: String,
     pub backend: Option<CoreTerminalId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configuration: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_pending: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch: Option<launch::Launch>,

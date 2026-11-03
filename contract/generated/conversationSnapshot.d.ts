@@ -253,6 +253,10 @@ export type ProcessAction =
 export type Receipt =
   | {
       contentId: string;
+      operation: "configure";
+    }
+  | {
+      contentId: string;
       operation: "describe";
     }
   | {

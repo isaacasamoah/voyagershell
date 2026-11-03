@@ -9,6 +9,7 @@ export type Response =
       warningPresent: boolean;
     }
   | {
+      configuration?: DataDescription | null;
       contentId: string;
       requestId: string;
       schemaDeclared: boolean;
@@ -17,11 +18,20 @@ export type Response =
       version: Version;
     }
   | {
+      configuration?: ConfigurationSnapshot | null;
       contentId: string;
       requestId: string;
       snapshot: Snapshot;
       status: "snapshot";
       version: Version;
+    }
+  | {
+      configuration: NotesConfiguration;
+      contentId: string;
+      requestId: string;
+      status: "configured";
+      version: Version;
+      workspaceVersion: string;
     }
   | {
       contentId: string;
@@ -48,6 +58,17 @@ export type Response =
     };
 export type Version = "1";
 
+export interface DataDescription {
+  defaults: unknown;
+  schema?: unknown;
+}
+export interface ConfigurationSnapshot {
+  configuration: NotesConfiguration;
+  workspaceVersion: string;
+}
+export interface NotesConfiguration {
+  showHeading: boolean;
+}
 export interface Snapshot {
   contentId: string;
   data: Notes;

@@ -17,6 +17,18 @@
       ],
       "type": "object"
     },
+    "NotesConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "showHeading": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "showHeading"
+      ],
+      "type": "object"
+    },
     "Version": {
       "enum": [
         "1"
@@ -25,6 +37,39 @@
     }
   },
   "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "$ref": "#/definitions/NotesConfiguration"
+        },
+        "contentId": {
+          "type": "string"
+        },
+        "expectedVersion": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.configure",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "contentId",
+        "expectedVersion",
+        "configuration"
+      ],
+      "type": "object"
+    },
     {
       "additionalProperties": false,
       "properties": {

@@ -1082,6 +1082,23 @@
               "type": "string"
             },
             "operation": {
+              "const": "configure",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
               "const": "describe",
               "type": "string"
             }

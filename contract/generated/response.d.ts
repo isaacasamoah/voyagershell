@@ -108,6 +108,9 @@ export interface Canvas {
 }
 export interface Content {
   backend?: string | null;
+  configuration?: {
+    [k: string]: unknown;
+  } | null;
   cwd: string;
   id: string;
   launch?: Launch | null;

@@ -7,6 +7,27 @@
         {
           "additionalProperties": false,
           "properties": {
+            "configuration": {
+              "$ref": "#/definitions/NotesConfiguration"
+            },
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "configure",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "configuration"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "contentId": {
               "type": "string"
             },
@@ -78,6 +99,18 @@
       "required": [
         "title",
         "text"
+      ],
+      "type": "object"
+    },
+    "NotesConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "showHeading": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "showHeading"
       ],
       "type": "object"
     }

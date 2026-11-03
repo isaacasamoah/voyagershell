@@ -1,6 +1,33 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "ConfigurationSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "$ref": "#/definitions/NotesConfiguration"
+        },
+        "workspaceVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "configuration",
+        "workspaceVersion"
+      ],
+      "type": "object"
+    },
+    "DataDescription": {
+      "additionalProperties": false,
+      "properties": {
+        "defaults": true,
+        "schema": true
+      },
+      "required": [
+        "defaults"
+      ],
+      "type": "object"
+    },
     "Notes": {
       "additionalProperties": false,
       "properties": {
@@ -14,6 +41,18 @@
       "required": [
         "title",
         "text"
+      ],
+      "type": "object"
+    },
+    "NotesConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "showHeading": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "showHeading"
       ],
       "type": "object"
     },
@@ -93,6 +132,16 @@
     {
       "additionalProperties": false,
       "properties": {
+        "configuration": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DataDescription"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "contentId": {
           "type": "string"
         },
@@ -123,6 +172,16 @@
     {
       "additionalProperties": false,
       "properties": {
+        "configuration": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ConfigurationSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "contentId": {
           "type": "string"
         },
@@ -146,6 +205,39 @@
         "requestId",
         "contentId",
         "snapshot"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "$ref": "#/definitions/NotesConfiguration"
+        },
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "const": "configured",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        },
+        "workspaceVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "configuration",
+        "workspaceVersion"
       ],
       "type": "object"
     },

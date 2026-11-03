@@ -9,6 +9,7 @@ export function conversationRequest(data: unknown): data is import("./conversati
 export function conversationSnapshot(data: unknown): data is import("./conversationSnapshot").Snapshot;
 export function launchCatalog(data: unknown): data is import("./launchCatalog").Catalog;
 export function notes(data: unknown): data is import("./notes").Notes;
+export function notesConfiguration(data: unknown): data is import("./notesConfiguration").NotesConfiguration;
 export function processResponse(data: unknown): data is import("./processResponse").ProcessResponse;
 export function processTool(data: unknown): data is import("./processTool").ProcessInput;
 export function reportedActivity(data: unknown): data is import("./reportedActivity").Projection;

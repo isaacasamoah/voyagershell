@@ -1,5 +1,13 @@
 export type Request =
   | {
+      configuration: NotesConfiguration;
+      contentId: string;
+      expectedVersion: string;
+      operation: "content.configure";
+      requestId: string;
+      version: Version;
+    }
+  | {
       contentId: string;
       operation: "content.describe";
       requestId: string;
@@ -21,6 +29,9 @@ export type Request =
     };
 export type Version = "1";
 
+export interface NotesConfiguration {
+  showHeading: boolean;
+}
 export interface Notes {
   text: string;
   title: string;

@@ -369,6 +369,7 @@ impl Client {
                         request,
                         reply,
                     } => {
+                        let previous_version = version;
                         let (_, request_id, expected) = crate::content::identity(&request);
                         let fingerprint = crate::content::fingerprint(&request);
                         if let Some(previous) = content_requests
@@ -393,6 +394,7 @@ impl Client {
                                 && matches!(
                                     request,
                                     voyager_contract::content::Request::Update { .. }
+                                        | voyager_contract::content::Request::Configure { .. }
                                 )
                             {
                                 return Err("Voyager is quitting; no content was changed".into());
@@ -433,6 +435,20 @@ impl Client {
                             version = revision;
                             fresh = true;
                             let owner = content.as_mut().ok_or("Content owner unavailable")?;
+                            if matches!(
+                                request,
+                                voyager_contract::content::Request::Configure { .. }
+                            ) {
+                                return Ok(configure(
+                                    core,
+                                    &mut layout,
+                                    &mut version,
+                                    &mut fresh,
+                                    owner,
+                                    &access,
+                                    &request,
+                                ));
+                            }
                             Ok(crate::content::run(
                                 owner,
                                 &layout,
@@ -445,6 +461,31 @@ impl Client {
                             .unwrap_or_else(|message| crate::content::reject(&request, message));
                         let response =
                             Arc::new(crate::content::bounded_response(&request, response));
+                        if (matches!(
+                            &*response,
+                            voyager_contract::content::Response::Configured { .. }
+                        ) || (matches!(
+                            request,
+                            voyager_contract::content::Request::Configure { .. }
+                        ) && matches!(
+                            &*response,
+                            voyager_contract::content::Response::Uncertain { .. }
+                        ))) && let Some(owner) = content.as_mut()
+                        {
+                            owner.notify(&response);
+                        }
+                        if version != previous_version
+                            && let Some(listener) = &workspace_listener
+                        {
+                            let _ = listener.try_send(WorkspaceNotice {
+                                package_revision: published_packages.load(Ordering::Relaxed),
+                                revision: version,
+                                activity_revision: core
+                                    .as_ref()
+                                    .map(Core::activity_revision)
+                                    .unwrap_or(0),
+                            });
+                        }
                         content_requests.push_back(ContentReceipt {
                             access,
                             request_id: request_id.into(),
@@ -1108,9 +1149,13 @@ impl Client {
         request: voyager_contract::content::Request,
         view: Option<&crate::content::ViewBinding>,
     ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
-        if matches!(&request, voyager_contract::content::Request::Update { .. }) {
+        if matches!(
+            &request,
+            voyager_contract::content::Request::Update { .. }
+                | voyager_contract::content::Request::Configure { .. }
+        ) {
             return Err(CallError::Rejected(
-                "Updates cannot use read-only admission".into(),
+                "Content effects cannot use read-only admission".into(),
             ));
         }
         check_content_size(&request)?;
@@ -1677,6 +1722,82 @@ fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
     Ok(core
         .document_set("voyager-layout-v1", layout, version)?
         .version)
+}
+
+fn configure(
+    core: &mut Core,
+    layout: &mut Arc<Layout>,
+    version: &mut u64,
+    fresh: &mut bool,
+    owner: &mut crate::content::Owner,
+    access: &crate::content::Access,
+    request: &voyager_contract::content::Request,
+) -> voyager_contract::content::Response {
+    use voyager_contract::content::{Request, Response, Version};
+    let Request::Configure {
+        request_id,
+        content_id,
+        expected_version,
+        configuration,
+        ..
+    } = request
+    else {
+        return crate::content::reject(request, "Expected a configuration request".into());
+    };
+    let candidate = (|| {
+        crate::content::admit(owner, layout, *version, access, request)?;
+        if expected_version != version {
+            return Err("Workspace changed; inspect before configuring content".into());
+        }
+        if crate::content::configuration(owner, layout, content_id, *version)?.is_none() {
+            return Err("Installed Notes and Header do not support configuration".into());
+        }
+        let mut candidate = (**layout).clone();
+        candidate
+            .contents
+            .iter_mut()
+            .find(|content| content.id == *content_id)
+            .ok_or("Content is unavailable")?
+            .configuration = Some(
+            serde_json::to_value(configuration)
+                .expect("Configuration serializes")
+                .as_object()
+                .expect("Configuration is an object")
+                .clone(),
+        );
+        Ok(candidate)
+    })();
+    let candidate = match candidate {
+        Ok(candidate) => candidate,
+        Err(message) => return crate::content::reject(request, message),
+    };
+    match save(core, &candidate, *version) {
+        Ok(revision) => {
+            *layout = Arc::new(candidate);
+            *version = revision;
+            Response::Configured {
+                version: Version::V1,
+                request_id: request_id.clone(),
+                content_id: content_id.clone(),
+                configuration: *configuration,
+                workspace_version: revision,
+            }
+        }
+        Err(Error::Rejected { kind, message }) => {
+            *fresh = false;
+            crate::content::reject(request, format!("{kind}: {message}"))
+        }
+        Err(Error::Uncertain(message)) => {
+            *fresh = false;
+            Response::Uncertain {
+                version: Version::V1,
+                request_id: request_id.clone(),
+                content_id: content_id.clone(),
+                expected_revision: expected_version.to_string(),
+                message,
+            }
+        }
+    }
 }
 
 #[cfg(test)]

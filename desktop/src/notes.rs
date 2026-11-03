@@ -397,21 +397,17 @@ impl Loader {
                         Some((raw, permit)) => {
                             let request: Request = serde_json::from_str(&raw)
                                 .map_err(|error| HostError::new(error.to_string()))?;
-                            let (actual_id, actual_revision) = match &request {
-                                Request::Describe { request_id, .. }
-                                | Request::Inspect { request_id, .. } => (request_id, None),
-                                Request::Update {
-                                    request_id,
-                                    expected_revision,
-                                    ..
-                                } => (request_id, Some(expected_revision)),
-                            };
-                            if actual_id != &request_id
-                                || actual_revision != expected_revision.as_ref()
+                            let (_, actual_id, actual_revision) =
+                                voyager_app::content::identity(&request);
+                            if actual_id != request_id
+                                || actual_revision != expected_revision.as_deref()
                             {
                                 return Err(HostError::new("Content request identity changed"));
                             }
-                            let response = if matches!(&request, Request::Update { .. }) {
+                            let response = if matches!(
+                                &request,
+                                Request::Update { .. } | Request::Configure { .. }
+                            ) {
                                 client.content_view(&binding, request)
                             } else {
                                 client.read_content_view(&binding, request).await
