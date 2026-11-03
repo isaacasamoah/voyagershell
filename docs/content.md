@@ -3,9 +3,9 @@
 The native candidate uses one Notes package in Fleet Vessels and Voyage Portals.
 The integrated Linux configuration journey demonstrates independent settings,
 real assistant updates arriving with Chat closed, a retained dirty sibling and
-persistence after explicit Quit and cold reopen. The earlier edit/reload and
-remove/restore journey retains its separate artifact, before the current Quit
-semantics. Those observations do not accept the whole content lifecycle,
+persistence after explicit Quit and cold reopen. The same release also demonstrates warm viewer Restore, seven source
+edit/error/repair states and real package removal/restoration across deliberate
+Quit and cold reopen. Those observations do not accept the whole content lifecycle,
 resource limits or combined-foundation proving-code cap.
 
 `contract/src/content.rs` owns the versioned Notes request, response and data types.
@@ -111,10 +111,11 @@ never replayed. The prior revision() read remains available for personal Header
 source; new composition uses notice().
 
 The filesystem/availability and notice changes have source tests and a separately
-recorded Core-backed package receipt/scope test. The retained edit/reload and remove/restore path has a separate Linux native
-receipt. That older fixture still assumes its earlier Quit semantics and must
-be adapted before rerunning against current product Quit. The earlier
-seventeen-stage Notes result also remains tied to its own legacy controller.
+recorded Core-backed package receipt/scope test. The current lifetime journey reuses the session-Quit viewer Close/Restore
+helper. It requires the original shell live through warm Restore, then ended
+with zero live programs after deliberate Quit and cold reopen. Package restore
+keeps that ended binding rather than starting a replacement. The earlier
+seventeen-stage result remains tied to its legacy controller.
 
 ## Retained editors and staged source replacement
 
