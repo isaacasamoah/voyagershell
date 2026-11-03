@@ -902,14 +902,7 @@ def prove(
         (evidence / "owned-shells.json").write_text(json.dumps(shells, indent=2))
     close()
     if administrator or content_case:
-        observe_core_exit(session, env)
-        for provider in providers:
-            path = Path("/proc") / str(provider["pid"])
-            assert (
-                not path.exists()
-                or path.joinpath("stat").read_text().rsplit(") ", 1)[1].split()[0]
-                == "Z"
-            ), "Owned provider survived Quit"
+        observe_core_exit(session, env, providers)
         if process_case:
             for shell in shells:
                 path = Path("/proc") / str(shell["pid"])
