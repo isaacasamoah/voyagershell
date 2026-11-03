@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled, Task, Window,
-    div, px,
+    div, px, rgb, svg,
 };
 use gpui_base::{Button, Theme};
 use std::{sync::Arc, time::Duration};
@@ -202,33 +202,23 @@ impl Render for Speech {
         let color = if active {
             colors.accent
         } else {
-            colors.muted_foreground
+            rgb(0x989ba9).into()
         };
-        let level = state.map_or(0, |state| state.microphone_peak.max(state.speaker_peak)) as f32
-            / u16::MAX as f32;
-        let mut wave = div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .gap(px(2.))
-            .w(px(28.))
-            .h(px(22.));
-        for weight in [0.35, 0.7, 1., 0.7, 0.35] {
-            wave = wave.child(
-                div()
-                    .w(px(2.))
-                    .h(px(4. + 14. * weight * level))
-                    .rounded(px(1.))
-                    .bg(color),
-            );
-        }
+        let wave = svg()
+            .path("speech-wave.svg")
+            .w(px(14.))
+            .h(px(12.))
+            .text_color(color);
         let label = if active { "Stop voice" } else { "Start voice" };
         let control = Button::new("voyager-speech")
             .accessibility_label(label)
             .disabled(unavailable || self.pending || stopping)
-            .px(px(8.))
-            .py(px(5.))
-            .rounded(px(8.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .w(px(20.))
+            .h(px(20.))
+            .rounded(px(10.))
             .on_click(cx.listener(|speech, _, _, cx| speech.activate(cx)))
             .child(wave);
         let status = if !self.error.is_empty() {
