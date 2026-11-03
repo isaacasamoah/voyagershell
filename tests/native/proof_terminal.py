@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 import subprocess
@@ -6,6 +7,20 @@ import time
 from PIL import ImageChops
 
 from proof_workspace import core_rpc, named_button
+
+
+def div_control_point(label, fleets, viewport, header_sha256):
+    assert header_sha256 == (
+        "7da0b1f9fde04137d20867e64b35fcc1eedb7a5b9be0ba4002031f78320e0909"
+    ), "Measured Div controls require the inspected Header source"
+    assert viewport == (2900, 1880), (
+        "Measured Div controls require the observed 2900x1880 X window"
+    )
+    assert 1 <= fleets <= 2, "Measured Fleet controls support this journey's scenes"
+    if label == "Create Fleet":
+        return 280 + 10 + fleets * (160 + 8) + 14, 52 + 45 / 2
+    assert label == "Refresh", "No measured route exists for this Div control"
+    return 280 + 12 + 23, viewport[1] / 2 - 6 - 38 / 2
 
 
 def terminal(
@@ -28,6 +43,41 @@ def terminal(
 
     def rpc(method, params):
         return core_rpc(session, env, method, params)
+
+    def div_control(label):
+        layout = rpc("doc.get", {"name": "voyager-layout-v1"})["value"]
+        assert layout.get("view", "fleet") == "fleet"
+        assert layout["context"] == {"kind": "workspace"}
+        assert len(layout["voyages"]) == 1
+        fleets = layout["voyages"][0]["fleets"]
+        bounds = geometry()
+        viewport = tuple(int(bounds[key]) for key in ("WIDTH", "HEIGHT"))
+        header = evidence / "profile/mods/header/main.js"
+        digest = hashlib.sha256(header.read_bytes()).hexdigest()
+        point = div_control_point(label, len(fleets), viewport, digest)
+        path = evidence / "terminal-div-controls.json"
+        targets = json.loads(path.read_text()) if path.exists() else []
+        name = f"terminal-div-control-{len(targets) + 1}"
+        frame = capture(name)
+        assert frame.size == viewport, "Measured controls require X-window pixels"
+        targets.append(
+            dict(
+                label=label,
+                route="pinned-div",
+                point=point,
+                viewport=viewport,
+                headerSha256=digest,
+                fleets=[item["id"] for item in fleets],
+                capture=name,
+                reference=(
+                    "native-01/terminal-output.png"
+                    if label == "Create Fleet"
+                    else "desktop/mods/header/main.ts:statusView"
+                ),
+            )
+        )
+        path.write_text(json.dumps(targets, indent=2))
+        click(*point)
 
     def key(value):
         active()
@@ -444,16 +494,16 @@ def terminal(
                 "value": changed,
             },
         )
-        click(*named_button(native, evidence, "Create Fleet"))
+        div_control("Create Fleet")
         time.sleep(0.4)
         assert (
             rpc("doc.get", {"name": "voyager-layout-v1"})["version"]
             == external["version"]
         )
         capture("terminal-stale-refused")
-        click(*named_button(native, evidence, "Refresh"))
+        div_control("Refresh")
         time.sleep(0.4)
-        click(*named_button(native, evidence, "Create Fleet"))
+        div_control("Create Fleet")
         rejected = wait_for(
             lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
             lambda value: (
@@ -466,7 +516,7 @@ def terminal(
         )
         capture("terminal-known-refusal")
         missing.mkdir()
-        click(*named_button(native, evidence, "Refresh"))
+        div_control("Refresh")
         recovered = wait_for(
             lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
             lambda value: value["value"]["contents"][1].get("backend") is not None,
@@ -618,7 +668,7 @@ def terminal(
             )
             before_refusal = rpc("doc.get", {"name": "voyager-layout-v1"})
             missing.rmdir()
-            click(*named_button(native, evidence, "Create Fleet"))
+            div_control("Create Fleet")
             wait_for(
                 lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
                 lambda value: (
