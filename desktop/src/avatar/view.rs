@@ -3,6 +3,7 @@ use crate::{avatar_motion as motion, platform};
 use gpui::{
     Bounds, Context, Entity, FocusHandle, IntoElement, MouseButton, ParentElement, Pixels, Point,
     Render, Styled, Subscription, Task, Window, canvas, div, img, point, prelude::*, px, rgb, rgba,
+    size,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -10,6 +11,22 @@ use std::{
     time::Instant,
 };
 use voyager_contract::Context as Scope;
+
+fn workspace_landing(bounds: Bounds<Pixels>) -> (Point<Pixels>, f32) {
+    (
+        point(bounds.center().x - px(47.), bounds.origin.y + px(47.)),
+        94.,
+    )
+}
+
+fn landing_preview(scope: &Scope, bounds: Bounds<Pixels>) -> (Bounds<Pixels>, bool) {
+    if matches!(scope, Scope::Workspace) {
+        let (origin, diameter) = workspace_landing(bounds);
+        (Bounds::new(origin, size(px(diameter), px(diameter))), true)
+    } else {
+        (bounds, false)
+    }
+}
 
 pub(super) struct AvatarView {
     avatar: Entity<Avatar>,
@@ -273,7 +290,7 @@ impl AvatarView {
             return Some((b.origin + point(px(5.), px(2.)), 38.));
         }
         match target.scope {
-            Scope::Workspace => Some((point(b.center().x - px(47.), b.origin.y + px(47.)), 94.)),
+            Scope::Workspace => Some(workspace_landing(b)),
             Scope::Voyage { .. } | Scope::Fleet { .. } => {
                 Some((b.origin + point(px(12.), px(2.)), 38.))
             }
@@ -507,17 +524,45 @@ impl Render for AvatarView {
             && drag.moved
             && let Some(target) = self.targets.borrow().target_at(drag.position + drag.offset)
         {
+            let (bounds, circular) = landing_preview(&target.scope, target.bounds);
             layer = layer.child(
                 div()
                     .absolute()
-                    .left(target.bounds.origin.x)
-                    .top(target.bounds.origin.y)
-                    .w(target.bounds.size.width)
-                    .h(target.bounds.size.height)
+                    .left(bounds.origin.x)
+                    .top(bounds.origin.y)
+                    .w(bounds.size.width)
+                    .h(bounds.size.height)
+                    .when(circular, |element| element.rounded_full())
                     .border_1()
                     .border_color(rgb(0xb3d2e5)),
             );
         }
         layer.child(image).into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_preview_matches_avatar_landing_and_other_targets_keep_bounds() {
+        let brand = Bounds::new(point(px(20.), px(30.)), size(px(200.), px(202.)));
+        let (landing, diameter) = workspace_landing(brand);
+        let (preview, circular) = landing_preview(&Scope::Workspace, brand);
+        assert!(circular);
+        assert_eq!(preview.origin, landing);
+        assert_eq!(preview.origin, point(px(73.), px(77.)));
+        assert_eq!(preview.size, size(px(diameter), px(diameter)));
+        assert_eq!(preview.size, size(px(94.), px(94.)));
+        assert_ne!(preview, brand);
+        let (other, circular) = landing_preview(
+            &Scope::Voyage {
+                id: voyager_contract::VoyageId("voyage".into()),
+            },
+            brand,
+        );
+        assert!(!circular);
+        assert_eq!(other, brand);
     }
 }
