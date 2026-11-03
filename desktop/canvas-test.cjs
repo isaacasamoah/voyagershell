@@ -360,7 +360,7 @@ test("Chat stays below the primary dock before Home and Voyages, using one retai
         name === "child" && value === buttons.get("home-navigation"),
     ),
   );
-  assert.equal(controls, 1);
+  assert.equal(controls, 2);
   assert.equal(children[controls + 1], panel);
   assert.ok(home > controls + 1);
   assert.ok(
@@ -479,4 +479,64 @@ test("the real layout editor keeps its captured revision, refuses invalid input 
   assert.equal(panel.version, "9");
   assert.equal(panel.unconfirmed, false);
   assert.deepEqual(JSON.parse(value), canvas);
+});
+
+test("right-click actions retain their opening revision and dismiss before acting", () => {
+  const nodes = new Map();
+  const Menu = new Function(
+    "div",
+    "Button",
+    "Popover",
+    workspaceSource("VOYAGER_MENU_SOURCE", "return class", "menu.js"),
+  )(
+    element,
+    {
+      new(id) {
+        const node = element();
+        nodes.set(id, node);
+        return node;
+      },
+    },
+    { new: element },
+  );
+  const Workspace = new Function(
+    "View",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(class {});
+  const view = Object.assign(new Workspace(), {
+    menus: new Menu(),
+    version: "7",
+  });
+  const actions = [];
+  const cx = { notify() {} };
+  const items = [
+    {
+      label: "Save layout",
+      choose: (version) => actions.push({ version, open: view.menus.current }),
+    },
+  ];
+  let menu = view.contextMenu("fleet", element(), items);
+  assert.equal(
+    menu.calls.find(([name]) => name === "mouse_button")[1],
+    "right",
+  );
+  menu.calls.find(([name]) => name === "on_open_change")[1](true, cx);
+  view.contextMenu("fleet", element(), items);
+  let click = nodes
+    .get("menu-fleet-0")
+    .calls.find(([name]) => name === "on_click")[1];
+  view.version = "8";
+  click({}, cx);
+  assert.deepEqual(actions, []);
+  assert.match(view.status, /layout changed/);
+  menu = view.contextMenu("fleet", element(), items);
+  menu.calls.find(([name]) => name === "on_open_change")[1](true, cx);
+  view.contextMenu("fleet", element(), items);
+  click = nodes
+    .get("menu-fleet-0")
+    .calls.find(([name]) => name === "on_click")[1];
+  click({}, cx);
+  assert.deepEqual(actions, [{ version: "8", open: null }]);
+  click({}, cx);
+  assert.equal(actions.length, 1);
 });

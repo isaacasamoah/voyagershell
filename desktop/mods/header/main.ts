@@ -24,9 +24,10 @@ import { Speech } from "voyager_conversation";
 import { Notes } from "voyager_content_view";
 import { homeOverview } from "./home.js";
 import { composeCanvas, vesselFrame } from "./canvas.js";
-import { LayoutPanel } from "./layout-panel.js";
 import { CreationPicker } from "./creation.js";
 import { activityBadge } from "./activity.js";
+import { WorkspaceMenu } from "./menu.js";
+import type { MenuItem } from "./menu.js";
 import type { Projection as ActivityProjection } from "../../../contract/generated/reportedActivity";
 import type { Facts } from "../../../contract/generated/contextFacts";
 
@@ -91,9 +92,9 @@ function errorMessage(error: unknown): string {
 
 export default class Workspace extends View {
   declare creation: CreationPicker | undefined;
+  declare menus: WorkspaceMenu;
   declare version: Response["version"];
   declare contextFacts: Facts | null;
-  declare layoutPanel: LayoutPanel | null;
   declare sidebar: boolean;
   declare dockReceipt: string;
   declare dockEpoch: string;
@@ -124,12 +125,11 @@ export default class Workspace extends View {
   declare savingLayout: boolean | undefined;
   declare pendingLayout:
     Extract<Action, { operation: "save-layout" }> | null | undefined;
-  declare layoutMenu: string | null | undefined;
   init(_props: unknown, cx: AsyncContext) {
+    this.menus = new WorkspaceMenu();
     this.chat = new Chat(cx);
     this.version = "0";
     this.contextFacts = null;
-    this.layoutPanel = null;
     this.sidebar = true;
     this.dockReceipt = "";
     this.dockEpoch = "";
@@ -738,7 +738,7 @@ export default class Workspace extends View {
   }
 
   maximizeShortcut(id: string, event: KeyEvent, cx: UIContext) {
-    if (this.editing || this.layoutName || this.layoutPanel) return;
+    if (this.editing || this.layoutName || this.menus?.current) return;
     const { control, shift, alt, platform } = event.modifiers;
     if (
       !shift ||
@@ -777,7 +777,7 @@ export default class Workspace extends View {
   }
 
   shortcut(event: KeyEvent, cx: UIContext) {
-    if (this.editing || this.layoutName || this.layoutPanel) return;
+    if (this.editing || this.layoutName || this.menus?.current) return;
     const { control, shift, alt, platform } = event.modifiers;
     if (
       (!control && !platform) ||
@@ -954,38 +954,50 @@ export default class Workspace extends View {
     cx.notify();
   }
 
-  layoutControls(fleet: Fleet): NativeElement {
-    const controls = div().flex().flex_col().gap(4);
-    if (this.layoutName?.fleet === fleet.id) {
-      controls.child(Name.new(this.layoutName.state));
-    } else {
-      controls.child(
-        Button.new(`save-layout-${fleet.id}`)
-          .accessibility_label("Save Fleet layout")
-          .child("Save layout")
-          .on_click((_event, cx) => this.saveLayout(fleet.id, cx)),
-      );
-    }
+  fleetMenu(fleet: Fleet, voyage: Layout["voyages"][number]): MenuItem[] {
+    const items: MenuItem[] = [
+      {
+        label: "Rename",
+        choose: (_version, cx) =>
+          this.editName({ kind: "fleet", id: fleet.id }, fleet.name, cx),
+      },
+      {
+        label: "New Fleet",
+        choose: (_version, cx) =>
+          this.run(
+            {
+              operation: "create-fleet",
+              voyage: voyage.id,
+              name: `Fleet ${voyage.fleets.length + 1}`,
+            },
+            cx,
+          ),
+      },
+      {
+        label: "Save layout",
+        choose: (_version, cx) => this.saveLayout(fleet.id, cx),
+      },
+    ];
     for (const saved of this.layout?.savedLayouts || []) {
-      if (saved.fleet !== fleet.id) continue;
-      controls.child(
-        Button.new(`load-layout-${fleet.id}-${saved.name}`)
-          .accessibility_label(`Load ${saved.name}`)
-          .child(saved.name)
-          .on_click((_event, cx) =>
+      if (saved.fleet === fleet.id)
+        items.push({
+          label: `Load ${saved.name}`,
+          choose: (version, cx) =>
             this.run(
               { operation: "load-layout", fleet: fleet.id, name: saved.name },
               cx,
+              undefined,
+              version,
             ),
-          ),
-      );
+        });
     }
-    return controls;
+    return items;
   }
 
   sidebarToggle(): NativeElement {
     return Button.new("toggle-sidebar")
       .accessibility_label(this.sidebar ? "Collapse sidebar" : "Expand sidebar")
+      .tooltip(this.sidebar ? "Collapse sidebar" : "Expand sidebar")
       .w(28)
       .h(28)
       .p(4)
@@ -995,12 +1007,27 @@ export default class Workspace extends View {
       );
   }
 
-  settings(cx: UIContext) {
-    const canvas = this.layout?.canvas;
-    if (!canvas || this.busy || !this.fresh) return;
-    if (this.layoutPanel) this.layoutPanel.release();
-    this.layoutPanel = new LayoutPanel(canvas, this.version);
-    cx.notify();
+  contextMenu(
+    id: string,
+    trigger: NativeElement,
+    items: MenuItem[],
+  ): NativeElement {
+    return this.menus.render(
+      id,
+      this.version,
+      trigger,
+      items.map((item) => ({
+        label: item.label,
+        choose: (version, cx) => {
+          if (version !== this.version) {
+            this.status = "The layout changed. Open the menu again.";
+            cx.notify();
+            return;
+          }
+          item.choose(version, cx);
+        },
+      })),
+    );
   }
 
   creationControl(
@@ -1352,6 +1379,19 @@ export default class Workspace extends View {
       .border_r_1()
       .border_color("#ffffff0c")
       .bg("#16181c");
+    sidebar.child(
+      div()
+        .flex()
+        .items_center()
+        .h(40)
+        .justify_end()
+        .flex_shrink_0()
+        .children(
+          this.sidebar
+            ? [div().flex_1(), this.sidebarToggle()]
+            : [this.sidebarToggle()],
+        ),
+    );
     if (this.sidebar) {
       sidebar.child(
         div()
@@ -1394,15 +1434,14 @@ export default class Workspace extends View {
           Button.new("home-navigation")
             .accessibility_label("Home")
             .h(28)
-            .px(this.sidebar ? 10 : 7)
+            .px(this.sidebar ? 10 : 12)
+            .w(this.sidebar ? 180 : 38)
             .justify_start()
             .text_size(13)
             .child(this.sidebar ? "Home" : "⌂")
             .on_click((_event, cx) => this.run({ operation: "home" }, cx)),
-        )
-        .children(this.sidebar ? [div().flex_1(), this.sidebarToggle()] : []),
+        ),
     );
-    if (!this.sidebar) sidebar.child(this.sidebarToggle());
     if (this.sidebar)
       sidebar.child(
         div()
@@ -1437,7 +1476,7 @@ export default class Workspace extends View {
               ),
           ),
       );
-    for (const item of layout.voyages) {
+    for (const [index, item] of layout.voyages.entries()) {
       const scope: Scope = { kind: "voyage", id: item.id };
       const docked =
         layout.context.kind === "voyage" && layout.context.id === item.id;
@@ -1482,8 +1521,9 @@ export default class Workspace extends View {
             .w(38)
             .h(38)
             .p(4)
+            .justify_center()
             .text_size(12)
-            .child(item.name.slice(0, 1))
+            .child(String(index + 1))
             .on_click((_event, cx) =>
               this.run({ operation: "select-voyage", id: item.id }, cx),
             ),
@@ -1530,62 +1570,18 @@ export default class Workspace extends View {
             ),
           ),
       );
-    if (!this.sidebar && voyage && layout.view !== "home") {
-      const fleet = voyage.fleets.find(
-        (item) => item.id === layout.selectedFleet,
-      );
-      const visible = this.visibleVessels(fleet);
-      const target =
-        visible.find((item) => item.id === this.focused) || visible[0];
-      if (fleet && target)
-        sidebar.child(
-          this.creationControl(`rail-${target.id}`, {
-            kind: "vessel",
-            fleet: fleet.id,
-            after: target.id,
-            axis: "horizontal",
-          }),
-        );
-    }
     sidebar.child(div().flex_1());
-    if (voyage && this.sidebar && layout.view !== "home")
+    if (!this.sidebar)
       sidebar.child(
-        this.action("Open Portal", {
-          operation: "create-portal",
-          voyage: voyage.id,
-        }),
+        div()
+          .flex()
+          .flex_col()
+          .items_center()
+          .gap(4)
+          .pb(8)
+          .child(Speech.new("voyager-speech", {}))
+          .child(this.chat.toggleView(colors)),
       );
-    sidebar.child(
-      div()
-        .flex()
-        .flex_col()
-        .gap(4)
-        .pb(8)
-        .child(
-          Button.new("workspace-layout-settings")
-            .accessibility_label("Workspace layout")
-            .h(28)
-            .px(7)
-            .justify_start()
-            .child(this.sidebar ? "Workspace layout" : "⚙")
-            .on_click((_event, cx) => this.settings(cx)),
-        )
-        .children(
-          !this.sidebar
-            ? [
-                div()
-                  .id("compact-conversation-controls")
-                  .flex()
-                  .flex_col()
-                  .items_center()
-                  .gap(4)
-                  .py(2)
-                  .child(Speech.new("voyager-speech", {}))
-                  .child(this.chat.toggleView(colors)),
-              ]
-            : [],
-        ),
-    );
     return sidebar;
   }
 
@@ -1597,16 +1593,18 @@ export default class Workspace extends View {
     const strip = div()
       .flex()
       .items_center()
-      .px(10)
-      .gap(3)
+      .px(8)
+      .gap(7)
+      .bg(projection().background)
       .border_b_1()
       .border_color("#ffffff0c");
     if (layout.view === "home")
       return strip.child(
         div().text_size(11).text_color(projection().muted).child("Home"),
       );
-    const tabs = div().flex().items_center().min_w(0).h_full().gap(3);
-    for (const item of voyage?.fleets || []) {
+    if (!voyage) return strip;
+    const tabs = div().flex().items_center().min_w(0).h_full().gap(7);
+    for (const item of voyage.fleets) {
       const selected = item.id === fleet?.id;
       const docked =
         layout.context.kind === "fleet" && layout.context.id === item.id;
@@ -1614,8 +1612,8 @@ export default class Workspace extends View {
         .relative()
         .flex()
         .items_center()
-        .h(docked ? 40 : 32)
-        .min_w(120)
+        .h(docked ? 40 : 29)
+        .min_w(90)
         .max_w(220)
         .rounded(5)
         .border_1()
@@ -1637,16 +1635,18 @@ export default class Workspace extends View {
           this.targetDrag("fleet", item.id, event, cx),
         )
         .child(
-          this.action(
-            item.name,
-            { operation: "select-fleet", id: item.id },
-            selected,
-            { kind: "fleet", id: item.id },
-          )
-            .flex_1()
-            .min_w(0)
-            .h(docked ? 40 : 32)
-            .justify_center(),
+          this.layoutName?.fleet === item.id
+            ? Name.new(this.layoutName.state).w(160).h(29)
+            : this.action(
+                item.name,
+                { operation: "select-fleet", id: item.id },
+                selected,
+                { kind: "fleet", id: item.id },
+              )
+                .flex_1()
+                .min_w(0)
+                .h(docked ? 40 : 29)
+                .justify_center(),
         );
       if (
         this.drag?.kind === "fleet" &&
@@ -1663,30 +1663,13 @@ export default class Workspace extends View {
             .bg("#b3d2e5"),
         );
       tabs.child(
-        this.target(`fleet-${item.id}`, { kind: "fleet", id: item.id }, row),
+        this.contextMenu(
+          `fleet-${item.id}`,
+          this.target(`fleet-${item.id}`, { kind: "fleet", id: item.id }, row),
+          this.fleetMenu(item, voyage),
+        ),
       );
     }
-    if (voyage)
-      tabs.child(
-        this.action("+", {
-          operation: "create-fleet",
-          voyage: voyage.id,
-          name: `Fleet ${voyage.fleets.length + 1}`,
-        }),
-      );
-    if (fleet)
-      tabs.child(
-        Button.new(`fleet-layouts-${fleet.id}`)
-          .accessibility_label("Fleet layouts")
-          .w(26)
-          .h(26)
-          .p(3)
-          .child("⋯")
-          .on_click((_event, cx) => {
-            this.layoutMenu = this.layoutMenu === fleet.id ? null : fleet.id;
-            cx.notify();
-          }),
-      );
     return strip.child(tabs).child(div().flex_1());
   }
 
@@ -1696,8 +1679,6 @@ export default class Workspace extends View {
       return body
         .p(20)
         .child(homeOverview(layout, (action, cx) => this.run(action, cx)));
-    if (fleet && this.layoutMenu === fleet.id)
-      body.child(this.layoutControls(fleet));
     if (fleet)
       body.child(
         div()
@@ -1705,8 +1686,7 @@ export default class Workspace extends View {
           .flex_1()
           .min_w(0)
           .min_h(0)
-          .px(7)
-          .py(5)
+          .p(8)
           .child(
             this.pane(
               fleet.maximizedPlacement
@@ -1850,17 +1830,6 @@ export default class Workspace extends View {
           cx.stop_propagation();
           return;
         }
-        if (
-          event.key === "escape" &&
-          this.layoutPanel &&
-          !this.layoutPanel.pending
-        ) {
-          this.layoutPanel.release();
-          this.layoutPanel = null;
-          cx.notify();
-          cx.stop_propagation();
-          return;
-        }
         if (event.key === "escape" && this.layoutName) {
           const { state } = this.layoutName;
           this.layoutName = null;
@@ -1937,26 +1906,6 @@ export default class Workspace extends View {
           Occluding.new().absolute().left(52).top(48).w(256).h(380).child(chat),
         );
     }
-    if (this.layoutPanel)
-      shell.child(
-        this.layoutPanel.render(
-          () => this.busy,
-          (task, done) =>
-            this.run({ operation: "inspect" }, task, done, this.version, false),
-          (canvas, version, task, done) =>
-            this.run(
-              { operation: "update-canvas", canvas },
-              task,
-              done,
-              version,
-            ),
-          (task) => {
-            this.layoutPanel?.release();
-            this.layoutPanel = null;
-            task.notify();
-          },
-        ),
-      );
     if (this.drag)
       shell.child(
         ArrangementCapture.new((kind, x, y, task) => {

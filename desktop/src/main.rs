@@ -100,6 +100,10 @@ fn run() -> Result<()> {
         include_str!("../mods/header/creation.js"),
     )?;
     seed(
+        &package.join("menu.js"),
+        include_str!("../mods/header/menu.js"),
+    )?;
+    seed(
         &package.join("activity.js"),
         include_str!("../mods/header/activity.js"),
     )?;

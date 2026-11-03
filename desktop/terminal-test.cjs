@@ -711,8 +711,8 @@ test("maximize shortcuts bind the displayed event origin and refuse busy intents
   assert.deepEqual(view.pendingShortcuts, []);
   assert.equal(calls.length, 0);
   view.busy = false;
-  for (const guard of ["editing", "layoutName", "layoutPanel"]) {
-    view[guard] = {};
+  for (const guard of ["editing", "layoutName", "menus"]) {
+    view[guard] = guard === "menus" ? { current: {} } : {};
     view.maximizeShortcut("second", event, cx);
     view[guard] = null;
   }
