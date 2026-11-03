@@ -18,6 +18,10 @@ use voyager_contract::{
 };
 
 enum Message {
+    WorkspaceChanges {
+        after: Option<u64>,
+        reply: async_channel::Sender<async_channel::Receiver<u64>>,
+    },
     BindContent {
         id: ContentId,
         reply: async_channel::Sender<Result<crate::content::Binding, String>>,
@@ -118,8 +122,18 @@ impl Client {
             let mut process_requests: VecDeque<(Context, ProcessRequest, Arc<ProcessResponse>)> =
                 VecDeque::new();
             let mut content_requests: VecDeque<ContentReceipt> = VecDeque::new();
+            let mut workspace_listener: Option<async_channel::Sender<u64>> = None;
             while let Ok(message) = receiver.recv_blocking() {
                 let (request, scope, reply) = match message {
+                    Message::WorkspaceChanges { after, reply } => {
+                        let (send, receive) = async_channel::bounded(1);
+                        if after != Some(version) {
+                            let _ = send.try_send(version);
+                        }
+                        workspace_listener = Some(send);
+                        let _ = reply.try_send(receive);
+                        continue;
+                    }
                     Message::BindContent { id, reply } => {
                         let result = (|| {
                             let core = core.as_mut().map_err(|error| format!("{error:?}"))?;
@@ -419,6 +433,7 @@ impl Client {
                         continue;
                     }
                 };
+                let previous_version = version;
                 let mut response = Response {
                     request_id: request.request_id.clone(),
                     status: Status::Rejected,
@@ -568,6 +583,11 @@ impl Client {
                 response.created_contents =
                     eligible_contents(&layout, scope.as_ref(), &created_contents);
                 response.fresh = fresh;
+                if version != previous_version
+                    && let Some(listener) = &workspace_listener
+                {
+                    let _ = listener.try_send(version);
+                }
                 receipts.push_back((
                     request,
                     scope,
@@ -612,6 +632,21 @@ impl Client {
             .recv()
             .await
             .map_err(|_| "Content binding unconfirmed".to_owned())?
+    }
+
+    pub async fn workspace_changes(
+        &self,
+        after: Option<u64>,
+    ) -> Result<async_channel::Receiver<u64>, String> {
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .send(Message::WorkspaceChanges { after, reply })
+            .await
+            .map_err(|_| "Workspace observer unavailable")?;
+        receive
+            .recv()
+            .await
+            .map_err(|_| "Workspace observer unconfirmed".into())
     }
 
     pub async fn content_changes(

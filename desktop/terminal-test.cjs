@@ -589,6 +589,7 @@ test("a non-Error open rejection remains uncertain and is not replayed", async (
 
 test("Home presents the retained out-of-view avatar without docking or starting content", () => {
   const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
+  let ownerRevision = "7";
   const targets = [];
   const nodes = [];
   function div() {
@@ -629,6 +630,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "Target",
     "take_result",
     "homeOverview",
+    "workspace_revision",
     source,
   )(
     class {},
@@ -640,11 +642,13 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     target,
     () => null,
     () => div(),
+    () => ownerRevision,
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
   Object.assign(view, {
     version: "7",
+    workspaceNotice: "0",
     sidebar: true,
     dockReceipt: "",
     dockEpoch: "",
@@ -701,6 +705,18 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   assert.ok(goThere);
   goThere.calls.on_click[0]({ click_count: 1 }, {});
   assert.deepEqual(actions, [{ operation: "reveal-vessel", id: "vessel" }]);
+  actions.length = 0;
+  ownerRevision = "8";
+  view.render({});
+  view.render({});
+  assert.deepEqual(actions, [{ operation: "inspect" }]);
+  assert.equal(view.version, "7", "The test retains an unconfirmed refresh");
+  ownerRevision = "9";
+  view.render({});
+  assert.deepEqual(actions, [
+    { operation: "inspect" },
+    { operation: "inspect" },
+  ]);
 });
 
 test("a confirmed dock retains its request and initiating window epoch", async () => {

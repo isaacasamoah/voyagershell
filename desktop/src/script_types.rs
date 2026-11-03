@@ -14,6 +14,7 @@ pub const WORKSPACE: &str = r#"
 export function request_id(): string;
 export function call(request: string): Promise<string>;
 export function terminal_open(request: string): Promise<string>;
+export function revision(): string;
 "#;
 
 pub const CONVERSATION_MODULE: &str = "voyager_conversation";

@@ -184,6 +184,7 @@ struct WorkspaceBinding {
     viewers: Viewers,
     notes: crate::notes::Host,
     avatar: crate::avatar::Binding,
+    revision: Rc<Cell<u64>>,
 }
 
 fn load(
@@ -210,6 +211,7 @@ fn load(
     let identity = client.clone();
     let calls = client.clone();
     let terminal_client = client.clone();
+    let revision = workspace_binding.revision.clone();
     let terminal_viewers = viewers.clone();
     let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)
         .declarations(crate::script_types::WORKSPACE)
@@ -279,6 +281,9 @@ fn load(
                 Ok(HostValue::from(encoded))
             })
         });
+    let workspace = workspace.function("revision", move |_| {
+        Ok(HostValue::from(revision.get().to_string()))
+    });
     let policy = Policy::new()
         .with_host_module(module)?
         .with_host_module(workspace)?;
@@ -301,6 +306,7 @@ pub struct Header {
     _watch: Option<Watcher>,
     _avatar: Option<gpui::Subscription>,
     _task: Task<()>,
+    _workspace_task: Task<()>,
     load_error: Option<String>,
     theme_error: Option<String>,
     watch_error: Option<String>,
@@ -343,6 +349,7 @@ impl Header {
             viewers,
             notes,
             avatar,
+            revision: Rc::new(Cell::new(0)),
         };
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
@@ -374,6 +381,40 @@ impl Header {
             Some(Err(error)) => (None, Some(format!("Header reload unavailable: {error:#}"))),
             None => (None, initial_source.as_ref().err().cloned()),
         };
+        let changed_client = workspace_binding.client.clone();
+        let changed_revision = workspace_binding.revision.clone();
+        let changed_runtime = runtime.clone();
+        let workspace_task = cx.spawn(async move |this, cx| {
+            let mut after = None;
+            loop {
+                let next = match changed_client.workspace_changes(after).await {
+                    Ok(receive) => receive
+                        .recv()
+                        .await
+                        .map_err(|_| "Workspace observer was replaced".to_owned()),
+                    Err(error) => Err(error),
+                };
+                let failed = next.is_err();
+                let updated = this.update(cx, |header, cx| {
+                    match next {
+                        Ok(version) => {
+                            after = Some(version);
+                            changed_revision.set(version);
+                            if let Some(root) = &header.root
+                                && let Err(error) = changed_runtime.refresh(root, cx)
+                            {
+                                header.watch_error = Some(format!("{error:#}"));
+                            }
+                        }
+                        Err(error) => header.watch_error = Some(error),
+                    }
+                    cx.notify();
+                });
+                if failed || updated.is_err() {
+                    break;
+                }
+            }
+        });
         let mut retrying = root.is_none();
         let handle = window.window_handle();
         let invalidate_notes = workspace_binding.notes.clone();
@@ -520,6 +561,7 @@ impl Header {
             _watch: watch,
             _avatar: avatar_observe,
             _task: task,
+            _workspace_task: workspace_task,
             load_error,
             theme_error,
             watch_error,

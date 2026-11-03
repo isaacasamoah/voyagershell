@@ -5,7 +5,7 @@ import { Brand, Layer, Target } from "voyager_avatar";
 import { take_result, window_epoch } from "voyager_avatar";
 import { response as validateResponse } from "./validate.js";
 import { invoke, openTerminal } from "./workspace.js";
-import { request_id } from "voyager_workspace";
+import { request_id, revision as workspace_revision } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { Terminal, TerminalState, Split as NativeSplit } from "voyager_native";
 import { Chat } from "./chat.js";
@@ -84,6 +84,7 @@ export default class Workspace extends View {
   declare afterRename: Action | null | undefined;
   declare chat: Chat;
   declare refreshRequested: boolean;
+  declare workspaceNotice: string;
   declare focused: string | null;
   declare splitHover: string | null;
   declare splitReset: number;
@@ -96,10 +97,7 @@ export default class Workspace extends View {
     Extract<Action, { operation: "save-layout" }> | null | undefined;
   declare layoutMenu: string | null | undefined;
   init(_props: unknown, cx: AsyncContext) {
-    this.chat = new Chat(cx, () => {
-      this.refreshRequested = true;
-      if (!this.busy) this.run({ operation: "inspect" }, cx);
-    });
+    this.chat = new Chat(cx);
     this.version = "0";
     this.sidebar = true;
     this.dockReceipt = "";
@@ -110,6 +108,7 @@ export default class Workspace extends View {
     this.focus = cx.focus_handle();
     this.names = new Map();
     this.refreshRequested = false;
+    this.workspaceNotice = "0";
     this.status = "Opening workspace";
     this.terminals = new Map();
     this.openings = new Map();
@@ -1039,6 +1038,14 @@ export default class Workspace extends View {
       }
     } catch (error) {
       this.status = errorMessage(error);
+    }
+    const ownerRevision = workspace_revision();
+    if (BigInt(ownerRevision) > BigInt(this.workspaceNotice)) {
+      this.workspaceNotice = ownerRevision;
+      if (BigInt(ownerRevision) > BigInt(this.version)) {
+        this.refreshRequested = true;
+        if (!this.busy) this.run({ operation: "inspect" }, cx);
+      }
     }
     const colors = projection();
     const shell = div()

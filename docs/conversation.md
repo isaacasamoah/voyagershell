@@ -110,9 +110,11 @@ call. Short visible outcomes such as "Fleet created" carry typed, inspectable
 tool/call/callback/request/action/status/revision metadata in the same snapshot.
 Callback IDs use a tagged string or integer reference. String values remain
 literal strings; integer values use decimal strings to preserve their original
-type and full numeric precision through the script layer. New tool outcomes cause
-one read refresh of the workspace view, queued behind a current UI operation.
-That refresh does not repeat an effect or introduce an idle polling loop.
+type and full numeric precision through the script layer. The workspace owner
+publishes confirmed workspace changes directly to Header. Chat observes only its
+conversation. Closing it cannot suppress a workspace refresh. Header queues a
+read behind its current UI operation without repeating an effect or polling the
+conversation for layout changes.
 
 The process catalogue has list, read, send, interrupt and selected-program stop operations. List and read
 retain access to known-ended bound terminals without a PID. Send, interrupt and stop

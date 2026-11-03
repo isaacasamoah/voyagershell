@@ -2,6 +2,101 @@ use std::io::Cursor;
 use voyager_app::wire::{Frame, MAX_FRAME};
 
 #[test]
+fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
+    use std::{
+        future::Future,
+        task::{Context, Poll, Waker},
+        time::{Duration, Instant},
+    };
+    use voyager_app::{client::Client, core::Core};
+    use voyager_contract::{Action, ContentDestination, RenameTarget, Request, Status};
+    fn ready<T>(future: impl Future<Output = T>) -> T {
+        let mut future = std::pin::pin!(future);
+        let mut context = Context::from_waker(Waker::noop());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Poll::Ready(value) = future.as_mut().poll(&mut context) {
+                return value;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+    let session = format!("voyager-workspace-changes-{}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let checked = std::panic::catch_unwind(|| {
+        let initial = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: 0,
+                action: Action::Inspect,
+            })
+            .unwrap();
+        let first = ready(client.workspace_changes(Some(initial.version))).unwrap();
+        let request = Request {
+            request_id: client.request_id(),
+            expected_version: initial.version,
+            action: Action::Rename {
+                target: RenameTarget::Fleet {
+                    id: initial.layout.selected_fleet.clone().unwrap(),
+                },
+                name: "Owner changed this".into(),
+            },
+        };
+        let applied = client.call(request.clone()).unwrap();
+        assert_eq!(applied.status, Status::Applied);
+        assert_eq!(first.recv_blocking().unwrap(), applied.version);
+        let quiet = ready(client.workspace_changes(Some(applied.version))).unwrap();
+        assert!(first.is_closed());
+        assert_eq!(client.call(request).unwrap().status, Status::Applied);
+        assert!(matches!(
+            quiet.try_recv(),
+            Err(async_channel::TryRecvError::Empty)
+        ));
+        let refused = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: 0,
+                action: Action::CreateFleet {
+                    voyage: initial.layout.selected_voyage.clone().unwrap(),
+                    name: "Refused".into(),
+                },
+            })
+            .unwrap();
+        assert_eq!(refused.status, Status::Rejected);
+        assert!(matches!(
+            quiet.try_recv(),
+            Err(async_channel::TryRecvError::Empty)
+        ));
+        let latest = ready(client.workspace_changes(Some(initial.version))).unwrap();
+        assert!(quiet.is_closed());
+        assert_eq!(latest.recv_blocking().unwrap(), applied.version);
+        let committed = ready(client.workspace_changes(Some(applied.version))).unwrap();
+        let partial = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: applied.version,
+                action: Action::CreateContent {
+                    type_id: "notes".into(),
+                    destination: ContentDestination::Portal {
+                        voyage: initial.layout.selected_voyage.clone().unwrap(),
+                    },
+                },
+            })
+            .unwrap();
+        assert_eq!(partial.status, Status::Uncertain);
+        assert!(partial.version > applied.version);
+        assert_eq!(committed.try_recv().unwrap(), partial.version);
+    });
+    let mut cleanup = Core::connect(&session).unwrap();
+    let stopped = cleanup.server_stop();
+    cleanup.close().unwrap();
+    drop(client);
+    stopped.unwrap();
+    checked.unwrap();
+}
+
+#[test]
 fn terminal_request_has_explicit_identity_and_target() {
     let request: voyager_contract::TerminalRequest = serde_json::from_value(
         serde_json::json!({"requestId":"open-1", "contentId":"content-1", "expectedVersion":"1"}),
