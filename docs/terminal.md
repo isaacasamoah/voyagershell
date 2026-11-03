@@ -143,3 +143,20 @@ wide `M` for every cell makes narrow letters appear widely spaced. If no named
 mono family is available, the earlier DejaVu request remains the last resort.
 This source correction has not established native visual parity. The existing
 18-pixel row height remains unchanged until a matched reference measurement.
+
+The Core child receives an explicit dedicated-session endpoint rather than an
+inherited `HC_SOCKET` or shared fixed-socket setting. On Unix this follows the
+pinned Core's runtime-directory and session-state fallback; on Windows it uses
+the pinned named-pipe naming rule. The existing session and its Core state are
+not renamed. Core's own existing-session lock check still refuses a session
+that is listening elsewhere. The Unix resolver calls `libc::getuid` in one small
+unsafe expression. This C function takes no pointers and returns the calling
+process's real UID; it does not mutate memory or the process. Linux evidence
+does not establish macOS or Windows behavior.
+
+Hello validates the advertised generation, framed mode, Core identity, and the
+methods and features this adapter uses, without pinning the Core version or
+rejecting additive fields. Dispatched replies must have the expected JSON-RPC
+version and identity and exactly one valid result or structured error. A known
+refusal retains its Core kind. Malformed, ambiguous, internal and unknown errors
+remain uncertain without an automatic replay.

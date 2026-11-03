@@ -1,9 +1,9 @@
 use crate::{
     core_shapes::{
         AttachParams, AttachResult, DocGetParams, DocGetResult, DocSetParams, DocSetResult,
-        GetParams, HelloParams, InterruptParams, InterruptResult, KillParams, ListParams,
-        ReadParams, ReadResult, RunParams, RunResult, SendParams, SendResult, StatusParams,
-        StatusResult, StopParams, StopResult, Terminal,
+        GetParams, HelloParams, HelloResult, InterruptParams, InterruptResult, KillParams,
+        ListParams, ReadParams, ReadResult, RunParams, RunResult, SendParams, SendResult,
+        StatusParams, StatusResult, StopParams, StopResult, Terminal,
     },
     wire::Frame,
 };
@@ -252,6 +252,7 @@ impl Core {
         let mut child = Command::new(env::var_os("VOYAGER_HC").unwrap_or_else(|| "hc".into()))
             .args(["connect", "--session", session])
             .env("HC_SESSION", session)
+            .env("HC_SOCKET", crate::core_endpoint::endpoint(session))
             .env_remove("HC_TERMINAL_ID")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -291,14 +292,7 @@ impl Core {
             }
             let result: Value =
                 serde_json::from_slice(&line).map_err(|e| Error::Uncertain(e.to_string()))?;
-            if result.get("id") != Some(&json!(1))
-                || result.pointer("/result/framed") != Some(&json!(true))
-            {
-                return Err(Error::Uncertain(
-                    "Core did not accept framed protocol".into(),
-                ));
-            }
-            Ok(())
+            Self::validate_hello(result)
         })();
         if let Err(error) = handshake {
             if let Err(cleanup) = child.kill() {
@@ -371,6 +365,7 @@ impl Core {
                         continue;
                     }
                     if id == reader_attaching.load(Ordering::Acquire)
+                        && Self::response(message.clone(), id).is_ok()
                         && let Some(channel) = message
                             .pointer("/result/channel")
                             .and_then(Value::as_u64)
@@ -646,29 +641,107 @@ impl Core {
         self.expected.store(0, Ordering::Release);
         self.attaching.store(0, Ordering::Release);
         let response = response?;
-        if response.get("id").and_then(Value::as_u64) != Some(id) {
-            return Err(Error::Uncertain(
-                "Core returned a mismatched reply; no request was repeated".into(),
-            ));
+        Self::response(response, id)
+    }
+
+    fn response(response: Value, id: u64) -> Result<Value, Error> {
+        let malformed = || {
+            Error::Uncertain(
+                "Core returned an invalid or ambiguous reply; no request was repeated".into(),
+            )
+        };
+        if response.get("jsonrpc").and_then(Value::as_str) != Some("2.0")
+            || response.get("id").and_then(Value::as_u64) != Some(id)
+        {
+            return Err(malformed());
         }
-        if let Some(error) = response.get("error") {
-            return Err(Error::Rejected {
-                kind: error
+        match (response.get("result"), response.get("error")) {
+            (Some(result), None) => Ok(result.clone()),
+            (None, Some(error)) => {
+                let Some(code) = error.get("code").and_then(Value::as_i64) else {
+                    return Err(malformed());
+                };
+                let Some(message) = error.get("message").and_then(Value::as_str) else {
+                    return Err(malformed());
+                };
+                let Some(kind) = error
                     .pointer("/data/kind")
                     .and_then(Value::as_str)
-                    .unwrap_or("unknown")
-                    .into(),
-                message: error
-                    .get("message")
-                    .and_then(Value::as_str)
-                    .unwrap_or("Core refused the request")
+                    .filter(|kind| !kind.is_empty())
+                else {
+                    return Err(malformed());
+                };
+                if code == -32603
+                    || !matches!(
+                        kind,
+                        "parse_error"
+                            | "invalid_request"
+                            | "unknown_method"
+                            | "invalid_params"
+                            | "unsupported_generation"
+                            | "conflict"
+                            | "not_found"
+                            | "machine_unknown"
+                            | "unavailable"
+                            | "needs_update"
+                            | "name_taken"
+                            | "spawn_failed"
+                            | "invalid_template"
+                            | "config"
+                            | "finished"
+                            | "needs_framed"
+                            | "blocked"
+                            | "status_mismatch"
+                    )
+                {
+                    return Err(Error::Uncertain(format!(
+                        "Core {kind}: {message}; no request was repeated"
+                    )));
+                }
+                Err(Error::Rejected {
+                    kind: kind.into(),
+                    message: message.into(),
+                })
+            }
+            _ => Err(malformed()),
+        }
+    }
+
+    const REQUIRED_METHODS: &'static [&'static str] = &[
+        "hello",
+        "doc.get",
+        "doc.set",
+        "terminal.get",
+        "terminal.run",
+        "terminal.attach",
+        "terminal.list",
+        "terminal.read",
+        "terminal.send",
+        "terminal.interrupt",
+        "terminal.kill",
+        "server.stop",
+    ];
+
+    fn validate_hello(response: Value) -> Result<(), Error> {
+        let result = Self::response(response, 1)?;
+        let hello: HelloResult = Self::decode("hello", result)?;
+        if hello.generation != 1
+            || !hello.framed
+            || hello.core.id.is_empty()
+            || !Self::REQUIRED_METHODS
+                .iter()
+                .all(|required| hello.methods.iter().any(|actual| actual == required))
+            || !["framed", "attach", "shell"]
+                .iter()
+                .all(|required| hello.features.iter().any(|actual| actual == required))
+        {
+            return Err(Error::Rejected {
+                kind: "unsupported_core".into(),
+                message: "Core does not provide the required protocol generation and capabilities"
                     .into(),
             });
         }
-        response
-            .get("result")
-            .cloned()
-            .ok_or_else(|| Error::Uncertain("Core reply has no result".into()))
+        Ok(())
     }
 
     pub fn viewer(&self, channel: u32) -> Result<Viewer, Error> {
@@ -721,6 +794,98 @@ impl Drop for Core {
 #[cfg(test)]
 mod adapter_tests {
     use super::*;
+
+    #[test]
+    fn protocol_envelopes_preserve_refusals_and_uncertainty() {
+        let valid = json!({"jsonrpc":"2.0","id":2,"result":{"value":null},"extra":true});
+        assert_eq!(Core::response(valid, 2).unwrap(), json!({"value":null}));
+        let refused = json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"stale","data":{"kind":"conflict","hint":"inspect"}}});
+        assert!(
+            matches!(Core::response(refused, 2), Err(Error::Rejected { kind, .. }) if kind == "conflict")
+        );
+        let unknown = json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"unknown outcome","data":{"kind":"future_error"}}});
+        assert!(
+            matches!(Core::response(unknown, 2), Err(Error::Uncertain(message)) if message.contains("future_error"))
+        );
+        for value in [
+            json!({"jsonrpc":"2.0","id":2,"error":null}),
+            json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000}}),
+            json!({"jsonrpc":"2.0","id":2,"result":{},"error":{"code":-32000,"message":"bad","data":{"kind":"conflict"}}}),
+            json!({"jsonrpc":"2.0","id":3,"result":{}}),
+            json!({"jsonrpc":"1.0","id":2,"result":{}}),
+            json!({"jsonrpc":"2.0","id":2}),
+        ] {
+            assert!(matches!(Core::response(value, 2), Err(Error::Uncertain(_))));
+        }
+    }
+
+    #[test]
+    fn dispatched_request_never_treats_malformed_or_lost_reply_as_refusal() {
+        for reply in [
+            Some(json!({"jsonrpc":"2.0","id":2,"error":null})),
+            Some(
+                json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"stale","data":{"kind":"conflict"}}}),
+            ),
+            None,
+        ] {
+            let expected_refusal = reply
+                .as_ref()
+                .is_some_and(|value| value.pointer("/error/data/kind") == Some(&json!("conflict")));
+            let (control, requests) = mpsc::sync_channel::<Frame>(1);
+            let (input, _) = mpsc::sync_channel(1);
+            let (send, replies) = mpsc::sync_channel(1);
+            let worker = thread::spawn(move || {
+                let frame = requests.recv().unwrap();
+                assert_eq!((frame.channel, frame.kind), (0, 0));
+                let message: Value = serde_json::from_slice(&frame.payload).unwrap();
+                assert_eq!(message["method"], "doc.set");
+                if let Some(reply) = reply {
+                    send.send(reply).unwrap();
+                }
+            });
+            let child = Command::new(env::current_exe().unwrap())
+                .arg("--list")
+                .stdout(Stdio::null())
+                .spawn()
+                .unwrap();
+            let mut core = Core {
+                child,
+                control,
+                input,
+                replies,
+                streams: Arc::default(),
+                expected: Arc::default(),
+                attaching: Arc::default(),
+                connected: Arc::new(AtomicBool::new(true)),
+                sequence: 1,
+            };
+            let result = core.rpc("doc.set", json!({}));
+            worker.join().unwrap();
+            assert!(if expected_refusal {
+                matches!(result, Err(Error::Rejected { .. }))
+            } else {
+                matches!(result, Err(Error::Uncertain(_)))
+            });
+        }
+    }
+
+    #[test]
+    fn hello_requires_consumed_capabilities_not_exact_version_or_extra_fields() {
+        let mut hello = json!({"jsonrpc":"2.0","id":1,"result":{"framed":true,"generation":1,"version":"future-compatible","core":{"id":"stable","name":"test"},"methods":Core::REQUIRED_METHODS,"features":["framed","attach","shell","future"],"extra":true}});
+        hello["result"]["methods"]
+            .as_array_mut()
+            .unwrap()
+            .push("future.method".into());
+        assert!(Core::validate_hello(hello.clone()).is_ok());
+        hello["result"]["generation"] = 2.into();
+        assert!(Core::validate_hello(hello.clone()).is_err());
+        hello["result"]["generation"] = 1.into();
+        hello["result"]["features"] = json!(["framed"]);
+        assert!(Core::validate_hello(hello.clone()).is_err());
+        hello["result"]["features"] = json!(["framed", "attach", "shell"]);
+        hello["result"]["methods"] = json!(["hello"]);
+        assert!(Core::validate_hello(hello).is_err());
+    }
 
     #[test]
     fn typed_hello_keeps_the_existing_handshake() {

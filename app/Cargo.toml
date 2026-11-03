@@ -12,3 +12,6 @@ serde = { version = "1", features = ["derive"] }
 typify = "=0.5.0"
 sha2 = "0.10"
 jsonschema = { version = "=0.60.2", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.191"

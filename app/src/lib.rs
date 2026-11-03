@@ -2,6 +2,7 @@ mod administrator;
 pub mod client;
 pub mod content;
 pub mod core;
+mod core_endpoint;
 mod process;
 mod scope;
 pub mod workspace;

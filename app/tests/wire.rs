@@ -112,6 +112,15 @@ fn framed_core_attaches_and_detaches_without_stopping_terminal() {
     use voyager_app::core::Core;
     let session = format!("voyager-terminal-wire-test-{}", std::process::id());
     let mut core = Core::connect(&session).unwrap();
+    #[cfg(unix)]
+    let intended_endpoint = std::env::var_os("XDG_RUNTIME_DIR")
+        .filter(|value| !value.is_empty())
+        .map(|runtime| {
+            std::path::PathBuf::from(runtime)
+                .join("herdr-core")
+                .join(format!("{session}.sock"))
+                .exists()
+        });
     let result = {
         let terminal = core
             .terminal_run_with(serde_json::from_value(serde_json::json!({"cwd":"/tmp"})).unwrap())
@@ -143,6 +152,8 @@ fn framed_core_attaches_and_detaches_without_stopping_terminal() {
     let stopped = core.server_stop();
     core.close().unwrap();
     assert!(stopped.is_ok());
+    #[cfg(unix)]
+    assert_ne!(intended_endpoint, Some(false));
     assert!(
         result
             .0
