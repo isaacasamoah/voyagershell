@@ -1,3 +1,14 @@
+export type Availability =
+  | {
+      status: "ready";
+    }
+  | {
+      status: "removed";
+    }
+  | {
+      reason: string;
+      status: "unavailable";
+    };
 export type Backend = "core-terminal";
 export type Placement = "fleet" | "voyage";
 
@@ -5,7 +16,8 @@ export interface Catalog {
   types: Description[];
 }
 export interface Description {
-  actions: Actions;
+  actions?: Actions | null;
+  availability: Availability;
   backend?: Backend | null;
   configuration?: DataDescription | null;
   host: NativeHost;

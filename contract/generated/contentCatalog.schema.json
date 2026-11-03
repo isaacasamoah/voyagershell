@@ -25,6 +25,53 @@
       ],
       "type": "object"
     },
+    "Availability": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "ready",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "removed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "const": "unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Backend": {
       "enum": [
         "core-terminal"
@@ -46,7 +93,17 @@
       "additionalProperties": false,
       "properties": {
         "actions": {
-          "$ref": "#/definitions/Actions"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Actions"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "availability": {
+          "$ref": "#/definitions/Availability"
         },
         "backend": {
           "anyOf": [
@@ -100,10 +157,10 @@
       "required": [
         "typeId",
         "name",
+        "availability",
         "host",
         "view",
-        "placements",
-        "actions"
+        "placements"
       ],
       "type": "object"
     },

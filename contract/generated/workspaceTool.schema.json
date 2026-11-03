@@ -199,6 +199,40 @@
         {
           "additionalProperties": false,
           "properties": {
+            "operation": {
+              "const": "remove-content-package",
+              "type": "string"
+            },
+            "typeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "typeId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "restore-content-package",
+              "type": "string"
+            },
+            "typeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "typeId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "name": {
               "type": "string"
             },

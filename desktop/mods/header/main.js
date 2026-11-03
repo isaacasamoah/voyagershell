@@ -10,7 +10,7 @@ import {
 import { invoke, openTerminal } from "./workspace.js";
 import {
   request_id,
-  revision as workspace_revision,
+  notice as workspace_notice,
   context_facts,
 } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
@@ -42,7 +42,8 @@ export default class Workspace extends View {
     this.focus = cx.focus_handle();
     this.names = new Map();
     this.refreshRequested = false;
-    this.workspaceNotice = "0";
+    this.workspaceNotice = { revision: "0", packageRevision: "0" };
+    this.automaticRefresh = false;
     this.status = "Opening workspace";
     this.terminals = new Map();
     this.openings = new Map();
@@ -111,6 +112,7 @@ export default class Workspace extends View {
       }
       return;
     }
+    const retryRefusals = !this.automaticRefresh;
     if (action.operation === "inspect") this.refreshRequested = false;
     const changesSelection = [
       "create-fleet",
@@ -154,6 +156,7 @@ export default class Workspace extends View {
         if (
           prepareContents &&
           accepted &&
+          retryRefusals &&
           action.operation === "inspect" &&
           result.status === "applied" &&
           result.fresh
@@ -236,11 +239,25 @@ export default class Workspace extends View {
       }
       task.notify();
       if (!prepared) this.pendingShortcuts = [];
-      if (!this.busy && this.refreshRequested)
-        this.run({ operation: "inspect" }, task);
-      else if (!this.busy) this.flushShortcuts(task, prepared);
+      if (!this.busy && this.refreshRequested) this.inspectNotice(task);
+      if (!this.busy) this.flushShortcuts(task, prepared);
     });
     cx.notify();
+  }
+  inspectNotice(cx) {
+    const notice = workspace_notice();
+    const packageChanged =
+      notice.packageRevision !== this.workspaceNotice.packageRevision;
+    this.workspaceNotice = notice;
+    this.refreshRequested = false;
+    if (!packageChanged && BigInt(notice.revision) <= BigInt(this.version))
+      return;
+    this.automaticRefresh = true;
+    try {
+      this.run({ operation: "inspect" }, cx);
+    } finally {
+      this.automaticRefresh = false;
+    }
   }
   acceptSnapshot(result, task) {
     this.drag = null;
@@ -1397,13 +1414,13 @@ export default class Workspace extends View {
     } catch (error) {
       this.status = errorMessage(error);
     }
-    const ownerRevision = workspace_revision();
-    if (BigInt(ownerRevision) > BigInt(this.workspaceNotice)) {
-      this.workspaceNotice = ownerRevision;
-      if (BigInt(ownerRevision) > BigInt(this.version)) {
-        this.refreshRequested = true;
-        if (!this.busy) this.run({ operation: "inspect" }, cx);
-      }
+    const ownerNotice = workspace_notice();
+    if (
+      ownerNotice.revision !== this.workspaceNotice.revision ||
+      ownerNotice.packageRevision !== this.workspaceNotice.packageRevision
+    ) {
+      this.refreshRequested = true;
+      if (!this.busy) this.inspectNotice(cx);
     }
     const colors = projection();
     const shell = div()

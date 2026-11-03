@@ -44,6 +44,14 @@ export type Action =
       typeId: string;
     }
   | {
+      operation: "remove-content-package";
+      typeId: string;
+    }
+  | {
+      operation: "restore-content-package";
+      typeId: string;
+    }
+  | {
       name: string;
       operation: "rename";
       target: RenameTarget;
