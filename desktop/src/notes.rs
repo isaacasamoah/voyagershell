@@ -1,12 +1,6 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    path::PathBuf,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::Result;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, IntoElement as _, ParentElement as _,
     Render, StyleRefinement, Styled as _, Subscription, Task, Window, div,
@@ -16,10 +10,10 @@ use gpui_shell::{
 };
 use voyager_app::{
     client::Client,
-    content::{Binding, Owner},
+    content::{Access, Binding},
 };
 use voyager_contract::{
-    Action, ContentId, Request as WorkspaceRequest, Status,
+    ContentId,
     content::{Request, Response, Version},
 };
 
@@ -41,7 +35,6 @@ fn validate_identity<'a>(
 pub struct Host {
     runtime: Rc<ShellRuntime>,
     package: PathBuf,
-    owner: Arc<Mutex<Owner>>,
     budget: Budget,
     client: Client,
     views: Rc<RefCell<HashMap<String, Entity<Note>>>>,
@@ -67,12 +60,11 @@ impl Host {
         }
     }
 
-    pub fn new(package: PathBuf, owner: Owner, client: Client) -> Result<Self> {
+    pub fn new(package: PathBuf, client: Client) -> Result<Self> {
         let runtime = ShellRuntime::new_isolated_with_components(crate::notes_input::registry()?)?;
         Ok(Self {
             runtime,
             package,
-            owner: Arc::new(Mutex::new(owner)),
             budget: Budget::default(),
             client,
             views: Rc::new(RefCell::new(HashMap::new())),
@@ -126,10 +118,48 @@ impl Host {
         let application = format!("notes-{}", id.0);
         let identity = id.0.clone();
         let budget = self.budget.clone();
-        let owner = self.owner.clone();
+        let client = self.client.clone();
+        let issued = self.client.clone();
+        let observer = self.client.clone();
+        let observed = binding.clone();
         let module = HostModule::new(crate::script_types::CONTENT_MODULE)
             .declarations(crate::script_types::CONTENT)
             .function("identity", move |_| Ok(HostValue::from(identity.clone())))
+            .function("request_id", move |_| {
+                Ok(HostValue::from(issued.request_id()))
+            })
+            .async_function("changed", move |arguments| {
+                let after = match arguments.get(0) {
+                    Some(HostValue::Null) => None,
+                    Some(value) => Some(
+                        value
+                            .as_str()
+                            .ok_or_else(|| {
+                                HostError::new("Content notification version must be text")
+                            })?
+                            .parse::<u64>()
+                            .map_err(|_| HostError::new("Invalid content notification version"))?,
+                    ),
+                    _ => {
+                        return Err(HostError::new(
+                            "Content notification requires its previous version",
+                        ));
+                    }
+                };
+                let observer = observer.clone();
+                let binding = observed.clone();
+                Ok(async move {
+                    let changes = observer
+                        .content_changes(binding, after)
+                        .await
+                        .map_err(HostError::new)?;
+                    let version = changes
+                        .recv()
+                        .await
+                        .map_err(|_| HostError::new("Content subscription closed"))?;
+                    Ok(HostValue::from(version.to_string()))
+                })
+            })
             .function("theme", move |_| colors())
             .async_function("invoke", move |arguments| {
                 let raw = arguments.string(0)?;
@@ -143,7 +173,7 @@ impl Host {
                     .then(|| budget.reserve(&id.0, raw.len()))
                     .flatten()
                     .map(|permit| (raw.to_owned(), permit));
-                let owner = owner.clone();
+                let client = client.clone();
                 let binding = binding.clone();
                 let content_id = id.clone();
                 Ok(async move {
@@ -165,11 +195,14 @@ impl Host {
                             {
                                 return Err(HostError::new("Content request identity changed"));
                             }
-                            let response = owner
-                                .lock()
-                                .map_err(|_| HostError::new("Content owner unavailable"))?
-                                .call(&binding, request);
-                            (response, Some(permit))
+                            let access = Access::View(binding);
+                            let response = if matches!(&request, Request::Update { .. }) {
+                                client.content(access, request)
+                            } else {
+                                client.read_content(access, request).await
+                            }
+                            .map_err(|error| HostError::new(format!("{error:?}")))?;
+                            ((*response).clone(), Some(permit))
                         }
                         None => (
                             Response::Rejected {
@@ -225,34 +258,14 @@ impl Note {
     ) -> Self {
         let handle = window.window_handle();
         let client = host.client.clone();
-        let owner = host.owner.clone();
         let task = cx.spawn(async move |this, cx| {
             let registered = cx
                 .background_executor()
                 .spawn(async move {
-                    let snapshot = client
-                        .call(WorkspaceRequest {
-                            request_id: client.request_id(),
-                            expected_version: 0,
-                            action: Action::Inspect,
-                        })
-                        .map_err(anyhow::Error::msg)?;
-                    if snapshot.status != Status::Applied || !snapshot.fresh {
-                        bail!("Workspace is unavailable");
-                    }
-                    if !snapshot
-                        .layout
-                        .contents
-                        .iter()
-                        .any(|content| content.id == id && content.type_id == "notes")
-                    {
-                        bail!("Unknown Notes instance");
-                    }
-                    owner
-                        .lock()
-                        .map_err(|_| anyhow::anyhow!("Content owner unavailable"))?
-                        .register(&id)
-                        .context("Opening Notes data")
+                    client
+                        .bind_content(id.clone())
+                        .await
+                        .map_err(anyhow::Error::msg)
                         .map(|binding| (binding, id))
                 })
                 .await;

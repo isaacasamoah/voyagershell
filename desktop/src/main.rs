@@ -138,9 +138,10 @@ fn run() -> Result<()> {
     let initial_theme = fs::read(&theme).context("Reading theme")?;
     let initial_source = host::source_snapshot(&package).map_err(|error| format!("{error:#}"));
     let assets = AppAssets::new(package.clone());
-    let client = Client::open(
+    let client = Client::with_content(
         session.clone(),
         env::current_dir()?.to_string_lossy().into_owned(),
+        content_owner,
     );
     let viewers = terminal::Viewers::default();
     let conversation =
@@ -198,8 +199,7 @@ fn run() -> Result<()> {
                     return;
                 }
             };
-            let notes = match notes::Host::new(notes_package.clone(), content_owner, client.clone())
-            {
+            let notes = match notes::Host::new(notes_package.clone(), client.clone()) {
                 Ok(notes) => notes,
                 Err(error) => {
                     eprintln!("Notes runtime failed: {error:#}");

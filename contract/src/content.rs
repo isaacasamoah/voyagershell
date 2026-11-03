@@ -2,14 +2,64 @@ use crate::ContentId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Notes {
     pub title: String,
     pub text: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "operation",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum Action {
+    Describe {
+        content_id: ContentId,
+    },
+    Inspect {
+        content_id: ContentId,
+    },
+    Update {
+        content_id: ContentId,
+        expected_revision: String,
+        data: Notes,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "operation",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum Receipt {
+    Describe {
+        content_id: ContentId,
+    },
+    Inspect {
+        content_id: ContentId,
+    },
+    Update {
+        content_id: ContentId,
+        expected_revision: String,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Input {
+    #[serde(with = "crate::decimal")]
+    #[schemars(with = "String")]
+    pub expected_version: u64,
+    pub action: Action,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "operation",
     rename_all_fields = "camelCase",
@@ -38,13 +88,13 @@ pub enum Request {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum Version {
     #[serde(rename = "1")]
     V1,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Snapshot {
     pub content_id: ContentId,
@@ -54,9 +104,18 @@ pub struct Snapshot {
     pub warning: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "status", rename_all_fields = "camelCase", deny_unknown_fields)]
 pub enum Response {
+    #[serde(rename = "limited")]
+    Limited {
+        version: Version,
+        request_id: String,
+        content_id: ContentId,
+        revision: Option<String>,
+        warning_present: bool,
+        message: String,
+    },
     #[serde(rename = "described")]
     Described {
         version: Version,

@@ -32,6 +32,8 @@ export const Notes: { new: (id: string, props: { contentId: string }) => import(
 pub const CONTENT_MODULE: &str = "voyager_content";
 pub const CONTENT: &str = r#"
 export function identity(): string;
+export function request_id(): string;
+export function changed(after: string | null): Promise<string>;
 export function invoke(request: string, requestId: string, expectedRevision: string): Promise<string>;
 export function theme(): {
     background: import("gpui-kit").Color;

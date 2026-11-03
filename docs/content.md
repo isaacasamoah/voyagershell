@@ -16,10 +16,12 @@ never enters terminal preparation or starts a Core process.
 
 `desktop/src/notes.rs` installs a `voyager_content_view` component only in the
 Header policy. Its native factory retains one view per content ID. Before opening
-data, background work obtains a fresh workspace snapshot through the existing
-Client and verifies that the requested content is Notes. The Rust owner then
-registers that ID and issues an opaque binding. Requests cannot supply their own
-binding or a filesystem path.
+data, background work asks the existing Client worker for a binding. That worker
+reads the authoritative workspace and checks the exact Notes placement before
+binding existing data. It never creates a missing file while binding or inspecting.
+Only a confirmed workspace creation initializes its newly issued Notes IDs with
+create-new semantics. Failure after the workspace write returns Uncertain and does
+not retry initialization. Requests cannot supply their own binding or path.
 
 All Notes instances share one isolated QuickJS VM with the private `voyager_input`
 registry. They cannot import the Header's Terminal, Name or workspace modules.
@@ -36,7 +38,7 @@ It validates those small identity fields and reserves the existing request/byte
 budget before copying a large request. Background work parses the admitted JSON
 and compares its identity with that envelope before calling the bound owner.
 Admission refusals retain a correlated rejected result. The limits remain eight
-admitted requests per instance, four MiB of aggregate raw request bytes, one MiB
+admitted data invokes per instance, four MiB of aggregate raw request bytes, one MiB
 of Notes data and one MiB plus sixteen KiB for each request/result envelope.
 These limits describe admitted raw payload, not total process memory. Data reads
 stop after the data limit plus one byte, so an oversized file is refused without
@@ -62,7 +64,83 @@ input still reaches the original Core terminal afterward. The sibling pixel chec
 cover its measured title, body and status area, not the whole Portal header or
 desktop. Earlier failed fixture attempts remain recorded separately.
 
-Actual agent data updates, live refresh after an agent write, remove/restore,
+The N3 source candidate adds generated voyager_content describe/inspect/update to
+the same actual-provider callback path. Captured focus stays outside its payload.
+The Client worker now owns the one Notes Owner and orders both UI and agent calls
+with fresh membership checks. An existing hidden Notes instance is allowed only
+inside the fresh captured projection and only when its data already exists. Old
+request identities retain the same result; changed scope or arguments refuse.
+
+Each retained view subscribes through a public async channel and an owner-held
+invalidation counter before its first read. Only one wait is retained per instance;
+a newer wait closes the previous one. A counter mismatch returns immediately, so
+updates between waits remain observable. Applied and post-dispatch Uncertain
+writes both trigger a read-only invalidation. The latter retains its uncertain
+receipt and never resubmits the update. The controller rereads the actual owner,
+independently of Chat. A dirty buffer, including typing while a read is pending,
+keeps its original base revision and receives an external-change warning. Early
+typing before the first read can acquire its first actual base without losing the
+draft. No conversation result supplies an editor revision.
+
+Only content arguments/results use the existing one MiB plus sixteen KiB envelope.
+Workspace/process arguments remain eight KiB. Ordinary provider requests remain
+64 KiB; correlated tool replies and incoming content frames have an outer JSON cap
+of twice the Notes envelope plus 4,096 bytes, allowing string escaping and callback
+identity. Incoming non-content frames retain one MiB. These are adapter bounds;
+large-envelope delivery by the installed provider is not yet native evidence.
+Oversized reads return a typed Limited result with the actual known revision and
+warning-presence flag, explicitly withholding a complete snapshot/warning. A
+post-dispatch confirmation that cannot fit remains Uncertain. The worker checks
+request size before enqueue and bounds responses before receipt retention.
+
+The Client mailbox remains eight messages. Binding, notification and UI
+Describe/Inspect await asynchronous read-only admission and replies. A full queue
+therefore delays the initial read instead of permanently disabling the view.
+Updates keep try-send refusal and the existing 25-second reply timeout. The async
+read API rejects Update; it cannot bypass effect admission. No read retry loop
+resubmits an effect.
+
+The callback and Client each retain at most 32 call results. Accepted payload
+identity uses the existing SHA-256 primitive over recursively sorted JSON,
+including the desktop's preserve_order feature, while
+request IDs, tool names and captured access remain explicit. Full accepted update
+bodies are discarded after dispatch instead of retained twice. Unchanged duplicate
+calls still reuse their original result, and changed arguments or access refuse.
+Client outcomes share Arc ownership. The two boundaries can retain 64
+envelope-sized result bodies, about 65 MiB of body allowance, before wrapper
+encoding, object overhead, transient serialization, queues and per-instance
+last-good snapshots. The two result forms serve the UI/Client and provider reply
+boundaries; replacing them with one cache would require new cross-owner machinery. This is a bounded retention statement,
+not a process-memory or responsiveness measurement. Conversation history stores
+only content operation/ID/revision/status summaries, within its existing 128-message
+and 256-KiB text bounds. It omits the Notes data object from public history;
+bounded warning messages can still quote invalid field values.
+
+The provider event queue holds up to 32 parsed frames. Its wire-equivalent content
+allowance is 32 times the 2,134,016-byte outer cap, about 65.125 MiB; parsed-object
+overhead is additional. Up to 16 callbacks can wait for a pending turn-start
+acknowledgement, another 32.5625 MiB of wire-equivalent allowance. The eight-message
+Client queue can hold about 8.125 MiB of admitted content envelopes. These are
+separate bounds and do not make the existing four-MiB raw UI admission budget a
+total-memory limit.
+
+Owner.last retains the existing per-ID last-good snapshots without an aggregate
+byte or entry cap. Agent access to never-mounted hidden Notes can add entries.
+Its registered-ID set has no aggregate entry cap. Notification state is created
+only for a subscribed retained view, with one counter and pending receiver per ID;
+updates before the first subscription need no entry because that subscription
+always triggers a fresh read. Existing owner-cache fallback semantics are preserved.
+Aggregate memory, cache release and measurement remain N4/load gates.
+
+Dropping the Rust admission future cancels its pending async-channel send, as the
+headless queue test establishes. The pinned Shell HostModule awaiting path detaches
+its foreground/background work and checks owner readiness afterward. It does not
+install the same cancellation callback used by neighboring scheduler paths. The
+queue test therefore does not establish actual retired-ScriptView cancellation
+or an aggregate bound on old pending observers. Those lifecycle limits remain
+explicitly unproved under N4; no SDK cancellation claim is inferred.
+
+Actual-provider updates and native dirty-sibling refresh, remove/restore,
 strict Notes authoring, complete generation/lifecycle and aggregate proof-size
 acceptance remain separate work. These native checks establish no performance
 gain, another platform or complete avatar/voice parity.

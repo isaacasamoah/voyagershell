@@ -25,10 +25,10 @@ fn bound_updates_preserve_other_data_and_refuse_stale_or_forged() {
     )
     .unwrap();
     let mut owner = Owner::open(&path).unwrap();
-    assert!(owner.register(&ContentId("../outside".into())).is_err());
+    assert!(owner.initialize(&ContentId("../outside".into())).is_err());
     assert!(owner.bind(&ContentId("unregistered".into())).is_none());
-    let a = owner.register(&ContentId("notes-a".into())).unwrap();
-    let b = owner.register(&ContentId("notes-b".into())).unwrap();
+    let a = owner.initialize(&ContentId("notes-a".into())).unwrap();
+    let b = owner.initialize(&ContentId("notes-b".into())).unwrap();
     let read = |id: &str| Request::Inspect {
         version: Version::V1,
         request_id: "r".into(),
@@ -80,7 +80,7 @@ fn named_schema_reload_and_legacy_data_remain_truthful() {
     let manifest = path.join("mods/notes/mod.json");
     fs::write(&manifest, include_str!("../../content/notes/mod.json")).unwrap();
     let mut owner = Owner::open(&path).unwrap();
-    let binding = owner.register(&ContentId("notes-a".into())).unwrap();
+    let binding = owner.initialize(&ContentId("notes-a".into())).unwrap();
     let describe = || Request::Describe {
         version: Version::V1,
         request_id: "d".into(),

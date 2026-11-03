@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
 import { TitleState, Title, BodyState, Body } from "voyager_input";
-import { identity, invoke, theme } from "voyager_content";
+import { identity, request_id, changed, invoke, theme } from "voyager_content";
 import {
   contentRequest as validateRequest,
   contentResponse as validateResponse,
@@ -21,7 +21,18 @@ export default class Notes extends View {
     this.text.on("change", (_event, cx) => this.changed("text", cx));
     this.title.on("blur", (_event, cx) => this.save(cx));
     this.text.on("blur", (_event, cx) => this.save(cx));
-    this.read(cx);
+    cx.spawn(async (task) => {
+      try {
+        let after = null;
+        while (true) {
+          after = await changed(after);
+          this.read(task);
+        }
+      } catch (error) {
+        this.status = error.message;
+        task.notify();
+      }
+    });
   }
 
   changed(field, cx) {
@@ -36,7 +47,7 @@ export default class Notes extends View {
     const request = {
       version: "1",
       operation,
-      requestId: `${this.id}-${++this.sequence}`,
+      requestId: request_id(),
       contentId: this.id,
       ...extra,
     };
@@ -58,34 +69,66 @@ export default class Notes extends View {
   }
 
   read(cx) {
+    if (this.reading) {
+      this.readAgain = true;
+      return;
+    }
+    this.reading = true;
     cx.spawn(async (task) => {
-      try {
-        const result = await this.call("content.inspect");
-        if (result.status !== "snapshot")
-          throw Error(result.message || "Notes unavailable");
-        this.revision = result.snapshot.revision;
-        this.hydrating = true;
-        try {
-          if (
-            !this.touched.title &&
-            this.title.value() !== result.snapshot.data.title
-          )
-            this.title.set_value(result.snapshot.data.title);
-          if (
-            !this.touched.text &&
-            this.text.value() !== result.snapshot.data.text
-          )
-            this.text.set_value(result.snapshot.data.text);
-        } finally {
-          this.hydrating = false;
-        }
-        this.status = result.snapshot.warning || "";
-        if (this.pendingBlur === this.generation) this.save(task);
-      } catch (error) {
-        this.status = error.message;
-      }
-      task.notify();
+      do {
+        this.readAgain = false;
+        await this.load(task);
+      } while (this.readAgain);
+      this.reading = false;
     });
+  }
+
+  async load(task) {
+    const generation = this.generation;
+    const revision = this.revision;
+    try {
+      const result = await this.call("content.inspect");
+      if (result.status !== "snapshot")
+        throw Error(result.message || "Notes unavailable");
+      if (
+        this.revision &&
+        (this.dirty ||
+          generation !== this.generation ||
+          revision !== this.revision)
+      ) {
+        this.status = [
+          result.snapshot.warning,
+          result.snapshot.revision !== this.revision
+            ? "Notes changed outside this draft. Its original revision is retained."
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        task.notify();
+        return;
+      }
+      this.revision = result.snapshot.revision;
+      this.hydrating = true;
+      try {
+        if (
+          (!this.dirty || !this.touched.title) &&
+          this.title.value() !== result.snapshot.data.title
+        )
+          this.title.set_value(result.snapshot.data.title);
+        if (
+          (!this.dirty || !this.touched.text) &&
+          this.text.value() !== result.snapshot.data.text
+        )
+          this.text.set_value(result.snapshot.data.text);
+      } finally {
+        this.hydrating = false;
+      }
+      this.status = result.snapshot.warning || "";
+      if (this.pendingBlur === this.generation) this.save(task);
+    } catch (error) {
+      this.status = error.message;
+    }
+    task.notify();
   }
 
   save(cx) {

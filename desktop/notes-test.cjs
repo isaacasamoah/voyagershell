@@ -8,6 +8,79 @@ const root = path.join(__dirname, "..");
 const file = `${root}/content/notes/main.js`;
 const source = fs.readFileSync(file, "utf8");
 
+test("owner refresh retains a draft and its original base, including typing during a read", async () => {
+  const Notes = new Function(
+    "View",
+    source
+      .slice(source.indexOf("export default class Notes"))
+      .replace("export default", "return"),
+  )(class {});
+  for (const mode of ["clean", "dirty", "in-flight", "first-read"]) {
+    let title = mode === "dirty" || mode === "first-read" ? "Draft" : "Old";
+    let text = "Old body";
+    let finish;
+    const result = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const pending = [];
+    const cx = {
+      notify() {},
+      spawn(body) {
+        pending.push(body(cx));
+      },
+    };
+    const note = Object.assign(Object.create(Notes.prototype), {
+      generation: 1,
+      dirty: mode === "dirty" || mode === "first-read",
+      revision: mode === "first-read" ? null : "original",
+      touched: {
+        title: mode === "dirty" || mode === "first-read",
+        text: false,
+      },
+      title: {
+        value: () => title,
+        set_value: (value) => {
+          title = value;
+        },
+      },
+      text: {
+        value: () => text,
+        set_value: (value) => {
+          text = value;
+        },
+      },
+      call: () => result,
+    });
+    note.read(cx);
+    if (mode === "in-flight") {
+      title = "Draft";
+      note.changed("title", cx);
+    }
+    finish({
+      status: "snapshot",
+      snapshot: {
+        revision: "outside",
+        data: { title: "New", text: "New body" },
+        warning: "Schema warning",
+      },
+    });
+    await Promise.all(pending);
+    const draft = mode !== "clean";
+    assert.equal(title, draft ? "Draft" : "New", mode);
+    assert.equal(
+      note.revision,
+      mode === "dirty" || mode === "in-flight" ? "original" : "outside",
+      mode,
+    );
+    assert.equal(
+      text,
+      mode === "dirty" || mode === "in-flight" ? "Old body" : "New body",
+      mode,
+    );
+    assert.ok(note.status.includes("Schema warning"));
+  }
+});
+
 test("the real Notes client retains drafts and distinguishes known refusal from lost confirmation", async () => {
   const { contentRequest: request, contentResponse: response } = await import(
     pathToFileURL(`${root}/contract/generated/validate.js`).href
@@ -50,10 +123,11 @@ test("the real Notes client retains drafts and distinguishes known refusal from 
     const Notes = new Function(
       "View",
       "invoke",
+      "request_id",
       "validateRequest",
       "validateResponse",
       declaration.replace("export default", "return"),
-    )(class {}, invoke, request, response);
+    )(class {}, invoke, () => `notes-${calls.length}`, request, response);
     const note = Object.assign(Object.create(Notes.prototype), {
       id: "notes-a",
       sequence: 0,

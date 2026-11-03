@@ -20,6 +20,20 @@ use voyager_contract::{
 };
 
 enum Message {
+    BindContent {
+        id: ContentId,
+        reply: async_channel::Sender<Result<crate::content::Binding, String>>,
+    },
+    ContentChanges {
+        binding: crate::content::Binding,
+        after: Option<u64>,
+        reply: async_channel::Sender<Result<async_channel::Receiver<u64>, String>>,
+    },
+    Content {
+        access: crate::content::Access,
+        request: voyager_contract::content::Request,
+        reply: ContentReply,
+    },
     Process {
         scope: Context,
         request: ProcessRequest,
@@ -38,10 +52,35 @@ enum Message {
     },
 }
 
+enum ContentReply {
+    Blocking(SyncSender<Arc<voyager_contract::content::Response>>),
+    Asynchronous(async_channel::Sender<Arc<voyager_contract::content::Response>>),
+}
+
+impl ContentReply {
+    fn deliver(self, response: Arc<voyager_contract::content::Response>) {
+        match self {
+            Self::Blocking(reply) => {
+                let _ = reply.send(response);
+            }
+            Self::Asynchronous(reply) => {
+                let _ = reply.try_send(response);
+            }
+        }
+    }
+}
+
 struct Outcome {
     status: Status,
     message: Option<String>,
     created_workspace: bool,
+}
+
+struct ContentReceipt {
+    access: crate::content::Access,
+    request_id: String,
+    fingerprint: [u8; 32],
+    result: Arc<voyager_contract::content::Response>,
 }
 
 #[derive(Debug)]
@@ -52,14 +91,22 @@ pub enum CallError {
 
 #[derive(Clone)]
 pub struct Client {
-    sender: SyncSender<Message>,
+    sender: async_channel::Sender<Message>,
     sequence: Arc<AtomicU64>,
     identity: String,
 }
 
 impl Client {
     pub fn open(session: String, cwd: String) -> Self {
-        let (sender, receiver) = mpsc::sync_channel::<Message>(8);
+        Self::start(session, cwd, None)
+    }
+
+    pub fn with_content(session: String, cwd: String, owner: crate::content::Owner) -> Self {
+        Self::start(session, cwd, Some(owner))
+    }
+
+    fn start(session: String, cwd: String, mut content: Option<crate::content::Owner>) -> Self {
+        let (sender, receiver) = async_channel::bounded::<Message>(8);
         thread::spawn(move || {
             let mut core = Core::connect(&session);
             let mut layout = Arc::new(Layout::default());
@@ -72,8 +119,124 @@ impl Client {
                 VecDeque::new();
             let mut process_requests: VecDeque<(Context, ProcessRequest, Arc<ProcessResponse>)> =
                 VecDeque::new();
-            while let Ok(message) = receiver.recv() {
+            let mut content_requests: VecDeque<ContentReceipt> = VecDeque::new();
+            while let Ok(message) = receiver.recv_blocking() {
                 let (request, scope, reply) = match message {
+                    Message::BindContent { id, reply } => {
+                        let result = (|| {
+                            let core = core.as_mut().map_err(|error| format!("{error:?}"))?;
+                            let (current, revision, _) =
+                                load(core).map_err(|error| format!("{error:?}"))?;
+                            layout = Arc::new(current);
+                            version = revision;
+                            fresh = true;
+                            crate::content::member(&layout, None, &id)?;
+                            let owner = content.as_mut().ok_or("Content owner unavailable")?;
+                            let binding = owner
+                                .register_existing(&id)
+                                .map_err(|error| error.to_string())?;
+                            Ok(binding)
+                        })();
+                        let _ = reply.try_send(result);
+                        continue;
+                    }
+                    Message::ContentChanges {
+                        binding,
+                        after,
+                        reply,
+                    } => {
+                        let result = content
+                            .as_mut()
+                            .ok_or_else(|| "Content owner unavailable".into())
+                            .map(|owner| owner.subscribe(&binding, after));
+                        let _ = reply.try_send(result);
+                        continue;
+                    }
+                    Message::Content {
+                        access,
+                        request,
+                        reply,
+                    } => {
+                        let (_, request_id, expected) = crate::content::identity(&request);
+                        let fingerprint = crate::content::fingerprint(&request);
+                        if let Some(previous) = content_requests
+                            .iter()
+                            .find(|prior| prior.request_id == request_id)
+                        {
+                            let response = if previous.access == access
+                                && previous.fingerprint == fingerprint
+                            {
+                                Arc::clone(&previous.result)
+                            } else {
+                                Arc::new(crate::content::reject(
+                                    &request,
+                                    "Content request identity changed; nothing was repeated".into(),
+                                ))
+                            };
+                            reply.deliver(response);
+                            continue;
+                        }
+                        let result = (|| {
+                            if request_id.is_empty()
+                                || request_id.len() > 128
+                                || expected.is_some_and(|revision| {
+                                    revision.is_empty() || revision.len() > 128
+                                })
+                            {
+                                return Err("Invalid content request identity".into());
+                            }
+                            if receipts
+                                .iter()
+                                .any(|(prior, _, _)| prior.request_id == request_id)
+                                || process_requests
+                                    .iter()
+                                    .any(|(_, prior, _)| prior.request_id == request_id)
+                                || terminal_requests
+                                    .iter()
+                                    .any(|(prior, _)| prior.request_id == request_id)
+                            {
+                                return Err(
+                                    "This request identity belongs to another operation".into()
+                                );
+                            }
+                            if serde_json::to_vec(&request)
+                                .map_err(|error| error.to_string())?
+                                .len()
+                                > crate::content::ENVELOPE_LIMIT
+                            {
+                                return Err("Content request exceeds the envelope limit".into());
+                            }
+                            let core = core.as_mut().map_err(|error| format!("{error:?}"))?;
+                            let (current, revision, _) =
+                                load(core).map_err(|error| format!("{error:?}"))?;
+                            layout = Arc::new(current);
+                            version = revision;
+                            fresh = true;
+                            let owner = content.as_mut().ok_or("Content owner unavailable")?;
+                            Ok(crate::content::run(
+                                owner,
+                                &layout,
+                                version,
+                                &access,
+                                request.clone(),
+                            ))
+                        })();
+                        let response = result
+                            .unwrap_or_else(|message| crate::content::reject(&request, message));
+                        let response =
+                            Arc::new(crate::content::bounded_response(&request, response));
+                        content_requests.push_back(ContentReceipt {
+                            access,
+                            request_id: request_id.into(),
+                            fingerprint,
+                            result: Arc::clone(&response),
+                        });
+                        if content_requests.len() > 32 {
+                            content_requests.pop_front();
+                        }
+                        reply.deliver(response);
+                        continue;
+                    }
                     Message::Process {
                         scope,
                         request,
@@ -104,6 +267,13 @@ impl Client {
                             || request.request_id.len() > 128
                         {
                             Err(rejected("Invalid process request identity".into()))
+                        } else if content_requests
+                            .iter()
+                            .any(|prior| prior.request_id == request.request_id)
+                        {
+                            Err(rejected(
+                                "This request identity belongs to a content operation".into(),
+                            ))
                         } else if receipts
                             .iter()
                             .any(|(prior, _, _)| prior.request_id == request.request_id)
@@ -191,6 +361,13 @@ impl Client {
                                         .into(),
                                 ))
                             }
+                        } else if content_requests
+                            .iter()
+                            .any(|prior| prior.request_id == request_id)
+                        {
+                            Err(rejected(
+                                "This request identity belongs to a content operation".into(),
+                            ))
                         } else if process_requests
                             .iter()
                             .any(|(_, prior, _)| prior.request_id == request_id)
@@ -254,6 +431,15 @@ impl Client {
                     created_contents: eligible_contents(&layout, scope.as_ref(), &created_contents),
                     message: None,
                 };
+                if content_requests
+                    .iter()
+                    .any(|prior| prior.request_id == request.request_id)
+                {
+                    response.message =
+                        Some("This request identity belongs to a content operation".into());
+                    let _ = reply.send(response);
+                    continue;
+                }
                 if process_requests
                     .iter()
                     .any(|(_, prior, _)| prior.request_id == request.request_id)
@@ -351,8 +537,14 @@ impl Client {
                                                 &candidate.layout,
                                             );
                                         }
+                                        let previous = Arc::clone(&layout);
                                         layout = Arc::new(candidate.layout);
                                         version = revision;
+                                        if let Some(owner) = content.as_mut() {
+                                            crate::content::initialize_created(owner, &previous, &layout).map_err(Error::Uncertain)?;
+                                        } else if layout.contents.iter().any(|item| item.type_id == "notes" && !previous.contents.iter().any(|old| old.id == item.id)) {
+                                            return Err(Error::Uncertain("Workspace created Notes, but no content owner is installed".into()));
+                                        }
                                         Ok(())
                                     })
                             }
@@ -410,6 +602,87 @@ impl Client {
                     .as_nanos()
             ),
         }
+    }
+
+    pub async fn bind_content(&self, id: ContentId) -> Result<crate::content::Binding, String> {
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .send(Message::BindContent { id, reply })
+            .await
+            .map_err(|_| "Content binding unavailable")?;
+        receive
+            .recv()
+            .await
+            .map_err(|_| "Content binding unconfirmed".to_owned())?
+    }
+
+    pub async fn content_changes(
+        &self,
+        binding: crate::content::Binding,
+        after: Option<u64>,
+    ) -> Result<async_channel::Receiver<u64>, String> {
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .send(Message::ContentChanges {
+                binding,
+                after,
+                reply,
+            })
+            .await
+            .map_err(|_| "Content notification subscription unavailable")?;
+        receive
+            .recv()
+            .await
+            .map_err(|_| "Content notification subscription unconfirmed".to_owned())?
+    }
+
+    pub async fn read_content(
+        &self,
+        access: crate::content::Access,
+        request: voyager_contract::content::Request,
+    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
+        if matches!(&request, voyager_contract::content::Request::Update { .. }) {
+            return Err(CallError::Rejected(
+                "Updates cannot use read-only admission".into(),
+            ));
+        }
+        check_content_size(&request)?;
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .send(Message::Content {
+                access,
+                request,
+                reply: ContentReply::Asynchronous(reply),
+            })
+            .await
+            .map_err(|_| {
+                CallError::Rejected("Content read unavailable; nothing was queued".into())
+            })?;
+        receive
+            .recv()
+            .await
+            .map_err(|_| CallError::Unconfirmed("Content read unconfirmed".into()))
+    }
+
+    pub fn content(
+        &self,
+        access: crate::content::Access,
+        request: voyager_contract::content::Request,
+    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
+        check_content_size(&request)?;
+        let (reply, receive) = mpsc::sync_channel(1);
+        self.sender
+            .try_send(Message::Content {
+                access,
+                request,
+                reply: ContentReply::Blocking(reply),
+            })
+            .map_err(|_| {
+                CallError::Rejected("Workspace busy; no content operation was queued".into())
+            })?;
+        receive.recv_timeout(Duration::from_secs(25)).map_err(|_| {
+            CallError::Unconfirmed("Content result unconfirmed; do not repeat the request".into())
+        })
     }
 
     pub fn request_id(&self) -> String {
@@ -489,6 +762,19 @@ impl Client {
             Error::Uncertain("Terminal result unconfirmed; no request was repeated".into())
         })?
     }
+}
+
+fn check_content_size(request: &voyager_contract::content::Request) -> Result<(), CallError> {
+    if serde_json::to_vec(request)
+        .map_err(|error| CallError::Rejected(error.to_string()))?
+        .len()
+        > crate::content::ENVELOPE_LIMIT
+    {
+        return Err(CallError::Rejected(
+            "Content request exceeds the envelope limit; nothing was queued".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn settle_created_content(
@@ -866,5 +1152,171 @@ mod terminal_outcome_tests {
             attach_failure(Error::Uncertain("connection lost".into()), true, "t1"),
             Error::Uncertain(_)
         ));
+    }
+}
+
+#[cfg(test)]
+mod content_admission_tests {
+    use super::*;
+    use std::{
+        future::Future,
+        task::{Context as TaskContext, Poll, Waker},
+    };
+    use voyager_contract::content::{
+        Notes, Request as ContentRequest, Response as ContentResponse, Version,
+    };
+
+    fn fill(client: &Client) {
+        for _ in 0..8 {
+            let (reply, _) = mpsc::sync_channel(1);
+            assert!(
+                client
+                    .sender
+                    .try_send(Message::Workspace {
+                        request: Request {
+                            request_id: "filler".into(),
+                            expected_version: 0,
+                            action: Action::Inspect
+                        },
+                        scope: None,
+                        reply
+                    })
+                    .is_ok()
+            );
+        }
+    }
+
+    fn next(receive: &async_channel::Receiver<Message>) -> Message {
+        loop {
+            let message = receive.try_recv().unwrap();
+            if !matches!(message, Message::Workspace { .. }) {
+                return message;
+            }
+        }
+    }
+
+    #[test]
+    fn reads_wait_for_queue_space_and_cancel_without_replaying_effects() {
+        let directory =
+            std::env::temp_dir().join(format!("voyager-n3-mailbox-{}", std::process::id()));
+        std::fs::create_dir_all(directory.join("mods/notes")).unwrap();
+        std::fs::write(
+            directory.join("mods/notes/mod.json"),
+            br#"{"name":"Notes"}"#,
+        )
+        .unwrap();
+        let mut owner = crate::content::Owner::open(&directory).unwrap();
+        let id = ContentId("notes".into());
+        owner.initialize(&id).unwrap();
+        let (sender, receive) = async_channel::bounded(8);
+        let client = Client {
+            sender,
+            sequence: Arc::new(AtomicU64::new(0)),
+            identity: "mailbox-test".into(),
+        };
+        let mut cx = TaskContext::from_waker(Waker::noop());
+        fill(&client);
+        let mut cancelled = Box::pin(client.bind_content(id.clone()));
+        assert!(cancelled.as_mut().poll(&mut cx).is_pending());
+        drop(cancelled);
+        for _ in 0..8 {
+            receive.try_recv().unwrap();
+        }
+        assert!(receive.is_empty());
+        fill(&client);
+        let mut binding = Box::pin(client.bind_content(id.clone()));
+        assert!(binding.as_mut().poll(&mut cx).is_pending());
+        receive.try_recv().unwrap();
+        assert!(binding.as_mut().poll(&mut cx).is_pending());
+        let Message::BindContent { id, reply } = next(&receive) else {
+            panic!("Expected binding");
+        };
+        reply
+            .try_send(
+                owner
+                    .register_existing(&id)
+                    .map_err(|error| error.to_string()),
+            )
+            .unwrap();
+        let Poll::Ready(Ok(binding)) = binding.as_mut().poll(&mut cx) else {
+            panic!("Binding did not complete");
+        };
+        fill(&client);
+        let mut subscribed = Box::pin(client.content_changes(binding.clone(), Some(0)));
+        assert!(subscribed.as_mut().poll(&mut cx).is_pending());
+        receive.try_recv().unwrap();
+        assert!(subscribed.as_mut().poll(&mut cx).is_pending());
+        let Message::ContentChanges {
+            binding: observed,
+            after,
+            reply,
+        } = next(&receive)
+        else {
+            panic!("Expected subscription");
+        };
+        reply
+            .try_send(Ok(owner.subscribe(&observed, after)))
+            .unwrap();
+        let Poll::Ready(Ok(changes)) = subscribed.as_mut().poll(&mut cx) else {
+            panic!("Subscription did not complete");
+        };
+        fill(&client);
+        let inspect = ContentRequest::Inspect {
+            version: Version::V1,
+            request_id: "read".into(),
+            content_id: id.clone(),
+        };
+        let mut read =
+            Box::pin(client.read_content(crate::content::Access::View(binding.clone()), inspect));
+        assert!(read.as_mut().poll(&mut cx).is_pending());
+        receive.try_recv().unwrap();
+        assert!(read.as_mut().poll(&mut cx).is_pending());
+        let Message::Content {
+            access,
+            request,
+            reply,
+        } = next(&receive)
+        else {
+            panic!("Expected read");
+        };
+        assert_eq!(access, crate::content::Access::View(binding.clone()));
+        reply.deliver(Arc::new(owner.call(&binding, request)));
+        let Poll::Ready(Ok(snapshot)) = read.as_mut().poll(&mut cx) else {
+            panic!("Read did not complete");
+        };
+        let ContentResponse::Snapshot { snapshot, .. } = &*snapshot else {
+            panic!("Expected snapshot");
+        };
+        let update = ContentRequest::Update {
+            version: Version::V1,
+            request_id: "update".into(),
+            content_id: id,
+            expected_revision: snapshot.revision.clone(),
+            data: Notes {
+                title: "Updated".into(),
+                text: "Body".into(),
+            },
+        };
+        assert!(matches!(
+            owner.call(&binding, update.clone()),
+            ContentResponse::Applied { .. }
+        ));
+        assert_eq!(changes.try_recv().unwrap(), 1);
+        fill(&client);
+        assert!(matches!(
+            client.content(
+                crate::content::Access::View(binding.clone()),
+                update.clone()
+            ),
+            Err(CallError::Rejected(_))
+        ));
+        let mut forbidden =
+            Box::pin(client.read_content(crate::content::Access::View(binding), update));
+        assert!(matches!(
+            forbidden.as_mut().poll(&mut cx),
+            Poll::Ready(Err(CallError::Rejected(_)))
+        ));
+        assert_eq!(receive.len(), 8);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

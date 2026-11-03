@@ -6,7 +6,7 @@ content ID, title, body and revision. Its placement and data are separate.
 
 `main.js` composes the native Title and Body controls from the private
 `voyager_input` registry. `voyager_content` supplies only the captured instance's
-identity, theme and typed data operations. It does not expose workspace controls
+identity, request identity, theme, versioned change notification and typed data operations. It does not expose workspace controls
 or terminal constructors. The Rust content contract generates the validators in
 `validate.js`. Package source is seeded once into the profile and remains editable.
 Editing source affects all copies of that package. Editing instance data affects
@@ -22,5 +22,22 @@ not grant access to another instance.
 The integrated package is currently JavaScript and is outside the Header's strict
 TypeScript authoring gate. Its private registry and host declarations are exported
 by `export-script-types --notes`; they are not the broader Header registry.
-Agent data updates, reversible remove/restore and complete live-authoring lifecycle
-remain separate acceptance work. Their absence must not be described as support.
+The administrator source candidate exposes voyager_content describe, inspect and
+update through this same owner. First inspect voyager_workspace for the captured
+content ID and workspace version, then describe and inspect that exact Notes ID.
+Update requires its original expectedRevision and complete title/text data. IDs,
+paths, roles, thread and scope cannot grant authority through payload fields. New
+Notes must be created through workspace create-content; inspect never recreates
+missing data. Hidden data requires current captured membership. Preserve every
+schema/freshness warning. Limited results are incomplete and identify their known
+revision and warning presence. Never repeat an Uncertain update automatically.
+
+The view listens for targeted owner changes and rereads outside rendering. Dirty
+text and its original base revision remain unchanged when another writer updates
+that instance. A stale refusal is deliberate protection of that draft, not a reason
+to replace its revision with an agent receipt. A change signal may follow an
+Uncertain write, but its read is not a repeated update.
+
+Real-provider/native N3 acceptance, reversible remove/restore and complete
+live-authoring lifecycle remain separate gates. The source interface alone does
+not establish them.
