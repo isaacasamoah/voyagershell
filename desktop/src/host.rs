@@ -358,6 +358,7 @@ pub struct Header {
     load_error: Option<String>,
     theme_error: Option<String>,
     watch_error: Option<String>,
+    quit_status: Option<String>,
     accessibility: bool,
     _observers: Vec<Subscription>,
 }
@@ -613,9 +614,15 @@ impl Header {
             load_error,
             theme_error,
             watch_error,
+            quit_status: None,
             accessibility: window.is_a11y_active(),
             _observers: Vec::new(),
         }
+    }
+
+    pub(crate) fn quit_status(&mut self, status: String, cx: &mut Context<Self>) {
+        self.quit_status = Some(status);
+        cx.notify();
     }
 }
 
@@ -630,12 +637,17 @@ impl Render for Header {
                     .into_any_element()
             }
         });
-        let errors = [&self.load_error, &self.theme_error, &self.watch_error]
-            .into_iter()
-            .flatten()
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n");
+        let errors = [
+            &self.load_error,
+            &self.theme_error,
+            &self.watch_error,
+            &self.quit_status,
+        ]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
         let error = (!errors.is_empty()).then_some(errors);
         div()
             .size_full()

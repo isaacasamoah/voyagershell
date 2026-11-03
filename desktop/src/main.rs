@@ -11,6 +11,7 @@ mod notes_scope;
 mod notes_session;
 mod occluding;
 mod platform;
+mod quit;
 mod script_types;
 mod speech;
 mod split;
@@ -219,7 +220,6 @@ fn run() -> Result<()> {
                 }
             };
             gpui_shell::init_with_components(cx, &registry);
-            cx.on_action(|_: &Quit, cx| cx.quit());
             cx.bind_keys([KeyBinding::new("ctrl-q", Quit, None)]);
             let runtime = match ShellRuntime::new_with_components(cx, registry) {
                 Ok(runtime) => runtime,
@@ -243,6 +243,8 @@ fn run() -> Result<()> {
                 ..Default::default()
             };
             if let Err(error) = cx.open_window(options, |window, cx| {
+                let quit_workspace = client.clone();
+                let quit_conversation = conversation.clone();
                 let avatar = avatar::Binding::new(client.clone(), window, cx);
                 let header = cx.new(|cx| {
                     host::Header::new(
@@ -262,6 +264,7 @@ fn run() -> Result<()> {
                         cx,
                     )
                 });
+                quit::register(header.downgrade(), quit_workspace, quit_conversation, cx);
                 cx.new(|cx| ShellRoot::new(header.into(), window, cx))
             }) {
                 eprintln!("Native window failed: {error}");
