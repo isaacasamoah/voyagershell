@@ -11,6 +11,50 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Routes(unittest.TestCase):
+    def test_clipboard_refuses_overwriting_an_external_change(self):
+        from proof_clipboard import Clipboard
+
+        clipboard = Clipboard({}, None)
+        clipboard.written.add(b"fixture")
+        with patch("proof_clipboard.subprocess.run") as execute:
+            execute.return_value.stdout = b"changed by user"
+            with self.assertRaisesRegex(AssertionError, "changed externally"):
+                clipboard.write(b"next fixture value")
+        self.assertEqual(execute.call_count, 1)
+        self.assertFalse(clipboard.mutated)
+
+    def test_new_owned_core_journeys_refuse_an_existing_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory)
+            socket = runtime / "herdr-core/voyager-owned-core.sock"
+            socket.parent.mkdir()
+            socket.write_text("existing session")
+            with patch.dict(
+                os.environ, {"XDG_RUNTIME_DIR": directory, "HC_SOCKET": ""}
+            ):
+                for journey in (
+                    "canvas",
+                    "conversation-voice",
+                    "conversation-content",
+                    "terminal-agent-create",
+                ):
+                    result = self.run_cli(
+                        "--foundation",
+                        "--journey",
+                        journey,
+                        "--launch",
+                        "--compositor",
+                        "--binary",
+                        sys.executable,
+                        "--session",
+                        "voyager-owned-core",
+                        "--evidence",
+                        str(runtime / journey),
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("fresh dedicated Core session", result.stderr)
+                    self.assertEqual(socket.read_text(), "existing session")
+
     def test_core_reads_and_cleanup_pin_the_requested_session_endpoint(self):
         from proof_workspace import core_rpc
 

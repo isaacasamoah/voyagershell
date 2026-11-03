@@ -8,7 +8,7 @@ from pathlib import Path
 from secrets import randbelow, token_hex
 
 from proof_process import process_identity
-from proof_workspace import core_rpc
+from proof_workspace import core_rpc, named_button
 
 
 def has_answer(text, expected):
@@ -33,9 +33,11 @@ def process_record(pid):
 def prove(
     *, native, capture, geometry, close, start_frame, evidence, session, env, journey
 ):
-    assert journey == "terminal-agent"
+    assert journey in ("terminal-agent", "terminal-agent-create")
+    direct = journey == "terminal-agent-create"
     observed = {}
     socket = None
+    app_pid = json.loads((evidence / "launch.json").read_text())["pid"]
 
     def rpc(method, params):
         assert socket is not None and socket.is_socket(), (
@@ -59,6 +61,24 @@ def prove(
             key = 65293 if character == "\n" else ord(character)
             native("key", key, True)
             native("key", key, False)
+
+    def click(point):
+        bounds = geometry()
+        native(
+            "move",
+            int(bounds["X"]) + round(point[0] * 2),
+            int(bounds["Y"]) + round(point[1] * 2),
+            2,
+        )
+        native("button", True)
+        native("button", False)
+
+    def button(name):
+        wait(lambda: fields(name), lambda items: len(items) == 1, name)
+        click(named_button(native, evidence, name))
+
+    def fields(name):
+        return native("fields", app_pid, [name], "window")["fields"]
 
     try:
         socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
@@ -124,30 +144,103 @@ def prove(
         observed.update({"initial": document, "original": original, "shell": shell})
         frame = capture("terminal-agent-initial")
         assert frame.size == (1450, 940), "Use the measured native viewport"
-        bounds = geometry()
-        native("move", int(bounds["X"]) + 700, int(bounds["Y"]) + 380, 2)
-        native("button", True)
-        native("button", False)
-        type_text(shlex.join(argv) + "\n")
+        if direct:
+            button("Collapse sidebar")
+            button("Create Vessel")
+            wait(
+                lambda: fields("Create Codex Vessel"),
+                lambda items: len(items) == 1,
+                "installed Codex choice",
+            )
+            capture("terminal-agent-creation-picker")
+            button("Create Codex Vessel")
+            created = wait(
+                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda doc: (
+                    len(doc["value"]["contents"]) == 2
+                    and bool(doc["value"]["contents"][1].get("backend"))
+                ),
+                "direct worker backend",
+                45,
+            )
+            layout = created["value"]
+            assert layout["context"] == document["value"]["context"]
+            assert layout["contents"][0] == content
+            assert layout["contents"][1]["launch"] == {
+                "kind": "codex",
+                "model": "gpt-6.1-sol",
+                "effort": "high",
+                "permissions": "yolo",
+            }
+            address = layout["contents"][1]["backend"]
+            button("Expand sidebar")
+            expanded = wait(
+                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda doc: not doc["value"]["canvas"]["sidebarCollapsed"],
+                "restored sidebar",
+            )
+            layout = expanded["value"]
+            observed["created"] = expanded
+            terminals = wait(
+                lambda: [
+                    field for field in fields("Terminal") if field["role"] == "terminal"
+                ],
+                lambda items: (
+                    len(items) == 2
+                    and all(
+                        field["width"] > 0 and field["height"] > 0 for field in items
+                    )
+                ),
+                "two native terminal views",
+            )
+            field = max(terminals, key=lambda field: field["x"])
+            click(
+                (
+                    (field["x"] + field["width"] / 2) / 2,
+                    (field["y"] + field["height"] / 2) / 2,
+                )
+            )
+            observed["terminalFields"] = terminals
+        else:
+            click((350, 190))
+            type_text(shlex.join(argv) + "\n")
+
+        bound = rpc("terminal.get", {"terminal": address})
+        if not direct:
+            assert bound["pid"] == original["pid"], "The original Core shell changed"
 
         def terminal():
             value = rpc("terminal.get", {"terminal": address})
-            assert value["pid"] == original["pid"], "The Core shell changed"
+            assert value["pid"] == bound["pid"], "The Core program changed"
             return value
 
         worker = wait(
             terminal,
-            lambda value: (value.get("foreground") or {}).get("name") == "codex",
+            lambda value: (
+                bool(value["pid"])
+                if direct
+                else (value.get("foreground") or {}).get("name") == "codex"
+            ),
             "a foreground interactive Codex process",
             45,
         )
-        pid = worker["foreground"]["pid"]
+        pid = worker["pid"] if direct else worker["foreground"]["pid"]
         identity = process_record(pid)
         assert identity["uid"] == os.getuid() and identity["executable"] == str(
             executable
         )
-        assert identity["parent"] == original["pid"], (
-            "The agent is not the shell's child"
+        if direct:
+            status = rpc("server.status", {})
+            assert status["pid"] == core["pid"] and status["core"] == core["core"]
+            holder = status["holder"]
+            assert holder["current"] and holder in status["holders"]
+            holder_identity = process_record(holder["pid"])
+            assert holder_identity["uid"] == os.getuid()
+            assert holder_identity["executable"] == core_identity["executable"]
+            assert identity["parent"] == shell["parent"] == holder["pid"]
+            observed.update({"holder": holder, "holderIdentity": holder_identity})
+        assert identity["parent"] == (holder["pid"] if direct else original["pid"]), (
+            "The agent has the wrong process owner"
         )
         assert identity["argv"] == argv
         assert identity["cwd"] == str(Path(original["cwd"]).resolve(strict=True))
@@ -177,7 +270,11 @@ def prove(
         )
         observed["response"] = response
         observed["after"] = terminal()
-        assert observed["after"]["foreground"]["pid"] == pid
+        assert (
+            observed["after"]["pid"]
+            if direct
+            else observed["after"]["foreground"]["pid"]
+        ) == pid
         assert process_record(pid) == identity
         assert process_record(original["pid"]) == shell
         final = rpc("doc.get", {"name": "voyager-layout-v1"})
@@ -217,6 +314,10 @@ def prove(
             recorded.append((observed["agentPid"], observed["agentIdentity"], "agent"))
         if "corePid" in observed:
             recorded.append((observed["corePid"], observed["coreIdentity"], "core"))
+        if "holder" in observed:
+            recorded.append(
+                (observed["holder"]["pid"], observed["holderIdentity"], "holder")
+            )
         for pid, identity, role in recorded:
             deadline = time.monotonic() + 5
             while True:
@@ -268,6 +369,8 @@ def prove(
     return [
         "native-interactive-codex-composer",
         "separate-computed-answer-captured-for-review",
-        "retained-shell-backend-and-agent-identity",
+        "direct-native-worker-and-retained-sibling"
+        if direct
+        else "retained-shell-backend-and-agent-identity",
         "native-quit-and-dedicated-core-stop-receipt",
     ]
