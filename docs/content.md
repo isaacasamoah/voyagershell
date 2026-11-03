@@ -23,6 +23,16 @@ Describe request and the same defaults as workspace-owned initialization.
 Descriptions contain no content-instance binding or authority. Discovery reads
 metadata, creates no content and starts no backend.
 
+Each entry now reports ready, removed or unavailable with a reason. Removing or
+breaking Notes metadata leaves Terminal discoverable. Unavailable entries omit
+state defaults and action details. Metadata errors longer than 1,024 characters
+are labelled as truncated. If the complete catalogue would exceed the existing
+content envelope, package state/action details are omitted with an unavailable
+reason instead of hiding Terminal behind a failed catalogue response. The actual
+native Notes host also reports its own VM setup failure without quitting the app
+or pretending that a Notes editor loaded. Ready metadata is not native rendering
+evidence.
+
 Neither type currently has a separate configuration operation, so configuration
 is explicitly absent. Action names come from the existing generated tool schema;
 the capability lookup refuses unknown actions, including configure. It does not
@@ -36,6 +46,45 @@ envelope limit. It does not extend the private Notes registry. The catalogue and
 existing bound Describe are source-tested; the creation picker has not yet been
 wired to this binding or observed in a native trial. Existing Notes appearance,
 editing and profile JavaScript are unchanged by this source increment.
+
+The source adds explicit remove-content-package and restore-content-package
+workspace actions. Native administration and an administrator captured at whole
+Workspace scope use the existing Client queue and request receipts. Narrower
+captured scopes refuse. Before changing files, the owner reads the actual Core
+document and checks the expected revision and caller again. It moves the complete
+personal Notes directory between mods/notes and mods/.notes.removed. Restore
+requires no active destination; neither operation edits instance data, placement
+or any Core backend. A reused remove receipt cannot remove a restored package.
+On Linux the move uses renameat2 with RENAME_NOREPLACE, including when another
+actor creates the destination after the preliminary check. Its two C strings
+are owned, NUL-terminated and live for the syscall; the kernel only reads their
+bytes. Other platforms return an unsupported error instead of copying source or
+using an overwriting rename. This has no macOS or Windows acceptance claim.
+
+Notes launch seeding occurs only when neither the active nor preserved directory
+exists. An existing partial package is reported instead of being silently repaired
+from shipped files. This keeps deliberate removal in place across restart and
+keeps personal source, assets, guides and configuration available for restore.
+
+Workspace notices carry the genuine Core document revision and a separate
+package revision. The package revision advances only for successful package
+operations; a filesystem-only operation does not save a layout or invent a CAS
+revision. The native Header keeps its single subscription and the script consumes
+the notice before queuing a coalesced read. A document notice already reflected
+in the view does not trigger another read or prepare. Automatic notice reads still
+prepare newly authorized content, but do not clear and retry known-refused
+terminal openings. Deliberate Refresh retains that retry. Uncertain starts are
+never replayed. The prior revision() read remains available for personal Header
+source; new composition uses notice().
+
+These filesystem/availability and notice changes have source tests. The new
+Core-backed package receipt/scope test is compiled, awaiting Root's authorized
+run. Native package controls, retained dirty-editor migration, exact script
+retirement and old-host-future admission remain the next lifecycle slice. The
+existing SDK Watcher does not provide state migration or a public successful
+reload hook. The current source must not be described as complete remove/restore
+or live-authoring acceptance until that native lifetime path is implemented and
+proved. The earlier seventeen-stage Notes result remains tied to its own artifact.
 
 `desktop/src/notes.rs` installs a `voyager_content_view` component only in the
 Header policy. Its native factory retains one view per content ID. Before opening

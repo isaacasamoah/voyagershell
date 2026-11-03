@@ -32,6 +32,7 @@ function fixture(
     "openTerminal",
     "TerminalState",
     "window_epoch",
+    "workspace_notice",
     source,
   )(
     class {},
@@ -58,10 +59,12 @@ function fixture(
     },
     { new: () => ({}) },
     () => "9",
+    () => ({ revision: String(version), packageRevision: "1" }),
   );
   const view = new Workspace();
   Object.assign(view, {
     version: "1",
+    workspaceNotice: { revision: "1", packageRevision: "0" },
     splitReset: 0,
     layout,
     busy: false,
@@ -108,6 +111,9 @@ test("Notes placements never open a terminal, including owner-created content", 
 test("explicit Refresh retries a known refusal after inspection", async () => {
   const { view, task, cx, pending, count } = fixture("rejected");
   await assert.rejects(view.prepare(task), /open failed/);
+  view.inspectNotice(cx);
+  await pending.at(-1);
+  assert.equal(count(), 1, "An owner notice must not retry a refused start");
   view.run({ operation: "inspect" }, cx);
   await pending.at(-1);
   assert.equal(count(), 2);
@@ -379,6 +385,11 @@ test("pending shortcut intents run only after success and stop after failed prep
     const { view, cx, pending } = fixture(status, "applied", true);
     view.layout.voyages[0].fleets[0].vessels[0].id = "first";
     view.run({ operation: "inspect" }, cx);
+    if (status === "applied") {
+      view.openings.set("content", { status: "applied" });
+      view.workspaceNotice.packageRevision = "1";
+      view.refreshRequested = true;
+    }
     view.shortcut({ key: "o", modifiers }, cx);
     view.shortcut({ key: "e", modifiers }, cx);
     await pending[0];
@@ -592,6 +603,7 @@ test("a non-Error open rejection remains uncertain and is not replayed", async (
 test("Home presents the retained out-of-view avatar without docking or starting content", () => {
   const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
   let ownerRevision = "7";
+  let packageRevision = "0";
   const targets = [];
   const nodes = [];
   function div() {
@@ -633,7 +645,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "Target",
     "take_result",
     "homeOverview",
-    "workspace_revision",
+    "workspace_notice",
     "composeCanvas",
     source,
   )(
@@ -647,7 +659,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     target,
     () => null,
     () => div(),
-    () => ownerRevision,
+    () => ({ revision: ownerRevision, packageRevision }),
     new Function(
       "div",
       fs
@@ -660,7 +672,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   const context = { kind: "vessel", id: "vessel" };
   Object.assign(view, {
     version: "7",
-    workspaceNotice: "0",
+    workspaceNotice: { revision: "7", packageRevision: "0" },
     sidebar: true,
     dockReceipt: "",
     dockEpoch: "",
@@ -724,17 +736,39 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   goThere.calls.on_click[0]({ click_count: 1 }, {});
   assert.deepEqual(actions, [{ operation: "reveal-vessel", id: "vessel" }]);
   actions.length = 0;
-  ownerRevision = "8";
+  packageRevision = "1";
   view.render({});
   view.render({});
   assert.deepEqual(actions, [{ operation: "inspect" }]);
   assert.equal(view.version, "7", "The test retains an unconfirmed refresh");
-  ownerRevision = "9";
+  packageRevision = "2";
   view.render({});
   assert.deepEqual(actions, [
     { operation: "inspect" },
     { operation: "inspect" },
   ]);
+  ownerRevision = "10";
+  view.version = "10";
+  view.render({});
+  assert.equal(
+    actions.length,
+    2,
+    "A caught-up layout notice must not prepare again",
+  );
+  view.busy = true;
+  ownerRevision = "11";
+  view.render({});
+  assert.equal(view.refreshRequested, true);
+  assert.equal(view.workspaceNotice.revision, "10");
+  view.version = "11";
+  view.busy = false;
+  view.inspectNotice({});
+  assert.equal(
+    actions.length,
+    2,
+    "A completed action already consumed this layout",
+  );
+  assert.equal(view.refreshRequested, false);
 });
 
 test("canvas-only Inspect retains a prior refused opening without retrying it", async () => {

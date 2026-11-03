@@ -22,7 +22,7 @@ use gpui_shell::{
 };
 use serde::Deserialize;
 use voyager_app::{
-    client::Client,
+    client::{Client, WorkspaceNotice},
     core::{Error, Viewer},
 };
 use voyager_contract::Request;
@@ -184,7 +184,7 @@ struct WorkspaceBinding {
     viewers: Viewers,
     notes: crate::notes::Host,
     avatar: crate::avatar::Binding,
-    revision: Rc<Cell<u64>>,
+    notice: Rc<Cell<WorkspaceNotice>>,
 }
 
 fn load(
@@ -213,7 +213,8 @@ fn load(
     let context_reader = client.clone();
     let launches_reader = client.clone();
     let terminal_client = client.clone();
-    let revision = workspace_binding.revision.clone();
+    let revision = workspace_binding.notice.clone();
+    let notice = workspace_binding.notice.clone();
     let terminal_viewers = viewers.clone();
     let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)
         .declarations(crate::script_types::WORKSPACE)
@@ -314,9 +315,23 @@ fn load(
                 Ok(HostValue::from(encoded))
             })
         });
-    let workspace = workspace.function("revision", move |_| {
-        Ok(HostValue::from(revision.get().to_string()))
-    });
+    let workspace = workspace
+        .function("revision", move |_| {
+            Ok(HostValue::from(revision.get().revision.to_string()))
+        })
+        .function("notice", move |_| {
+            let notice = notice.get();
+            Ok(HostValue::Object(vec![
+                (
+                    "packageRevision".into(),
+                    HostValue::from(notice.package_revision.to_string()),
+                ),
+                (
+                    "revision".into(),
+                    HostValue::from(notice.revision.to_string()),
+                ),
+            ]))
+        });
     let policy = Policy::new()
         .with_host_module(module)?
         .with_host_module(workspace)?;
@@ -382,7 +397,7 @@ impl Header {
             viewers,
             notes,
             avatar,
-            revision: Rc::new(Cell::new(0)),
+            notice: Rc::new(Cell::new(WorkspaceNotice::default())),
         };
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
@@ -415,7 +430,7 @@ impl Header {
             None => (None, initial_source.as_ref().err().cloned()),
         };
         let changed_client = workspace_binding.client.clone();
-        let changed_revision = workspace_binding.revision.clone();
+        let changed_revision = workspace_binding.notice.clone();
         let changed_runtime = runtime.clone();
         let workspace_task = cx.spawn(async move |this, cx| {
             let mut after = None;
@@ -430,9 +445,9 @@ impl Header {
                 let failed = next.is_err();
                 let updated = this.update(cx, |header, cx| {
                     match next {
-                        Ok(version) => {
-                            after = Some(version);
-                            changed_revision.set(version);
+                        Ok(notice) => {
+                            after = Some(notice);
+                            changed_revision.set(notice);
                             if let Some(root) = &header.root
                                 && let Err(error) = changed_runtime.refresh(root, cx)
                             {

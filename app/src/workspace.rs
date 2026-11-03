@@ -66,6 +66,9 @@ impl Model {
     pub fn apply(&mut self, action: Action) -> Result<(), String> {
         match action {
             Action::Inspect => (),
+            Action::RemoveContentPackage { .. } | Action::RestoreContentPackage { .. } => {
+                return Err("Content package operations require the application owner".into());
+            }
             Action::Home => self.layout.view = WorkspaceView::Home,
             Action::UpdateCanvas { canvas } => {
                 crate::canvas::validate(&canvas)?;

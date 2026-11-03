@@ -1,27 +1,27 @@
 use std::io::Cursor;
 use voyager_app::wire::{Frame, MAX_FRAME};
 
-#[test]
-fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
+fn ready<T>(future: impl std::future::Future<Output = T>) -> T {
     use std::{
-        future::Future,
         task::{Context, Poll, Waker},
         time::{Duration, Instant},
     };
+    let mut future = std::pin::pin!(future);
+    let mut context = Context::from_waker(Waker::noop());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Poll::Ready(value) = future.as_mut().poll(&mut context) {
+            return value;
+        }
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
+#[test]
+fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
     use voyager_app::{client::Client, core::Core};
     use voyager_contract::{Action, ContentDestination, RenameTarget, Request, Status};
-    fn ready<T>(future: impl Future<Output = T>) -> T {
-        let mut future = std::pin::pin!(future);
-        let mut context = Context::from_waker(Waker::noop());
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            if let Poll::Ready(value) = future.as_mut().poll(&mut context) {
-                return value;
-            }
-            assert!(Instant::now() < deadline);
-            std::thread::sleep(Duration::from_millis(1));
-        }
-    }
     let session = format!("voyager-workspace-changes-{}", std::process::id());
     let client = Client::open(session.clone(), "/tmp".into());
     let checked = std::panic::catch_unwind(|| {
@@ -32,7 +32,11 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
                 action: Action::Inspect,
             })
             .unwrap();
-        let first = ready(client.workspace_changes(Some(initial.version))).unwrap();
+        let observed = ready(client.workspace_changes(None))
+            .unwrap()
+            .recv_blocking()
+            .unwrap();
+        let first = ready(client.workspace_changes(Some(observed))).unwrap();
         let request = Request {
             request_id: client.request_id(),
             expected_version: initial.version,
@@ -45,8 +49,10 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
         };
         let applied = client.call(request.clone()).unwrap();
         assert_eq!(applied.status, Status::Applied);
-        assert_eq!(first.recv_blocking().unwrap(), applied.version);
-        let quiet = ready(client.workspace_changes(Some(applied.version))).unwrap();
+        let applied_notice = first.recv_blocking().unwrap();
+        assert_eq!(applied_notice.revision, applied.version);
+        assert_ne!(applied_notice, observed);
+        let quiet = ready(client.workspace_changes(Some(applied_notice))).unwrap();
         assert!(first.is_closed());
         assert_eq!(client.call(request).unwrap().status, Status::Applied);
         assert!(matches!(
@@ -68,10 +74,10 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
             quiet.try_recv(),
             Err(async_channel::TryRecvError::Empty)
         ));
-        let latest = ready(client.workspace_changes(Some(initial.version))).unwrap();
+        let latest = ready(client.workspace_changes(Some(observed))).unwrap();
         assert!(quiet.is_closed());
-        assert_eq!(latest.recv_blocking().unwrap(), applied.version);
-        let committed = ready(client.workspace_changes(Some(applied.version))).unwrap();
+        assert_eq!(latest.recv_blocking().unwrap(), applied_notice);
+        let committed = ready(client.workspace_changes(Some(applied_notice))).unwrap();
         let partial = client
             .call(Request {
                 request_id: client.request_id(),
@@ -87,12 +93,156 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
             .unwrap();
         assert_eq!(partial.status, Status::Uncertain);
         assert!(partial.version > applied.version);
-        assert_eq!(committed.try_recv().unwrap(), partial.version);
+        let partial_notice = committed.try_recv().unwrap();
+        assert_eq!(partial_notice.revision, partial.version);
+        assert_ne!(partial_notice, applied_notice);
     });
     let mut cleanup = Core::connect(&session).unwrap();
     let stopped = cleanup.server_stop();
     cleanup.close().unwrap();
     drop(client);
+    stopped.unwrap();
+    checked.unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
+    use std::fs;
+    use voyager_app::{
+        client::Client,
+        content::{Owner, seed_package},
+        core::Core,
+    };
+    use voyager_contract::{Action, Context, Request, Status};
+    let session = format!("voyager-package-effects-{}", std::process::id());
+    let profile = std::env::temp_dir().join(&session);
+    let package = profile.join("mods/notes");
+    seed_package(
+        &package,
+        &[
+            ("main.js", "personal source"),
+            ("mod.json", include_str!("../../content/notes/mod.json")),
+        ],
+    )
+    .unwrap();
+    let client = Client::with_content(
+        session.clone(),
+        "/tmp".into(),
+        Owner::open(&profile).unwrap(),
+    );
+    let checked = std::panic::catch_unwind(|| {
+        let initial = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: 0,
+                action: Action::Inspect,
+            })
+            .unwrap();
+        let before = ready(client.workspace_changes(None))
+            .unwrap()
+            .recv_blocking()
+            .unwrap();
+        let observed = ready(client.workspace_changes(Some(before))).unwrap();
+        let request = |action| Request {
+            request_id: client.request_id(),
+            expected_version: initial.version,
+            action,
+        };
+        let refused = client
+            .scoped_call(
+                Context::Fleet {
+                    id: initial.layout.selected_fleet.clone().unwrap(),
+                },
+                request(Action::RemoveContentPackage {
+                    type_id: "notes".into(),
+                }),
+            )
+            .unwrap();
+        assert_eq!(refused.status, Status::Rejected);
+        assert!(package.exists());
+        let remove = request(Action::RemoveContentPackage {
+            type_id: "notes".into(),
+        });
+        let removed = client
+            .scoped_call(Context::Workspace, remove.clone())
+            .unwrap();
+        assert_eq!(removed.status, Status::Applied);
+        assert_eq!(removed.version, initial.version);
+        assert!(!package.exists());
+        let unavailable = client
+            .scoped_call(
+                Context::Workspace,
+                request(Action::CreateContent {
+                    type_id: "notes".into(),
+                    destination: voyager_contract::ContentDestination::Portal {
+                        voyage: initial.layout.selected_voyage.clone().unwrap(),
+                    },
+                }),
+            )
+            .unwrap();
+        assert_eq!(unavailable.status, Status::Rejected);
+        assert_eq!(unavailable.layout, removed.layout);
+        let restored = client
+            .scoped_call(
+                Context::Workspace,
+                request(Action::RestoreContentPackage {
+                    type_id: "notes".into(),
+                }),
+            )
+            .unwrap();
+        assert_eq!(restored.status, Status::Applied);
+        assert_eq!(restored.version, initial.version);
+        assert_eq!(
+            fs::read(package.join("main.js")).unwrap(),
+            b"personal source"
+        );
+        let first = observed.try_recv().unwrap();
+        assert_eq!(first.revision, initial.version);
+        let latest = ready(client.workspace_changes(Some(first)))
+            .unwrap()
+            .recv_blocking()
+            .unwrap();
+        assert!(latest.package_revision > first.package_revision);
+        assert_eq!(latest.revision, initial.version);
+        let quiet = ready(client.workspace_changes(Some(latest))).unwrap();
+        assert_eq!(
+            client
+                .scoped_call(Context::Workspace, remove)
+                .unwrap()
+                .status,
+            Status::Applied
+        );
+        assert!(
+            package.exists(),
+            "Reused receipt must not remove the restored package"
+        );
+        assert!(matches!(
+            quiet.try_recv(),
+            Err(async_channel::TryRecvError::Empty)
+        ));
+        let mut external = Core::connect(&session).unwrap();
+        let bumped = external
+            .document_set("voyager-layout-v1", &initial.layout, initial.version)
+            .unwrap();
+        external.close().unwrap();
+        let stale = client
+            .scoped_call(
+                Context::Workspace,
+                request(Action::RemoveContentPackage {
+                    type_id: "notes".into(),
+                }),
+            )
+            .unwrap();
+        assert_eq!(stale.status, Status::Rejected);
+        assert_eq!(stale.version, bumped.version);
+        assert!(package.exists());
+    });
+    let mut cleanup = Core::connect(&session).unwrap();
+    let stopped = cleanup.server_stop();
+    cleanup.close().unwrap();
+    drop(client);
+    fs::remove_dir_all(profile).unwrap();
     stopped.unwrap();
     checked.unwrap();
 }

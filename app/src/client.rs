@@ -17,6 +17,12 @@ use voyager_contract::{
     Action, ContentId, Context, CoreTerminalId, Layout, Request, Response, Status, TerminalRequest,
 };
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WorkspaceNotice {
+    pub package_revision: u64,
+    pub revision: u64,
+}
+
 enum Message {
     Launches {
         reply: async_channel::Sender<Result<voyager_contract::launch::Catalog, String>>,
@@ -25,8 +31,8 @@ enum Message {
         reply: async_channel::Sender<Result<voyager_contract::context::Facts, String>>,
     },
     WorkspaceChanges {
-        after: Option<u64>,
-        reply: async_channel::Sender<async_channel::Receiver<u64>>,
+        after: Option<WorkspaceNotice>,
+        reply: async_channel::Sender<async_channel::Receiver<WorkspaceNotice>>,
     },
     BindContent {
         id: ContentId,
@@ -173,7 +179,8 @@ impl Client {
             let mut process_requests: VecDeque<(Context, ProcessRequest, Arc<ProcessResponse>)> =
                 VecDeque::new();
             let mut content_requests: VecDeque<ContentReceipt> = VecDeque::new();
-            let mut workspace_listener: Option<async_channel::Sender<u64>> = None;
+            let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
+            let mut package_revision = 0;
             while let Ok(message) = receiver.recv_blocking() {
                 let (request, scope, reply) = match message {
                     Message::Launches { reply } => {
@@ -186,8 +193,12 @@ impl Client {
                     }
                     Message::WorkspaceChanges { after, reply } => {
                         let (send, receive) = async_channel::bounded(1);
-                        if after != Some(version) {
-                            let _ = send.try_send(version);
+                        let current = WorkspaceNotice {
+                            revision: version,
+                            package_revision,
+                        };
+                        if after != Some(current) {
+                            let _ = send.try_send(current);
                         }
                         workspace_listener = Some(send);
                         let _ = reply.try_send(receive);
@@ -493,6 +504,7 @@ impl Client {
                     }
                 };
                 let previous_version = version;
+                let mut package_changed = false;
                 let mut response = Response {
                     request_id: request.request_id.clone(),
                     status: Status::Rejected,
@@ -585,6 +597,36 @@ impl Client {
                             } else {
                                 crate::scope::check(&layout, scope.as_ref(), &request.action)
                                     .map_err(rejected)?;
+                                if let Action::RemoveContentPackage { type_id }
+                                | Action::RestoreContentPackage { type_id } = &request.action
+                                {
+                                    let (current, revision, missing) = load(core).map_err(|error| rejected(format!("Workspace observation unavailable; no content package was changed: {error:?}")))?;
+                                    layout = Arc::new(current);
+                                    version = revision;
+                                    fresh = true;
+                                    if missing || request.expected_version != version {
+                                        return Err(rejected("Workspace changed; inspect before changing a content package".into()));
+                                    }
+                                    crate::scope::check(&layout, scope.as_ref(), &request.action)
+                                        .map_err(rejected)?;
+                                    let owner = content.as_mut().ok_or_else(|| {
+                                        rejected("Content owner unavailable".into())
+                                    })?;
+                                    match &request.action {
+                                        Action::RemoveContentPackage { .. } => {
+                                            owner.remove_package(type_id)
+                                        }
+                                        _ => owner.restore_package(type_id),
+                                    }
+                                    .map_err(rejected)?;
+                                    package_changed = true;
+                                    return Ok(());
+                                }
+                                if let Action::CreateContent { type_id, .. } = &request.action
+                                    && let Some(owner) = &content
+                                {
+                                    owner.require_available(type_id).map_err(rejected)?;
+                                }
                                 let mut candidate = Model {
                                     layout: (*layout).clone(),
                                 };
@@ -642,10 +684,16 @@ impl Client {
                 response.created_contents =
                     eligible_contents(&layout, scope.as_ref(), &created_contents);
                 response.fresh = fresh;
-                if version != previous_version
-                    && let Some(listener) = &workspace_listener
-                {
-                    let _ = listener.try_send(version);
+                if version != previous_version || package_changed {
+                    if package_changed {
+                        package_revision = package_revision.saturating_add(1);
+                    }
+                    if let Some(listener) = &workspace_listener {
+                        let _ = listener.try_send(WorkspaceNotice {
+                            package_revision,
+                            revision: version,
+                        });
+                    }
                 }
                 receipts.push_back((
                     request,
@@ -695,8 +743,8 @@ impl Client {
 
     pub async fn workspace_changes(
         &self,
-        after: Option<u64>,
-    ) -> Result<async_channel::Receiver<u64>, String> {
+        after: Option<WorkspaceNotice>,
+    ) -> Result<async_channel::Receiver<WorkspaceNotice>, String> {
         let (reply, receive) = async_channel::bounded(1);
         self.sender
             .send(Message::WorkspaceChanges { after, reply })

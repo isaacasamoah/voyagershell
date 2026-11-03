@@ -253,6 +253,14 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         launch: Option<launch::Launch>,
     },
+    RemoveContentPackage {
+        #[serde(rename = "typeId")]
+        type_id: String,
+    },
+    RestoreContentPackage {
+        #[serde(rename = "typeId")]
+        type_id: String,
+    },
     Rename {
         target: RenameTarget,
         name: String,

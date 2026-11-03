@@ -157,13 +157,16 @@ owns the single CLI bridge to the selected dedicated session. Its framed
 connection carries document RPC and terminal viewer channels together. The
 terminal's start and attachment boundary is described in [terminal.md](terminal.md).
 
-The application owner publishes confirmed workspace revisions directly to one
+The application owner publishes confirmed change notices directly to one
 bounded native Header subscription. Its Rust task survives script reload and
 is canceled with Header. It invalidates the retained script description and
 exposes only a small read-only revision projection to JavaScript. Retired scripts
 cannot register or replace this subscription.
 
-The Header reads the latest snapshot for a new notice, even with Chat closed,
+Each notice carries the actual Core document revision and a separate package
+revision. Package remove/restore advances only the package revision without
+saving a layout or changing its CAS revision. The Header reads the latest snapshot
+for a new notice, even with Chat closed,
 and coalesces it behind the current action. It records the notice before queuing
 the read, so a failed read does not retry from every render. A newer revision or
 explicit Refresh can request another read. Unchanged reads, refused requests and
@@ -171,9 +174,15 @@ receipt replays do not publish another change. A confirmed layout save still
 publishes when subsequent content initialization makes the overall result
 uncertain. Its original uncertain receipt remains unchanged and is not replayed.
 A replacement native Header retires the previous subscription. The next
-subscription compares its last revision with the owner's current revision, so a
+subscription compares its last revision pair with the owner's current pair, so a
 full bounded notification cannot hide the final accepted state. This is a view
-notification, not another writer or effect retry.
+notification, not another writer or effect retry. A caught-up document notice
+is consumed without another read or preparation, including after a busy action.
+
+Notice reads keep normal preparation for newly authorized visible content, but
+do not retry known-refused terminal starts. Explicit Refresh retains that retry;
+uncertain starts are never replayed. The package filesystem/availability source
+and its remaining native-lifetime requirements are described in [content.md](content.md).
 
 The channel holds at most eight pending calls. A client timeout reports an
 unconfirmed result and never retries it. The actor keeps the accepted request

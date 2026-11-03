@@ -616,6 +616,8 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::CreateFleet { .. } => "Fleet created",
             Action::CreatePortal { .. } => "Voyage Portal created",
             Action::CreateContent { .. } => "Content created",
+            Action::RemoveContentPackage { .. } => "Content package removed",
+            Action::RestoreContentPackage { .. } => "Content package restored",
             Action::Rename { .. } => "Name changed",
             Action::Split { .. } => "Vessel split",
             Action::ResizeSplit { .. } => "Split resized",
