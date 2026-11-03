@@ -1,5 +1,6 @@
 {
   "name": "Voyager header",
   "entry": "main.js",
-  "version": 1
+  "version": 1,
+  "contentConfiguration": 1
 }

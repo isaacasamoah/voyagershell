@@ -28,7 +28,11 @@ export default class Notes extends View {
       .p(24)
       .bg(colors.background)
       .text_color(colors.foreground)
-      .child(div().text_size(9).text_color("#92939e").child("NOTES"))
+      .children(
+        this.session.show_heading()
+          ? [div().text_size(9).text_color("#92939e").child("NOTES")]
+          : [],
+      )
       .child(Title.new(this.title).w_full().py(8).text_size(20))
       .child(Body.new(this.text).w_full().min_h(180).py(16).text_size(13))
       .child(

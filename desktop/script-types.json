@@ -14,7 +14,7 @@
     ]
   },
   "notes": {
-    "rawSha256": "b9669f3647a7a68fe7496611b430d25185ec07a59c0057cdaa978a2ddda58444",
+    "rawSha256": "b75350cad10d3abb72ac6a69d08117a76a85e29e13c6c85938d24024266052b9",
     "modules": [
       "gpui-base",
       "gpui-kit",

@@ -40,6 +40,7 @@ import type { Request } from "../../contract/generated/contentRequest";
 Title.new(TitleState.new("")).w_full();
 Body.new(BodyState.new("")).min_h(180);
 SessionState.new().status();
+const heading: boolean = SessionState.new().show_heading();
 RetainedTitle.new(RetainedTitleState.new()).w_full();
 RetainedBody.new(RetainedBodyState.new()).min_h(180);
 invoke("{}", "request", "");

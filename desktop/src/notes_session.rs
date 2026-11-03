@@ -3,7 +3,7 @@ use gpui_base::input::{InputEvent, InputState, TextareaState};
 use voyager_app::{client::Client, content::ViewBinding};
 use voyager_contract::{
     ContentId,
-    content::{Notes, Request, Response, Version},
+    content::{Notes, NotesConfiguration, Request, Response, Version},
 };
 
 use crate::notes_draft::{Draft, Field};
@@ -19,6 +19,7 @@ pub struct Session {
     pub text: Entity<TextareaState>,
     pub(crate) height: Entity<crate::notes_input::BodyHeight>,
     pub draft: Draft,
+    pub configuration: NotesConfiguration,
     id: ContentId,
     client: Client,
     observed: [SharedString; 2],
@@ -57,6 +58,7 @@ impl Session {
             text,
             height,
             draft: Draft::default(),
+            configuration: NotesConfiguration::default(),
             id,
             client,
             observed: ["".into(), "".into()],
@@ -135,7 +137,15 @@ impl Session {
                     this.update(cx, |session, cx| {
                         match result {
                             Ok(response) => match &*response {
-                                Response::Snapshot { snapshot, .. } => {
+                                Response::Snapshot {
+                                    snapshot,
+                                    configuration,
+                                    ..
+                                } => {
+                                    session.configuration = configuration
+                                        .as_ref()
+                                        .map(|metadata| metadata.configuration)
+                                        .unwrap_or_default();
                                     let hydrate = session.draft.load(
                                         snapshot,
                                         generation,

@@ -219,6 +219,17 @@ pub fn registry() -> Result<FrozenComponentRegistry, RegistryError> {
             )
             .with_readonly(true),
             StateMethodDescriptor::new::<crate::notes_scope::SessionHandle>(
+                "show_heading",
+                "(): boolean",
+                |handle, args, _, cx| {
+                    ensure!(args.is_empty(), "show_heading takes no arguments");
+                    Ok(ComponentDataValue::Boolean(
+                        handle.session.read(cx).configuration.show_heading,
+                    ))
+                },
+            )
+            .with_readonly(true),
+            StateMethodDescriptor::new::<crate::notes_scope::SessionHandle>(
                 "save",
                 "(): void",
                 |handle, args, _, cx| {

@@ -215,3 +215,63 @@ test("fresh Notes opts into its native session before requesting retained editor
   assert.deepEqual(calls, ["session", "title", "text"]);
   assert.ok(note.session && note.title && note.text);
 });
+
+test("Notes changes its heading without replacing its retained editors", () => {
+  const source = fs.readFileSync(`${root}/content/notes/main.js`, "utf8");
+  let showHeading = true;
+  const session = { status: () => "Draft", show_heading: () => showHeading };
+  const title = {};
+  const text = {};
+  const div = () => {
+    const value = { nodes: [] };
+    const view = new Proxy(value, {
+      get(target, key) {
+        if (key in target) return target[key];
+        return (...args) => {
+          if (key === "child") target.nodes.push(args[0]);
+          if (key === "children") target.nodes.push(...args[0]);
+          return view;
+        };
+      },
+    });
+    return view;
+  };
+  const Notes = new Function(
+    "View",
+    "SessionState",
+    "TitleState",
+    "BodyState",
+    "Title",
+    "Body",
+    "div",
+    "theme",
+    source
+      .slice(source.indexOf("export default class Notes"))
+      .replace("export default", "return"),
+  )(
+    class {},
+    { new: () => session },
+    { new: () => title },
+    { new: () => text },
+    { new: (state) => Object.assign(div(), { kind: "title", state }) },
+    { new: (state) => Object.assign(div(), { kind: "body", state }) },
+    div,
+    () => ({}),
+  );
+  const note = new Notes();
+  note.init();
+  for (const visible of [true, false, true]) {
+    showHeading = visible;
+    const view = note.render();
+    assert.equal(
+      view.nodes.some((child) => child.nodes.includes("NOTES")),
+      visible,
+    );
+    assert.equal(
+      view.nodes.find((child) => child.kind === "title").state,
+      title,
+    );
+    assert.equal(view.nodes.find((child) => child.kind === "body").state, text);
+    assert.equal(note.session, session);
+  }
+});
