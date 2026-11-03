@@ -37,6 +37,7 @@ class Routes(unittest.TestCase):
                     "conversation-voice",
                     "conversation-content",
                     "terminal-agent-create",
+                    "arrangement",
                 ):
                     result = self.run_cli(
                         "--foundation",

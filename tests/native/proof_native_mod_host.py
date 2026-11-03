@@ -87,7 +87,7 @@ def run():
                 socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
                 if socket.exists():
                     raise RuntimeError("Selected Stop requires two fresh dedicated Core sessions")
-    if args.journey in ("avatar", "portal-avatar", "notes", "split-resize", "canvas", "canvas-input", "conversation-voice", "conversation-content", "terminal-agent-create"):
+    if args.journey in ("avatar", "portal-avatar", "notes", "split-resize", "canvas", "canvas-input", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement"):
         if env.get("HC_SOCKET"):
             raise RuntimeError("This journey requires an unset HC_SOCKET before launch")
         env.pop("HC_SESSION", None)

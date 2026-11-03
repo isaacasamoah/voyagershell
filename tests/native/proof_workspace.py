@@ -178,7 +178,20 @@ def prove(
     assert len(initial["value"]["voyages"]) == 1, "Use a new isolated workspace"
     original = initial["value"]["voyages"][0]
     if journey == "layouts":
-        return layouts(native, capture, click, wait, state, rpc, close, start_frame, original, width, height, evidence)
+        return layouts(
+            native,
+            capture,
+            click,
+            wait,
+            state,
+            rpc,
+            close,
+            start_frame,
+            original,
+            width,
+            height,
+            evidence,
+        )
     if journey == "arrangement":
         return arrangement(
             native,
@@ -272,9 +285,80 @@ def prove(
     ]
 
 
+def arrangement_panes(fields, fleet, contents):
+    root = fleet["root"]
+    if root["kind"] == "leaf":
+        order = [root["placement"]]
+    else:
+        assert root["axis"] == "horizontal"
+        assert root["first"]["kind"] == root["second"]["kind"] == "leaf"
+        order = [root["first"]["placement"], root["second"]["placement"]]
+    positive = [item for item in fields if item["width"] > 0 and item["height"] > 0]
+    views = sorted(
+        [item for item in positive if item["role"] == "terminal"],
+        key=lambda item: item["x"],
+    )
+    titles = sorted(
+        [item for item in positive if item["role"] in ("button", "push button")],
+        key=lambda item: item["x"],
+    )
+    assert len(views) == len(titles) == len(order) == len(fleet["vessels"]), fields
+    mapped = {}
+    for placement, title, view in zip(order, titles, views, strict=True):
+        center = title["x"] + title["width"] / 2
+        assert view["x"] <= center < view["x"] + view["width"], (title, view)
+        assert title["y"] + title["height"] <= view["y"], (title, view)
+        vessel = next(item for item in fleet["vessels"] if item["id"] == placement)
+        content = next(item for item in contents if item["id"] == vessel["content"])
+        assert content["typeId"] == "terminal" and content["backend"], content
+        mapped[placement] = {
+            "title": title,
+            "terminal": view,
+            "content": content["id"],
+            "backend": content["backend"],
+        }
+    return mapped
+
+
 def arrangement(
     native, capture, geometry, click, wait, state, rpc, close, width, height, evidence
 ):
+    owner = json.loads((evidence / "launch.json").read_text())["pid"]
+    mappings = []
+
+    def panes(document):
+        layout = document["value"]
+        fleet = next(
+            item
+            for voyage in layout["voyages"]
+            for item in voyage["fleets"]
+            if item["id"] == layout["selectedFleet"]
+        )
+        deadline = time.monotonic() + 5
+        while True:
+            fields = native("fields", owner, ["Terminal"], "window")["fields"]
+            (evidence / "arrangement-target-last.json").write_text(
+                json.dumps({"document": document, "fields": fields}, indent=2)
+            )
+            try:
+                mapped = arrangement_panes(fields, fleet, layout["contents"])
+                break
+            except AssertionError:
+                assert time.monotonic() < deadline, fields
+                time.sleep(0.05)
+        mappings.append({"document": document, "panes": mapped})
+        (evidence / "arrangement-targets.json").write_text(
+            json.dumps(mappings, indent=2)
+        )
+        return mapped
+
+    def point(item, left=False):
+        return (
+            (item["x"] + (min(2, item["width"] / 2) if left else item["width"] / 2))
+            / 2,
+            (item["y"] + item["height"] / 2) / 2,
+        )
+
     def key(value):
         native("key", value, True)
         native("key", value, False)
@@ -311,7 +395,9 @@ def arrangement(
     address = ready["value"]["contents"][0]["backend"]
     pid = rpc("terminal.get", {"terminal": address})["pid"]
     assert pid
-    click(350, 190)
+    initial_fleet = ready["value"]["voyages"][0]["fleets"][0]
+    initial_targets = panes(ready)
+    click(*point(initial_targets[initial_fleet["vessels"][0]["id"]]["terminal"]))
     chord(native, "o")
     split = wait(
         lambda layout: (
@@ -323,7 +409,8 @@ def arrangement(
     first = fleet["vessels"][0]["id"]
     second = fleet["vessels"][1]["id"]
     capture("arrangement-before")
-    drag((width - 150, 90), (240, height / 2))
+    targets = panes(split)
+    drag(point(targets[second]["title"]), point(targets[first]["terminal"], left=True))
     moved = wait(
         lambda layout: (
             (root := layout["voyages"][0]["fleets"][0]["root"])["kind"] == "branch"
@@ -335,7 +422,9 @@ def arrangement(
     assert moved["value"]["contents"] == split["value"]["contents"]
     assert moved["value"]["context"] == split["value"]["context"]
     assert rpc("terminal.get", {"terminal": address})["pid"] == pid
-    click(width - 150, 190)
+    targets = panes(moved)
+    assert targets[first]["backend"] == address
+    click(*point(targets[first]["terminal"]))
     for (
         character
     ) in "printf 'ESC%s\\n' WAIT; read -rsn1 -t 5 x; printf 'ESC%s:%s\\n' STATUS $?":
@@ -350,7 +439,9 @@ def arrangement(
         time.sleep(0.1)
     else:
         raise AssertionError("Terminal did not enter the Escape input check")
-    drag((350, 90), (width - 150, 150), cancel=True)
+    drag(
+        point(targets[second]["title"]), point(targets[first]["terminal"]), cancel=True
+    )
     assert state() == moved
     for _ in range(70):
         if (
@@ -364,13 +455,13 @@ def arrangement(
             "Escape reached the terminal or the input check did not finish"
         )
     capture("arrangement-after-escape")
-    drag((350, 90), (370, 100))
+    drag(point(targets[second]["title"]), point(targets[second]["terminal"]))
     assert state() == moved
     capture("arrangement-after-self-drop")
-    drag((350, 90), (width + 10, height / 2))
+    drag(point(targets[second]["title"]), (width + 10, height / 2))
     assert state() == moved
     capture("arrangement-after-outside-release")
-    click(width - 150, 190)
+    click(*point(targets[first]["terminal"]))
     for character in "printf 'ARRANGED\\n'":
         key(ord(character))
     key(65293)
@@ -393,9 +484,12 @@ def arrangement(
     first_fleet, second_fleet = [
         item["id"] for item in added["value"]["voyages"][0]["fleets"]
     ]
+    fleet_names = {
+        item["id"]: item["name"] for item in added["value"]["voyages"][0]["fleets"]
+    }
     drag(
-        named_button(native, evidence, "Fleet 2"),
-        named_button(native, evidence, "Workbench", "left"),
+        named_button(native, evidence, fleet_names[second_fleet]),
+        named_button(native, evidence, fleet_names[first_fleet], "left"),
     )
     reordered = wait(
         lambda layout: (
@@ -404,7 +498,7 @@ def arrangement(
         )
     )
     assert reordered["value"]["contents"] == added["value"]["contents"]
-    create_voyage(capture, click, evidence)
+    click(*named_button(native, evidence, "Create Voyage"))
     added_voyage = wait(
         lambda layout: (
             len(layout["voyages"]) == 2
@@ -414,9 +508,12 @@ def arrangement(
     first_voyage, second_voyage = [
         item["id"] for item in added_voyage["value"]["voyages"]
     ]
+    voyage_names = {
+        item["id"]: item["name"] for item in added_voyage["value"]["voyages"]
+    }
     drag(
-        named_button(native, evidence, "Voyage 2"),
-        named_button(native, evidence, "Voyager", "top"),
+        named_button(native, evidence, voyage_names[second_voyage]),
+        named_button(native, evidence, voyage_names[first_voyage], "top"),
     )
     reordered_voyages = wait(
         lambda layout: (
@@ -598,6 +695,7 @@ def placement(
         "saved-placement-reopened",
         "native-quit",
     ]
+
 
 def layouts(
     native,
