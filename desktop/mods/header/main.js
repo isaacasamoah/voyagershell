@@ -16,6 +16,7 @@ import {
 import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { Terminal, TerminalState, Split as NativeSplit } from "voyager_native";
 import { Chat } from "./chat.js";
+import { Speech } from "voyager_conversation";
 import { Notes } from "voyager_content_view";
 import { homeOverview } from "./home.js";
 import { composeCanvas, vesselFrame } from "./canvas.js";
@@ -960,9 +961,10 @@ export default class Workspace extends View {
           .flex()
           .items_center()
           .justify_center()
-          .h(30)
+          .min_h(30)
           .flex_shrink_0()
           .gap(6)
+          .child(Speech.new("voyager-speech", {}))
           .child(this.chat.toggleView(colors)),
       );
       sidebar.child(this.chat.render(colors, layout.context) || div());
@@ -1141,6 +1143,7 @@ export default class Workspace extends View {
                   .items_center()
                   .gap(4)
                   .py(2)
+                  .child(Speech.new("voyager-speech", {}))
                   .child(this.chat.toggleView(colors)),
               ]
             : [],

@@ -150,6 +150,7 @@ test("Chat stays below the primary dock before Home and Voyages, using one retai
     "div",
     "Button",
     "Brand",
+    "Speech",
     "projection",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(
@@ -162,6 +163,7 @@ test("Chat stays below the primary dock before Home and Voyages, using one retai
         return node;
       },
     },
+    { new: element },
     { new: element },
     () => ({}),
   );
