@@ -18,6 +18,11 @@ def candidate_directory(foundation):
     return repository if foundation else repository / "experiments/native-content"
 
 
+def reap_launched_candidate(process, pid):
+    if process is not None and process.pid == pid:
+        process.wait(timeout=5)
+
+
 def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
@@ -285,8 +290,9 @@ def run():
             try:
                 state = process.joinpath("stat").read_text().rsplit(") ", 1)[1].split()[0]
             except FileNotFoundError:
-                return
-            if state == "Z":
+                state = None
+            if state in (None, "Z"):
+                reap_launched_candidate(pending_process, record["pid"])
                 return
             time.sleep(0.1)
         raise AssertionError("Native Quit did not close the owned candidate")

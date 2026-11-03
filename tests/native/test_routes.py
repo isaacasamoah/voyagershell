@@ -151,6 +151,22 @@ class Routes(unittest.TestCase):
             path.write_text(source)
             subprocess.run(["node", "--check", str(path)], check=True, timeout=5)
 
+    def test_only_matching_launched_child_is_reaped_after_exit(self):
+        driver = importlib.import_module("proof_native_mod_host")
+        child = subprocess.Popen([sys.executable, "-c", "pass"])
+        try:
+            status = os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOWAIT)
+            self.assertEqual(status.si_pid, child.pid)
+            driver.reap_launched_candidate(None, child.pid)
+            driver.reap_launched_candidate(child, child.pid + 1)
+            self.assertIsNone(child.returncode)
+            driver.reap_launched_candidate(child, child.pid)
+            self.assertEqual(child.returncode, 0)
+            with self.assertRaises(ChildProcessError):
+                os.waitpid(child.pid, os.WNOHANG)
+        finally:
+            child.wait(timeout=5)
+
     def test_notes_setup_and_source_controls_match_actual_packages(self):
         from contextlib import contextmanager
 
