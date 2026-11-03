@@ -40,6 +40,12 @@ function convert(value) {
   );
 }
 for (const [method, name] of [
+  ["hello", "HelloParams"],
+  ["doc.get", "DocGetParams"],
+  ["doc.set", "DocSetParams"],
+  ["terminal.get", "GetParams"],
+  ["server.stop", "StopParams"],
+  ["server.status", "StatusParams"],
   ["terminal.run", "RunParams"],
   ["terminal.attach", "AttachParams"],
   ["terminal.list", "ListParams"],

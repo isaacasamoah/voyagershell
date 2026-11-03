@@ -3,6 +3,120 @@
   "title": "CoreMessages",
   "type": "object",
   "definitions": {
+    "HelloParams": {
+      "type": "object",
+      "properties": {
+        "calls_you": {
+          "description": "What that core calls this one (`rohan`), so news about `t7` reaches it as `rohan/t7`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "core": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CoreInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Another core dialing in: who it is. Its terminals may then be parents\nof terminals here, and hear from them."
+        },
+        "framed": {
+          "default": false,
+          "description": "Switch this connection to framed mode after the reply.",
+          "type": "boolean"
+        },
+        "generation": {
+          "description": "Protocol generation the caller speaks.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": []
+    },
+    "DocGetParams": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Document name, using the terminal name rules.",
+          "type": "string"
+        },
+        "on": {
+          "description": "Another machine; omitted for this core.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "DocSetParams": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "Any JSON value, at most 1 MiB when serialized; null deletes it."
+        },
+        "version": {
+          "description": "Current version from doc.get; zero for a name never written.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "value",
+        "version"
+      ]
+    },
+    "GetParams": {
+      "type": "object",
+      "properties": {
+        "caller": {
+          "description": "Who is calling; a parent looking at its child has seen its news.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "terminal": {
+          "description": "The terminal: `t7`, a name, or `machine/t7`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "terminal"
+      ]
+    },
+    "StopParams": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    },
+    "StatusParams": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    },
     "RunParams": {
       "type": "object",
       "properties": {
@@ -315,6 +429,387 @@
       "required": [
         "terminal"
       ]
+    },
+    "CoreInfo": {
+      "properties": {
+        "id": {
+          "description": "Permanent random id, reset only when state is wiped.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Display name, the hostname by default.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "HelloResult": {
+      "properties": {
+        "core": {
+          "$ref": "#/definitions/CoreInfo"
+        },
+        "features": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "framed": {
+          "type": "boolean"
+        },
+        "generation": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "methods": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation",
+        "version",
+        "core",
+        "framed",
+        "methods",
+        "features"
+      ],
+      "type": "object"
+    },
+    "DocGetResult": {
+      "properties": {
+        "value": true,
+        "version": {
+          "description": "Zero when never written. Deletions retain their version.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "version"
+      ],
+      "type": "object"
+    },
+    "DocSetResult": {
+      "properties": {
+        "version": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "Terminal": {
+      "properties": {
+        "address": {
+          "description": "`t7`: this terminal forever on this core.",
+          "type": "string"
+        },
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cols": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "created_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "die_with_parent": {
+          "default": false,
+          "type": "boolean"
+        },
+        "exit_code": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "finished_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "foreground": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Foreground"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What runs in it right now and where (null once it has finished)."
+        },
+        "identity": {
+          "default": "",
+          "description": "Which terminal the program believes it runs in (TERM_PROGRAM and\nversion), fixed at start; XTVERSION answers with it.",
+          "type": "string"
+        },
+        "keep": {
+          "default": false,
+          "description": "Replace a lost program with this machine’s shell, in place. Exit with a code and kill remain final.",
+          "type": "boolean"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notify": {
+          "default": false,
+          "description": "Its parent gets notes about it (see `--no-notify`).",
+          "type": "boolean"
+        },
+        "parent": {
+          "default": null,
+          "description": "The terminal that started it (`t3`), set once at start.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "paste_gap_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why its program ended or is pending (`spawn_pending` means its initial\nspawn timed out, but the holder may still be starting it):\nexited, killed, server_stop, host_shutdown (Windows\nis ending the session, including logout), signaled (a kept program\ndied by signal without an exit code), holder_lost (its holder\ndied), stopped_by_restart (nothing ran it any more after a restart).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "records": {
+          "additionalProperties": {
+            "$ref": "#/definitions/Status"
+          },
+          "description": "Other 7501 records by id (programs reporting on several things).",
+          "type": "object"
+        },
+        "reported": {
+          "default": false,
+          "description": "Whether the program ever sent a 7501 report.",
+          "type": "boolean"
+        },
+        "rm": {
+          "default": false,
+          "description": "Removed right after it exits (once a waiting parent has the exit code).",
+          "type": "boolean"
+        },
+        "rows": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "screen": {
+          "description": "\"exact\", or \"inexact\" after a core crash (older history may be missing).",
+          "type": "string"
+        },
+        "signal": {
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "\"live\" or \"finished\".",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Status"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The program's own word for what it's doing (OSC 7501 root record);\nnull if it never said, or after it exited."
+        },
+        "status_ms": {
+          "default": null,
+          "description": "When that word last changed, ms since the epoch; null if it never said.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stop": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "submit": {
+          "description": "Template overrides: the key that submits a message, the stop key, the pause\nbetween paste and submit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "template": {
+          "default": null,
+          "description": "The template that started it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "default": "",
+          "type": "string"
+        },
+        "turn": {
+          "default": 0,
+          "description": "Goes up each time the status leaves `working`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "address",
+        "labels",
+        "argv",
+        "cwd",
+        "state",
+        "created_ms",
+        "screen",
+        "cols",
+        "rows"
+      ],
+      "type": "object"
+    },
+    "StopResult": {
+      "properties": {
+        "stopped": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "stopped"
+      ],
+      "type": "object"
+    },
+    "StatusResult": {
+      "properties": {
+        "core": {
+          "$ref": "#/definitions/CoreInfo"
+        },
+        "finished": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "holder": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/HolderInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The holder new terminals go to."
+        },
+        "holders": {
+          "description": "Every holder: after an update, older ones run their terminals to the end.",
+          "items": {
+            "$ref": "#/definitions/HolderInfo"
+          },
+          "type": "array"
+        },
+        "installed_by": {
+          "description": "The package manager this hc came from (homebrew, nix, mise, or\nsystem package manager): it updates hc, `hc update` won't.\nNull for a replaceable plain install.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "live": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "uptime_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "core",
+        "version",
+        "pid",
+        "uptime_ms",
+        "holders",
+        "live",
+        "finished"
+      ],
+      "type": "object"
     },
     "RunResult": {
       "properties": {
@@ -745,260 +1240,6 @@
       ],
       "type": "object"
     },
-    "Terminal": {
-      "properties": {
-        "address": {
-          "description": "`t7`: this terminal forever on this core.",
-          "type": "string"
-        },
-        "argv": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "cols": {
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0,
-          "type": "integer"
-        },
-        "created_ms": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "cwd": {
-          "type": "string"
-        },
-        "die_with_parent": {
-          "default": false,
-          "type": "boolean"
-        },
-        "exit_code": {
-          "format": "int32",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "finished_ms": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "foreground": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Foreground"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "What runs in it right now and where (null once it has finished)."
-        },
-        "identity": {
-          "default": "",
-          "description": "Which terminal the program believes it runs in (TERM_PROGRAM and\nversion), fixed at start; XTVERSION answers with it.",
-          "type": "string"
-        },
-        "keep": {
-          "default": false,
-          "description": "Replace a lost program with this machine’s shell, in place. Exit with a code and kill remain final.",
-          "type": "boolean"
-        },
-        "labels": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "type": "object"
-        },
-        "name": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "notify": {
-          "default": false,
-          "description": "Its parent gets notes about it (see `--no-notify`).",
-          "type": "boolean"
-        },
-        "parent": {
-          "default": null,
-          "description": "The terminal that started it (`t3`), set once at start.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "paste_gap_ms": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "pid": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "reason": {
-          "description": "Why its program ended or is pending (`spawn_pending` means its initial\nspawn timed out, but the holder may still be starting it):\nexited, killed, server_stop, host_shutdown (Windows\nis ending the session, including logout), signaled (a kept program\ndied by signal without an exit code), holder_lost (its holder\ndied), stopped_by_restart (nothing ran it any more after a restart).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "records": {
-          "additionalProperties": {
-            "$ref": "#/definitions/Status"
-          },
-          "description": "Other 7501 records by id (programs reporting on several things).",
-          "type": "object"
-        },
-        "reported": {
-          "default": false,
-          "description": "Whether the program ever sent a 7501 report.",
-          "type": "boolean"
-        },
-        "rm": {
-          "default": false,
-          "description": "Removed right after it exits (once a waiting parent has the exit code).",
-          "type": "boolean"
-        },
-        "rows": {
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0,
-          "type": "integer"
-        },
-        "screen": {
-          "description": "\"exact\", or \"inexact\" after a core crash (older history may be missing).",
-          "type": "string"
-        },
-        "signal": {
-          "format": "int32",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "state": {
-          "description": "\"live\" or \"finished\".",
-          "type": "string"
-        },
-        "status": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Status"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "The program's own word for what it's doing (OSC 7501 root record);\nnull if it never said, or after it exited."
-        },
-        "status_ms": {
-          "default": null,
-          "description": "When that word last changed, ms since the epoch; null if it never said.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "stop": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "submit": {
-          "description": "Template overrides: the key that submits a message, the stop key, the pause\nbetween paste and submit.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "template": {
-          "default": null,
-          "description": "The template that started it.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "title": {
-          "default": "",
-          "type": "string"
-        },
-        "turn": {
-          "default": 0,
-          "description": "Goes up each time the status leaves `working`.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "address",
-        "labels",
-        "argv",
-        "cwd",
-        "state",
-        "created_ms",
-        "screen",
-        "cols",
-        "rows"
-      ],
-      "type": "object"
-    },
-    "FirstMessage": {
-      "properties": {
-        "reason": {
-          "description": "Why it was not sent.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sent": {
-          "type": "boolean"
-        },
-        "started": {
-          "description": "Whether the agent started working on it (see terminal.send).",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "turn": {
-          "description": "The turn when it went in (see terminal.send).",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "sent"
-      ],
-      "type": "object"
-    },
     "Foreground": {
       "properties": {
         "argv": {
@@ -1065,6 +1306,69 @@
       },
       "required": [
         "state"
+      ],
+      "type": "object"
+    },
+    "HolderInfo": {
+      "properties": {
+        "current": {
+          "description": "Same build as the core: takes new terminals. Others drain.",
+          "type": "boolean"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "terminals": {
+          "description": "Live terminals it runs.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid",
+        "instance",
+        "current",
+        "terminals"
+      ],
+      "type": "object"
+    },
+    "FirstMessage": {
+      "properties": {
+        "reason": {
+          "description": "Why it was not sent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sent": {
+          "type": "boolean"
+        },
+        "started": {
+          "description": "Whether the agent started working on it (see terminal.send).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "turn": {
+          "description": "The turn when it went in (see terminal.send).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sent"
       ],
       "type": "object"
     },
