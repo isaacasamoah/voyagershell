@@ -666,9 +666,17 @@ mod tests {
             "voyager-arrangement-imports-{}",
             std::process::id()
         ));
+        let mut import_continues = false;
         let source = include_str!("../mods/header/main.js")
             .lines()
             .filter(|line| {
+                if import_continues {
+                    import_continues = !line.ends_with(';');
+                    return false;
+                }
+                if line.starts_with("import ") {
+                    import_continues = !line.ends_with(';');
+                }
                 !line.starts_with("import ")
                     || line.ends_with("from \"gpui-kit\";")
                     || line.ends_with("from \"gpui-base\";")
