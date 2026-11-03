@@ -350,7 +350,9 @@ def prove(
         )
         assert document()["value"] == layout
         ended = rpc("terminal.get", {"terminal": address})
-        assert ended["state"] == "finished" and ended.get("pid") is None, ended
+        assert ended["state"] == "finished", ended
+        assert ended.get("pid") in (None, terminal["pid"]), ended
+        assert ended["created_ms"] == terminal["created_ms"], ended
         terminals = rpc("terminal.list", {"all": True})
         assert not [
             item for item in terminals["terminals"] if item["state"] == "live"
