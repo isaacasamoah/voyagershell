@@ -286,6 +286,7 @@ def terminal(
 
             record(owner, "app")
             first_runtime = runtime()
+            first_core = next(item for item in owned if item["role"] == "core")
             original_identity = record(original["pid"], "original-shell")
             context = document["value"]["context"]
             assert not native("fields", owner, ["Message Voyager"], "window")[
@@ -421,7 +422,14 @@ def terminal(
             final = rpc("doc.get", {"name": "voyager-layout-v1"})
             assert final["value"]["context"] == context
             assert final["value"]["contents"] == baseline["value"]["contents"]
-            assert runtime()["core"]["id"] == first_runtime["core"]["id"]
+            final_runtime = runtime()
+            assert final_runtime["core"]["id"] == first_runtime["core"]["id"]
+            assert final_runtime["pid"] == first_runtime["pid"]
+            final_core = process_record(final_runtime["pid"])
+            assert all(
+                final_core[key] == first_core[key]
+                for key in ("uid", "start", "executable")
+            )
             assert not native("fields", owner, ["Message Voyager"], "window")["fields"]
             observations["final"] = final
             observations["limit"] = (
