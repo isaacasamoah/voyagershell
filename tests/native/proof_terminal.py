@@ -36,6 +36,9 @@ def terminal(
 
     def click(x, y):
         bounds = geometry()
+        subprocess.check_call(
+            ["xdotool", "windowactivate", "--sync", bounds["WINDOW"]], env=env
+        )
         native(
             "move", int(bounds["X"]) + round(x * 2), int(bounds["Y"]) + round(y * 2), 2
         )
