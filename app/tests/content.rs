@@ -146,9 +146,7 @@ fn wait<T>(future: impl std::future::Future<Output = T>) -> T {
 fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
     use std::sync::Arc;
     use voyager_app::{client::Client, content::Access, core::Core};
-    use voyager_contract::{
-        Action, ContentDestination, Context, Status, content::NotesConfiguration,
-    };
+    use voyager_contract::{Action, Context, Status, content::NotesConfiguration};
     let runtime = std::path::PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap());
     for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
         assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
@@ -199,8 +197,17 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
                 Action::CreateContent {
                     type_id: "notes".into(),
                     launch: None,
-                    destination: ContentDestination::Portal {
-                        voyage: workspace.layout.voyages[0].id.clone(),
+                    destination: voyager_contract::ContentDestination::Panel {
+                        owner: voyager_contract::PanelOwner::Portals {
+                            voyage: workspace.layout.voyages[0].id.clone(),
+                        },
+                        insertion: workspace.layout.voyages[0].portals.last().map_or(
+                            voyager_contract::PanelInsertion::Empty,
+                            |panel| voyager_contract::PanelInsertion::Beside {
+                                id: panel.id.clone(),
+                                side: voyager_contract::Side::Bottom,
+                            },
+                        ),
                     },
                 },
                 workspace.version,

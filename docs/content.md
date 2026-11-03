@@ -11,8 +11,9 @@ resource limits or combined-foundation proving-code cap.
 `contract/src/content.rs` owns the versioned Notes request, response and data types.
 The existing generator exports their validators beside the workspace and
 conversation contract. `app/src/content.rs` owns persisted data, revisions and
-schema checks. `create-content` uses the existing split or Portal placement rule,
-with an explicit type ID. The supported type IDs are `terminal` and `notes`.
+schema checks. `create-content` uses the shared panel owner and an explicit
+empty or beside-placement insertion with a left/right/top/bottom side and
+an explicit type ID. The supported type IDs are `terminal` and `notes`.
 Changing a placement does not change its content ID or data. A Notes placement
 never enters terminal preparation or starts a Core process.
 

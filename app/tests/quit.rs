@@ -9,7 +9,7 @@ mod linux {
         time::{Duration, Instant},
     };
     use voyager_app::{client::Client, core::Core, core_shapes::RunParams};
-    use voyager_contract::{Action, Axis, ContentDestination, Request, Status, launch::Launch};
+    use voyager_contract::{Action, Axis, Request, Status, launch::Launch};
 
     fn wait<T>(future: impl Future<Output = T>) -> T {
         let mut future = Box::pin(future);
@@ -127,10 +127,19 @@ mod linux {
                     snapshot.version,
                     Action::CreateContent {
                         type_id: "terminal".into(),
-                        destination: ContentDestination::Vessel {
-                            fleet: fleet.clone(),
-                            after: after.clone(),
-                            axis: Axis::Horizontal,
+                        destination: voyager_contract::ContentDestination::Panel {
+                            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                            insertion: voyager_contract::PanelInsertion::Beside {
+                                id: after.clone(),
+                                side: match Axis::Horizontal {
+                                    voyager_contract::Axis::Horizontal => {
+                                        voyager_contract::Side::Right
+                                    }
+                                    voyager_contract::Axis::Vertical => {
+                                        voyager_contract::Side::Bottom
+                                    }
+                                },
+                            },
                         },
                         launch: Some(Launch::Program {
                             argv: vec!["/bin/sleep".into(), "60".into()],

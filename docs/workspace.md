@@ -1,9 +1,51 @@
 # Native workspace boundary
 
+## Shared panel arrangements
+
+The current owner contract uses `PanelOwner`: a Fleet ID or a Voyage's Portal
+column. Home is one retained internal Voyage/Fleet with its own Portal column,
+kept outside the ordinary Voyage list. Entering Home preserves the selected
+ordinary Voyage/Fleet and explicit dock context. Its primary arrangement starts
+empty. New ordinary Voyages and Fleets keep their initial plain shell.
+
+`create-content` names the chosen content type and a panel destination. Insertion
+is either `empty` or `beside` a captured placement with a left, right, top or
+bottom side. Split controls choose content before dispatch. Cancellation creates
+nothing. Old default-terminal split and Fleet-only action aliases are removed;
+the current Header, agent declarations and generated validators use the common
+create, resize, move, maximize, visibility, reveal and saved-layout actions.
+
+Roots may be empty. Hiding retains a panel's leaf and proportions; removing its
+layout entry retains its placement, content, configuration and backend in the
+same membership list. Reveal reuses that instance in its original owner. If all
+panels are hidden, a new empty insertion preserves their subtree beside the new
+visible panel. Hidden-leaf pruning preserves original accepted resize paths.
+Save captures the visible arrangement; load shows its included retained panels.
+Neither operation stops or restarts a program or changes explicit context.
+
+Each Voyage's Portal visibility, overlay/make-room mode and width persist in the
+existing Core workspace document. Portal moves remain within that column.
+Legacy Portal lists, nonempty Fleet roots, saved Fleet arrangements and missing
+names are decoded at the same owner boundary. This does not rewrite personal
+package source or save a migration merely because the workspace is inspected.
+
+New names are stored once as Terminal 1, Notes 1 and the next available suffix in
+that owner. Hidden and unplaced names remain reserved. Legacy missing names are
+resolved deterministically before projection. UI, context facts and conversation
+tools receive the same required name; rendering and reordering do not renumber
+panels. Explicit rename preserves identity and may deliberately duplicate a name.
+Tools retain IDs and full paths for disambiguation. Home paths omit its internal
+container labels.
+
+`app/src/panels.rs` owns the shared tree rules; workspace, scope, content and
+process routes keep their existing application queue, grants, CAS and receipts.
+Home is omitted from subordinate ordinary Voyage projections. The source and
+Core checks do not establish the separate integrated native UX journey.
+
 ## Pane maximize and restore
 
 Each Fleet optionally records `maximizedPlacement` in the existing workspace
-document. `set-vessel-maximized` names one placement and an explicit Boolean.
+document. `set-panel-maximized` names one placement and an explicit Boolean.
 The Rust owner checks scope, accepted tree membership and the existing version
 before saving. A restore for another placement refuses unchanged. Stored invalid
 targets are rejected before publication; a narrow projection omits other IDs.

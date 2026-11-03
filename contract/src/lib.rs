@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub mod activity;
+mod panels;
+pub use panels::{PanelInsertion, PanelOwner, PortalLayout, SavedLayout};
 pub mod administrator;
 pub mod canvas;
 pub mod content;
@@ -137,13 +139,14 @@ pub struct Content {
     pub shell_intent: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Vessel {
     pub id: PlacementId,
     pub content: ContentId,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -161,7 +164,7 @@ pub struct Fleet {
     pub id: FleetId,
     pub name: String,
     pub vessels: Vec<Vessel>,
-    pub root: Split,
+    pub root: Option<Split>,
     #[serde(
         default,
         rename = "maximizedPlacement",
@@ -177,6 +180,14 @@ pub struct Voyage {
     pub name: String,
     pub fleets: Vec<Fleet>,
     pub portals: Vec<Vessel>,
+    #[serde(
+        default,
+        rename = "portalLayout",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub portal_layout: Option<PortalLayout>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -187,18 +198,12 @@ pub enum WorkspaceView {
     Fleet,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SavedLayout {
-    pub fleet: FleetId,
-    pub name: String,
-    pub root: Split,
-}
-
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Layout {
     pub voyages: Vec<Voyage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home: Option<Voyage>,
     pub contents: Vec<Content>,
     pub selected_voyage: Option<VoyageId>,
     pub selected_fleet: Option<FleetId>,
@@ -217,13 +222,9 @@ pub struct Layout {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ContentDestination {
-    Vessel {
-        fleet: FleetId,
-        after: PlacementId,
-        axis: Axis,
-    },
-    Portal {
-        voyage: VoyageId,
+    Panel {
+        owner: PanelOwner,
+        insertion: PanelInsertion,
     },
 }
 
@@ -238,12 +239,12 @@ pub enum Action {
     SetSidebar {
         collapsed: bool,
     },
-    SaveLayout {
-        fleet: FleetId,
+    SavePanelLayout {
+        owner: PanelOwner,
         name: String,
     },
-    LoadLayout {
-        fleet: FleetId,
+    LoadPanelLayout {
+        owner: PanelOwner,
         name: String,
     },
     CreateVoyage {
@@ -253,9 +254,6 @@ pub enum Action {
     CreateFleet {
         voyage: VoyageId,
         name: String,
-    },
-    CreatePortal {
-        voyage: VoyageId,
     },
     CreateContent {
         #[serde(rename = "typeId")]
@@ -282,18 +280,13 @@ pub enum Action {
         target: RenameTarget,
         name: String,
     },
-    Split {
-        fleet: FleetId,
-        after: PlacementId,
-        axis: Axis,
-    },
-    ResizeSplit {
-        fleet: FleetId,
+    ResizePanelSplit {
+        owner: PanelOwner,
         #[schemars(length(max = 128))]
         path: Vec<SplitChild>,
         share: SplitShare,
     },
-    MoveVessel {
+    MovePanel {
         id: PlacementId,
         target: PlacementId,
         side: Side,
@@ -314,16 +307,47 @@ pub enum Action {
     SelectFleet {
         id: FleetId,
     },
-    RevealVessel {
+    RevealPanel {
         id: PlacementId,
     },
     Dock {
         context: Context,
     },
-    SetVesselMaximized {
+    SetPanelMaximized {
         id: PlacementId,
         maximized: bool,
     },
+    SetPanelHidden {
+        id: PlacementId,
+        hidden: bool,
+    },
+    RemovePanel {
+        id: PlacementId,
+    },
+    RemovePanelLayout {
+        owner: PanelOwner,
+        name: String,
+    },
+    SetPortalPresentation {
+        voyage: VoyageId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        visible: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<canvas::PortalMode>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(range(min = 1, max = 4096), transform = panels::width_schema)]
+        width: Option<u16>,
+    },
+}
+
+impl Layout {
+    pub fn containers(&self) -> impl Iterator<Item = &Voyage> {
+        self.voyages.iter().chain(self.home.iter())
+    }
+
+    pub fn containers_mut(&mut self) -> impl Iterator<Item = &mut Voyage> {
+        self.voyages.iter_mut().chain(self.home.iter_mut())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

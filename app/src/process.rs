@@ -50,7 +50,7 @@ pub(crate) fn run(
     action: &ProcessAction,
 ) -> Result<ProcessOutput, Error> {
     let visible = scope::project(layout, Some(context));
-    if visible.voyages.is_empty() {
+    if visible.containers().next().is_none() {
         return Err(refused("The request's captured focus no longer exists"));
     }
     let target = match action {

@@ -236,7 +236,7 @@ pub(crate) fn member(
         .contents
         .iter()
         .any(|content| content.id == *id && content.type_id == "notes")
-        || !projected.voyages.iter().any(|voyage| {
+        || !projected.containers().any(|voyage| {
             voyage
                 .portals
                 .iter()
@@ -713,8 +713,11 @@ mod tests {
                 .apply(voyager_contract::Action::CreateContent {
                     launch: None,
                     type_id: "unknown".into(),
-                    destination: voyager_contract::ContentDestination::Portal {
-                        voyage: before_layout.voyages[0].id.clone()
+                    destination: voyager_contract::ContentDestination::Panel {
+                        owner: voyager_contract::PanelOwner::Portals {
+                            voyage: before_layout.voyages[0].id.clone()
+                        },
+                        insertion: voyager_contract::PanelInsertion::Empty
                     }
                 })
                 .is_err()
@@ -764,7 +767,7 @@ mod tests {
     #[test]
     fn agent_uses_fresh_membership_and_the_same_owner_as_views() {
         use std::sync::Arc;
-        use voyager_contract::{Action, Axis, ContentDestination, Context};
+        use voyager_contract::{Action, Context};
         let directory =
             std::env::temp_dir().join(format!("voyager-content-agent-test-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
@@ -789,10 +792,12 @@ mod tests {
             .apply(Action::CreateContent {
                 launch: None,
                 type_id: "notes".into(),
-                destination: ContentDestination::Vessel {
-                    fleet: fleet.clone(),
-                    after: old.voyages[0].fleets[0].vessels[0].id.clone(),
-                    axis: Axis::Horizontal,
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                    insertion: voyager_contract::PanelInsertion::Beside {
+                        id: old.voyages[0].fleets[0].vessels[0].id.clone(),
+                        side: voyager_contract::Side::Right,
+                    },
                 },
             })
             .unwrap();
@@ -807,7 +812,10 @@ mod tests {
             .apply(Action::CreateContent {
                 launch: None,
                 type_id: "notes".into(),
-                destination: ContentDestination::Portal { voyage },
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Portals { voyage },
+                    insertion: voyager_contract::PanelInsertion::Empty,
+                },
             })
             .unwrap();
         let b = model.layout.contents.last().unwrap().id.clone();

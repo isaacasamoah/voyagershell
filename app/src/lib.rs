@@ -7,6 +7,7 @@ pub mod context;
 pub mod core;
 mod core_endpoint;
 pub mod launch;
+mod panels;
 mod process;
 mod scope;
 pub mod workspace;

@@ -620,32 +620,34 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
     match status {
         Status::Applied => match action {
             Action::Inspect => "Workspace inspected",
-            Action::SetVesselMaximized {
+            Action::SetPanelMaximized {
                 maximized: true, ..
-            } => "Vessel maximized",
-            Action::SetVesselMaximized {
+            } => "Panel maximized",
+            Action::SetPanelMaximized {
                 maximized: false, ..
-            } => "Vessel restored",
+            } => "Panel restored",
             Action::Home => "Home opened",
             Action::UpdateCanvas { .. } => "Workspace layout updated",
             Action::SetSidebar { .. } => "Sidebar updated",
-            Action::SaveLayout { .. } => "Fleet layout saved",
-            Action::LoadLayout { .. } => "Fleet layout loaded",
+            Action::SavePanelLayout { .. } => "Panel layout saved",
+            Action::LoadPanelLayout { .. } => "Panel layout loaded",
             Action::CreateVoyage { .. } => "Voyage created",
             Action::CreateFleet { .. } => "Fleet created",
-            Action::CreatePortal { .. } => "Voyage Portal created",
             Action::CreateContent { .. } => "Content created",
+            Action::SetPanelHidden { .. } => "Panel visibility changed",
+            Action::RemovePanel { .. } => "Panel removed from layout",
+            Action::RemovePanelLayout { .. } => "Saved arrangement removed",
+            Action::SetPortalPresentation { .. } => "Portal column updated",
             Action::RemoveContentPackage { .. } => "Content package removed",
             Action::RestoreContentPackage { .. } => "Content package restored",
             Action::Rename { .. } => "Name changed",
-            Action::Split { .. } => "Vessel split",
-            Action::ResizeSplit { .. } => "Split resized",
-            Action::MoveVessel { .. } => "Vessel moved",
+            Action::ResizePanelSplit { .. } => "Split resized",
+            Action::MovePanel { .. } => "Panel moved",
             Action::MoveVoyage { .. } => "Voyage reordered",
             Action::MoveFleet { .. } => "Fleet reordered",
             Action::SelectVoyage { .. } => "Voyage selected",
             Action::SelectFleet { .. } => "Fleet selected",
-            Action::RevealVessel { .. } => "Vessel revealed",
+            Action::RevealPanel { .. } => "Panel revealed",
             Action::Dock { .. } => "Focus changed",
             Action::StartNewShell { .. } => "New shell authorized",
         }
@@ -707,9 +709,8 @@ mod tests {
             content::{Access, Owner},
             core::Core,
         };
-        use voyager_contract::{
-            Axis, ContentDestination,
-            content::{Notes, Request as ContentRequest, Response as ContentResponse, Version},
+        use voyager_contract::content::{
+            Notes, Request as ContentRequest, Response as ContentResponse, Version,
         };
         let directory =
             std::env::temp_dir().join(format!("voyager-n3-owner-{}", std::process::id()));
@@ -747,10 +748,12 @@ mod tests {
                 Action::CreateContent {
                     launch: None,
                     type_id: "notes".into(),
-                    destination: ContentDestination::Vessel {
-                        fleet,
-                        after: initial.layout.voyages[0].fleets[0].vessels[0].id.clone(),
-                        axis: Axis::Horizontal,
+                    destination: voyager_contract::ContentDestination::Panel {
+                        owner: voyager_contract::PanelOwner::Fleet { id: fleet },
+                        insertion: voyager_contract::PanelInsertion::Beside {
+                            id: initial.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+                            side: voyager_contract::Side::Right,
+                        },
                     },
                 },
                 initial.version,
@@ -767,7 +770,10 @@ mod tests {
                 Action::CreateContent {
                     launch: None,
                     type_id: "notes".into(),
-                    destination: ContentDestination::Portal { voyage },
+                    destination: voyager_contract::ContentDestination::Panel {
+                        owner: voyager_contract::PanelOwner::Portals { voyage },
+                        insertion: voyager_contract::PanelInsertion::Empty,
+                    },
                 },
                 created.version,
             );

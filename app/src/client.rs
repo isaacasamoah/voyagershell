@@ -338,7 +338,7 @@ impl Client {
                         let result = (|| {
                             let core = core.as_mut().map_err(|error| format!("{error:?}"))?;
                             let (current, revision, _) =
-                                load(core).map_err(|error| format!("{error:?}"))?;
+                                load(core, &cwd).map_err(|error| format!("{error:?}"))?;
                             layout = Arc::new(current);
                             version = revision;
                             fresh = true;
@@ -430,7 +430,7 @@ impl Client {
                             }
                             let core = core.as_mut().map_err(|error| format!("{error:?}"))?;
                             let (current, revision, _) =
-                                load(core).map_err(|error| format!("{error:?}"))?;
+                                load(core, &cwd).map_err(|error| format!("{error:?}"))?;
                             layout = Arc::new(current);
                             version = revision;
                             fresh = true;
@@ -559,7 +559,7 @@ impl Client {
                             ))
                         } else {
                             match core.as_mut() {
-                                    Ok(core) => load(core).and_then(|(current, revision, _)| {
+                                    Ok(core) => load(core, &cwd).and_then(|(current, revision, _)| {
                                         layout = Arc::new(current);
                                         version = revision;
                                         if version != request.input.expected_version {
@@ -754,7 +754,7 @@ impl Client {
                         Err(error) => Err(error.clone()),
                         Ok(core) => (|| {
                             if matches!(request.action, Action::Inspect) {
-                                load(core).and_then(|(loaded, revision, missing)| {
+                                load(core, &cwd).and_then(|(loaded, revision, missing)| {
                                     let mut candidate = Model { layout: loaded };
                                     let mut revision = revision;
                                     if missing {
@@ -801,7 +801,7 @@ impl Client {
                                 if let Action::RemoveContentPackage { type_id }
                                 | Action::RestoreContentPackage { type_id } = &request.action
                                 {
-                                    let (current, revision, missing) = load(core).map_err(|error| rejected(format!("Workspace observation unavailable; no content package was changed: {error:?}")))?;
+                                    let (current, revision, missing) = load(core, &cwd).map_err(|error| rejected(format!("Workspace observation unavailable; no content package was changed: {error:?}")))?;
                                     layout = Arc::new(current);
                                     version = revision;
                                     fresh = true;
@@ -829,7 +829,7 @@ impl Client {
                                     owner.require_available(type_id).map_err(rejected)?;
                                 }
                                 if matches!(request.action, Action::StartNewShell { .. }) {
-                                    let (current, revision, missing) = load(core)?;
+                                    let (current, revision, missing) = load(core, &cwd)?;
                                     layout = Arc::new(current);
                                     version = revision;
                                     if missing || request.expected_version != version {
@@ -863,9 +863,7 @@ impl Client {
                                                 request.action,
                                                 Action::CreateVoyage { .. }
                                                     | Action::CreateFleet { .. }
-                                                    | Action::CreatePortal { .. }
                                                     | Action::CreateContent { .. }
-                                                    | Action::Split { .. }
                                             )
                                         {
                                             record_created_terminals(
@@ -1402,46 +1400,51 @@ fn settle_created_content(
 }
 
 fn visible_content(layout: &Layout, content: &ContentId) -> bool {
-    if layout.view == voyager_contract::WorkspaceView::Home {
-        return false;
-    }
-    let Some(voyage) = layout
-        .voyages
-        .iter()
-        .find(|voyage| Some(&voyage.id) == layout.selected_voyage.as_ref())
-    else {
+    let voyage = if layout.view == voyager_contract::WorkspaceView::Home {
+        layout.home.as_ref()
+    } else {
+        layout
+            .voyages
+            .iter()
+            .find(|voyage| Some(&voyage.id) == layout.selected_voyage.as_ref())
+    };
+    let Some(voyage) = voyage else {
         return false;
     };
-    if voyage
-        .portals
-        .iter()
-        .any(|portal| &portal.content == content)
+    if let Some(column) = &voyage.portal_layout
+        && column.visible
     {
-        return true;
-    }
-    let Some(fleet) = voyage
-        .fleets
-        .iter()
-        .find(|fleet| Some(&fleet.id) == layout.selected_fleet.as_ref())
-    else {
-        return false;
-    };
-    fn contains(
-        tree: &voyager_contract::Split,
-        fleet: &voyager_contract::Fleet,
-        content: &ContentId,
-    ) -> bool {
-        match tree {
-            voyager_contract::Split::Leaf { placement } => fleet
-                .vessels
-                .iter()
-                .any(|vessel| &vessel.id == placement && &vessel.content == content),
-            voyager_contract::Split::Branch { first, second, .. } => {
-                contains(first, fleet, content) || contains(second, fleet, content)
-            }
+        let root = crate::panels::visible(&column.root, &voyage.portals);
+        if voyage.portals.iter().any(|panel| {
+            &panel.content == content
+                && crate::panels::contains(&root, &panel.id)
+                && column
+                    .maximized_placement
+                    .as_ref()
+                    .is_none_or(|id| id == &panel.id)
+        }) {
+            return true;
         }
     }
-    contains(&fleet.root, fleet, content)
+    let fleet = if layout.view == voyager_contract::WorkspaceView::Home {
+        voyage.fleets.first()
+    } else {
+        voyage
+            .fleets
+            .iter()
+            .find(|fleet| Some(&fleet.id) == layout.selected_fleet.as_ref())
+    };
+    fleet.is_some_and(|fleet| {
+        let root = crate::panels::visible(&fleet.root, &fleet.vessels);
+        fleet.vessels.iter().any(|panel| {
+            &panel.content == content
+                && crate::panels::contains(&root, &panel.id)
+                && fleet
+                    .maximized_placement
+                    .as_ref()
+                    .is_none_or(|id| id == &panel.id)
+        })
+    })
 }
 
 fn require_finished(
@@ -1705,7 +1708,7 @@ fn attach_failure(error: Error, created: bool, address: &str) -> Error {
     }
 }
 
-fn load(core: &mut Core) -> Result<(Layout, u64, bool), Error> {
+fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Error> {
     let doc = core.document_get("voyager-layout-v1")?;
     let version = doc.version;
     let value = doc.value;
@@ -1715,7 +1718,7 @@ fn load(core: &mut Core) -> Result<(Layout, u64, bool), Error> {
     let layout: Layout = serde_json::from_value(value)
         .map_err(|e| rejected(format!("Stored workspace is invalid: {e}")))?;
     crate::canvas::validate(&layout.canvas).map_err(rejected)?;
-    crate::workspace::validate_maximized(&layout).map_err(rejected)?;
+    let layout = Model::prepare(layout, cwd).map_err(rejected)?;
     Ok((layout, version, false))
 }
 
@@ -1815,8 +1818,15 @@ mod terminal_outcome_tests {
             })
             .unwrap();
         model
-            .apply(Action::CreatePortal {
-                voyage: model.layout.voyages[0].id.clone(),
+            .apply(Action::CreateContent {
+                type_id: "terminal".into(),
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Portals {
+                        voyage: model.layout.voyages[0].id.clone(),
+                    },
+                    insertion: voyager_contract::PanelInsertion::Empty,
+                },
+                launch: None,
             })
             .unwrap();
         let id = model.layout.contents[0].id.clone();
@@ -1909,10 +1919,12 @@ mod terminal_outcome_tests {
             .apply(Action::CreateContent {
                 launch: None,
                 type_id: "notes".into(),
-                destination: voyager_contract::ContentDestination::Vessel {
-                    fleet: fleet.clone(),
-                    after: after.clone(),
-                    axis: voyager_contract::Axis::Horizontal,
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                    insertion: voyager_contract::PanelInsertion::Beside {
+                        id: after.clone(),
+                        side: voyager_contract::Side::Right,
+                    },
                 },
             })
             .unwrap();
@@ -1931,10 +1943,12 @@ mod terminal_outcome_tests {
             .apply(Action::CreateContent {
                 launch: None,
                 type_id: "terminal".into(),
-                destination: voyager_contract::ContentDestination::Vessel {
-                    fleet,
-                    after,
-                    axis: voyager_contract::Axis::Vertical,
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Fleet { id: fleet },
+                    insertion: voyager_contract::PanelInsertion::Beside {
+                        id: after,
+                        side: voyager_contract::Side::Bottom,
+                    },
                 },
             })
             .unwrap();
@@ -1972,6 +1986,86 @@ mod terminal_outcome_tests {
             eligible_contents(&layout, None, &pending),
             vec![terminal, new_terminal]
         );
+    }
+
+    #[test]
+    fn maximized_groups_exclude_occluded_pending_terminals() {
+        for portals in [false, true] {
+            let mut model = Model::default();
+            model
+                .apply(Action::CreateVoyage {
+                    name: "Work".into(),
+                    cwd: "/tmp".into(),
+                })
+                .unwrap();
+            let owner = if portals {
+                voyager_contract::PanelOwner::Portals {
+                    voyage: model.layout.voyages[0].id.clone(),
+                }
+            } else {
+                voyager_contract::PanelOwner::Fleet {
+                    id: model.layout.voyages[0].fleets[0].id.clone(),
+                }
+            };
+            if portals {
+                model
+                    .apply(Action::CreateContent {
+                        type_id: "terminal".into(),
+                        launch: None,
+                        destination: voyager_contract::ContentDestination::Panel {
+                            owner: owner.clone(),
+                            insertion: voyager_contract::PanelInsertion::Empty,
+                        },
+                    })
+                    .unwrap();
+            }
+            let first = crate::panels::group(&model.layout, &owner).unwrap().members[0].clone();
+            model
+                .apply(Action::CreateContent {
+                    type_id: "terminal".into(),
+                    launch: None,
+                    destination: voyager_contract::ContentDestination::Panel {
+                        owner: owner.clone(),
+                        insertion: voyager_contract::PanelInsertion::Beside {
+                            id: first.id.clone(),
+                            side: voyager_contract::Side::Right,
+                        },
+                    },
+                })
+                .unwrap();
+            let second = crate::panels::group(&model.layout, &owner).unwrap().members[1].clone();
+            let pending = vec![CreatedTerminal {
+                id: second.content.clone(),
+                launch: Default::default(),
+                backend: None,
+                shell_intent: None,
+            }];
+            assert_eq!(
+                eligible_contents(&Arc::new(model.layout.clone()), None, &pending),
+                vec![second.content.clone()]
+            );
+            model
+                .apply(Action::SetPanelMaximized {
+                    id: first.id.clone(),
+                    maximized: true,
+                })
+                .unwrap();
+            assert!(!visible_content(&model.layout, &second.content));
+            assert_eq!(
+                eligible_contents(&Arc::new(model.layout.clone()), None, &pending),
+                vec![second.content.clone()]
+            );
+            model
+                .apply(Action::SetPanelMaximized {
+                    id: first.id,
+                    maximized: false,
+                })
+                .unwrap();
+            assert_eq!(
+                eligible_contents(&Arc::new(model.layout), None, &pending),
+                vec![second.content]
+            );
+        }
     }
 
     #[test]

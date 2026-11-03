@@ -14,29 +14,35 @@ fn maximize_preserves_identity_and_scoped_restore_cannot_clear_another_pane() {
     let first = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
     let zoom = |id: &voyager_contract::PlacementId, maximized| {
         serde_json::from_value::<Action>(
-            serde_json::json!({"operation":"set-vessel-maximized","id":id,"maximized":maximized}),
+            serde_json::json!({"operation":"set-panel-maximized","id":id,"maximized":maximized}),
         )
         .unwrap()
     };
     assert!(model.apply(zoom(&first, true)).is_err());
     model
-        .apply(Action::Split {
-            fleet: fleet.clone(),
-            after: first.clone(),
-            axis: Axis::Horizontal,
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                insertion: voyager_contract::PanelInsertion::Beside {
+                    id: first.clone(),
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch: None,
         })
         .unwrap();
     let second = model.layout.voyages[0].fleets[0].vessels[1].id.clone();
     model
-        .apply(Action::ResizeSplit {
-            fleet: fleet.clone(),
+        .apply(Action::ResizePanelSplit {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             path: Vec::new(),
             share: voyager_contract::SplitShare::try_from(3700).unwrap(),
         })
         .unwrap();
     model
-        .apply(Action::SaveLayout {
-            fleet: fleet.clone(),
+        .apply(Action::SavePanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "Both".into(),
         })
         .unwrap();
@@ -94,15 +100,21 @@ fn maximize_preserves_identity_and_scoped_restore_cannot_clear_another_pane() {
     assert_eq!(model.layout, original);
     model.apply(zoom(&first, true)).unwrap();
     model
-        .apply(Action::RevealVessel { id: second.clone() })
+        .apply(Action::RevealPanel { id: second.clone() })
         .unwrap();
     assert_eq!(model.layout, original);
     model.apply(zoom(&first, true)).unwrap();
     model
-        .apply(Action::Split {
-            fleet,
-            after: first,
-            axis: Axis::Vertical,
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet },
+                insertion: voyager_contract::PanelInsertion::Beside {
+                    id: first,
+                    side: voyager_contract::Side::Bottom,
+                },
+            },
+            launch: None,
         })
         .unwrap();
     assert!(
@@ -126,27 +138,33 @@ fn maximize_is_per_fleet_and_saved_layout_hiding_clears_it() {
     let fleet = model.layout.voyages[0].fleets[0].id.clone();
     let first = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
     model
-        .apply(Action::SaveLayout {
-            fleet: fleet.clone(),
+        .apply(Action::SavePanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "One".into(),
         })
         .unwrap();
     model
-        .apply(Action::Split {
-            fleet: fleet.clone(),
-            after: first.clone(),
-            axis: Axis::Horizontal,
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                insertion: voyager_contract::PanelInsertion::Beside {
+                    id: first.clone(),
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch: None,
         })
         .unwrap();
     let second = model.layout.voyages[0].fleets[0].vessels[1].id.clone();
     model
-        .apply(Action::SetVesselMaximized {
+        .apply(Action::SetPanelMaximized {
             id: second.clone(),
             maximized: true,
         })
         .unwrap();
     model
-        .apply(Action::MoveVessel {
+        .apply(Action::MovePanel {
             id: first,
             target: second.clone(),
             side: voyager_contract::Side::Bottom,
@@ -175,8 +193,8 @@ fn maximize_is_per_fleet_and_saved_layout_hiding_clears_it() {
         .apply(Action::SelectFleet { id: fleet.clone() })
         .unwrap();
     model
-        .apply(Action::LoadLayout {
-            fleet,
+        .apply(Action::LoadPanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet },
             name: "One".into(),
         })
         .unwrap();
@@ -188,7 +206,7 @@ fn maximize_is_per_fleet_and_saved_layout_hiding_clears_it() {
     let before = model.layout.clone();
     assert!(
         model
-            .apply(Action::SetVesselMaximized {
+            .apply(Action::SetPanelMaximized {
                 id: second,
                 maximized: true
             })
@@ -217,7 +235,7 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
         .unwrap()
     };
     let vessel = create(
-        serde_json::json!({"kind":"vessel","fleet":fleet,"after":first,"axis":"horizontal"}),
+        serde_json::json!({"kind":"panel","owner":{"kind":"fleet","id":fleet},"insertion":{"kind":"beside","id":first,"side":"right"}}),
     );
     assert!(
         crate::scope::check(
@@ -232,7 +250,7 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
     assert_eq!(notes.type_id, "notes");
     assert!(notes.backend.is_none());
     model
-        .apply(create(serde_json::json!({"kind":"portal","voyage":voyage})))
+        .apply(create(serde_json::json!({"kind":"panel","owner":{"kind":"portals","voyage":voyage},"insertion":{"kind":"empty"}})))
         .unwrap();
     let portal = model.layout.voyages[0].portals[0].clone();
     let projected = std::sync::Arc::new(model.layout.clone());
@@ -240,7 +258,7 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
         crate::scope::check(
             &projected,
             Some(&Context::Fleet { id: fleet.clone() }),
-            &create(serde_json::json!({"kind":"portal","voyage":voyage}))
+            &create(serde_json::json!({"kind":"panel","owner":{"kind":"portals","voyage":voyage},"insertion":{"kind":"empty"}}))
         )
         .is_err()
     );
@@ -250,8 +268,11 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
             .apply(Action::CreateContent {
                 launch: None,
                 type_id: "unknown".into(),
-                destination: voyager_contract::ContentDestination::Portal {
-                    voyage: voyage.clone()
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Portals {
+                        voyage: voyage.clone()
+                    },
+                    insertion: voyager_contract::PanelInsertion::Empty
                 }
             })
             .is_err()
@@ -302,10 +323,19 @@ fn resize_changes_one_branch_and_saved_layout_restores_its_share() {
     let placement = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
     for axis in [Axis::Horizontal, Axis::Vertical] {
         model
-            .apply(Action::Split {
-                fleet: fleet.clone(),
-                after: placement.clone(),
-                axis,
+            .apply(Action::CreateContent {
+                type_id: "terminal".into(),
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                    insertion: voyager_contract::PanelInsertion::Beside {
+                        id: placement.clone(),
+                        side: match axis {
+                            voyager_contract::Axis::Horizontal => voyager_contract::Side::Right,
+                            voyager_contract::Axis::Vertical => voyager_contract::Side::Bottom,
+                        },
+                    },
+                },
+                launch: None,
             })
             .unwrap();
     }
@@ -313,7 +343,7 @@ fn resize_changes_one_branch_and_saved_layout_restores_its_share() {
     let context = model.layout.context.clone();
     let resize = |path: serde_json::Value, share| {
         serde_json::from_value::<Action>(
-            serde_json::json!({"operation":"resize-split","fleet":fleet,"path":path,"share":share}),
+            serde_json::json!({"operation":"resize-panel-split","owner":{"kind":"fleet","id":fleet},"path":path,"share":share}),
         )
         .unwrap()
     };
@@ -324,8 +354,8 @@ fn resize_changes_one_branch_and_saved_layout_restores_its_share() {
     assert_eq!(tree["share"], 5000);
     assert_eq!(tree["first"]["share"], 3500);
     model
-        .apply(Action::SaveLayout {
-            fleet: fleet.clone(),
+        .apply(Action::SavePanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "Sizes".into(),
         })
         .unwrap();
@@ -333,8 +363,8 @@ fn resize_changes_one_branch_and_saved_layout_restores_its_share() {
         .apply(resize(serde_json::json!(["first"]), 7200))
         .unwrap();
     model
-        .apply(Action::LoadLayout {
-            fleet: fleet.clone(),
+        .apply(Action::LoadPanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "Sizes".into(),
         })
         .unwrap();
@@ -383,14 +413,21 @@ fn home_and_saved_layouts_respect_captured_scope() {
     let fleet = model.layout.voyages[0].fleets[0].id.clone();
     let vessel = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
     model
-        .apply(Action::SaveLayout {
-            fleet: fleet.clone(),
+        .apply(Action::SavePanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "Focus".into(),
         })
         .unwrap();
     model
-        .apply(Action::CreatePortal {
-            voyage: voyage.clone(),
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Portals {
+                    voyage: voyage.clone(),
+                },
+                insertion: voyager_contract::PanelInsertion::Empty,
+            },
+            launch: None,
         })
         .unwrap();
     let portal = model.layout.voyages[0].portals[0].id.clone();
@@ -404,8 +441,8 @@ fn home_and_saved_layouts_respect_captured_scope() {
             crate::scope::check(
                 &layout,
                 Some(&scope),
-                &Action::LoadLayout {
-                    fleet: fleet.clone(),
+                &Action::LoadPanelLayout {
+                    owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
                     name: "Focus".into()
                 }
             )
@@ -424,8 +461,8 @@ fn home_and_saved_layouts_respect_captured_scope() {
         crate::scope::check(
             &layout,
             Some(&narrow),
-            &Action::LoadLayout {
-                fleet: fleet.clone(),
+            &Action::LoadPanelLayout {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
                 name: "Focus".into()
             }
         )
@@ -442,8 +479,8 @@ fn home_and_saved_layouts_respect_captured_scope() {
         crate::scope::check(
             &layout,
             Some(&portal_scope),
-            &Action::LoadLayout {
-                fleet,
+            &Action::LoadPanelLayout {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet },
                 name: "Focus".into()
             }
         )
@@ -468,8 +505,10 @@ fn captured_fleet_layout_target_survives_later_navigation_without_retargeting() 
     let voyage = model.layout.voyages[0].id.clone();
     let original = model.layout.voyages[0].fleets[0].id.clone();
     model
-        .apply(Action::SaveLayout {
-            fleet: original.clone(),
+        .apply(Action::SavePanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet {
+                id: original.clone(),
+            },
             name: "Saved".into(),
         })
         .unwrap();
@@ -485,8 +524,8 @@ fn captured_fleet_layout_target_survives_later_navigation_without_retargeting() 
     let other = model.layout.voyages[0].fleets[1].id.clone();
     model.apply(Action::Home).unwrap();
     let layout = std::sync::Arc::new(model.layout.clone());
-    let load = |fleet| Action::LoadLayout {
-        fleet,
+    let load = |fleet| Action::LoadPanelLayout {
+        owner: voyager_contract::PanelOwner::Fleet { id: fleet },
         name: "Saved".into(),
     };
     assert!(crate::scope::check(&layout, Some(&captured), &load(original)).is_ok());
@@ -520,17 +559,25 @@ fn direct_arrangement_preserves_content_and_rejects_invalid_targets() {
     let fleet_b = model.layout.voyages[0].fleets[1].id.clone();
     let original = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
     model
-        .apply(Action::Split {
-            fleet: fleet_a.clone(),
-            after: original.clone(),
-            axis: Axis::Horizontal,
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Fleet {
+                    id: fleet_a.clone(),
+                },
+                insertion: voyager_contract::PanelInsertion::Beside {
+                    id: original.clone(),
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch: None,
         })
         .unwrap();
     let other = model.layout.voyages[0].fleets[0].vessels[1].id.clone();
     let contents = model.layout.contents.clone();
     let context = model.layout.context.clone();
     model
-        .apply(Action::MoveVessel {
+        .apply(Action::MovePanel {
             id: other,
             target: original,
             side: Side::Left,
@@ -569,7 +616,7 @@ fn direct_arrangement_preserves_content_and_rejects_invalid_targets() {
     let missing_placement = PlacementId("missing".into());
     assert!(
         model
-            .apply(Action::MoveVessel {
+            .apply(Action::MovePanel {
                 id: missing_placement.clone(),
                 target: missing_placement,
                 side: Side::Left
@@ -634,10 +681,16 @@ fn scoped_creation_and_split_keep_existing_identity() {
     let fleet = voyage.fleets[0].id.clone();
     let original = voyage.fleets[0].vessels[0].clone();
     model
-        .apply(Action::Split {
-            fleet: fleet.clone(),
-            after: original.id.clone(),
-            axis: Axis::Horizontal,
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                insertion: voyager_contract::PanelInsertion::Beside {
+                    id: original.id.clone(),
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch: None,
         })
         .unwrap();
     assert_eq!(model.layout.voyages[0].fleets[0].vessels.len(), 2);
@@ -712,18 +765,28 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     let final_state = call(Action::Inspect, 0);
     let fleet = &final_state.layout.voyages[0].fleets[0];
     let divided = call(
-        Action::Split {
-            fleet: fleet.id.clone(),
-            after: fleet.vessels[0].id.clone(),
-            axis: Axis::Horizontal,
+        Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Fleet {
+                    id: fleet.id.clone(),
+                },
+                insertion: voyager_contract::PanelInsertion::Beside {
+                    id: fleet.vessels[0].id.clone(),
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch: None,
         },
         final_state.version,
     );
     let resized_request = Request {
         request_id: client.request_id(),
         expected_version: divided.version,
-        action: Action::ResizeSplit {
-            fleet: fleet.id.clone(),
+        action: Action::ResizePanelSplit {
+            owner: voyager_contract::PanelOwner::Fleet {
+                id: fleet.id.clone(),
+            },
             path: vec![],
             share: 3500.try_into().unwrap(),
         },
@@ -735,8 +798,10 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
         .document_set("voyager-layout-v1", &resized.layout, resized.version)
         .unwrap();
     let external_conflict = call(
-        Action::ResizeSplit {
-            fleet: fleet.id.clone(),
+        Action::ResizePanelSplit {
+            owner: voyager_contract::PanelOwner::Fleet {
+                id: fleet.id.clone(),
+            },
             path: vec![],
             share: 7200.try_into().unwrap(),
         },
@@ -794,8 +859,15 @@ fn a_voyage_portal_retains_its_identity_while_fleets_change() {
         .unwrap();
     let voyage = model.layout.voyages[0].id.clone();
     model
-        .apply(Action::CreatePortal {
-            voyage: voyage.clone(),
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Portals {
+                    voyage: voyage.clone(),
+                },
+                insertion: voyager_contract::PanelInsertion::Empty,
+            },
+            launch: None,
         })
         .unwrap();
     let portal = model.layout.voyages[0].portals[0].clone();
@@ -816,7 +888,7 @@ fn a_voyage_portal_retains_its_identity_while_fleets_change() {
     let retained = &model.layout.voyages[0].portals[0];
     assert_eq!(retained.id, portal.id);
     assert_eq!(retained.content, portal.content);
-    assert_eq!(retained.name.as_deref(), Some("Voyage terminal"));
+    assert_eq!(retained.name, "Voyage terminal");
     model
         .apply(Action::Dock {
             context: Context::Portal { id: portal.id },
@@ -899,26 +971,38 @@ fn saved_fleet_layout_restores_existing_placements_without_creating_backends() {
     let first = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
     model.layout.contents[0].backend = Some(CoreTerminalId("first".into()));
     model
-        .apply(Action::Split {
-            fleet: fleet.clone(),
-            after: first,
-            axis: Axis::Horizontal,
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                insertion: voyager_contract::PanelInsertion::Beside {
+                    id: first,
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch: None,
         })
         .unwrap();
     model.layout.contents[1].backend = Some(CoreTerminalId("second".into()));
     let saved = model.layout.voyages[0].fleets[0].root.clone();
     model
-        .apply(Action::SaveLayout {
-            fleet: fleet.clone(),
+        .apply(Action::SavePanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "Focus".into(),
         })
         .unwrap();
     let second = model.layout.voyages[0].fleets[0].vessels[1].id.clone();
     model
-        .apply(Action::Split {
-            fleet: fleet.clone(),
-            after: second,
-            axis: Axis::Vertical,
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                insertion: voyager_contract::PanelInsertion::Beside {
+                    id: second,
+                    side: voyager_contract::Side::Bottom,
+                },
+            },
+            launch: None,
         })
         .unwrap();
     model.layout.contents[2].backend = Some(CoreTerminalId("third".into()));
@@ -926,8 +1010,8 @@ fn saved_fleet_layout_restores_existing_placements_without_creating_backends() {
     let placements = model.layout.voyages[0].fleets[0].vessels.clone();
     let context = model.layout.context.clone();
     model
-        .apply(Action::LoadLayout {
-            fleet: fleet.clone(),
+        .apply(Action::LoadPanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "Focus".into(),
         })
         .unwrap();
@@ -935,31 +1019,33 @@ fn saved_fleet_layout_restores_existing_placements_without_creating_backends() {
     assert_eq!(model.layout.voyages[0].fleets[0].vessels, placements);
     assert_eq!(model.layout.contents, contents);
     assert_eq!(model.layout.context, context);
-    assert!(matches!(saved, Split::Branch { .. }));
+    assert!(matches!(saved, Some(Split::Branch { .. })));
     let before = model.layout.clone();
     assert!(
         model
-            .apply(Action::LoadLayout {
-                fleet: FleetId("wrong".into()),
+            .apply(Action::LoadPanelLayout {
+                owner: voyager_contract::PanelOwner::Fleet {
+                    id: FleetId("wrong".into())
+                },
                 name: "Focus".into()
             })
             .is_err()
     );
     assert_eq!(model.layout, before);
     let missing = voyager_contract::PlacementId("missing".into());
-    model.layout.saved_layouts[0].root = Split::Leaf { placement: missing };
+    model.layout.saved_layouts[0].root = Some(Split::Leaf { placement: missing });
     let before = model.layout.clone();
     assert!(
         model
-            .apply(Action::LoadLayout {
-                fleet: fleet.clone(),
+            .apply(Action::LoadPanelLayout {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
                 name: "Focus".into()
             })
             .is_err()
     );
     assert_eq!(model.layout, before);
     let first_leaf = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
-    model.layout.saved_layouts[0].root = Split::Branch {
+    model.layout.saved_layouts[0].root = Some(Split::Branch {
         axis: Axis::Horizontal,
         share: Default::default(),
         first: Box::new(Split::Leaf {
@@ -968,12 +1054,12 @@ fn saved_fleet_layout_restores_existing_placements_without_creating_backends() {
         second: Box::new(Split::Leaf {
             placement: first_leaf,
         }),
-    };
+    });
     let before = model.layout.clone();
     assert!(
         model
-            .apply(Action::LoadLayout {
-                fleet: fleet.clone(),
+            .apply(Action::LoadPanelLayout {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
                 name: "Focus".into()
             })
             .is_err()
@@ -983,8 +1069,8 @@ fn saved_fleet_layout_restores_existing_placements_without_creating_backends() {
     model.layout.contents[0].backend = None;
     model.layout.contents[0].start_pending = Some("unconfirmed".into());
     model
-        .apply(Action::LoadLayout {
-            fleet: fleet.clone(),
+        .apply(Action::LoadPanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "Focus".into(),
         })
         .unwrap();
@@ -997,8 +1083,8 @@ fn saved_fleet_layout_restores_existing_placements_without_creating_backends() {
     let before = model.layout.clone();
     assert!(
         model
-            .apply(Action::LoadLayout {
-                fleet,
+            .apply(Action::LoadPanelLayout {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet },
                 name: "Focus".into()
             })
             .is_err()
@@ -1356,16 +1442,22 @@ fn reveal_hidden_vessel_keeps_identity_context_and_original_fleet() {
     let fleet = model.layout.voyages[0].fleets[0].id.clone();
     let first = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
     model
-        .apply(Action::SaveLayout {
-            fleet: fleet.clone(),
+        .apply(Action::SavePanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "One".into(),
         })
         .unwrap();
     model
-        .apply(Action::Split {
-            fleet: fleet.clone(),
-            after: first,
-            axis: Axis::Horizontal,
+        .apply(Action::CreateContent {
+            type_id: "terminal".into(),
+            destination: voyager_contract::ContentDestination::Panel {
+                owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
+                insertion: voyager_contract::PanelInsertion::Beside {
+                    id: first,
+                    side: voyager_contract::Side::Right,
+                },
+            },
+            launch: None,
         })
         .unwrap();
     let hidden = model.layout.voyages[0].fleets[0].vessels[1].clone();
@@ -1377,8 +1469,8 @@ fn reveal_hidden_vessel_keeps_identity_context_and_original_fleet() {
         .unwrap();
     content.backend = Some(voyager_contract::CoreTerminalId("retained-backend".into()));
     model
-        .apply(Action::LoadLayout {
-            fleet: fleet.clone(),
+        .apply(Action::LoadPanelLayout {
+            owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
             name: "One".into(),
         })
         .unwrap();
@@ -1399,7 +1491,7 @@ fn reveal_hidden_vessel_keeps_identity_context_and_original_fleet() {
     let before_unknown = model.layout.clone();
     assert!(
         model
-            .apply(Action::RevealVessel {
+            .apply(Action::RevealPanel {
                 id: voyager_contract::PlacementId("missing".into())
             })
             .is_err()
@@ -1414,7 +1506,7 @@ fn reveal_hidden_vessel_keeps_identity_context_and_original_fleet() {
             Some(&Context::Vessel {
                 id: hidden.id.clone()
             }),
-            &Action::RevealVessel {
+            &Action::RevealPanel {
                 id: hidden.id.clone()
             }
         )
@@ -1426,14 +1518,14 @@ fn reveal_hidden_vessel_keeps_identity_context_and_original_fleet() {
             Some(&Context::Voyage {
                 id: model.layout.voyages[1].id.clone()
             }),
-            &Action::RevealVessel {
+            &Action::RevealPanel {
                 id: hidden.id.clone()
             }
         )
         .is_err()
     );
     model
-        .apply(Action::RevealVessel {
+        .apply(Action::RevealPanel {
             id: hidden.id.clone(),
         })
         .unwrap();
@@ -1450,16 +1542,16 @@ fn reveal_hidden_vessel_keeps_identity_context_and_original_fleet() {
     assert_eq!(model.layout.voyages[0].fleets[0].vessels[1], hidden);
     assert_eq!(
         model.layout.voyages[0].fleets[0].root,
-        voyager_contract::Split::Branch {
+        Some(voyager_contract::Split::Branch {
             axis: Axis::Horizontal,
             share: Default::default(),
-            first: Box::new(tree),
+            first: Box::new(tree.unwrap()),
             second: Box::new(voyager_contract::Split::Leaf {
                 placement: hidden.id.clone()
             })
-        }
+        })
     );
     let once = model.layout.clone();
-    model.apply(Action::RevealVessel { id: hidden.id }).unwrap();
+    model.apply(Action::RevealPanel { id: hidden.id }).unwrap();
     assert_eq!(model.layout, once);
 }

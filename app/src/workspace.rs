@@ -1,7 +1,7 @@
+use crate::panels;
 use voyager_contract::{
-    Action, Axis, Content, ContentDestination, ContentId, Context, Fleet, FleetId, Layout,
-    PlacementId, RenameTarget, SavedLayout, Side, Split, SplitChild, Vessel, Voyage, VoyageId,
-    WorkspaceView,
+    Action, Content, ContentDestination, ContentId, Context, Fleet, FleetId, Layout, PanelOwner,
+    PlacementId, PortalLayout, RenameTarget, Split, Vessel, Voyage, VoyageId, WorkspaceView,
 };
 
 #[derive(Default)]
@@ -10,6 +10,43 @@ pub struct Model {
 }
 
 impl Model {
+    fn ensure_home(&mut self, cwd: &str) -> Result<(), String> {
+        if self.layout.home.is_none() {
+            let id = VoyageId(self.id("home-voyage")?);
+            let fleet = Fleet {
+                id: FleetId(self.id("home-fleet")?),
+                name: "Home".into(),
+                vessels: Vec::new(),
+                root: None,
+                maximized_placement: None,
+            };
+            self.layout.home = Some(Voyage {
+                id,
+                name: "Home".into(),
+                fleets: vec![fleet],
+                portals: Vec::new(),
+                portal_layout: Some(PortalLayout::default()),
+                cwd: Some(cwd.into()),
+            });
+        }
+        Ok(())
+    }
+
+    pub(crate) fn prepare(layout: Layout, cwd: &str) -> Result<Layout, String> {
+        let mut model = Self { layout };
+        panels::normalize(&mut model.layout)?;
+        model.ensure_home(cwd)?;
+        if model
+            .layout
+            .home
+            .as_ref()
+            .is_some_and(|home| home.fleets.len() != 1)
+        {
+            return Err("Home requires one primary arrangement".into());
+        }
+        Ok(model.layout)
+    }
+
     fn id(&mut self, prefix: &str) -> Result<String, String> {
         self.layout.next_id = self
             .layout
@@ -19,34 +56,41 @@ impl Model {
         Ok(format!("{prefix}-{}", self.layout.next_id))
     }
 
-    fn placement(&mut self, cwd: String) -> Result<Vessel, String> {
+    fn placement(
+        &mut self,
+        cwd: String,
+        type_id: String,
+        name: String,
+        launch: Option<voyager_contract::launch::Launch>,
+    ) -> Result<Vessel, String> {
         let content = ContentId(self.id("content")?);
         let placement = PlacementId(self.id("placement")?);
         self.layout.contents.push(Content {
             id: content.clone(),
-            type_id: "terminal".into(),
+            type_id,
             cwd,
             backend: None,
             configuration: None,
             start_pending: None,
-            launch: None,
+            launch,
             shell_intent: None,
         });
         Ok(Vessel {
             id: placement,
             content,
-            name: None,
+            name,
+            hidden: false,
         })
     }
 
     fn fleet(&mut self, name: String, cwd: String) -> Result<Fleet, String> {
-        let placement = self.placement(cwd)?;
+        let placement = self.placement(cwd, "terminal".into(), "Terminal 1".into(), None)?;
         Ok(Fleet {
             id: FleetId(self.id("fleet")?),
             name,
-            root: Split::Leaf {
+            root: Some(Split::Leaf {
                 placement: placement.id.clone(),
-            },
+            }),
             vessels: vec![placement],
             maximized_placement: None,
         })
@@ -104,62 +148,12 @@ impl Model {
                 self.layout.canvas = canvas;
             }
             Action::SetSidebar { collapsed } => self.layout.canvas.sidebar_collapsed = collapsed,
-            Action::SaveLayout { fleet, name } => {
-                let name = name.trim().to_owned();
-                if name.is_empty() || name.len() > 128 {
-                    return Err("A layout name must contain 1 to 128 bytes".into());
-                }
-                let (v, f) = self.fleet_index(&fleet).ok_or("Fleet not found")?;
-                let saved = SavedLayout {
-                    fleet: fleet.clone(),
-                    name: name.clone(),
-                    root: self.layout.voyages[v].fleets[f].root.clone(),
-                };
-                if let Some(existing) = self
-                    .layout
-                    .saved_layouts
-                    .iter_mut()
-                    .find(|item| item.fleet == fleet && item.name == name)
-                {
-                    *existing = saved;
-                } else {
-                    self.layout.saved_layouts.push(saved);
-                }
-            }
-            Action::LoadLayout { fleet, name } => {
-                let (v, f) = self.fleet_index(&fleet).ok_or("Fleet not found")?;
-                let root = self
-                    .layout
-                    .saved_layouts
-                    .iter()
-                    .find(|item| item.fleet == fleet && item.name == name.trim())
-                    .ok_or("Saved layout not found for this Fleet")?
-                    .root
-                    .clone();
-                let mut seen = Vec::new();
-                validate_saved(
-                    &root,
-                    &self.layout.voyages[v].fleets[f],
-                    &self.layout.contents,
-                    &mut seen,
-                )?;
-                let target = &mut self.layout.voyages[v].fleets[f];
-                target.root = root;
-                if target
-                    .maximized_placement
-                    .as_ref()
-                    .is_some_and(|id| !contains_leaf(&target.root, id))
-                    || matches!(target.root, Split::Leaf { .. })
-                {
-                    target.maximized_placement = None;
-                }
-            }
             Action::CreateVoyage { name, cwd } => {
                 if name.trim().is_empty() || !std::path::Path::new(&cwd).is_absolute() {
                     return Err("A Voyage needs a name and absolute working directory".into());
                 }
                 let id = VoyageId(self.id("voyage")?);
-                let fleet = self.fleet("Fleet 1".into(), cwd)?;
+                let fleet = self.fleet("Fleet 1".into(), cwd.clone())?;
                 self.layout.selected_voyage = Some(id.clone());
                 self.layout.selected_fleet = Some(fleet.id.clone());
                 self.layout.view = WorkspaceView::Fleet;
@@ -168,7 +162,10 @@ impl Model {
                     name,
                     fleets: vec![fleet],
                     portals: vec![],
+                    portal_layout: Some(PortalLayout::default()),
+                    cwd: Some(cwd.clone()),
                 });
+                self.ensure_home(&cwd)?;
             }
             Action::CreateFleet { voyage, name } => {
                 let index = self
@@ -204,31 +201,9 @@ impl Model {
                 self.layout.selected_voyage = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
             }
-            Action::CreatePortal { voyage } => {
-                let index = self
-                    .layout
-                    .voyages
-                    .iter()
-                    .position(|item| item.id == voyage)
-                    .ok_or("Voyage not found")?;
-                let cwd = self.layout.voyages[index]
-                    .fleets
-                    .first()
-                    .and_then(|fleet| fleet.vessels.first())
-                    .and_then(|placement| {
-                        self.layout
-                            .contents
-                            .iter()
-                            .find(|content| content.id == placement.content)
-                    })
-                    .map(|content| content.cwd.clone())
-                    .ok_or("Voyage has no working directory")?;
-                let placement = self.placement(cwd)?;
-                self.layout.voyages[index].portals.push(placement);
-            }
             Action::CreateContent {
                 type_id,
-                destination,
+                destination: ContentDestination::Panel { owner, insertion },
                 launch,
             } => {
                 if !crate::content::supports_type(&type_id) {
@@ -240,20 +215,24 @@ impl Model {
                     }
                     crate::launch::argv(launch)?;
                 }
-                let action = match destination {
-                    ContentDestination::Vessel { fleet, after, axis } => {
-                        Action::Split { fleet, after, axis }
-                    }
-                    ContentDestination::Portal { voyage } => Action::CreatePortal { voyage },
-                };
-                self.apply(action)?;
-                let content = self
-                    .layout
-                    .contents
-                    .last_mut()
-                    .ok_or("Content was not created")?;
-                content.type_id = type_id;
-                content.launch = launch;
+                let cwd = panels::insertion_cwd(&self.layout, &owner, &insertion)?;
+                let name =
+                    panels::default_name(panels::group(&self.layout, &owner)?.members, &type_id);
+                let panel = self.placement(cwd, type_id, name, launch)?;
+                panels::insert(
+                    panels::group_mut(&mut self.layout, &owner)?,
+                    &owner,
+                    insertion,
+                    panel,
+                )?;
+                if let PanelOwner::Portals { voyage } = owner {
+                    self.layout
+                        .containers_mut()
+                        .find(|item| item.id == voyage)
+                        .and_then(|item| item.portal_layout.as_mut())
+                        .ok_or("Portal arrangement not found")?
+                        .visible = true;
+                }
             }
             Action::Rename { target, name } => {
                 let name = name.trim().to_owned();
@@ -263,8 +242,7 @@ impl Model {
                 match target {
                     RenameTarget::Voyage { id } => {
                         self.layout
-                            .voyages
-                            .iter_mut()
+                            .containers_mut()
                             .find(|item| item.id == id)
                             .ok_or("Voyage not found")?
                             .name = name
@@ -275,22 +253,20 @@ impl Model {
                     }
                     RenameTarget::Vessel { id } => {
                         self.layout
-                            .voyages
-                            .iter_mut()
+                            .containers_mut()
                             .flat_map(|voyage| &mut voyage.fleets)
                             .flat_map(|fleet| &mut fleet.vessels)
                             .find(|item| item.id == id)
                             .ok_or("Vessel not found")?
-                            .name = Some(name)
+                            .name = name
                     }
                     RenameTarget::Portal { id } => {
                         self.layout
-                            .voyages
-                            .iter_mut()
+                            .containers_mut()
                             .flat_map(|voyage| &mut voyage.portals)
                             .find(|item| item.id == id)
                             .ok_or("Portal not found")?
-                            .name = Some(name)
+                            .name = name
                     }
                 }
             }
@@ -300,64 +276,23 @@ impl Model {
                 self.layout.selected_fleet = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
             }
-            Action::RevealVessel { id } => {
-                let (v, f) = self
-                    .layout
-                    .voyages
-                    .iter()
-                    .enumerate()
-                    .find_map(|(v, voyage)| {
-                        voyage
-                            .fleets
-                            .iter()
-                            .position(|fleet| fleet.vessels.iter().any(|vessel| vessel.id == id))
-                            .map(|f| (v, f))
-                    })
-                    .ok_or("Vessel not found")?;
-                let voyage = self.layout.voyages[v].id.clone();
-                let fleet = &mut self.layout.voyages[v].fleets[f];
-                if fleet
-                    .maximized_placement
-                    .as_ref()
-                    .is_some_and(|selected| selected != &id)
-                {
-                    fleet.maximized_placement = None;
-                }
-                let fleet_id = fleet.id.clone();
-                if !contains_leaf(&fleet.root, &id) {
-                    let first = std::mem::replace(
-                        &mut fleet.root,
-                        Split::Leaf {
-                            placement: id.clone(),
-                        },
-                    );
-                    fleet.root = Split::Branch {
-                        axis: Axis::Horizontal,
-                        share: Default::default(),
-                        first: Box::new(first),
-                        second: Box::new(Split::Leaf { placement: id }),
-                    };
-                }
-                self.layout.selected_voyage = Some(voyage);
-                self.layout.selected_fleet = Some(fleet_id);
-                self.layout.view = WorkspaceView::Fleet;
-            }
             Action::Dock { context } => {
                 let exists = match &context {
                     Context::Workspace => true,
-                    Context::Voyage { id } => self.layout.voyages.iter().any(|v| &v.id == id),
-                    Context::Fleet { id } => self.fleet_index(id).is_some(),
+                    Context::Voyage { id } => self.layout.containers().any(|v| &v.id == id),
+                    Context::Fleet { id } => self
+                        .layout
+                        .containers()
+                        .any(|voyage| voyage.fleets.iter().any(|fleet| &fleet.id == id)),
                     Context::Vessel { id } => self
                         .layout
-                        .voyages
-                        .iter()
+                        .containers()
                         .flat_map(|v| &v.fleets)
                         .flat_map(|f| &f.vessels)
                         .any(|p| &p.id == id),
                     Context::Portal { id } => self
                         .layout
-                        .voyages
-                        .iter()
+                        .containers()
                         .flat_map(|v| &v.portals)
                         .any(|p| &p.id == id),
                 };
@@ -366,99 +301,16 @@ impl Model {
                 }
                 self.layout.context = context;
             }
-            Action::ResizeSplit { fleet, path, share } => {
-                if path.len() > 128 {
-                    return Err("Split path exceeds 128 steps".into());
-                }
-                let (v, f) = self.fleet_index(&fleet).ok_or("Fleet not found")?;
-                let mut node = &mut self.layout.voyages[v].fleets[f].root;
-                for child in path {
-                    node = match (node, child) {
-                        (Split::Branch { first, .. }, SplitChild::First) => first,
-                        (Split::Branch { second, .. }, SplitChild::Second) => second,
-                        _ => return Err("Split branch not found".into()),
-                    };
-                }
-                let Split::Branch { share: current, .. } = node else {
-                    return Err("Split branch not found".into());
-                };
-                *current = share;
-            }
-            Action::Split { fleet, after, axis } => {
-                let (v, f) = self.fleet_index(&fleet).ok_or("Fleet not found")?;
-                let content_id = self.layout.voyages[v].fleets[f]
-                    .vessels
-                    .iter()
-                    .find(|p| p.id == after)
-                    .map(|p| p.content.clone())
-                    .ok_or("Split target not found")?;
-                let cwd = self
-                    .layout
-                    .contents
-                    .iter()
-                    .find(|c| c.id == content_id)
-                    .map(|c| c.cwd.clone())
-                    .ok_or("Content not found")?;
-                let new_content = ContentId(self.id("content")?);
-                let placement = PlacementId(self.id("placement")?);
-                let target = &mut self.layout.voyages[v].fleets[f];
-                if !replace_leaf(&mut target.root, &after, &placement, axis) {
-                    return Err("Split layout target not found".into());
-                }
-                target.maximized_placement = None;
-                target.vessels.push(Vessel {
-                    id: placement,
-                    content: new_content.clone(),
-                    name: None,
-                });
-                self.layout.contents.push(Content {
-                    id: new_content,
-                    type_id: "terminal".into(),
-                    cwd,
-                    backend: None,
-                    configuration: None,
-                    start_pending: None,
-                    launch: None,
-                    shell_intent: None,
-                });
-            }
-            Action::SetVesselMaximized { id, maximized } => {
-                let fleet = self
-                    .layout
-                    .voyages
-                    .iter_mut()
-                    .flat_map(|voyage| &mut voyage.fleets)
-                    .find(|fleet| fleet.vessels.iter().any(|vessel| vessel.id == id))
-                    .ok_or("Vessel cannot change maximization")?;
-                if !contains_leaf(&fleet.root, &id)
-                    || (maximized && matches!(fleet.root, Split::Leaf { .. }))
-                    || (!maximized && fleet.maximized_placement.as_ref() != Some(&id))
-                {
-                    return Err("Vessel cannot change maximization".into());
-                }
-                fleet.maximized_placement = maximized.then_some(id);
-            }
-            Action::MoveVessel { id, target, side } => {
-                let fleet = self
-                    .layout
-                    .voyages
-                    .iter_mut()
-                    .flat_map(|voyage| &mut voyage.fleets)
-                    .find(|fleet| {
-                        fleet.vessels.iter().any(|vessel| vessel.id == id)
-                            && fleet.vessels.iter().any(|vessel| vessel.id == target)
-                    })
-                    .ok_or("Both Vessels must belong to the same Fleet")?;
-                if id == target {
-                    return Ok(());
-                }
-                let (root, removed) = remove_leaf(fleet.root.clone(), &id);
-                let mut root = root.ok_or("The source Vessel has no destination")?;
-                if !removed || !insert_leaf(&mut root, &target, &id, side) {
-                    return Err("Vessel placement is not in the Fleet layout".into());
-                }
-                fleet.root = root;
-            }
+            action @ (Action::ResizePanelSplit { .. }
+            | Action::MovePanel { .. }
+            | Action::SetPanelMaximized { .. }
+            | Action::SetPanelHidden { .. }
+            | Action::RemovePanel { .. }
+            | Action::RevealPanel { .. }
+            | Action::SavePanelLayout { .. }
+            | Action::LoadPanelLayout { .. }
+            | Action::RemovePanelLayout { .. }
+            | Action::SetPortalPresentation { .. }) => panels::apply(&mut self.layout, action)?,
             Action::MoveVoyage { id, target, before } => {
                 let source = self
                     .layout
@@ -501,28 +353,6 @@ impl Model {
     }
 }
 
-pub(crate) fn validate_maximized(layout: &Layout) -> Result<(), String> {
-    for fleet in layout.voyages.iter().flat_map(|voyage| &voyage.fleets) {
-        if let Some(id) = &fleet.maximized_placement
-            && (matches!(fleet.root, Split::Leaf { .. })
-                || !contains_leaf(&fleet.root, id)
-                || !fleet.vessels.iter().any(|vessel| &vessel.id == id))
-        {
-            return Err("Stored Fleet maximization is invalid".into());
-        }
-    }
-    Ok(())
-}
-
-fn contains_leaf(root: &Split, id: &PlacementId) -> bool {
-    match root {
-        Split::Leaf { placement } => placement == id,
-        Split::Branch { first, second, .. } => {
-            contains_leaf(first, id) || contains_leaf(second, id)
-        }
-    }
-}
-
 fn reorder<T>(items: &mut Vec<T>, source: usize, destination: usize, before: bool) {
     if source == destination {
         return;
@@ -530,128 +360,4 @@ fn reorder<T>(items: &mut Vec<T>, source: usize, destination: usize, before: boo
     let item = items.remove(source);
     let destination = destination - usize::from(source < destination);
     items.insert(destination + usize::from(!before), item);
-}
-
-fn remove_leaf(root: Split, id: &PlacementId) -> (Option<Split>, bool) {
-    match root {
-        Split::Leaf { placement } if &placement == id => (None, true),
-        Split::Leaf { .. } => (Some(root), false),
-        Split::Branch {
-            axis,
-            share,
-            first,
-            second,
-        } => {
-            let (first, removed) = remove_leaf(*first, id);
-            let (second, removed) = if removed {
-                (Some(*second), true)
-            } else {
-                remove_leaf(*second, id)
-            };
-            let root = match (first, second) {
-                (Some(first), Some(second)) => Some(Split::Branch {
-                    axis,
-                    share,
-                    first: Box::new(first),
-                    second: Box::new(second),
-                }),
-                (Some(child), None) | (None, Some(child)) => Some(child),
-                (None, None) => None,
-            };
-            (root, removed)
-        }
-    }
-}
-
-fn insert_leaf(root: &mut Split, target: &PlacementId, id: &PlacementId, side: Side) -> bool {
-    match root {
-        Split::Leaf { placement } if placement == target => {
-            let (axis, before) = match side {
-                Side::Left => (Axis::Horizontal, true),
-                Side::Right => (Axis::Horizontal, false),
-                Side::Top => (Axis::Vertical, true),
-                Side::Bottom => (Axis::Vertical, false),
-            };
-            let source = Split::Leaf {
-                placement: id.clone(),
-            };
-            let destination = Split::Leaf {
-                placement: target.clone(),
-            };
-            let (first, second) = if before {
-                (source, destination)
-            } else {
-                (destination, source)
-            };
-            *root = Split::Branch {
-                axis,
-                share: Default::default(),
-                first: Box::new(first),
-                second: Box::new(second),
-            };
-            true
-        }
-        Split::Branch { first, second, .. } => {
-            insert_leaf(first, target, id, side) || insert_leaf(second, target, id, side)
-        }
-        _ => false,
-    }
-}
-
-fn validate_saved(
-    root: &Split,
-    fleet: &Fleet,
-    contents: &[Content],
-    seen: &mut Vec<PlacementId>,
-) -> Result<(), String> {
-    match root {
-        Split::Leaf { placement } => {
-            if seen.contains(placement) {
-                return Err("Saved layout repeats a placement".into());
-            }
-            seen.push(placement.clone());
-            let vessel = fleet
-                .vessels
-                .iter()
-                .find(|item| &item.id == placement)
-                .ok_or("Saved placement no longer belongs to this Fleet")?;
-            contents
-                .iter()
-                .find(|item| item.id == vessel.content)
-                .ok_or("Saved content not found")?;
-            Ok(())
-        }
-        Split::Branch { first, second, .. } => {
-            validate_saved(first, fleet, contents, seen)?;
-            validate_saved(second, fleet, contents, seen)
-        }
-    }
-}
-
-fn replace_leaf(
-    root: &mut Split,
-    target: &PlacementId,
-    inserted: &PlacementId,
-    axis: Axis,
-) -> bool {
-    match root {
-        Split::Leaf { placement } if placement == target => {
-            *root = Split::Branch {
-                axis,
-                share: Default::default(),
-                first: Box::new(Split::Leaf {
-                    placement: target.clone(),
-                }),
-                second: Box::new(Split::Leaf {
-                    placement: inserted.clone(),
-                }),
-            };
-            true
-        }
-        Split::Branch { first, second, .. } => {
-            replace_leaf(first, target, inserted, axis)
-                || replace_leaf(second, target, inserted, axis)
-        }
-        _ => false,
-    }
 }

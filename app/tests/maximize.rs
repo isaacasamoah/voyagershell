@@ -1,5 +1,5 @@
 use voyager_app::{client::Client, core::Core};
-use voyager_contract::{Action, Axis, Context, PlacementId, Request, Status};
+use voyager_contract::{Action, Context, PlacementId, Request, Status};
 
 #[test]
 fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
@@ -27,10 +27,16 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
         let split = client
             .call(request(
                 initial.version,
-                Action::Split {
-                    fleet,
-                    after: first.clone(),
-                    axis: Axis::Horizontal,
+                Action::CreateContent {
+                    type_id: "terminal".into(),
+                    destination: voyager_contract::ContentDestination::Panel {
+                        owner: voyager_contract::PanelOwner::Fleet { id: fleet },
+                        insertion: voyager_contract::PanelInsertion::Beside {
+                            id: first.clone(),
+                            side: voyager_contract::Side::Right,
+                        },
+                    },
+                    launch: None,
                 },
             ))
             .unwrap();
@@ -39,7 +45,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
         let zoom = client
             .call(request(
                 split.version,
-                Action::SetVesselMaximized {
+                Action::SetPanelMaximized {
                     id: first.clone(),
                     maximized: true,
                 },
@@ -51,7 +57,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
                 Context::Vessel { id: second.clone() },
                 request(
                     zoom.version,
-                    Action::SetVesselMaximized {
+                    Action::SetPanelMaximized {
                         id: second,
                         maximized: false,
                     },
@@ -61,7 +67,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
         assert_eq!(wrong.status, Status::Rejected);
         assert_eq!(
             wrong.message.as_deref(),
-            Some("invalid_workspace: Vessel cannot change maximization")
+            Some("invalid_workspace: Panel cannot change maximization")
         );
         assert_eq!(wrong.version, zoom.version);
         assert!(
@@ -72,7 +78,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
         let stale = client
             .call(request(
                 split.version,
-                Action::SetVesselMaximized {
+                Action::SetPanelMaximized {
                     id: first.clone(),
                     maximized: false,
                 },

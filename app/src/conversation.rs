@@ -13,9 +13,18 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
     if layout.context == Context::Workspace {
         return Ok(focus);
     }
-    for voyage in &layout.voyages {
+    for voyage in layout.containers() {
+        let home = layout
+            .home
+            .as_ref()
+            .is_some_and(|home| home.id == voyage.id);
+        let prefix = if home {
+            vec!["Home".to_owned()]
+        } else {
+            vec!["Workspace".to_owned(), voyage.name.clone()]
+        };
         if matches!(&layout.context, Context::Voyage { id } if id == &voyage.id) {
-            focus.path.push(voyage.name.clone());
+            focus.path = prefix.clone();
             focus.cwd = directory(
                 layout,
                 voyage
@@ -28,7 +37,10 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
         }
         for fleet in &voyage.fleets {
             if matches!(&layout.context, Context::Fleet { id } if id == &fleet.id) {
-                focus.path.extend([voyage.name.clone(), fleet.name.clone()]);
+                focus.path = prefix.clone();
+                if !home {
+                    focus.path.push(fleet.name.clone());
+                }
                 focus.cwd = directory(layout, fleet.vessels.iter());
                 return Ok(focus);
             }
@@ -42,11 +54,11 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
                     .iter()
                     .find(|c| c.id == placement.content)
                     .ok_or("Focused content is missing")?;
-                focus.path.extend([
-                    voyage.name.clone(),
-                    fleet.name.clone(),
-                    content.type_id.clone(),
-                ]);
+                focus.path = prefix.clone();
+                if !home {
+                    focus.path.push(fleet.name.clone());
+                }
+                focus.path.push(placement.name.clone());
                 focus.cwd = Some(content.cwd.clone());
                 return Ok(focus);
             }
@@ -61,9 +73,10 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
                 .iter()
                 .find(|c| c.id == placement.content)
                 .ok_or("Focused content is missing")?;
+            focus.path = prefix;
             focus
                 .path
-                .extend([voyage.name.clone(), format!("{} Portal", content.type_id)]);
+                .extend(["Portals".to_owned(), placement.name.clone()]);
             focus.cwd = Some(content.cwd.clone());
             return Ok(focus);
         }
@@ -252,7 +265,10 @@ mod tests {
             .unwrap();
         let captured = focus(&model.layout, 42).unwrap();
         assert_eq!(captured.scope, model.layout.context);
-        assert_eq!(captured.path, ["Workspace", "Alpha", "Fleet 1", "terminal"]);
+        assert_eq!(
+            captured.path,
+            ["Workspace", "Alpha", "Fleet 1", "Terminal 1"]
+        );
         assert_eq!(captured.cwd.as_deref(), Some("/alpha"));
         assert_eq!(captured.revision, 42);
         model.layout.voyages[0].name = "Renamed".into();
@@ -270,14 +286,15 @@ mod tests {
         model.layout.voyages[0].portals.push(Vessel {
             id: voyager_contract::PlacementId("portal".into()),
             content: placement.content,
-            name: None,
+            name: "Portal test".into(),
+            hidden: false,
         });
         model.layout.context = Context::Portal {
             id: voyager_contract::PlacementId("portal".into()),
         };
         assert_eq!(
             focus(&model.layout, 45).unwrap().path,
-            ["Workspace", "Renamed", "terminal Portal"]
+            ["Workspace", "Renamed", "Portals", "Portal test"]
         );
         model.layout.context = Context::Workspace;
         assert!(focus(&model.layout, 46).unwrap().cwd.is_none());

@@ -21,7 +21,7 @@ fn ready<T>(future: impl std::future::Future<Output = T>) -> T {
 #[test]
 fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
     use voyager_app::{client::Client, core::Core};
-    use voyager_contract::{Action, ContentDestination, RenameTarget, Request, Status};
+    use voyager_contract::{Action, RenameTarget, Request, Status};
     let session = format!("voyager-workspace-changes-{}", std::process::id());
     let client = Client::open(session.clone(), "/tmp".into());
     let checked = std::panic::catch_unwind(|| {
@@ -85,8 +85,11 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
                 action: Action::CreateContent {
                     launch: None,
                     type_id: "notes".into(),
-                    destination: ContentDestination::Portal {
-                        voyage: initial.layout.selected_voyage.clone().unwrap(),
+                    destination: voyager_contract::ContentDestination::Panel {
+                        owner: voyager_contract::PanelOwner::Portals {
+                            voyage: initial.layout.selected_voyage.clone().unwrap(),
+                        },
+                        insertion: voyager_contract::PanelInsertion::Empty,
                     },
                 },
             })
@@ -176,8 +179,11 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                 request(Action::CreateContent {
                     type_id: "notes".into(),
                     launch: None,
-                    destination: voyager_contract::ContentDestination::Portal {
-                        voyage: initial.layout.selected_voyage.clone().unwrap(),
+                    destination: voyager_contract::ContentDestination::Panel {
+                        owner: voyager_contract::PanelOwner::Portals {
+                            voyage: initial.layout.selected_voyage.clone().unwrap(),
+                        },
+                        insertion: voyager_contract::PanelInsertion::Empty,
                     },
                 }),
             )
