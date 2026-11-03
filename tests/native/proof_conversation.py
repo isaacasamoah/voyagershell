@@ -8,6 +8,7 @@ from secrets import token_hex
 from PIL import ImageChops
 
 from proof_workspace import core_rpc, named_button
+from proof_clipboard import Clipboard
 
 
 def provider_processes(evidence):
@@ -55,8 +56,6 @@ def conversation_ux(
     providers = []
     errors = []
     original_clipboard = None
-    clipboard_written = set()
-    clipboard_mutated = False
 
     def document():
         return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
@@ -85,35 +84,12 @@ def conversation_ux(
         native("focus", pid, "Message Voyager", 0)
         wait(input_value, lambda item: item["focused"], "focused chat input")
 
-    def clipboard_output():
-        return subprocess.run(
-            ["xsel", "--clipboard", "--output", "--selectionTimeout", "2000"],
-            env=env,
-            capture_output=True,
-            check=True,
-            timeout=4,
-        ).stdout
-
-    def clipboard_write(value):
-        nonlocal clipboard_mutated
-        assert clipboard_output() in clipboard_written, "Clipboard changed externally"
-        clipboard_mutated = True
-        clipboard_written.add(value)
-        subprocess.run(
-            ["xsel", "--clipboard", "--input"],
-            input=value,
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            check=True,
-            timeout=4,
-        )
-        wait(clipboard_output, lambda current: current == value, "clipboard write", 5)
+    clipboard = Clipboard(env, wait)
 
     def copied_text(expected):
         focus_input()
         sentinel = ("voyager-clipboard-" + token_hex(16)).encode()
-        clipboard_write(sentinel)
+        clipboard.write(sentinel)
         native("key", 65507, True)
         for key in (ord("a"), ord("c")):
             native("key", key, True)
@@ -121,10 +97,8 @@ def conversation_ux(
         native("key", 65507, False)
         native("key", 65367, True)
         native("key", 65367, False)
-        clipboard_written.add(expected.encode())
-        copied = wait(
-            clipboard_output, lambda value: value != sentinel, "editor copy", 5
-        )
+        clipboard.written.add(expected.encode())
+        copied = wait(clipboard.read, lambda value: value != sentinel, "editor copy", 5)
         assert copied == expected.encode(), "Copied editor text did not match"
 
     try:
@@ -160,72 +134,9 @@ def conversation_ux(
         click(*named_button(native, evidence, "Chat"))
         idle = wait(read, lambda state: state["phase"] == "idle", "idle chat")
         assert idle["thread"] is None
-        wayland_env = dict(env, WAYLAND_DISPLAY=env["VOYAGER_PROOF_WAYLAND_DISPLAY"])
-        types = (
-            subprocess.run(
-                ["wl-paste", "--list-types"],
-                env=wayland_env,
-                capture_output=True,
-                check=True,
-                timeout=4,
-            )
-            .stdout.decode()
-            .splitlines()
+        original_clipboard = clipboard.preserve(
+            evidence / "conversation-ux-clipboard-types.json"
         )
-        advertised = types
-        transfer_targets = {
-            "SAVE_TARGETS",
-            "TARGETS",
-            "INCR",
-            "DELETE",
-            "MULTIPLE",
-            "TIMESTAMP",
-        }
-        types = [kind for kind in types if kind not in transfer_targets]
-        assert types and all(
-            kind in {"UTF8_STRING", "TEXT", "STRING"}
-            or kind.lower() in {"text/plain", "text/plain;charset=utf-8"}
-            for kind in types
-        ), f"Clipboard is not known plain text: {types}"
-        original_clipboard = clipboard_output()
-        original_clipboard.decode("utf-8")
-        representations = []
-        for kind in types:
-            try:
-                result = subprocess.run(
-                    ["wl-paste", "--no-newline", "--type", kind],
-                    env=wayland_env,
-                    capture_output=True,
-                    check=False,
-                    timeout=4,
-                )
-                representations.append(
-                    {
-                        "type": kind,
-                        "length": len(result.stdout),
-                        "match": result.returncode == 0
-                        and result.stdout == original_clipboard,
-                    }
-                )
-            except subprocess.TimeoutExpired:
-                representations.append({"type": kind, "length": None, "match": False})
-        (evidence / "conversation-ux-clipboard-types.json").write_text(
-            json.dumps(
-                {
-                    "advertisedTypes": advertised,
-                    "xselLength": len(original_clipboard),
-                    "representations": representations,
-                    "restores": "text bytes only; MIME aliases and owner are not preserved",
-                },
-                indent=2,
-            )
-        )
-        assert any(
-            item["match"]
-            and item["type"].lower() in {"text/plain", "text/plain;charset=utf-8"}
-            for item in representations
-        ), "No canonical Wayland plain-text representation matched X11"
-        clipboard_written.add(original_clipboard)
         try:
             wait(
                 input_value,
@@ -448,9 +359,9 @@ def conversation_ux(
     finally:
         primary = sys.exc_info()[0] is not None
         observations = []
-        if original_clipboard is not None and clipboard_mutated:
+        if original_clipboard is not None and clipboard.mutated:
             try:
-                clipboard_write(original_clipboard)
+                clipboard.write(original_clipboard)
             except Exception as error:
                 errors.append(f"clipboard restore: {error}")
         try:
@@ -553,6 +464,7 @@ def prove(
             read=read,
         )
 
+    content_case = journey == "conversation-content"
     process_case = journey == "conversation-process"
     closed_chat = journey == "conversation-workspace-refresh"
     administrator = closed_chat or journey in (
@@ -588,13 +500,14 @@ def prove(
     idle = wait(lambda state: state["phase"] == "idle", 5)
     assert idle["thread"] is None, "Opening chat started the provider"
     capture("conversation-open")
-    if administrator:
-        fixture = evidence / "profile/conversation/administrator-read.txt"
-        fixture.parent.mkdir(parents=True, exist_ok=True)
+    if administrator or content_case:
         marker = token_hex(8)
-        fixture.write_text(marker)
         initial = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
-    if process_case:
+        if administrator:
+            fixture = evidence / "profile/conversation/administrator-read.txt"
+            fixture.parent.mkdir(parents=True, exist_ok=True)
+            fixture.write_text(marker)
+    if process_case or content_case:
         deadline = time.monotonic() + 15
         while True:
             initial = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
@@ -615,6 +528,8 @@ def prove(
         if process_case
         else "Use your native file read tool to read administrator-read.txt in your current directory. Then use voyager_workspace to inspect the workspace and create exactly one Fleet named Native admin inside the existing Voyage. Report the file marker and actual result briefly. Do not change project files or launch agents."
         if administrator
+        else f"Use voyager_workspace to inspect this workspace. Create exactly two Notes instances: one Vessel beside the existing terminal in the selected Fleet and one Portal in this Voyage. Use voyager_content to describe and inspect each instance, then update its title and text with the inspected revision. The Vessel title must be Fleet notes and text must be FLEET_{marker}. The Portal title must be Voyage notes and text must be VOYAGE_{marker}. Inspect both again to verify saved data. Keep all existing content and context unchanged. Do not edit files, send terminal input, create Fleets, repeat an uncertain action or use native tools to bypass the content owner."
+        if content_case
         else "Count from one to one hundred in words. Use no tools."
         if journey == "conversation-interrupt"
         else "Reply with one short sentence about a quiet ocean. Use no tools."
@@ -707,11 +622,15 @@ def prove(
     first = wait(
         lambda state: any(
             message["role"] == "assistant" for message in state["messages"]
-        )
+        ),
+        240 if content_case else 90,
     )
     (evidence / "conversation-first.json").write_text(json.dumps(first, indent=2))
     capture("conversation-progress")
-    final = wait(lambda state: state["phase"] in ("completed", "failed", "unconfirmed"))
+    final = wait(
+        lambda state: state["phase"] in ("completed", "failed", "unconfirmed"),
+        240 if content_case else 90,
+    )
     assert final["phase"] == "completed", final
     assert final["thread"] and final["turn"] and final["model"]
     users = [message for message in final["messages"] if message["role"] == "user"]
@@ -726,6 +645,93 @@ def prove(
     assert users[0]["context"]["path"] == ["Workspace"]
     assert users[0]["context"]["scope"] == {"kind": "workspace"}
     assert users[0]["context"]["revision"].isdigit()
+    if content_case:
+        tools = [message for message in final["messages"] if message["role"] == "tool"]
+        assert tools and all(
+            message["tool"]["status"] == "applied" for message in tools
+        )
+        assert all(
+            message["context"] == users[0]["context"]
+            and message["requestId"] == users[0]["requestId"]
+            and message["tool"]["callId"] == message["id"]
+            and message["tool"]["callbackIds"]
+            for message in tools
+        )
+        actions = [
+            message["tool"]["action"]["action"]
+            for message in tools
+            if message["tool"]["name"] == "voyager_content"
+        ]
+        assert {action["operation"] for action in actions} == {
+            "describe",
+            "inspect",
+            "update",
+        }
+        assert sum(action["operation"] == "update" for action in actions) == 2
+        observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        layout = observed["value"]
+        voyage = layout["voyages"][0]
+        fleet = voyage["fleets"][0]
+        assert (
+            len(layout["contents"]) == 3
+            and len(fleet["vessels"]) == 2
+            and len(voyage["portals"]) == 1
+        )
+        assert layout["context"] == initial["value"]["context"]
+        assert layout["contents"][0] == initial["value"]["contents"][0]
+        ids = [fleet["vessels"][1]["content"], voyage["portals"][0]["content"]]
+        expected = [
+            {"title": "Fleet notes", "text": f"FLEET_{marker}"},
+            {"title": "Voyage notes", "text": f"VOYAGE_{marker}"},
+        ]
+        assert ids[0] != ids[1]
+        for key in ids:
+            calls = [
+                message["tool"]
+                for message in tools
+                if message["tool"]["name"] == "voyager_content"
+                and message["tool"]["action"]["action"]["contentId"] == key
+            ]
+            assert [call["action"]["action"]["operation"] for call in calls] == [
+                "describe",
+                "inspect",
+                "update",
+                "inspect",
+            ]
+            assert (
+                calls[2]["action"]["action"]["expectedRevision"] == calls[1]["version"]
+            )
+            assert calls[3]["version"] == calls[2]["version"] != calls[1]["version"]
+        assert [
+            json.loads((evidence / "profile/data" / (key + ".json")).read_text())
+            for key in ids
+        ] == expected
+        click(*chat_close_point(native, pid, evidence))
+        deadline = time.monotonic() + 10
+        while True:
+            fields = native("fields", pid, ["Note title", "Note text"], "window")[
+                "fields"
+            ]
+            if len(fields) == 4 and all(
+                item["role"] == "entry" and item["width"] > 0 and item["height"] > 0
+                for item in fields
+            ):
+                break
+            assert time.monotonic() < deadline, fields
+            time.sleep(0.1)
+        (evidence / "content-agent-observed.json").write_text(
+            json.dumps(
+                {
+                    "layout": observed,
+                    "ids": ids,
+                    "data": expected,
+                    "fields": fields,
+                    "renderedTextRequiresVisualReview": True,
+                },
+                indent=2,
+            )
+        )
+        capture("content-agent-both-native-views")
     if administrator:
         assert marker in " ".join(message["text"] for message in answers), (
             "Native file inspection did not return the undisclosed fixture marker"
@@ -897,7 +903,7 @@ def prove(
             )
         (evidence / "owned-shells.json").write_text(json.dumps(shells, indent=2))
     close()
-    if administrator:
+    if administrator or content_case:
         core_rpc(session, env, "server.stop", {})
         for provider in providers:
             path = Path("/proc") / str(provider["pid"])
@@ -914,8 +920,16 @@ def prove(
                     or path.joinpath("stat").read_text().rsplit(") ", 1)[1].split()[19]
                     != shell["start"]
                 ), shell
-    return (["native-workspace-refresh-with-chat-closed"] if closed_chat else []) + [
-        "native-private-text-completed",
-        "matching-thread-turn-request-context",
-        "native-quit",
-    ]
+    return (
+        (
+            ["native-content-agent-create-inspect-update-both-scopes"]
+            if content_case
+            else []
+        )
+        + (["native-workspace-refresh-with-chat-closed"] if closed_chat else [])
+        + [
+            "native-private-text-completed",
+            "matching-thread-turn-request-context",
+            "native-quit",
+        ]
+    )
