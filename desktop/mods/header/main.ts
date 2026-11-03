@@ -60,6 +60,8 @@ type Editing = {
 };
 type Opening = {
   status: TerminalResponse["status"] | "pending" | "unbound";
+  reason?: TerminalResponse["reason"];
+  intent?: Content["shellIntent"];
   message?: string | null;
 };
 
@@ -254,7 +256,7 @@ export default class Workspace extends View {
           for (const [content, outcome] of this.openings)
             if (outcome.status === "rejected") {
               this.openings.delete(content);
-              retry.add(content);
+              if (outcome.reason !== "ended") retry.add(content);
             }
         }
         if (
@@ -463,6 +465,14 @@ export default class Workspace extends View {
       );
       if (content?.typeId !== "terminal") continue;
       if (
+        allowed.has(vessel.content) &&
+        content.shellIntent &&
+        this.openings.get(vessel.content)?.intent !== content.shellIntent
+      ) {
+        this.openings.delete(vessel.content);
+        this.terminals.delete(vessel.content);
+      }
+      if (
         content?.backend &&
         !content.startPending &&
         this.openings.get(vessel.content)?.status === "unbound"
@@ -479,7 +489,10 @@ export default class Workspace extends View {
         continue;
       }
       if (this.openings.has(vessel.content)) continue;
-      this.openings.set(vessel.content, { status: "pending" });
+      this.openings.set(vessel.content, {
+        status: "pending",
+        intent: content.shellIntent,
+      });
       let opened: TerminalResponse;
       try {
         opened = await openTerminal(vessel.content, this.version);
@@ -487,11 +500,15 @@ export default class Workspace extends View {
         this.openings.set(vessel.content, {
           status: "uncertain",
           message: errorMessage(error),
+          intent: content.shellIntent,
         });
         this.fresh = false;
         throw error;
       }
-      this.openings.set(vessel.content, opened);
+      this.openings.set(vessel.content, {
+        ...opened,
+        intent: content.shellIntent,
+      });
       if (opened.status === "applied")
         this.terminals.set(vessel.content, TerminalState.new(vessel.content));
       const current = await invoke({ operation: "inspect" }, this.version);
@@ -501,7 +518,10 @@ export default class Workspace extends View {
           this.status ||
             "Workspace refresh is unconfirmed after the terminal request.",
         );
-      if (opened.status !== "applied")
+      if (
+        opened.status !== "applied" &&
+        !(opened.status === "rejected" && opened.reason === "ended")
+      )
         errors.push(opened.message || opened.status);
       task.notify();
     }
@@ -512,6 +532,8 @@ export default class Workspace extends View {
     if (content.startPending)
       return "Terminal start is unconfirmed. Inspect before trying again.";
     const outcome = this.openings.get(content.id);
+    if (outcome?.status === "rejected" && outcome.reason === "ended")
+      return "This program has ended.";
     if (outcome?.status === "rejected")
       return `Terminal unavailable: ${outcome.message || "Request refused"}`;
     if (outcome?.status === "uncertain")
@@ -970,6 +992,18 @@ export default class Workspace extends View {
     );
     if (!content) throw Error("Placement content is unavailable.");
     const terminal = this.terminals.get(content.id);
+    const opening = this.openings.get(content.id);
+    const startShell: Extract<Action, { operation: "start-new-shell" }> | null =
+      opening?.status === "rejected" &&
+      opening.reason === "ended" &&
+      content.backend &&
+      !content.startPending
+        ? {
+            operation: "start-new-shell",
+            contentId: content.id,
+            expectedBackend: content.backend,
+          }
+        : null;
     return this.target(
       `${scope.kind}-${placement.id}`,
       scope,
@@ -1081,7 +1115,20 @@ export default class Workspace extends View {
                         .p(20)
                         .text_size(12)
                         .text_color(colors.muted)
-                        .child(this.terminalStatus(content)),
+                        .child(this.terminalStatus(content))
+                        .children(
+                          startShell
+                            ? [
+                                Button.new(`start-shell-${placement.id}`)
+                                  .accessibility_label("Start new shell")
+                                  .disabled(this.busy || !this.fresh)
+                                  .child("Start new shell")
+                                  .on_click((_event, cx) =>
+                                    this.run(startShell, cx),
+                                  ),
+                              ]
+                            : [],
+                        ),
               ),
           )
           .children(

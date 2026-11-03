@@ -52,8 +52,9 @@ function fixture(
     async (content) => {
       opened += 1;
       version += 1;
+      const outcome = typeof status === "function" ? status(content) : status;
       return {
-        status: typeof status === "function" ? status(content) : status,
+        ...(typeof outcome === "string" ? { status: outcome } : outcome),
         message: "open failed",
       };
     },
@@ -106,6 +107,47 @@ test("Notes placements never open a terminal, including owner-created content", 
   assert.equal(count(), 0);
   assert.equal(view.openings.size, 0);
   assert.equal(view.terminals.size, 0);
+});
+
+test("a confirmed ended binding is neutral and Refresh never authorizes a new program", async () => {
+  const { view, task, layout, cx, pending, count } = fixture({
+    status: "rejected",
+    reason: "ended",
+  });
+  layout.contents[0].backend = "t1";
+  await view.prepare(task, true);
+  assert.equal(
+    view.terminalStatus(layout.contents[0]),
+    "This program has ended.",
+  );
+  assert.equal(view.terminals.size, 0);
+  view.run({ operation: "inspect" }, cx);
+  await pending[0];
+  assert.equal(count(), 2);
+  assert.equal(layout.contents[0].backend, "t1");
+  assert.equal(view.status, "");
+});
+
+test("Refresh does not start an unbound shell merely because its prior viewer ended", async () => {
+  const { view, layout, cx, pending, count } = fixture("applied");
+  view.openings.set("content", { status: "rejected", reason: "ended" });
+  assert.equal(layout.contents[0].backend, null);
+  view.run({ operation: "inspect" }, cx);
+  await pending[0];
+  assert.equal(count(), 0);
+});
+
+test("one fresh shell intent replaces its old opening without retrying a refusal", async () => {
+  const { view, task, layout, count } = fixture("rejected");
+  layout.contents[0].backend = "t1";
+  layout.contents[0].shellIntent = "explicit-intent";
+  view.openings.set("content", { status: "rejected", reason: "ended" });
+  await assert.rejects(
+    view.prepare(task, true, new Set(), new Set(["content"])),
+  );
+  await view.prepare(task, true, new Set(), new Set(["content"]));
+  assert.equal(count(), 1);
+  assert.equal(view.openings.get("content").intent, "explicit-intent");
 });
 
 test("explicit Refresh retries a known refusal after inspection", async () => {
@@ -647,6 +689,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "homeOverview",
     "workspace_notice",
     "composeCanvas",
+    "vesselFrame",
     source,
   )(
     class {},
@@ -667,6 +710,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
         .replace(/^import [\s\S]*?;\n/gm, "")
         .replaceAll("export function", "function") + "\nreturn composeCanvas;",
     )(div),
+    (node) => node,
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
@@ -714,6 +758,24 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   });
   const actions = [];
   view.run = (action) => actions.push(action);
+  view.terminals = new Map();
+  view.openings = new Map([
+    ["content", { status: "rejected", reason: "ended" }],
+  ]);
+  view.layout.contents[0].typeId = "terminal";
+  view.layout.contents[0].backend = "t1";
+  view.content(view.layout.voyages[0].fleets[0].vessels[0], context);
+  const start = nodes.filter(
+    (node) => node.calls.accessibility_label?.[0] === "Start new shell",
+  );
+  assert.equal(start.length, 1);
+  start[0].calls.on_click[0]({}, {});
+  assert.deepEqual(actions.pop(), {
+    operation: "start-new-shell",
+    contentId: "content",
+    expectedBackend: "t1",
+  });
+  assert.deepEqual(view.layout.context, context);
   view.render({});
   assert.ok(
     nodes.some((node) => node.calls.child?.[0] === "Avatar unavailable"),

@@ -294,6 +294,12 @@ fn load(
                 );
                 let result = result
                     .and_then(|viewer| install_viewer(&viewers, &request.content_id.0, viewer));
+                let reason = match &result {
+                    Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "finished" => {
+                        Some(voyager_contract::TerminalReason::Ended)
+                    }
+                    _ => None,
+                };
                 let (status, message) = match result {
                     Ok(()) => (voyager_contract::Status::Applied, None),
                     Err(voyager_app::core::Error::Rejected { kind, message }) => (
@@ -308,6 +314,7 @@ fn load(
                     request_id: request.request_id,
                     content_id: request.content_id,
                     status,
+                    reason,
                     message,
                 };
                 let encoded = serde_json::to_string(&response)
