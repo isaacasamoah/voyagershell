@@ -1,4 +1,5 @@
 import copy
+import time
 from secrets import token_hex
 
 from proof_process import process_identity
@@ -20,6 +21,8 @@ def maximize(
     native,
     owner,
     capture,
+    geometry,
+    evidence,
     wait,
     document,
     fleet,
@@ -226,7 +229,7 @@ def maximize(
     assert len(candidates) == 1, candidates
     frame = candidates[0]
     away = panes()[0]
-    move(away["x"] + away["width"] / 2, away["y"] + away["height"] / 2)
+    pointer_away = move(away["x"] + away["width"] / 2, away["y"] + away["height"] / 2)
     native("focus", owner, "Vessel dock", frames.index(frame))
     wait(
         lambda: fields("Vessel dock", 3),
@@ -256,9 +259,70 @@ def maximize(
         native("key", 65289, True)
         native("key", 65289, False)
     assert document()["value"] == baseline["value"]
-    capture("maximize-tab-focused-arrow")
-    native("key", 65293, True)
-    native("key", 65293, False)
+    diagnostic = {
+        "variant": "AX/doc observations hold Enter longer than the original fast pair; no driver or product fix inferred",
+        "pointerAwayAcknowledgement": pointer_away,
+    }
+
+    def observe(label):
+        item = {"startedAt": time.time(), "startedMonotonic": time.monotonic()}
+        diagnostic[label] = item
+        item["fields"] = native("fields", owner, None, "window")["fields"]
+        item["document"] = document()
+        item.update(finishedAt=time.time(), finishedMonotonic=time.monotonic())
+        save("maximize-enter-diagnostic", diagnostic)
+        return item
+
+    def enter(label):
+        observe(label + "-before")
+        try:
+            diagnostic[label + "-down"] = {
+                "startedAt": time.time(),
+                "startedMonotonic": time.monotonic(),
+            }
+            diagnostic[label + "-down"]["acknowledgement"] = native("key", 65293, True)
+            diagnostic[label + "-down"].update(
+                finishedAt=time.time(), finishedMonotonic=time.monotonic()
+            )
+            observe(label + "-after-down")
+        finally:
+            diagnostic[label + "-up"] = {
+                "startedAt": time.time(),
+                "startedMonotonic": time.monotonic(),
+            }
+            diagnostic[label + "-up"]["acknowledgement"] = native("key", 65293, False)
+            diagnostic[label + "-up"].update(
+                finishedAt=time.time(), finishedMonotonic=time.monotonic()
+            )
+            observe(label + "-after-up")
+        capture("maximize-enter-" + label + "-after-keyup")
+
+    before_capture = observe("before-capture")
+    button = buttons[0]
+    assert button in before_capture["fields"]
+    image = capture("maximize-tab-focused-arrow")
+    after_capture = observe("after-capture")
+    bounds = geometry()
+    sx, sy = image.width / int(bounds["WIDTH"]), image.height / int(bounds["HEIGHT"])
+    box = [
+        round(button["x"] * sx),
+        round(button["y"] * sy),
+        round((button["x"] + button["width"]) * sx),
+        round((button["y"] + button["height"]) * sy),
+    ]
+    assert 0 <= box[0] < box[2] <= image.width and 0 <= box[1] < box[3] <= image.height
+    image.crop(box).save(evidence / "maximize-tab-focused-control.png")
+    save(
+        "maximize-tab-focused-control",
+        {
+            "field": button,
+            "cropBox": box,
+            "imageSize": image.size,
+            "windowBounds": bounds,
+        },
+    )
+    assert button in after_capture["fields"]
+    enter("maximize")
     wait(
         document,
         lambda doc: fleet(doc).get("maximizedPlacement") == selected,
@@ -278,8 +342,7 @@ def maximize(
         {"document": verify(True), "fields": focused_restore},
     )
     capture("maximize-enter-focused-restore")
-    native("key", 65293, True)
-    native("key", 65293, False)
+    enter("restore")
     wait(
         document,
         lambda doc: not fleet(doc).get("maximizedPlacement"),
@@ -307,7 +370,7 @@ def maximize(
         "corner-maximize-different-pane-without-focus-repair",
         "keyboard-restore-and-maximize-without-focus-repair",
         "corner-restore-retains-the-accepted-three-leaf-tree",
-        "tab-visible-button-and-enter-maximize-restore-with-pointer-away",
+        "tab-visible-button-and-held-enter-diagnostic-with-pointer-away",
         "original-processes-context-layouts-and-pane-mapping-retained",
         "native-quit-and-recorded-owned-exits",
     ]

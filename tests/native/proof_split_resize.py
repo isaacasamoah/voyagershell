@@ -170,7 +170,9 @@ def prove(
 
     def move(x, y):
         bounds = geometry()
-        native("move", int(bounds["X"]) + round(x), int(bounds["Y"]) + round(y), 2)
+        return native(
+            "move", int(bounds["X"]) + round(x), int(bounds["Y"]) + round(y), 2
+        )
 
     def click(item):
         move(item["x"] + item["width"] / 2, item["y"] + item["height"] / 2)
@@ -467,6 +469,8 @@ def prove(
                 native=native,
                 owner=owner,
                 capture=capture,
+                geometry=geometry,
+                evidence=evidence,
                 wait=wait,
                 document=document,
                 fleet=fleet,
