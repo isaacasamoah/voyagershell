@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum Action {
     Send { text: String },
     Interrupt,
+    StartVoice,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

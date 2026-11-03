@@ -19,3 +19,9 @@ mod codex;
 pub mod conversation;
 pub mod conversation_client;
 pub mod provider;
+
+mod voice;
+mod voice_host;
+mod voice_session;
+mod voice_transcript;
+mod voice_wire;

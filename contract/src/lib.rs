@@ -5,6 +5,7 @@ use std::sync::Arc;
 pub mod administrator;
 pub mod content;
 pub mod conversation;
+pub mod voice;
 
 macro_rules! id {
     ($name:ident) => {

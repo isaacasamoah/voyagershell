@@ -1,3 +1,5 @@
+#[path = "conversation_audio.rs"]
+mod audio;
 use crate::{
     administrator::{self, Tools},
     client::Client as Workspace,
@@ -7,10 +9,14 @@ use crate::{
         Answer, Capabilities, Command, Event as ProviderEvent, Operation, Outcome, ToolCall,
         Visible,
     },
+    voice::{Binding, Shared as AudioState},
+    voice_session::{self, Event as AudioEvent},
 };
+use audio::Realtime;
 use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
+    ffi::OsString,
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -24,6 +30,7 @@ use std::{
 use voyager_contract::conversation::{
     Action, Delivery, Focus, Message, Phase, Reply, Request, Role, Snapshot,
 };
+use voyager_contract::voice::{Capability, State as VoiceState};
 use voyager_contract::{Action as WorkspaceAction, Request as WorkspaceRequest, Status};
 
 struct Projection {
@@ -55,6 +62,7 @@ impl Projection {
 
 struct Call {
     request: Request,
+    binding: Option<Binding>,
     reply: SyncSender<Reply>,
 }
 
@@ -63,51 +71,109 @@ pub struct Client {
     sender: SyncSender<Call>,
     projection: Arc<Projection>,
     sequence: Arc<AtomicU64>,
+    audio: Arc<AudioState>,
+}
+
+pub struct AudioLease {
+    client: Client,
+    binding: Binding,
+}
+
+impl AudioLease {
+    pub fn snapshot(&self) -> Result<VoiceState, String> {
+        self.client.audio.snapshot()
+    }
+
+    pub fn start(&self) -> Result<Reply, String> {
+        self.client.call_bound(
+            Request {
+                request_id: self.client.request_id(),
+                action: Action::StartVoice,
+            },
+            Some(self.binding.clone()),
+        )
+    }
+
+    pub fn stop(&self) -> Result<(), String> {
+        self.client.audio.stop(&self.binding)
+    }
+
+    pub fn release(&self) {
+        self.binding.revoke();
+        let _ = self.client.audio.stop(&self.binding);
+    }
+}
+
+impl Drop for AudioLease {
+    fn drop(&mut self) {
+        self.release();
+    }
 }
 
 impl Client {
-    pub fn capabilities() -> Capabilities {
-        Codex::capabilities()
+    pub fn open(profile: PathBuf, workspace: Workspace) -> Self {
+        Self::with_audio(profile, workspace, Vec::new())
     }
 
-    pub fn open(profile: PathBuf, workspace: Workspace) -> Self {
+    pub fn with_audio(
+        profile: PathBuf,
+        workspace: Workspace,
+        audio_environment: Vec<(OsString, OsString)>,
+    ) -> Self {
         let (sender, commands) = mpsc::sync_channel::<Call>(8);
         let projection = Arc::new(Projection {
             value: Mutex::new(Snapshot::default()),
             changed: Condvar::new(),
         });
         let sequence = Arc::new(AtomicU64::new(0));
+        let audio = Arc::new(AudioState::new(Capability::Checking));
+        let owned_audio = audio.clone();
         let shared = projection.clone();
         let issued = sequence.clone();
         thread::spawn(move || {
             let (events, incoming) = mpsc::sync_channel(32);
-            let mut owner = Owner {
-                projection: shared,
-                provider: None,
-                disconnected: false,
-                started: false,
-                pending: None,
-                sequence: 0,
-                model: "gpt-6.1-sol".into(),
-                effort: "high".into(),
-                active: String::new(),
-                interrupt: false,
-                deferred: VecDeque::new(),
-                callbacks: VecDeque::new(),
+            let (audio_events, audio_incoming) = mpsc::sync_channel(2);
+            let (scopes, captured_scopes) = mpsc::sync_channel(1);
+            let _ = owned_audio.capability(Codex::voice_capability());
+            let mut owner = Owner::new(
+                shared,
                 profile,
                 workspace,
-                receipts: VecDeque::new(),
-                seen: None,
-                tools: Tools::default(),
-                context: None,
-            };
+                owned_audio,
+                audio_environment,
+                audio_events,
+                scopes,
+            );
             loop {
+                if let Ok(event) = audio_incoming.try_recv() {
+                    owner.audio_event(event);
+                }
+                if let Ok(scope) = captured_scopes.try_recv() {
+                    match scope {
+                        CapturedScope::Opening { generation, result } => {
+                            owner.initial_scope(generation, result)
+                        }
+                        CapturedScope::Turn {
+                            generation,
+                            turn,
+                            result,
+                        } => {
+                            if let Err(error) = owner.accept_scope(generation, &turn, result) {
+                                owner.fail(error, Phase::Unconfirmed);
+                            }
+                        }
+                    }
+                }
+                if let Err(error) = owner.audio_tick() {
+                    let _ = owner.audio.end(Some(error));
+                }
                 if let Err(error) = owner.tool_result() {
                     owner.fail(error, Phase::Unconfirmed);
                 }
                 match commands.try_recv() {
                     Ok(call) => {
-                        let reply = owner.call(&call.request, &issued, &events);
+                        let reply =
+                            owner.call(&call.request, call.binding.as_ref(), &issued, &events);
                         let _ = call.reply.send(reply);
                     }
                     Err(mpsc::TryRecvError::Disconnected) => break,
@@ -115,7 +181,7 @@ impl Client {
                 }
                 match incoming.recv_timeout(Duration::from_millis(10)) {
                     Ok(Ok(value)) => {
-                        if let Err(error) = owner.event(value) {
+                        if let Err(error) = owner.receive(value) {
                             owner.fail(error, Phase::Unconfirmed);
                         }
                     }
@@ -123,6 +189,7 @@ impl Client {
                         owner.disconnected = true;
                         owner.pending = None;
                         owner.fail(error, Phase::Unconfirmed);
+                        let _ = owner.audio.end(Some("The private provider disconnected. Native audio stopped; accepted work was not replayed.".into()));
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => (),
                     Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -132,13 +199,27 @@ impl Client {
                     .as_ref()
                     .is_some_and(|pending| pending.deadline < Instant::now())
                 {
-                    owner.pending = None;
-                    owner.fail(
-                        "Provider acknowledgement unconfirmed; nothing was resubmitted".into(),
-                        Phase::Unconfirmed,
-                    );
+                    let expired = owner.pending.take();
+                    let audio_only = expired
+                        .as_ref()
+                        .is_some_and(|pending| pending.operation.audio());
+                    if audio_only {
+                        if let Some(generation) = owner.voice_start.take() {
+                            let _ = owner.audio.finish(generation, Some("Native account readiness was not confirmed. Audio did not open.".into()), true);
+                        }
+                        let _ = owner.audio.end(Some(
+                            "Native voice acknowledgement is unconfirmed. No request was replayed."
+                                .into(),
+                        ));
+                    } else {
+                        owner.fail(
+                            "Provider acknowledgement unconfirmed; nothing was resubmitted".into(),
+                            Phase::Unconfirmed,
+                        );
+                    }
                 }
             }
+            let _ = owner.audio.end(None);
             if let Some(provider) = owner.provider.take()
                 && let Err(error) = provider.close()
             {
@@ -149,6 +230,7 @@ impl Client {
             sender,
             projection,
             sequence,
+            audio,
         }
     }
 
@@ -160,13 +242,32 @@ impl Client {
     }
 
     pub fn call(&self, request: Request) -> Result<Reply, String> {
+        self.call_bound(request, None)
+    }
+
+    fn call_bound(&self, request: Request, binding: Option<Binding>) -> Result<Reply, String> {
         let (reply, result) = mpsc::sync_channel(1);
         self.sender
-            .try_send(Call { request, reply })
+            .try_send(Call {
+                request,
+                binding,
+                reply,
+            })
             .map_err(|_| "Conversation busy or unavailable; nothing was queued")?;
         result
             .recv_timeout(Duration::from_secs(25))
             .map_err(|_| "Conversation result unconfirmed; do not repeat this request".into())
+    }
+
+    pub fn capabilities(&self) -> Result<Capabilities, String> {
+        Ok(Codex::capabilities(self.audio.snapshot()?.capability))
+    }
+
+    pub fn audio_lease(&self) -> Result<AudioLease, String> {
+        Ok(AudioLease {
+            client: self.clone(),
+            binding: self.audio.binding()?,
+        })
     }
 
     pub fn snapshot(&self, after: Option<u64>) -> Result<Option<Snapshot>, String> {
@@ -196,6 +297,18 @@ struct Pending {
     deadline: Instant,
 }
 
+enum CapturedScope {
+    Opening {
+        generation: u64,
+        result: Result<Focus, String>,
+    },
+    Turn {
+        generation: u64,
+        turn: String,
+        result: Result<Focus, String>,
+    },
+}
+
 struct Owner {
     projection: Arc<Projection>,
     provider: Option<Codex>,
@@ -215,9 +328,58 @@ struct Owner {
     seen: Option<u64>,
     tools: Tools,
     context: Option<Focus>,
+    audio: Arc<AudioState>,
+    audio_environment: Vec<(OsString, OsString)>,
+    audio_events: SyncSender<AudioEvent>,
+    realtime: Option<Realtime>,
+    voice_start: Option<u64>,
+    offer: Option<(u64, String)>,
+    scope_pending: Option<(u64, String)>,
+    audio_focus: Option<(u64, Focus)>,
+    scopes: SyncSender<CapturedScope>,
 }
 
 impl Owner {
+    fn new(
+        projection: Arc<Projection>,
+        profile: PathBuf,
+        workspace: Workspace,
+        audio: Arc<AudioState>,
+        audio_environment: Vec<(OsString, OsString)>,
+        audio_events: SyncSender<AudioEvent>,
+        scopes: SyncSender<CapturedScope>,
+    ) -> Self {
+        Self {
+            projection,
+            provider: None,
+            disconnected: false,
+            started: false,
+            pending: None,
+            sequence: 0,
+            model: "gpt-6.1-sol".into(),
+            effort: "high".into(),
+            active: String::new(),
+            interrupt: false,
+            deferred: VecDeque::new(),
+            callbacks: VecDeque::new(),
+            profile,
+            workspace,
+            receipts: VecDeque::new(),
+            seen: None,
+            tools: Tools::default(),
+            context: None,
+            audio,
+            audio_environment,
+            audio_events,
+            realtime: None,
+            voice_start: None,
+            offer: None,
+            scope_pending: None,
+            audio_focus: None,
+            scopes,
+        }
+    }
+
     fn fail(&self, error: String, phase: Phase) {
         let _ = self.projection.edit(|state| fail(state, error, phase));
     }
@@ -241,6 +403,7 @@ impl Owner {
     fn call(
         &mut self,
         request: &Request,
+        binding: Option<&Binding>,
         issued: &AtomicU64,
         events: &SyncSender<Result<ProviderEvent, String>>,
     ) -> Reply {
@@ -272,7 +435,7 @@ impl Owner {
             })
             .and_then(|id| {
                 self.seen = Some(id);
-                self.apply(request, events)
+                self.apply(request, binding, events)
             });
         let delivery = if result.is_ok() {
             Delivery::Accepted
@@ -300,12 +463,36 @@ impl Owner {
     fn apply(
         &mut self,
         request: &Request,
+        binding: Option<&Binding>,
         events: &SyncSender<Result<ProviderEvent, String>>,
     ) -> Result<(), String> {
         if self.disconnected {
             return Err(
                 "The private provider disconnected; nothing was restarted or resubmitted".into(),
             );
+        }
+        if matches!(request.action, Action::StartVoice) {
+            let binding = binding.ok_or("Voice requires the native avatar's audio lease")?;
+            if self.pending.is_some() || self.realtime.is_some() || self.voice_start.is_some() {
+                return Err("The previous native connection is still starting or stopping".into());
+            }
+            if self
+                .projection
+                .read(|state| state.phase == Phase::Unconfirmed)?
+            {
+                return Err("The private conversation has an unconfirmed operation".into());
+            }
+            if !self.started {
+                (self.model, self.effort) = settings(&self.profile)?;
+            }
+            let generation = self.audio.begin(binding)?;
+            self.voice_start = Some(generation);
+            if self.started {
+                self.rpc(Command::ReadAccount)
+            } else {
+                self.open_provider(events)
+            }?;
+            return Ok(());
         }
         if matches!(request.action, Action::Interrupt) {
             if !self
@@ -381,22 +568,32 @@ impl Owner {
             true
         })?;
         if !self.started {
-            self.started = true;
-            let cwd = self.profile.join("conversation");
-            let result = fs::create_dir_all(&cwd)
-                .map_err(|e| e.to_string())
-                .and_then(|()| Codex::open(&cwd, events.clone()));
-            match result {
-                Ok(provider) => self.provider = Some(provider),
-                Err(error) => {
-                    self.fail(error, Phase::Failed);
-                    return Ok(());
-                }
-            }
-            self.rpc(Command::Initialize)
+            self.open_provider(events)
         } else {
             self.start_turn()
         }
+    }
+
+    fn open_provider(
+        &mut self,
+        events: &SyncSender<Result<ProviderEvent, String>>,
+    ) -> Result<(), String> {
+        self.started = true;
+        let cwd = self.profile.join("conversation");
+        match fs::create_dir_all(&cwd)
+            .map_err(|e| e.to_string())
+            .and_then(|()| Codex::open(&cwd, events.clone()))
+        {
+            Ok(provider) => self.provider = Some(provider),
+            Err(error) => {
+                self.fail(error.clone(), Phase::Failed);
+                if let Some(generation) = self.voice_start.take() {
+                    self.audio.finish(generation, Some(error), true)?;
+                }
+                return Ok(());
+            }
+        }
+        self.rpc(Command::Initialize)
     }
 
     fn start_turn(&mut self) -> Result<(), String> {
@@ -430,13 +627,49 @@ impl Owner {
         Ok(())
     }
 
-    fn event(&mut self, event: ProviderEvent) -> Result<(), String> {
+    #[cfg(test)]
+    fn event(&mut self, value: Value) -> Result<(), String> {
+        let pending = self
+            .pending
+            .as_ref()
+            .map(|pending| (pending.id, pending.operation));
+        if let Some(event) = crate::codex::normalize(value, pending) {
+            self.receive(event)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn receive(&mut self, event: ProviderEvent) -> Result<(), String> {
         match event {
+            ProviderEvent::Audio(event) => {
+                if let Err(error) = self.realtime_event(&event) {
+                    self.audio.end(Some(error))?;
+                }
+                Ok(())
+            }
+            ProviderEvent::Visible(event) => {
+                if self.voice_turn(&event)? {
+                    return Ok(());
+                }
+                if self.scope_pending.is_some()
+                    || self
+                        .pending
+                        .as_ref()
+                        .is_some_and(|pending| pending.operation == Operation::StartTurn)
+                {
+                    self.projection
+                        .edit(|state| defer(state, &mut self.deferred, event))
+                } else {
+                    self.reduce(event)
+                }
+            }
             ProviderEvent::Tool(call) => {
                 if self
                     .pending
                     .as_ref()
                     .is_some_and(|pending| pending.operation == Operation::StartTurn)
+                    || self.scope_pending.is_some()
                 {
                     if self.callbacks.len() >= 16 {
                         return Err("Early tool callbacks exceeded their bound; no extra tools were dispatched".into());
@@ -478,23 +711,54 @@ impl Owner {
                 if self.pending.as_ref().is_none_or(|pending| pending.id != id) {
                     return Ok(());
                 }
-                self.pending
+                let pending = self
+                    .pending
                     .take()
                     .ok_or("Missing provider request identity")?;
                 let result = match outcome {
                     Outcome::Applied(answer) => answer,
+                    Outcome::Unconfirmed(error) => return Err(error),
                     Outcome::Rejected(error) => {
+                        if pending.operation.audio() {
+                            if let Some(generation) = self.voice_start.take() {
+                                self.audio.finish(
+                                    generation,
+                                    Some(
+                                        "The native account check failed. Audio did not open."
+                                            .into(),
+                                    ),
+                                    true,
+                                )?;
+                            }
+                            self.audio.end(Some("The provider refused native voice. Text and accepted work remain available.".into()))?;
+                            if pending.operation == Operation::StartAudio {
+                                self.realtime = None;
+                            } else if pending.operation == Operation::StopAudio {
+                                self.audio_stopped();
+                            }
+                            return Ok(());
+                        }
+                        if let Some(generation) = self.voice_start.take() {
+                            self.audio.finish(
+                                generation,
+                                Some(
+                                    "The private provider could not create its native voice thread"
+                                        .into(),
+                                ),
+                                true,
+                            )?;
+                        }
                         self.fail(error, Phase::Failed);
                         return Ok(());
                     }
-                    Outcome::Unconfirmed(error) => return Err(error),
                 };
                 match result {
-                    Answer::Initialized => {
-                        self.provider
+                    Answer::Initialized { version } => {
+                        let provider = self
+                            .provider
                             .as_mut()
-                            .ok_or("Private provider unavailable")?
-                            .initialized()?;
+                            .ok_or("Private provider unavailable")?;
+                        provider.initialized(version)?;
                         self.rpc(Command::OpenConversation {
                             model: self.model.clone(),
                             effort: self.effort.clone(),
@@ -509,45 +773,66 @@ impl Owner {
                             state.model = model;
                             true
                         })?;
-                        self.start_turn()
+                        if self.voice_start.is_some() {
+                            self.rpc(Command::ReadAccount)
+                        } else {
+                            self.start_turn()
+                        }
                     }
                     Answer::Turn { id } => {
                         self.projection.edit(|state| {
                             state.turn = Some(id);
                             true
                         })?;
-                        while let Some(value) = self.deferred.pop_front() {
-                            self.reduce(value)?;
+                        while let Some(event) = self.deferred.pop_front() {
+                            self.reduce(event)?;
                         }
-                        while let Some(value) = self.callbacks.pop_front() {
-                            self.event(ProviderEvent::Tool(value))?;
+                        while let Some(call) = self.callbacks.pop_front() {
+                            self.receive(ProviderEvent::Tool(call))?;
                         }
                         if self.interrupt {
                             self.interrupt_turn()?;
                         }
                         Ok(())
                     }
-                    Answer::Acknowledged => Ok(()),
-                }
-            }
-            ProviderEvent::Visible(value) => {
-                if self
-                    .pending
-                    .as_ref()
-                    .is_some_and(|pending| pending.operation == Operation::StartTurn)
-                {
-                    self.projection
-                        .edit(|state| defer(state, &mut self.deferred, value))
-                } else {
-                    self.reduce(value)
+                    Answer::Account { native } => {
+                        if native {
+                            self.start_audio()
+                        } else {
+                            if let Some(generation) = self.voice_start.take() {
+                                self.audio.finish(generation, Some("Native speech requires the existing ChatGPT account. No account or billing route was changed.".into()), true)?;
+                            }
+                            Ok(())
+                        }
+                    }
+                    Answer::Acknowledged => {
+                        if pending.operation == Operation::StopAudio {
+                            self.audio_stopped();
+                        }
+                        Ok(())
+                    }
                 }
             }
         }
     }
 
     fn reduce(&self, value: Visible) -> Result<(), String> {
-        self.projection
-            .edit(|state| notification(state, &value, &self.active))
+        self.projection.edit(|state| {
+            let changed = notification(state, &value, &self.active);
+            if changed {
+                for message in state
+                    .messages
+                    .iter_mut()
+                    .rev()
+                    .take_while(|message| message.request_id == self.active)
+                {
+                    if message.context.is_none() {
+                        message.context = self.context.clone();
+                    }
+                }
+            }
+            changed
+        })
     }
 
     fn tool_result(&mut self) -> Result<(), String> {

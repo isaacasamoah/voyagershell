@@ -3,6 +3,7 @@ mod protocol;
 use crate::provider::{
     Capabilities, Command as ProviderCommand, Event, Operation, Support, ToolReply,
 };
+use crate::voice_host::Package;
 pub(crate) use protocol::decode as normalize;
 #[cfg(test)]
 pub(crate) use protocol::tool_reply as encode_tool_reply;
@@ -44,7 +45,19 @@ fn encode(value: &Value, limit: usize) -> Result<Vec<u8>, String> {
 pub(crate) struct Codex {
     child: Child,
     input: ChildStdin,
+    executable: PathBuf,
+    version: Option<String>,
     pending: Arc<Mutex<Option<(u64, Operation)>>>,
+}
+
+pub(crate) fn reported_version(result: &Value) -> Option<&str> {
+    let token = result
+        .get("userAgent")?
+        .as_str()?
+        .split_whitespace()
+        .next()?;
+    let (originator, version) = token.rsplit_once('/')?;
+    (!originator.is_empty() && !version.is_empty()).then_some(version)
 }
 
 impl Codex {
@@ -70,25 +83,25 @@ impl Codex {
         cwd: &Path,
         events: SyncSender<Result<Event, String>>,
     ) -> Result<Self, String> {
-        let mut child =
-            Command::new(env::var_os("VOYAGER_CODEX_BIN").unwrap_or_else(|| "codex".into()))
-                .args([
-                    "app-server",
-                    "--listen",
-                    "stdio://",
-                    "-c",
-                    "features.shell_tool=true",
-                    "-c",
-                    "features.multi_agent=false",
-                    "-c",
-                    "features.multi_agent_v2=false",
-                ])
-                .current_dir(cwd)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .spawn()
-                .map_err(|e| format!("Starting the private Codex runtime: {e}"))?;
+        let executable = Self::executable()?;
+        let mut child = Command::new(&executable)
+            .args([
+                "app-server",
+                "--listen",
+                "stdio://",
+                "-c",
+                "features.shell_tool=true",
+                "-c",
+                "features.multi_agent=false",
+                "-c",
+                "features.multi_agent_v2=false",
+            ])
+            .current_dir(cwd)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Starting the private Codex runtime: {e}"))?;
         let input = child.stdin.take().ok_or("Codex input unavailable")?;
         let output = child.stdout.take().ok_or("Codex output unavailable")?;
         let pending = Arc::new(Mutex::new(None));
@@ -122,6 +135,8 @@ impl Codex {
         Ok(Self {
             child,
             input,
+            executable,
+            version: None,
             pending,
         })
     }
@@ -151,14 +166,33 @@ impl Codex {
             .pending
             .lock()
             .map_err(|_| "Provider correlation unavailable")? = Some((id, operation));
-        self.write(json!({"id": id, "method": method, "params": params}))
+        self.write_bounded(
+            json!({"id": id, "method": method, "params": params}),
+            if operation.audio() { 128 * 1024 } else { 65536 },
+        )
     }
 
-    pub(crate) fn initialized(&mut self) -> Result<(), String> {
+    pub(crate) fn initialized(&mut self, version: Option<String>) -> Result<(), String> {
+        self.version = version;
         self.write(json!({"method":"initialized"}))
     }
 
-    pub(crate) fn capabilities() -> Capabilities {
+    pub(crate) fn voice_package(&self) -> Result<Package, String> {
+        let package = Package::discover(&self.executable)?;
+        package.check_provider(self.version.as_deref())?;
+        Ok(package)
+    }
+
+    pub(crate) fn voice_capability() -> voyager_contract::voice::Capability {
+        match Self::executable().and_then(|path| Package::discover(&path)) {
+            Ok(package) => voyager_contract::voice::Capability::Candidate {
+                version: package.version,
+            },
+            Err(reason) => voyager_contract::voice::Capability::Unavailable { reason },
+        }
+    }
+
+    pub(crate) fn capabilities(voice: voyager_contract::voice::Capability) -> Capabilities {
         let support = if Self::executable().is_ok() {
             Support::Protocol
         } else {
@@ -168,7 +202,7 @@ impl Codex {
             text: support,
             tools: support,
             interruption: support,
-            voice: Support::Unavailable,
+            voice,
         }
     }
 

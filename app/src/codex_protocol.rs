@@ -1,6 +1,9 @@
-use crate::provider::{Answer, Command, Event, Operation, Outcome, ToolCall, ToolReply, Visible};
+use crate::provider::{
+    Answer, AudioEvent, Command, Event, Operation, Outcome, ToolCall, ToolReply, Transcript,
+    Visible,
+};
 use serde_json::{Value, json};
-use voyager_contract::conversation::Phase;
+use voyager_contract::conversation::{Phase, Role};
 
 fn text(value: &Value, key: &str) -> Option<String> {
     value
@@ -41,6 +44,21 @@ pub(crate) fn encode(command: Command) -> Result<(&'static str, Value), String> 
         Command::InterruptTurn { thread, turn } => {
             ("turn/interrupt", json!({"threadId":thread,"turnId":turn}))
         }
+        Command::ReadAccount => ("account/read", json!({"refreshToken":false})),
+        Command::StartAudio {
+            thread,
+            session,
+            offer,
+            focus,
+            instructions,
+        } => {
+            let context = serde_json::to_string(&focus).map_err(|error| error.to_string())?;
+            (
+                "thread/realtime/start",
+                json!({"threadId":thread,"realtimeSessionId":session,"voiceSessionId":session,"outputModality":"audio","version":"v3","voice":"sol","transport":{"type":"webrtc","sdp":offer},"clientManagedHandoffs":false,"delegationAckFiller":true,"backendReasoningStatus":false,"initialItems":[{"role":"developer","text":context}],"realtimeStartInstructions":context,"prompt":instructions}),
+            )
+        }
+        Command::StopAudio { thread } => ("thread/realtime/stop", json!({"threadId":thread})),
     })
 }
 
@@ -63,7 +81,9 @@ fn outcome(value: &Value, operation: Operation) -> Outcome {
         return Outcome::Unconfirmed("Provider response missing its result".into());
     };
     let answer = match operation {
-        Operation::Initialize => Some(Answer::Initialized),
+        Operation::Initialize => Some(Answer::Initialized {
+            version: super::reported_version(result).map(str::to_owned),
+        }),
         Operation::OpenConversation => result
             .get("thread")
             .and_then(|thread| text(thread, "id"))
@@ -75,7 +95,10 @@ fn outcome(value: &Value, operation: Operation) -> Outcome {
             .get("turn")
             .and_then(|turn| text(turn, "id"))
             .map(|id| Answer::Turn { id }),
-        Operation::InterruptTurn => Some(Answer::Acknowledged),
+        Operation::ReadAccount => Some(Answer::Account {
+            native: result.pointer("/account/type").and_then(Value::as_str) == Some("chatgpt"),
+        }),
+        _ => Some(Answer::Acknowledged),
     };
     match answer {
         Some(answer) => Outcome::Applied(answer),
@@ -180,7 +203,50 @@ pub(crate) fn decode(value: Value, pending: Option<(u64, Operation)>) -> Option<
                 .into(),
             retrying: params.get("willRetry").and_then(Value::as_bool) == Some(true),
         },
-        _ => return None,
+        _ => {
+            let event = match method {
+                "thread/realtime/started" => AudioEvent::Started {
+                    thread,
+                    session: text(params, "realtimeSessionId").unwrap_or_default(),
+                    supported: params.get("version").and_then(Value::as_str) == Some("v3"),
+                },
+                "thread/realtime/sdp" => AudioEvent::Answer {
+                    thread,
+                    answer: text(params, "sdp").unwrap_or_default(),
+                },
+                "thread/realtime/closed" => AudioEvent::Closed { thread },
+                "thread/realtime/error" => AudioEvent::Failed { thread },
+                "thread/realtime/item/started" | "thread/realtime/item/completed"
+                    if params.pointer("/item/type").and_then(Value::as_str)
+                        == Some("transcriptSegment") =>
+                {
+                    let item = &params["item"];
+                    let role = match item.get("role").and_then(Value::as_str) {
+                        Some("user") => Role::User,
+                        Some("assistant") => Role::Assistant,
+                        _ => return None,
+                    };
+                    AudioEvent::Transcript(Transcript {
+                        thread,
+                        session: text(item, "realtimeSessionId"),
+                        item: text(item, "id")?,
+                        role: Some(role),
+                        text: item.get("text")?.as_str()?.into(),
+                        delta: false,
+                    })
+                }
+                "thread/realtime/item/transcript/delta" => AudioEvent::Transcript(Transcript {
+                    thread,
+                    session: None,
+                    item: text(params, "itemId")?,
+                    role: None,
+                    text: params.get("delta")?.as_str()?.into(),
+                    delta: true,
+                }),
+                _ => return None,
+            };
+            return Some(Event::Audio(event));
+        }
     };
     Some(Event::Visible(event))
 }
@@ -189,6 +255,49 @@ pub(crate) fn decode(value: Value, pending: Option<(u64, Operation)>) -> Option<
 mod tests {
     use super::*;
     use voyager_contract::{Context, conversation::Focus};
+
+    #[test]
+    fn native_audio_keeps_the_subscription_route_and_captured_focus() {
+        assert_eq!(
+            encode(Command::ReadAccount).unwrap(),
+            ("account/read", json!({"refreshToken":false}))
+        );
+        let focus = Focus {
+            scope: Context::Workspace,
+            path: vec!["Workspace".into()],
+            cwd: None,
+            revision: 42,
+        };
+        let (method, params) = encode(Command::StartAudio {
+            thread: "thread".into(),
+            session: "session".into(),
+            offer: "synthetic description".into(),
+            focus: focus.clone(),
+            instructions: "voice policy",
+        })
+        .unwrap();
+        assert_eq!(method, "thread/realtime/start");
+        assert_eq!(params["threadId"], "thread");
+        assert_eq!(params["realtimeSessionId"], "session");
+        assert_eq!(params["voiceSessionId"], "session");
+        assert_eq!(params["version"], "v3");
+        assert_eq!(
+            params["transport"],
+            json!({"type":"webrtc","sdp":"synthetic description"})
+        );
+        assert_eq!(
+            serde_json::from_str::<Focus>(params["initialItems"][0]["text"].as_str().unwrap())
+                .unwrap(),
+            focus
+        );
+        assert_eq!(
+            encode(Command::StopAudio {
+                thread: "thread".into()
+            })
+            .unwrap(),
+            ("thread/realtime/stop", json!({"threadId":"thread"}))
+        );
+    }
 
     #[test]
     fn commands_keep_bound_context_and_the_existing_text_profile() {

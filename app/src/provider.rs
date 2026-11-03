@@ -1,6 +1,6 @@
 use serde_json::Value;
 use std::path::PathBuf;
-use voyager_contract::conversation::{Focus, Phase};
+use voyager_contract::conversation::{Focus, Phase, Role};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Support {
@@ -13,7 +13,7 @@ pub struct Capabilities {
     pub text: Support,
     pub tools: Support,
     pub interruption: Support,
-    pub voice: Support,
+    pub voice: voyager_contract::voice::Capability,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -22,6 +22,15 @@ pub(crate) enum Operation {
     OpenConversation,
     StartTurn,
     InterruptTurn,
+    ReadAccount,
+    StartAudio,
+    StopAudio,
+}
+
+impl Operation {
+    pub fn audio(self) -> bool {
+        matches!(self, Self::ReadAccount | Self::StartAudio | Self::StopAudio)
+    }
 }
 
 pub(crate) struct ToolDefinition {
@@ -49,6 +58,17 @@ pub(crate) enum Command {
         thread: String,
         turn: String,
     },
+    ReadAccount,
+    StartAudio {
+        thread: String,
+        session: String,
+        offer: String,
+        focus: Focus,
+        instructions: &'static str,
+    },
+    StopAudio {
+        thread: String,
+    },
 }
 
 impl Command {
@@ -58,18 +78,26 @@ impl Command {
             Self::OpenConversation { .. } => Operation::OpenConversation,
             Self::StartTurn { .. } => Operation::StartTurn,
             Self::InterruptTurn { .. } => Operation::InterruptTurn,
+            Self::ReadAccount => Operation::ReadAccount,
+            Self::StartAudio { .. } => Operation::StartAudio,
+            Self::StopAudio { .. } => Operation::StopAudio,
         }
     }
 }
 
 pub(crate) enum Answer {
-    Initialized,
+    Initialized {
+        version: Option<String>,
+    },
     Conversation {
         thread: String,
         model: Option<String>,
     },
     Turn {
         id: String,
+    },
+    Account {
+        native: bool,
     },
     Acknowledged,
 }
@@ -136,6 +164,35 @@ pub(crate) enum ToolReply {
     },
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct Transcript {
+    pub thread: String,
+    pub session: Option<String>,
+    pub item: String,
+    pub role: Option<Role>,
+    pub text: String,
+    pub delta: bool,
+}
+
+pub(crate) enum AudioEvent {
+    Started {
+        thread: String,
+        session: String,
+        supported: bool,
+    },
+    Answer {
+        thread: String,
+        answer: String,
+    },
+    Closed {
+        thread: String,
+    },
+    Failed {
+        thread: String,
+    },
+    Transcript(Transcript),
+}
+
 pub(crate) enum Event {
     Response {
         id: u64,
@@ -143,6 +200,7 @@ pub(crate) enum Event {
     },
     Visible(Visible),
     Tool(Box<ToolCall>),
+    Audio(AudioEvent),
     CallbackError {
         id: Value,
         code: i64,
@@ -182,7 +240,7 @@ mod tests {
             })
         ));
         assert!(
-            matches!(crate::codex::normalize(json!({"id":7,"error":{"message":"known refusal"}}), Some((7, Operation::InterruptTurn))), Some(Event::Response { outcome: Outcome::Rejected(message), .. }) if message == "known refusal")
+            matches!(crate::codex::normalize(json!({"id":7,"error":{"message":"known refusal"}}), Some((7, Operation::StopAudio))), Some(Event::Response { outcome: Outcome::Rejected(message), .. }) if message == "known refusal")
         );
         for id in [json!("callback"), json!(u64::MAX)] {
             let callback = json!({"id":id,"method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_workspace","arguments":{"expectedVersion":"0","action":{"operation":"inspect"}}}});
@@ -228,8 +286,13 @@ mod tests {
             text: Support::Protocol,
             tools: Support::Protocol,
             interruption: Support::Protocol,
-            voice: Support::Unavailable,
+            voice: voyager_contract::voice::Capability::Unavailable {
+                reason: "Text-only provider".into(),
+            },
         };
+        let audio = crate::voice::Shared::new(capabilities.voice.clone());
+        let lease = audio.binding().unwrap();
+        assert!(audio.begin(&lease).is_err());
         let mut state = voyager_contract::conversation::Snapshot {
             thread: Some("thread".into()),
             turn: Some("turn".into()),
@@ -249,7 +312,7 @@ mod tests {
         ));
         assert_eq!(state.messages[0].text, "Text remains available");
         assert!(state.messages[0].tool.is_none());
-        assert_eq!(capabilities.voice, Support::Unavailable);
+        assert_eq!(audio.snapshot().unwrap().generation, 0);
         assert_eq!(capabilities.tools, Support::Protocol);
     }
 }
