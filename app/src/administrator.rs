@@ -858,7 +858,9 @@ mod tests {
             );
             assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
             let mut external = Core::connect(&session).unwrap();
-            let bumped = external.rpc("doc.set", json!({"name":"voyager-layout-v1","value":created.layout,"version":created.version})).unwrap();
+            let bumped = external
+                .document_set("voyager-layout-v1", &created.layout, created.version)
+                .unwrap();
             callback["id"] = "stale".into();
             callback["params"]["callId"] = "stale".into();
             callback["params"]["arguments"]["action"]["contentId"] = json!(a);
@@ -889,7 +891,7 @@ mod tests {
                 .content(
                     Access::Agent {
                         scope: focus.scope.clone(),
-                        expected_version: bumped["version"].as_u64().unwrap(),
+                        expected_version: bumped.version,
                     },
                     inspect(&a),
                 )
@@ -908,7 +910,7 @@ mod tests {
             external.close().unwrap();
         }));
         let mut cleanup = Core::connect(&session).unwrap();
-        let stopped = cleanup.rpc("server.stop", json!({}));
+        let stopped = cleanup.server_stop();
         cleanup.close().unwrap();
         drop(workspace);
         std::fs::remove_dir_all(directory).unwrap();
