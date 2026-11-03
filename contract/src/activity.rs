@@ -17,8 +17,10 @@ pub enum ActivityState {
 pub struct ReportedActivity {
     pub state: ActivityState,
     pub reason: Option<String>,
-    pub reported: bool,
+    pub reported: Option<bool>,
     pub app: Option<String>,
+    pub title: Option<String>,
+    pub message: Option<String>,
     pub kind: Option<String>,
     #[schemars(range(max = 100), transform = percent_schema)]
     pub progress: Option<u8>,

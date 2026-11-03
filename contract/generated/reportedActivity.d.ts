@@ -9,11 +9,13 @@ export interface ReportedActivity {
   app?: string | null;
   kind?: string | null;
   limited: boolean;
+  message?: string | null;
   observedMs?: string | null;
   progress?: number | null;
   reason?: string | null;
-  reported: boolean;
+  reported?: boolean | null;
   sequence?: string | null;
   sourceMs?: string | null;
   state: ActivityState;
+  title?: string | null;
 }

@@ -31,6 +31,12 @@
         "limited": {
           "type": "boolean"
         },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "observedMs": {
           "type": [
             "string",
@@ -52,7 +58,10 @@
           ]
         },
         "reported": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "sequence": {
           "type": [
@@ -68,11 +77,16 @@
         },
         "state": {
           "$ref": "#/definitions/ActivityState"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "state",
-        "reported",
         "limited"
       ],
       "type": "object"

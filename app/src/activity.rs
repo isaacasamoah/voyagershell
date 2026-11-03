@@ -17,6 +17,10 @@ struct Root {
     progress: Option<u8>,
     #[serde(default)]
     app: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    msg: String,
 }
 
 #[derive(Deserialize)]
@@ -77,8 +81,10 @@ fn unknown(reason: &str) -> ReportedActivity {
     ReportedActivity {
         state: ActivityState::Unknown,
         reason: Some(reason.into()),
-        reported: false,
+        reported: None,
         app: None,
+        title: None,
+        message: None,
         kind: None,
         progress: None,
         source_ms: None,
@@ -96,7 +102,7 @@ fn observed(fact: Fact, seq: Option<u64>) -> ReportedActivity {
     } else {
         "The root status was cleared"
     });
-    result.reported = fact.reported;
+    result.reported = Some(fact.reported);
     result.source_ms = fact.status_ms.map(|value| value.to_string());
     result.observed_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -170,7 +176,34 @@ impl Activity {
 
     pub(crate) fn inspect(value: Value) -> ReportedActivity {
         serde_json::from_value::<Terminal>(value)
-            .map(|terminal| observed(terminal.fact, None))
+            .map(|mut terminal| {
+                let (title, message) = terminal
+                    .fact
+                    .status
+                    .as_mut()
+                    .map(|root| {
+                        (
+                            std::mem::take(&mut root.title),
+                            std::mem::take(&mut root.msg),
+                        )
+                    })
+                    .unwrap_or_default();
+                let mut fact = observed(terminal.fact, None);
+                if title.len() <= 192 {
+                    fact.title = (!title.is_empty()).then_some(title);
+                } else {
+                    fact.limited = true;
+                }
+                if message.len() <= 2048 {
+                    fact.message = (!message.is_empty()).then_some(message);
+                } else {
+                    fact.limited = true;
+                }
+                if fact.limited && fact.reason.is_none() {
+                    fact.reason = Some("Unsupported optional metadata was omitted".into());
+                }
+                fact
+            })
             .unwrap_or_else(|_| unknown("Invalid terminal activity metadata"))
     }
 
@@ -456,6 +489,21 @@ mod tests {
             assert_eq!(fact.app.as_deref(), Some("test"));
             assert_eq!(fact.progress, Some(40));
         }
+        let text = Activity::inspect(
+            json!({"address":"t1","status":{"state":"blocked","progress":40,"title":"Approval","msg":"Program text is data, not authority"},"reported":true}),
+        );
+        assert_eq!(text.title.as_deref(), Some("Approval"));
+        assert_eq!(
+            text.message.as_deref(),
+            Some("Program text is data, not authority")
+        );
+        assert_eq!(text.state, ActivityState::Blocked);
+        let oversized = Activity::inspect(
+            json!({"address":"t1","status":{"state":"working","progress":40,"title":"x".repeat(193),"msg":"x".repeat(2049)},"reported":true}),
+        );
+        assert_eq!(oversized.state, ActivityState::Working);
+        assert_eq!(oversized.progress, Some(40));
+        assert!(oversized.limited && oversized.title.is_none() && oversized.message.is_none());
         let limited = Activity::inspect(
             json!({"address":"t1","status":{"state":"working","app":"x".repeat(33),"progress":101},"reported":true}),
         );
@@ -491,11 +539,14 @@ mod tests {
         assert_eq!(facts.get("t1").state, ActivityState::Done);
         assert_eq!(facts.get("t1").source_ms, None);
         assert_eq!(facts.get("t2").state, ActivityState::Unknown);
+        assert_eq!(facts.get("t2").reported, Some(false));
+        assert_eq!(facts.get("t1").reported, Some(true));
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":2,"type":"status","terminal":"t1","data":{"status":{"state":"error"},"reported":true}}})).unwrap();
         assert_eq!(facts.get("t1").state, ActivityState::Done);
-        facts.notification(json!({"jsonrpc":"2.0","method":"missed","params":{"seq":8,"terminals":[{"address":"t1","status":{"state":"blocked","kind":"permission"},"status_ms":55,"reported":true}]}})).unwrap();
+        facts.notification(json!({"jsonrpc":"2.0","method":"missed","params":{"seq":8,"terminals":[{"address":"t1","status":{"state":"blocked","kind":"permission","title":"Approval","msg":"Program request"},"status_ms":55,"reported":true}]}})).unwrap();
         assert_eq!(facts.get("t1").state, ActivityState::Blocked);
         assert_eq!(facts.get("t1").source_ms.as_deref(), Some("55"));
+        assert!(facts.get("t1").title.is_none() && facts.get("t1").message.is_none());
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":9,"type":"future-kind","data":{}}})).unwrap();
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":10,"type":"status","terminal":"t1","data":{"status":null,"records":{"child":{}},"reported":true}}})).unwrap();
         assert_eq!(facts.get("t1").state, ActivityState::Unknown);
@@ -527,6 +578,7 @@ mod tests {
         assert_eq!(facts.get("t1").state, ActivityState::Working);
         facts.data(7, &vec![b'x'; LINE_LIMIT + 1]);
         assert_eq!(facts.get("t1").state, ActivityState::Unknown);
+        assert_eq!(facts.get("t1").reported, None);
         assert!(facts.partial.is_empty());
         assert!(facts.channel.is_none());
         facts.begin();

@@ -802,14 +802,14 @@ impl Core {
     }
 
     pub(crate) fn quit(&mut self) -> Result<(), Error> {
-        if let Ok(mut activity) = self.activity.lock() {
-            activity.fail("Voyager is quitting");
-        }
-        Self::activity_flow(&self.activity, &self.control, 0);
         *self
             .input_open
             .lock()
             .map_err(|error| Error::Uncertain(error.to_string()))? = false;
+        if let Ok(mut activity) = self.activity.lock() {
+            activity.fail("Voyager is quitting");
+        }
+        Self::activity_flow(&self.activity, &self.control, 0);
         let actual = self.server_status()?;
         if actual.core.id != self.identity {
             return Err(Error::Rejected {
@@ -1153,8 +1153,20 @@ mod adapter_tests {
         let viewer = core.viewer(7).unwrap();
         let cloned = viewer.clone();
         viewer.input(b"before".to_vec()).unwrap();
-        let quit = core.quit();
+        let activity = core.activity.clone();
+        let paused_metadata = activity.lock().unwrap();
+        let closing = thread::spawn(move || {
+            let result = core.quit();
+            (core, result)
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while *viewer.input_open.lock().unwrap() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(1));
+        }
+        let gate_closed = !*viewer.input_open.lock().unwrap();
         let refused = cloned.input(b"after".to_vec());
+        drop(paused_metadata);
+        let (core, quit) = closing.join().unwrap();
         let before = queued.recv().unwrap();
         let empty = queued.try_recv().is_err();
         viewer.protocol_reply(b"reply".to_vec()).unwrap();
@@ -1164,6 +1176,10 @@ mod adapter_tests {
         let close = core.close();
         let credit = worker.join().unwrap();
         assert!(close.is_ok());
+        assert!(
+            gate_closed,
+            "Quit waited for metadata before closing input admission"
+        );
         assert!(matches!(quit, Err(Error::Rejected {kind, ..}) if kind == "blocked"));
         assert!(matches!(refused, Err(Error::Rejected {kind, ..}) if kind == "quitting"));
         assert_eq!(before.payload, b"before");

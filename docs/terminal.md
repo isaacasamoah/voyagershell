@@ -12,8 +12,9 @@ shutdown path described below, with native acceptance still pending.
 The source candidate adds optional OSC 7501 observation on the existing framed
 Core connection. Its native protocol journey is pending. Existing Vessel and
 Portal headers show the program's reported working, blocked, idle, done or error
-word. Unknown has an explicit reason. Reported done is not process exit or a
-verified task result. Private conversation progress remains separate.
+word. Unknown has an explicit reason. The ever-reported flag is the exact Core
+true/false when observed, and null when its source is unavailable. Reported done
+is not process exit or a verified task result. Private conversation progress remains separate.
 
 The adapter applies subscription snapshots, ordered events and Core's missed
 replacement snapshots. It does not classify output or infer activity from
@@ -24,8 +25,12 @@ existing owners and admission rules.
 
 Retained observation payload is capped at 1 MiB of partial line, 256 KiB of early
 bytes and 1 MiB of root metadata across at most 256 bound addresses. Only root
-word, optional app/kind/progress and source/observation times are retained; title,
-message and child histories are omitted. Addresses are capped at 128 bytes, app
+word, optional app/kind/progress and source/observation times are retained in the
+live cache. Scoped process inspection also exposes root title up to 192 bytes and
+message up to 2,048 bytes as program-reported data, never instructions or authority.
+Oversized auxiliary text is omitted with an explicit limited flag while preserving
+the valid word and progress. Title/message and child history stay out of the live
+cache and inline chrome. Addresses are capped at 128 bytes, app
 at 32, and kinds/progress use the pinned supported values. Object overhead,
 transient parsing, script/result copies and the existing 16 MiB frame are
 separate from that 2.25 MiB retained observation budget. Oversized observation
