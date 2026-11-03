@@ -539,4 +539,22 @@ test("right-click actions retain their opening revision and dismiss before actin
   assert.deepEqual(actions, [{ version: "8", open: null }]);
   click({}, cx);
   assert.equal(actions.length, 1);
+  menu.calls.find(([name]) => name === "on_open_change")[1](true, cx);
+  view.contextMenu("fleet", element(), items);
+  click = nodes
+    .get("menu-fleet-0")
+    .calls.find(([name]) => name === "on_click")[1];
+  view.names = new Map();
+  view.acceptSnapshot(
+    {
+      version: "9",
+      status: "applied",
+      fresh: true,
+      layout: { view: "home", voyages: [], context: { kind: "workspace" } },
+    },
+    cx,
+  );
+  assert.equal(view.menus.current, null);
+  click({}, cx);
+  assert.equal(actions.length, 1);
 });

@@ -390,6 +390,7 @@ export default class Workspace extends View {
         this.status = result.message || result.status;
       return false;
     }
+    if (this.menus) this.menus.current = null;
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
