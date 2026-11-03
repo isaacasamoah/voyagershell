@@ -25,6 +25,19 @@ Native region rendering, the actual layout panel and matched UX verification
 remain pending their focused continuation. The model checks establish no app
 build or native result.
 
+## Dock context metadata
+
+The existing Client queue captures the explicit dock scope, its names and its
+scoped content directories. It does not use the selected pane as a substitute.
+`app/src/context.rs` resolves the captured directory outside rendering by reading
+bounded Git marker and HEAD files. It supports Git worktree marker files without
+starting Git or reading account configuration. Multiple directories, unavailable
+metadata and detached HEAD remain distinct typed results.
+
+The Header receives this read through `voyager_workspace.context_facts`. Late
+metadata is bound to the captured workspace revision and scope. This read does
+not change the document, publish an effect or query Core terminal state.
+
 The native workspace creates, selects and renames Voyages and Fleets, splits a
 placement and sets explicit dock context. Voyage-wide Portals use the same
 placement/content interface and remain present across Fleet selection. Herdr Core

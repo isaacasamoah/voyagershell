@@ -2,6 +2,7 @@ mod administrator;
 mod canvas;
 pub mod client;
 pub mod content;
+pub mod context;
 pub mod core;
 mod core_endpoint;
 mod process;

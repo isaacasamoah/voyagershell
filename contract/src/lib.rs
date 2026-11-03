@@ -5,6 +5,7 @@ use std::sync::Arc;
 pub mod administrator;
 pub mod canvas;
 pub mod content;
+pub mod context;
 pub mod conversation;
 pub mod voice;
 

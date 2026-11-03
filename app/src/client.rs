@@ -18,6 +18,9 @@ use voyager_contract::{
 };
 
 enum Message {
+    ContextFacts {
+        reply: async_channel::Sender<Result<voyager_contract::context::Facts, String>>,
+    },
     WorkspaceChanges {
         after: Option<u64>,
         reply: async_channel::Sender<async_channel::Receiver<u64>>,
@@ -135,6 +138,10 @@ impl Client {
             let mut workspace_listener: Option<async_channel::Sender<u64>> = None;
             while let Ok(message) = receiver.recv_blocking() {
                 let (request, scope, reply) = match message {
+                    Message::ContextFacts { reply } => {
+                        let _ = reply.try_send(crate::context::capture(&layout, version));
+                        continue;
+                    }
                     Message::WorkspaceChanges { after, reply } => {
                         let (send, receive) = async_channel::bounded(1);
                         if after != Some(version) {
@@ -734,6 +741,18 @@ impl Client {
             self.identity,
             self.sequence.fetch_add(1, Ordering::Relaxed)
         )
+    }
+
+    pub async fn context_facts(&self) -> Result<voyager_contract::context::Facts, String> {
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .send(Message::ContextFacts { reply })
+            .await
+            .map_err(|_| "Workspace context is unavailable".to_owned())?;
+        receive
+            .recv()
+            .await
+            .map_err(|_| "Workspace context read was not confirmed".to_owned())?
     }
 
     pub fn call(&self, request: Request) -> Result<Response, String> {

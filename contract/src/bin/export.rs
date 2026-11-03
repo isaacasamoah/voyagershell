@@ -23,6 +23,7 @@ fn main() {
             "contentResponse":schema::<voyager_contract::content::Response>(),
             "contentCatalog":schema::<voyager_contract::content::Catalog>(),
             "canvas":schema::<voyager_contract::canvas::Canvas>(),
+            "contextFacts":schema::<voyager_contract::context::Facts>(),
             "notes":schema::<voyager_contract::content::Notes>(),
             "voiceState":schema::<voyager_contract::voice::State>()}),
     ) {

@@ -210,6 +210,7 @@ fn load(
     let viewers = &workspace_binding.viewers;
     let identity = client.clone();
     let calls = client.clone();
+    let context_reader = client.clone();
     let terminal_client = client.clone();
     let revision = workspace_binding.revision.clone();
     let terminal_viewers = viewers.clone();
@@ -217,6 +218,22 @@ fn load(
         .declarations(crate::script_types::WORKSPACE)
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
+        })
+        .async_function("context_facts", move |_| {
+            let client = context_reader.clone();
+            Ok(async move {
+                let facts = client
+                    .context_facts()
+                    .await
+                    .map_err(gpui_shell::HostError::new)?;
+                let facts = voyager_app::context::resolve(facts);
+                let raw = serde_json::to_string(&facts)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                if raw.len() > 65536 {
+                    return Err(gpui_shell::HostError::new("Context facts exceed 64 KiB"));
+                }
+                Ok(HostValue::from(raw))
+            })
         })
         .async_function("call", move |arguments| {
             let raw = arguments.string(0)?;
