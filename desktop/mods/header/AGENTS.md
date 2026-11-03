@@ -5,6 +5,10 @@ Fleet tabs, active Fleet or Home, Voyage Portals and bottom context. `canvas.js`
 arranges these regions from the Rust-owned workspace definition. A Fleet's Vessel
 split tree is separate from this outer arrangement. Keep the existing native
 Terminal, Notes, divider and avatar identities when changing presentation.
+Use `Occluding.new()` from `voyager_native` for a real overlay that must receive
+input above other content. It accepts ordinary children and styles without owning
+geometry or durable state. Do not replace it with a plain div or mute terminals.
+The layout editor, overlay Portals and compact Chat already use this container.
 
 Use Workspace layout to edit the outer JSON definition. Apply uses the revision
 captured when opening the editor. Invalid definitions and stale edits retain the

@@ -6,6 +6,7 @@ mod conversation;
 mod host;
 mod notes;
 mod notes_input;
+mod occluding;
 mod platform;
 mod script_types;
 mod speech;
@@ -189,6 +190,11 @@ fn run() -> Result<()> {
             }
             if let Err(error) = split::register(&mut registry) {
                 eprintln!("Split registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = occluding::register(&mut registry) {
+                eprintln!("Native overlay registration: {error}");
                 cx.quit();
                 return;
             }

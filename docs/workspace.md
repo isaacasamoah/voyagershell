@@ -50,6 +50,30 @@ interaction acceptance. The original avatar controller's Home pose and rectangul
 drag-preview geometry still cannot represent an exact circular landing target.
 Speech/lifecycle declarations are deliberately integrated separately.
 
+## Native overlay input
+
+`desktop/src/occluding.rs` registers `Occluding.new()` in the actual
+`voyager_native` component registry. Its generated declaration comes from the
+same registry used by the application. It has no arguments or state. The public
+GPUI `div().occlude()` excludes mouse and scroll hitboxes behind that container;
+`MaterializeRequest::finish` applies the authored styles and takes its ordinary
+children once. Child editors retain their native focus/input/scroll handlers.
+There is no full-window input shield, terminal mute or second panel owner.
+
+The layout editor, overlay-mode Portal region and compact Chat overlay use this
+container. Make-room Portals stay in ordinary canvas flow. Geometry, content
+identity, context and all durable actions remain in their existing owners.
+Outside the actual container rectangle, ordinary workspace controls remain
+available. These source changes address the recorded editor click-through;
+constructor/typing checks do not establish native focus or pointer routing.
+The real saved failure and Root's fresh native rerun remain the comparison.
+
+Pinned Herdr App `1581a587` uses this public mechanism for float content in
+`src/window/floats.rs:209`. The pinned GPUI implementation sets
+`HitboxBehavior::BlockMouse` through `InteractiveElement::occlude`; the script
+SDK does not expose an equivalent method on `NativeElement`. This registration
+adds only the missing concrete container, without copying its implementation.
+
 ## Dock context metadata
 
 The existing Client queue captures the explicit dock scope, its names and its

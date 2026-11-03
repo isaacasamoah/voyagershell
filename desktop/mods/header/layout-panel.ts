@@ -1,5 +1,6 @@
 import { div } from "gpui-kit";
 import { Button, Textarea, TextareaState } from "gpui-base";
+import { Occluding } from "voyager_native";
 import { canvas as validateCanvas } from "./validate.js";
 import type { Context, NativeElement } from "gpui-kit";
 import type { Canvas } from "../../../contract/generated/canvas";
@@ -36,7 +37,7 @@ export class LayoutPanel {
     ) => void,
     close: (cx: Context) => void,
   ): NativeElement {
-    return div()
+    return Occluding.new()
       .id("workspace-layout-panel")
       .absolute()
       .right(12)

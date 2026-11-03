@@ -2,6 +2,8 @@
 mod arrangement;
 #[path = "../notes_input.rs"]
 mod notes_input;
+#[path = "../occluding.rs"]
+mod occluding;
 #[path = "../script_types.rs"]
 mod script_types;
 #[path = "../split.rs"]
@@ -31,6 +33,7 @@ fn main() -> Result<()> {
     text::register(&mut registry)?;
     arrangement::register(&mut registry)?;
     split::register(&mut registry)?;
+    occluding::register(&mut registry)?;
     terminal::register(&mut registry, Default::default())?;
     let mut declarations = gpui_shell::type_declarations(&registry.freeze()?);
     for (name, body) in [

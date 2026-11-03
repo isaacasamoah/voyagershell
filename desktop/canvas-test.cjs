@@ -250,7 +250,17 @@ test("the real layout editor keeps its captured revision, refuses invalid input 
               },
             },
           }
-        : { canvas: validateCanvas },
+        : name === "voyager_native"
+          ? {
+              Occluding: {
+                new() {
+                  const node = element();
+                  node.calls.push(["occluding"]);
+                  return node;
+                },
+              },
+            }
+          : { canvas: validateCanvas },
   );
   const canvas = JSON.parse(
     fs.readFileSync(`${__dirname}/../contract/generated/response.schema.json`),
@@ -259,7 +269,7 @@ test("the real layout editor keeps its captured revision, refuses invalid input 
   let sent = 0;
   let closed = 0;
   let busy = false;
-  panel.render(
+  const rendered = panel.render(
     () => busy,
     (_cx, done) =>
       done({
@@ -277,6 +287,7 @@ test("the real layout editor keeps its captured revision, refuses invalid input 
       closed += 1;
     },
   );
+  assert.ok(rendered.calls.some(([name]) => name === "occluding"));
   const click = buttons
     .get("apply-workspace-layout")
     .calls.find(([name]) => name === "on_click")[1];
