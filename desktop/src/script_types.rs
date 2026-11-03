@@ -20,6 +20,7 @@ export function revision(): string;
 pub const CONVERSATION_MODULE: &str = "voyager_conversation";
 
 pub const CONVERSATION: &str = r#"
+export const Speech: { new: (id: string, props: Record<string, never>) => import("gpui-kit").NativeElement };
 export function request_id(): string;
 export function call(request: string): Promise<string>;
 export function snapshot(after: string | null): Promise<string>;

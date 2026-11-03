@@ -5,8 +5,10 @@ use voyager_contract::conversation::Request;
 pub fn module(client: Client) -> HostModule {
     let identity = client.clone();
     let calls = client.clone();
+    let speech = client.clone();
     HostModule::new(crate::script_types::CONVERSATION_MODULE)
         .declarations(crate::script_types::CONVERSATION)
+        .component("Speech", crate::speech::component(speech))
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
         })

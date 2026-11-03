@@ -186,12 +186,12 @@ the current workspace, process, Stop and content dispatch, caller checks and
 receipt policy. Its generated tool definitions remain the same three schemas.
 The adapter encodes tool replies without moving authority into the transport.
 
-The text-stage capability reports Protocol only when the selected executable can
-be resolved. This describes an implemented route, not a running connection or a
-successful account/model operation. Voice is Unavailable in this integration
-stage. The preserved native-helper/audio-lease candidate requires separate
-integration and actual audible full-duplex proof. No Header, avatar, device or
-platform implementation is replaced by this conversion.
+The text capability reports Protocol only when the selected executable can be
+resolved. This describes an implemented route, not a running connection or a
+successful account/model operation. Voice has separate Checking, Candidate,
+Compatible and Unavailable states. Package discovery and a compatible helper do
+not establish account readiness or audible speech. Unavailable voice refuses
+audio start while valid text and tools remain usable. Only Codex is implemented.
 
 Ordinary outbound frames remain limited to 64 KiB. Content-only framing retains
 2 * (1 MiB + 16 KiB) + 4096 bytes to allow escaped serialized Notes results.
@@ -200,3 +200,74 @@ remains 8 KiB for workspace/process and 1 MiB + 16 KiB for content. The adapter
 accepts only a response matching the outstanding numeric request ID; the owner
 also checks that ID before settling its request. Invalid or unsupported provider
 callbacks receive explicit errors without dispatching an application effect.
+
+## Native speech integration
+
+The native speech candidate reuses the installed Codex 0.166.0 helper beside the
+exact executable retained by the private provider. It compares the initialized
+provider version with that package's manifest before starting the helper. The
+helper must then acknowledge protocol 1 and the manifest's exact build commit.
+Provider initialization exposes a version, so these checks do not establish the
+running provider's build commit. The inspected reference is the
+[helper protocol](https://github.com/openai/codex/blob/6ff1e1ca3b30fc8b914720681fcf5fe62e95f856/codex-rs/realtime-webrtc/src/protocol.rs)
+and [native client](https://github.com/openai/codex/blob/6ff1e1ca3b30fc8b914720681fcf5fe62e95f856/codex-rs/realtime-webrtc/src/client.rs).
+
+Before requesting native audio, the provider checks its existing account type
+without requesting a token refresh. This candidate accepts only the ChatGPT
+account route. The adapter reduces that reply to a readiness boolean. Voyager
+does not expose the account record, inspect credentials or select paid API audio.
+
+The helper owns native WebRTC, microphone capture and speaker playback. Its
+control pipe carries big-endian length-prefixed JSON of at most 128 KiB, without
+audio samples. Provider audio-control requests have a separate 128 KiB bound;
+the ordinary and content-specific frame bounds above remain unchanged. The
+desktop supplies the existing packaged-runtime environment in
+[platform.rs](../desktop/src/platform.rs), including Linux-only ALSA discovery.
+Devices remain the operating system defaults. No global device or mute setting
+changes. macOS and Windows runtime behavior remains unproved.
+
+The helper must acknowledge transport connection, device opening and audio
+controls before the speech control reports Listening or Speaking. Its level
+display uses actual microphone and speaker peaks. Neither those acknowledgements
+nor levels establish intelligible sound.
+
+The native `voyager_conversation.Speech` component retains one application-issued
+audio lease in an application-lived GPUI entity. A script can place the component
+with `Speech.new("voyager-speech", {})`; a payload cannot grant a lease. Header
+reload or movement among full, compact and floating views reuses that entity.
+The component observes only the small audio state while connecting, active or
+stopping. It does not continuously read the full conversation while idle.
+
+Stopping or releasing the lease cancels only its owned helper. It does not
+interrupt accepted tools, erase the private thread or stop Core programs. Helper
+exit, lost exit confirmation and provider failure remain distinct. An
+unconfirmed helper stop prevents another audio start. A known provider stop
+refusal settles only after its closure notification and confirmed helper exit,
+and the refusal remains visible. No audio session or operation restarts or
+replays automatically.
+
+Native voice may start its own backing Codex turn. Voyager accepts that actual
+thread/turn under the current audio generation without submitting another
+`turn/start`. It queues an inspection at the workspace owner synchronously before
+waiting on another thread. Later Dock requests enter behind that inspection.
+Early tools wait for the captured context. Later docking or audio loss cannot
+retarget accepted tools. The current workspace owner's existing effect
+notifications refresh views even when Chat is closed; voice adds no second
+workspace effect counter or refresh owner.
+
+Visible native transcript items retain their actual item, thread, session and
+audio-generation identities. The installed transcript events do not supply a
+reliable backing-turn identity. Their displayed messages therefore have no
+invented turn context and use the audio generation as their request reference.
+Sessionless deltas extend only an item already accepted for the current session;
+they cannot create a new item. Backing turns and their tools separately retain
+the actual turn, captured context and request receipt. Private reasoning, raw
+audio negotiation and account data never enter these messages.
+
+`VOYAGER_VOICE_EVIDENCE` is an opt-in proving path for sequential sanitized state
+writes. It contains bounded peaks, status and nonsecret thread/session/turn
+references. It contains no audio samples or session description. This integration
+has compile and pure source checks only. Real account readiness, audible
+full-duplex speech, interruption, scoped tools and lease loss still require the
+serialized native journey in the approved
+[conversation plan](/home/isaac/voyagershell/.worktrees/feature-foundation-design/tasks/plan-native-conversation.md#complete-real-native-voice).

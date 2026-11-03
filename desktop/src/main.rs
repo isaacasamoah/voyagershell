@@ -8,6 +8,7 @@ mod notes;
 mod notes_input;
 mod platform;
 mod script_types;
+mod speech;
 mod split;
 mod terminal;
 mod terminal_screen;
@@ -144,8 +145,11 @@ fn run() -> Result<()> {
         content_owner,
     );
     let viewers = terminal::Viewers::default();
-    let conversation =
-        voyager_app::conversation_client::Client::open(profile.clone(), client.clone());
+    let conversation = voyager_app::conversation_client::Client::with_audio(
+        profile.clone(),
+        client.clone(),
+        platform::audio_environment(),
+    );
     gpui_platform::application()
         .with_assets(assets)
         .run(move |cx: &mut App| {

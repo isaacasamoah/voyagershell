@@ -1,4 +1,6 @@
 use std::{
+    env,
+    ffi::OsString,
     io::Write,
     process::{Command, Stdio},
     sync::{
@@ -6,6 +8,63 @@ use std::{
         mpsc::{self, SyncSender},
     },
 };
+
+pub fn audio_environment() -> Vec<(OsString, OsString)> {
+    let mut selected = [
+        "SYSTEMROOT",
+        "WINDIR",
+        "HOME",
+        "USERPROFILE",
+        "LOCALAPPDATA",
+        "APPDATA",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "XDG_RUNTIME_DIR",
+        "PULSE_SERVER",
+        "PULSE_COOKIE",
+        "PIPEWIRE_REMOTE",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+    ]
+    .into_iter()
+    .filter_map(|key| env::var_os(key).map(|value| (OsString::from(key), value)))
+    .collect::<Vec<_>>();
+    for (key, value) in [
+        ("GST_PLUGIN_PATH", ""),
+        ("GST_PLUGIN_PATH_1_0", ""),
+        ("GST_PLUGIN_SYSTEM_PATH", ""),
+        ("GST_PLUGIN_SYSTEM_PATH_1_0", ""),
+        (
+            "GST_REGISTRY",
+            if cfg!(windows) { "NUL" } else { "/dev/null" },
+        ),
+        ("GST_REGISTRY_UPDATE", "no"),
+        ("GST_REGISTRY_FORK", "no"),
+    ] {
+        selected.push((key.into(), value.into()));
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(path) = [
+        "/usr/lib/x86_64-linux-gnu/alsa-lib",
+        "/usr/lib/aarch64-linux-gnu/alsa-lib",
+        "/usr/lib/alsa-lib",
+        "/usr/lib64/alsa-lib",
+    ]
+    .into_iter()
+    .find(|path| std::path::Path::new(path).is_dir())
+    {
+        selected.push(("ALSA_PLUGIN_DIR".into(), path.into()));
+    }
+    selected
+}
 
 pub fn native_window(window: &gpui::Window) -> Result<u32, String> {
     #[cfg(target_os = "linux")]
