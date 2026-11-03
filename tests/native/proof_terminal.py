@@ -8,11 +8,13 @@ from PIL import ImageChops
 
 from proof_workspace import core_rpc, named_button
 
+LEGACY_DIV_HEADER = "7da0b1f9fde04137d20867e64b35fcc1eedb7a5b9be0ba4002031f78320e0909"
+
 
 def div_control_point(label, fleets, viewport, header_sha256):
-    assert header_sha256 == (
-        "7da0b1f9fde04137d20867e64b35fcc1eedb7a5b9be0ba4002031f78320e0909"
-    ), "Measured Div controls require the inspected Header source"
+    assert header_sha256 == LEGACY_DIV_HEADER, (
+        "Measured Div controls require the inspected Header source"
+    )
     assert viewport == (2900, 1880), (
         "Measured Div controls require the observed 2900x1880 X window"
     )
@@ -44,7 +46,12 @@ def terminal(
     def rpc(method, params):
         return core_rpc(session, env, method, params)
 
-    def div_control(label):
+    def workspace_control(label):
+        header = evidence / "profile/mods/header/main.js"
+        digest = hashlib.sha256(header.read_bytes()).hexdigest()
+        if digest != LEGACY_DIV_HEADER:
+            click(*named_button(native, evidence, label))
+            return
         layout = rpc("doc.get", {"name": "voyager-layout-v1"})["value"]
         assert layout.get("view", "fleet") == "fleet"
         assert layout["context"] == {"kind": "workspace"}
@@ -52,8 +59,6 @@ def terminal(
         fleets = layout["voyages"][0]["fleets"]
         bounds = geometry()
         viewport = tuple(int(bounds[key]) for key in ("WIDTH", "HEIGHT"))
-        header = evidence / "profile/mods/header/main.js"
-        digest = hashlib.sha256(header.read_bytes()).hexdigest()
         point = div_control_point(label, len(fleets), viewport, digest)
         path = evidence / "terminal-div-controls.json"
         targets = json.loads(path.read_text()) if path.exists() else []
@@ -130,6 +135,7 @@ def terminal(
             ),
             "bound terminal",
         )
+        original_fleet_name = document["value"]["voyages"][0]["fleets"][0]["name"]
         address = document["value"]["contents"][0]["backend"]
         original = rpc("terminal.get", {"terminal": address})
         assert original.get("pid"), "Terminal has no live process"
@@ -494,16 +500,16 @@ def terminal(
                 "value": changed,
             },
         )
-        div_control("Create Fleet")
+        workspace_control("Create Fleet")
         time.sleep(0.4)
         assert (
             rpc("doc.get", {"name": "voyager-layout-v1"})["version"]
             == external["version"]
         )
         capture("terminal-stale-refused")
-        div_control("Refresh")
+        workspace_control("Refresh")
         time.sleep(0.4)
-        div_control("Create Fleet")
+        workspace_control("Create Fleet")
         rejected = wait_for(
             lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
             lambda value: (
@@ -516,7 +522,7 @@ def terminal(
         )
         capture("terminal-known-refusal")
         missing.mkdir()
-        div_control("Refresh")
+        workspace_control("Refresh")
         recovered = wait_for(
             lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
             lambda value: value["value"]["contents"][1].get("backend") is not None,
@@ -540,7 +546,7 @@ def terminal(
         assert ImageChops.difference(
             before_recovered_input, recovered_frame
         ).getbbox(), "Recovered terminal input did not change visible pixels"
-        click(*named_button(native, evidence, "Workbench"))
+        click(*named_button(native, evidence, original_fleet_name))
         time.sleep(0.3)
         click(350, 190)
         type_text("exit\n")
@@ -668,7 +674,7 @@ def terminal(
             )
             before_refusal = rpc("doc.get", {"name": "voyager-layout-v1"})
             missing.rmdir()
-            div_control("Create Fleet")
+            workspace_control("Create Fleet")
             wait_for(
                 lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
                 lambda value: (

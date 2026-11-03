@@ -21,9 +21,7 @@ spec.loader.exec_module(notes)
 
 
 def setup_source(source):
-    anchor = (
-        '    this.run({ operation: "inspect" }, cx);\n  }\n  run(action, cx, done, expectedVersion = this.version) {'
-    )
+    anchor = '    this.run({ operation: "inspect" }, cx);'
     setup = """    this.run({ operation: "inspect" }, cx, (initial, task) => {
       if (initial?.status !== "applied" || !initial.fresh) throw Error("Proof setup inspect failed");
       const layout = initial.layout;
@@ -34,9 +32,7 @@ def setup_source(source):
         if (first?.status !== "applied" || !first.fresh) throw Error("Proof Vessel setup was not confirmed");
         this.run({ operation: "create-content", typeId: "notes", destination: { kind: "portal", voyage: voyage.id } }, next);
       });
-    });
-  }
-  run(action, cx, done, expectedVersion = this.version) {"""
+    });"""
     return notes.once(source, anchor, setup)
 
 
