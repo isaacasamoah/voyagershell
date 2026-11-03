@@ -763,6 +763,65 @@
         }
       ]
     },
+    "Receipt": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "describe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "inspect",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "expectedRevision": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "update",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "expectedRevision"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "RenameTarget": {
       "oneOf": [
         {
@@ -899,6 +958,23 @@
             },
             "tool": {
               "const": "process",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/Receipt"
+            },
+            "tool": {
+              "const": "content",
               "type": "string"
             }
           },

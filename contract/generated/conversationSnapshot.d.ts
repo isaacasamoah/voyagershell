@@ -27,6 +27,10 @@ export type ToolAction =
   | {
       action: ProcessAction;
       tool: "process";
+    }
+  | {
+      action: Receipt;
+      tool: "content";
     };
 export type Action =
   | {
@@ -178,6 +182,20 @@ export type ProcessAction =
       operation: "stop";
       pid: number;
       terminalId: string;
+    };
+export type Receipt =
+  | {
+      contentId: string;
+      operation: "describe";
+    }
+  | {
+      contentId: string;
+      operation: "inspect";
+    }
+  | {
+      contentId: string;
+      expectedRevision: string;
+      operation: "update";
     };
 export type CallbackId =
   | {

@@ -1,6 +1,15 @@
 export type Response =
   | {
       contentId: string;
+      message: string;
+      requestId: string;
+      revision?: string | null;
+      status: "limited";
+      version: Version;
+      warningPresent: boolean;
+    }
+  | {
+      contentId: string;
       requestId: string;
       schemaDeclared: boolean;
       stateSchema?: unknown;

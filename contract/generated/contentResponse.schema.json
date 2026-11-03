@@ -57,6 +57,45 @@
         "contentId": {
           "type": "string"
         },
+        "message": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "const": "limited",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        },
+        "warningPresent": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "warningPresent",
+        "message"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
         "requestId": {
           "type": "string"
         },
