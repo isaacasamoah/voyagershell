@@ -42,6 +42,11 @@ fn maximize_preserves_identity_and_scoped_restore_cannot_clear_another_pane() {
         .unwrap();
     model.layout.contents[0].backend =
         Some(voyager_contract::CoreTerminalId("retained-backend".into()));
+    model
+        .apply(Action::Dock {
+            context: Context::Vessel { id: second.clone() },
+        })
+        .unwrap();
     let original = model.layout.clone();
     model.apply(zoom(&first, true)).unwrap();
     let selected = model.layout.clone();
