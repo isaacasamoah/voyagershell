@@ -76,6 +76,7 @@ function fixture() {
     },
   };
   const view = new Workspace();
+  view.startContext = () => {};
   view.init(null, cx);
   async function reply(status = "applied", fresh = true) {
     request({ status, fresh, version: "1", layout });
@@ -134,7 +135,7 @@ test("F2 targets are tab stops and a plus name keeps its accessible name", async
       .accessibility_label,
     "+",
   );
-  assert.notEqual(
+  assert.equal(
     view.action("Refresh", { operation: "inspect" }).sourceKind,
     "native-button",
   );

@@ -9,6 +9,8 @@ const root = path.join(__dirname, "..");
 const directory = path.join(root, "target/script-types");
 const entries = [
   "desktop/mods/header/main.ts",
+  "desktop/mods/header/canvas.ts",
+  "desktop/mods/header/layout-panel.ts",
   "contract/generated/workspace.ts",
   "contract/generated/conversation.ts",
   "desktop/mods/header/home.ts",

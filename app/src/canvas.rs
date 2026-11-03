@@ -1,4 +1,4 @@
-use voyager_contract::canvas::{Canvas, Node, Region, Size};
+use voyager_contract::canvas::{Canvas, Node, PortalMode, Region, Size};
 
 pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
     fn visit(
@@ -6,6 +6,7 @@ pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
         depth: usize,
         count: &mut usize,
         regions: &mut Vec<Region>,
+        overlay: bool,
     ) -> Result<(), String> {
         *count += 1;
         if depth > 12 || *count > 64 {
@@ -22,8 +23,21 @@ pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
                 if children.is_empty() {
                     return Err("Canvas containers need at least one child".into());
                 }
-                for child in children {
-                    visit(child, depth + 1, count, regions)?;
+                for (index, child) in children.iter().enumerate() {
+                    if overlay
+                        && let Node::Block {
+                            region: Region::Portals,
+                            size,
+                        } = child
+                    {
+                        if index != 0 && index + 1 != children.len() {
+                            return Err("Overlay Portals must be the first or last child of their row or column".into());
+                        }
+                        if matches!(size, Size::Content) {
+                            return Err("Overlay Portals need fixed or fill sizing".into());
+                        }
+                    }
+                    visit(child, depth + 1, count, regions, overlay)?;
                 }
             }
             Node::Block { region, .. } => {
@@ -37,7 +51,13 @@ pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
     }
     let mut regions = Vec::new();
     let mut count = 0;
-    visit(&canvas.root, 1, &mut count, &mut regions)?;
+    visit(
+        &canvas.root,
+        1,
+        &mut count,
+        &mut regions,
+        canvas.portal_mode == PortalMode::Overlay,
+    )?;
     if [
         Region::Sidebar,
         Region::FleetStrip,
@@ -92,6 +112,27 @@ mod tests {
             )
             .is_err()
         );
+        let mut positioned = Canvas {
+            root: Node::Row {
+                size: Size::Fill,
+                children: [
+                    Region::Sidebar,
+                    Region::FleetStrip,
+                    Region::Portals,
+                    Region::ActiveFleet,
+                    Region::ContextBar,
+                ]
+                .map(|region| Node::Block {
+                    region,
+                    size: Size::Fixed { pixels: 240 },
+                })
+                .into(),
+            },
+            ..Canvas::default()
+        };
+        assert!(validate(&positioned).is_err());
+        positioned.portal_mode = voyager_contract::canvas::PortalMode::MakeRoom;
+        assert!(validate(&positioned).is_ok());
         for pixels in [0, 4097] {
             let mut invalid = Canvas::default();
             if let Node::Row { size, .. } = &mut invalid.root {

@@ -14,25 +14,54 @@ does not dock Voyager. Invalid definitions are refused before mutation. A bad
 stored definition preserves the Client's last usable layout with its error.
 
 The definition retains exactly one Sidebar, Fleet strip, active Fleet, Portals
-and context region. Maximum depth is 12, maximum node count is 64, and fixed sizes
+and context region. The initial sidebar is 224 logical pixels, from the pinned
+Electron composition source; its unchanged 200-pixel Brand is centred. A retained
+capture appears wider, but its equal-scale provenance has not been established.
+Matched native/reference screenshots must resolve that discrepancy rather than
+introducing an arbitrary scale adjustment. Maximum depth is 12, maximum node count is 64, and fixed sizes
 contain 1 to 4096 logical pixels. These bounds limit the native composition, not
 total application memory. The Portal block defaults to overlay; explicit
-make-room uses the same instance in flow. Stack selection and Portal reveal/hide
-choices are not supplied by this increment.
+make-room uses the same instance in flow. Overlay Portals follow the parent row or column: first means left/top and last
+means right/bottom. A middle overlay position and intrinsic/content overlay size
+are refused with an explanation. Fixed sizing follows that parent axis; fill
+covers the parent. Make-room follows ordinary authored flow at any position.
+Stack selection and Portal reveal/hide choices are not supplied by this increment.
 
-This first source checkpoint validates the model and backwards-compatible data.
-Native region rendering, the actual layout panel and matched UX verification
-remain pending their focused continuation. The model checks establish no app
-build or native result.
+`desktop/mods/header/canvas.ts` composes the actual saved outer tree through
+Header region factories. It retains the existing terminal, Notes, native split,
+avatar and conversation owners. Collapsing the sidebar keeps a 48-pixel rail
+and sends only `set-sidebar`, without Dock. Native named controls expose
+creation, Refresh, Home, sidebar and Workspace layout actions. Empty dock circles
+and the redundant top context bar are removed. Compact dock names reserve the
+existing controller footprint. Only the selected Vessel gets the subtle
+blue/purple/amber frame, composed from the public SDK's two-stop gradients.
+
+The Workspace layout panel uses the SDK's retained multiline Textarea. Apply
+validates the generated shape and sends the exact opening revision. A refusal
+retains the draft. Uncertainty blocks another Apply until explicit Reload,
+which reads the owner and replaces the draft/revision without repeating an
+effect. Header shortcuts do not act on the workspace while this editor is open.
+The current source checks establish no app build, matched native screenshot or
+interaction acceptance. The original avatar controller's Home pose and rectangular
+drag-preview geometry still cannot represent an exact circular landing target.
+Speech/lifecycle declarations are deliberately integrated separately.
 
 ## Dock context metadata
 
 The existing Client queue captures the explicit dock scope, its names and its
-scoped content directories. It does not use the selected pane as a substitute.
+scoped content directories. These are the configured starting folders from
+`Content.cwd`, matching the retained Electron workspace's starting-folder
+meaning. They are not a claim about the shell's current directory after `cd`.
+The existing Core terminal_get/process-inspection path exposes actual terminal
+cwd; this increment does not add all-terminal polling or another directory
+tracker. It does not use the selected pane as a substitute.
 `app/src/context.rs` resolves the captured directory outside rendering by reading
 bounded Git marker and HEAD files. It supports Git worktree marker files without
 starting Git or reading account configuration. Multiple directories, unavailable
-metadata and detached HEAD remain distinct typed results.
+metadata and detached HEAD remain distinct typed results. One Header-owned task
+refreshes these facts at the named `CONTEXT_REFRESH_MS` default of 3000 ms. It
+notifies only changed facts, checks their captured revision and scope, and never
+polls Core or reloads the workspace snapshot.
 
 The Header receives this read through `voyager_workspace.context_facts`. Late
 metadata is bound to the captured workspace revision and scope. This read does

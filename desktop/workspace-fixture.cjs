@@ -10,7 +10,7 @@ module.exports = function workspaceSource(
       process.env[environmentKey] || `${__dirname}/mods/header/${filename}`,
       "utf8",
     )
-    .replace(/^import .*;\n/gm, "")
+    .replace(/^import [\s\S]*?;\n/gm, "")
     .replace("export default class", declaration)
     .replace("export class", declaration);
 };

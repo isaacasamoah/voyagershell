@@ -1,0 +1,231 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const { test } = require("node:test");
+const ts = require("typescript");
+const workspaceSource = require("./workspace-fixture.cjs");
+
+function element() {
+  const calls = [];
+  const node = new Proxy(
+    { calls },
+    {
+      get(target, name) {
+        if (name === "calls") return calls;
+        return (...args) => {
+          calls.push([name, ...args]);
+          return node;
+        };
+      },
+    },
+  );
+  return node;
+}
+
+test("the actual canvas renderer uses saved order, sizing and Portal presentation", () => {
+  const source = ts.transpileModule(
+    fs.readFileSync(`${__dirname}/mods/header/canvas.ts`, "utf8"),
+    {
+      compilerOptions: { module: ts.ModuleKind.CommonJS },
+    },
+  ).outputText;
+  const exports = {};
+  new Function("exports", "require", source)(exports, () => ({ div: element }));
+  const canvas = JSON.parse(
+    fs.readFileSync(`${__dirname}/../contract/generated/response.schema.json`),
+  ).definitions.Layout.properties.canvas.default;
+  for (const mode of ["overlay", "make-room"]) {
+    const regions = new Map();
+    const result = exports.composeCanvas(
+      { ...canvas, portalMode: mode },
+      (region) => {
+        const node = element();
+        regions.set(region, node);
+        return node;
+      },
+    );
+    assert.equal(regions.size, 5);
+    assert.ok(result.calls.some(([name]) => name === "flex"));
+    const portal = regions.get("portals");
+    assert.equal(
+      portal.calls.some(([name]) => name === "absolute"),
+      mode === "overlay",
+    );
+    assert.ok(
+      portal.calls.some(([name, value]) => name === "w" && value === 340),
+    );
+  }
+  for (const axis of ["row", "column"]) {
+    for (const first of [true, false]) {
+      const portal = {
+        kind: "block",
+        region: "portals",
+        size: { kind: "fixed", pixels: 240 },
+      };
+      const body = { kind: "block", region: "active-fleet" };
+      let actual;
+      exports.composeCanvas(
+        {
+          root: {
+            kind: axis,
+            children: first ? [portal, body] : [body, portal],
+          },
+        },
+        (region) => {
+          const node = element();
+          if (region === "portals") actual = node;
+          return node;
+        },
+      );
+      const edge =
+        axis === "row" ? (first ? "left" : "right") : first ? "top" : "bottom";
+      assert.ok(
+        actual.calls.some(([name, value]) => name === edge && value === 0),
+      );
+      assert.ok(
+        actual.calls.some(
+          ([name, value]) =>
+            name === (axis === "row" ? "w" : "h") && value === 240,
+        ),
+      );
+    }
+  }
+  const result = exports.composeCanvas(
+    { ...canvas, sidebarCollapsed: true },
+    () => element(),
+  );
+  const sidebar = result.calls.find(([name]) => name === "children")[1][0];
+  assert.ok(
+    sidebar.calls.some(([name, value]) => name === "w" && value === 48),
+  );
+});
+
+test("context metadata rejects a late different dock and notifies only changed facts", async () => {
+  const { contextFacts: validateFacts } =
+    await import("../contract/generated/validate.js");
+  let result;
+  const Workspace = new Function(
+    "View",
+    "context_facts",
+    "validateFacts",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(class {}, async () => result, validateFacts);
+  const view = Object.assign(new Workspace(), {
+    version: "2",
+    layout: { context: { kind: "workspace" } },
+    contextFacts: null,
+  });
+  const facts = {
+    version: "2",
+    scope: { kind: "workspace" },
+    path: ["Workspace"],
+    directory: { kind: "multiple" },
+    branch: { kind: "unavailable" },
+  };
+  let notified = 0;
+  const cx = {
+    notify() {
+      notified += 1;
+    },
+  };
+  result = JSON.stringify({ ...facts, version: "1" });
+  await view.readContext(cx);
+  assert.equal(view.contextFacts, null);
+  result = JSON.stringify(facts);
+  await view.readContext(cx);
+  await view.readContext(cx);
+  assert.equal(notified, 1);
+  result = JSON.stringify({ ...facts, scope: { kind: "voyage", id: "other" } });
+  await view.readContext(cx);
+  assert.equal(view.contextFacts.scope.kind, "workspace");
+  result = "{}";
+  await view.readContext(cx);
+  assert.equal(view.contextFacts, null);
+  assert.equal(notified, 2);
+});
+
+test("the real layout editor keeps its captured revision, refuses invalid input and gates uncertainty", async () => {
+  const { canvas: validateCanvas } =
+    await import("../contract/generated/validate.js");
+  const source = ts.transpileModule(
+    fs.readFileSync(`${__dirname}/mods/header/layout-panel.ts`, "utf8"),
+    {
+      compilerOptions: { module: ts.ModuleKind.CommonJS },
+    },
+  ).outputText;
+  const buttons = new Map();
+  let value = "";
+  const exports = {};
+  new Function("exports", "require", source)(exports, (name) =>
+    name === "gpui-kit"
+      ? { div: element }
+      : name === "gpui-base"
+        ? {
+            Button: {
+              new(id) {
+                const button = element();
+                buttons.set(id, button);
+                return button;
+              },
+            },
+            Textarea: { new: element },
+            TextareaState: {
+              new(input) {
+                value = input.value;
+                return {
+                  value: () => value,
+                  set_value(next) {
+                    value = next;
+                  },
+                };
+              },
+            },
+          }
+        : { canvas: validateCanvas },
+  );
+  const canvas = JSON.parse(
+    fs.readFileSync(`${__dirname}/../contract/generated/response.schema.json`),
+  ).definitions.Layout.properties.canvas.default;
+  const panel = new exports.LayoutPanel(canvas, "7");
+  let sent = 0;
+  let closed = 0;
+  panel.render(
+    false,
+    (_cx, done) =>
+      done({
+        status: "applied",
+        fresh: true,
+        version: "9",
+        layout: { canvas },
+      }),
+    (_canvas, version, _cx, done) => {
+      sent += 1;
+      assert.equal(version, "7");
+      done({ status: "uncertain", message: "Lost confirmation" });
+    },
+    () => {
+      closed += 1;
+    },
+  );
+  const click = buttons
+    .get("apply-workspace-layout")
+    .calls.find(([name]) => name === "on_click")[1];
+  const cx = { notify() {} };
+  value = "{}";
+  click(null, cx);
+  assert.equal(sent, 0);
+  value = JSON.stringify(canvas);
+  click(null, cx);
+  click(null, cx);
+  assert.equal(sent, 1);
+  assert.equal(closed, 0);
+  assert.equal(panel.pending, false);
+  assert.equal(panel.error, "Lost confirmation");
+  assert.equal(value, JSON.stringify(canvas));
+  const reload = buttons
+    .get("reload-workspace-layout")
+    .calls.find(([name]) => name === "on_click")[1];
+  reload(null, cx);
+  assert.equal(panel.version, "9");
+  assert.equal(panel.unconfirmed, false);
+  assert.deepEqual(JSON.parse(value), canvas);
+});

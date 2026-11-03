@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const workspaceSource = require("./workspace-fixture.cjs");
 const { test } = require("node:test");
 
@@ -155,7 +156,7 @@ test("starting a drag directs Escape to the workspace", () => {
   assert.equal(focused, 1);
 });
 
-test("Create Fleet and Refresh keep their original nonfocusable press and click", () => {
+test("Create Fleet and Refresh expose native buttons while preserving their press and click", () => {
   const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
   function div() {
     const calls = {};
@@ -170,9 +171,10 @@ test("Create Fleet and Refresh keep their original nonfocusable press and click"
     });
     return node;
   }
-  const Workspace = new Function("View", "div", "projection", source)(
+  const Workspace = new Function("View", "div", "Button", "projection", source)(
     class {},
     div,
+    { new: div },
     () => ({ foreground: "fg", muted: "muted" }),
   );
   const view = new Workspace();
@@ -631,6 +633,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "take_result",
     "homeOverview",
     "workspace_revision",
+    "composeCanvas",
     source,
   )(
     class {},
@@ -643,6 +646,13 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     () => null,
     () => div(),
     () => ownerRevision,
+    new Function(
+      "div",
+      fs
+        .readFileSync(`${__dirname}/mods/header/canvas.js`, "utf8")
+        .replace(/^import [\s\S]*?;\n/gm, "")
+        .replaceAll("export function", "function") + "\nreturn composeCanvas;",
+    )(div),
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
@@ -655,6 +665,12 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     fresh: true,
     layout: {
       view: "home",
+      canvas: JSON.parse(
+        fs.readFileSync(
+          `${__dirname}/../contract/generated/response.schema.json`,
+          "utf8",
+        ),
+      ).definitions.Layout.properties.canvas.default,
       context,
       selectedVoyage: "voyage",
       selectedFleet: "fleet",

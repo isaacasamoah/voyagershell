@@ -1,4 +1,33 @@
-# Voyager Home
+# Voyager workspace composition
+
+`main.js` is the native workspace view. Its region factories render the sidebar,
+Fleet tabs, active Fleet or Home, Voyage Portals and bottom context. `canvas.js`
+arranges these regions from the Rust-owned workspace definition. A Fleet's Vessel
+split tree is separate from this outer arrangement. Keep the existing native
+Terminal, Notes, divider and avatar identities when changing presentation.
+
+Use Workspace layout to edit the outer JSON definition. Apply uses the revision
+captured when opening the editor. Invalid definitions and stale edits retain the
+draft and show the owner's result. Reload explicitly replaces the draft with the
+current definition. Unconfirmed effects are never submitted again automatically.
+
+Overlay Portals occupy the first or last edge of their parent row or column.
+Make-room Portals take ordinary flow space. This does not add reveal, hide or
+pin behavior. Collapsing the sidebar retains a rail and does not change the
+avatar's explicit dock context.
+
+The bottom region shows the dock scope's configured starting folder and the Git
+branch read there. It does not follow a shell's later `cd`. Unavailable or multiple
+folders remain explicit. The background refresh interval is the named
+`CONTEXT_REFRESH_MS` value in `main.js`; it performs no Core terminal polling.
+
+The repository authors these files in TypeScript, using declarations from the
+actual native registrations. Run `npm run scripts:generate` and `npm test` after
+repository edits. Personal profile JavaScript remains live-editable. Source
+reload retains the last usable package on error and does not grant content
+packages Header, process or private conversation authority.
+
+## Home
 
 `home.js` composes the native Home overview from the current workspace snapshot.
 Edit this file to change its arrangement or presentation. `navigate` accepts the

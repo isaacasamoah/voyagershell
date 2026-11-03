@@ -83,6 +83,14 @@ fn run() -> Result<()> {
         include_str!("../mods/header/mod.json"),
     )?;
     seed(
+        &package.join("canvas.js"),
+        include_str!("../mods/header/canvas.js"),
+    )?;
+    seed(
+        &package.join("layout-panel.js"),
+        include_str!("../mods/header/layout-panel.js"),
+    )?;
+    seed(
         &package.join("home.js"),
         include_str!("../mods/header/home.js"),
     )?;
