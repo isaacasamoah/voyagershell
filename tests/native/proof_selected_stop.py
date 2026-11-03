@@ -4,7 +4,8 @@ import shutil
 import time
 from pathlib import Path
 
-from proof_workspace import chord, core_rpc
+from proof_workspace import chord, core_rpc, named_button
+from proof_conversation import chat_close_point
 
 
 def prove(
@@ -128,7 +129,7 @@ def prove(
         assert running["pid"] == target_before["pid"]
         owned["foreground"] = record(running["foreground"]["pid"])
         capture("stop-two-running")
-        click(64, 108)
+        click(*named_button(native, evidence, "Chat"))
 
         def conversation():
             path = evidence / "conversation.json"
@@ -138,7 +139,7 @@ def prove(
             conversation, lambda item: item["phase"] == "idle", "idle private chat"
         )
         assert idle["thread"] is None
-        click(150, 637)
+        native("focus", app_pid, "Message Voyager", 0)
         type_text(
             f"Inspect the workspace and list processes. Explicitly Stop only the terminal {target['backend']} whose screen contains STOP_TARGET_READY. Use its inspected contentId and live PID. Read that same terminal after Stop, and list processes again to verify the other terminal is still running. Report the observed result briefly. Do not interrupt, send input, start or restart anything, change the layout or files, or repeat Stop."
         )
@@ -257,7 +258,7 @@ def prove(
             time.sleep(0.08)
         native("scroll", 0, 1)
         capture("stop-visible-answer")
-        click(64, 108)
+        click(*chat_close_point(native, app_pid, evidence))
         capture("stop-native-ended-and-survivor")
     except BaseException as error:
         failure = error

@@ -27,7 +27,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "split-resize", "notes", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-process", "conversation-ux", "terminal-agent", "conversation-scroll", "conversation-stop", "avatar", "portal-avatar"])
+    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "split-resize", "notes", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "conversation-scroll", "conversation-stop", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -138,13 +138,30 @@ def run():
         except (OSError, ValueError, KeyError, StopIteration) as error:
             pending["identityError"] = str(error)
         pending_path.write_text(json.dumps(pending, indent=2))
+        windows = []
         for _ in range(100):
             if process.poll() is not None:
                 raise RuntimeError("Native candidate exited before its window")
             try:
-                windows = execute(
+                visible = execute(
                     "xdotool", "search", "--onlyvisible", "--pid", str(process.pid)
                 ).splitlines()
+                candidates = [
+                    {"window": item, "title": execute("xdotool", "getwindowname", item)}
+                    for item in visible
+                ]
+                (evidence / "launch-window-candidates.json").write_text(
+                    json.dumps({"pid": process.pid, "candidates": candidates}, indent=2)
+                )
+                windows = (
+                    [
+                        item["window"]
+                        for item in candidates
+                        if item["title"] == f"Voyager — {args.session}"
+                    ]
+                    if args.foundation
+                    else visible
+                )
                 if len(windows) == 1:
                     break
             except subprocess.CalledProcessError:

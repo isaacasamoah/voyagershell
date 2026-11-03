@@ -31,6 +31,23 @@ def provider_processes(evidence):
     return providers
 
 
+def chat_close_point(native, pid, evidence):
+    fields = native("fields", pid, ["Close chat"], "window")["fields"]
+    (evidence / "conversation-close-fields.json").write_text(
+        json.dumps(fields, indent=2)
+    )
+    assert len(fields) == 2 and all(
+        item["role"] in ("push button", "button")
+        and item["width"] > 0
+        and item["height"] > 0
+        for item in fields
+    ), fields
+    target = min(fields, key=lambda item: item["width"])
+    return (target["x"] + target["width"] / 2) / 2, (
+        target["y"] + target["height"] / 2
+    ) / 2
+
+
 def conversation_ux(
     *, native, capture, geometry, close, evidence, session, env, click, type_text, read
 ):
@@ -520,6 +537,8 @@ def prove(
             native("key", ord(character), True)
             native("key", ord(character), False)
 
+    pid = json.loads((evidence / "launch.json").read_text())["pid"]
+
     if journey == "conversation-ux":
         return conversation_ux(
             native=native,
@@ -535,7 +554,11 @@ def prove(
         )
 
     process_case = journey == "conversation-process"
-    administrator = journey in ("conversation-administrator", "conversation-process")
+    closed_chat = journey == "conversation-workspace-refresh"
+    administrator = closed_chat or journey in (
+        "conversation-administrator",
+        "conversation-process",
+    )
     if process_case:
         deadline = time.monotonic() + 15
         while True:
@@ -561,7 +584,7 @@ def prove(
         capture("administrator-home-before-turn")
     if not (evidence / "conversation-open.png").exists():
         time.sleep(0.5)
-        click(64, 108)
+        click(*named_button(native, evidence, "Chat"))
     idle = wait(lambda state: state["phase"] == "idle", 5)
     assert idle["thread"] is None, "Opening chat started the provider"
     capture("conversation-open")
@@ -584,7 +607,7 @@ def prove(
                     break
             assert time.monotonic() < deadline, "Initial real terminal was not bound"
             time.sleep(0.05)
-    click(150, 637)
+    native("focus", pid, "Message Voyager", 0)
     time.sleep(0.2)
     capture("conversation-focused")
     type_text(
@@ -597,8 +620,39 @@ def prove(
         else "Reply with one short sentence about a quiet ocean. Use no tools."
     )
     capture("conversation-draft")
+    close_point = chat_close_point(native, pid, evidence) if closed_chat else None
     native("key", 65293, True)
     native("key", 65293, False)
+    if closed_chat:
+        click(*close_point)
+        deadline = time.monotonic() + 5
+        while native("fields", pid, ["Message Voyager"], "window")["fields"]:
+            assert time.monotonic() < deadline, "Chat did not close"
+            time.sleep(0.05)
+        before_effect = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+        assert before_effect["value"]["voyages"] == initial["value"]["voyages"], (
+            "The model acted before Chat closed; this run cannot prove closed-Chat refresh"
+        )
+        capture("workspace-refresh-chat-closed-before-effect")
+        deadline = time.monotonic() + 90
+        while True:
+            observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
+            if len(observed["value"]["voyages"][0]["fleets"]) == 2:
+                break
+            assert time.monotonic() < deadline, (
+                "No workspace effect while Chat was closed"
+            )
+            time.sleep(0.1)
+        point = named_button(native, evidence, "Native admin")
+        assert not native("fields", pid, ["Message Voyager"], "window")["fields"]
+        capture("workspace-refresh-fleet-visible-chat-closed")
+        (evidence / "workspace-refresh-closed.json").write_text(
+            json.dumps(
+                {"before": before_effect, "after": observed, "nativeFleetPoint": point},
+                indent=2,
+            )
+        )
+        click(*named_button(native, evidence, "Chat"))
     wait(lambda state: state["turn"] is not None)
     if process_case:
         deadline = time.monotonic() + 90
@@ -808,7 +862,7 @@ def prove(
         native("scroll", 0, 1)
         time.sleep(0.3)
         capture("administrator-scrolled-answer")
-        click(64, 108)
+        click(*chat_close_point(native, pid, evidence))
         capture("administrator-native-workspace-effect")
         if process_case:
             click(275, 30)
@@ -860,7 +914,7 @@ def prove(
                     or path.joinpath("stat").read_text().rsplit(") ", 1)[1].split()[19]
                     != shell["start"]
                 ), shell
-    return [
+    return (["native-workspace-refresh-with-chat-closed"] if closed_chat else []) + [
         "native-private-text-completed",
         "matching-thread-turn-request-context",
         "native-quit",
