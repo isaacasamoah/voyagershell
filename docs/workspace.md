@@ -245,6 +245,15 @@ the controller and validator tests. This headless check requires the Rust toolch
 and GPUI's native linker libraries; it does not create a window or establish native
 interaction behavior.
 
+Size an avatar dock target through an ordinary `div` around `Target.new`, such as
+`div().h(42).flex_shrink_0().child(target)`. The pinned Shell renders a registered
+module's factory result directly and does not apply style chains attached to
+that module element. A native factory owns its own geometry; ordinary layout
+containers apply the surrounding geometry. The built-in Button and Div paths
+have their own style handling. Generated types check accepted calls and values,
+but do not prove that a factory applies a requested visual style. Check the actual
+native result when changing a registered component's size or presentation.
+
 The exporter obtains declarations from the real Name, Terminal and arrangement
 registrations, plus declarations attached to the runtime host modules. It retains
 the raw declaration hash and the transitive imported-module slice. The slice is
