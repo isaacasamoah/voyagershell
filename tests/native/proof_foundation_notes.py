@@ -21,7 +21,7 @@ spec.loader.exec_module(notes)
 
 
 def setup_source(source):
-    anchor = '    this.run({ operation: "inspect" }, cx);'
+    anchor = '    this.run({ operation: "inspect" }, cx);\n    this.startContext(cx);'
     setup = """    this.run({ operation: "inspect" }, cx, (initial, task) => {
       if (initial?.status !== "applied" || !initial.fresh) throw Error("Proof setup inspect failed");
       const layout = initial.layout;
@@ -32,8 +32,52 @@ def setup_source(source):
         if (first?.status !== "applied" || !first.fresh) throw Error("Proof Vessel setup was not confirmed");
         this.run({ operation: "create-content", typeId: "notes", destination: { kind: "portal", voyage: voyage.id } }, next);
       });
-    });"""
+    });
+    this.startContext(cx);"""
     return notes.once(source, anchor, setup)
+
+
+def wait(get, predicate, label, seconds=20):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        value = get()
+        if value is not None and predicate(value):
+            return value
+        time.sleep(0.1)
+    raise AssertionError(f"Timed out waiting for {label}: {value}")
+
+
+def stop_owned(owned, session, env, wait, errors):
+    try:
+        socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
+        if socket.is_socket():
+            core_rpc(session, env, "server.stop", {})
+        wait(
+            socket.exists,
+            lambda exists: not exists,
+            "dedicated Core socket exit",
+            5,
+        )
+    except Exception as error:
+        errors.append(f"stop dedicated Core: {error}")
+    for name, identity in owned.items():
+
+        def exited():
+            try:
+                return (
+                    Path(f"/proc/{identity['pid']}/stat")
+                    .read_text()
+                    .rsplit(") ", 1)[1]
+                    .split()[19]
+                    != identity["start"]
+                )
+            except FileNotFoundError:
+                return True
+
+        try:
+            wait(exited, bool, f"{name} exit", 5)
+        except Exception as error:
+            errors.append(f"{name} exit: {error}")
 
 
 def prove(
@@ -61,15 +105,6 @@ def prove(
             return core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
         except (AssertionError, subprocess.CalledProcessError):
             return None
-
-    def wait(get, predicate, label, seconds=20):
-        deadline = time.monotonic() + seconds
-        while time.monotonic() < deadline:
-            value = get()
-            if value is not None and predicate(value):
-                return value
-            time.sleep(0.1)
-        raise AssertionError(f"Timed out waiting for {label}: {value}")
 
     def close_current():
         nonlocal opened
@@ -103,9 +138,28 @@ def prove(
     original = package.read_bytes()
     source = original.decode()
     setup_active = False
+    notes_path = profile / "mods/notes/main.js"
+    fresh_notes = None
     try:
         assert not native("accessibility-state")["enabled"], (
             "Pointer case requires initially disabled accessibility"
+        )
+        fresh_notes = notes_path.read_bytes()
+        legacy = (
+            Path(__file__).resolve().parents[2] / "desktop/notes-legacy-fixture.js"
+        ).read_bytes()
+        close_current()
+        notes.atomic(notes_path, legacy)
+        start_current("notes-legacy-controller")
+        (evidence / "notes-legacy-source.json").write_text(
+            json.dumps(
+                {
+                    "scope": "legacy JavaScript controller controls, not retained native session proof",
+                    "source": "desktop/notes-legacy-fixture.js",
+                    "exactBytes": notes_path.read_bytes() == legacy,
+                },
+                indent=2,
+            )
         )
         initial = wait(
             document,
@@ -495,36 +549,12 @@ def prove(
             close_current()
         except Exception as error:
             errors.append(f"close candidate: {error}")
-        try:
-            socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
-            if socket.is_socket():
-                core_rpc(session, env, "server.stop", {})
-            wait(
-                socket.exists,
-                lambda exists: not exists,
-                "dedicated Core socket exit",
-                5,
-            )
-        except Exception as error:
-            errors.append(f"stop dedicated Core: {error}")
-        for name, identity in owned.items():
-
-            def exited():
-                try:
-                    return (
-                        Path(f"/proc/{identity['pid']}/stat")
-                        .read_text()
-                        .rsplit(") ", 1)[1]
-                        .split()[19]
-                        != identity["start"]
-                    )
-                except FileNotFoundError:
-                    return True
-
+        if fresh_notes is not None:
             try:
-                wait(exited, bool, f"{name} exit", 5)
+                notes.atomic(notes_path, fresh_notes)
             except Exception as error:
-                errors.append(f"{name} exit: {error}")
+                errors.append(f"restore fresh Notes source: {error}")
+        stop_owned(owned, session, env, wait, errors)
         try:
             (evidence / "notes-cleanup.json").write_text(
                 json.dumps(
@@ -532,6 +562,9 @@ def prove(
                         "errors": errors,
                         "owned": owned,
                         "setupRestored": package.read_bytes() == original,
+                        "freshNotesRestored": fresh_notes is not None
+                        and notes_path.read_bytes() == fresh_notes,
+                        "scope": "legacy JavaScript controller controls",
                     },
                     indent=2,
                 )

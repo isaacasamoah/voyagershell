@@ -277,7 +277,7 @@ class Routes(unittest.TestCase):
         self.assertEqual(setup.count('operation: "create-content"'), 2)
         with self.assertRaises(AssertionError):
             proof.setup_source(header + header)
-        source = (ROOT / "content/notes/main.js").read_text()
+        source = (ROOT / "desktop/notes-legacy-fixture.js").read_text()
 
         @contextmanager
         def inspect(_profile, _close, _start, name, transform):
