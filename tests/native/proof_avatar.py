@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 
-from proof_workspace import chord
+from proof_workspace import chord, core_rpc
 from proof_avatar_window import floating_windows as owned_floating_windows
 
 
@@ -95,21 +95,7 @@ def prove(
         return process
 
     def rpc(method, params):
-        result = subprocess.run(
-            ["hc", "connect", "--session", session],
-            input=json.dumps(
-                {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-            )
-            + "\n",
-            env=env,
-            text=True,
-            capture_output=True,
-            check=True,
-            timeout=5,
-        )
-        response = json.loads(result.stdout.splitlines()[-1])
-        assert "result" in response, response
-        return response["result"]
+        return core_rpc(session, env, method, params)
 
     def state():
         return rpc("doc.get", {"name": "voyager-layout-v1"})
@@ -631,7 +617,7 @@ def prove(
         assert another_fleet["value"]["context"] == focused_portal["value"]["context"]
         assert another_fleet["value"]["voyages"][0]["portals"][0] == portal
         capture("avatar-portal-across-fleets")
-        click(*control_point("+ Voyage", button=True))
+        click(*control_point("Create Voyage", button=True))
         hidden = state()
         assert hidden["value"]["selectedVoyage"] != original_voyage["id"]
         assert hidden["value"]["context"] == focused_portal["value"]["context"]
