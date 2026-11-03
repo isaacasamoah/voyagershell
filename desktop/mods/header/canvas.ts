@@ -28,11 +28,18 @@ export function composeCanvas(
     else element.flex_shrink_0();
     if (!block) {
       if (node.kind === "column") element.flex_col();
-      element.children(
-        node.children
-          .map((child, index) => visit(child, node.kind, index === 0))
-          .filter((child): child is NativeElement => child !== null),
-      );
+      const children: NativeElement[] = [];
+      const overlays: NativeElement[] = [];
+      for (const [index, child] of node.children.entries()) {
+        const rendered = visit(child, node.kind, index === 0);
+        if (!rendered) continue;
+        const overlay =
+          canvas.portalMode !== "make-room" &&
+          child.kind === "block" &&
+          child.region === "portals";
+        (overlay ? overlays : children).push(rendered);
+      }
+      element.children([...children, ...overlays]);
     } else if (node.region === "portals" && canvas.portalMode !== "make-room") {
       element.absolute();
       if (axis === "row") {

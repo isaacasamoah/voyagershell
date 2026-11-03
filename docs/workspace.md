@@ -61,7 +61,11 @@ children once. Child editors retain their native focus/input/scroll handlers.
 There is no full-window input shield, terminal mute or second panel owner.
 
 The layout editor, overlay-mode Portal region and compact Chat overlay use this
-container. Make-room Portals stay in ordinary canvas flow. Geometry, content
+container. Make-room Portals stay in ordinary canvas flow. The renderer derives
+an overlay's edge from its original authored axis/index, then paints that
+absolute child after ordinary siblings inside the same parent. Flow order stays
+unchanged, so first/left and first/top overlays also receive foreground input.
+Geometry, content
 identity, context and all durable actions remain in their existing owners.
 Outside the actual container rectangle, ordinary workspace controls remain
 available. These source changes address the recorded editor click-through;

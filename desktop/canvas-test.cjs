@@ -25,7 +25,10 @@ test("the actual canvas renderer uses saved order, sizing and Portal presentatio
   const source = ts.transpileModule(
     fs.readFileSync(`${__dirname}/mods/header/canvas.ts`, "utf8"),
     {
-      compilerOptions: { module: ts.ModuleKind.CommonJS },
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
     },
   ).outputText;
   const exports = {};
@@ -61,17 +64,21 @@ test("the actual canvas renderer uses saved order, sizing and Portal presentatio
         region: "portals",
         size: { kind: "fixed", pixels: 240 },
       };
-      const body = { kind: "block", region: "active-fleet" };
+      const flow = [
+        { kind: "block", region: "fleet-strip" },
+        { kind: "block", region: "active-fleet" },
+      ];
       let actual;
-      exports.composeCanvas(
+      const rendered = exports.composeCanvas(
         {
           root: {
             kind: axis,
-            children: first ? [portal, body] : [body, portal],
+            children: first ? [portal, ...flow] : [...flow, portal],
           },
         },
         (region) => {
           const node = element();
+          node.calls.push(["region", region]);
           if (region === "portals") actual = node;
           return node;
         },
@@ -87,6 +94,17 @@ test("the actual canvas renderer uses saved order, sizing and Portal presentatio
             name === (axis === "row" ? "w" : "h") && value === 240,
         ),
       );
+      const children = rendered.calls.find(([name]) => name === "children")[1];
+      assert.equal(children.at(-1), actual);
+      assert.equal(children.length, 3);
+      for (const [index, block] of flow.entries()) {
+        const flowCalls = children[index].calls;
+        assert.ok(!flowCalls.some(([name]) => name === "absolute"));
+        assert.equal(
+          flowCalls.find(([name]) => name === "region")[1],
+          block.region,
+        );
+      }
     }
   }
   const result = exports.composeCanvas(
@@ -219,7 +237,10 @@ test("the real layout editor keeps its captured revision, refuses invalid input 
   const source = ts.transpileModule(
     fs.readFileSync(`${__dirname}/mods/header/layout-panel.ts`, "utf8"),
     {
-      compilerOptions: { module: ts.ModuleKind.CommonJS },
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
     },
   ).outputText;
   const buttons = new Map();
