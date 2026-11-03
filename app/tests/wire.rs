@@ -204,6 +204,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
             .recv_blocking()
             .unwrap();
         assert!(latest.package_revision > first.package_revision);
+        assert_eq!(client.package_revision(), latest.package_revision);
         assert_eq!(latest.revision, initial.version);
         let quiet = ready(client.workspace_changes(Some(latest))).unwrap();
         assert_eq!(

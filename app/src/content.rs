@@ -1,8 +1,11 @@
 mod description;
 mod package;
+mod view;
 pub(crate) use description::supports_type;
 pub use description::{describe, discover, require_action};
 pub use package::seed_package;
+pub(crate) use view::Phase as ViewPhase;
+pub use view::ViewBinding;
 
 use sha2::{Digest, Sha256};
 use std::{
@@ -282,6 +285,7 @@ pub struct Owner {
     last: HashMap<String, Snapshot>,
     instances: HashSet<String>,
     changes: HashMap<String, (u64, Option<async_channel::Sender<u64>>)>,
+    views: Vec<std::sync::Weak<view::Gate>>,
 }
 
 impl Owner {
@@ -293,6 +297,7 @@ impl Owner {
             last: HashMap::new(),
             instances: HashSet::new(),
             changes: HashMap::new(),
+            views: Vec::new(),
         })
     }
 
@@ -334,6 +339,13 @@ impl Owner {
     }
 
     fn package_changed(&mut self) {
+        for view in self.views.drain(..).filter_map(|view| view.upgrade()) {
+            view.retire();
+        }
+        self.refresh_views();
+    }
+
+    pub fn refresh_views(&mut self) {
         for (version, listener) in self.changes.values_mut() {
             *version = version.saturating_add(1);
             if let Some(listener) = listener.take() {
@@ -377,6 +389,19 @@ impl Owner {
 
     pub fn bind(&self, id: &ContentId) -> Option<Binding> {
         self.instances.contains(&id.0).then(|| Binding(id.clone()))
+    }
+
+    pub fn register_view(&mut self, binding: Binding) -> Result<ViewBinding, String> {
+        if !self.package_path("notes")?.is_dir() {
+            return Err("Notes package is unavailable".into());
+        }
+        if !self.instances.contains(&binding.id().0) {
+            return Err("Notes binding is unavailable".into());
+        }
+        self.views.retain(|view| view.strong_count() > 0);
+        let view = ViewBinding::new(binding);
+        self.views.push(std::sync::Arc::downgrade(&view.gate));
+        Ok(view)
     }
 
     pub fn subscribe(

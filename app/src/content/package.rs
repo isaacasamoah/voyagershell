@@ -90,9 +90,12 @@ mod tests {
         fs::write(active.join("AGENTS.md"), "personal guide").unwrap();
         let mut owner = Owner::open(&profile).unwrap();
         let binding = owner.initialize(&ContentId("stable-note".into())).unwrap();
+        let view = owner.register_view(binding.clone()).unwrap();
+        view.activate().unwrap();
         let changes = owner.subscribe(&binding, Some(0));
         let original_data = fs::read(profile.join("data/stable-note.json")).unwrap();
         owner.remove_package("notes").unwrap();
+        assert!(!view.is_active());
         assert_eq!(changes.try_recv().unwrap(), 1);
         assert!(owner.require_available("notes").is_err());
         assert!(owner.require_available("terminal").is_ok());
@@ -120,6 +123,10 @@ mod tests {
         );
         let restored = owner.subscribe(&binding, Some(1));
         owner.restore_package("notes").unwrap();
+        assert!(
+            !view.is_active(),
+            "Restore must not revive old view authority"
+        );
         assert_eq!(restored.try_recv().unwrap(), 2);
         assert_eq!(
             fs::read(active.join("main.js")).unwrap(),

@@ -27,6 +27,11 @@ enum Message {
     Launches {
         reply: async_channel::Sender<Result<voyager_contract::launch::Catalog, String>>,
     },
+    RefreshContentViews,
+    RegisterView {
+        binding: crate::content::Binding,
+        reply: async_channel::Sender<Result<crate::content::ViewBinding, String>>,
+    },
     ContextFacts {
         reply: async_channel::Sender<Result<voyager_contract::context::Facts, String>>,
     },
@@ -134,6 +139,7 @@ impl PendingCall {
 pub struct Client {
     sender: async_channel::Sender<Message>,
     sequence: Arc<AtomicU64>,
+    package_revision: Arc<AtomicU64>,
     identity: String,
 }
 
@@ -166,6 +172,8 @@ impl Client {
         launches: Option<std::path::PathBuf>,
     ) -> Self {
         let (sender, receiver) = async_channel::bounded::<Message>(8);
+        let package_revision = Arc::new(AtomicU64::new(0));
+        let published_packages = package_revision.clone();
         thread::spawn(move || {
             let mut core = Core::connect(&session);
             let mut layout = Arc::new(Layout::default());
@@ -180,11 +188,24 @@ impl Client {
                 VecDeque::new();
             let mut content_requests: VecDeque<ContentReceipt> = VecDeque::new();
             let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
-            let mut package_revision = 0;
             while let Ok(message) = receiver.recv_blocking() {
                 let (request, scope, reply) = match message {
                     Message::Launches { reply } => {
                         let _ = reply.try_send(crate::launch::catalog(launches.as_deref(), &cwd));
+                        continue;
+                    }
+                    Message::RefreshContentViews => {
+                        if let Some(owner) = &mut content {
+                            owner.refresh_views();
+                        }
+                        continue;
+                    }
+                    Message::RegisterView { binding, reply } => {
+                        let result = content
+                            .as_mut()
+                            .ok_or_else(|| "Content owner unavailable".to_owned())
+                            .and_then(|owner| owner.register_view(binding));
+                        let _ = reply.try_send(result);
                         continue;
                     }
                     Message::ContextFacts { reply } => {
@@ -195,7 +216,7 @@ impl Client {
                         let (send, receive) = async_channel::bounded(1);
                         let current = WorkspaceNotice {
                             revision: version,
-                            package_revision,
+                            package_revision: published_packages.load(Ordering::Relaxed),
                         };
                         if after != Some(current) {
                             let _ = send.try_send(current);
@@ -686,11 +707,12 @@ impl Client {
                 response.fresh = fresh;
                 if version != previous_version || package_changed {
                     if package_changed {
-                        package_revision = package_revision.saturating_add(1);
+                        let next = published_packages.load(Ordering::Relaxed).saturating_add(1);
+                        published_packages.store(next, Ordering::Relaxed);
                     }
                     if let Some(listener) = &workspace_listener {
                         let _ = listener.try_send(WorkspaceNotice {
-                            package_revision,
+                            package_revision: published_packages.load(Ordering::Relaxed),
                             revision: version,
                         });
                     }
@@ -718,6 +740,7 @@ impl Client {
         Self {
             sender,
             sequence: Arc::new(AtomicU64::new(0)),
+            package_revision,
             identity: format!(
                 "{}-{}",
                 std::process::id(),
@@ -739,6 +762,17 @@ impl Client {
             .recv()
             .await
             .map_err(|_| "Content binding unconfirmed".to_owned())?
+    }
+
+    pub fn package_revision(&self) -> u64 {
+        self.package_revision.load(Ordering::Relaxed)
+    }
+
+    pub async fn refresh_content_views(&self) -> Result<(), String> {
+        self.sender
+            .send(Message::RefreshContentViews)
+            .await
+            .map_err(|_| "Content refresh unavailable".into())
     }
 
     pub async fn workspace_changes(
@@ -768,6 +802,88 @@ impl Client {
             .map_err(|_| "Worker settings read was not confirmed")?
     }
 
+    pub async fn bind_content_view(
+        &self,
+        id: ContentId,
+    ) -> Result<crate::content::ViewBinding, String> {
+        let binding = self.bind_content(id).await?;
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .send(Message::RegisterView { binding, reply })
+            .await
+            .map_err(|_| "Content view registration unavailable".to_owned())?;
+        receive
+            .recv()
+            .await
+            .map_err(|_| "Content view registration unconfirmed".to_owned())?
+    }
+
+    async fn admit_view(
+        &self,
+        view: &crate::content::ViewBinding,
+        message: Message,
+    ) -> Result<(), CallError> {
+        use std::future::Future as _;
+        let mut sending = std::pin::pin!(self.sender.send(message));
+        let mut retired = std::pin::pin!(view.gate.retired.recv());
+        let mut published = std::pin::pin!(view.gate.published.recv());
+        std::future::poll_fn(|cx| {
+            let active = view.lock();
+            if *active == crate::content::ViewPhase::Retired {
+                return std::task::Poll::Ready(Err(CallError::Rejected(
+                    "Notes view was retired; nothing was queued".into(),
+                )));
+            }
+            if *active == crate::content::ViewPhase::Pending {
+                let _ = published.as_mut().poll(cx);
+                return std::task::Poll::Pending;
+            }
+            let _ = retired.as_mut().poll(cx);
+            sending.as_mut().poll(cx).map(|result| {
+                result.map_err(|_| {
+                    CallError::Rejected("Content view unavailable; nothing was queued".into())
+                })
+            })
+        })
+        .await
+    }
+
+    pub async fn view_changed(
+        &self,
+        view: &crate::content::ViewBinding,
+        after: Option<u64>,
+    ) -> Result<u64, CallError> {
+        use std::future::Future as _;
+        let (reply, receive) = async_channel::bounded(1);
+        self.admit_view(
+            view,
+            Message::ContentChanges {
+                binding: view.binding.clone(),
+                after,
+                reply,
+            },
+        )
+        .await?;
+        let changes = receive
+            .recv()
+            .await
+            .map_err(|_| CallError::Unconfirmed("Content observer unconfirmed".into()))?
+            .map_err(CallError::Rejected)?;
+        let mut next = std::pin::pin!(changes.recv());
+        let mut retired = std::pin::pin!(view.gate.retired.recv());
+        std::future::poll_fn(|cx| {
+            if retired.as_mut().poll(cx).is_ready() {
+                return std::task::Poll::Ready(Err(CallError::Rejected(
+                    "Notes view was retired".into(),
+                )));
+            }
+            next.as_mut().poll(cx).map(|result| {
+                result.map_err(|_| CallError::Rejected("Content observer replaced".into()))
+            })
+        })
+        .await
+    }
+
     pub async fn content_changes(
         &self,
         binding: crate::content::Binding,
@@ -793,6 +909,28 @@ impl Client {
         access: crate::content::Access,
         request: voyager_contract::content::Request,
     ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
+        self.read_content_inner(access, request, None).await
+    }
+
+    pub async fn read_content_view(
+        &self,
+        view: &crate::content::ViewBinding,
+        request: voyager_contract::content::Request,
+    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
+        self.read_content_inner(
+            crate::content::Access::View(view.binding.clone()),
+            request,
+            Some(view),
+        )
+        .await
+    }
+
+    async fn read_content_inner(
+        &self,
+        access: crate::content::Access,
+        request: voyager_contract::content::Request,
+        view: Option<&crate::content::ViewBinding>,
+    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
         if matches!(&request, voyager_contract::content::Request::Update { .. }) {
             return Err(CallError::Rejected(
                 "Updates cannot use read-only admission".into(),
@@ -800,16 +938,18 @@ impl Client {
         }
         check_content_size(&request)?;
         let (reply, receive) = async_channel::bounded(1);
-        self.sender
-            .send(Message::Content {
-                access,
-                request,
-                reply: ContentReply::Asynchronous(reply),
-            })
-            .await
-            .map_err(|_| {
+        let message = Message::Content {
+            access,
+            request,
+            reply: ContentReply::Asynchronous(reply),
+        };
+        if let Some(view) = view {
+            self.admit_view(view, message).await?;
+        } else {
+            self.sender.send(message).await.map_err(|_| {
                 CallError::Rejected("Content read unavailable; nothing was queued".into())
             })?;
+        }
         receive
             .recv()
             .await
@@ -821,8 +961,38 @@ impl Client {
         access: crate::content::Access,
         request: voyager_contract::content::Request,
     ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
+        self.content_inner(access, request, None)
+    }
+
+    pub fn content_view(
+        &self,
+        view: &crate::content::ViewBinding,
+        request: voyager_contract::content::Request,
+    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
+        self.content_inner(
+            crate::content::Access::View(view.binding.clone()),
+            request,
+            Some(view),
+        )
+    }
+
+    fn content_inner(
+        &self,
+        access: crate::content::Access,
+        request: voyager_contract::content::Request,
+        view: Option<&crate::content::ViewBinding>,
+    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
         check_content_size(&request)?;
         let (reply, receive) = mpsc::sync_channel(1);
+        let active = view.map(|view| view.lock());
+        if active
+            .as_ref()
+            .is_some_and(|active| **active != crate::content::ViewPhase::Active)
+        {
+            return Err(CallError::Rejected(
+                "Notes view was retired; nothing was queued".into(),
+            ));
+        }
         self.sender
             .try_send(Message::Content {
                 access,
@@ -832,6 +1002,7 @@ impl Client {
             .map_err(|_| {
                 CallError::Rejected("Workspace busy; no content operation was queued".into())
             })?;
+        drop(active);
         receive.recv_timeout(Duration::from_secs(25)).map_err(|_| {
             CallError::Unconfirmed("Content result unconfirmed; do not repeat the request".into())
         })
@@ -969,6 +1140,7 @@ mod voice_scope_tests {
             sender,
             sequence: Arc::new(AtomicU64::new(0)),
             identity: "voice-scope-test".into(),
+            package_revision: Arc::new(AtomicU64::new(0)),
         };
         let _inspection = client.queue_inspection().unwrap();
         let _later = client
@@ -1468,6 +1640,7 @@ mod content_admission_tests {
             sender,
             sequence: Arc::new(AtomicU64::new(0)),
             identity: "mailbox-test".into(),
+            package_revision: Arc::new(AtomicU64::new(0)),
         };
         let mut cx = TaskContext::from_waker(Waker::noop());
         fill(&client);
@@ -1566,12 +1739,97 @@ mod content_admission_tests {
             Err(CallError::Rejected(_))
         ));
         let mut forbidden =
-            Box::pin(client.read_content(crate::content::Access::View(binding), update));
+            Box::pin(client.read_content(crate::content::Access::View(binding.clone()), update));
         assert!(matches!(
             forbidden.as_mut().poll(&mut cx),
             Poll::Ready(Err(CallError::Rejected(_)))
         ));
         assert_eq!(receive.len(), 8);
+        let view = crate::content::ViewBinding::new(binding.clone());
+        view.activate().unwrap();
+        let inspect = ContentRequest::Inspect {
+            version: Version::V1,
+            request_id: "retired-read".into(),
+            content_id: binding.id().clone(),
+        };
+        let mut retired = Box::pin(client.read_content_view(&view, inspect.clone()));
+        assert!(retired.as_mut().poll(&mut cx).is_pending());
+        view.retire();
+        assert!(matches!(
+            retired.as_mut().poll(&mut cx),
+            Poll::Ready(Err(CallError::Rejected(_)))
+        ));
+        assert_eq!(receive.len(), 8);
+        for _ in 0..8 {
+            receive.try_recv().unwrap();
+        }
+        let pending = crate::content::ViewBinding::new(binding.clone());
+        let mut staged = Box::pin(client.read_content_view(&pending, inspect.clone()));
+        assert!(staged.as_mut().poll(&mut cx).is_pending());
+        assert!(receive.is_empty());
+        assert!(matches!(
+            client.content_view(
+                &pending,
+                ContentRequest::Inspect {
+                    version: Version::V1,
+                    request_id: "staged-effect".into(),
+                    content_id: binding.id().clone(),
+                }
+            ),
+            Err(CallError::Rejected(_))
+        ));
+        assert!(receive.is_empty());
+        pending.activate().unwrap();
+        assert!(staged.as_mut().poll(&mut cx).is_pending());
+        let Message::Content { request, reply, .. } = receive.try_recv().unwrap() else {
+            panic!("Expected published read")
+        };
+        reply.deliver(Arc::new(owner.call(&binding, request)));
+        assert!(matches!(staged.as_mut().poll(&mut cx), Poll::Ready(Ok(_))));
+        let mut observed = Box::pin(client.view_changed(&pending, Some(1)));
+        assert!(observed.as_mut().poll(&mut cx).is_pending());
+        let Message::ContentChanges { after, reply, .. } = receive.try_recv().unwrap() else {
+            panic!("Expected published subscription")
+        };
+        reply
+            .try_send(Ok(owner.subscribe(&binding, after)))
+            .unwrap();
+        assert!(observed.as_mut().poll(&mut cx).is_pending());
+        pending.retire();
+        assert!(matches!(
+            observed.as_mut().poll(&mut cx),
+            Poll::Ready(Err(CallError::Rejected(_)))
+        ));
+        let ContentResponse::Snapshot { snapshot, .. } = owner.call(&binding, inspect) else {
+            panic!("Expected current data")
+        };
+        let accepted = crate::content::ViewBinding::new(binding.clone());
+        accepted.activate().unwrap();
+        let request = ContentRequest::Update {
+            version: Version::V1,
+            request_id: "accepted-save".into(),
+            content_id: binding.id().clone(),
+            expected_revision: snapshot.revision,
+            data: Notes {
+                title: "Accepted".into(),
+                text: "After retirement".into(),
+            },
+        };
+        let writing = {
+            let client = client.clone();
+            let view = accepted.clone();
+            std::thread::spawn(move || client.content_view(&view, request))
+        };
+        let Message::Content { request, reply, .. } = receive.recv_blocking().unwrap() else {
+            panic!("Expected accepted save")
+        };
+        accepted.retire();
+        reply.deliver(Arc::new(owner.call(&binding, request)));
+        assert!(matches!(
+            &*writing.join().unwrap().unwrap(),
+            ContentResponse::Applied { .. }
+        ));
+        assert!(receive.is_empty());
         std::fs::remove_dir_all(directory).unwrap();
     }
 }

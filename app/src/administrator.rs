@@ -694,6 +694,11 @@ mod tests {
             std::env::temp_dir().join(format!("voyager-n3-owner-{}", std::process::id()));
         std::fs::create_dir_all(directory.join("mods/notes")).unwrap();
         std::fs::write(
+            directory.join("mods/notes/main.js"),
+            include_str!("../../content/notes/main.js"),
+        )
+        .unwrap();
+        std::fs::write(
             directory.join("mods/notes/mod.json"),
             include_str!("../../content/notes/mod.json"),
         )
