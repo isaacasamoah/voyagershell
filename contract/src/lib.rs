@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub mod administrator;
+pub mod content;
 pub mod conversation;
 
 macro_rules! id {
@@ -195,6 +196,19 @@ pub struct Layout {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ContentDestination {
+    Vessel {
+        fleet: FleetId,
+        after: PlacementId,
+        axis: Axis,
+    },
+    Portal {
+        voyage: VoyageId,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
     Inspect,
@@ -217,6 +231,11 @@ pub enum Action {
     },
     CreatePortal {
         voyage: VoyageId,
+    },
+    CreateContent {
+        #[serde(rename = "typeId")]
+        type_id: String,
+        destination: ContentDestination,
     },
     Rename {
         target: RenameTarget,

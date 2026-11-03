@@ -120,6 +120,11 @@ checked without skipping library declarations. The pinned Shell's invalid
 `ElementBounds` extension is converted to an equivalent intersection only when
 its expected exact form appears. Missing or changed declarations fail the check.
 
+Notes is a separate live-editable JavaScript package. It is not yet inside this
+strict TypeScript gate. Its actual private input and host declarations are
+exported separately with `export-script-types --notes`, and it cannot import the
+Header's broader native registry. See [native Notes](content.md).
+
 Go there for a hidden Vessel uses its existing placement identity. The workspace
 owner selects that Vessel's original Voyage and Fleet, keeps the current split
 tree intact and adds the hidden leaf beside it only when absent. It does not

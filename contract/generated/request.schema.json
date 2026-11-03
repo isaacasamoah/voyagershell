@@ -134,6 +134,27 @@
         {
           "additionalProperties": false,
           "properties": {
+            "destination": {
+              "$ref": "#/definitions/ContentDestination"
+            },
+            "operation": {
+              "const": "create-content",
+              "type": "string"
+            },
+            "typeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "typeId",
+            "destination"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "name": {
               "type": "string"
             },
@@ -357,6 +378,52 @@
         "vertical"
       ],
       "type": "string"
+    },
+    "ContentDestination": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "after": {
+              "type": "string"
+            },
+            "axis": {
+              "$ref": "#/definitions/Axis"
+            },
+            "fleet": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "vessel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "fleet",
+            "after",
+            "axis"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "portal",
+              "type": "string"
+            },
+            "voyage": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "voyage"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "Context": {
       "oneOf": [

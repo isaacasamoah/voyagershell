@@ -46,6 +46,7 @@ class Routes(unittest.TestCase):
             ("--foundation", "conversation-ux"),
             ("--foundation", "avatar"),
             ("--foundation", "portal-avatar"),
+            ("--foundation", "notes"),
             ("--native-mod-host", "--notes-case"),
             ("--native-avatar", "--reduced-motion"),
             ("--reference", "--direct-controls"),
@@ -56,7 +57,7 @@ class Routes(unittest.TestCase):
                 self.assertIn(option, result.stdout)
 
     def test_avatar_routes_require_compositor_before_launch(self):
-        for route in ("avatar", "portal-avatar"):
+        for route in ("avatar", "portal-avatar", "notes"):
             result = self.run_cli(
                 "--foundation",
                 "--journey",
@@ -67,11 +68,16 @@ class Routes(unittest.TestCase):
                 "/tmp/unused-avatar-route-test",
             )
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("require compositor capture", result.stderr)
+            self.assertIn(
+                "requires compositor capture"
+                if route == "notes"
+                else "require compositor capture",
+                result.stderr,
+            )
 
     def test_avatar_routes_refuse_fixed_core_socket_before_launch(self):
         with tempfile.TemporaryDirectory() as directory:
-            for route in ("avatar", "portal-avatar", "conversation-ux"):
+            for route in ("avatar", "portal-avatar", "conversation-ux", "notes"):
                 environment = dict(os.environ, HC_SOCKET="/tmp/not-a-test-session")
                 result = subprocess.run(
                     [
@@ -116,12 +122,89 @@ class Routes(unittest.TestCase):
             "proof_terminal_agent",
             "proof_selected_stop",
             "proof_avatar",
+            "proof_foundation_notes",
             "proof_conversation",
             "proof_conversation_scroll",
         ):
             self.assertEqual(
                 Path(importlib.import_module(name).__file__).parent, directory
             )
+
+    def test_notes_setup_and_source_controls_match_actual_packages(self):
+        from contextlib import contextmanager
+
+        proof = importlib.import_module("proof_foundation_notes")
+        header = (ROOT / "desktop/mods/header/main.js").read_text()
+        setup = proof.setup_source(header)
+        self.assertEqual(setup.count('operation: "create-content"'), 2)
+        with self.assertRaises(AssertionError):
+            proof.setup_source(header + header)
+        source = (ROOT / "content/notes/main.js").read_text()
+
+        @contextmanager
+        def inspect(_profile, _close, _start, name, transform):
+            controlled = transform(source)
+            if name == "uncertain":
+                self.assertIn("this.proofUpdates", controlled)
+                self.assertIn("request.requestId", controlled)
+            else:
+                self.assertIn('"content-5"', controlled)
+            with tempfile.TemporaryDirectory() as directory:
+                for entry, text in (("setup", setup), (name, controlled)):
+                    path = Path(directory) / f"{entry}.mjs"
+                    path.write_text(text)
+                    subprocess.run(
+                        ["node", "--check", str(path)], check=True, timeout=5
+                    )
+            raise RuntimeError("checked")
+            yield
+
+        original = proof.notes.source_control
+        proof.notes.source_control = inspect
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                profile = Path(directory)
+                (profile / "data").mkdir()
+                for content in ("content-5", "content-6"):
+                    (profile / "data" / f"{content}.json").write_text(
+                        '{"title":"a","text":"b"}'
+                    )
+                for case in (
+                    proof.notes.delayed_initial_read,
+                    proof.notes.uncertain_confirmation,
+                    proof.notes.resize_and_refresh,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "checked"):
+                        case(
+                            profile=profile,
+                            evidence=profile,
+                            native=None,
+                            pid=None,
+                            capture=None,
+                            close=None,
+                            start_frame=None,
+                            geometry=None,
+                            ids={"a": "content-5", "b": "content-6"},
+                        )
+        finally:
+            proof.notes.source_control = original
+
+    def test_notes_sibling_region_covers_both_editors_and_status(self):
+        from PIL import Image
+
+        proof = importlib.import_module("proof_foundation_notes")
+        title = {"x": 2256, "y": 369, "width": 580, "height": 64}
+        body = {"x": 2256, "y": 481, "width": 580, "height": 296}
+        image = Image.new("RGB", (1450, 940))
+        bounds = {"WIDTH": "2900", "HEIGHT": "1880"}
+        self.assertEqual(
+            proof.notes.sibling_region(title, body, image, bounds),
+            (1128, 184, 1418, 429),
+        )
+        with self.assertRaises(AssertionError):
+            proof.notes.sibling_region({**title, "x": 2900}, body, image, bounds)
+        with self.assertRaises(AssertionError):
+            proof.notes.sibling_region({**title, "width": 0}, body, image, bounds)
 
 
 if __name__ == "__main__":

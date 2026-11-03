@@ -24,6 +24,23 @@ export function call(request: string): Promise<string>;
 export function snapshot(after: string | null): Promise<string>;
 "#;
 
+pub const CONTENT_VIEW_MODULE: &str = "voyager_content_view";
+pub const CONTENT_VIEW: &str = r#"
+export const Notes: { new: (id: string, props: { contentId: string }) => import("gpui-kit").NativeElement };
+"#;
+
+pub const CONTENT_MODULE: &str = "voyager_content";
+pub const CONTENT: &str = r#"
+export function identity(): string;
+export function invoke(request: string, requestId: string, expectedRevision: string): Promise<string>;
+export function theme(): {
+    background: import("gpui-kit").Color;
+    foreground: import("gpui-kit").Color;
+    muted: import("gpui-kit").Color;
+    accent: import("gpui-kit").Color;
+};
+"#;
+
 pub const AVATAR_MODULE: &str = "voyager_avatar";
 
 pub const AVATAR: &str = r#"

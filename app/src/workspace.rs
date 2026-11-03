@@ -1,6 +1,7 @@
 use voyager_contract::{
-    Action, Axis, Content, ContentId, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget,
-    SavedLayout, Side, Split, SplitChild, Vessel, Voyage, VoyageId, WorkspaceView,
+    Action, Axis, Content, ContentDestination, ContentId, Context, Fleet, FleetId, Layout,
+    PlacementId, RenameTarget, SavedLayout, Side, Split, SplitChild, Vessel, Voyage, VoyageId,
+    WorkspaceView,
 };
 
 #[derive(Default)]
@@ -177,6 +178,26 @@ impl Model {
                     .ok_or("Voyage has no working directory")?;
                 let placement = self.placement(cwd)?;
                 self.layout.voyages[index].portals.push(placement);
+            }
+            Action::CreateContent {
+                type_id,
+                destination,
+            } => {
+                if !matches!(type_id.as_str(), "terminal" | "notes") {
+                    return Err("Unsupported content type".into());
+                }
+                let action = match destination {
+                    ContentDestination::Vessel { fleet, after, axis } => {
+                        Action::Split { fleet, after, axis }
+                    }
+                    ContentDestination::Portal { voyage } => Action::CreatePortal { voyage },
+                };
+                self.apply(action)?;
+                self.layout
+                    .contents
+                    .last_mut()
+                    .ok_or("Content was not created")?
+                    .type_id = type_id;
             }
             Action::Rename { target, name } => {
                 let name = name.trim().to_owned();

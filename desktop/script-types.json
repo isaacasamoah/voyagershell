@@ -1,10 +1,11 @@
 {
-  "rawSha256": "e8defe442655b0db6c7d943d1636f5d580f944eec00e2e7d3416d3b692fd3eb0",
+  "rawSha256": "c11a18ed805bc9ecd799d080ce9a515800243f6c1d782c16940d032f040f801c",
   "modules": [
     "gpui-base",
     "gpui-kit",
     "gpui-shell",
     "voyager_avatar",
+    "voyager_content_view",
     "voyager_conversation",
     "voyager_header",
     "voyager_native",

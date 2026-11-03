@@ -12,7 +12,8 @@ use std::{
 use anyhow::{Context as _, Result, bail};
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    App, Context, Entity, IntoElement, ParentElement, Render, Styled, Task, Window, div, px, rgb,
+    App, Context, Entity, IntoElement, ParentElement, Render, StyleRefinement, Styled,
+    Subscription, Task, Window, div, px, rgb,
 };
 use gpui_base::{ColorTokens, ThemeAppearance};
 use gpui_shell::{
@@ -46,10 +47,10 @@ fn install_viewer(viewers: &Viewers, content: &str, viewer: Viewer) -> Result<()
     Ok(())
 }
 
-struct LoadGuard;
+pub(crate) struct LoadGuard;
 
 impl LoadGuard {
-    fn enter(bound: Policy) -> Result<Self> {
+    pub(crate) fn enter(bound: Policy) -> Result<Self> {
         if LOADING.with(|loading| loading.replace(true)) {
             bail!("Nested package load is not allowed");
         }
@@ -181,6 +182,7 @@ fn projection(value: &Theme) -> HostValue {
 struct WorkspaceBinding {
     client: Client,
     viewers: Viewers,
+    notes: crate::notes::Host,
     avatar: crate::avatar::Binding,
 }
 
@@ -280,6 +282,14 @@ fn load(
     let policy = Policy::new()
         .with_host_module(module)?
         .with_host_module(workspace)?;
+    let note_colors = current.clone();
+    let policy = policy.with_host_module(workspace_binding.notes.module(Rc::new(move || {
+        let current = note_colors.borrow();
+        current
+            .as_ref()
+            .map(projection)
+            .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))
+    })))?;
     let policy = policy.with_host_module(crate::conversation::module(conversation.clone()))?;
     let policy = policy.with_host_module(workspace_binding.avatar.module())?;
     let _guard = LoadGuard::enter(policy)?;
@@ -294,6 +304,8 @@ pub struct Header {
     load_error: Option<String>,
     theme_error: Option<String>,
     watch_error: Option<String>,
+    accessibility: bool,
+    _observers: Vec<Subscription>,
 }
 
 pub struct Setup {
@@ -303,6 +315,7 @@ pub struct Setup {
     pub initial_source: Result<Vec<(PathBuf, u64)>, String>,
     pub client: Client,
     pub viewers: Viewers,
+    pub notes: crate::notes::Host,
     pub conversation: voyager_app::conversation_client::Client,
     pub avatar: crate::avatar::Binding,
 }
@@ -321,12 +334,14 @@ impl Header {
             initial_source,
             client,
             viewers,
+            notes,
             conversation,
             avatar,
         } = setup;
         let workspace_binding = WorkspaceBinding {
             client,
             viewers,
+            notes,
             avatar,
         };
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
@@ -361,6 +376,7 @@ impl Header {
         };
         let mut retrying = root.is_none();
         let handle = window.window_handle();
+        let invalidate_notes = workspace_binding.notes.clone();
         let task = cx.spawn(async move |this, cx| {
             let mut prior_theme = Some(initial_theme);
             let mut prior_source = initial_source;
@@ -384,9 +400,6 @@ impl Header {
                 let changed_source = source_bytes
                     .as_ref()
                     .is_some_and(|bytes| *bytes != prior_source);
-                if !changed_theme && !changed_source {
-                    continue;
-                }
                 if changed_theme {
                     prior_theme = theme_bytes.clone();
                 }
@@ -395,6 +408,15 @@ impl Header {
                 }
                 let result = handle.update(cx, |_, window, cx| {
                     this.update(cx, |header, cx| {
+                        let active = window.is_a11y_active();
+                        let changed_accessibility = header.accessibility != active;
+                        header.accessibility = active;
+                        if !changed_theme && !changed_source && !changed_accessibility {
+                            return header.root.is_some();
+                        }
+                        if changed_accessibility {
+                            workspace_binding.notes.invalidate(cx);
+                        }
                         let mut valid_theme_change = false;
                         if changed_theme {
                             let parsed = theme_bytes
@@ -411,6 +433,9 @@ impl Header {
                                     if let Some(root) = &header.root
                                         && let Err(error) = runtime.refresh(root, cx)
                                     {
+                                        header.theme_error = Some(format!("{error:#}"));
+                                    }
+                                    if let Err(error) = workspace_binding.notes.refresh(cx) {
                                         header.theme_error = Some(format!("{error:#}"));
                                     }
                                 }
@@ -465,6 +490,31 @@ impl Header {
                 }
             }
         });
+        cx.defer_in(window, move |header, window, cx| {
+            if let Some(root) = window.root::<ShellRoot>().flatten() {
+                let notes = invalidate_notes.clone();
+                header
+                    ._observers
+                    .push(cx.observe_in(&root, window, move |_, _, window, cx| {
+                        if window.is_a11y_active() {
+                            notes.invalidate(cx);
+                            cx.notify();
+                        }
+                    }));
+                if let Some(tooltip) = ShellRoot::tooltip_overlay(window, cx) {
+                    header._observers.push(cx.observe_in(
+                        &tooltip,
+                        window,
+                        move |_, _, window, cx| {
+                            if window.is_a11y_active() {
+                                invalidate_notes.invalidate(cx);
+                                cx.notify();
+                            }
+                        },
+                    ));
+                }
+            }
+        });
         Self {
             root,
             _watch: watch,
@@ -473,12 +523,23 @@ impl Header {
             load_error,
             theme_error,
             watch_error,
+            accessibility: window.is_a11y_active(),
+            _observers: Vec::new(),
         }
     }
 }
 
 impl Render for Header {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let content = self.root.as_ref().map(|root| {
+            let view = root.read(cx).content().clone();
+            if window.is_a11y_active() {
+                view.into_any_element()
+            } else {
+                view.cached(StyleRefinement::default().size_full())
+                    .into_any_element()
+            }
+        });
         let errors = [&self.load_error, &self.theme_error, &self.watch_error]
             .into_iter()
             .flatten()
@@ -489,7 +550,7 @@ impl Render for Header {
         div()
             .size_full()
             .bg(rgb(0x111316))
-            .children(self.root.clone())
+            .children(content)
             .when_some(error, |view, error| {
                 view.child(
                     div()
@@ -507,8 +568,38 @@ impl Render for Header {
 
 #[cfg(test)]
 mod tests {
-    use super::{ShellRuntime, install_viewer, source_snapshot, theme};
+    use super::{LoadGuard, ShellRuntime, install_viewer, source_snapshot, theme};
+    use gpui_shell::{
+        Capabilities,
+        policy::{self, Policy},
+    };
     use std::fs;
+
+    #[test]
+    fn content_load_scope_restores_deny_after_normal_error_and_unwind() {
+        let bound = || {
+            Policy::new()
+                .with_application("notes-a")
+                .with_capabilities(Capabilities::new().network_hosts(["example.test".to_owned()]))
+        };
+        let guard = LoadGuard::enter(bound()).unwrap();
+        assert!(policy::default().capabilities().may_reach("example.test"));
+        assert!(LoadGuard::enter(Policy::new().with_application("notes-b")).is_err());
+        drop(guard);
+        assert!(!policy::default().capabilities().may_reach("example.test"));
+        let fail = || -> anyhow::Result<()> {
+            let _guard = LoadGuard::enter(bound())?;
+            anyhow::bail!("load failed")
+        };
+        assert!(fail().is_err());
+        assert!(!policy::default().capabilities().may_reach("example.test"));
+        let _ = std::panic::catch_unwind(|| {
+            let _guard = LoadGuard::enter(bound()).unwrap();
+            panic!("load failed");
+        });
+        assert!(!policy::default().capabilities().may_reach("example.test"));
+        assert!(LoadGuard::enter(Policy::new()).is_ok());
+    }
 
     #[test]
     fn workspace_builtin_imports_link_in_real_quickjs() {

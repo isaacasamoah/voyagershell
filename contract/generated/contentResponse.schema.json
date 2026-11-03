@@ -1,0 +1,212 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Notes": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "text"
+      ],
+      "type": "object"
+    },
+    "Snapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/definitions/Notes"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "contentId",
+        "revision",
+        "data"
+      ],
+      "type": "object"
+    },
+    "Version": {
+      "enum": [
+        "1"
+      ],
+      "type": "string"
+    }
+  },
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "schemaDeclared": {
+          "type": "boolean"
+        },
+        "stateSchema": true,
+        "status": {
+          "const": "described",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "schemaDeclared"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/Snapshot"
+        },
+        "status": {
+          "const": "snapshot",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "snapshot"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/Snapshot"
+        },
+        "status": {
+          "const": "applied",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "snapshot"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "expectedRevision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "const": "rejected",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "message"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "expectedRevision": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "const": "uncertain",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "expectedRevision",
+        "message"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "Response"
+}

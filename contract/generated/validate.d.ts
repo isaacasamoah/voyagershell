@@ -1,6 +1,9 @@
+export function contentRequest(data: unknown): data is import("./contentRequest").Request;
+export function contentResponse(data: unknown): data is import("./contentResponse").Response;
 export function conversationReply(data: unknown): data is import("./conversationReply").Reply;
 export function conversationRequest(data: unknown): data is import("./conversationRequest").Request;
 export function conversationSnapshot(data: unknown): data is import("./conversationSnapshot").Snapshot;
+export function notes(data: unknown): data is import("./notes").Notes;
 export function processResponse(data: unknown): data is import("./processResponse").ProcessResponse;
 export function processTool(data: unknown): data is import("./processTool").ProcessInput;
 export function request(data: unknown): data is import("./request").Request;
