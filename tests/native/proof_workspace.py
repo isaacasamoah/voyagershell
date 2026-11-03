@@ -60,6 +60,15 @@ def create_voyage(capture, click, evidence):
 
 
 def core_rpc(session, env, method, params):
+    runtime = env.get("XDG_RUNTIME_DIR")
+    assert runtime and Path(runtime).is_absolute(), (
+        "Core proof needs its actual runtime directory"
+    )
+    pinned = {key: value for key, value in env.items() if key != "HC_TERMINAL_ID"}
+    pinned.update(
+        HC_SESSION=session,
+        HC_SOCKET=str(Path(runtime) / "herdr-core" / (session + ".sock")),
+    )
     request = json.dumps(
         {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     )
@@ -68,7 +77,7 @@ def core_rpc(session, env, method, params):
         input=request + "\n",
         text=True,
         capture_output=True,
-        env=env,
+        env=pinned,
         check=True,
         timeout=5,
     )

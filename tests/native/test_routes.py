@@ -5,11 +5,34 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class Routes(unittest.TestCase):
+    def test_core_reads_and_cleanup_pin_the_requested_session_endpoint(self):
+        from proof_workspace import core_rpc
+
+        environment = {
+            "XDG_RUNTIME_DIR": "/run/user/42",
+            "HC_SOCKET": "/unrelated.sock",
+            "HC_SESSION": "unrelated",
+            "HC_TERMINAL_ID": "t99",
+        }
+        with patch("proof_workspace.subprocess.run") as execute:
+            execute.return_value.stdout = '{"result":{"pid":42}}\n'
+            self.assertEqual(
+                core_rpc("voyager-owned", environment, "server.status", {}), {"pid": 42}
+            )
+            actual = execute.call_args.kwargs["env"]
+        self.assertEqual(
+            actual["HC_SOCKET"], "/run/user/42/herdr-core/voyager-owned.sock"
+        )
+        self.assertEqual(actual["HC_SESSION"], "voyager-owned")
+        self.assertNotIn("HC_TERMINAL_ID", actual)
+        self.assertEqual(environment["HC_SOCKET"], "/unrelated.sock")
+
     def run_cli(self, *arguments):
         return subprocess.run(
             [sys.executable, str(ROOT / "prove.py"), *arguments],
