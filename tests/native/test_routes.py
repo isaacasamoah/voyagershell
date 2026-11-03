@@ -151,6 +151,39 @@ class Routes(unittest.TestCase):
             path.write_text(source)
             subprocess.run(["node", "--check", str(path)], check=True, timeout=5)
 
+    def test_resize_point_avoids_recorded_nested_crossing_and_uses_largest_span(self):
+        proof = importlib.import_module("proof_split_resize")
+        outer = {"x": 1730, "y": 204, "width": 2, "height": 1666}
+        crossing = {"x": 576, "y": 1036, "width": 1152, "height": 2}
+        self.assertEqual(
+            proof.splitter_point(outer, [crossing]), ([1731, 620], (204, 1036))
+        )
+        self.assertEqual(
+            proof.splitter_point(crossing, [outer]), ([1152, 1037], (576, 1728))
+        )
+        second = {**crossing, "y": 600}
+        self.assertEqual(
+            proof.splitter_point(outer, [crossing, second])[1], (1038, 1870)
+        )
+        covering = {"x": 576, "y": 204, "width": 2000, "height": 1666}
+        with self.assertRaises(AssertionError):
+            proof.splitter_point(outer, [covering])
+
+    def test_resize_preview_requires_the_intended_three_pane_change(self):
+        proof = importlib.import_module("proof_split_resize")
+        before = [
+            [576, 276, 1152, 759],
+            [576, 1109, 1152, 759],
+            [1732, 276, 1152, 1592],
+        ]
+        outer = [[576, 276, 1384, 759], [576, 1109, 1384, 759], [1964, 276, 920, 1592]]
+        nested = [[576, 276, 1152, 909], [576, 1259, 1152, 609], before[2]]
+        self.assertTrue(proof.preview_changed(before, outer, True))
+        self.assertFalse(proof.preview_changed(before, outer, False))
+        self.assertTrue(proof.preview_changed(before, nested, False))
+        self.assertFalse(proof.preview_changed(before, nested, True))
+        self.assertFalse(proof.preview_changed(before, before, True))
+
     def test_only_matching_launched_child_is_reaped_after_exit(self):
         driver = importlib.import_module("proof_native_mod_host")
         child = subprocess.Popen([sys.executable, "-c", "pass"])
