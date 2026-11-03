@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from proof_workspace import chord
+from proof_avatar_window import floating_windows as owned_floating_windows
 
 
 def prove(
@@ -295,27 +296,7 @@ def prove(
         raise AssertionError(f"Actual native docking did not reach {kind}: {current}")
 
     def floating_windows():
-        windows = subprocess.check_output(
-            ["xdotool", "search", "--pid", str(launch["pid"])], env=env, text=True
-        ).splitlines()
-        floating = []
-        for window in windows:
-            if window == launch["window"]:
-                continue
-            try:
-                bounds = geometry(window)
-            except subprocess.CalledProcessError:
-                remaining = subprocess.check_output(
-                    ["xdotool", "search", "--pid", str(launch["pid"])],
-                    env=env,
-                    text=True,
-                ).splitlines()
-                if window in remaining:
-                    raise
-                continue
-            if bounds["WIDTH"] == "240" and bounds["HEIGHT"] == "240":
-                floating.append(window)
-        return floating
+        return owned_floating_windows(launch, geometry, env)
 
     def floating_window():
         for _ in range(30):

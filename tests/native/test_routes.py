@@ -11,6 +11,27 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Routes(unittest.TestCase):
+    def test_session_quit_requires_recorded_exits_and_socket_absence(self):
+        from proof_session_quit import exit_observation
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            process = root / "42"
+            process.mkdir()
+            stat = process / "stat"
+            stat.write_text(
+                "42 (owned process) " + " ".join(["Z", "1"] + ["0"] * 17 + ["123"])
+            )
+            socket = root / "owned.sock"
+            socket.write_text("still present")
+            owned = [{"pid": 42, "start": "123"}]
+            self.assertFalse(exit_observation(owned, socket, root)["complete"])
+            socket.unlink()
+            self.assertFalse(exit_observation(owned, socket, root)["complete"])
+            stat.unlink()
+            process.rmdir()
+            self.assertTrue(exit_observation(owned, socket, root)["complete"])
+
     def test_clipboard_refuses_overwriting_an_external_change(self):
         from proof_clipboard import Clipboard
 
@@ -38,6 +59,7 @@ class Routes(unittest.TestCase):
                     "conversation-voice",
                     "conversation-content",
                     "terminal-agent-create",
+                    "session-quit",
                     "arrangement",
                 ):
                     result = self.run_cli(
@@ -118,6 +140,7 @@ class Routes(unittest.TestCase):
             ("--foundation", "notes"),
             ("--foundation", "notes-lifetime"),
             ("--foundation", "split-resize"),
+            ("--foundation", "session-quit"),
             ("--native-mod-host", "--notes-case"),
             ("--native-avatar", "--reduced-motion"),
             ("--reference", "--direct-controls"),
@@ -134,6 +157,7 @@ class Routes(unittest.TestCase):
             "notes",
             "notes-lifetime",
             "split-resize",
+            "session-quit",
         ):
             result = self.run_cli(
                 "--foundation",
@@ -147,7 +171,7 @@ class Routes(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
                 "requires compositor capture"
-                if route in ("notes", "notes-lifetime", "split-resize")
+                if route in ("notes", "notes-lifetime", "split-resize", "session-quit")
                 else "require compositor capture",
                 result.stderr,
             )
@@ -161,6 +185,7 @@ class Routes(unittest.TestCase):
                 "notes",
                 "notes-lifetime",
                 "split-resize",
+                "session-quit",
             ):
                 environment = dict(os.environ, HC_SOCKET="/tmp/not-a-test-session")
                 result = subprocess.run(
