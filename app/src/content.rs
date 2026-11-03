@@ -1,6 +1,8 @@
 mod description;
+mod package;
 pub(crate) use description::supports_type;
 pub use description::{describe, discover, require_action};
+pub use package::seed_package;
 
 use sha2::{Digest, Sha256};
 use std::{
@@ -18,7 +20,7 @@ pub const LIMIT: usize = 1024 * 1024;
 pub const ENVELOPE_LIMIT: usize = LIMIT + 16 * 1024;
 const INITIAL_NOTES: &[u8] = br#"{"title":"Working notes","text":"A little space to think."}"#;
 
-fn schema(package: &Path) -> Result<Option<serde_json::Value>, String> {
+fn manifest(package: &Path) -> Result<serde_json::Value, String> {
     let mut bytes = Vec::new();
     fs::File::open(package.join("mod.json"))
         .and_then(|file| file.take(ENVELOPE_LIMIT as u64 + 1).read_to_end(&mut bytes))
@@ -26,13 +28,19 @@ fn schema(package: &Path) -> Result<Option<serde_json::Value>, String> {
     if bytes.len() > ENVELOPE_LIMIT {
         return Err("Notes schema exceeds the content envelope limit".into());
     }
-    let manifest: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    serde_json::from_slice(&bytes).map_err(|error| error.to_string())
+}
+
+fn state_schema(manifest: &serde_json::Value) -> Result<Option<serde_json::Value>, String> {
     let Some(schema) = manifest.get("stateSchema") else {
         return Ok(None);
     };
     jsonschema::validator_for(schema).map_err(|error| error.to_string())?;
     Ok(Some(schema.clone()))
+}
+
+fn schema(package: &Path) -> Result<Option<serde_json::Value>, String> {
+    state_schema(&manifest(package)?)
 }
 
 pub(crate) fn fingerprint(value: &impl serde::Serialize) -> [u8; 32] {
@@ -288,6 +296,52 @@ impl Owner {
         })
     }
 
+    fn package_path(&self, type_id: &str) -> Result<PathBuf, String> {
+        let name = description::package_name(type_id)?
+            .ok_or("This content type has no removable package")?;
+        Ok(self
+            .root
+            .parent()
+            .expect("profile root")
+            .join("mods")
+            .join(name))
+    }
+
+    pub fn require_available(&self, type_id: &str) -> Result<(), String> {
+        let packages = self.root.parent().expect("profile root").join("mods");
+        if description::package_name(type_id)?.is_none() {
+            return description::require_ready(&describe(&packages, type_id)?);
+        }
+        let catalog = discover(&packages)?;
+        let kind = catalog
+            .types
+            .iter()
+            .find(|kind| kind.type_id == type_id)
+            .ok_or("Unsupported content type")?;
+        description::require_ready(kind)
+    }
+
+    pub fn remove_package(&mut self, type_id: &str) -> Result<(), String> {
+        package::remove(&self.package_path(type_id)?)?;
+        self.package_changed();
+        Ok(())
+    }
+
+    pub fn restore_package(&mut self, type_id: &str) -> Result<(), String> {
+        package::restore(&self.package_path(type_id)?)?;
+        self.package_changed();
+        Ok(())
+    }
+
+    fn package_changed(&mut self) {
+        for (version, listener) in self.changes.values_mut() {
+            *version = version.saturating_add(1);
+            if let Some(listener) = listener.take() {
+                let _ = listener.try_send(*version);
+            }
+        }
+    }
+
     fn path(&self, id: &ContentId) -> std::io::Result<PathBuf> {
         if id.0.is_empty()
             || id.0.len() > 128
@@ -441,7 +495,11 @@ impl Owner {
             Request::Describe { .. } => match describe(
                 &self.root.parent().expect("profile root").join("mods"),
                 "notes",
-            ) {
+            )
+            .and_then(|description| {
+                description::require_ready(&description)?;
+                Ok(description)
+            }) {
                 Ok(description) => {
                     let schema = description.state.and_then(|state| state.schema);
                     Response::Described {
@@ -543,6 +601,7 @@ mod tests {
             include_str!("../../content/notes/mod.json"),
         )
         .unwrap();
+        fs::write(package.join("main.js"), "personal source").unwrap();
         let catalog = discover(&packages).unwrap();
         assert_eq!(catalog.types.len(), 2);
         let terminal = describe(&packages, "terminal").unwrap();
@@ -579,7 +638,8 @@ mod tests {
                 .is_err()
         );
         assert_eq!(model.layout, before_layout);
-        let validator = jsonschema::validator_for(&notes.actions.input_schema).unwrap();
+        let validator =
+            jsonschema::validator_for(&notes.actions.as_ref().unwrap().input_schema).unwrap();
         let mut input = serde_json::json!({"expectedVersion":"7","action":{"operation":"update","contentId":"opaque-id","expectedRevision":"revision","data":{"title":"Title","text":"Body"}}});
         assert!(validator.is_valid(&input));
         input["action"]["data"]["unsupported"] = true.into();

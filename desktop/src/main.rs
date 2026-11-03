@@ -125,17 +125,16 @@ fn run() -> Result<()> {
         include_str!("../../contract/generated/conversation.js"),
     )?;
     let notes_package = profile.join("mods/notes");
-    seed(
-        &notes_package.join("main.js"),
-        include_str!("../../content/notes/main.js"),
-    )?;
-    seed(
-        &notes_package.join("mod.json"),
-        include_str!("../../content/notes/mod.json"),
-    )?;
-    seed(
-        &notes_package.join("validate.js"),
-        include_str!("../../contract/generated/validate.js"),
+    voyager_app::content::seed_package(
+        &notes_package,
+        &[
+            ("main.js", include_str!("../../content/notes/main.js")),
+            ("mod.json", include_str!("../../content/notes/mod.json")),
+            (
+                "validate.js",
+                include_str!("../../contract/generated/validate.js"),
+            ),
+        ],
     )?;
     let content_owner = voyager_app::content::Owner::open(&profile)?;
     let manifest: serde_json::Value = serde_json::from_slice(&fs::read(package.join("mod.json"))?)
@@ -227,14 +226,7 @@ fn run() -> Result<()> {
                     return;
                 }
             };
-            let notes = match notes::Host::new(notes_package.clone(), client.clone()) {
-                Ok(notes) => notes,
-                Err(error) => {
-                    eprintln!("Notes runtime failed: {error:#}");
-                    cx.quit();
-                    return;
-                }
-            };
+            let notes = notes::Host::new(notes_package.clone(), client.clone());
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                     point(px(180.), px(130.)),

@@ -13,13 +13,22 @@ pub struct Catalog {
 pub struct Description {
     pub type_id: String,
     pub name: String,
+    pub availability: Availability,
     pub host: NativeHost,
     pub view: NativeView,
     pub placements: Vec<Placement>,
     pub configuration: Option<DataDescription>,
     pub state: Option<DataDescription>,
-    pub actions: Actions,
+    pub actions: Option<Actions>,
     pub backend: Option<Backend>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "status", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum Availability {
+    Ready,
+    Removed,
+    Unavailable { reason: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

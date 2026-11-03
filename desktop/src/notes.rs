@@ -33,7 +33,7 @@ fn validate_identity<'a>(
 
 #[derive(Clone)]
 pub struct Host {
-    runtime: Rc<ShellRuntime>,
+    runtime: Result<Rc<ShellRuntime>, String>,
     package: PathBuf,
     budget: Budget,
     client: Client,
@@ -42,10 +42,13 @@ pub struct Host {
 
 impl Host {
     pub fn refresh(&self, cx: &mut App) -> Result<()> {
+        let Ok(runtime) = &self.runtime else {
+            return Ok(());
+        };
         for view in self.views.borrow().values() {
             view.update(cx, |note, cx| {
                 if let Some(root) = &note.root {
-                    self.runtime.refresh(root, cx)?;
+                    runtime.refresh(root, cx)?;
                 }
                 cx.notify();
                 Ok::<_, anyhow::Error>(())
@@ -60,29 +63,49 @@ impl Host {
         }
     }
 
-    pub fn new(package: PathBuf, client: Client) -> Result<Self> {
-        let runtime = ShellRuntime::new_isolated_with_components(crate::notes_input::registry()?)?;
-        Ok(Self {
+    pub fn new(package: PathBuf, client: Client) -> Self {
+        let runtime = crate::notes_input::registry()
+            .map_err(anyhow::Error::from)
+            .and_then(ShellRuntime::new_isolated_with_components)
+            .map_err(|error| format!("{error:#}"));
+        Self {
             runtime,
             package,
             budget: Budget::default(),
             client,
             views: Rc::new(RefCell::new(HashMap::new())),
-        })
+        }
     }
 
     pub fn module(&self, colors: Colors) -> HostModule {
         let host = self.clone();
+        let runtime_error = self.runtime.as_ref().err().cloned();
         let packages = self.package.parent().map(std::path::Path::to_path_buf);
         HostModule::new(crate::script_types::CONTENT_VIEW_MODULE)
             .declarations(crate::script_types::CONTENT_VIEW)
             .async_function("descriptions", move |_| {
                 let packages = packages.clone();
+                let runtime_error = runtime_error.clone();
                 Ok(async move {
                     let packages = packages
                         .ok_or_else(|| HostError::new("Content package root is unavailable"))?;
-                    let catalog =
+                    let mut catalog =
                         voyager_app::content::discover(&packages).map_err(HostError::new)?;
+                    if let Some(reason) = runtime_error {
+                        for kind in &mut catalog.types {
+                            if kind.type_id == "notes"
+                                && kind.availability
+                                    == voyager_contract::content::Availability::Ready
+                            {
+                                kind.availability =
+                                    voyager_contract::content::Availability::Unavailable {
+                                        reason: reason.clone(),
+                                    };
+                                kind.state = None;
+                                kind.actions = None;
+                            }
+                        }
+                    }
                     let raw = serde_json::to_string(&catalog)
                         .map_err(|error| HostError::new(error.to_string()))?;
                     if raw.len() > voyager_app::content::ENVELOPE_LIMIT {
@@ -94,6 +117,12 @@ impl Host {
                 })
             })
             .component("Notes", move |args, window, cx| {
+                if let Err(error) = &host.runtime {
+                    return div()
+                        .p_4()
+                        .child(format!("Notes unavailable: {error}"))
+                        .into_any_element();
+                }
                 let id = match args.props() {
                     HostValue::Object(fields) => fields.iter().find_map(|(key, value)| {
                         (key == "contentId")
@@ -133,6 +162,10 @@ impl Host {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<(Entity<ShellRoot>, Watcher)> {
+        let runtime = self
+            .runtime
+            .as_ref()
+            .map_err(|error| anyhow::Error::msg(error.clone()))?;
         let application = format!("notes-{}", id.0);
         let identity = id.0.clone();
         let budget = self.budget.clone();
@@ -252,8 +285,8 @@ impl Host {
                 .with_application(application)
                 .with_host_module(module)?,
         )?;
-        let root = self.runtime.try_load(&self.package, window, cx)?;
-        let watch = self.runtime.watch(&root, window, cx)?;
+        let root = runtime.try_load(&self.package, window, cx)?;
+        let watch = runtime.watch(&root, window, cx)?;
         Ok((root, watch))
     }
 }
