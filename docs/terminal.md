@@ -275,6 +275,11 @@ not replayed. Quit still refuses new work. A later app start has no retained
 in-memory creation grant, so it attaches the old ended binding without starting
 the saved intent or old agent arguments.
 
+Inspect retains an existing immutable creation grant even when an outside edit
+makes its launch or intent ineligible. The opening owner needs that record to
+reject a changed launch instead of treating it as an ordinary unbound shell.
+Advertising eligibility still requires the exact current tuple to match.
+
 The updated Header treats the typed ended reason as a neutral condition and
 offers one Start new shell button inside that content placement. Placement ID,
 content ID, name, tree and avatar context stay unchanged. The new program always

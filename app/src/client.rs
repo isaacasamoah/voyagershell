@@ -732,11 +732,12 @@ impl Client {
                                         })
                                     });
                                     created_contents.retain(|pending| {
-                                        candidate
-                                            .layout
-                                            .contents
-                                            .iter()
-                                            .any(|item| pending.eligible(item))
+                                        candidate.layout.contents.iter().any(|item| {
+                                            item.id == pending.id
+                                                && (item.backend.is_none()
+                                                    || pending.shell_intent.is_some())
+                                                && item.start_pending.is_none()
+                                        })
                                     });
                                     layout = Arc::new(candidate.layout);
                                     version = revision;
