@@ -1,5 +1,6 @@
 import { div } from "gpui-kit";
 import { Button, Textarea, TextareaState } from "gpui-base";
+import { Occluding } from "voyager_native";
 import { canvas as validateCanvas } from "./validate.js";
 export class LayoutPanel {
   constructor(canvas, version) {
@@ -17,7 +18,7 @@ export class LayoutPanel {
     this.input.release();
   }
   render(busy, inspect, apply, close) {
-    return div()
+    return Occluding.new()
       .id("workspace-layout-panel")
       .absolute()
       .right(12)

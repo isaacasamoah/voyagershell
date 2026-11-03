@@ -15,6 +15,7 @@ import {
 } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { Terminal, TerminalState, Split as NativeSplit } from "voyager_native";
+import { Occluding } from "voyager_native";
 import { Chat } from "./chat.js";
 import { Speech } from "voyager_conversation";
 import { Notes } from "voyager_content_view";
@@ -1412,6 +1413,7 @@ export default class Workspace extends View {
         .p(24)
         .child(this.status || "Workspace canvas unavailable")
         .child(this.action("Refresh", { operation: "inspect" }));
+    const canvas = layout.canvas;
     const voyage = layout.voyages.find(
       (item) => item.id === layout.selectedVoyage,
     );
@@ -1419,7 +1421,7 @@ export default class Workspace extends View {
       (item) => item.id === layout.selectedFleet,
     );
     shell.child(
-      composeCanvas(layout.canvas, (region) => {
+      composeCanvas(canvas, (region) => {
         switch (region) {
           case "sidebar":
             return this.sidebarRegion(layout, voyage);
@@ -1431,7 +1433,14 @@ export default class Workspace extends View {
             return this.contextRegion(layout, voyage, fleet);
           case "portals": {
             if (layout.view === "home" || !voyage?.portals.length) return null;
-            const portals = div().flex().flex_col().gap(8).px(7).py(5);
+            const portals = (
+              canvas.portalMode === "make-room" ? div() : Occluding.new()
+            )
+              .flex()
+              .flex_col()
+              .gap(8)
+              .px(7)
+              .py(5);
             for (const placement of voyage.portals)
               portals.child(
                 this.content(placement, { kind: "portal", id: placement.id }),
@@ -1445,7 +1454,7 @@ export default class Workspace extends View {
       const chat = this.chat.render(colors, layout.context, true);
       if (chat)
         shell.child(
-          div().absolute().left(52).top(48).w(256).h(380).child(chat),
+          Occluding.new().absolute().left(52).top(48).w(256).h(380).child(chat),
         );
     }
     if (this.layoutPanel)
