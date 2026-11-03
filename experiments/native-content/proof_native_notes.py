@@ -24,6 +24,19 @@ def once(source, old, new):
     return source.replace(old, new)
 
 
+def initial_read(source, replacement, integrated):
+    if not integrated:
+        return once(source, "this.read(cx);", replacement)
+    guarded = """if (!this.proofInitialRead) {
+            this.proofInitialRead = true;
+            const cx = task;
+            REPLACEMENT
+          } else {
+            this.read(task);
+          }""".replace("REPLACEMENT", replacement)
+    return once(source, "this.read(task);", guarded)
+
+
 def forged_response(fields, marker, content, revision):
     matches = [field for field in fields if (field["name"] or "").startswith(marker)]
     assert len(matches) <= 1, "Multiple forged response controls"
@@ -221,7 +234,7 @@ def delayed_initial_read(
         close,
         start_frame,
         "delayed-read",
-        lambda source: once(source, "this.read(cx);", delayed),
+        lambda source: initial_read(source, delayed, ids is not None),
     ):
         notes.replace("Note title", 0, "Title before first read")
         assert notes.saved("a") == original, "Typing unexpectedly saved before blur"
@@ -679,7 +692,7 @@ def prove(
             'import { View, div } from "gpui-kit";',
             'import { View, div } from "gpui-kit";\nimport { Button } from "gpui-base";',
         )
-        source = once(source, "this.read(cx);", replacement)
+        source = initial_read(source, replacement, ids is not None)
         return once(
             source,
             ".child(div().text_size(11).text_color(colors.muted).child(this.status));",
