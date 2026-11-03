@@ -100,6 +100,10 @@ fn run() -> Result<()> {
         include_str!("../mods/header/creation.js"),
     )?;
     seed(
+        &package.join("activity.js"),
+        include_str!("../mods/header/activity.js"),
+    )?;
+    seed(
         &package.join("home.js"),
         include_str!("../mods/header/home.js"),
     )?;
@@ -127,6 +131,12 @@ fn run() -> Result<()> {
     for (name, source) in [
         ("maximize.svg", include_str!("../mods/header/maximize.svg")),
         ("restore.svg", include_str!("../mods/header/restore.svg")),
+        ("folder.svg", include_str!("../mods/header/folder.svg")),
+        ("branch.svg", include_str!("../mods/header/branch.svg")),
+        (
+            "speech-wave.svg",
+            include_str!("../mods/header/speech-wave.svg"),
+        ),
     ] {
         seed(&package.join(name), source)?;
     }

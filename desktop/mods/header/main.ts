@@ -26,6 +26,7 @@ import { homeOverview } from "./home.js";
 import { composeCanvas, vesselFrame } from "./canvas.js";
 import { LayoutPanel } from "./layout-panel.js";
 import { CreationPicker } from "./creation.js";
+import { activityBadge } from "./activity.js";
 import type { Projection as ActivityProjection } from "../../../contract/generated/reportedActivity";
 import type { Facts } from "../../../contract/generated/contextFacts";
 
@@ -1109,6 +1110,7 @@ export default class Workspace extends View {
     const activity = content.backend
       ? this.reportedActivity?.[content.backend]
       : null;
+    const badge = activityBadge(activity || undefined, this.activityLimit);
     const fleet = split
       ? this.layout?.voyages
           .flatMap((voyage) => voyage.fleets)
@@ -1168,15 +1170,17 @@ export default class Workspace extends View {
                       scope,
                     ),
                   )
-                  .child(
-                    div()
-                      .text_size(9)
-                      .text_color(colors.muted)
-                      .child(
-                        content.typeId === "terminal"
-                          ? `Reported: ${activity?.state ?? (this.activityLimit ? "unknown (limit)" : "unknown")}`
-                          : "",
-                      ),
+                  .children(
+                    content.typeId === "terminal" && badge.label
+                      ? [
+                          div()
+                            .text_size(9)
+                            .text_color(colors.muted)
+                            .accessibility_label(badge.hint)
+                            .tooltip(badge.hint)
+                            .child(badge.label),
+                        ]
+                      : [],
                   ),
               )
               .children(
@@ -1749,7 +1753,7 @@ export default class Workspace extends View {
     const facts = this.contextFacts;
     const directory =
       facts?.directory.kind === "known"
-        ? `Starting folder: ${facts.directory.path}`
+        ? facts.directory.path
         : facts?.directory.kind === "multiple"
           ? "Multiple starting folders"
           : "Starting folder unavailable";
@@ -1783,7 +1787,22 @@ export default class Workspace extends View {
         .flex_1()
         .min_w(0)
         .overflow_hidden()
-        .child(`${directory}  ·  ${branch}`),
+        .child(
+          div()
+            .flex()
+            .items_center()
+            .gap(6)
+            .child(svg("folder.svg").size(13))
+            .child(
+              div()
+                .accessibility_label(`Folder: ${directory}`)
+                .child(directory),
+            )
+            .child(svg("branch.svg").size(13).ml(6))
+            .child(
+              div().accessibility_label(`Branch: ${branch}`).child(branch),
+            ),
+        ),
     );
     if (facts) row.child(div().child(facts.path.join(" / ")));
     if (!visible && goThere) row.child(this.action("Go there", goThere));

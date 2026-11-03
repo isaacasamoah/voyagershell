@@ -2,6 +2,29 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const workspaceSource = require("./workspace-fixture.cjs");
 const { test } = require("node:test");
+const activityBadge = new Function(
+  workspaceSource("VOYAGER_ACTIVITY_SOURCE", "return function", "activity.js"),
+)();
+
+test("activity labels omit nonreporting shells and retain genuine observation failures", () => {
+  assert.equal(activityBadge(undefined).label, "");
+  assert.equal(activityBadge({ state: "unknown", reported: false }).label, "");
+  const failure = activityBadge({
+    state: "unknown",
+    reported: null,
+    reason: "Program observation ended or was lost",
+  });
+  assert.equal(failure.label, "Status unavailable");
+  assert.equal(failure.hint, "Program observation ended or was lost");
+  assert.equal(
+    activityBadge({ state: "blocked", reported: true }).label,
+    "Blocked",
+  );
+  assert.match(
+    activityBadge({ state: "done", reported: true }).hint,
+    /not a verified/,
+  );
+});
 
 function fixture(
   status,
@@ -784,6 +807,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "validateReportedActivity",
     "vesselFrame",
     "svg",
+    "activityBadge",
     source,
   )(
     class {},
@@ -815,6 +839,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     validateReportedActivity,
     (node) => node,
     div,
+    activityBadge,
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
@@ -953,7 +978,13 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   view.layout.contents[0].backend = "outside-cache";
   view.content({ id: "vessel", content: "content" }, context);
   assert.ok(
-    nodes.some((node) => node.calls.child?.[0] === "Reported: unknown (limit)"),
+    nodes.some((node) => node.calls.child?.[0] === "Status unavailable"),
+  );
+  assert.ok(
+    nodes.some(
+      (node) =>
+        node.calls.tooltip?.[0] === "Bound terminal observation limit exceeded",
+    ),
   );
   view.layout = unchanged;
   assert.equal(view.version, "7");

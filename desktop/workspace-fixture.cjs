@@ -12,5 +12,6 @@ module.exports = function workspaceSource(
     )
     .replace(/^import [\s\S]*?;\n/gm, "")
     .replace("export default class", declaration)
-    .replace("export class", declaration);
+    .replace("export class", declaration)
+    .replace("export function", declaration);
 };
