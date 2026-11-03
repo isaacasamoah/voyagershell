@@ -735,6 +735,19 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   ]);
 });
 
+test("canvas-only Inspect retains a prior refused opening without retrying it", async () => {
+  const { view, cx, pending, count } = fixture("rejected", "applied", true);
+  view.run({ operation: "inspect" }, cx);
+  await pending.at(-1);
+  const opening = view.openings.get("content");
+  assert.equal(count(), 1);
+  view.run({ operation: "inspect" }, cx, undefined, view.version, false);
+  await pending.at(-1);
+  assert.equal(count(), 1);
+  assert.equal(view.openings.get("content"), opening);
+  assert.equal(opening.status, "rejected");
+});
+
 test("a confirmed dock retains its request and initiating window epoch", async () => {
   const { view, cx, pending } = fixture("applied");
   view.run({ operation: "dock", context: { kind: "workspace" } }, cx);

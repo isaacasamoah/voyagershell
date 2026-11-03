@@ -173,6 +173,7 @@ export default class Workspace extends View {
     cx: UIContext,
     done?: (result: Response | null, cx: AsyncContext) => void,
     expectedVersion: string = this.version,
+    prepareContents = true,
   ) {
     this.drag = null;
     if (this.busy) {
@@ -236,6 +237,7 @@ export default class Workspace extends View {
         }
         const retry = new Set<string>();
         if (
+          prepareContents &&
           accepted &&
           action.operation === "inspect" &&
           result.status === "applied" &&
@@ -247,7 +249,12 @@ export default class Workspace extends View {
               retry.add(content);
             }
         }
-        if (accepted && result.status === "applied" && result.fresh) {
+        if (
+          prepareContents &&
+          accepted &&
+          result.status === "applied" &&
+          result.fresh
+        ) {
           try {
             const creates = [
               "create-voyage",
@@ -1577,7 +1584,8 @@ export default class Workspace extends View {
       shell.child(
         this.layoutPanel.render(
           this.busy,
-          (task, done) => this.run({ operation: "inspect" }, task, done),
+          (task, done) =>
+            this.run({ operation: "inspect" }, task, done, this.version, false),
           (canvas, version, task, done) =>
             this.run(
               { operation: "update-canvas", canvas },
