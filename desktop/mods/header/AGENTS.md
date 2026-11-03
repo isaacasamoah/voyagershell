@@ -34,6 +34,14 @@ repository edits. Personal profile JavaScript remains live-editable. Source
 reload retains the last usable package on error and does not grant content
 packages Header, process or private conversation authority.
 
+The current Header declares numeric `contentConfiguration: 1` in mod.json.
+Together with the matching Notes declaration, this enables Notes configuration
+discovery and actions. Preserve the optional Content.configuration object when
+validating or composing the workspace. Rust owns its validation and writes.
+Personal source is not silently updated. An older strict Header may reject a
+workspace containing saved configuration; keep source and data and explicitly
+update or restore the compatible Header.
+
 ## Home
 
 `home.js` composes the native Home overview from the current workspace snapshot.

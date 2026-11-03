@@ -17,6 +17,20 @@ or terminal constructors. The Rust content contract generates the validators in
 Editing source affects all copies of that package. Editing instance data affects
 only its content ID.
 
+Per-instance presentation is separate from package source and title/body data.
+The supported setting is `showHeading`, a Boolean defaulting to true. The script
+reads `SessionState.show_heading()` to show the existing NOTES eyebrow. Keep the
+same retained title/body controls when it changes. Both Notes and Header declare
+numeric `contentConfiguration: 1` in their manifests for this capability.
+
+Describe the instance before configuring it. When configuration is declared,
+Inspect returns its effective configuration and workspaceVersion beside the data
+snapshot. Use that workspaceVersion as the content tool's expectedVersion for
+`configure`, with the content ID and complete `{ "showHeading": false }` value.
+The configured result returns the accepted value and resulting workspace version.
+The title/text revision stays unchanged. A stale request requires fresh inspection;
+an uncertain result permits read-only inspection, never automatic replay.
+
 The retained native session keeps the draft and native focus. Rust owns persisted title/body data.
 Inspect the current revision before updating. Known stale or invalid-data refusals
 keep the draft usable. Clear the known cause before a deliberate retry. A lost
@@ -30,7 +44,7 @@ own private declaration scope using `export-script-types --notes` and the genera
 content definitions. It does not expose Header or Terminal constructors to Notes.
 The profile's personal JavaScript remains editable and is not overwritten or
 automatically typechecked by repository commands.
-The administrator source candidate exposes voyager_content describe, inspect and
+The administrator exposes voyager_content describe, inspect, configure and
 update through this same owner. First inspect voyager_workspace for the captured
 content ID and workspace version, then describe and inspect that exact Notes ID.
 Update requires its original expectedRevision and complete title/text data. IDs,
@@ -46,9 +60,8 @@ that instance. A stale refusal is deliberate protection of that draft, not a rea
 to replace its revision with an agent receipt. A change signal may follow an
 Uncertain write, but its read is not a repeated update.
 
-Real-provider/native N3 acceptance, reversible remove/restore and complete
-live-authoring lifecycle remain separate gates. The source interface alone does
-not establish them.
+Native journeys have separate receipts and limits. This guide describes the
+supported interface, not acceptance of the full content or lifecycle module.
 
 Personal packages are never overwritten. Old TitleState/BodyState and bound
 voyager_content signatures remain available for their original controller. They
@@ -58,3 +71,8 @@ source edit keeps the prior usable composition with its error. A retired
 generation cannot queue a new data operation; an accepted save still settles
 the same retained session. General deferred/layout failure detection and actual
 native repeated-reload resource limits remain unproved.
+
+An older personal package without the configuration declaration retains its
+default behavior. Update it explicitly. Loading an older strict Header after
+saving configuration may expose its validation/load error; preserve the source,
+configuration and data until that Header is explicitly updated or restored.
