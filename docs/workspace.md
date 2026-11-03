@@ -27,6 +27,10 @@ after layout to apply committed proportions, including saved-layout loads and
 refusal restoration. This programmatic synchronization does not dispatch an
 application save. It does not access private SDK resize state or copy a divider
 implementation. Native children keep their existing content-owned entities.
+The actual divider line declares a native Splitter role, an orientation and a name
+through the SDK's public handle appearance. The SDK still owns its wider hit
+band and drag behavior. Native accessibility exposure remains to be checked;
+the surrounding panels are not labeled as a handle.
 The isolated source is based on the selected UX checkpoint; its exhausted
 correction histories and held proving cap remain unchanged. Zoom, navigation
 and new content actions are outside this increment.

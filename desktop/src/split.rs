@@ -1,9 +1,10 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use anyhow::{Context as _, ensure};
 use gpui::{
-    AnyElement, AppContext as _, Axis, Bounds, DispatchPhase, Entity, MouseButton,
-    ParentElement as _, Pixels, Styled as _, canvas, div, px,
+    AnyElement, AppContext as _, Axis, Bounds, DispatchPhase, Entity, InteractiveElement as _,
+    IntoElement as _, MouseButton, Orientation, ParentElement as _, Pixels, Role,
+    StatefulInteractiveElement as _, Styled as _, canvas, div, px,
 };
 use gpui_base::{ResizablePanelGroup, ResizableState, resizable_panel};
 use gpui_shell::{
@@ -86,6 +87,31 @@ impl ComponentMaterializer for Split {
         let mut group = ResizablePanelGroup::new(format!("split-panels:{}", config.id))
             .axis(config.axis)
             .with_state(&native)
+            .with_handle_appearance(Rc::new(|handle, _, cx| {
+                let theme = gpui_base::Theme::global(cx);
+                let color = if handle.is_active() {
+                    theme
+                        .resizable
+                        .active_handle
+                        .unwrap_or(theme.tokens.colors.ring)
+                } else {
+                    theme.resizable.handle.unwrap_or(theme.tokens.colors.border)
+                };
+                let (label, orientation) = match handle.axis() {
+                    Axis::Horizontal => ("Resize side by side panes", Orientation::Vertical),
+                    Axis::Vertical => ("Resize stacked panes", Orientation::Horizontal),
+                };
+                Some(
+                    div()
+                        .id("split-divider")
+                        .role(Role::Splitter)
+                        .aria_label(label)
+                        .aria_orientation(orientation)
+                        .size_full()
+                        .bg(color)
+                        .into_any_element(),
+                )
+            }))
             .on_resize(move |native, window, cx| {
                 let sizes = native.read(cx).sizes();
                 let share = match sizes.as_slice() {
