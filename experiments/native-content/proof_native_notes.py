@@ -1,8 +1,11 @@
 import hashlib
 import json
+import math
 import os
+import sys
 import time
 from contextlib import contextmanager
+from secrets import token_hex
 
 from PIL import ImageChops
 
@@ -21,15 +24,37 @@ def once(source, old, new):
     return source.replace(old, new)
 
 
+def forged_response(fields, marker, content, revision):
+    matches = [field for field in fields if (field["name"] or "").startswith(marker)]
+    assert len(matches) <= 1, "Multiple forged response controls"
+    if not matches:
+        return None
+    field = matches[0]
+    assert field["role"] in ("button", "push button")
+    assert field["width"] > 0 and field["height"] > 0
+    response = json.loads(field["name"][len(marker) :])
+    assert response["status"] == "rejected"
+    assert response["requestId"] == "scope-ui"
+    assert response["contentId"] == content
+    assert response["expectedRevision"] == revision
+    return field, response
+
+
 class NotesActions:
-    def __init__(self, profile, native, pid):
+    def __init__(self, profile, native, pid, ids=None):
         self.profile, self.native, self.pid = profile, native, pid
+        self.relative = ids is not None
+        self.ids = ids or {"a": "notes-a", "b": "notes-b"}
 
     def tap(self, key):
         self.native("key", key, True)
         self.native("key", key, False)
 
     def widgets(self):
+        if self.relative:
+            return self.native(
+                "fields", self.pid(), ["Note title", "Note text"], "window"
+            )["fields"]
         return self.native("fields", self.pid())["fields"]
 
     def editors(self):
@@ -55,7 +80,7 @@ class NotesActions:
             self.tap(65293 if character == "\n" else ord(character))
 
     def path(self, id):
-        return self.profile / "data" / f"notes-{id}.json"
+        return self.profile / "data" / f"{self.ids[id]}.json"
 
     def saved(self, id):
         return json.loads(self.path(id).read_text())
@@ -75,18 +100,58 @@ def source_control(profile, close, start_frame, name, transform):
     controlled = transform(source)
     close()
     atomic(package, controlled)
+    failure = None
+    errors = []
     try:
         start_frame(f"{name}-start")
         yield
+    except BaseException as error:
+        failure = error
+        raise
     finally:
         try:
             close()
-        finally:
+        except Exception as error:
+            errors.append(f"close controlled profile: {error}")
+        try:
             atomic(package, source)
+        except Exception as error:
+            errors.append(f"restore controlled source: {error}")
+        if errors:
+            if failure is not None:
+                print(f"Notes source-control cleanup errors: {errors}", file=sys.stderr)
+            else:
+                raise AssertionError(f"Notes source-control cleanup failed: {errors}")
 
 
 def status_rect(body):
     return body["x"], body["y"] + body["height"] + 32, body["width"], 48
+
+
+def sibling_region(title, body, image, bounds):
+    assert all(field["width"] > 0 and field["height"] > 0 for field in (title, body))
+    status = status_rect(body)
+    left = min(title["x"], body["x"], status[0])
+    top = min(title["y"], body["y"], status[1])
+    right = max(
+        title["x"] + title["width"], body["x"] + body["width"], status[0] + status[2]
+    )
+    bottom = max(
+        title["y"] + title["height"], body["y"] + body["height"], status[1] + status[3]
+    )
+    width, height = int(bounds["WIDTH"]), int(bounds["HEIGHT"])
+    assert 0 <= left < right <= width and 0 <= top < bottom <= height
+    region = (
+        math.floor(left * image.width / width),
+        math.floor(top * image.height / height),
+        math.ceil(right * image.width / width),
+        math.ceil(bottom * image.height / height),
+    )
+    assert (
+        0 <= region[0] < region[2] <= image.width
+        and 0 <= region[1] < region[3] <= image.height
+    )
+    return region
 
 
 def image_crop(image, geometry, rect):
@@ -98,8 +163,10 @@ def image_crop(image, geometry, rect):
     return image.crop(bounds)
 
 
-def known_refusal_clears(*, profile, evidence, native, pid, capture, close, **_options):
-    notes = NotesActions(profile, native, pid)
+def known_refusal_clears(
+    *, profile, evidence, native, pid, capture, close, ids=None, **_options
+):
+    notes = NotesActions(profile, native, pid, ids)
     notes.editors()
     original = notes.path("a").read_bytes()
     protected = notes.path("b").read_bytes()
@@ -119,27 +186,36 @@ def known_refusal_clears(*, profile, evidence, native, pid, capture, close, **_o
         assert notes.path("b").read_bytes() == protected
         capture("known-refusal-cleared-saved")
     except BaseException:
-        close()
-        atomic(notes.path("a"), original)
-        assert notes.path("b").read_bytes() == protected
+        errors = []
+        for action in (close, lambda: atomic(notes.path("a"), original)):
+            try:
+                action()
+            except Exception as error:
+                errors.append(str(error))
+        try:
+            assert notes.path("b").read_bytes() == protected
+        except Exception as error:
+            errors.append(str(error))
+        if errors:
+            print(f"Notes refusal cleanup errors: {errors}", file=sys.stderr)
         raise
     return ["known-refusal-clears-with-unchanged-draft"]
 
 
 def delayed_initial_read(
-    *, profile, evidence, native, pid, capture, close, start_frame, **_options
+    *, profile, evidence, native, pid, capture, close, start_frame, ids=None, **_options
 ):
-    notes = NotesActions(profile, native, pid)
+    notes = NotesActions(profile, native, pid, ids)
     original = notes.saved("a")
     protected = notes.path("b").read_bytes()
-    delayed = """if (this.id === "notes-a") {
+    delayed = """if (this.id === NOTE_A) {
       cx.timer.after(2500, (task) => {
         if (!this.dirty) throw Error("Proof edit did not precede initial read");
         this.read(task);
       });
     } else {
       this.read(cx);
-    }"""
+    }""".replace("NOTE_A", json.dumps(notes.ids["a"]))
     with source_control(
         profile,
         close,
@@ -172,18 +248,36 @@ def delayed_initial_read(
 
 
 def uncertain_confirmation(
-    *, profile, evidence, native, pid, capture, close, start_frame, geometry, **_options
+    *,
+    profile,
+    evidence,
+    native,
+    pid,
+    capture,
+    close,
+    start_frame,
+    geometry,
+    ids=None,
+    **_options,
 ):
-    notes = NotesActions(profile, native, pid)
+    notes = NotesActions(profile, native, pid, ids)
 
     def transform(source):
+        anchor = "return invoke(JSON.stringify(request)).then((raw) => {"
+        if anchor not in source:
+            anchor = """return invoke(
+      JSON.stringify(request),
+      request.requestId,
+      request.expectedRevision || "",
+    ).then((raw) => {"""
         source = once(
             source,
-            "return invoke(JSON.stringify(request)).then((raw) => {",
+            anchor,
             """if (operation === "content.update") {
       this.proofUpdates = (this.proofUpdates || 0) + 1;
     }
-    return invoke(JSON.stringify(request)).then((raw) => {""",
+    """
+            + anchor,
         )
         source = once(
             source,
@@ -266,12 +360,22 @@ def uncertain_confirmation(
 
 
 def resize_and_refresh(
-    *, profile, evidence, native, pid, capture, close, start_frame, geometry, **_options
+    *,
+    profile,
+    evidence,
+    native,
+    pid,
+    capture,
+    close,
+    start_frame,
+    geometry,
+    ids=None,
+    **_options,
 ):
-    notes = NotesActions(profile, native, pid)
+    notes = NotesActions(profile, native, pid, ids)
     actions = """.w_full().h(24)
       .on_mouse_down("left", (event, cx) => {
-        if (this.id !== "notes-a") return;
+        if (this.id !== NOTE_A) return;
         cx.stop_propagation();
         if (event.local_position.x < event.bounds.width / 2) {
           this.title.set_value("A updated while B is dirty");
@@ -281,7 +385,9 @@ def resize_and_refresh(
           window.push_toast({ id: "n2-root-proof", title: "Root repaint", timeout: 1000 });
         }
       })
-      .child(this.status || "Proof actions")"""
+      .child(this.status || "Proof actions")""".replace(
+        "NOTE_A", json.dumps(notes.ids["a"])
+    )
 
     def move(x, y):
         bounds = geometry()
@@ -301,6 +407,7 @@ def resize_and_refresh(
     ):
         notes.focus("Note title", 0)
         a, b = notes.field("Note text", 0), notes.field("Note text", 1)
+        title_b = notes.field("Note title", 1) if ids else None
         initial = capture("resize-before")
         protected_b = notes.path("b").read_bytes()
         grip_x, grip_y = a["x"] + a["width"] - 16, a["y"] + a["height"] + 28
@@ -316,12 +423,35 @@ def resize_and_refresh(
         assert grown["height"] >= a["height"] + 80, "Body editing viewport did not grow"
         assert unchanged == b, "Resizing A changed B editor bounds/state"
         resized = capture("resize-after")
-        region = (
-            initial.width // 2,
-            initial.height // 5,
-            initial.width,
-            initial.height,
-        )
+        if ids:
+            left = b["x"] - 50
+            assert a["x"] + a["width"] < left
+            assert notes.field("Note title", 1) == title_b, (
+                "Resizing A changed B title bounds/state"
+            )
+            bounds = geometry()
+            assert initial.size == resized.size
+            region = sibling_region(title_b, b, initial, bounds)
+            (evidence / "resize-b-region.json").write_text(
+                json.dumps(
+                    {
+                        "title": title_b,
+                        "body": b,
+                        "status": status_rect(b),
+                        "window": bounds,
+                        "imageSize": initial.size,
+                        "region": region,
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            region = (
+                initial.width // 2,
+                initial.height // 5,
+                initial.width,
+                initial.height,
+            )
         assert (
             ImageChops.difference(initial.crop(region), resized.crop(region)).getbbox()
             is None
@@ -362,7 +492,16 @@ def resize_and_refresh(
     ]
 
 
-def pointer_diagnostic(profile, evidence, native, capture, geometry):
+def pointer_diagnostic(
+    profile,
+    evidence,
+    native,
+    capture,
+    geometry,
+    ids=None,
+    points=None,
+    protected_region=None,
+):
     assert not native("accessibility-state")["enabled"], (
         "Expected unchanged disabled accessibility"
     )
@@ -378,20 +517,27 @@ def pointer_diagnostic(profile, evidence, native, capture, geometry):
         native("key", key, True)
         native("key", key, False)
 
-    click(250, 405)
+    click(*(points[0] if points else (250, 405)))
     native("key", 65507, True)
     tap(ord("a"))
     native("key", 65507, False)
     for character in "Pointer alpha":
         tap(ord(character))
-    click(250, 510)
+    click(*(points[1] if points else (250, 510)))
     time.sleep(0.4)
     assert (
-        json.loads((profile / "data/notes-a.json").read_text())["title"]
+        json.loads(
+            (profile / "data" / f"{ids['a'] if ids else 'notes-a'}.json").read_text()
+        )["title"]
         == "Pointer alpha"
     )
     edited = capture("notes-pointer-edited")
-    region = (initial.width // 2, initial.height // 5, initial.width, initial.height)
+    region = protected_region or (
+        initial.width // 2,
+        initial.height // 5,
+        initial.width,
+        initial.height,
+    )
     assert (
         ImageChops.difference(initial.crop(region), edited.crop(region)).getbbox()
         is None
@@ -412,10 +558,11 @@ def prove(
     resize_window,
     geometry,
     pointer_only,
+    ids=None,
 ):
     if pointer_only:
         return pointer_diagnostic(profile, evidence, native, capture, geometry)
-    notes = NotesActions(profile, native, pid)
+    notes = NotesActions(profile, native, pid, ids)
     tap, widgets, focus, replace = notes.tap, notes.widgets, notes.focus, notes.replace
     path, saved, wait_saved = notes.path, notes.saved, notes.wait_saved
 
@@ -492,39 +639,82 @@ def prove(
     close()
     start_frame("notes-after-refusals")
     assert saved("a") == external and saved("b") == expected["b"]
-    package = profile / "mods/notes/main.js"
-    source = package.read_text()
     revision = hashlib.sha256(path("b").read_bytes()).hexdigest()
     protected_b = path("b").read_bytes()
+    marker = "notes-forged-" + token_hex(12)
     forged = json.dumps(
         {
             "version": "1",
             "operation": "content.update",
             "requestId": "scope-ui",
-            "contentId": "notes-b",
+            "contentId": notes.ids["b"],
             "expectedRevision": revision,
             "data": {"title": "Forged choice", "text": "must not apply"},
         }
     )
-    replacement = """if (this.id === "notes-a") {
+    replacement = (
+        """if (this.id === NOTE_A) {
       cx.spawn(async (task) => {
         const request = FORGED_REQUEST;
         if (!validateRequest(request)) throw Error("Invalid proof request");
-        const response = JSON.parse(await invoke(JSON.stringify(request)));
+        const response = JSON.parse(await INVOKE);
         if (!validateResponse(response)) throw Error("Invalid proof response");
+        this.proofResponse = response;
         this.status = `${response.status}: ${response.message}`;
         task.notify();
       });
     } else { this.read(cx); }""".replace("FORGED_REQUEST", forged)
-    assert source.count("this.read(cx);") == 1
-    close()
-    atomic(package, source.replace("this.read(cx);", replacement))
-    start_frame("notes-forged-request")
-    time.sleep(0.5)
-    capture("notes-forged-refusal")
-    assert path("b").read_bytes() == protected_b, "Forged A call changed B"
-    close()
-    atomic(package, source)
+        .replace("NOTE_A", json.dumps(notes.ids["a"]))
+        .replace(
+            "INVOKE",
+            "invoke(JSON.stringify(request), request.requestId, request.expectedRevision)"
+            if ids
+            else "invoke(JSON.stringify(request))",
+        )
+    )
+
+    def forged_source(source):
+        source = once(
+            source,
+            'import { View, div } from "gpui-kit";',
+            'import { View, div } from "gpui-kit";\nimport { Button } from "gpui-base";',
+        )
+        source = once(source, "this.read(cx);", replacement)
+        return once(
+            source,
+            ".child(div().text_size(11).text_color(colors.muted).child(this.status));",
+            ".child(div().text_size(11).text_color(colors.muted).child(this.status))\n"
+            '.child(this.proofResponse ? Button.new("forged-response").accessibility_label('
+            + json.dumps(marker)
+            + ' + JSON.stringify(this.proofResponse)).child("Proof response") : div());',
+        )
+
+    with source_control(
+        profile,
+        close,
+        start_frame,
+        "notes-forged-request",
+        forged_source,
+    ):
+        deadline = time.monotonic() + 15
+        response = None
+        while time.monotonic() < deadline:
+            fields = native("fields", pid(), None)["fields"]
+            result = forged_response(fields, marker, notes.ids["b"], revision)
+            if result is not None:
+                field, response = result
+                (evidence / "notes-forged-field.json").write_text(
+                    json.dumps(field, indent=2)
+                )
+            if response is not None:
+                break
+            time.sleep(0.1)
+        assert response is not None, "Forged request callback did not return"
+        (evidence / "notes-forged-response.json").write_text(
+            json.dumps(response, indent=2)
+        )
+        capture("notes-forged-refusal")
+        assert path("b").read_bytes() == protected_b, "Forged A call changed B"
     start_frame("notes-final")
     return [
         "native-labeled-editors",

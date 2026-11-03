@@ -47,7 +47,13 @@ try:
             elif action == "accessibility-state":
                 from proof_native_accessibility import enabled
 
-                result["enabled"] = enabled()
+                if len(args) > 1:
+                    assert isinstance(args[1], bool)
+                    if accessibility_before is None:
+                        accessibility_before = enabled()
+                    result["enabled"] = enabled(args[1])
+                else:
+                    result["enabled"] = enabled()
             elif action in ("fields", "focus"):
                 from proof_native_accessibility import enabled, fields
 
@@ -103,20 +109,37 @@ try:
         except Exception as error:
             print(json.dumps({"error": str(error)}), flush=True)
 finally:
-    if pointer is not None:
-        pointer.close()
-    call(session, service + ".Session", "Stop")
-    if accessibility_before is not None:
-        from proof_native_accessibility import enabled
+    primary = sys.exc_info()[0] is not None
+    errors = []
+    try:
+        if pointer is not None:
+            pointer.close()
+    except Exception as error:
+        errors.append(f"pointer close: {error}")
+    try:
+        call(session, service + ".Session", "Stop")
+    except Exception as error:
+        errors.append(f"session stop: {error}")
+    try:
+        if accessibility_before is not None:
+            from proof_native_accessibility import enabled
 
-        if not accessibility_before:
-            enabled(False)
-        print(
-            json.dumps(
-                {
-                    "accessibilityBefore": accessibility_before,
-                    "accessibilityAfter": enabled(),
-                }
-            ),
-            flush=True,
-        )
+            if enabled() != accessibility_before:
+                enabled(accessibility_before)
+            after = enabled()
+            assert after == accessibility_before, "Accessibility restoration failed"
+            print(
+                json.dumps(
+                    {
+                        "accessibilityBefore": accessibility_before,
+                        "accessibilityAfter": after,
+                    }
+                ),
+                flush=True,
+            )
+    except Exception as error:
+        errors.append(f"accessibility restore: {error}")
+    if errors:
+        print(json.dumps({"cleanupErrors": errors}), file=sys.stderr, flush=True)
+        if not primary:
+            raise RuntimeError(f"Native input cleanup failed: {errors}")
