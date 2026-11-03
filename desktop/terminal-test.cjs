@@ -894,6 +894,29 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   assert.ok(maximize, "The maximize Button exists without mouse hover");
   assert.equal(maximize.calls.opacity[0], 0);
   assert.equal(typeof maximize.calls.focus[0], "function");
+  assert.equal(maximize.calls.on_mouse_down?.[0], "left");
+  let stopped = 0;
+  maximize.calls.on_mouse_down[1](
+    {},
+    {
+      stop_propagation() {
+        stopped += 1;
+      },
+    },
+  );
+  assert.equal(
+    stopped,
+    1,
+    "The pointer press stops before native Button focus transfer",
+  );
+  view.focused = "other";
+  maximize.calls.on_click[0]({}, {});
+  assert.equal(view.focused, "vessel");
+  assert.deepEqual(actions.pop(), {
+    operation: "set-vessel-maximized",
+    id: "vessel",
+    maximized: true,
+  });
   start[0].calls.on_click[0]({}, {});
   assert.deepEqual(actions.pop(), {
     operation: "start-new-shell",

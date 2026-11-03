@@ -1079,6 +1079,9 @@ export default class Workspace extends View {
                                     this.splitHover === placement.id ? 1 : 0,
                                   )
                                   .focus((element) => element.opacity(1))
+                                  .on_mouse_down("left", (_event, cx) =>
+                                    cx.stop_propagation(),
+                                  )
                                   .child(
                                     svg(
                                       maximized
@@ -1086,7 +1089,8 @@ export default class Workspace extends View {
                                         : "maximize.svg",
                                     ).size(12),
                                   )
-                                  .on_click((_event, cx) =>
+                                  .on_click((_event, cx) => {
+                                    this.focused = placement.id;
                                     this.run(
                                       {
                                         operation: "set-vessel-maximized",
@@ -1094,8 +1098,8 @@ export default class Workspace extends View {
                                         maximized: !maximized,
                                       },
                                       cx,
-                                    ),
-                                  ),
+                                    );
+                                  }),
                               ]
                             : [],
                         ),

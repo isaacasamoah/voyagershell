@@ -16,6 +16,9 @@ target. Go there to an occluded sibling restores the tree. A same-Fleet move
 retains a still-present target.
 
 The corner Button stays keyboard reachable and appears on hover or native focus.
+Its left pointer press stops before the native default-focus listener, retaining
+the terminal focus used by the existing unchanged-focus check. Tab and keyboard
+activation keep the Button's native focus behavior.
 Linux uses Ctrl+Shift+Z; macOS uses Cmd+Shift+Enter. The displayed Vessel frame
 handles a chord that reaches it, preserving native text-editor handling. A busy
 action refuses the chord without queuing it. Terminal focus transfers through
