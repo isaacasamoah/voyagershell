@@ -1,5 +1,31 @@
 # Native workspace boundary
 
+## Pane maximize and restore
+
+Each Fleet optionally records `maximizedPlacement` in the existing workspace
+document. `set-vessel-maximized` names one placement and an explicit Boolean.
+The Rust owner checks scope, accepted tree membership and the existing version
+before saving. A restore for another placement refuses unchanged. Stored invalid
+targets are rejected before publication; a narrow projection omits other IDs.
+
+Maximize renders the existing content through a temporary leaf. The accepted
+split tree, saved layouts, backend bindings and explicit context remain intact.
+Preparation retains all accepted-tree terminal and Notes entities. Ordinary
+splits clear maximize; loading an arrangement clears an omitted or redundant
+target. Go there to an occluded sibling restores the tree. A same-Fleet move
+retains a still-present target.
+
+The corner Button stays keyboard reachable and appears on hover or native focus.
+Linux uses Ctrl+Shift+Z; macOS uses Cmd+Shift+Enter. The displayed Vessel frame
+handles a chord that reaches it, preserving native text-editor handling. A busy
+action refuses the chord without queuing it. Terminal focus transfers through
+the existing captured-focus check only if the user has not changed focus.
+This follows ordinary split/zoom behavior in pinned
+[Herdr App](https://github.com/herdrdev/herdr-app/tree/1581a587919dddd6f1efd5f78eb542c4b2b02cb5).
+Owner, contract and script checks establish this source path. Current native
+geometry, keyboard accessibility and retained input mapping require the separate
+application journey; no macOS runtime result is claimed.
+
 ## Outer canvas
 
 The workspace document owns an outer canvas separately from each Fleet's Vessel

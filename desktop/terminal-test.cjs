@@ -299,6 +299,45 @@ test("selection focus uses the actual current-Fleet terminal and preserves outsi
   }
 });
 
+test("maximizing another terminal transfers unchanged native focus to that retained target", async () => {
+  for (const [eligible, status] of [
+    [true, "applied"],
+    [false, "applied"],
+    [true, "rejected"],
+  ]) {
+    const { view, cx, pending, layout } = fixture("applied", status);
+    const fleet = layout.voyages[0].fleets[0];
+    fleet.vessels = [
+      { id: "first", content: "content" },
+      { id: "second", content: "other" },
+    ];
+    fleet.root = {
+      kind: "branch",
+      first: { kind: "leaf", placement: "first" },
+      second: { kind: "leaf", placement: "second" },
+    };
+    const calls = [];
+    const first = { rememberFocus: () => eligible };
+    const second = {
+      rememberFocus: () => false,
+      focusIfUnchanged: () => calls.push("second"),
+    };
+    view.terminals.set("content", first);
+    view.terminals.set("other", second);
+    for (const id of ["content", "other"])
+      view.openings.set(id, { status: "applied" });
+    view.run(
+      { operation: "set-vessel-maximized", id: "second", maximized: true },
+      cx,
+    );
+    fleet.maximizedPlacement = "second";
+    await pending[0];
+    assert.deepEqual(calls, eligible && status === "applied" ? ["second"] : []);
+    assert.equal(view.terminals.get("content"), first);
+    assert.equal(view.terminals.get("other"), second);
+  }
+});
+
 test("explicit Refresh never repeats an uncertain start", async () => {
   const { view, task, cx, pending, count } = fixture("uncertain");
   await assert.rejects(view.prepare(task), /open failed/);
@@ -600,6 +639,54 @@ test("workspace shortcuts leave the layout-name editor alone", () => {
   assert.deepEqual(calls, []);
 });
 
+test("maximize shortcuts bind the displayed event origin and refuse busy intents", () => {
+  const { view, cx, layout } = fixture("applied");
+  const fleet = layout.voyages[0].fleets[0];
+  fleet.vessels = [
+    { id: "first", content: "content" },
+    { id: "second", content: "other" },
+  ];
+  fleet.root = {
+    kind: "branch",
+    first: { kind: "leaf", placement: "first" },
+    second: { kind: "leaf", placement: "second" },
+  };
+  view.focused = "first";
+  const calls = [];
+  view.run = (action) => calls.push(action);
+  const event = {
+    key: "z",
+    modifiers: { control: true, shift: true, alt: false, platform: false },
+  };
+  view.maximizeShortcut("second", event, cx);
+  assert.deepEqual(calls.pop(), {
+    operation: "set-vessel-maximized",
+    id: "second",
+    maximized: true,
+  });
+  fleet.maximizedPlacement = "second";
+  view.maximizeShortcut("first", event, cx);
+  assert.equal(calls.length, 0);
+  view.maximizeShortcut("second", event, cx);
+  assert.equal(calls.pop().maximized, false);
+  view.busy = true;
+  view.maximizeShortcut("second", event, cx);
+  assert.deepEqual(view.pendingShortcuts, []);
+  assert.equal(calls.length, 0);
+  view.busy = false;
+  for (const guard of ["editing", "layoutName", "layoutPanel"]) {
+    view[guard] = {};
+    view.maximizeShortcut("second", event, cx);
+    view[guard] = null;
+  }
+  view.maximizeShortcut(
+    "second",
+    { ...event, modifiers: { ...event.modifiers, shift: false } },
+    cx,
+  );
+  assert.equal(calls.length, 0);
+});
+
 test("owner-created content is prepared without starting older unbound content", async () => {
   const opened = [];
   const { view, cx, pending, layout } = fixture(
@@ -696,6 +783,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "reported_activity",
     "validateReportedActivity",
     "vesselFrame",
+    "svg",
     source,
   )(
     class {},
@@ -726,6 +814,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     },
     validateReportedActivity,
     (node) => node,
+    div,
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
@@ -786,6 +875,25 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     (node) => node.calls.accessibility_label?.[0] === "Start new shell",
   );
   assert.equal(start.length, 1);
+  const fleet = view.layout.voyages[0].fleets[0];
+  fleet.vessels.push({ id: "other", content: "other-content" });
+  fleet.root = {
+    kind: "branch",
+    first: { kind: "leaf", placement: "vessel" },
+    second: { kind: "leaf", placement: "other" },
+  };
+  view.content(fleet.vessels[0], context, {
+    operation: "split",
+    fleet: fleet.id,
+    after: "vessel",
+    axis: "horizontal",
+  });
+  const maximize = nodes.find(
+    (node) => node.calls.accessibility_label?.[0] === "Maximize Vessel",
+  );
+  assert.ok(maximize, "The maximize Button exists without mouse hover");
+  assert.equal(maximize.calls.opacity[0], 0);
+  assert.equal(typeof maximize.calls.focus[0], "function");
   start[0].calls.on_click[0]({}, {});
   assert.deepEqual(actions.pop(), {
     operation: "start-new-shell",

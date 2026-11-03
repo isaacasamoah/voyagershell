@@ -1,4 +1,4 @@
-import { View, div } from "gpui-kit";
+import { View, div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { projection } from "voyager_header";
 import { Brand, Layer, Target } from "voyager_avatar";
@@ -137,9 +137,16 @@ export default class Workspace extends View {
     const oldFleet = oldVoyage?.fleets.find(
       (item) => item.id === oldLayout?.selectedFleet,
     );
+    const maximization =
+      action.operation === "set-vessel-maximized" ? action : null;
+    const splitMaximized =
+      !!oldFleet?.maximizedPlacement &&
+      (action.operation === "split" ||
+        (action.operation === "create-content" &&
+          action.destination.kind === "vessel"));
     const transferFocus =
-      changesSelection &&
-      this.visibleVessels(oldFleet).some(
+      (changesSelection || !!maximization || splitMaximized) &&
+      this.displayedVessels(oldFleet).some(
         (vessel) =>
           this.terminals.get(vessel.content)?.rememberFocus() === true,
       );
@@ -204,7 +211,15 @@ export default class Workspace extends View {
               const fleet = voyage?.fleets.find(
                 (item) => item.id === current?.selectedFleet,
               );
-              const target = this.visibleVessels(fleet)[0];
+              const target = maximization
+                ? fleet?.vessels.find((vessel) => vessel.id === maximization.id)
+                : splitMaximized
+                  ? fleet?.vessels.find(
+                      (vessel) => !previousContents.has(vessel.content),
+                    )
+                  : this.displayedVessels(fleet)[0];
+              if (target && (maximization || splitMaximized))
+                this.focused = target.id;
               if (target)
                 this.terminals.get(target.content)?.focusIfUnchanged();
             }
@@ -345,6 +360,12 @@ export default class Workspace extends View {
     };
     collect(fleet.root);
     return fleet.vessels.filter((vessel) => visible.has(vessel.id));
+  }
+  displayedVessels(fleet) {
+    const vessels = this.visibleVessels(fleet);
+    return fleet?.maximizedPlacement
+      ? vessels.filter((vessel) => vessel.id === fleet.maximizedPlacement)
+      : vessels;
   }
   async prepare(
     task,
@@ -587,6 +608,44 @@ export default class Workspace extends View {
     }
     cx.notify();
   }
+  maximizeShortcut(id, event, cx) {
+    if (this.editing || this.layoutName || this.layoutPanel) return;
+    const { control, shift, alt, platform } = event.modifiers;
+    if (
+      !shift ||
+      alt ||
+      event.modifiers.function ||
+      !(
+        (control && !platform && event.key.toLowerCase() === "z") ||
+        (platform && !control && event.key.toLowerCase() === "enter")
+      )
+    )
+      return;
+    const fleet = this.layout?.voyages
+      .flatMap((voyage) => voyage.fleets)
+      .find((fleet) => fleet.id === this.layout?.selectedFleet);
+    if (
+      !fleet ||
+      this.visibleVessels(fleet).length < 2 ||
+      !this.displayedVessels(fleet).some((vessel) => vessel.id === id)
+    )
+      return;
+    cx.stop_propagation();
+    if (this.busy) {
+      this.status =
+        "Maximize was not changed while another workspace request was pending.";
+      cx.notify();
+      return;
+    }
+    this.run(
+      {
+        operation: "set-vessel-maximized",
+        id,
+        maximized: fleet.maximizedPlacement !== id,
+      },
+      cx,
+    );
+  }
   shortcut(event, cx) {
     if (this.editing || this.layoutName || this.layoutPanel) return;
     const { control, shift, alt, platform } = event.modifiers;
@@ -632,7 +691,7 @@ export default class Workspace extends View {
         cx,
       );
     } else {
-      const visible = this.visibleVessels(fleet);
+      const visible = this.displayedVessels(fleet);
       const vessel =
         visible.find((item) => item.id === this.focused) || visible[0];
       if (!vessel) return;
@@ -889,6 +948,13 @@ export default class Workspace extends View {
     const activity = content.backend
       ? this.reportedActivity?.[content.backend]
       : null;
+    const fleet = split
+      ? this.layout?.voyages
+          .flatMap((voyage) => voyage.fleets)
+          .find((fleet) => fleet.id === split.fleet)
+      : undefined;
+    const maximized = fleet?.maximizedPlacement === placement.id;
+    const canMaximize = this.visibleVessels(fleet).length > 1;
     return this.target(
       `${scope.kind}-${placement.id}`,
       scope,
@@ -905,6 +971,10 @@ export default class Workspace extends View {
           .on_mouse_down("left", (_event, cx) => {
             this.focused = placement.id;
             cx.notify();
+          })
+          .on_key_down((event, cx) => {
+            if (scope.kind === "vessel")
+              this.maximizeShortcut(placement.id, event, cx);
           })
           .on_mouse_move((event, cx) => {
             if (scope.kind === "vessel")
@@ -953,7 +1023,7 @@ export default class Workspace extends View {
                   ? [
                       div()
                         .id(`split-zone-${placement.id}`)
-                        .w(90)
+                        .w(canMaximize ? 116 : 90)
                         .h(35)
                         .flex()
                         .items_center()
@@ -990,6 +1060,39 @@ export default class Workspace extends View {
                                   .on_click((_event, cx) =>
                                     this.run(
                                       { ...split, axis: "vertical" },
+                                      cx,
+                                    ),
+                                  ),
+                              ]
+                            : [],
+                        )
+                        .children(
+                          canMaximize
+                            ? [
+                                Button.new(`maximize-${placement.id}`)
+                                  .accessibility_label(
+                                    maximized
+                                      ? "Restore Vessel"
+                                      : "Maximize Vessel",
+                                  )
+                                  .opacity(
+                                    this.splitHover === placement.id ? 1 : 0,
+                                  )
+                                  .focus((element) => element.opacity(1))
+                                  .child(
+                                    svg(
+                                      maximized
+                                        ? "restore.svg"
+                                        : "maximize.svg",
+                                    ).size(12),
+                                  )
+                                  .on_click((_event, cx) =>
+                                    this.run(
+                                      {
+                                        operation: "set-vessel-maximized",
+                                        id: placement.id,
+                                        maximized: !maximized,
+                                      },
                                       cx,
                                     ),
                                   ),
@@ -1425,7 +1528,14 @@ export default class Workspace extends View {
           .min_h(0)
           .px(7)
           .py(5)
-          .child(this.pane(fleet.root, fleet)),
+          .child(
+            this.pane(
+              fleet.maximizedPlacement
+                ? { kind: "leaf", placement: fleet.maximizedPlacement }
+                : fleet.root,
+              fleet,
+            ),
+          ),
       );
     return body;
   }
@@ -1439,7 +1549,7 @@ export default class Workspace extends View {
           : context.kind === "fleet"
             ? !!voyage?.fleets.some((item) => item.id === context.id)
             : context.kind === "vessel"
-              ? this.visibleVessels(fleet).some(
+              ? this.displayedVessels(fleet).some(
                   (item) => item.id === context.id,
                 )
               : !!voyage?.portals.some((item) => item.id === context.id);

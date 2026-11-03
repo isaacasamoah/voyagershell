@@ -21,6 +21,44 @@ function element() {
   return node;
 }
 
+test("maximization renders the selected leaf while retaining preparation of the whole tree", () => {
+  const Workspace = new Function(
+    "View",
+    "div",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(class {}, element);
+  const fleet = {
+    id: "fleet",
+    maximizedPlacement: "second",
+    vessels: [{ id: "first" }, { id: "second" }],
+    root: {
+      kind: "branch",
+      first: { kind: "leaf", placement: "first" },
+      second: { kind: "leaf", placement: "second" },
+    },
+  };
+  const rendered = [];
+  const view = Object.assign(new Workspace(), {
+    pane(tree) {
+      rendered.push(tree);
+      return element();
+    },
+  });
+  view.activeRegion({ view: "fleet" }, fleet);
+  assert.deepEqual(rendered.pop(), { kind: "leaf", placement: "second" });
+  assert.deepEqual(
+    view.visibleVessels(fleet).map((vessel) => vessel.id),
+    ["first", "second"],
+  );
+  assert.deepEqual(
+    view.displayedVessels(fleet).map((vessel) => vessel.id),
+    ["second"],
+  );
+  delete fleet.maximizedPlacement;
+  view.activeRegion({ view: "fleet" }, fleet);
+  assert.equal(rendered.pop(), fleet.root);
+});
+
 test("worker creation keeps its opening target and revision across a delayed catalogue", async () => {
   const { launchCatalog, contentCatalog } =
     await import("../contract/generated/validate.js");

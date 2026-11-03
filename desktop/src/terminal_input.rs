@@ -2,6 +2,20 @@ use super::Pane;
 use gpui::{Bounds, ClipboardItem, Context, EntityInputHandler, Pixels, UTF16Selection, Window};
 use std::ops::Range;
 
+pub(super) fn workspace_shortcut(key: &gpui::Keystroke) -> bool {
+    let modifiers = key.modifiers;
+    if !modifiers.shift || modifiers.alt || modifiers.function {
+        return false;
+    }
+    let name = key.key.to_ascii_lowercase();
+    ((modifiers.control ^ modifiers.platform) && matches!(name.as_str(), "o" | "e" | "t"))
+        || if cfg!(target_os = "macos") {
+            modifiers.platform && !modifiers.control && name == "enter"
+        } else {
+            modifiers.control && !modifiers.platform && name == "z"
+        }
+}
+
 #[derive(Default)]
 pub(super) struct Composition {
     pub(super) text: String,
@@ -185,6 +199,31 @@ impl EntityInputHandler for Pane {
 #[cfg(test)]
 mod tests {
     use super::Composition;
+
+    #[test]
+    fn workspace_shortcuts_leave_normal_terminal_input_alone() {
+        for key in [
+            "ctrl-shift-o",
+            "ctrl-shift-e",
+            "ctrl-shift-t",
+            if cfg!(target_os = "macos") {
+                "cmd-shift-enter"
+            } else {
+                "ctrl-shift-z"
+            },
+        ] {
+            assert!(
+                super::workspace_shortcut(&gpui::Keystroke::parse(key).unwrap()),
+                "{key}"
+            );
+        }
+        for key in ["z", "ctrl-z", "ctrl-alt-shift-z", "enter", "shift-enter"] {
+            assert!(
+                !super::workspace_shortcut(&gpui::Keystroke::parse(key).unwrap()),
+                "{key}"
+            );
+        }
+    }
 
     #[test]
     fn composition_tracks_utf16_without_splitting_surrogate_pairs() {

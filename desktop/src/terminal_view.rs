@@ -275,16 +275,7 @@ impl Render for Pane {
                 if !entity.read(cx).composition.text.is_empty() {
                     return;
                 }
-                let modifiers = event.keystroke.modifiers;
-                if (modifiers.control ^ modifiers.platform)
-                    && modifiers.shift
-                    && !modifiers.alt
-                    && !modifiers.function
-                    && matches!(
-                        event.keystroke.key.to_ascii_lowercase().as_str(),
-                        "o" | "e" | "t"
-                    )
-                {
+                if super::input::workspace_shortcut(&event.keystroke) {
                     return;
                 }
                 entity.update(cx, |pane, cx| {

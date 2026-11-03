@@ -124,6 +124,12 @@ fn run() -> Result<()> {
         &package.join("chat.svg"),
         include_str!("../mods/header/chat.svg"),
     )?;
+    for (name, source) in [
+        ("maximize.svg", include_str!("../mods/header/maximize.svg")),
+        ("restore.svg", include_str!("../mods/header/restore.svg")),
+    ] {
+        seed(&package.join(name), source)?;
+    }
     seed(
         &package.join("conversation.js"),
         include_str!("../../contract/generated/conversation.js"),
