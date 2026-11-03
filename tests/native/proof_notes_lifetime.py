@@ -147,7 +147,22 @@ def prove(
         return result
 
     def focus(name, index):
-        target = [item for item in editors() if item["name"] == name][index]
+        if name == "Terminal":
+            assert index == 0
+            targets = wait(
+                lambda: [
+                    item
+                    for item in native("fields", pid(), [name], "window")["fields"]
+                    if item["role"] == "terminal"
+                ],
+                lambda items: (
+                    len(items) == 1 and items[0]["width"] > 0 and items[0]["height"] > 0
+                ),
+                "one real Terminal field",
+            )
+            target = targets[0]
+        else:
+            target = [item for item in editors() if item["name"] == name][index]
         click(
             (
                 (target["x"] + target["width"] / 2) / 2,
@@ -273,7 +288,7 @@ def prove(
                 focus(name, index)
                 select_all()
                 type_text(note[key])
-            native("focus", pid(), "Terminal", 0)
+            focus("Terminal", 0)
             wait(
                 data,
                 lambda values: json.loads(values[index]) == note,
@@ -340,7 +355,7 @@ def prove(
                 },
             )
             capture(name)
-        native("focus", pid(), "Terminal", 0)
+        focus("Terminal", 0)
         expected[0]["text"] = dirty
         wait(
             data,
