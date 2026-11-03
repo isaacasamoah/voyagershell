@@ -77,7 +77,7 @@ impl Default for Canvas {
                     Node::Column {
                         size: Size::Fill,
                         children: vec![
-                            block(Region::FleetStrip, Size::Fixed { pixels: 45 }),
+                            block(Region::FleetStrip, Size::Fixed { pixels: 40 }),
                             Node::Row {
                                 size: Size::Fill,
                                 children: vec![

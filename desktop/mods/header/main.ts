@@ -1314,7 +1314,6 @@ export default class Workspace extends View {
       return strip.child(
         div().text_size(11).text_color(projection().muted).child("Home"),
       );
-    strip.child(div().flex_1());
     const tabs = div().flex().items_center().min_w(0).h_full().gap(3);
     for (const item of voyage?.fleets || []) {
       const selected = item.id === fleet?.id;
@@ -1324,7 +1323,7 @@ export default class Workspace extends View {
         .relative()
         .flex()
         .items_center()
-        .h_full()
+        .h(docked ? 40 : 32)
         .min_w(120)
         .max_w(220)
         .rounded(5)
@@ -1352,7 +1351,11 @@ export default class Workspace extends View {
             { operation: "select-fleet", id: item.id },
             selected,
             { kind: "fleet", id: item.id },
-          ),
+          )
+            .flex_1()
+            .min_w(0)
+            .h(docked ? 40 : 32)
+            .justify_center(),
         );
       if (
         this.drag?.kind === "fleet" &&
