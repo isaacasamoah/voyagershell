@@ -367,7 +367,7 @@ def terminal(
             assert rpc("doc.get", {"name": "voyager-layout-v1"}) == baseline
             suffix = token_hex(8)
             type_text(
-                f"(sleep 6; printf '\\033]7501;state=blocked:kind=question:app=voyager-proof\\033\\\\'; printf 'HIDDEN_%s\\n' {suffix}) &\nprintf 'READY_%s\\n' {suffix}\n"
+                f"(sleep 6; printf '\\033]7501;state=blocked:kind=question:app=voyager-proof\\033\\\\'; printf '\\nHIDDEN_%s\\n' {suffix}) &\nprintf 'READY_%s\\n' {suffix}\n"
             )
             wait_for(
                 lambda: rpc("terminal.read", {"terminal": address}),
