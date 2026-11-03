@@ -31,6 +31,7 @@ export type ProcessOutput =
       operation: "stop";
       target: ProcessInfo;
     };
+export type ActivityState = "unknown" | "working" | "blocked" | "idle" | "done" | "error";
 export type Status = "applied" | "rejected" | "uncertain";
 
 export interface ProcessResponse {
@@ -46,6 +47,19 @@ export interface ProcessInfo {
   cwd: string;
   foreground?: string | null;
   pid?: number | null;
+  reportedActivity?: ReportedActivity | null;
   state: string;
   terminalId: string;
+}
+export interface ReportedActivity {
+  app?: string | null;
+  kind?: string | null;
+  limited: boolean;
+  observedMs?: string | null;
+  progress?: number | null;
+  reason?: string | null;
+  reported: boolean;
+  sequence?: string | null;
+  sourceMs?: string | null;
+  state: ActivityState;
 }

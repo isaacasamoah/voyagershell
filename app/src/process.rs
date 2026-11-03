@@ -17,6 +17,7 @@ fn refused(message: &str) -> Error {
 }
 
 fn info(content: &ContentId, terminal: Terminal) -> ProcessInfo {
+    let reported_activity = Some(Arc::new(Core::reported_activity(&terminal)));
     ProcessInfo {
         content_id: content.clone(),
         terminal_id: CoreTerminalId(terminal.address),
@@ -24,6 +25,7 @@ fn info(content: &ContentId, terminal: Terminal) -> ProcessInfo {
         cwd: terminal.cwd,
         state: terminal.state,
         foreground: terminal.foreground.map(|process| process.name),
+        reported_activity,
     }
 }
 
@@ -202,6 +204,7 @@ mod tests {
             cwd: "/tmp".into(),
             state: "live".into(),
             foreground: None,
+            reported_activity: None,
         };
         assert!(matches!(
             stop_result(target.clone(), target.clone()),

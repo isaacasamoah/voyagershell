@@ -80,6 +80,8 @@ pub struct ProcessInfo {
     pub cwd: String,
     pub state: String,
     pub foreground: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reported_activity: Option<std::sync::Arc<crate::activity::ReportedActivity>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

@@ -11,6 +11,7 @@ export function launchCatalog(data: unknown): data is import("./launchCatalog").
 export function notes(data: unknown): data is import("./notes").Notes;
 export function processResponse(data: unknown): data is import("./processResponse").ProcessResponse;
 export function processTool(data: unknown): data is import("./processTool").ProcessInput;
+export function reportedActivity(data: unknown): data is import("./reportedActivity").Projection;
 export function request(data: unknown): data is import("./request").Request;
 export function response(data: unknown): data is import("./response").Response;
 export function terminalRequest(data: unknown): data is import("./terminalRequest").TerminalRequest;

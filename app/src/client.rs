@@ -1,11 +1,12 @@
 use crate::{
+    activity::Activity,
     core::{Core, Error, Viewer},
     workspace::Model,
 };
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
         mpsc::{self, SyncSender},
     },
@@ -21,9 +22,14 @@ use voyager_contract::{
 pub struct WorkspaceNotice {
     pub package_revision: u64,
     pub revision: u64,
+    pub activity_revision: u64,
 }
 
 enum Message {
+    ActivityChanged,
+    RefreshActivity {
+        reply: async_channel::Sender<()>,
+    },
     Quit {
         reply: async_channel::Sender<Result<(), Error>>,
     },
@@ -155,9 +161,56 @@ pub struct Client {
     sequence: Arc<AtomicU64>,
     package_revision: Arc<AtomicU64>,
     identity: String,
+    activity: Arc<Mutex<Activity>>,
+}
+
+fn next_message(
+    receiver: &async_channel::Receiver<Message>,
+    activity: &Arc<Mutex<Activity>>,
+    layout: &Layout,
+    mut notice: WorkspaceNotice,
+    listener: Option<&async_channel::Sender<WorkspaceNotice>>,
+) -> Result<Message, async_channel::RecvError> {
+    let message = receiver.recv_blocking()?;
+    if let Ok(mut activity) = activity.lock() {
+        activity.bind(
+            layout
+                .contents
+                .iter()
+                .filter_map(|content| content.backend.as_ref().map(|backend| backend.0.as_str())),
+        );
+        if activity.take_dirty()
+            && let Some(listener) = listener
+        {
+            notice.activity_revision = activity.revision;
+            let _ = listener.try_send(notice);
+        }
+    }
+    Ok(message)
 }
 
 impl Client {
+    pub fn reported_activity(&self) -> voyager_contract::activity::Projection {
+        voyager_contract::activity::Projection {
+            terminals: self
+                .activity
+                .lock()
+                .map(|activity| activity.projection())
+                .unwrap_or_default(),
+        }
+    }
+
+    pub async fn refresh_activity(&self) -> Result<(), String> {
+        let (reply, result) = async_channel::bounded(1);
+        self.sender
+            .try_send(Message::RefreshActivity { reply })
+            .map_err(|_| "Workspace owner is unavailable".to_owned())?;
+        result
+            .recv()
+            .await
+            .map_err(|_| "Activity refresh is unconfirmed".to_owned())
+    }
+
     pub fn open(session: String, cwd: String) -> Self {
         Self::start(session, cwd, None)
     }
@@ -188,8 +241,16 @@ impl Client {
         let (sender, receiver) = async_channel::bounded::<Message>(8);
         let package_revision = Arc::new(AtomicU64::new(0));
         let published_packages = package_revision.clone();
+        let activity = Arc::new(Mutex::new(Activity::default()));
+        let observed_activity = activity.clone();
+        let activity_sender = sender.clone();
         thread::spawn(move || {
-            let mut core = Core::connect(&session);
+            let mut core = Core::connect_activity(&session, observed_activity.clone());
+            if let Ok(core) = &mut core {
+                core.observe_activity(Box::new(move || {
+                    let _ = activity_sender.try_send(Message::ActivityChanged);
+                }));
+            }
             let mut layout = Arc::new(Layout::default());
             let mut version = 0;
             let mut fresh = false;
@@ -203,8 +264,28 @@ impl Client {
             let mut content_requests: VecDeque<ContentReceipt> = VecDeque::new();
             let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
             let mut quit_result: Option<Result<(), Error>> = None;
-            while let Ok(message) = receiver.recv_blocking() {
+            while let Ok(message) = next_message(
+                &receiver,
+                &observed_activity,
+                &layout,
+                WorkspaceNotice {
+                    revision: version,
+                    package_revision: published_packages.load(Ordering::Relaxed),
+                    activity_revision: 0,
+                },
+                workspace_listener.as_ref(),
+            ) {
                 let (request, scope, reply) = match message {
+                    Message::ActivityChanged => continue,
+                    Message::RefreshActivity { reply } => {
+                        if quit_result.is_none()
+                            && let Ok(core) = &mut core
+                        {
+                            core.refresh_activity();
+                        }
+                        let _ = reply.try_send(());
+                        continue;
+                    }
                     Message::Quit { reply } => {
                         let result = quit_result.get_or_insert_with(|| {
                             core.as_mut().map_err(|error| error.clone())?.quit()
@@ -240,6 +321,10 @@ impl Client {
                         let (send, receive) = async_channel::bounded(1);
                         let current = WorkspaceNotice {
                             revision: version,
+                            activity_revision: core
+                                .as_ref()
+                                .map(Core::activity_revision)
+                                .unwrap_or(0),
                             package_revision: published_packages.load(Ordering::Relaxed),
                         };
                         if after != Some(current) {
@@ -789,6 +874,10 @@ impl Client {
                         let _ = listener.try_send(WorkspaceNotice {
                             package_revision: published_packages.load(Ordering::Relaxed),
                             revision: version,
+                            activity_revision: core
+                                .as_ref()
+                                .map(Core::activity_revision)
+                                .unwrap_or(0),
                         });
                     }
                 }
@@ -816,6 +905,7 @@ impl Client {
             sender,
             sequence: Arc::new(AtomicU64::new(0)),
             package_revision,
+            activity,
             identity: format!(
                 "{}-{}",
                 std::process::id(),
@@ -1226,6 +1316,7 @@ mod voice_scope_tests {
             sender,
             sequence: Arc::new(AtomicU64::new(0)),
             identity: "voice-scope-test".into(),
+            activity: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
         };
         let _inspection = client.queue_inspection().unwrap();
@@ -1860,6 +1951,7 @@ mod content_admission_tests {
             sender,
             sequence: Arc::new(AtomicU64::new(0)),
             identity: "mailbox-test".into(),
+            activity: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
         };
         let mut cx = TaskContext::from_waker(Waker::noop());
@@ -2051,5 +2143,58 @@ mod content_admission_tests {
         ));
         assert!(receive.is_empty());
         std::fs::remove_dir_all(directory).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod activity_notice_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn reported_activity_full_mailbox_is_published_before_a_continuing_message() {
+        let (sender, receiver) = async_channel::bounded(8);
+        for _ in 0..8 {
+            sender.try_send(Message::RefreshContentViews).unwrap();
+        }
+        let activity = Arc::new(Mutex::new(Activity::default()));
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Status".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        model.layout.contents[0].backend = Some(CoreTerminalId("t1".into()));
+        {
+            let mut facts = activity.lock().unwrap();
+            facts.bind(["t1"]);
+            facts.begin();
+            facts
+                .install(json!({"seq":0,"channel":7,"terminals":[]}))
+                .unwrap();
+            facts.take_dirty();
+            facts.wake_with(Box::new(move || {
+                let _ = sender.try_send(Message::ActivityChanged);
+            }));
+            facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":1,"type":"status","terminal":"t1","data":{"status":{"state":"done"},"reported":true}}})).unwrap();
+        }
+        let (listener, changed) = async_channel::bounded(1);
+        let notice = WorkspaceNotice {
+            revision: 55,
+            package_revision: 7,
+            activity_revision: 0,
+        };
+        assert!(matches!(
+            next_message(&receiver, &activity, &model.layout, notice, Some(&listener)).unwrap(),
+            Message::RefreshContentViews
+        ));
+        let actual = changed.try_recv().unwrap();
+        assert_eq!((actual.revision, actual.package_revision), (55, 7));
+        assert!(actual.activity_revision > 0);
+        assert_eq!(
+            activity.lock().unwrap().get("t1").state,
+            voyager_contract::activity::ActivityState::Done
+        );
     }
 }

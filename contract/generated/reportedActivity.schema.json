@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ActivityState": {
+      "enum": [
+        "unknown",
+        "working",
+        "blocked",
+        "idle",
+        "done",
+        "error"
+      ],
+      "type": "string"
+    },
+    "ReportedActivity": {
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limited": {
+          "type": "boolean"
+        },
+        "observedMs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "progress": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reported": {
+          "type": "boolean"
+        },
+        "sequence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceMs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/definitions/ActivityState"
+        }
+      },
+      "required": [
+        "state",
+        "reported",
+        "limited"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "terminals": {
+      "additionalProperties": {
+        "$ref": "#/definitions/ReportedActivity"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "terminals"
+  ],
+  "title": "Projection",
+  "type": "object"
+}

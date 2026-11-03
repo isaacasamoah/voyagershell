@@ -24,6 +24,7 @@ fn main() {
             "contentCatalog":schema::<voyager_contract::content::Catalog>(),
             "canvas":schema::<voyager_contract::canvas::Canvas>(),
             "contextFacts":schema::<voyager_contract::context::Facts>(),
+            "reportedActivity":schema::<voyager_contract::activity::Projection>(),
             "notes":schema::<voyager_contract::content::Notes>(),
             "voiceState":schema::<voyager_contract::voice::State>(),
             "launchCatalog":schema::<voyager_contract::launch::Catalog>()}),
