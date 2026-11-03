@@ -218,7 +218,11 @@ def prove(
             "initial terminal",
         )
         target = initial["value"]["contents"][0]["backend"]
-        terminal = rpc("terminal.get", {"terminal": target})
+        terminal = wait(
+            lambda: rpc("terminal.get", {"terminal": target}),
+            lambda item: bool(item.get("pid")) and item["state"] == "live",
+            "original live shell identity",
+        )
         core = rpc("server.status", {})
         record("terminal", terminal["pid"])
         record("core", core["pid"])
