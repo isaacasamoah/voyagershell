@@ -200,7 +200,14 @@
           "type": "string"
         },
         "root": {
-          "$ref": "#/definitions/Split"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Split"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "vessels": {
           "items": {
@@ -212,8 +219,7 @@
       "required": [
         "id",
         "name",
-        "vessels",
-        "root"
+        "vessels"
       ],
       "type": "object"
     },
@@ -372,6 +378,16 @@
         "context": {
           "$ref": "#/definitions/Context"
         },
+        "home": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Voyage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "nextId": {
           "type": "string"
         },
@@ -508,6 +524,44 @@
         }
       ]
     },
+    "PanelOwner": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "portals",
+              "type": "string"
+            },
+            "voyage": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "voyage"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Permissions": {
       "enum": [
         "yolo",
@@ -515,6 +569,44 @@
         "read-only"
       ],
       "type": "string"
+    },
+    "PortalLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "maximizedPlacement": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "$ref": "#/definitions/PortalMode"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Split"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "width": {
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "visible",
+        "mode",
+        "width"
+      ],
+      "type": "object"
     },
     "PortalMode": {
       "enum": [
@@ -536,20 +628,26 @@
     "SavedLayout": {
       "additionalProperties": false,
       "properties": {
-        "fleet": {
-          "type": "string"
-        },
         "name": {
           "type": "string"
         },
+        "owner": {
+          "$ref": "#/definitions/PanelOwner"
+        },
         "root": {
-          "$ref": "#/definitions/Split"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Split"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
-        "fleet",
-        "name",
-        "root"
+        "owner",
+        "name"
       ],
       "type": "object"
     },
@@ -675,25 +773,32 @@
         "content": {
           "type": "string"
         },
+        "hidden": {
+          "type": "boolean"
+        },
         "id": {
           "type": "string"
         },
         "name": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         }
       },
       "required": [
         "id",
-        "content"
+        "content",
+        "name"
       ],
       "type": "object"
     },
     "Voyage": {
       "additionalProperties": false,
       "properties": {
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "fleets": {
           "items": {
             "$ref": "#/definitions/Fleet"
@@ -705,6 +810,16 @@
         },
         "name": {
           "type": "string"
+        },
+        "portalLayout": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PortalLayout"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "portals": {
           "items": {

@@ -14,14 +14,14 @@ export type Action =
       operation: "set-sidebar";
     }
   | {
-      fleet: string;
       name: string;
-      operation: "save-layout";
+      operation: "save-panel-layout";
+      owner: PanelOwner;
     }
   | {
-      fleet: string;
       name: string;
-      operation: "load-layout";
+      operation: "load-panel-layout";
+      owner: PanelOwner;
     }
   | {
       cwd: string;
@@ -31,10 +31,6 @@ export type Action =
   | {
       name: string;
       operation: "create-fleet";
-      voyage: string;
-    }
-  | {
-      operation: "create-portal";
       voyage: string;
     }
   | {
@@ -62,14 +58,8 @@ export type Action =
       target: RenameTarget;
     }
   | {
-      after: string;
-      axis: Axis;
-      fleet: string;
-      operation: "split";
-    }
-  | {
-      fleet: string;
-      operation: "resize-split";
+      operation: "resize-panel-split";
+      owner: PanelOwner;
       /**
        * @maxItems 128
        */
@@ -78,7 +68,7 @@ export type Action =
     }
   | {
       id: string;
-      operation: "move-vessel";
+      operation: "move-panel";
       side: Side;
       target: string;
     }
@@ -104,7 +94,7 @@ export type Action =
     }
   | {
       id: string;
-      operation: "reveal-vessel";
+      operation: "reveal-panel";
     }
   | {
       context: Context;
@@ -113,7 +103,28 @@ export type Action =
   | {
       id: string;
       maximized: boolean;
-      operation: "set-vessel-maximized";
+      operation: "set-panel-maximized";
+    }
+  | {
+      hidden: boolean;
+      id: string;
+      operation: "set-panel-hidden";
+    }
+  | {
+      id: string;
+      operation: "remove-panel";
+    }
+  | {
+      name: string;
+      operation: "remove-panel-layout";
+      owner: PanelOwner;
+    }
+  | {
+      mode?: PortalMode | null;
+      operation: "set-portal-presentation";
+      visible?: boolean | null;
+      voyage: string;
+      width?: number | null;
     };
 export type PortalMode = "overlay" | "make-room";
 export type Node =
@@ -144,18 +155,30 @@ export type Size =
       pixels: number;
     };
 export type Region = "sidebar" | "fleet-strip" | "active-fleet" | "portals" | "context-bar";
-export type ContentDestination =
+export type PanelOwner =
   | {
-      after: string;
-      axis: Axis;
-      fleet: string;
-      kind: "vessel";
+      id: string;
+      kind: "fleet";
     }
   | {
-      kind: "portal";
+      kind: "portals";
       voyage: string;
     };
-export type Axis = "horizontal" | "vertical";
+export type ContentDestination = {
+  insertion: PanelInsertion;
+  kind: "panel";
+  owner: PanelOwner;
+};
+export type PanelInsertion =
+  | {
+      kind: "empty";
+    }
+  | {
+      id: string;
+      kind: "beside";
+      side: Side;
+    };
+export type Side = "left" | "right" | "top" | "bottom";
 export type Launch =
   | {
       kind: "terminal";
@@ -191,7 +214,6 @@ export type RenameTarget =
     };
 export type SplitChild = "first" | "second";
 export type SplitShare = number;
-export type Side = "left" | "right" | "top" | "bottom";
 export type Context =
   | {
       kind: "workspace";

@@ -77,6 +77,15 @@ export type Split =
     };
 export type Axis = "horizontal" | "vertical";
 export type SplitShare = number;
+export type PanelOwner =
+  | {
+      id: string;
+      kind: "fleet";
+    }
+  | {
+      kind: "portals";
+      voyage: string;
+    };
 export type WorkspaceView = "home" | "fleet";
 export type Status = "applied" | "rejected" | "uncertain";
 
@@ -94,6 +103,7 @@ export interface Layout {
   canvas?: Canvas;
   contents: Content[];
   context: Context;
+  home?: Voyage | null;
   nextId: string;
   savedLayouts?: SavedLayout[];
   selectedFleet?: string | null;
@@ -118,26 +128,36 @@ export interface Content {
   startPending?: string | null;
   typeId: string;
 }
-export interface SavedLayout {
-  fleet: string;
-  name: string;
-  root: Split;
-}
 export interface Voyage {
+  cwd?: string | null;
   fleets: Fleet[];
   id: string;
   name: string;
+  portalLayout?: PortalLayout | null;
   portals: Vessel[];
 }
 export interface Fleet {
   id: string;
   maximizedPlacement?: string | null;
   name: string;
-  root: Split;
+  root?: Split | null;
   vessels: Vessel[];
 }
 export interface Vessel {
   content: string;
+  hidden?: boolean;
   id: string;
-  name?: string | null;
+  name: string;
+}
+export interface PortalLayout {
+  maximizedPlacement?: string | null;
+  mode: PortalMode;
+  root?: Split | null;
+  visible: boolean;
+  width: number;
+}
+export interface SavedLayout {
+  name: string;
+  owner: PanelOwner;
+  root?: Split | null;
 }
