@@ -157,6 +157,61 @@ def configuration(
             capture("notes-configuration-" + operation + "-before-gate")
             with gate.open("x") as file:
                 file.write(token)
+            if operation == "configure":
+                wait(
+                    document,
+                    lambda doc: (
+                        next(
+                            item
+                            for item in doc["value"]["contents"]
+                            if item["id"] == target
+                        ).get("configuration")
+                        == {"showHeading": False}
+                    ),
+                    "actual owner configuration with Chat closed",
+                    90,
+                )
+                selected = next(
+                    item
+                    for item in created["value"]["contents"]
+                    if item["id"] == target
+                )
+                selected["configuration"] = {"showHeading": False}
+                assert data() == saved
+            else:
+                wait(
+                    data,
+                    lambda values: json.loads(values[0]) == updated,
+                    "actual owner data with Chat closed",
+                    90,
+                )
+                expected[0] = updated
+            assert not native("fields", pid(), ["Message Voyager"], "window")["fields"]
+            copied("Note text", 1, dirty, False)
+            assert data()[1] == baseline[1]
+            receipt(
+                "notes-configuration-" + operation + "-observed",
+                {
+                    "identity": identity(),
+                    "fields": native("fields", pid())["fields"],
+                    "user": user,
+                    "dirtyText": dirty,
+                    "gateToken": token,
+                    "baseRevisions": [
+                        hashlib.sha256(value).hexdigest() for value in baseline
+                    ],
+                    "data": [json.loads(value) for value in data()],
+                    "chatClosed": True,
+                    "visualReviewRequired": True,
+                    "expectedEyebrows": [None, "NOTES"],
+                },
+            )
+            capture("notes-configuration-" + operation + "-observed")
+            if operation == "update":
+                copied("Note title", 0, updated["title"])
+                copied("Note text", 0, updated["text"])
+            expected[1]["text"] = dirty
+            click(named_button(native, evidence, "Chat"))
 
         command = (
             "python3 notes-configuration-gate.py " + gate.name + " " + token + " 45"
@@ -259,50 +314,29 @@ def configuration(
             for tool in tools
         )
         assert len({tool["requestId"] for tool in tools}) == len(tools)
-        assert not native("fields", pid(), ["Message Voyager"], "window")["fields"]
-        copied("Note text", 1, dirty, False)
-        assert data()[1] == baseline[1]
-        if operation == "configure":
-            assert data() == saved
-            selected = next(
-                item for item in created["value"]["contents"] if item["id"] == target
-            )
-            selected["configuration"] = {"showHeading": False}
-        else:
-            wait(
-                data,
-                lambda values: json.loads(values[0]) == updated,
-                "actual owner data update",
-            )
-            expected[0] = updated
+        click(chat_close_point(native, pid(), evidence))
+        wait(
+            lambda: native("fields", pid(), ["Message Voyager"], "window")["fields"],
+            lambda fields: not fields,
+            "receipt Chat closed again",
+        )
+        wait(
+            data,
+            lambda values: [json.loads(value) for value in values] == expected,
+            "sibling saved after observed owner arrival",
+        )
         receipt(
-            "notes-configuration-" + operation + "-observed",
+            "notes-configuration-" + operation + "-completed",
             {
                 "identity": identity(),
-                "fields": native("fields", pid())["fields"],
-                "dirtyText": dirty,
                 "tools": tools,
-                "gateToken": token,
-                "baseRevisions": [
-                    hashlib.sha256(value).hexdigest() for value in baseline
-                ],
-                "data": [json.loads(value) for value in data()],
-                "visualReviewRequired": True,
-                "expectedEyebrows": [None, "NOTES"],
+                "user": user,
+                "data": expected,
+                "closedPhaseEvidence": "notes-configuration-"
+                + operation
+                + "-observed.json",
             },
         )
-        capture("notes-configuration-" + operation + "-observed")
-        if operation == "update":
-            copied("Note title", 0, updated["title"])
-            copied("Note text", 0, updated["text"])
-        if operation == "configure":
-            focus("Terminal", 0)
-            expected[1]["text"] = dirty
-            wait(
-                data,
-                lambda values: json.loads(values[1]) == expected[1],
-                "original-base sibling save",
-            )
     focus("Terminal", 0)
     expected[1]["text"] = dirty
     wait(
