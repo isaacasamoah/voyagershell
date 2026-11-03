@@ -92,6 +92,10 @@ fn run() -> Result<()> {
         include_str!("../mods/header/layout-panel.js"),
     )?;
     seed(
+        &package.join("creation.js"),
+        include_str!("../mods/header/creation.js"),
+    )?;
+    seed(
         &package.join("home.js"),
         include_str!("../mods/header/home.js"),
     )?;
@@ -148,10 +152,16 @@ fn run() -> Result<()> {
     let initial_theme = fs::read(&theme).context("Reading theme")?;
     let initial_source = host::source_snapshot(&package).map_err(|error| format!("{error:#}"));
     let assets = AppAssets::new(package.clone());
-    let client = Client::with_content(
+    let launches_path = profile.join("launches.json");
+    seed(
+        &launches_path,
+        &serde_json::to_string_pretty(&voyager_contract::launch::LaunchSettings::default())?,
+    )?;
+    let client = Client::with_content_and_launches(
         session.clone(),
         env::current_dir()?.to_string_lossy().into_owned(),
         content_owner,
+        launches_path,
     );
     let viewers = terminal::Viewers::default();
     let conversation = voyager_app::conversation_client::Client::with_audio(

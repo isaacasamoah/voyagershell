@@ -21,6 +21,111 @@ function element() {
   return node;
 }
 
+test("worker creation keeps its opening target and revision across a delayed catalogue", async () => {
+  const { launchCatalog, contentCatalog } =
+    await import("../contract/generated/validate.js");
+  const source = ts.transpileModule(
+    fs.readFileSync(
+      process.env.VOYAGER_CREATION_SOURCE ||
+        `${__dirname}/mods/header/creation.ts`,
+      "utf8",
+    ),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    },
+  ).outputText;
+  const buttons = new Map();
+  let resolve;
+  const exports = {};
+  new Function("exports", "require", source)(exports, (name) => {
+    if (name === "gpui-kit") return { div: element };
+    if (name === "gpui-base")
+      return {
+        Button: {
+          new(id) {
+            const node = element();
+            buttons.set(id, node);
+            return node;
+          },
+        },
+        Popover: { new: element },
+      };
+    if (name === "voyager_workspace")
+      return {
+        launches: () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      };
+    if (name === "voyager_content_view")
+      return {
+        descriptions: () => Promise.reject(Error("Notes metadata unavailable")),
+      };
+    return { launchCatalog, contentCatalog };
+  });
+  const picker = new exports.CreationPicker();
+  const destination = {
+    kind: "vessel",
+    fleet: "fleet",
+    after: "original",
+    axis: "horizontal",
+  };
+  const actions = [];
+  const create = (...value) => actions.push(value);
+  const pending = [];
+  const cx = {
+    spawn(run) {
+      pending.push(run(cx));
+    },
+    notify() {},
+  };
+  const root = picker.render("original", destination, "7", create);
+  root.calls.find(([name]) => name === "on_open_change")[1](true, cx);
+  const launch = {
+    kind: "codex",
+    model: "gpt-6.1-sol",
+    effort: "high",
+    permissions: "yolo",
+  };
+  resolve(
+    JSON.stringify({
+      settings: {
+        default: "codex",
+        entries: [
+          { id: "codex", name: "Codex", launch },
+          {
+            id: "missing",
+            name: "Missing",
+            launch: { kind: "program", argv: ["/missing"] },
+          },
+        ],
+      },
+      available: ["codex"],
+      errors: ["Missing is unavailable"],
+      path: "/profile/launches.json",
+    }),
+  );
+  await pending[0];
+  assert.equal(picker.error, "Notes metadata unavailable");
+  picker.render("original", { ...destination, after: "later" }, "99", create);
+  assert.equal(buttons.has("create-worker-missing"), false);
+  const choose = buttons
+    .get("create-worker-codex")
+    .calls.find(([name]) => name === "on_click")[1];
+  choose({}, cx);
+  choose({}, cx);
+  assert.equal(actions.length, 1);
+  assert.deepEqual(actions[0], [
+    { operation: "create-content", typeId: "terminal", destination, launch },
+    "7",
+    cx,
+  ]);
+  assert.equal(picker.current, null);
+});
+
 test("the actual canvas renderer uses saved order, sizing and Portal presentation", () => {
   const source = ts.transpileModule(
     fs.readFileSync(`${__dirname}/mods/header/canvas.ts`, "utf8"),

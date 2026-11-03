@@ -22,6 +22,7 @@ import { Notes } from "voyager_content_view";
 import { homeOverview } from "./home.js";
 import { composeCanvas, vesselFrame } from "./canvas.js";
 import { LayoutPanel } from "./layout-panel.js";
+import { CreationPicker } from "./creation.js";
 import type { Facts } from "../../../contract/generated/contextFacts";
 
 import type {
@@ -82,6 +83,7 @@ function errorMessage(error: unknown): string {
 }
 
 export default class Workspace extends View {
+  declare creation: CreationPicker | undefined;
   declare version: Response["version"];
   declare contextFacts: Facts | null;
   declare layoutPanel: LayoutPanel | null;
@@ -857,6 +859,30 @@ export default class Workspace extends View {
     cx.notify();
   }
 
+  creationControl(
+    id: string,
+    destination: Extract<
+      Action,
+      { operation: "create-content" }
+    >["destination"],
+  ): NativeElement {
+    const creation = (this.creation ??= new CreationPicker());
+    return creation.render(
+      id,
+      destination,
+      this.version,
+      (action, version, cx) => {
+        if (this.busy) {
+          this.status =
+            "Wait for the pending workspace request. No Vessel was created.";
+          cx.notify();
+          return;
+        }
+        this.run(action, cx, undefined, version);
+      },
+    );
+  }
+
   statusView(): NativeElement {
     return div()
       .flex()
@@ -985,8 +1011,15 @@ export default class Workspace extends View {
                           cx.notify();
                         })
                         .children(
-                          this.splitHover === placement.id
+                          this.splitHover === placement.id ||
+                            this.creation?.current?.id === placement.id
                             ? [
+                                this.creationControl(placement.id, {
+                                  kind: "vessel",
+                                  fleet: split.fleet,
+                                  after: placement.id,
+                                  axis: "horizontal",
+                                }),
                                 Button.new(`split-horizontal-${placement.id}`)
                                   .accessibility_label(
                                     "Split this Vessel side by side",
@@ -1256,6 +1289,23 @@ export default class Workspace extends View {
             ),
           ),
       );
+    if (!this.sidebar && voyage && layout.view !== "home") {
+      const fleet = voyage.fleets.find(
+        (item) => item.id === layout.selectedFleet,
+      );
+      const visible = this.visibleVessels(fleet);
+      const target =
+        visible.find((item) => item.id === this.focused) || visible[0];
+      if (fleet && target)
+        sidebar.child(
+          this.creationControl(`rail-${target.id}`, {
+            kind: "vessel",
+            fleet: fleet.id,
+            after: target.id,
+            axis: "horizontal",
+          }),
+        );
+    }
     sidebar.child(div().flex_1());
     if (voyage && this.sidebar && layout.view !== "home")
       sidebar.child(

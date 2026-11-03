@@ -11,6 +11,7 @@ const entries = [
   "desktop/mods/header/main.ts",
   "desktop/mods/header/canvas.ts",
   "desktop/mods/header/layout-panel.ts",
+  "desktop/mods/header/creation.ts",
   "contract/generated/workspace.ts",
   "contract/generated/conversation.ts",
   "desktop/mods/header/home.ts",

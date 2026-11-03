@@ -211,11 +211,27 @@ fn load(
     let identity = client.clone();
     let calls = client.clone();
     let context_reader = client.clone();
+    let launches_reader = client.clone();
     let terminal_client = client.clone();
     let revision = workspace_binding.revision.clone();
     let terminal_viewers = viewers.clone();
     let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)
         .declarations(crate::script_types::WORKSPACE)
+        .async_function("launches", move |arguments| {
+            if !arguments.is_empty() {
+                return Err(gpui_shell::HostError::new("launches expects no arguments"));
+            }
+            let client = launches_reader.clone();
+            Ok(async move {
+                let catalog = client
+                    .launches()
+                    .await
+                    .map_err(gpui_shell::HostError::new)?;
+                let value = serde_json::to_string(&catalog)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                Ok(gpui_shell::HostValue::from(value))
+            })
+        })
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
         })

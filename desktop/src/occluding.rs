@@ -49,9 +49,40 @@ mod tests {
             .unwrap()
             .0;
         let editor = format!("Occluding.new(){editor}.child(div().child('Workspace layout'));");
+        let mut importing = false;
+        let creation = include_str!("../mods/header/creation.js")
+            .lines()
+            .filter(|line| {
+                if importing {
+                    importing = !line.ends_with(';');
+                    return false;
+                }
+                if line.starts_with("import ") {
+                    importing = !line.ends_with(';');
+                    return false;
+                }
+                true
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            .replace("export class CreationPicker", "class CreationPicker");
         let root = std::env::temp_dir().join(format!("voyager-occluding-{}", std::process::id()));
         std::fs::create_dir(&root).unwrap();
         let outcomes = [
+            (
+                "creation",
+                "new CreationPicker().render('pane', {kind:'vessel', fleet:'fleet', after:'pane', axis:'horizontal'}, '7', () => {});",
+                true,
+            ),
+            (
+                "creation-open",
+                r#"const picker = new CreationPicker();
+const destination = {kind:'vessel', fleet:'fleet', after:'pane', axis:'horizontal'};
+picker.current = {id:'pane', version:'7', destination};
+picker.catalog = {settings:{default:'codex', entries:[{id:'codex', name:'Codex', launch:{kind:'codex', model:'gpt-6.1-sol', effort:'high', permissions:'yolo'}}]}, available:['codex'], errors:[], path:null};
+picker.render('pane', destination, '7', () => {});"#,
+                true,
+            ),
             (
                 "editor",
                 editor.as_str(),
@@ -79,6 +110,8 @@ mod tests {
                 format!(
                     r#"import {{ View, div }} from "gpui-kit";
 import {{ Occluding }} from "voyager_native";
+import {{ Button, Popover }} from "gpui-base";
+{creation}
 {expression}
 export default class extends View {{}}
 "#

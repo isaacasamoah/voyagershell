@@ -27,6 +27,8 @@ The foundation will retain the established avatar, docking, animation, original 
 
 Selected-program Stop has passed its native private-Chat journey. The selected terminal ends with its final screen retained, while another terminal and a separate Core session remain running. Whole-session Quit remains unfinished. See [conversation tools](docs/conversation.md).
 
+The source adds a compact worker creation picker with profile-local Codex defaults and installed program choices. It uses the existing Rust/Core owner and does not change the private administrator. Source/refusal checks are available; the integrated native creation/answer journey remains pending. See [worker creation](docs/agent-launch.md).
+
 ## Development
 
 Selected product code belongs in contract/, app/, desktop/ and content/. Keep experimental source under experiments/<name>/. Original artwork is shared from desktop/assets. Keep local task documents, profiles and evidence outside commits.

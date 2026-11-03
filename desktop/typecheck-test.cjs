@@ -71,7 +71,7 @@ test("the real generated APIs reject wrong workspace and native calls", () => {
   fs.writeFileSync(
     filename,
     `import { invoke } from "../../contract/generated/workspace.js";
-import { terminal_open } from "voyager_workspace";
+import { terminal_open, launches } from "voyager_workspace";
 import { ArrangementCapture } from "voyager_native";
 import { Target, window_epoch } from "voyager_avatar";
 import { observe, send } from "../../contract/generated/conversation.js";
@@ -79,6 +79,7 @@ invoke({ operation: "select-fleet", id: 12 }, "0");
 invoke({ operation: "mistyped-operation" }, "0");
 terminal_open(12);
 terminal_open(null);
+launches("unsupported");
 ArrangementCapture.new(12);
 Target.new("dock", { scope: 1, fallback: false });
 window_epoch(1);
@@ -89,7 +90,7 @@ send({ operation: "unknown" });
   const diagnostics = compile([filename]);
   assert.deepEqual(
     diagnostics.map((entry) => entry.code),
-    [2322, 2322, 2345, 2345, 2345, 2322, 2554, 2345, 2322],
+    [2322, 2322, 2345, 2345, 2554, 2345, 2322, 2554, 2345, 2322],
   );
   assert.ok(diagnostics.every((entry) => entry.file.fileName === filename));
   fs.writeFileSync(
