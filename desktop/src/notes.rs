@@ -1,17 +1,20 @@
-use std::{cell::RefCell, collections::HashMap, path::PathBuf, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    hash::{DefaultHasher, Hash as _, Hasher as _},
+    io::Read as _,
+    path::{Path, PathBuf},
+    rc::Rc,
+    time::Duration,
+};
 
 use anyhow::Result;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, IntoElement as _, ParentElement as _,
-    Render, StyleRefinement, Styled as _, Subscription, Task, Window, div,
+    Render, Styled as _, Subscription, Task, Window, div,
 };
-use gpui_shell::{
-    HostError, HostModule, HostValue, ShellRoot, ShellRuntime, Watcher, policy::Policy,
-};
-use voyager_app::{
-    client::Client,
-    content::{Access, Binding},
-};
+use gpui_shell::{HostError, HostModule, HostValue, ScriptView, ShellRuntime, policy::Policy};
+use voyager_app::{client::Client, content::ViewBinding};
 use voyager_contract::{
     ContentId,
     content::{Request, Response, Version},
@@ -38,17 +41,15 @@ pub struct Host {
     budget: Budget,
     client: Client,
     views: Rc<RefCell<HashMap<String, Entity<Note>>>>,
+    watch: Rc<RefCell<Option<Task<()>>>>,
 }
 
 impl Host {
     pub fn refresh(&self, cx: &mut App) -> Result<()> {
-        let Ok(runtime) = &self.runtime else {
-            return Ok(());
-        };
         for view in self.views.borrow().values() {
             view.update(cx, |note, cx| {
-                if let Some(root) = &note.root {
-                    runtime.refresh(root, cx)?;
+                if let Some(current) = &note.current {
+                    current.view.update(cx, |view, cx| view.refresh(cx));
                 }
                 cx.notify();
                 Ok::<_, anyhow::Error>(())
@@ -74,6 +75,7 @@ impl Host {
             budget: Budget::default(),
             client,
             views: Rc::new(RefCell::new(HashMap::new())),
+            watch: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -123,6 +125,7 @@ impl Host {
                         .child(format!("Notes unavailable: {error}"))
                         .into_any_element();
                 }
+                host.watch(window, cx);
                 let id = match args.props() {
                     HostValue::Object(fields) => fields.iter().find_map(|(key, value)| {
                         (key == "contentId")
@@ -142,8 +145,8 @@ impl Host {
                 }
                 let view = cx.new(|cx| {
                     Note::new(
-                        host.clone(),
                         ContentId(id.clone()),
+                        host.client.clone(),
                         colors.clone(),
                         window,
                         cx,
@@ -154,25 +157,191 @@ impl Host {
             })
     }
 
+    fn watch(&self, window: &mut Window, cx: &mut App) {
+        let mut watch = self.watch.borrow_mut();
+        if watch.is_some() {
+            return;
+        }
+        let views = Rc::downgrade(&self.views);
+        let loader = Loader {
+            runtime: self.runtime.clone(),
+            package: self.package.clone(),
+            budget: self.budget.clone(),
+            client: self.client.clone(),
+        };
+        let handle = window.window_handle();
+        *watch = Some(cx.spawn(async move |cx| {
+            let mut prior = None;
+            let mut package_revision = loader.client.package_revision();
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(250))
+                    .await;
+                let package = loader.package.clone();
+                let source = cx
+                    .background_executor()
+                    .spawn(async move { signature(&package).map_err(|error| format!("{error:#}")) })
+                    .await;
+                let revision = loader.client.package_revision();
+                let changed = prior.as_ref() != Some(&source) || revision != package_revision;
+                prior = Some(source.clone());
+                package_revision = revision;
+                if changed {
+                    let _ = loader.client.refresh_content_views().await;
+                }
+                let Some(views) = views.upgrade() else {
+                    break;
+                };
+                let targets: Vec<_> = views
+                    .borrow()
+                    .iter()
+                    .map(|(id, view)| (ContentId(id.clone()), view.clone()))
+                    .collect();
+                let Ok(targets) = handle.update(cx, |_, _, cx| {
+                    targets
+                        .into_iter()
+                        .filter(|(_, view)| {
+                            view.update(cx, |note, _| {
+                                if changed {
+                                    note.scheduled = true;
+                                }
+                                let scheduled = note.scheduled;
+                                note.scheduled = false;
+                                scheduled
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                }) else {
+                    break;
+                };
+                for (id, note) in targets {
+                    let binding = match &source {
+                        Ok(_) => loader.client.bind_content_view(id.clone()).await,
+                        Err(error) => Err(error.clone()),
+                    };
+                    if handle
+                        .update(cx, |_, window, cx| {
+                            note.update(cx, |note, cx| {
+                                match binding {
+                                    Ok(binding) => {
+                                        let entry = &source.as_ref().expect("source checked").entry;
+                                        let candidate = loader.load(
+                                            binding.clone(),
+                                            note,
+                                            id,
+                                            entry,
+                                            window,
+                                            cx,
+                                        );
+                                        match candidate {
+                                            Ok(candidate) => {
+                                                note.pending = Some(candidate);
+                                                note.error = None;
+                                            }
+                                            Err(error) => {
+                                                binding.retire();
+                                                note.error =
+                                                    Some(format!("Notes reload failed: {error:#}"));
+                                            }
+                                        }
+                                    }
+                                    Err(error) => {
+                                        note.error = Some(error);
+                                    }
+                                }
+                                if note
+                                    .current
+                                    .as_ref()
+                                    .is_some_and(|current| current.binding.is_retired())
+                                {
+                                    note.session.update(cx, |session, cx| session.suspend(cx));
+                                }
+                                cx.notify();
+                            })
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+        }));
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+struct Source {
+    files: Vec<(PathBuf, u64)>,
+    metadata: u64,
+    entry: String,
+}
+
+fn signature(package: &Path) -> Result<Source> {
+    let files = crate::host::source_snapshot(package)?;
+    let mut bytes = Vec::new();
+    std::fs::File::open(package.join("mod.json"))?
+        .take(voyager_app::content::ENVELOPE_LIMIT as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    anyhow::ensure!(
+        bytes.len() <= voyager_app::content::ENVELOPE_LIMIT,
+        "Notes metadata exceeds its envelope limit"
+    );
+    let metadata: serde_json::Value = serde_json::from_slice(&bytes)?;
+    anyhow::ensure!(metadata.is_object(), "Notes metadata must be an object");
+    if let Some(version) = metadata.get("version") {
+        anyhow::ensure!(
+            version.as_u64() == Some(1),
+            "Notes requires package version 1"
+        );
+    }
+    let entry = match metadata.get("entry") {
+        None => "main.js",
+        Some(entry) => entry
+            .as_str()
+            .filter(|entry| !entry.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("Notes entry must be nonempty text"))?,
+    }
+    .to_owned();
+    let mut hash = DefaultHasher::new();
+    bytes.hash(&mut hash);
+    Ok(Source {
+        files,
+        metadata: hash.finish(),
+        entry,
+    })
+}
+
+#[derive(Clone)]
+struct Loader {
+    runtime: Result<Rc<ShellRuntime>, String>,
+    package: PathBuf,
+    budget: Budget,
+    client: Client,
+}
+
+impl Loader {
     fn load(
         &self,
-        binding: Binding,
+        binding: ViewBinding,
+        note: &Note,
         id: ContentId,
-        colors: Colors,
+        entry: &str,
         window: &mut Window,
         cx: &mut App,
-    ) -> Result<(Entity<ShellRoot>, Watcher)> {
+    ) -> Result<Candidate> {
         let runtime = self
             .runtime
             .as_ref()
             .map_err(|error| anyhow::Error::msg(error.clone()))?;
         let application = format!("notes-{}", id.0);
+        let colors = note.colors.clone();
         let identity = id.0.clone();
         let budget = self.budget.clone();
         let client = self.client.clone();
         let issued = self.client.clone();
         let observer = self.client.clone();
         let observed = binding.clone();
+        let invoked = binding.clone();
         let module = HostModule::new(crate::script_types::CONTENT_MODULE)
             .declarations(crate::script_types::CONTENT)
             .function("identity", move |_| Ok(HostValue::from(identity.clone())))
@@ -200,14 +369,10 @@ impl Host {
                 let observer = observer.clone();
                 let binding = observed.clone();
                 Ok(async move {
-                    let changes = observer
-                        .content_changes(binding, after)
+                    let version = observer
+                        .view_changed(&binding, after)
                         .await
-                        .map_err(HostError::new)?;
-                    let version = changes
-                        .recv()
-                        .await
-                        .map_err(|_| HostError::new("Content subscription closed"))?;
+                        .map_err(|error| HostError::new(format!("{error:?}")))?;
                     Ok(HostValue::from(version.to_string()))
                 })
             })
@@ -225,7 +390,7 @@ impl Host {
                     .flatten()
                     .map(|permit| (raw.to_owned(), permit));
                 let client = client.clone();
-                let binding = binding.clone();
+                let binding = invoked.clone();
                 let content_id = id.clone();
                 Ok(async move {
                     let (response, permit) = match admitted {
@@ -246,11 +411,10 @@ impl Host {
                             {
                                 return Err(HostError::new("Content request identity changed"));
                             }
-                            let access = Access::View(binding);
                             let response = if matches!(&request, Request::Update { .. }) {
-                                client.content(access, request)
+                                client.content_view(&binding, request)
                             } else {
-                                client.read_content(access, request).await
+                                client.read_content_view(&binding, request).await
                             }
                             .map_err(|error| HostError::new(format!("{error:?}")))?;
                             ((*response).clone(), Some(permit))
@@ -285,87 +449,164 @@ impl Host {
                 .with_application(application)
                 .with_host_module(module)?,
         )?;
-        let root = runtime.try_load(&self.package, window, cx)?;
-        let watch = runtime.watch(&root, window, cx)?;
-        Ok((root, watch))
+        let session =
+            crate::notes_scope::LoadSession::enter(note.session.clone(), binding.clone())?;
+        let application = runtime.load_application(&self.package, entry)?;
+        let view = runtime.mount_application(&application, window, cx)?;
+        Ok(Candidate {
+            view,
+            binding,
+            retained: session.retained(),
+            validated: false,
+        })
+    }
+}
+
+struct Candidate {
+    view: Entity<ScriptView>,
+    binding: ViewBinding,
+    retained: bool,
+    validated: bool,
+}
+
+impl Drop for Candidate {
+    fn drop(&mut self) {
+        self.binding.retire();
     }
 }
 
 struct Note {
-    root: Option<Entity<ShellRoot>>,
-    _watch: Option<Watcher>,
-    _task: Task<()>,
-    _observers: Vec<Subscription>,
+    current: Option<Candidate>,
+    pending: Option<Candidate>,
+    session: Entity<crate::notes_session::Session>,
+    colors: Colors,
+    scheduled: bool,
+    publishing: bool,
+    view_observer: Option<Subscription>,
+    _session_observer: Subscription,
     error: Option<String>,
 }
 
 impl Note {
     fn new(
-        host: Host,
         id: ContentId,
+        client: Client,
         colors: Colors,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let handle = window.window_handle();
-        let client = host.client.clone();
-        let task = cx.spawn(async move |this, cx| {
-            let registered = cx
-                .background_executor()
-                .spawn(async move {
-                    client
-                        .bind_content(id.clone())
-                        .await
-                        .map_err(anyhow::Error::msg)
-                        .map(|binding| (binding, id))
-                })
-                .await;
-            let _ = handle.update(cx, |_, window, cx| {
-                this.update(cx, |note, cx| {
-                    let loaded = registered
-                        .and_then(|(binding, id)| host.load(binding, id, colors, window, cx));
-                    match loaded {
-                        Ok((root, watch)) => {
-                            note._observers
-                                .push(cx.observe(&root, |_, _, cx| cx.notify()));
-                            note.root = Some(root);
-                            note._watch = Some(watch);
-                        }
-                        Err(error) => note.error = Some(format!("{error:#}")),
-                    }
-                    cx.notify();
-                })
-            });
+        let session = cx.new(|cx| crate::notes_session::Session::new(id, client, window, cx));
+        let observer = cx.observe(&session, |note, _, cx| {
+            if let Some(current) = &note.current {
+                current.view.update(cx, |view, cx| view.refresh(cx));
+            }
+            cx.notify();
         });
         Self {
-            root: None,
-            _watch: None,
-            _task: task,
-            _observers: Vec::new(),
+            current: None,
+            pending: None,
+            session,
+            colors,
+            scheduled: true,
+            publishing: false,
+            view_observer: None,
+            _session_observer: observer,
             error: None,
         }
+    }
+
+    fn publish(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.publishing = false;
+        let Some(candidate) = self.pending.take() else {
+            return;
+        };
+        if !candidate.validated {
+            self.pending = Some(candidate);
+            cx.notify();
+            return;
+        }
+        if let Err(error) = candidate.binding.activate() {
+            self.error = Some(error);
+            cx.notify();
+            return;
+        }
+        if let Some(previous) = self.current.take() {
+            previous.binding.retire();
+        }
+        if candidate.retained {
+            self.session.update(cx, |session, cx| {
+                session.activate(candidate.binding.clone(), window, cx)
+            });
+        } else {
+            self.session.update(cx, |session, cx| session.suspend(cx));
+        }
+        self.view_observer = Some(cx.observe(&candidate.view, |_, _, cx| cx.notify()));
+        self.current = Some(candidate);
+        self.error = None;
+        cx.notify();
+    }
+
+    fn draw(
+        candidate: &Candidate,
+        session: Entity<crate::notes_session::Session>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (AnyElement, Option<String>) {
+        let frame = crate::notes_scope::Build::enter(session);
+        let element = candidate
+            .view
+            .update(cx, |view, cx| view.render(window, cx).into_any_element());
+        let error = frame
+            .error()
+            .or_else(|| candidate.view.read(cx).build_error().map(str::to_owned));
+        (element, error)
     }
 }
 
 impl Render for Note {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
-        let content: AnyElement = match &self.root {
-            Some(root) => {
-                let content = root.read(cx).content().clone();
-                if window.is_a11y_active() {
-                    content.into_any_element()
-                } else {
-                    content
-                        .cached(StyleRefinement::default().size_full())
-                        .into_any_element()
+        if let Some(candidate) = &self.pending {
+            let (_, error) = Self::draw(candidate, self.session.clone(), window, cx);
+            if let Some(error) = error {
+                self.pending = None;
+                self.error = Some(format!("Notes reload failed: {error}"));
+            } else {
+                if let Some(candidate) = &mut self.pending {
+                    candidate.validated = true;
+                }
+                if !self.publishing {
+                    self.publishing = true;
+                    cx.defer_in(window, |note, window, cx| note.publish(window, cx));
                 }
             }
-            None => div()
+        }
+        let content = match &self.current {
+            Some(current) if !current.binding.is_retired() => {
+                Self::draw(current, self.session.clone(), window, cx).0
+            }
+            _ => div()
                 .p_4()
-                .child(self.error.clone().unwrap_or_else(|| "Opening Notes".into()))
+                .child(if self.current.is_some() {
+                    "Notes is unavailable"
+                } else {
+                    "Opening Notes"
+                })
                 .into_any_element(),
         };
-        div().size_full().child(content)
+        div()
+            .relative()
+            .size_full()
+            .child(content)
+            .children(self.error.as_ref().map(|error| {
+                div()
+                    .absolute()
+                    .bottom_0()
+                    .left_0()
+                    .w_full()
+                    .p_2()
+                    .bg(gpui::rgb(0x16181c))
+                    .child(error.clone())
+            }))
     }
 }
 
@@ -411,6 +652,7 @@ mod tests {
                 "import { call } from 'voyager_workspace';",
                 false,
             ),
+            ("broken.js", "export const broken = ;", false),
         ] {
             std::fs::write(directory.join(entry), format!("import {{ View }} from 'gpui-kit'; {import} export default class Notes extends View {{}}")).unwrap();
             let result = runtime.load_application(&directory, entry);

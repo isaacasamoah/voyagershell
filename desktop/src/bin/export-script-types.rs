@@ -1,7 +1,13 @@
 #[path = "../arrangement.rs"]
 mod arrangement;
+#[path = "../notes_draft.rs"]
+pub mod notes_draft;
 #[path = "../notes_input.rs"]
 mod notes_input;
+#[path = "../notes_scope.rs"]
+pub mod notes_scope;
+#[path = "../notes_session.rs"]
+pub mod notes_session;
 #[path = "../occluding.rs"]
 mod occluding;
 #[path = "../script_types.rs"]
