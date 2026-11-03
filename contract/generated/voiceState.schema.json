@@ -1,0 +1,144 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Capability": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "checking",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "unavailable",
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "candidate",
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "version"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "compatible",
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "version"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Phase": {
+      "enum": [
+        "off",
+        "preparing",
+        "negotiating",
+        "active",
+        "stopping",
+        "failed",
+        "unconfirmed"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "capability": {
+      "$ref": "#/definitions/Capability"
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generation": {
+      "type": "string"
+    },
+    "microphonePeak": {
+      "maximum": 65535,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "phase": {
+      "$ref": "#/definitions/Phase"
+    },
+    "realtimeSession": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "speakerPeak": {
+      "maximum": 65535,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "thread": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "turn": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "generation",
+    "phase",
+    "capability",
+    "microphonePeak",
+    "speakerPeak"
+  ],
+  "title": "State",
+  "type": "object"
+}

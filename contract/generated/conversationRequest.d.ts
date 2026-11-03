@@ -5,6 +5,9 @@ export type Action =
     }
   | {
       operation: "interrupt";
+    }
+  | {
+      operation: "start-voice";
     };
 
 export interface Request {
