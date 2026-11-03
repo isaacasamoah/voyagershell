@@ -66,9 +66,14 @@ struct Call {
     reply: SyncSender<Reply>,
 }
 
+enum OwnerMessage {
+    Call(Call),
+    Quit(async_channel::Sender<Result<(), String>>),
+}
+
 #[derive(Clone)]
 pub struct Client {
-    sender: SyncSender<Call>,
+    sender: async_channel::Sender<OwnerMessage>,
     projection: Arc<Projection>,
     sequence: Arc<AtomicU64>,
     audio: Arc<AudioState>,
@@ -120,7 +125,7 @@ impl Client {
         workspace: Workspace,
         audio_environment: Vec<(OsString, OsString)>,
     ) -> Self {
-        let (sender, commands) = mpsc::sync_channel::<Call>(8);
+        let (sender, commands) = async_channel::bounded::<OwnerMessage>(8);
         let projection = Arc::new(Projection {
             value: Mutex::new(Snapshot::default()),
             changed: Condvar::new(),
@@ -144,7 +149,26 @@ impl Client {
                 audio_events,
                 scopes,
             );
+            let mut quit_result: Option<Result<(), String>> = None;
             loop {
+                if let Some(result) = &quit_result {
+                    match commands.recv_blocking() {
+                        Ok(OwnerMessage::Quit(reply)) => {
+                            let _ = reply.try_send(result.clone());
+                        }
+                        Ok(OwnerMessage::Call(call)) => {
+                            let _ = call.reply.send(Reply {
+                                request_id: call.request.request_id,
+                                delivery: Delivery::Rejected,
+                                error: Some(
+                                    "Voyager is quitting; no private request was accepted".into(),
+                                ),
+                            });
+                        }
+                        Err(_) => break,
+                    }
+                    continue;
+                }
                 if let Ok(event) = audio_incoming.try_recv() {
                     owner.audio_event(event);
                 }
@@ -171,13 +195,19 @@ impl Client {
                     owner.fail(error, Phase::Unconfirmed);
                 }
                 match commands.try_recv() {
-                    Ok(call) => {
+                    Ok(OwnerMessage::Call(call)) => {
                         let reply =
                             owner.call(&call.request, call.binding.as_ref(), &issued, &events);
                         let _ = call.reply.send(reply);
                     }
-                    Err(mpsc::TryRecvError::Disconnected) => break,
-                    Err(mpsc::TryRecvError::Empty) => (),
+                    Ok(OwnerMessage::Quit(reply)) => {
+                        let result = owner.quit();
+                        let _ = reply.try_send(result.clone());
+                        quit_result = Some(result);
+                        continue;
+                    }
+                    Err(async_channel::TryRecvError::Closed) => break,
+                    Err(async_channel::TryRecvError::Empty) => (),
                 }
                 match incoming.recv_timeout(Duration::from_millis(10)) {
                     Ok(Ok(value)) => {
@@ -245,14 +275,26 @@ impl Client {
         self.call_bound(request, None)
     }
 
+    pub async fn quit(&self) -> Result<(), String> {
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .send(OwnerMessage::Quit(reply))
+            .await
+            .map_err(|_| "The private shutdown owner is unavailable")?;
+        receive
+            .recv()
+            .await
+            .map_err(|_| "Private shutdown was not confirmed; do not repeat it")?
+    }
+
     fn call_bound(&self, request: Request, binding: Option<Binding>) -> Result<Reply, String> {
         let (reply, result) = mpsc::sync_channel(1);
         self.sender
-            .try_send(Call {
+            .try_send(OwnerMessage::Call(Call {
                 request,
                 binding,
                 reply,
-            })
+            }))
             .map_err(|_| "Conversation busy or unavailable; nothing was queued")?;
         result
             .recv_timeout(Duration::from_secs(25))
@@ -340,6 +382,71 @@ struct Owner {
 }
 
 impl Owner {
+    fn quit(&mut self) -> Result<(), String> {
+        let mut failures = Vec::new();
+        let generation = match self.audio.snapshot() {
+            Ok(state) => Some(state.generation),
+            Err(error) => {
+                failures.push(error);
+                None
+            }
+        };
+        if let Err(error) = self.audio.end(None) {
+            failures.push(error);
+        }
+        if self.voice_start.take().is_some()
+            && let Some(generation) = generation
+            && let Err(error) = self.audio.finish(generation, None, true)
+        {
+            failures.push(error);
+        }
+        self.pending = None;
+        self.callbacks.clear();
+        self.offer = None;
+        self.realtime = None;
+        if let Some(provider) = self.provider.as_mut() {
+            match provider.shutdown() {
+                Ok(()) => self.provider = None,
+                Err(error) => failures.push(error),
+            }
+        }
+        let deadline = Instant::now() + Duration::from_secs(6);
+        while let Some(generation) = generation {
+            match self.audio.exited(generation) {
+                Ok(true) => break,
+                Ok(false) if Instant::now() < deadline => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Ok(false) => {
+                    failures.push("Native audio helper exit is unconfirmed".into());
+                    break;
+                }
+                Err(error) => {
+                    failures.push(error);
+                    break;
+                }
+            }
+        }
+        let failed = (!failures.is_empty()).then(|| failures.join("\n"));
+        self.projection.edit(|state| {
+            if !matches!(state.phase, Phase::Starting | Phase::Working) {
+                return false;
+            }
+            state.phase = if failed.is_some() {
+                Phase::Unconfirmed
+            } else {
+                Phase::Interrupted
+            };
+            state.error = failed.clone();
+            true
+        })?;
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(failures.join("\n"))
+        }
+    }
+
     fn new(
         projection: Arc<Projection>,
         profile: PathBuf,
@@ -898,6 +1005,53 @@ fn settings(profile: &Path) -> Result<(String, String), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quit_without_a_started_runtime_keeps_its_result_and_refuses_late_calls() {
+        fn ready<T>(future: impl std::future::Future<Output = T>) -> T {
+            let mut future = std::pin::pin!(future);
+            let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                if let std::task::Poll::Ready(value) = future.as_mut().poll(&mut context) {
+                    return value;
+                }
+                assert!(Instant::now() < deadline);
+                thread::sleep(Duration::from_millis(1));
+            }
+        }
+        let workspace = Workspace::open("invalid-for-core-start".into(), "/tmp".into());
+        let private = Client::open(std::env::temp_dir(), workspace.clone());
+        private
+            .projection
+            .edit(|state| {
+                state.phase = Phase::Working;
+                true
+            })
+            .unwrap();
+        assert!(ready(private.quit()).is_ok());
+        assert_eq!(
+            private.snapshot(None).unwrap().unwrap().phase,
+            Phase::Interrupted
+        );
+        assert!(ready(private.quit()).is_ok());
+        let rejected = private
+            .call(Request {
+                request_id: private.request_id(),
+                action: Action::Interrupt,
+            })
+            .unwrap();
+        assert_eq!(rejected.delivery, Delivery::Rejected);
+        assert!(rejected.error.unwrap().contains("quitting"));
+        let first = ready(workspace.quit());
+        assert!(
+            matches!(&first, Err(crate::core::Error::Rejected {kind, ..}) if kind == "invalid_session")
+        );
+        assert_eq!(
+            format!("{first:?}"),
+            format!("{:?}", ready(workspace.quit()))
+        );
+    }
 
     #[test]
     fn malformed_settings_can_be_corrected_before_any_runtime_starts() {

@@ -330,11 +330,13 @@ mod tests {
         shared.stop(&second).unwrap();
         assert!(!shared.current(next));
         shared.finish(next, None, false).unwrap();
+        assert!(!shared.exited(next).unwrap());
         assert_eq!(shared.snapshot().unwrap().phase, Phase::Unconfirmed);
         assert!(shared.begin(&second).is_err());
         shared
             .finish(next, Some("closed pipe".into()), true)
             .unwrap();
+        assert!(shared.exited(next).unwrap());
         assert_eq!(shared.snapshot().unwrap().phase, Phase::Off);
         assert!(shared.snapshot().unwrap().error.is_none());
     }

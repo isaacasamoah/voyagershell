@@ -15,6 +15,7 @@ use std::{
     process::{Child, ChildStdin, Command, Stdio},
     sync::{Arc, Mutex, mpsc::SyncSender},
     thread,
+    time::{Duration, Instant},
 };
 
 const CONTENT_FRAME_LIMIT: usize = 2 * crate::content::ENVELOPE_LIMIT + 4096;
@@ -207,17 +208,55 @@ impl Codex {
     }
 
     pub(crate) fn close(mut self) -> Result<(), String> {
+        self.shutdown()
+    }
+
+    pub(crate) fn shutdown(&mut self) -> Result<(), String> {
         if self.child.try_wait().map_err(|e| e.to_string())?.is_none() {
             self.child.kill().map_err(|e| e.to_string())?;
         }
-        self.child.wait().map_err(|e| e.to_string())?;
-        Ok(())
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if self.child.try_wait().map_err(|e| e.to_string())?.is_some() {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err("Private provider exit is unconfirmed".into());
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(unix)]
+    fn shutdown_reaps_its_owned_child_and_preserves_another_child() {
+        let mut child = Command::new("/bin/sleep")
+            .arg("10")
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut other = Command::new("/bin/sleep").arg("10").spawn().unwrap();
+        let mut owner = Codex {
+            input: child.stdin.take().unwrap(),
+            child,
+            executable: "/bin/sleep".into(),
+            version: None,
+            pending: Arc::new(Mutex::new(None)),
+        };
+        let result = owner.shutdown();
+        let exited = owner.child.try_wait().unwrap().is_some();
+        let survived = other.try_wait().unwrap().is_none();
+        let _ = owner.child.kill();
+        owner.child.wait().unwrap();
+        other.kill().unwrap();
+        other.wait().unwrap();
+        assert!(result.is_ok() && exited && survived);
+    }
 
     #[test]
     fn content_frames_do_not_raise_other_request_limits() {
