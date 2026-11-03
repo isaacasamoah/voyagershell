@@ -246,7 +246,7 @@ def prove(
         )
         native("focus", launch()["pid"], "Message Voyager", 0)
         type_text(prompt)
-        click(*named_button(native, evidence, "Send"))
+        key(65293)
         wait(lambda: provider_processes(evidence), bool, "the owned private provider")
         observed["providersEarly"] = record_providers(executable)
         final = wait(
