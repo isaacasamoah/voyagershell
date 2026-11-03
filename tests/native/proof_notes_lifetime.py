@@ -97,6 +97,11 @@ def prove(
 
     def start(name):
         nonlocal opened
+        previous = evidence / "conversation.json"
+        if previous.exists():
+            retained = evidence / (name + "-previous-conversation.json")
+            assert not retained.exists()
+            previous.rename(retained)
         frame = start_frame(name)
         opened = True
         record("app-" + str(pid()), pid())
