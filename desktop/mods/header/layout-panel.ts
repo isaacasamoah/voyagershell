@@ -26,7 +26,7 @@ export class LayoutPanel {
   }
 
   render(
-    busy: boolean,
+    busy: () => boolean,
     inspect: (cx: Context, done: (result: Response | null) => void) => void,
     apply: (
       canvas: Canvas,
@@ -72,7 +72,7 @@ export class LayoutPanel {
               .child(this.pending ? "Applying" : "Apply")
               .on_click((_event, cx) => {
                 if (this.pending || this.unconfirmed) return;
-                if (busy) {
+                if (busy()) {
                   this.error = "Wait for the workspace request to finish.";
                   cx.notify();
                   return;
@@ -106,7 +106,7 @@ export class LayoutPanel {
               .accessibility_label("Reload workspace layout")
               .child("Reload")
               .on_click((_event, cx) => {
-                if (this.pending || busy) return;
+                if (this.pending || busy()) return;
                 this.pending = true;
                 inspect(cx, (result) => {
                   this.pending = false;

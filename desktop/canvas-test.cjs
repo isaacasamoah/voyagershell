@@ -188,8 +188,9 @@ test("the real layout editor keeps its captured revision, refuses invalid input 
   const panel = new exports.LayoutPanel(canvas, "7");
   let sent = 0;
   let closed = 0;
+  let busy = false;
   panel.render(
-    false,
+    () => busy,
     (_cx, done) =>
       done({
         status: "applied",
@@ -214,6 +215,11 @@ test("the real layout editor keeps its captured revision, refuses invalid input 
   click(null, cx);
   assert.equal(sent, 0);
   value = JSON.stringify(canvas);
+  busy = true;
+  click(null, cx);
+  assert.equal(sent, 0);
+  assert.equal(panel.pending, false);
+  busy = false;
   click(null, cx);
   click(null, cx);
   assert.equal(sent, 1);

@@ -1583,7 +1583,7 @@ export default class Workspace extends View {
     if (this.layoutPanel)
       shell.child(
         this.layoutPanel.render(
-          this.busy,
+          () => this.busy,
           (task, done) =>
             this.run({ operation: "inspect" }, task, done, this.version, false),
           (canvas, version, task, done) =>
