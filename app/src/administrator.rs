@@ -9,10 +9,43 @@ use voyager_contract::{
     conversation::{CallbackId, Focus, ToolOutcome},
 };
 
+#[derive(Clone)]
+enum Dispatch {
+    Workspace(Action),
+    Process(ProcessAction),
+    Content(voyager_contract::content::Action),
+}
+
+impl Dispatch {
+    fn receipt(&self) -> ToolAction {
+        use voyager_contract::content::{Action as Content, Receipt};
+        match self {
+            Self::Workspace(action) => ToolAction::Workspace(action.clone()),
+            Self::Process(action) => ToolAction::Process(action.clone()),
+            Self::Content(action) => ToolAction::Content(match action {
+                Content::Describe { content_id } => Receipt::Describe {
+                    content_id: content_id.clone(),
+                },
+                Content::Inspect { content_id } => Receipt::Inspect {
+                    content_id: content_id.clone(),
+                },
+                Content::Update {
+                    content_id,
+                    expected_revision,
+                    ..
+                } => Receipt::Update {
+                    content_id: content_id.clone(),
+                    expected_revision: expected_revision.clone(),
+                },
+            }),
+        }
+    }
+}
+
 struct Receipt {
     tool: String,
     call: String,
-    arguments: Option<Value>,
+    arguments: Option<[u8; 32]>,
     replies: Vec<Value>,
     waiting: Vec<Value>,
     refused_ids: Vec<Value>,
@@ -57,9 +90,14 @@ pub(crate) fn catalog() -> Result<Value, String> {
         "../../contract/generated/processTool.schema.json"
     ))
     .map_err(|error| error.to_string())?;
+    let content_schema: Value = serde_json::from_str(include_str!(
+        "../../contract/generated/contentTool.schema.json"
+    ))
+    .map_err(|error| error.to_string())?;
     Ok(json!([
         {"type":"function","name":"voyager_workspace","description":"Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.","inputSchema":schema},
-        {"type":"function","name":"voyager_process","description":"Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact contentId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Content tools are unavailable.","inputSchema":process_schema}
+        {"type":"function","name":"voyager_process","description":"Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact contentId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_content tool.","inputSchema":process_schema},
+        {"type":"function","name":"voyager_content","description":"Describe, inspect and update an existing Notes instance only inside the immutable captured focus. Inspect workspace for expectedVersion and exact contentId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-content initializes new Notes. Never repeat an uncertain update. The application supplies request identity and actor scope outside arguments.","inputSchema":content_schema}
     ]))
 }
 
@@ -95,7 +133,7 @@ impl Tools {
         self.receipts.push(Receipt {
             tool: tool.into(),
             call: call.into(),
-            arguments,
+            arguments: arguments.as_ref().map(crate::content::fingerprint),
             replies: vec![id],
             waiting: Vec::new(),
             refused_ids: Vec::new(),
@@ -129,7 +167,10 @@ impl Tools {
         let matches = value["method"] == "item/tool/call"
             && thread.is_some_and(|thread| !thread.is_empty() && params["threadId"] == thread)
             && turn.is_some_and(|turn| !turn.is_empty() && params["turnId"] == turn)
-            && matches!(tool, "voyager_workspace" | "voyager_process")
+            && matches!(
+                tool,
+                "voyager_workspace" | "voyager_process" | "voyager_content"
+            )
             && params.get("namespace").is_none_or(Value::is_null);
         let call = params["callId"].as_str().unwrap_or_default();
         if !matches || call.is_empty() || call.len() > 128 {
@@ -148,6 +189,7 @@ impl Tools {
                 "Callback request identity already belongs to another tool call",
             ));
         }
+        let fingerprint = crate::content::fingerprint(&params["arguments"]);
         if let Some(receipt) = self
             .receipts
             .iter_mut()
@@ -171,7 +213,7 @@ impl Tools {
                 || receipt
                     .arguments
                     .as_ref()
-                    .is_some_and(|arguments| arguments != &params["arguments"])
+                    .is_some_and(|arguments| arguments != &fingerprint)
             {
                 if receipt.waiting.contains(&id) {
                     return None;
@@ -196,10 +238,20 @@ impl Tools {
                 "The turn's 32-call limit was reached; no new call was dispatched",
             ));
         }
+        let limit = if tool == "voyager_content" {
+            crate::content::ENVELOPE_LIMIT
+        } else {
+            8192
+        };
         let arguments =
-            (params["arguments"].to_string().len() <= 8192).then(|| params["arguments"].clone());
+            (params["arguments"].to_string().len() <= limit).then(|| params["arguments"].clone());
         let Some(arguments) = arguments else {
-            return self.reject(tool, id, call, None, "Tool arguments exceed 8 KiB. This call ID remains refused; use a new call for a different request.");
+            let message = if tool == "voyager_content" {
+                "Content arguments exceed 1 MiB plus 16 KiB. This call ID remains refused; use a new call for a different request."
+            } else {
+                "Tool arguments exceed 8 KiB. This call ID remains refused; use a new call for a different request."
+            };
+            return self.reject(tool, id, call, None, message);
         };
         if !active || context.is_none() || self.busy() {
             return self.reject(
@@ -212,9 +264,11 @@ impl Tools {
         }
         let parsed = match tool {
             "voyager_workspace" => serde_json::from_value::<WorkspaceInput>(arguments.clone())
-                .map(|input| (input.expected_version, ToolAction::Workspace(input.action))),
-            _ => serde_json::from_value::<ProcessInput>(arguments.clone())
-                .map(|input| (input.expected_version, ToolAction::Process(input.action))),
+                .map(|input| (input.expected_version, Dispatch::Workspace(input.action))),
+            "voyager_process" => serde_json::from_value::<ProcessInput>(arguments.clone())
+                .map(|input| (input.expected_version, Dispatch::Process(input.action))),
+            _ => serde_json::from_value::<voyager_contract::content::Input>(arguments.clone())
+                .map(|input| (input.expected_version, Dispatch::Content(input.action))),
         };
         let (expected_version, action) = match parsed {
             Ok(input) if !self.uncertain || reads(&input.1) => input,
@@ -233,12 +287,14 @@ impl Tools {
         let request_id = workspace.request_id();
         let client = workspace.clone();
         let scope = context.scope.clone();
-        let effect_action = action.clone();
+        let receipt_action = action.receipt();
+        let effect_action = action;
+        let action = receipt_action;
         let effect_id = request_id.clone();
         let (send, receive) = mpsc::sync_channel(1);
         thread::spawn(move || {
             let result = match effect_action {
-                ToolAction::Workspace(action) => {
+                Dispatch::Workspace(action) => {
                     let request = Request {
                         request_id: effect_id,
                         expected_version,
@@ -268,7 +324,7 @@ impl Tools {
                         Err(error) => failed(error, "Workspace"),
                     }
                 }
-                ToolAction::Process(action) => {
+                Dispatch::Process(action) => {
                     let request = ProcessRequest {
                         request_id: effect_id,
                         input: ProcessInput {
@@ -297,13 +353,26 @@ impl Tools {
                         Err(error) => failed(error, "Process"),
                     }
                 }
+                Dispatch::Content(action) => {
+                    let request = crate::content::request(action, effect_id);
+                    match client.content(
+                        crate::content::Access::Agent {
+                            scope,
+                            expected_version,
+                        },
+                        request,
+                    ) {
+                        Ok(response) => content_result(&response),
+                        Err(error) => failed(error, "Content"),
+                    }
+                }
             };
             let _ = send.send(result);
         });
         self.receipts.push(Receipt {
             tool: tool.into(),
             call: call.into(),
-            arguments: Some(arguments),
+            arguments: Some(fingerprint),
             replies: vec![id.clone()],
             waiting: vec![id],
             refused_ids: Vec::new(),
@@ -370,12 +439,80 @@ impl Tools {
     }
 }
 
-fn reads(action: &ToolAction) -> bool {
+fn reads(action: &Dispatch) -> bool {
     matches!(
         action,
-        ToolAction::Workspace(Action::Inspect)
-            | ToolAction::Process(ProcessAction::List | ProcessAction::Read { .. })
+        Dispatch::Workspace(Action::Inspect)
+            | Dispatch::Process(ProcessAction::List | ProcessAction::Read { .. })
+            | Dispatch::Content(
+                voyager_contract::content::Action::Describe { .. }
+                    | voyager_contract::content::Action::Inspect { .. }
+            )
     )
+}
+
+fn content_result(response: &voyager_contract::content::Response) -> EffectResult {
+    use voyager_contract::content::Response;
+    let (status, id, revision, warning) = match response {
+        Response::Described { content_id, .. } => (Status::Applied, content_id, None, None),
+        Response::Snapshot {
+            content_id,
+            snapshot,
+            ..
+        }
+        | Response::Applied {
+            content_id,
+            snapshot,
+            ..
+        } => (
+            Status::Applied,
+            content_id,
+            Some(snapshot.revision.clone()),
+            snapshot.warning.as_deref(),
+        ),
+        Response::Rejected {
+            content_id,
+            message,
+            ..
+        } => (Status::Rejected, content_id, None, Some(message.as_str())),
+        Response::Limited {
+            content_id,
+            revision,
+            message,
+            ..
+        } => (
+            Status::Rejected,
+            content_id,
+            revision.clone(),
+            Some(message.as_str()),
+        ),
+        Response::Uncertain {
+            content_id,
+            message,
+            ..
+        } => (Status::Uncertain, content_id, None, Some(message.as_str())),
+    };
+    let raw = serde_json::to_string(response).expect("Content response serializes");
+    let displayed_warning = warning.map(|message| {
+        if message.len() <= 2048 { message.to_owned() } else { "Warning details exceed the conversation display limit; the result explicitly reports when complete details are unavailable.".into() }
+    });
+    let text = format!(
+        "Notes {}: {:?}; revision {}{}",
+        id.0,
+        status,
+        revision.as_deref().unwrap_or("unavailable"),
+        displayed_warning
+            .as_deref()
+            .map(|message| format!("; {message}"))
+            .unwrap_or_default()
+    );
+    let value = result(status == Status::Applied, raw);
+    EffectResult {
+        value,
+        text,
+        status,
+        version: revision,
+    }
 }
 
 fn failed(error: CallError, label: &str) -> EffectResult {
@@ -470,6 +607,314 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
     use voyager_contract::{Action, Context, Response};
+
+    #[test]
+    fn content_results_are_bounded_and_never_claim_a_partial_read_is_complete() {
+        use voyager_contract::content::{Notes, Response as ContentResponse, Snapshot, Version};
+        let response = ContentResponse::Snapshot {
+            version: Version::V1,
+            request_id: "read".into(),
+            content_id: voyager_contract::ContentId("notes".into()),
+            snapshot: Snapshot {
+                content_id: voyager_contract::ContentId("notes".into()),
+                revision: "revision".into(),
+                data: Notes {
+                    title: "Title".into(),
+                    text: "x".repeat(crate::content::LIMIT),
+                },
+                warning: Some("warning".repeat(4096)),
+            },
+        };
+        let request = voyager_contract::content::Request::Inspect {
+            version: Version::V1,
+            request_id: "read".into(),
+            content_id: voyager_contract::ContentId("notes".into()),
+        };
+        let response = crate::content::bounded_response(&request, response);
+        let result = content_result(&response);
+        assert_eq!(result.status, Status::Rejected);
+        let limited: Value =
+            serde_json::from_str(result.value["contentItems"][0]["text"].as_str().unwrap())
+                .unwrap();
+        assert_eq!(limited["requestId"], "read");
+        assert_eq!(limited["revision"], "revision");
+        assert_eq!(limited["status"], "limited");
+        assert_eq!(limited["warningPresent"], true);
+        assert!(result.text.len() < 4096);
+    }
+
+    #[test]
+    fn content_callbacks_share_the_owner_and_recheck_the_live_workspace() {
+        use crate::{
+            content::{Access, Owner},
+            core::Core,
+        };
+        use voyager_contract::{
+            Axis, ContentDestination,
+            content::{Notes, Request as ContentRequest, Response as ContentResponse, Version},
+        };
+        let directory =
+            std::env::temp_dir().join(format!("voyager-n3-owner-{}", std::process::id()));
+        std::fs::create_dir_all(directory.join("mods/notes")).unwrap();
+        std::fs::write(
+            directory.join("mods/notes/mod.json"),
+            include_str!("../../content/notes/mod.json"),
+        )
+        .unwrap();
+        let session = format!("voyager-n3-owner-{}", std::process::id());
+        let workspace = Client::with_content(
+            session.clone(),
+            "/tmp".into(),
+            Owner::open(&directory).unwrap(),
+        );
+        let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let call = |action, expected_version| {
+                workspace
+                    .call(Request {
+                        request_id: workspace.request_id(),
+                        expected_version,
+                        action,
+                    })
+                    .unwrap()
+            };
+            let initial = call(Action::Inspect, 0);
+            let voyage = initial.layout.voyages[0].id.clone();
+            let fleet = initial.layout.voyages[0].fleets[0].id.clone();
+            let created = call(
+                Action::CreateContent {
+                    type_id: "notes".into(),
+                    destination: ContentDestination::Vessel {
+                        fleet,
+                        after: initial.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+                        axis: Axis::Horizontal,
+                    },
+                },
+                initial.version,
+            );
+            assert_eq!(created.status, Status::Applied);
+            let a = created.layout.contents.last().unwrap().id.clone();
+            let placement = created.layout.voyages[0].fleets[0]
+                .vessels
+                .last()
+                .unwrap()
+                .id
+                .clone();
+            let created = call(
+                Action::CreateContent {
+                    type_id: "notes".into(),
+                    destination: ContentDestination::Portal { voyage },
+                },
+                created.version,
+            );
+            let b = created.layout.contents.last().unwrap().id.clone();
+            let b_before = std::fs::read(directory.join(format!("data/{}.json", b.0))).unwrap();
+            let mut binding = Box::pin(workspace.bind_content(a.clone()));
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let binding = loop {
+                let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+                if let std::task::Poll::Ready(result) =
+                    std::future::Future::poll(binding.as_mut(), &mut cx)
+                {
+                    break result.unwrap();
+                }
+                assert!(Instant::now() < deadline);
+                thread::sleep(Duration::from_millis(5));
+            };
+            let inspect = |id: &voyager_contract::ContentId| ContentRequest::Inspect {
+                version: Version::V1,
+                request_id: workspace.request_id(),
+                content_id: id.clone(),
+            };
+            let read = inspect(&a);
+            let snapshot = workspace
+                .content(Access::View(binding.clone()), read.clone())
+                .unwrap();
+            let duplicate_read = workspace
+                .content(Access::View(binding.clone()), read.clone())
+                .unwrap();
+            assert!(std::sync::Arc::ptr_eq(&snapshot, &duplicate_read));
+            assert!(matches!(
+                &*workspace
+                    .content(
+                        Access::Agent {
+                            scope: Context::Vessel {
+                                id: placement.clone()
+                            },
+                            expected_version: created.version
+                        },
+                        read
+                    )
+                    .unwrap(),
+                ContentResponse::Rejected { .. }
+            ));
+            let revision = match &*snapshot {
+                ContentResponse::Snapshot { snapshot, .. } => snapshot.revision.clone(),
+                other => panic!("{other:?}"),
+            };
+            let focus = Focus {
+                scope: Context::Vessel { id: placement },
+                path: vec!["Notes A".into()],
+                cwd: None,
+                revision: created.version,
+            };
+            let mut tools = Tools::default();
+            let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_content","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"update","contentId":a,"expectedRevision":revision,"data":Notes { title: "Agent".into(), text: "x".repeat(9000) }}}}});
+            assert!(
+                tools
+                    .callback(
+                        &callback,
+                        Some("thread"),
+                        Some("turn"),
+                        true,
+                        Some(&focus),
+                        &workspace
+                    )
+                    .is_none()
+            );
+            assert!(
+                tools
+                    .callback(
+                        &callback,
+                        Some("thread"),
+                        Some("turn"),
+                        true,
+                        Some(&focus),
+                        &workspace
+                    )
+                    .is_none()
+            );
+            let applied = completed(&mut tools);
+            assert_eq!(applied.outcome.status, Status::Applied);
+            let applied_content: ContentResponse = serde_json::from_str(
+                applied.replies[0]["result"]["contentItems"][0]["text"]
+                    .as_str()
+                    .unwrap(),
+            )
+            .unwrap();
+            let applied_revision = match applied_content {
+                ContentResponse::Applied { snapshot, .. } => snapshot.revision,
+                other => panic!("{other:?}"),
+            };
+            let mut changed_data = callback.clone();
+            changed_data["id"] = "changed-data".into();
+            changed_data["params"]["arguments"]["action"]["data"]["title"] = "Changed".into();
+            assert_eq!(
+                tools
+                    .callback(
+                        &changed_data,
+                        Some("thread"),
+                        Some("turn"),
+                        true,
+                        Some(&focus),
+                        &workspace
+                    )
+                    .unwrap()["result"]["success"],
+                false
+            );
+            assert!(
+                !serde_json::to_string(&applied.outcome)
+                    .unwrap()
+                    .contains(&"x".repeat(9000))
+            );
+            let duplicate = tools
+                .callback(
+                    &callback,
+                    Some("thread"),
+                    Some("turn"),
+                    false,
+                    Some(&focus),
+                    &workspace,
+                )
+                .unwrap();
+            assert_eq!(duplicate["result"], applied.replies[0]["result"]);
+            callback["id"] = "changed".into();
+            callback["params"]["arguments"]["action"]["contentId"] = json!(b);
+            assert_eq!(
+                tools
+                    .callback(
+                        &callback,
+                        Some("thread"),
+                        Some("turn"),
+                        true,
+                        Some(&focus),
+                        &workspace
+                    )
+                    .unwrap()["result"]["success"],
+                false
+            );
+            callback["id"] = "forged".into();
+            callback["params"]["callId"] = "forged".into();
+            assert!(
+                tools
+                    .callback(
+                        &callback,
+                        Some("thread"),
+                        Some("turn"),
+                        true,
+                        Some(&focus),
+                        &workspace
+                    )
+                    .is_none()
+            );
+            assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
+            let mut external = Core::connect(&session).unwrap();
+            let bumped = external.rpc("doc.set", json!({"name":"voyager-layout-v1","value":created.layout,"version":created.version})).unwrap();
+            callback["id"] = "stale".into();
+            callback["params"]["callId"] = "stale".into();
+            callback["params"]["arguments"]["action"]["contentId"] = json!(a);
+            callback["params"]["arguments"]["action"]["expectedRevision"] = json!(applied_revision);
+            assert!(
+                tools
+                    .callback(
+                        &callback,
+                        Some("thread"),
+                        Some("turn"),
+                        true,
+                        Some(&focus),
+                        &workspace
+                    )
+                    .is_none()
+            );
+            assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
+            assert_eq!(
+                std::fs::read(directory.join(format!("data/{}.json", b.0))).unwrap(),
+                b_before
+            );
+            std::fs::write(
+                directory.join("mods/notes/mod.json"),
+                br#"{"name":"Notes"}"#,
+            )
+            .unwrap();
+            let current = workspace
+                .content(
+                    Access::Agent {
+                        scope: focus.scope.clone(),
+                        expected_version: bumped["version"].as_u64().unwrap(),
+                    },
+                    inspect(&a),
+                )
+                .unwrap();
+            assert!(
+                matches!(&*current, ContentResponse::Snapshot { snapshot, .. } if snapshot.warning.as_deref() == Some("No state schema declared") && snapshot.data.title == "Agent")
+            );
+            std::fs::remove_file(directory.join(format!("data/{}.json", a.0))).unwrap();
+            assert!(matches!(
+                &*workspace
+                    .content(Access::View(binding), inspect(&a))
+                    .unwrap(),
+                ContentResponse::Rejected { .. }
+            ));
+            assert!(!directory.join(format!("data/{}.json", a.0)).exists());
+            external.close().unwrap();
+        }));
+        let mut cleanup = Core::connect(&session).unwrap();
+        let stopped = cleanup.rpc("server.stop", json!({}));
+        cleanup.close().unwrap();
+        drop(workspace);
+        std::fs::remove_dir_all(directory).unwrap();
+        stopped.unwrap();
+        checked.unwrap();
+    }
 
     fn completed(tools: &mut Tools) -> Completed {
         let deadline = Instant::now() + Duration::from_secs(5);

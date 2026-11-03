@@ -1,6 +1,43 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 
+test("content tools contain data and revision but no actor authority", async () => {
+  const { contentTool } = await import("./generated/validate.js");
+  const input = {
+    expectedVersion: "7",
+    action: {
+      operation: "update",
+      contentId: "notes-a",
+      expectedRevision: "base",
+      data: { title: "Title", text: "Body" },
+    },
+  };
+  assert.equal(contentTool(input), true);
+  for (const key of [
+    "role",
+    "path",
+    "scope",
+    "generation",
+    "threadId",
+    "turnId",
+  ])
+    assert.equal(contentTool({ ...input, [key]: "forged" }), false);
+  assert.equal(
+    contentTool({ ...input, action: { ...input.action, contentId: 4 } }),
+    false,
+  );
+  assert.equal(
+    contentTool({
+      ...input,
+      action: {
+        ...input.action,
+        data: { title: "Title", text: "Body", role: "owner" },
+      },
+    }),
+    false,
+  );
+});
+
 test("generated wire validator rejects a forged caller and malformed split", async () => {
   const { request } = await import("./generated/validate.js");
   const valid = {

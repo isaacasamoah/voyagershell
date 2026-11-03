@@ -144,4 +144,5 @@ pub struct ProcessResponse {
 pub enum ToolAction {
     Workspace(Action),
     Process(ProcessAction),
+    Content(crate::content::Receipt),
 }

@@ -23,8 +23,12 @@ when the human requests it, but cannot retarget an already accepted request.
 The private provider cannot supply a different owner, scope or request identity.
 The current process-integration candidate adds voyager_process alongside the
 accepted workspace catalogue. Its source and owned-Core checks are under review;
-the combined native/account journey is not yet accepted. Content updates still
-wait for their accepted provider and are not advertised or simulated.
+the combined native/account journey is not yet accepted. The N3 source candidate adds the generated voyager_content tool through the same
+callback/receipt path and one Client-owned Notes writer. It admits only fresh
+captured Notes membership, preserves revisions/warnings and does not recreate
+missing data. Content bodies stay out of public tool-history summaries. Its larger
+content-only envelope and retention bounds are recorded in docs/content.md.
+Actual provider/native N3 acceptance remains pending.
 
 Rust binds a new request to the actual workspace context at Send. Its descriptor
 contains the original scope and IDs, readable Voyage/Fleet/content path, matching
