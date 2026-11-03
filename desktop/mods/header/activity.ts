@@ -9,7 +9,9 @@ export function activityBadge(
   if (!activity || activity.state === "unknown")
     return {
       label:
-        activity?.reported === false || (!activity && !unavailable)
+        (activity?.reported === false &&
+          activity.reason === "No status was reported") ||
+        (!activity && !unavailable)
           ? ""
           : "Status unavailable",
       hint,

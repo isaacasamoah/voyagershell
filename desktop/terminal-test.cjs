@@ -8,7 +8,21 @@ const activityBadge = new Function(
 
 test("activity labels omit nonreporting shells and retain genuine observation failures", () => {
   assert.equal(activityBadge(undefined).label, "");
-  assert.equal(activityBadge({ state: "unknown", reported: false }).label, "");
+  assert.equal(
+    activityBadge({
+      state: "unknown",
+      reported: false,
+      reason: "No status was reported",
+    }).label,
+    "",
+  );
+  const inconsistent = activityBadge({
+    state: "unknown",
+    reported: false,
+    reason: "Root metadata was not marked reported",
+  });
+  assert.equal(inconsistent.label, "Status unavailable");
+  assert.equal(inconsistent.hint, "Root metadata was not marked reported");
   const failure = activityBadge({
     state: "unknown",
     reported: null,
