@@ -19,7 +19,6 @@ export class LayoutPanel {
   }
   render(busy, inspect, apply, close) {
     return Occluding.new()
-      .id("workspace-layout-panel")
       .absolute()
       .right(12)
       .top(52)

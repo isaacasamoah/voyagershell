@@ -242,6 +242,11 @@ the raw declaration hash and the transitive imported-module slice. The slice is
 checked without skipping library declarations. The pinned Shell's invalid
 `ElementBounds` extension is converted to an equivalent intersection only when
 its expected exact form appears. Missing or changed declarations fail the check.
+The Header declaration slice also withholds `id` from the registered Occluding
+element, including after style calls. The pinned Shell advertises that method
+but rejects it at runtime. This exact-form adjustment changes no runtime method.
+The Shell's separate profile editor hints still contain the upstream declaration;
+they do not provide the repository's corrected strict authoring check.
 
 The shipped Notes package is also authored in TypeScript and emitted by this
 same gate. Its compilation uses the actual `export-script-types --notes` private

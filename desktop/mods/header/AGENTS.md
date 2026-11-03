@@ -8,6 +8,7 @@ Terminal, Notes, divider and avatar identities when changing presentation.
 Use `Occluding.new()` from `voyager_native` for a real overlay that must receive
 input above other content. It accepts ordinary children and styles without owning
 geometry or durable state. Do not replace it with a plain div or mute terminals.
+It does not accept `.id()`, even if the pinned Shell's editor hints offer it.
 The layout editor, overlay Portals and compact Chat already use this container.
 
 Use Workspace layout to edit the outer JSON definition. Apply uses the revision

@@ -4,6 +4,31 @@ const path = require("node:path");
 const { test } = require("node:test");
 const { compile } = require("./typecheck.cjs");
 
+test("the registered occluding API retains style chains and refuses id", () => {
+  const filename = path.join(__dirname, "../target/script-types/occluding.ts");
+  const valid = `import { Occluding } from "voyager_native";
+Occluding.new().absolute().right(12).top(52).bottom(12).w(430).flex().flex_col().gap(12).p(16).rounded(8).bg("#16181c").border_1().border_color("#ffffff1c").child("Layout");
+`;
+  fs.writeFileSync(filename, valid);
+  assert.deepEqual(
+    compile([filename]).map((entry) => entry.code),
+    [],
+  );
+  fs.writeFileSync(
+    filename,
+    valid +
+      `Occluding.new().id("unsupported");
+Occluding.new().w(30).id("unsupported");
+`,
+  );
+  const diagnostics = compile([filename]);
+  assert.deepEqual(
+    diagnostics.map((entry) => entry.code),
+    [2345, 2345],
+  );
+  assert.ok(diagnostics.every((entry) => entry.file.fileName === filename));
+});
+
 test("Notes checks its actual private native and content signatures", () => {
   const filename = path.join(
     __dirname,

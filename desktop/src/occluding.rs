@@ -41,15 +41,35 @@ mod tests {
         let runtime =
             ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
         runtime.set_editor_files(false);
+        let editor = include_str!("../mods/header/layout-panel.js")
+            .split_once("return Occluding.new()")
+            .unwrap()
+            .1
+            .split_once(".child(")
+            .unwrap()
+            .0;
+        let editor = format!("Occluding.new(){editor}.child(div().child('Workspace layout'));");
         let root = std::env::temp_dir().join(format!("voyager-occluding-{}", std::process::id()));
         std::fs::create_dir(&root).unwrap();
         let outcomes = [
             (
-                "children",
-                "Occluding.new().w(30).h(20).child(div().child('Input'));",
+                "editor",
+                editor.as_str(),
+                true,
+            ),
+            (
+                "portal",
+                "Occluding.new().flex().flex_col().gap(8).px(7).py(5).child(div().child('Portal'));",
+                true,
+            ),
+            (
+                "compact",
+                "Occluding.new().absolute().left(52).top(48).w(256).h(380).child(div().child('Chat'));",
                 true,
             ),
             ("arguments", "Occluding.new('unsupported');", false),
+            ("id", "Occluding.new().id('unsupported');", false),
+            ("styled-id", "Occluding.new().w(30).id('unsupported');", false),
         ]
         .map(|(name, expression, expected)| {
             let package = root.join(name);

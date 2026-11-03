@@ -38,7 +38,6 @@ export class LayoutPanel {
     close: (cx: Context) => void,
   ): NativeElement {
     return Occluding.new()
-      .id("workspace-layout-panel")
       .absolute()
       .right(12)
       .top(52)

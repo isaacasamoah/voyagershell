@@ -47,6 +47,19 @@ function selectDeclarations(raw, sources) {
     invalid,
     'export type ElementBounds = import("gpui-kit").Point & {',
   );
+  const occluding =
+    'export type OccludingElement = Omit<NativeElement, "disabled" | "selected" | "on_click" | "role" | "transition"> & {';
+  if (raw.includes("export type OccludingElement")) {
+    if (raw.split(occluding).length !== 2)
+      throw Error(
+        "Pinned Occluding declaration changed; review the type adapter",
+      );
+    raw = raw.replace(
+      occluding,
+      occluding.replace('"disabled"', '"id" | "disabled"') +
+        "\n    id(unavailable: never): never;",
+    );
+  }
   const parsed = ts.createSourceFile(
     "runtime.d.ts",
     raw,
