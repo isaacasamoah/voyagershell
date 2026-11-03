@@ -20,7 +20,7 @@ use std::{
         mpsc::{self, Receiver, SyncSender},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[derive(Deserialize)]
@@ -227,6 +227,7 @@ impl Viewer {
 
 pub struct Core {
     child: Child,
+    identity: String,
     control: SyncSender<Frame>,
     input: SyncSender<Frame>,
     replies: Receiver<Value>,
@@ -268,7 +269,7 @@ impl Core {
                 .take()
                 .ok_or_else(|| Error::Uncertain("Core output pipe missing".into()))?,
         );
-        let handshake = (|| -> Result<(), Error> {
+        let handshake = (|| -> Result<String, Error> {
             let params = Self::hello_params();
             let mut hello = serde_json::to_vec(
                 &json!({"jsonrpc":"2.0","id":1,"method":"hello","params":params}),
@@ -294,15 +295,18 @@ impl Core {
                 serde_json::from_slice(&line).map_err(|e| Error::Uncertain(e.to_string()))?;
             Self::validate_hello(result)
         })();
-        if let Err(error) = handshake {
-            if let Err(cleanup) = child.kill() {
-                eprintln!("Core bridge startup cleanup failed: {cleanup}");
+        let identity = match handshake {
+            Ok(identity) => identity,
+            Err(error) => {
+                if let Err(cleanup) = child.kill() {
+                    eprintln!("Core bridge startup cleanup failed: {cleanup}");
+                }
+                if let Err(cleanup) = child.wait() {
+                    eprintln!("Core bridge startup wait failed: {cleanup}");
+                }
+                return Err(error);
             }
-            if let Err(cleanup) = child.wait() {
-                eprintln!("Core bridge startup wait failed: {cleanup}");
-            }
-            return Err(error);
-        }
+        };
         let (control, controls) = mpsc::sync_channel::<Frame>(64);
         let (data, inputs) = mpsc::sync_channel::<Frame>(64);
         let (reply, replies) = mpsc::sync_channel(1);
@@ -419,6 +423,7 @@ impl Core {
         });
         Ok(Self {
             child,
+            identity,
             control,
             input: data,
             replies,
@@ -590,6 +595,37 @@ impl Core {
         self.call("server.stop", StopParams(Default::default()))
     }
 
+    pub(crate) fn quit(&mut self) -> Result<(), Error> {
+        let actual = self.server_status()?;
+        if actual.core.id != self.identity {
+            return Err(Error::Rejected {
+                kind: "changed_core".into(),
+                message: "The connected Core identity changed; no session was stopped".into(),
+            });
+        }
+        if !self.server_stop()?.stopped {
+            return Err(Error::Uncertain(
+                "Core did not confirm session shutdown".into(),
+            ));
+        }
+        self.connected.store(false, Ordering::Release);
+        if self.child.try_wait()?.is_none() {
+            self.child.kill()?;
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if self.child.try_wait()?.is_some() {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(Error::Uncertain(
+                    "Core connector exit is unconfirmed".into(),
+                ));
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
     fn rpc(&mut self, method: &str, params: Value) -> Result<Value, Error> {
         self.sequence = self
             .sequence
@@ -719,10 +755,11 @@ impl Core {
         "terminal.send",
         "terminal.interrupt",
         "terminal.kill",
+        "server.status",
         "server.stop",
     ];
 
-    fn validate_hello(response: Value) -> Result<(), Error> {
+    fn validate_hello(response: Value) -> Result<String, Error> {
         let result = Self::response(response, 1)?;
         let hello: HelloResult = Self::decode("hello", result)?;
         if hello.generation != 1
@@ -741,7 +778,7 @@ impl Core {
                     .into(),
             });
         }
-        Ok(())
+        Ok(hello.core.id)
     }
 
     pub fn viewer(&self, channel: u32) -> Result<Viewer, Error> {
@@ -850,6 +887,7 @@ mod adapter_tests {
                 .unwrap();
             let mut core = Core {
                 child,
+                identity: "test-core".into(),
                 control,
                 input,
                 replies,
@@ -876,7 +914,7 @@ mod adapter_tests {
             .as_array_mut()
             .unwrap()
             .push("future.method".into());
-        assert!(Core::validate_hello(hello.clone()).is_ok());
+        assert_eq!(Core::validate_hello(hello.clone()).unwrap(), "stable");
         hello["result"]["generation"] = 2.into();
         assert!(Core::validate_hello(hello.clone()).is_err());
         hello["result"]["generation"] = 1.into();

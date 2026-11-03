@@ -24,6 +24,9 @@ pub struct WorkspaceNotice {
 }
 
 enum Message {
+    Quit {
+        reply: async_channel::Sender<Result<(), Error>>,
+    },
     Launches {
         reply: async_channel::Sender<Result<voyager_contract::launch::Catalog, String>>,
     },
@@ -188,8 +191,18 @@ impl Client {
                 VecDeque::new();
             let mut content_requests: VecDeque<ContentReceipt> = VecDeque::new();
             let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
+            let mut quit_result: Option<Result<(), Error>> = None;
             while let Ok(message) = receiver.recv_blocking() {
                 let (request, scope, reply) = match message {
+                    Message::Quit { reply } => {
+                        let result = quit_result.get_or_insert_with(|| {
+                            core.as_mut().map_err(|error| error.clone())?.quit()
+                        });
+                        created_contents.clear();
+                        fresh = false;
+                        let _ = reply.try_send(result.clone());
+                        continue;
+                    }
                     Message::Launches { reply } => {
                         let _ = reply.try_send(crate::launch::catalog(launches.as_deref(), &cwd));
                         continue;
@@ -280,6 +293,14 @@ impl Client {
                             continue;
                         }
                         let result = (|| {
+                            if quit_result.is_some()
+                                && matches!(
+                                    request,
+                                    voyager_contract::content::Request::Update { .. }
+                                )
+                            {
+                                return Err("Voyager is quitting; no content was changed".into());
+                            }
                             if request_id.is_empty()
                                 || request_id.len() > 128
                                 || expected.is_some_and(|revision| {
@@ -366,9 +387,16 @@ impl Client {
                             let _ = reply.send(outcome);
                             continue;
                         }
-                        let result = if request.request_id.is_empty()
-                            || request.request_id.len() > 128
-                        {
+                        let result = if quit_result.is_some()
+                            && !matches!(
+                                request.input.action,
+                                voyager_contract::administrator::ProcessAction::List
+                                    | voyager_contract::administrator::ProcessAction::Read { .. }
+                            ) {
+                            Err(rejected(
+                                "Voyager is quitting; no process effect was dispatched".into(),
+                            ))
+                        } else if request.request_id.is_empty() || request.request_id.len() > 128 {
                             Err(rejected("Invalid process request identity".into()))
                         } else if content_requests
                             .iter()
@@ -464,6 +492,10 @@ impl Client {
                                         .into(),
                                 ))
                             }
+                        } else if quit_result.is_some() {
+                            Err(rejected(
+                                "Voyager is quitting; no terminal was opened".into(),
+                            ))
                         } else if content_requests
                             .iter()
                             .any(|prior| prior.request_id == request_id)
@@ -569,6 +601,16 @@ impl Client {
                         Some("Changed request identity; nothing was repeated".into());
                 } else if request.request_id.is_empty() || request.request_id.len() > 128 {
                     response.message = Some("Invalid request identity".into());
+                } else if quit_result.is_some() {
+                    if matches!(request.action, Action::Inspect) {
+                        response.status = Status::Applied;
+                        response.fresh = false;
+                    } else {
+                        response.message =
+                            Some("Voyager is quitting; no workspace effect was dispatched".into());
+                    }
+                    let _ = reply.send(response);
+                    continue;
                 } else {
                     let inspecting = matches!(request.action, Action::Inspect);
                     let result = match core.as_mut() {
@@ -882,6 +924,17 @@ impl Client {
             })
         })
         .await
+    }
+
+    pub async fn quit(&self) -> Result<(), Error> {
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .send(Message::Quit { reply })
+            .await
+            .map_err(|_| Error::Uncertain("The workspace shutdown owner is unavailable".into()))?;
+        receive.recv().await.map_err(|_| {
+            Error::Uncertain("Session shutdown was not confirmed; do not repeat it".into())
+        })?
     }
 
     pub async fn content_changes(
