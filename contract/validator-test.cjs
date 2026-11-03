@@ -6,12 +6,31 @@ test("new-shell intent names its current content and backend without a saved lau
   const intent = {
     requestId: "new-shell",
     expectedVersion: "4",
-    action: { operation: "start-new-shell", contentId: "content", expectedBackend: "t1" },
+    action: {
+      operation: "start-new-shell",
+      contentId: "content",
+      expectedBackend: "t1",
+    },
   };
   assert.equal(request(intent), true);
-  assert.equal(request({ ...intent, action: { ...intent.action, launch: { kind: "codex" } } }), false);
-  assert.equal(request({ ...intent, action: { ...intent.action, expectedBackend: 1 } }), false);
-  const outcome = { requestId: "open", contentId: "content", status: "rejected", reason: "ended", message: "Finished" };
+  assert.equal(
+    request({
+      ...intent,
+      action: { ...intent.action, launch: { kind: "codex" } },
+    }),
+    false,
+  );
+  assert.equal(
+    request({ ...intent, action: { ...intent.action, expectedBackend: 1 } }),
+    false,
+  );
+  const outcome = {
+    requestId: "open",
+    contentId: "content",
+    status: "rejected",
+    reason: "ended",
+    message: "Finished",
+  };
   assert.equal(terminalResponse(outcome), true);
   assert.equal(terminalResponse({ ...outcome, reason: "lost" }), false);
 });

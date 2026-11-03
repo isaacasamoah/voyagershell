@@ -9,6 +9,12 @@
         "uncertain"
       ],
       "type": "string"
+    },
+    "TerminalReason": {
+      "enum": [
+        "ended"
+      ],
+      "type": "string"
     }
   },
   "properties": {
@@ -19,6 +25,16 @@
       "type": [
         "string",
         "null"
+      ]
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TerminalReason"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "requestId": {

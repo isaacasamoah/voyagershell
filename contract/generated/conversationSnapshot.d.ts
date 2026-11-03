@@ -78,6 +78,11 @@ export type Action =
       typeId: string;
     }
   | {
+      contentId: string;
+      expectedBackend: string;
+      operation: "start-new-shell";
+    }
+  | {
       operation: "remove-content-package";
       typeId: string;
     }

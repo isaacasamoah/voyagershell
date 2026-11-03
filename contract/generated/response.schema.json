@@ -58,6 +58,12 @@
             }
           ]
         },
+        "shellIntent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "startPending": {
           "type": [
             "string",

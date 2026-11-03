@@ -199,6 +199,27 @@
         {
           "additionalProperties": false,
           "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "expectedBackend": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "start-new-shell",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "expectedBackend"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "operation": {
               "const": "remove-content-package",
               "type": "string"

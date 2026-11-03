@@ -111,6 +111,7 @@ export interface Content {
   cwd: string;
   id: string;
   launch?: Launch | null;
+  shellIntent?: string | null;
   startPending?: string | null;
   typeId: string;
 }
