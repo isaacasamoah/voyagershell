@@ -34,11 +34,14 @@ test("Notes checks its actual private native and content signatures", () => {
     __dirname,
     "../target/script-types/notes-signatures.ts",
   );
-  const valid = `import { Title, TitleState, Body, BodyState } from "voyager_input";
+  const valid = `import { Title, TitleState, Body, BodyState, SessionState, RetainedTitleState, RetainedTitle, RetainedBodyState, RetainedBody } from "voyager_input";
 import { invoke, changed } from "voyager_content";
 import type { Request } from "../../contract/generated/contentRequest";
 Title.new(TitleState.new("")).w_full();
 Body.new(BodyState.new("")).min_h(180);
+SessionState.new().status();
+RetainedTitle.new(RetainedTitleState.new()).w_full();
+RetainedBody.new(RetainedBodyState.new()).min_h(180);
 invoke("{}", "request", "");
 changed(null);
 const request: Request = { version: "1", operation: "content.update", requestId: "r", contentId: "notes", expectedRevision: "base", data: { title: "Title", text: "Body" } };
@@ -56,12 +59,14 @@ Title.new(TitleState.new("")).missing_property();
 invoke("{}", "request");
 const invalid: Request = { ...request, data: { title: 12, text: "Body" } };
 import { TerminalState } from "voyager_native";
+RetainedTitleState.new().set_value("Overwrite during staging");
+RetainedBodyState.new().focus();
 `,
   );
   const diagnostics = compile([filename], "notes");
   assert.deepEqual(
     diagnostics.map((entry) => entry.code),
-    [2345, 2339, 2554, 2322, 2307],
+    [2345, 2339, 2554, 2322, 2307, 2339, 2339],
   );
   assert.ok(diagnostics.every((entry) => entry.file.fileName === filename));
 });

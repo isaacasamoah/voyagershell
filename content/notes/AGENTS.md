@@ -5,15 +5,19 @@ places another instance across its Voyage. Each instance has an independent
 content ID, title, body and revision. Its placement and data are separate.
 
 `main.ts` is the checked shipped source; `main.js` is its emitted, editable native
-package entry. It composes the native Title and Body controls from the private
-`voyager_input` registry. `voyager_content` supplies only the captured instance's
+package entry. It composes the retained native Title and Body controls from the private
+`voyager_input` registry. Create SessionState before RetainedTitleState and
+RetainedBodyState. Their values are read-only script handles to the existing
+native editors. Rust keeps their draft, original revision, input focus and save
+bookkeeping through supported source replacement. Native blur saves;
+SessionState.save requests the same save explicitly. `voyager_content` supplies only the captured instance's
 identity, request identity, theme, versioned change notification and typed data operations. It does not expose workspace controls
 or terminal constructors. The Rust content contract generates the validators in
 `validate.js`. Package source is seeded once into the profile and remains editable.
 Editing source affects all copies of that package. Editing instance data affects
 only its content ID.
 
-The view keeps the draft and native focus. Rust owns persisted title/body data.
+The retained native session keeps the draft and native focus. Rust owns persisted title/body data.
 Inspect the current revision before updating. Known stale or invalid-data refusals
 keep the draft usable. Clear the known cause before a deliberate retry. A lost
 confirmation is uncertain, so another unchanged blur must not repeat the save.
@@ -45,3 +49,12 @@ Uncertain write, but its read is not a repeated update.
 Real-provider/native N3 acceptance, reversible remove/restore and complete
 live-authoring lifecycle remain separate gates. The source interface alone does
 not establish them.
+
+Personal packages are never overwritten. Old TitleState/BodyState and bound
+voyager_content signatures remain available for their original controller. They
+do not automatically acquire retained native draft migration. Upgrade the
+personal source deliberately to use the retained session. A broken supported
+source edit keeps the prior usable composition with its error. A retired
+generation cannot queue a new data operation; an accepted save still settles
+the same retained session. General deferred/layout failure detection and actual
+native repeated-reload resource limits remain unproved.

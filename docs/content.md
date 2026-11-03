@@ -1,8 +1,9 @@
 # Native Notes integration
 
 The integration candidate uses one Notes package in Fleet Vessels and Voyage
-Portals. Its seventeen-stage Linux native journey passes on the combined
-workspace candidate. The earlier standalone Notes proving-size failure remains
+Portals. The earlier combined workspace artifact passed its seventeen-stage Linux
+native journey. The retained native edit-session changes below are source-only
+and have not been built or tried as a native application. The earlier standalone Notes proving-size failure remains
 recorded. Conditional integration still requires the unchanged combined-foundation
 cap and does not accept the agent or live-authoring lifecycle work.
 
@@ -77,14 +78,77 @@ terminal openings. Deliberate Refresh retains that retry. Uncertain starts are
 never replayed. The prior revision() read remains available for personal Header
 source; new composition uses notice().
 
-These filesystem/availability and notice changes have source tests. The new
-Core-backed package receipt/scope test is compiled, awaiting Root's authorized
-run. Native package controls, retained dirty-editor migration, exact script
-retirement and old-host-future admission remain the next lifecycle slice. The
-existing SDK Watcher does not provide state migration or a public successful
-reload hook. The current source must not be described as complete remove/restore
-or live-authoring acceptance until that native lifetime path is implemented and
-proved. The earlier seventeen-stage Notes result remains tied to its own artifact.
+The filesystem/availability and notice changes have source tests and a separately
+recorded Core-backed package receipt/scope test. The new native lifetime path is
+not yet native-tested. The earlier seventeen-stage Notes result remains tied to
+its own artifact and the legacy controller it exercised.
+
+## Retained editors and staged source replacement
+
+`desktop/src/notes_session.rs` owns one real native Title editor, Body editor,
+resizable body height, dirty draft, original data revision and accepted save task
+per mounted content ID. The fresh shipped TypeScript remains the visual
+composition. It opts into SessionState, RetainedTitleState and RetainedBodyState.
+The retained editor handles expose values, not setters or focus commands, so an
+unpublished candidate cannot replace a dirty buffer during construction. Native
+input events update the draft and request a save on blur. Change comparison
+keeps cheap native shared-string handles rather than cloning the whole body
+on each keystroke. SessionState.save is an
+optional explicit save intent, permitted only for the active generation.
+
+A single native Task per active edit session subscribes before reading the real
+Client owner. Replacing or removing its view drops that Task. It retains the
+editors and their focus handles, text, dirty state and original revision. A save
+already admitted to Client completes against that same session independently of
+its old presentation. Known refusal permits a later deliberate retry. Unconfirmed
+saves remain unconfirmed and unchanged blur never repeats them. Publication does
+not itself retry an unsent script save.
+
+`desktop/src/notes.rs` owns one background package watcher for all retained Notes.
+It compares streamed JavaScript fingerprints, bounded metadata and the existing
+actor-owned package revision. The reused source scanner limits directory depth
+to eight and the file list to 4,096 entries. It uses an 8,192-byte read buffer
+but has no per-file byte or scan-time cap. This is not a CPU or memory benchmark. Removal followed by restore is observable even if
+both operations happen between source scans. Metadata/source reads occur outside
+rendering. A changed source constructs a separate ScriptView through the pinned
+public load_application and mount_application methods. The old view stays current
+until the candidate's real render reports no build_error or owned Title/Body
+materializer error. Publication is deferred outside rendering. Parse,
+construction and observed first-render failures retain the current usable view
+and expose the error. Repair stages a new candidate.
+
+The pinned SDK does not expose a general materialization-result or layout-failure
+API. This implementation observes public ScriptView.build_error and errors from
+our actual Title/Body components. It cannot promise rejection of every later
+built-in, deferred, layout or paint failure. It uses no hidden window, SDK fork,
+private cache mutation or replacement of the workspace root.
+
+`app/src/content/view.rs` gives each view a Pending, Active or Retired admission
+state. Pending reads wait for publication and pending effects refuse. Retirement
+and queue admission use the same short mutex boundary. Retired waits wake and
+refuse before queueing; accepted messages retain their original binding and
+receipt and finish normally. Confirmed remove/restore retires all registered
+Notes generations. Normal data invalidation does not retire them. The package
+watcher reads the same actor-owned packageRevision through a native atomic
+projection, without another workspace listener or another revision clock.
+
+These explicit gates fence detached legacy host work at actual Client admission.
+They do not claim that dropping a JavaScript future cancels the pinned SDK's
+background task. An admitted read may still finish after retirement. An admitted
+save must finish and keep its actual result. Actual repeated reload and pending
+host-task lifetime remain required native/resource observations.
+
+## Personal-source compatibility
+
+Existing profile JavaScript is never overwritten. The original TitleState,
+BodyState, Title, Body and bound voyager_content methods remain available with
+their previous signatures. Old packages continue to own their legacy local
+controller and do not automatically gain retained native draft migration. Using
+the new session requires a deliberate personal-package source upgrade. The exact
+old emitted controller is retained in desktop/notes-legacy-fixture.js as proving
+code, not production credit. Its maintained read/refusal/lost-confirmation tests
+establish only that supported legacy behavior. They do not establish the fresh
+native session or a new native lifecycle journey.
 
 `desktop/src/notes.rs` installs a `voyager_content_view` component only in the
 Header policy. Its native factory retains one view per content ID. Before opening
@@ -95,15 +159,15 @@ Only a confirmed workspace creation initializes its newly issued Notes IDs with
 create-new semantics. Failure after the workspace write returns Uncertain and does
 not retry initialization. Requests cannot supply their own binding or path.
 
-All Notes instances share one isolated QuickJS VM with the private `voyager_input`
-registry. They cannot import the Header's Terminal, Name or workspace modules.
-Each has its own captured `voyager_content` module, application generation,
-controller and Watcher. The host retains the controller but embeds its public
-`content()` view beneath the single window overlay root. The existing accessibility
-activation and overlay invalidation route is retained. This follows the corrected
-Notes provider. The integrated journey observes both instances through native
-accessibility and also edits with accessibility disabled. The VM has an additional
-fixed memory cost that has not been measured.
+All Notes instances share one isolated QuickJS VM with the private voyager_input
+registry. They cannot import Header Terminal, Name or workspace modules. Each
+candidate has its captured voyager_content module and application generation.
+The host renders the published ScriptView beneath the existing single window
+ShellRoot and retains the accessibility activation/overlay invalidation route.
+The older native journey observed the legacy inputs with accessibility enabled
+and disabled. The new retained editor/native staging path needs matched native
+input and screenshot evidence. Neither VM memory nor repeated-edit retention has
+been measured.
 
 The private host accepts the request ID and expected revision beside the JSON.
 It validates those small identity fields and reserves the existing request/byte
@@ -133,21 +197,18 @@ its declaration hash/modules in `desktop/script-types.json`. Wrong native calls,
 unknown builder properties, missing invoke arguments, invalid data types and
 Header-only imports fail the maintained control.
 
-The small host function declarations still live in `desktop/src/script_types.rs`;
-this seam checks calls against that exported ABI and does not infer the callback's
-Rust argument parsing from its implementation. The invocation remains three strings
-with correlated generated request/result validation. No owner or protocol changes
-are part of this authoring change. The emitted Notes runtime code is unchanged
-apart from blank-line formatting. Type-only fields use `declare` so they cannot
-initialize after View.init and overwrite native state. Catch and non-null type
-assertions preserve the existing host-error/base-revision assumptions without
-adding runtime behavior.
+The small host function declarations remain in desktop/src/script_types.rs.
+The gate checks that exported ABI, not an inferred Rust callback signature. The
+legacy invocation still accepts three strings with correlated generated
+request/result validation. Fresh Notes uses the additive actual native registry
+signatures and the native session's typed Client calls. Type-only fields retain
+declare so View.init state is not overwritten after construction.
 
 The profile still receives editable JavaScript seeded once. Repository checking
 covers the shipped TypeScript and emitted bytes, not arbitrary later personal
 JavaScript edits. Personal files are not implicitly overwritten or migrated.
 
-The real native journey covers save/reopen, stale and forged refusal, delayed
+The earlier artifact's native journey covers save/reopen, stale and forged refusal, delayed
 hydration, uncertain confirmation without replay, body resizing and independent
 draft/focus retention. Switching Fleets retains the same Portal and data. Native
 input still reaches the original Core terminal afterward. The sibling pixel checks
@@ -222,13 +283,12 @@ updates before the first subscription need no entry because that subscription
 always triggers a fresh read. Existing owner-cache fallback semantics are preserved.
 Aggregate memory, cache release and measurement remain N4/load gates.
 
-Dropping the Rust admission future cancels its pending async-channel send, as the
-headless queue test establishes. The pinned Shell HostModule awaiting path detaches
-its foreground/background work and checks owner readiness afterward. It does not
-install the same cancellation callback used by neighboring scheduler paths. The
-queue test therefore does not establish actual retired-ScriptView cancellation
-or an aggregate bound on old pending observers. Those lifecycle limits remain
-explicitly unproved under N4; no SDK cancellation claim is inferred.
+The headless queue test covers pending publication, queue pressure, retirement
+before admission, a retired observer and an accepted save completing afterward.
+Native session Task ownership and explicit generation gates address the actual
+read/admission path. The pinned Shell awaiting path still detaches background
+work. There is no claim that a dropped Rust test future proves Shell retirement
+or a whole-process memory bound.
 
 Actual-provider updates and native dirty-sibling refresh, remove/restore,
 complete private-signature derivation, personal-package compatibility,

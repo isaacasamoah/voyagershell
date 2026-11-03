@@ -5,10 +5,10 @@ const path = require("node:path");
 const { test } = require("node:test");
 
 const root = path.join(__dirname, "..");
-const file = `${root}/content/notes/main.js`;
+const file = `${__dirname}/notes-legacy-fixture.js`;
 const source = fs.readFileSync(file, "utf8");
 
-test("owner refresh retains a draft and its original base, including typing during a read", async () => {
+test("the supported legacy client retains a draft and its original base during reads", async () => {
   const Notes = new Function(
     "View",
     source
@@ -81,7 +81,7 @@ test("owner refresh retains a draft and its original base, including typing duri
   }
 });
 
-test("the real Notes client retains drafts and distinguishes known refusal from lost confirmation", async () => {
+test("the supported legacy client distinguishes known refusal from lost confirmation", async () => {
   const { contentRequest: request, contentResponse: response } = await import(
     pathToFileURL(`${root}/contract/generated/validate.js`).href
   );
@@ -176,4 +176,42 @@ test("the real Notes client retains drafts and distinguishes known refusal from 
     expected: 2,
   });
   assert.equal(fs.readFileSync(file, "utf8"), source);
+});
+
+test("fresh Notes opts into its native session before requesting retained editors", () => {
+  const source = fs.readFileSync(`${root}/content/notes/main.js`, "utf8");
+  const calls = [];
+  const Notes = new Function(
+    "View",
+    "SessionState",
+    "TitleState",
+    "BodyState",
+    source
+      .slice(source.indexOf("export default class Notes"))
+      .replace("export default", "return"),
+  )(
+    class {},
+    {
+      new() {
+        calls.push("session");
+        return {};
+      },
+    },
+    {
+      new() {
+        calls.push("title");
+        return {};
+      },
+    },
+    {
+      new() {
+        calls.push("text");
+        return {};
+      },
+    },
+  );
+  const note = new Notes();
+  note.init();
+  assert.deepEqual(calls, ["session", "title", "text"]);
+  assert.ok(note.session && note.title && note.text);
 });
