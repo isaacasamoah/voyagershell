@@ -913,10 +913,15 @@ def prove(
             errors.append(f"Native close: {error}")
         try:
             socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
-            if socket.is_socket():
-                rpc("server.stop", {})
+            for _ in range(30):
+                if not socket.exists():
+                    break
+                time.sleep(0.1)
+            assert not socket.exists(), (
+                "Owned Core exit is unconfirmed; Stop was not repeated"
+            )
         except Exception as error:
-            errors.append(f"Dedicated Core stop: {error}")
+            errors.append(f"Dedicated Core exit: {error}")
         if errors:
             if failure is not None:
                 failure.add_note("Cleanup errors: " + "; ".join(errors))
