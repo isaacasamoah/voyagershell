@@ -166,6 +166,7 @@ class Routes(unittest.TestCase):
                     "canvas",
                     "notes-lifetime",
                     "notes-configuration",
+                    "pane-maximize",
                     "conversation-voice",
                     "conversation-content",
                     "terminal-agent-create",
@@ -252,6 +253,7 @@ class Routes(unittest.TestCase):
             ("--foundation", "notes-lifetime"),
             ("--foundation", "notes-configuration"),
             ("--foundation", "split-resize"),
+            ("--foundation", "pane-maximize"),
             ("--foundation", "session-quit"),
             ("--foundation", "terminal-reported-status"),
             ("--native-mod-host", "--notes-case"),
@@ -271,6 +273,7 @@ class Routes(unittest.TestCase):
             "notes-lifetime",
             "notes-configuration",
             "split-resize",
+            "pane-maximize",
             "session-quit",
             "terminal-reported-status",
         ):
@@ -292,6 +295,7 @@ class Routes(unittest.TestCase):
                     "notes-lifetime",
                     "notes-configuration",
                     "split-resize",
+                    "pane-maximize",
                     "session-quit",
                     "terminal-reported-status",
                 )
@@ -309,6 +313,7 @@ class Routes(unittest.TestCase):
                 "notes-lifetime",
                 "notes-configuration",
                 "split-resize",
+                "pane-maximize",
                 "session-quit",
                 "terminal-reported-status",
             ):
@@ -359,6 +364,7 @@ class Routes(unittest.TestCase):
             "proof_foundation_notes",
             "proof_notes_lifetime",
             "proof_split_resize",
+            "proof_pane_maximize",
             "proof_conversation",
             "proof_conversation_scroll",
         ):
@@ -396,6 +402,18 @@ class Routes(unittest.TestCase):
         covering = {"x": 576, "y": 204, "width": 2000, "height": 1666}
         with self.assertRaises(AssertionError):
             proof.splitter_point(outer, [covering])
+
+    def test_maximized_pane_extent_includes_every_accepted_pane(self):
+        proof = importlib.import_module("proof_pane_maximize")
+        panes = [
+            {"x": 576, "y": 276, "width": 1152, "height": 759},
+            {"x": 576, "y": 1109, "width": 1152, "height": 759},
+            {"x": 1732, "y": 276, "width": 1152, "height": 1592},
+        ]
+        self.assertEqual(proof.pane_extent(panes), [576, 276, 2308, 1592])
+        self.assertNotEqual(proof.pane_extent(panes[1:2]), proof.pane_extent(panes))
+        with self.assertRaises(AssertionError):
+            proof.pane_extent([])
 
     def test_resize_preview_requires_the_intended_three_pane_change(self):
         proof = importlib.import_module("proof_split_resize")

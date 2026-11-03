@@ -370,7 +370,7 @@ def prove(
         owned[str(pid)] = identity
 
     try:
-        assert journey == "split-resize"
+        assert journey in ("split-resize", "pane-maximize")
         assert not env.get("HC_SOCKET"), "Launch without a fixed Core socket"
         env = {
             key: value
@@ -391,16 +391,17 @@ def prove(
             "the original bound terminal",
         )
         context = initial["value"]["context"]
-        original_source = package.read_bytes()
-        notes.atomic(package, observer_source(original_source.decode()))
-        wait(
-            witness,
-            lambda value: (
-                value is not None and value["outcomes"] == [] and not value["busy"]
-            ),
-            "the loaded profile-local observer",
-        )
-        assert document() == initial, "The observer changed the domain layout"
+        if journey == "split-resize":
+            original_source = package.read_bytes()
+            notes.atomic(package, observer_source(original_source.decode()))
+            wait(
+                witness,
+                lambda value: (
+                    value is not None and value["outcomes"] == [] and not value["busy"]
+                ),
+                "the loaded profile-local observer",
+            )
+            assert document() == initial, "The observer changed the domain layout"
         focus(fields("Terminal")[0], 1)
         chord(native, "o")
         wait(
@@ -459,6 +460,32 @@ def prove(
             "rectangles": rectangles(),
             "paneBackends": pane_backends,
         }
+        if journey == "pane-maximize":
+            from proof_pane_maximize import maximize
+
+            return maximize(
+                native=native,
+                owner=owner,
+                capture=capture,
+                wait=wait,
+                document=document,
+                fleet=fleet,
+                panes=panes,
+                settled=settled,
+                fields=fields,
+                move=move,
+                click=click,
+                focus=focus,
+                press=press,
+                type_text=type_text,
+                rpc=rpc,
+                save=save,
+                nested=nested,
+                terminals=terminals,
+                pane_backends=pane_backends,
+                owned=owned,
+                core=core,
+            )
         capture("resize-nested-before")
         drag("Resize side by side panes", 0.08)
         resized = drag("Resize stacked panes", 0.08)
@@ -600,9 +627,10 @@ def prove(
             }
         )
         save("resize-observed", observed)
+        if failure is None:
+            assert not errors and not survivors and not socket.exists(), observed
     if failure:
         raise failure
-    assert not errors and not survivors and not socket.exists(), observed
     return [
         "nested-native-splits",
         "both-divider-axes-persisted",
