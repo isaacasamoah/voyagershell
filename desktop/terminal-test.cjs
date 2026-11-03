@@ -24,6 +24,7 @@ function fixture(
   let opened = 0;
   let version = 1;
   const actions = [];
+  const versions = [];
   const Workspace = new Function(
     "View",
     "invoke",
@@ -33,8 +34,9 @@ function fixture(
     source,
   )(
     class {},
-    async (action) => {
+    async (action, expectedVersion) => {
       actions.push(action.operation);
+      versions.push(expectedVersion);
       return {
         status: inspected,
         requestId: "dock-receipt",
@@ -59,6 +61,7 @@ function fixture(
   const view = new Workspace();
   Object.assign(view, {
     version: "1",
+    splitReset: 0,
     layout,
     busy: false,
     terminals: new Map(),
@@ -86,6 +89,7 @@ function fixture(
     pending,
     layout,
     count: () => opened,
+    versions,
     version: () => String(version),
     actions,
   };
@@ -733,4 +737,24 @@ test("a delayed request cannot rewind a newer native dock snapshot", async () =>
   );
   assert.equal(view.version, "8");
   assert.equal(view.status, "Unconfirmed request");
+});
+
+test("resize dispatch keeps the captured revision and restores a busy preview without sending", async () => {
+  const { view, cx, pending, versions } = fixture("applied");
+  const action = {
+    operation: "resize-split",
+    fleet: "fleet",
+    path: [],
+    share: 3500,
+  };
+  view.version = "8";
+  view.run(action, cx, undefined, "3");
+  await pending.at(-1);
+  assert.deepEqual(versions, ["3"]);
+  const reset = view.splitReset;
+  view.busy = true;
+  view.run(action, cx, undefined, "3");
+  assert.deepEqual(versions, ["3"]);
+  assert.equal(view.splitReset, reset + 1);
+  assert.match(view.status, /not saved/);
 });

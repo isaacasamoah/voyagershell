@@ -264,6 +264,14 @@
             },
             "second": {
               "$ref": "#/definitions/Split"
+            },
+            "share": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SplitShare"
+                }
+              ],
+              "default": 5000
             }
           },
           "required": [
@@ -275,6 +283,11 @@
           "type": "object"
         }
       ]
+    },
+    "SplitShare": {
+      "maximum": 9999,
+      "minimum": 1,
+      "type": "integer"
     },
     "Status": {
       "enum": [

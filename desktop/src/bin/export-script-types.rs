@@ -4,6 +4,8 @@ mod arrangement;
 mod notes_input;
 #[path = "../script_types.rs"]
 mod script_types;
+#[path = "../split.rs"]
+mod split;
 #[path = "../terminal.rs"]
 mod terminal;
 #[path = "../terminal_screen.rs"]
@@ -28,6 +30,7 @@ fn main() -> Result<()> {
     let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, "voyager_native")?;
     text::register(&mut registry)?;
     arrangement::register(&mut registry)?;
+    split::register(&mut registry)?;
     terminal::register(&mut registry, Default::default())?;
     let mut declarations = gpui_shell::type_declarations(&registry.freeze()?);
     for (name, body) in [

@@ -120,7 +120,9 @@ pub(crate) fn check(
     };
     let allowed = match action {
         Action::Inspect | Action::Dock { .. } | Action::Home => true,
-        Action::SaveLayout { fleet: id, .. } | Action::LoadLayout { fleet: id, .. } => {
+        Action::SaveLayout { fleet: id, .. }
+        | Action::LoadLayout { fleet: id, .. }
+        | Action::ResizeSplit { fleet: id, .. } => {
             matches!(scope, Context::Voyage { .. } | Context::Fleet { .. }) && fleet(id).is_some()
         }
         Action::CreateVoyage { .. } => false,

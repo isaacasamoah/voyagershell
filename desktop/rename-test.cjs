@@ -44,6 +44,7 @@ function fixture() {
   const source = workspaceSource("VOYAGER_RENAME_SOURCE");
   const Workspace = vm.runInNewContext(`${source}\nWorkspace`, {
     View: class {},
+    request_id: () => "header-generation",
     div,
     Button: {
       new() {

@@ -28,8 +28,10 @@ export type Split =
       first: Split;
       kind: "branch";
       second: Split;
+      share?: SplitShare;
     };
 export type Axis = "horizontal" | "vertical";
+export type SplitShare = number;
 export type WorkspaceView = "home" | "fleet";
 export type Status = "applied" | "rejected" | "uncertain";
 

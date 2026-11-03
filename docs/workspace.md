@@ -7,6 +7,30 @@ stores the versioned layout. This branch integrates the independently reviewed
 terminal and placement providers; the combined native behavior is under review.
 Full avatar, conversation and UX parity remain open.
 
+The divider-resize candidate adds a validated first-child share to each split.
+Existing layouts without that field open at half. Shares travel with the saved
+split tree, while placement, content, Core backend and explicit avatar context
+remain unchanged. This has source and boundary checks; native resizing and
+integrated acceptance have not been established yet.
+
+`desktop/src/split.rs` wraps the pinned public native resizable group and state.
+The SDK owns the pointer drag and local preview. A non-consuming public window
+observer captures the original revision and group configuration on left-down.
+Only the SDK's actual resize-completion callback may submit a resize. A changed
+configuration retires that gesture. The Header passes the captured revision to
+the existing generated owner call and sends no per-motion document writes.
+Known refusal restores the owner projection through a read, without retrying
+the resize. Uncertainty retains its original request and is not resubmitted.
+
+The adapter measures native bounds and uses public `ResizableState::resize_panel`
+after layout to apply committed proportions, including saved-layout loads and
+refusal restoration. This programmatic synchronization does not dispatch an
+application save. It does not access private SDK resize state or copy a divider
+implementation. Native children keep their existing content-owned entities.
+The isolated source is based on the selected UX checkpoint; its exhausted
+correction histories and held proving cap remain unchanged. Zoom, navigation
+and new content actions are outside this increment.
+
 `contract/` owns the Rust request, response, identity and layout types.
 `contract/build.cjs` generates declarations and strict runtime validators from
 those types. Layout revisions and the allocation counter cross JavaScript as
