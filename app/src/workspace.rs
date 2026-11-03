@@ -48,6 +48,7 @@ impl Model {
                 placement: placement.id.clone(),
             },
             vessels: vec![placement],
+            maximized_placement: None,
         })
     }
 
@@ -142,7 +143,16 @@ impl Model {
                     &self.layout.contents,
                     &mut seen,
                 )?;
-                self.layout.voyages[v].fleets[f].root = root;
+                let target = &mut self.layout.voyages[v].fleets[f];
+                target.root = root;
+                if target
+                    .maximized_placement
+                    .as_ref()
+                    .is_some_and(|id| !contains_leaf(&target.root, id))
+                    || matches!(target.root, Split::Leaf { .. })
+                {
+                    target.maximized_placement = None;
+                }
             }
             Action::CreateVoyage { name, cwd } => {
                 if name.trim().is_empty() || !std::path::Path::new(&cwd).is_absolute() {
@@ -306,6 +316,13 @@ impl Model {
                     .ok_or("Vessel not found")?;
                 let voyage = self.layout.voyages[v].id.clone();
                 let fleet = &mut self.layout.voyages[v].fleets[f];
+                if fleet
+                    .maximized_placement
+                    .as_ref()
+                    .is_some_and(|selected| selected != &id)
+                {
+                    fleet.maximized_placement = None;
+                }
                 let fleet_id = fleet.id.clone();
                 if !contains_leaf(&fleet.root, &id) {
                     let first = std::mem::replace(
@@ -388,6 +405,7 @@ impl Model {
                 if !replace_leaf(&mut target.root, &after, &placement, axis) {
                     return Err("Split layout target not found".into());
                 }
+                target.maximized_placement = None;
                 target.vessels.push(Vessel {
                     id: placement,
                     content: new_content.clone(),
@@ -403,6 +421,22 @@ impl Model {
                     launch: None,
                     shell_intent: None,
                 });
+            }
+            Action::SetVesselMaximized { id, maximized } => {
+                let fleet = self
+                    .layout
+                    .voyages
+                    .iter_mut()
+                    .flat_map(|voyage| &mut voyage.fleets)
+                    .find(|fleet| fleet.vessels.iter().any(|vessel| vessel.id == id))
+                    .ok_or("Vessel cannot change maximization")?;
+                if !contains_leaf(&fleet.root, &id)
+                    || (maximized && matches!(fleet.root, Split::Leaf { .. }))
+                    || (!maximized && fleet.maximized_placement.as_ref() != Some(&id))
+                {
+                    return Err("Vessel cannot change maximization".into());
+                }
+                fleet.maximized_placement = maximized.then_some(id);
             }
             Action::MoveVessel { id, target, side } => {
                 let fleet = self
@@ -465,6 +499,19 @@ impl Model {
         }
         Ok(())
     }
+}
+
+pub(crate) fn validate_maximized(layout: &Layout) -> Result<(), String> {
+    for fleet in layout.voyages.iter().flat_map(|voyage| &voyage.fleets) {
+        if let Some(id) = &fleet.maximized_placement
+            && (matches!(fleet.root, Split::Leaf { .. })
+                || !contains_leaf(&fleet.root, id)
+                || !fleet.vessels.iter().any(|vessel| &vessel.id == id))
+        {
+            return Err("Stored Fleet maximization is invalid".into());
+        }
+    }
+    Ok(())
 }
 
 fn contains_leaf(root: &Split, id: &PlacementId) -> bool {

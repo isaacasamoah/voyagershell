@@ -2,6 +2,197 @@ use crate::workspace::Model;
 use voyager_contract::{Action, Axis, Context, FleetId};
 
 #[test]
+fn maximize_preserves_identity_and_scoped_restore_cannot_clear_another_pane() {
+    let mut model = Model::default();
+    model
+        .apply(Action::CreateVoyage {
+            name: "Zoom".into(),
+            cwd: "/tmp".into(),
+        })
+        .unwrap();
+    let fleet = model.layout.voyages[0].fleets[0].id.clone();
+    let first = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+    let zoom = |id: &voyager_contract::PlacementId, maximized| {
+        serde_json::from_value::<Action>(
+            serde_json::json!({"operation":"set-vessel-maximized","id":id,"maximized":maximized}),
+        )
+        .unwrap()
+    };
+    assert!(model.apply(zoom(&first, true)).is_err());
+    model
+        .apply(Action::Split {
+            fleet: fleet.clone(),
+            after: first.clone(),
+            axis: Axis::Horizontal,
+        })
+        .unwrap();
+    let second = model.layout.voyages[0].fleets[0].vessels[1].id.clone();
+    model
+        .apply(Action::ResizeSplit {
+            fleet: fleet.clone(),
+            path: Vec::new(),
+            share: voyager_contract::SplitShare::try_from(3700).unwrap(),
+        })
+        .unwrap();
+    model
+        .apply(Action::SaveLayout {
+            fleet: fleet.clone(),
+            name: "Both".into(),
+        })
+        .unwrap();
+    model.layout.contents[0].backend =
+        Some(voyager_contract::CoreTerminalId("retained-backend".into()));
+    let original = model.layout.clone();
+    model.apply(zoom(&first, true)).unwrap();
+    let selected = model.layout.clone();
+    let mut unchanged = serde_json::to_value(&selected).unwrap();
+    assert_eq!(
+        unchanged["voyages"][0]["fleets"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("maximizedPlacement")
+            .unwrap(),
+        serde_json::json!(first)
+    );
+    assert_eq!(unchanged, serde_json::to_value(&original).unwrap());
+    assert_eq!(
+        crate::scope::project(
+            &std::sync::Arc::new(selected.clone()),
+            Some(&Context::Vessel { id: first.clone() })
+        )
+        .voyages[0]
+            .fleets[0]
+            .maximized_placement,
+        Some(first.clone())
+    );
+    let scoped = crate::scope::project(
+        &std::sync::Arc::new(selected.clone()),
+        Some(&Context::Vessel { id: second.clone() }),
+    );
+    assert!(
+        serde_json::to_value(&scoped.voyages[0].fleets[0])
+            .unwrap()
+            .get("maximizedPlacement")
+            .is_none()
+    );
+    assert!(
+        crate::scope::check(
+            &std::sync::Arc::new(selected.clone()),
+            Some(&Context::Vessel { id: second.clone() }),
+            &zoom(&second, false)
+        )
+        .is_ok()
+    );
+    assert!(model.apply(zoom(&second, false)).is_err());
+    assert_eq!(model.layout, selected);
+    model.apply(zoom(&first, false)).unwrap();
+    assert_eq!(model.layout, original);
+    model.apply(zoom(&first, true)).unwrap();
+    model
+        .apply(Action::RevealVessel { id: second.clone() })
+        .unwrap();
+    assert_eq!(model.layout, original);
+    model.apply(zoom(&first, true)).unwrap();
+    model
+        .apply(Action::Split {
+            fleet,
+            after: first,
+            axis: Axis::Vertical,
+        })
+        .unwrap();
+    assert!(
+        serde_json::to_value(&model.layout.voyages[0].fleets[0])
+            .unwrap()
+            .get("maximizedPlacement")
+            .is_none()
+    );
+}
+
+#[test]
+fn maximize_is_per_fleet_and_saved_layout_hiding_clears_it() {
+    let mut model = Model::default();
+    model
+        .apply(Action::CreateVoyage {
+            name: "Zoom".into(),
+            cwd: "/tmp".into(),
+        })
+        .unwrap();
+    let voyage = model.layout.voyages[0].id.clone();
+    let fleet = model.layout.voyages[0].fleets[0].id.clone();
+    let first = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+    model
+        .apply(Action::SaveLayout {
+            fleet: fleet.clone(),
+            name: "One".into(),
+        })
+        .unwrap();
+    model
+        .apply(Action::Split {
+            fleet: fleet.clone(),
+            after: first.clone(),
+            axis: Axis::Horizontal,
+        })
+        .unwrap();
+    let second = model.layout.voyages[0].fleets[0].vessels[1].id.clone();
+    model
+        .apply(Action::SetVesselMaximized {
+            id: second.clone(),
+            maximized: true,
+        })
+        .unwrap();
+    model
+        .apply(Action::MoveVessel {
+            id: first,
+            target: second.clone(),
+            side: voyager_contract::Side::Bottom,
+        })
+        .unwrap();
+    assert_eq!(
+        model.layout.voyages[0].fleets[0].maximized_placement,
+        Some(second.clone())
+    );
+    model
+        .apply(Action::CreateFleet {
+            voyage,
+            name: "Other".into(),
+        })
+        .unwrap();
+    assert!(
+        model.layout.voyages[0].fleets[1]
+            .maximized_placement
+            .is_none()
+    );
+    assert_eq!(
+        model.layout.voyages[0].fleets[0].maximized_placement,
+        Some(second.clone())
+    );
+    model
+        .apply(Action::SelectFleet { id: fleet.clone() })
+        .unwrap();
+    model
+        .apply(Action::LoadLayout {
+            fleet,
+            name: "One".into(),
+        })
+        .unwrap();
+    assert!(
+        model.layout.voyages[0].fleets[0]
+            .maximized_placement
+            .is_none()
+    );
+    let before = model.layout.clone();
+    assert!(
+        model
+            .apply(Action::SetVesselMaximized {
+                id: second,
+                maximized: true
+            })
+            .is_err()
+    );
+    assert_eq!(model.layout, before);
+}
+
+#[test]
 fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
     let mut model = Model::default();
     model

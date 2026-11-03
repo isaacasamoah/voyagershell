@@ -162,6 +162,12 @@ pub struct Fleet {
     pub name: String,
     pub vessels: Vec<Vessel>,
     pub root: Split,
+    #[serde(
+        default,
+        rename = "maximizedPlacement",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub maximized_placement: Option<PlacementId>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -313,6 +319,10 @@ pub enum Action {
     },
     Dock {
         context: Context,
+    },
+    SetVesselMaximized {
+        id: PlacementId,
+        maximized: bool,
     },
 }
 

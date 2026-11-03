@@ -620,6 +620,12 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
     match status {
         Status::Applied => match action {
             Action::Inspect => "Workspace inspected",
+            Action::SetVesselMaximized {
+                maximized: true, ..
+            } => "Vessel maximized",
+            Action::SetVesselMaximized {
+                maximized: false, ..
+            } => "Vessel restored",
             Action::Home => "Home opened",
             Action::UpdateCanvas { .. } => "Workspace layout updated",
             Action::SetSidebar { .. } => "Sidebar updated",

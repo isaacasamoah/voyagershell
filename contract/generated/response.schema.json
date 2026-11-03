@@ -190,6 +190,12 @@
         "id": {
           "type": "string"
         },
+        "maximizedPlacement": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "type": "string"
         },

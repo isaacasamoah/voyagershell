@@ -36,6 +36,11 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
                     id: fleet.id.clone(),
                     name: fleet.name.clone(),
                     vessels: vec![vessel.clone()],
+                    maximized_placement: fleet
+                        .maximized_placement
+                        .as_ref()
+                        .filter(|selected| *selected == id)
+                        .cloned(),
                     root: Split::Leaf {
                         placement: id.clone(),
                     },
@@ -181,7 +186,7 @@ pub(crate) fn check(
                 .flat_map(|voyage| &voyage.portals)
                 .any(|portal| &portal.id == id),
         },
-        Action::RevealVessel { id } => scoped
+        Action::RevealVessel { id } | Action::SetVesselMaximized { id, .. } => scoped
             .voyages
             .iter()
             .flat_map(|voyage| &voyage.fleets)

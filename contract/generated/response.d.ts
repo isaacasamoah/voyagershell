@@ -131,6 +131,7 @@ export interface Voyage {
 }
 export interface Fleet {
   id: string;
+  maximizedPlacement?: string | null;
   name: string;
   root: Split;
   vessels: Vessel[];

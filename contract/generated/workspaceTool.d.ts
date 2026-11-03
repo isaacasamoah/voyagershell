@@ -109,6 +109,11 @@ export type Action =
   | {
       context: Context;
       operation: "dock";
+    }
+  | {
+      id: string;
+      maximized: boolean;
+      operation: "set-vessel-maximized";
     };
 export type PortalMode = "overlay" | "make-room";
 export type Node =

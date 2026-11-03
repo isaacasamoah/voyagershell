@@ -468,6 +468,27 @@
             "context"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "maximized": {
+              "type": "boolean"
+            },
+            "operation": {
+              "const": "set-vessel-maximized",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "maximized"
+          ],
+          "type": "object"
         }
       ]
     },

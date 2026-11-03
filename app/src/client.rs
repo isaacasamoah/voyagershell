@@ -1715,6 +1715,7 @@ fn load(core: &mut Core) -> Result<(Layout, u64, bool), Error> {
     let layout: Layout = serde_json::from_value(value)
         .map_err(|e| rejected(format!("Stored workspace is invalid: {e}")))?;
     crate::canvas::validate(&layout.canvas).map_err(rejected)?;
+    crate::workspace::validate_maximized(&layout).map_err(rejected)?;
     Ok((layout, version, false))
 }
 
