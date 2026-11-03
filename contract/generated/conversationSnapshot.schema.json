@@ -33,6 +33,40 @@
         {
           "additionalProperties": false,
           "properties": {
+            "canvas": {
+              "$ref": "#/definitions/Canvas"
+            },
+            "operation": {
+              "const": "update-canvas",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "canvas"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "collapsed": {
+              "type": "boolean"
+            },
+            "operation": {
+              "const": "set-sidebar",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "collapsed"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "fleet": {
               "type": "string"
             },
@@ -418,6 +452,30 @@
         }
       ]
     },
+    "Canvas": {
+      "additionalProperties": false,
+      "properties": {
+        "portalMode": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/PortalMode"
+            }
+          ],
+          "default": "overlay"
+        },
+        "root": {
+          "$ref": "#/definitions/Node"
+        },
+        "sidebarCollapsed": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "root"
+      ],
+      "type": "object"
+    },
     "ContentDestination": {
       "oneOf": [
         {
@@ -622,6 +680,97 @@
       ],
       "type": "object"
     },
+    "Node": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "row",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "column",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block",
+              "type": "string"
+            },
+            "region": {
+              "$ref": "#/definitions/Region"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "region"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Phase": {
       "enum": [
         "idle",
@@ -631,6 +780,13 @@
         "interrupted",
         "failed",
         "unconfirmed"
+      ],
+      "type": "string"
+    },
+    "PortalMode": {
+      "enum": [
+        "overlay",
+        "make-room"
       ],
       "type": "string"
     },
@@ -822,6 +978,16 @@
         }
       ]
     },
+    "Region": {
+      "enum": [
+        "sidebar",
+        "fleet-strip",
+        "active-fleet",
+        "portals",
+        "context-bar"
+      ],
+      "type": "string"
+    },
     "RenameTarget": {
       "oneOf": [
         {
@@ -910,6 +1076,55 @@
         "bottom"
       ],
       "type": "string"
+    },
+    "Size": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fill",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fixed",
+              "type": "string"
+            },
+            "pixels": {
+              "maximum": 4096,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "pixels"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "SplitChild": {
       "enum": [

@@ -1,7 +1,9 @@
+export function canvas(data: unknown): data is import("./canvas").Canvas;
 export function contentCatalog(data: unknown): data is import("./contentCatalog").Catalog;
 export function contentRequest(data: unknown): data is import("./contentRequest").Request;
 export function contentResponse(data: unknown): data is import("./contentResponse").Response;
 export function contentTool(data: unknown): data is import("./contentTool").Input;
+export function contextFacts(data: unknown): data is import("./contextFacts").Facts;
 export function conversationReply(data: unknown): data is import("./conversationReply").Reply;
 export function conversationRequest(data: unknown): data is import("./conversationRequest").Request;
 export function conversationSnapshot(data: unknown): data is import("./conversationSnapshot").Snapshot;

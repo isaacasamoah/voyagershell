@@ -9,6 +9,30 @@
       ],
       "type": "string"
     },
+    "Canvas": {
+      "additionalProperties": false,
+      "properties": {
+        "portalMode": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/PortalMode"
+            }
+          ],
+          "default": "overlay"
+        },
+        "root": {
+          "$ref": "#/definitions/Node"
+        },
+        "sidebarCollapsed": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "root"
+      ],
+      "type": "object"
+    },
     "Content": {
       "additionalProperties": false,
       "properties": {
@@ -156,6 +180,79 @@
     "Layout": {
       "additionalProperties": false,
       "properties": {
+        "canvas": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Canvas"
+            }
+          ],
+          "default": {
+            "portalMode": "overlay",
+            "root": {
+              "children": [
+                {
+                  "kind": "block",
+                  "region": "sidebar",
+                  "size": {
+                    "kind": "fixed",
+                    "pixels": 224
+                  }
+                },
+                {
+                  "children": [
+                    {
+                      "kind": "block",
+                      "region": "fleet-strip",
+                      "size": {
+                        "kind": "fixed",
+                        "pixels": 45
+                      }
+                    },
+                    {
+                      "children": [
+                        {
+                          "kind": "block",
+                          "region": "active-fleet",
+                          "size": {
+                            "kind": "fill"
+                          }
+                        },
+                        {
+                          "kind": "block",
+                          "region": "portals",
+                          "size": {
+                            "kind": "fixed",
+                            "pixels": 340
+                          }
+                        }
+                      ],
+                      "kind": "row",
+                      "size": {
+                        "kind": "fill"
+                      }
+                    },
+                    {
+                      "kind": "block",
+                      "region": "context-bar",
+                      "size": {
+                        "kind": "content"
+                      }
+                    }
+                  ],
+                  "kind": "column",
+                  "size": {
+                    "kind": "fill"
+                  }
+                }
+              ],
+              "kind": "row",
+              "size": {
+                "kind": "fill"
+              }
+            },
+            "sidebarCollapsed": false
+          }
+        },
         "contents": {
           "items": {
             "$ref": "#/definitions/Content"
@@ -210,6 +307,114 @@
       ],
       "type": "object"
     },
+    "Node": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "row",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "column",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block",
+              "type": "string"
+            },
+            "region": {
+              "$ref": "#/definitions/Region"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "region"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PortalMode": {
+      "enum": [
+        "overlay",
+        "make-room"
+      ],
+      "type": "string"
+    },
+    "Region": {
+      "enum": [
+        "sidebar",
+        "fleet-strip",
+        "active-fleet",
+        "portals",
+        "context-bar"
+      ],
+      "type": "string"
+    },
     "SavedLayout": {
       "additionalProperties": false,
       "properties": {
@@ -229,6 +434,55 @@
         "root"
       ],
       "type": "object"
+    },
+    "Size": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fill",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fixed",
+              "type": "string"
+            },
+            "pixels": {
+              "maximum": 4096,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "pixels"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "Split": {
       "oneOf": [

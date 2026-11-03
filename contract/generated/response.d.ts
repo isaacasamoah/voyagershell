@@ -1,3 +1,32 @@
+export type PortalMode = "overlay" | "make-room";
+export type Node =
+  | {
+      children: Node[];
+      kind: "row";
+      size?: Size;
+    }
+  | {
+      children: Node[];
+      kind: "column";
+      size?: Size;
+    }
+  | {
+      kind: "block";
+      region: Region;
+      size?: Size;
+    };
+export type Size =
+  | {
+      kind: "fill";
+    }
+  | {
+      kind: "content";
+    }
+  | {
+      kind: "fixed";
+      pixels: number;
+    };
+export type Region = "sidebar" | "fleet-strip" | "active-fleet" | "portals" | "context-bar";
 export type Context =
   | {
       kind: "workspace";
@@ -46,6 +75,7 @@ export interface Response {
   version: string;
 }
 export interface Layout {
+  canvas?: Canvas;
   contents: Content[];
   context: Context;
   nextId: string;
@@ -54,6 +84,11 @@ export interface Layout {
   selectedVoyage?: string | null;
   view?: WorkspaceView & string;
   voyages: Voyage[];
+}
+export interface Canvas {
+  portalMode?: PortalMode & string;
+  root: Node;
+  sidebarCollapsed?: boolean;
 }
 export interface Content {
   backend?: string | null;

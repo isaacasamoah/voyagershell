@@ -6,6 +6,14 @@ export type Action =
       operation: "home";
     }
   | {
+      canvas: Canvas;
+      operation: "update-canvas";
+    }
+  | {
+      collapsed: boolean;
+      operation: "set-sidebar";
+    }
+  | {
       fleet: string;
       name: string;
       operation: "save-layout";
@@ -88,6 +96,35 @@ export type Action =
       context: Context;
       operation: "dock";
     };
+export type PortalMode = "overlay" | "make-room";
+export type Node =
+  | {
+      children: Node[];
+      kind: "row";
+      size?: Size;
+    }
+  | {
+      children: Node[];
+      kind: "column";
+      size?: Size;
+    }
+  | {
+      kind: "block";
+      region: Region;
+      size?: Size;
+    };
+export type Size =
+  | {
+      kind: "fill";
+    }
+  | {
+      kind: "content";
+    }
+  | {
+      kind: "fixed";
+      pixels: number;
+    };
+export type Region = "sidebar" | "fleet-strip" | "active-fleet" | "portals" | "context-bar";
 export type ContentDestination =
   | {
       after: string;
@@ -145,4 +182,9 @@ export interface Request {
   action: Action;
   expectedVersion: string;
   requestId: string;
+}
+export interface Canvas {
+  portalMode?: PortalMode & string;
+  root: Node;
+  sidebarCollapsed?: boolean;
 }
