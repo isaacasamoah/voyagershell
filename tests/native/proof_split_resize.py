@@ -127,7 +127,11 @@ def prove(
 
     def fields(name, count=1):
         return wait(
-            lambda: native("fields", owner, [name], "window")["fields"],
+            lambda: [
+                item
+                for item in native("fields", owner, [name], "window")["fields"]
+                if name != "Terminal" or item["role"] == "terminal"
+            ],
             lambda items: (
                 len(items) == count
                 and all(item["width"] > 0 and item["height"] > 0 for item in items)
@@ -191,34 +195,6 @@ def prove(
         item = fields(name)[0]
         assert item["role"] in ("button", "push button"), item
         click(item)
-
-    def refresh():
-        def target():
-            current = panes()
-            left = min(item["x"] for item in current)
-            right = max(item["x"] + item["width"] for item in current)
-            bottom = max(item["y"] + item["height"] for item in current)
-            items = native("fields", owner, None, "window")["fields"]
-            save("resize-refresh-tree", items)
-            return [
-                item
-                for item in items
-                if not item["name"]
-                and item["role"] in ("button", "push button")
-                and (item["width"] or 0) > 0
-                and (item["height"] or 0) > 0
-                and left <= item["x"] < item["x"] + item["width"] <= right
-                and item["y"] >= bottom
-                and item["y"] + item["height"] <= int(geometry()["HEIGHT"])
-            ]
-
-        matches = wait(
-            target,
-            lambda items: len(items) == 1,
-            "the unique native error-row Refresh button",
-        )
-        save("resize-refresh-target", matches[0])
-        click(matches[0])
 
     def key(value):
         native("key", value, True)
@@ -352,7 +328,7 @@ def prove(
             assert result["status"] == "rejected" and result["message"], result
             assert completed["version"] == str(changed["version"]), completed
             capture("resize-stale-rejected")
-            refresh()
+            press("Refresh")
             refreshed = wait(
                 witness,
                 lambda current: (
@@ -516,9 +492,9 @@ def prove(
             lambda item: fleet(item)["root"] == saved_root,
             "same-window saved arrangement load",
         )
+        press("Fleet layouts")
         restored(saved_bounds)
         capture("resize-saved-layout-restored")
-        press("Fleet layouts")
         stale = drag("Resize side by side panes", -0.08, stale=True)
         assert stale["value"]["contents"] == contents
         assert stale["value"]["context"] == context
