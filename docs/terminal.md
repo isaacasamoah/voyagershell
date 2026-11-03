@@ -214,3 +214,41 @@ rejecting additive fields. Dispatched replies must have the expected JSON-RPC
 version and identity and exactly one valid result or structured error. A known
 refusal retains its Core kind. Malformed, ambiguous, internal and unknown errors
 remain uncertain without an automatic replay.
+
+## Explicit new shell after an ended program
+
+The current source adds a deliberate `start-new-shell` workspace action for an
+existing terminal content ID and expected old backend. It uses the ordinary
+request revision, captured caller scope, single Client queue and receipt. The
+owner refreshes the document, verifies the binding and canonical finished state,
+and retains the old backend while saving a shell intent. A historical PID on a
+finished Core record is valid metadata and is never signalled by this action.
+
+Only a confirmed intent save grants the exact shell/old-backend/intent identity
+through the existing creation-permission path. The ordinary native terminal-open
+flow checks it again and uses the existing start marker, Core run and binding
+save. Confirmation clears the intent and publishes the new backend. The old Core
+terminal record remains available. Uncertain dispatch keeps its marker and is
+not replayed. Quit still refuses new work. A later app start has no retained
+in-memory creation grant, so it attaches the old ended binding without starting
+the saved intent or old agent arguments.
+
+The updated Header treats the typed ended reason as a neutral condition and
+offers one Start new shell button inside that content placement. Placement ID,
+content ID, name, tree and avatar context stay unchanged. The new program always
+uses the ordinary shell launch. A fresh intent can replace the old opening;
+an automatic owner notice cannot retry a refusal for the same intent. Refresh
+does not gain start permission merely from an old ended response. Existing
+explicit repair of a known refused opening retains its separate behavior.
+
+Personal Header source and validators are not overwritten. Existing workspace
+documents omit the new optional `shellIntent` field and continue to load. The
+new button and typed ended response require the updated Header/generated API;
+an older copied strict validator can reject new fields rather than understand
+the new operation. Upgrade such a personal package deliberately. No automatic
+package migration or source merge is implemented here.
+
+These are source and pure-control claims. Native same-placement shell input in
+both Vessel and Portal after Quit/reopen still requires the maintained session
+Quit journey on the matched release. Already-attached terminal end presentation
+and its original correction history are unchanged by this cold-attachment path.

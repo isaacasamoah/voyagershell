@@ -129,6 +129,9 @@ pub(crate) fn check(
         Action::CreateVoyage { .. } => false,
         Action::UpdateCanvas { .. } | Action::SetSidebar { .. } => false,
         Action::RemoveContentPackage { .. } | Action::RestoreContentPackage { .. } => false,
+        Action::StartNewShell { content_id, .. } => {
+            scoped.contents.iter().any(|item| &item.id == content_id)
+        }
         Action::MoveVoyage { .. } => false,
         Action::MoveFleet { id, target, .. } => {
             matches!(scope, Context::Voyage { .. })

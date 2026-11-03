@@ -628,6 +628,7 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::SelectFleet { .. } => "Fleet selected",
             Action::RevealVessel { .. } => "Vessel revealed",
             Action::Dock { .. } => "Focus changed",
+            Action::StartNewShell { .. } => "New shell authorized",
         }
         .into(),
         Status::Rejected => format!(

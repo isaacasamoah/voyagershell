@@ -29,6 +29,7 @@ impl Model {
             backend: None,
             start_pending: None,
             launch: None,
+            shell_intent: None,
         });
         Ok(Vessel {
             id: placement,
@@ -63,9 +64,35 @@ impl Model {
             })
     }
 
+    pub fn start_new_shell(
+        &mut self,
+        id: &ContentId,
+        backend: &voyager_contract::CoreTerminalId,
+        intent: &str,
+    ) -> Result<(), String> {
+        let content = self
+            .layout
+            .contents
+            .iter_mut()
+            .find(|item| &item.id == id)
+            .ok_or("Terminal content not found")?;
+        if content.type_id != "terminal"
+            || content.backend.as_ref() != Some(backend)
+            || content.start_pending.is_some()
+        {
+            return Err("The ended terminal binding changed or is unconfirmed".into());
+        }
+        content.launch = Some(voyager_contract::launch::Launch::Terminal);
+        content.shell_intent = Some(intent.into());
+        Ok(())
+    }
+
     pub fn apply(&mut self, action: Action) -> Result<(), String> {
         match action {
             Action::Inspect => (),
+            Action::StartNewShell { .. } => {
+                return Err("New shell intent requires terminal owner validation".into());
+            }
             Action::RemoveContentPackage { .. } | Action::RestoreContentPackage { .. } => {
                 return Err("Content package operations require the application owner".into());
             }
@@ -372,6 +399,7 @@ impl Model {
                     backend: None,
                     start_pending: None,
                     launch: None,
+                    shell_intent: None,
                 });
             }
             Action::MoveVessel { id, target, side } => {

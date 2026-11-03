@@ -102,16 +102,27 @@ struct Outcome {
 struct CreatedTerminal {
     id: ContentId,
     launch: voyager_contract::launch::Launch,
+    backend: Option<CoreTerminalId>,
+    shell_intent: Option<String>,
 }
 
 impl CreatedTerminal {
     fn matches(&self, content: &voyager_contract::Content) -> bool {
         self.id == content.id
+            && self.backend == content.backend
+            && self.shell_intent == content.shell_intent
             && &self.launch
                 == content
                     .launch
                     .as_ref()
                     .unwrap_or(&voyager_contract::launch::Launch::Terminal)
+    }
+
+    fn eligible(&self, content: &voyager_contract::Content) -> bool {
+        self.matches(content)
+            && content.type_id == "terminal"
+            && (content.backend.is_none() || self.shell_intent.is_some())
+            && content.start_pending.is_none()
     }
 }
 
@@ -636,11 +647,11 @@ impl Client {
                                         })
                                     });
                                     created_contents.retain(|pending| {
-                                        candidate.layout.contents.iter().any(|item| {
-                                            item.id == pending.id
-                                                && item.backend.is_none()
-                                                && item.start_pending.is_none()
-                                        })
+                                        candidate
+                                            .layout
+                                            .contents
+                                            .iter()
+                                            .any(|item| pending.eligible(item))
                                     });
                                     layout = Arc::new(candidate.layout);
                                     version = revision;
@@ -690,14 +701,36 @@ impl Client {
                                 {
                                     owner.require_available(type_id).map_err(rejected)?;
                                 }
+                                if matches!(request.action, Action::StartNewShell { .. }) {
+                                    let (current, revision, missing) = load(core)?;
+                                    layout = Arc::new(current);
+                                    version = revision;
+                                    if missing || request.expected_version != version {
+                                        return Err(rejected("Workspace changed; inspect before starting a new shell".into()));
+                                    }
+                                    crate::scope::check(&layout, scope.as_ref(), &request.action)
+                                        .map_err(rejected)?;
+                                }
                                 let mut candidate = Model {
                                     layout: (*layout).clone(),
                                 };
-                                candidate
-                                    .apply(request.action.clone())
+                                match &request.action {
+                                    Action::StartNewShell { content_id, expected_backend } => {
+                                        candidate.start_new_shell(content_id, expected_backend, &request.request_id)
+                                    }
+                                    _ => candidate.apply(request.action.clone()),
+                                }
                                     .map_err(rejected)
                                     .and_then(|()| {
+                                        if let Action::StartNewShell { expected_backend, .. } = &request.action {
+                                            let observed = core.terminal_get(&expected_backend.0)?;
+                                            require_finished(&observed, expected_backend)?;
+                                        }
                                         let revision = save(core, &candidate.layout, version)?;
+                                        if let Action::StartNewShell { content_id, expected_backend } = &request.action {
+                                            grant_new_shell(&mut created_contents, content_id, expected_backend, &request.request_id);
+                                            unconfirmed.remove(&content_id.0);
+                                        }
                                         if (scope.is_some() || matches!(request.action, Action::CreateContent { .. }))
                                             && matches!(
                                                 request.action,
@@ -1274,6 +1307,36 @@ fn visible_content(layout: &Layout, content: &ContentId) -> bool {
     contains(&fleet.root, fleet, content)
 }
 
+fn require_finished(
+    observed: &crate::core_shapes::Terminal,
+    expected: &CoreTerminalId,
+) -> Result<(), Error> {
+    if observed.address != expected.0
+        || observed.state != "finished"
+        || observed.reason.as_deref() == Some("spawn_pending")
+    {
+        return Err(rejected(
+            "The selected program is not confirmed ended; no new shell was authorized".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn grant_new_shell(
+    pending: &mut Vec<CreatedTerminal>,
+    content: &ContentId,
+    backend: &CoreTerminalId,
+    intent: &str,
+) {
+    pending.retain(|item| &item.id != content);
+    pending.push(CreatedTerminal {
+        id: content.clone(),
+        launch: voyager_contract::launch::Launch::Terminal,
+        backend: Some(backend.clone()),
+        shell_intent: Some(intent.into()),
+    });
+}
+
 fn record_created_terminals(
     pending: &mut Vec<CreatedTerminal>,
     previous: &Layout,
@@ -1289,6 +1352,8 @@ fn record_created_terminals(
             .map(|item| CreatedTerminal {
                 id: item.id.clone(),
                 launch: item.launch.clone().unwrap_or_default(),
+                backend: None,
+                shell_intent: None,
             }),
     );
 }
@@ -1302,12 +1367,10 @@ fn eligible_contents(
     pending
         .iter()
         .filter(|pending| {
-            projection.contents.iter().any(|item| {
-                pending.matches(item)
-                    && item.type_id == "terminal"
-                    && item.backend.is_none()
-                    && item.start_pending.is_none()
-            })
+            projection
+                .contents
+                .iter()
+                .any(|item| pending.eligible(item))
         })
         .map(|pending| pending.id.clone())
         .collect()
@@ -1339,23 +1402,35 @@ fn open_terminal(
     }
     let cwd = target.cwd.clone();
     let launch = target.launch.clone().unwrap_or_default();
-    if target.backend.is_none() {
-        let accepted = created_contents
-            .iter()
-            .find(|pending| &pending.id == content);
-        if accepted.is_some_and(|pending| !pending.matches(target)) {
-            return Err(rejected(
-                "The creation launch changed; no program was started".into(),
-            ));
-        }
-        if !matches!(launch, voyager_contract::launch::Launch::Terminal) && accepted.is_none() {
-            return Err(rejected(
-                "This saved worker has no new-creation permission; no command was restarted".into(),
-            ));
-        }
+    let accepted = created_contents
+        .iter()
+        .find(|pending| &pending.id == content);
+    let new_shell = target.shell_intent.is_some() && accepted.is_some();
+    if accepted.is_some_and(|pending| !pending.matches(target)) {
+        return Err(rejected(
+            "The creation launch changed; no program was started".into(),
+        ));
+    }
+    if new_shell {
+        let backend = target
+            .backend
+            .as_ref()
+            .ok_or_else(|| rejected("New shell intent lost its original binding".into()))?;
+        require_finished(&core.terminal_get(&backend.0)?, backend)?;
+    }
+    if target.backend.is_none()
+        && (target.shell_intent.is_some()
+            || !matches!(launch, voyager_contract::launch::Launch::Terminal))
+        && accepted.is_none()
+    {
+        return Err(rejected(
+            "This saved worker has no new-creation permission; no command was restarted".into(),
+        ));
     }
     let mut created = false;
-    let address = if let Some(address) = &target.backend {
+    let address = if let Some(address) = &target.backend
+        && !new_shell
+    {
         address.0.clone()
     } else {
         let operation = format!("voyager-start-{request_id}");
@@ -1447,6 +1522,7 @@ fn open_terminal(
             .ok_or_else(|| Error::Uncertain("Terminal content disappeared after start".into()))?;
         item.backend = Some(CoreTerminalId(address.clone()));
         item.start_pending = None;
+        item.shell_intent = None;
         match save(core, &candidate, *version) {
             Ok(saved) => {
                 *layout = Arc::new(candidate);
@@ -1516,6 +1592,93 @@ mod terminal_outcome_tests {
     use super::*;
 
     #[test]
+    fn explicit_new_shell_preserves_placement_and_grants_only_a_fresh_shell() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Voyage".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        model
+            .apply(Action::CreatePortal {
+                voyage: model.layout.voyages[0].id.clone(),
+            })
+            .unwrap();
+        let id = model.layout.contents[0].id.clone();
+        let backend = CoreTerminalId("t1".into());
+        model.layout.contents[0].backend = Some(backend.clone());
+        model.layout.contents[0].launch = Some(voyager_contract::launch::Launch::Codex {
+            model: "old-worker".into(),
+            effort: Default::default(),
+            permissions: Default::default(),
+        });
+        let mut observed: crate::core_shapes::Terminal = serde_json::from_value(serde_json::json!({
+            "address": "t1", "labels": {}, "argv": ["old-agent"], "cwd": "/tmp", "state": "finished", "pid": 123,
+            "created_ms": 1, "screen": "exact", "cols": 80, "rows": 24
+        })).unwrap();
+        assert_eq!(observed.pid, Some(123));
+        require_finished(&observed, &backend).unwrap();
+        for state in ["live", "unknown"] {
+            observed.state = state.into();
+            assert!(require_finished(&observed, &backend).is_err());
+        }
+        observed.state = "finished".into();
+        assert!(require_finished(&observed, &CoreTerminalId("another".into())).is_err());
+        let before = model.layout.clone();
+        let action = Action::StartNewShell {
+            content_id: id.clone(),
+            expected_backend: backend.clone(),
+        };
+        let scope = Context::Vessel {
+            id: model.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+        };
+        crate::scope::check(&Arc::new(before.clone()), Some(&scope), &action).unwrap();
+        assert!(
+            crate::scope::check(
+                &Arc::new(before.clone()),
+                Some(&Context::Portal {
+                    id: model.layout.voyages[0].portals[0].id.clone()
+                }),
+                &action
+            )
+            .is_err()
+        );
+        crate::scope::check(
+            &Arc::new(before.clone()),
+            Some(&Context::Portal {
+                id: model.layout.voyages[0].portals[0].id.clone(),
+            }),
+            &Action::StartNewShell {
+                content_id: model.layout.contents[1].id.clone(),
+                expected_backend: CoreTerminalId("t2".into()),
+            },
+        )
+        .unwrap();
+        model
+            .start_new_shell(&id, &CoreTerminalId("wrong".into()), "intent")
+            .unwrap_err();
+        assert_eq!(model.layout, before);
+        model.start_new_shell(&id, &backend, "intent").unwrap();
+        let mut expected = before;
+        expected.contents[0].launch = Some(voyager_contract::launch::Launch::Terminal);
+        expected.contents[0].shell_intent = Some("intent".into());
+        assert_eq!(model.layout, expected);
+        let mut pending = Vec::new();
+        assert!(eligible_contents(&Arc::new(model.layout.clone()), None, &pending).is_empty());
+        grant_new_shell(&mut pending, &id, &backend, "intent");
+        model.layout.contents[0].shell_intent = Some("changed".into());
+        assert!(eligible_contents(&Arc::new(model.layout.clone()), None, &pending).is_empty());
+        model.layout.contents[0].shell_intent = Some("intent".into());
+        assert_eq!(
+            eligible_contents(&Arc::new(model.layout), None, &pending),
+            vec![id.clone()]
+        );
+        settle_created_content(&mut pending, &id, &Err(Error::Uncertain("lost".into())));
+        assert!(pending.is_empty());
+    }
+
+    #[test]
     fn automatic_terminal_eligibility_excludes_notes() {
         let mut model = Model::default();
         model
@@ -1543,6 +1706,8 @@ mod terminal_outcome_tests {
         let record = |id| CreatedTerminal {
             id,
             launch: Default::default(),
+            backend: None,
+            shell_intent: None,
         };
         let mut pending = vec![record(terminal.clone())];
         record_created_terminals(&mut pending, &previous, &model.layout);
@@ -1602,6 +1767,8 @@ mod terminal_outcome_tests {
         let record = |id| CreatedTerminal {
             id,
             launch: Default::default(),
+            backend: None,
+            shell_intent: None,
         };
         let mut pending = vec![record(first.clone()), record(other.clone())];
         let refused = Err(Error::Rejected {
