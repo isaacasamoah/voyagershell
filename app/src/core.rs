@@ -1,4 +1,13 @@
-use crate::wire::Frame;
+use crate::{
+    core_shapes::{
+        AttachParams, AttachResult, DocGetParams, DocGetResult, DocSetParams, DocSetResult,
+        GetParams, HelloParams, InterruptParams, InterruptResult, KillParams, ListParams,
+        ReadParams, ReadResult, RunParams, RunResult, SendParams, SendResult, StatusParams,
+        StatusResult, StopParams, StopResult, Terminal,
+    },
+    wire::Frame,
+};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, VecDeque},
@@ -13,6 +22,11 @@ use std::{
     thread,
     time::Duration,
 };
+
+#[derive(Deserialize)]
+struct TerminalList {
+    terminals: Vec<Terminal>,
+}
 
 const VIEW_LIMIT: usize = 1024 * 1024;
 const TOTAL_LIMIT: usize = 16 * 1024 * 1024;
@@ -254,7 +268,16 @@ impl Core {
                 .ok_or_else(|| Error::Uncertain("Core output pipe missing".into()))?,
         );
         let handshake = (|| -> Result<(), Error> {
-            input.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"hello\",\"params\":{\"framed\":true,\"generation\":1}}\n")?;
+            let params = Self::hello_params();
+            let mut hello = serde_json::to_vec(
+                &json!({"jsonrpc":"2.0","id":1,"method":"hello","params":params}),
+            )
+            .map_err(|e| Error::Rejected {
+                kind: "invalid".into(),
+                message: e.to_string(),
+            })?;
+            hello.push(b'\n');
+            input.write_all(&hello)?;
             input.flush()?;
             let mut line = Vec::new();
             output
@@ -412,7 +435,167 @@ impl Core {
         })
     }
 
-    pub fn rpc(&mut self, method: &str, params: Value) -> Result<Value, Error> {
+    fn hello_params() -> HelloParams {
+        HelloParams {
+            framed: true,
+            generation: Some(1),
+            ..Default::default()
+        }
+    }
+
+    fn call<P: Serialize, R: DeserializeOwned>(
+        &mut self,
+        method: &str,
+        params: P,
+    ) -> Result<R, Error> {
+        let params = serde_json::to_value(params).map_err(|error| Error::Rejected {
+            kind: "invalid".into(),
+            message: error.to_string(),
+        })?;
+        Self::decode(method, self.rpc(method, params)?)
+    }
+
+    fn decode<R: DeserializeOwned>(method: &str, result: Value) -> Result<R, Error> {
+        serde_json::from_value(result)
+            .map_err(|error| Error::Uncertain(format!("Invalid Core {method} result: {error}")))
+    }
+
+    pub fn document_get(&mut self, name: &str) -> Result<DocGetResult, Error> {
+        self.call(
+            "doc.get",
+            DocGetParams {
+                name: name.into(),
+                on: None,
+            },
+        )
+    }
+
+    pub fn document_set<T: Serialize + ?Sized>(
+        &mut self,
+        name: &str,
+        value: &T,
+        version: u64,
+    ) -> Result<DocSetResult, Error> {
+        let value = serde_json::to_value(value).map_err(|error| Error::Rejected {
+            kind: "invalid".into(),
+            message: error.to_string(),
+        })?;
+        self.call(
+            "doc.set",
+            DocSetParams {
+                name: name.into(),
+                on: None,
+                value,
+                version,
+            },
+        )
+    }
+
+    pub fn terminal_run(&mut self, cwd: &str, operation: &str) -> Result<RunResult, Error> {
+        self.terminal_run_with(RunParams {
+            cwd: Some(cwd.into()),
+            no_parent: true,
+            labels: HashMap::from([("voyager-operation".into(), operation.into())]),
+            ..Default::default()
+        })
+    }
+
+    pub fn terminal_run_with(&mut self, params: RunParams) -> Result<RunResult, Error> {
+        self.call("terminal.run", params)
+    }
+
+    pub fn server_status(&mut self) -> Result<StatusResult, Error> {
+        self.call("server.status", StatusParams(Default::default()))
+    }
+
+    pub fn terminal_attach(&mut self, terminal: &str) -> Result<AttachResult, Error> {
+        self.call(
+            "terminal.attach",
+            AttachParams {
+                caller: None,
+                cols: 80,
+                display: Default::default(),
+                history: 0,
+                observe: false,
+                resumed: false,
+                rows: 24,
+                terminal: terminal.into(),
+            },
+        )
+    }
+
+    pub fn terminal_get(&mut self, terminal: &str) -> Result<Terminal, Error> {
+        self.call(
+            "terminal.get",
+            GetParams {
+                caller: None,
+                terminal: terminal.into(),
+            },
+        )
+    }
+
+    pub fn terminal_list(&mut self) -> Result<Vec<Terminal>, Error> {
+        let result: TerminalList = self.call(
+            "terminal.list",
+            ListParams {
+                all: true,
+                ..Default::default()
+            },
+        )?;
+        Ok(result.terminals)
+    }
+
+    pub fn terminal_read(&mut self, terminal: &str, lines: u32) -> Result<ReadResult, Error> {
+        self.call(
+            "terminal.read",
+            ReadParams {
+                caller: None,
+                lines,
+                terminal: terminal.into(),
+            },
+        )
+    }
+
+    pub fn terminal_send(&mut self, terminal: &str, text: &str) -> Result<SendResult, Error> {
+        self.call(
+            "terminal.send",
+            SendParams {
+                caller: None,
+                force: false,
+                if_: None,
+                terminal: terminal.into(),
+                text: text.into(),
+                timeout: None,
+                wait: false,
+            },
+        )
+    }
+
+    pub fn terminal_interrupt(&mut self, terminal: &str) -> Result<InterruptResult, Error> {
+        self.call(
+            "terminal.interrupt",
+            InterruptParams {
+                terminal: terminal.into(),
+                timeout: Some(5.0),
+            },
+        )
+    }
+
+    pub fn terminal_kill(&mut self, terminal: &str) -> Result<Terminal, Error> {
+        self.call(
+            "terminal.kill",
+            KillParams {
+                caller: None,
+                terminal: terminal.into(),
+            },
+        )
+    }
+
+    pub fn server_stop(&mut self) -> Result<StopResult, Error> {
+        self.call("server.stop", StopParams(Default::default()))
+    }
+
+    fn rpc(&mut self, method: &str, params: Value) -> Result<Value, Error> {
         self.sequence = self
             .sequence
             .checked_add(1)
@@ -531,6 +714,50 @@ impl Drop for Core {
         }
         if let Err(error) = self.child.wait() {
             eprintln!("Core bridge wait failed: {error}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod adapter_tests {
+    use super::*;
+
+    #[test]
+    fn typed_hello_keeps_the_existing_handshake() {
+        let params = Core::hello_params();
+        assert_eq!(
+            serde_json::to_value(params).unwrap(),
+            json!({"framed":true,"generation":1})
+        );
+    }
+
+    #[test]
+    fn terminal_list_accepts_observed_minimal_result() {
+        let result: TerminalList = serde_json::from_value(json!({"terminals":[]})).unwrap();
+        assert!(result.terminals.is_empty());
+        assert!(serde_json::from_value::<TerminalList>(json!({})).is_err());
+        assert!(matches!(
+            Core::decode::<Terminal>("terminal.get", json!({})),
+            Err(Error::Uncertain(_))
+        ));
+    }
+
+    #[test]
+    fn typed_document_preserves_null_and_nested_values() {
+        for value in [Value::Null, json!({"nested": [1, {"name": "Voyage"}]})] {
+            let params = DocSetParams {
+                name: "voyager-layout-v1".into(),
+                on: None,
+                value: value.clone(),
+                version: 9,
+            };
+            let encoded = serde_json::to_value(params).unwrap();
+            assert_eq!(encoded["value"], value);
+            assert_eq!(encoded["version"], 9);
+            let result: DocGetResult =
+                serde_json::from_value(json!({"value":value,"version":9})).unwrap();
+            assert_eq!(result.value, value);
+            assert_eq!(result.version, 9);
         }
     }
 }

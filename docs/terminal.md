@@ -120,9 +120,14 @@ continuation source. The first corrective release remains pending independent
 source review. Performance, native agent behavior, additional terminal styles,
 complete lifecycle and platform acceptance remain open.
 
-`app/core-schema.cjs` extracts the used terminal run and attach types from the
-installed Core 0.1.16 schema, checking its SHA-256 before generating the Rust
-schema. `cargo` generates the Rust types from that checked schema. The VT
+`app/core-schema.cjs` extracts the used hello, document, terminal and server
+message types from the reviewed Core 0.1.16 schema after checking its canonical
+SHA-256. Cargo generates the Rust types from that checked schema. Named Core
+adapter methods own the wire conversions; document values remain arbitrary JSON.
+The hello request uses the generated type, while its fuller response and endpoint
+compatibility validation remain the separate K2 continuation. Terminal list
+decodes the used terminal records without requiring the reviewed schema's
+`machines` field, which the installed Core omitted in an isolated check. The VT
 binding uses [libghostty-rs at 8363442](https://github.com/Uzaaft/libghostty-rs/tree/83634421c232385f9fd7c61f454961341453d661),
 which builds Ghostty's VT library and requires the matching Zig toolchain.
 Core protocol behavior is based on

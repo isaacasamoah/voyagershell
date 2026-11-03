@@ -1,9 +1,7 @@
 use crate::{
     core::{Core, Error, Viewer},
-    core_shapes::{AttachParams, AttachResult, RunParams, RunResult},
     workspace::Model,
 };
-use serde_json::{Value, json};
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
@@ -892,11 +890,6 @@ fn open_terminal(
         address.0.clone()
     } else {
         let operation = format!("voyager-start-{request_id}");
-        let params: RunParams = serde_json::from_value(
-            json!({"cwd": cwd, "no_parent": true, "labels": {"voyager-operation": operation}}),
-        )
-        .map_err(|error| rejected(format!("Invalid Core run parameters: {error}")))?;
-        let params = serde_json::to_value(params).map_err(|error| rejected(error.to_string()))?;
         let mut pending = (**layout).clone();
         let item = pending
             .contents
@@ -924,21 +917,12 @@ fn open_terminal(
                 });
             }
         }
-        let run = core.rpc("terminal.run", params);
+        let run = core.terminal_run(&cwd, &operation);
         if !matches!(run, Err(Error::Rejected { .. })) {
             created_contents.retain(|item| item != content);
         }
         let started = match run {
-            Ok(value) => match serde_json::from_value::<RunResult>(value) {
-                Ok(result) => result,
-                Err(error) => {
-                    let message = format!(
-                        "Terminal start {operation} returned an invalid result: {error}. Inspect Core terminals with voyager-operation={operation}; no start was repeated"
-                    );
-                    unconfirmed.insert(content.0.clone(), message.clone());
-                    return Err(Error::Uncertain(message));
-                }
-            },
+            Ok(result) => result,
             Err(Error::Uncertain(message)) => {
                 let message = format!(
                     "Terminal start {operation} is unconfirmed: {message}. Inspect Core terminals with voyager-operation={operation}; no start was repeated"
@@ -1001,17 +985,9 @@ fn open_terminal(
         }
         address
     };
-    let params: AttachParams =
-        serde_json::from_value(json!({"terminal": address, "cols": 80, "rows": 24}))
-            .map_err(|error| rejected(format!("Invalid Core attach parameters: {error}")))?;
     let attached = core
-        .rpc(
-            "terminal.attach",
-            serde_json::to_value(params).map_err(|error| rejected(error.to_string()))?,
-        )
+        .terminal_attach(&address)
         .map_err(|error| attach_failure(error, created, &address))?;
-    let attached: AttachResult = serde_json::from_value(attached)
-        .map_err(|error| Error::Uncertain(format!("Invalid Core attach result: {error}")))?;
     core.viewer(attached.channel)
 }
 
@@ -1038,15 +1014,9 @@ fn attach_failure(error: Error, created: bool, address: &str) -> Error {
 }
 
 fn load(core: &mut Core) -> Result<(Layout, u64, bool), Error> {
-    let doc = core.rpc("doc.get", json!({"name":"voyager-layout-v1"}))?;
-    let version = doc
-        .get("version")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| Error::Uncertain("Core document revision missing".into()))?;
-    let value = doc
-        .get("value")
-        .cloned()
-        .ok_or_else(|| Error::Uncertain("Core document value missing".into()))?;
+    let doc = core.document_get("voyager-layout-v1")?;
+    let version = doc.version;
+    let value = doc.value;
     if value.is_null() {
         return Ok((Layout::default(), version, true));
     }
@@ -1056,14 +1026,9 @@ fn load(core: &mut Core) -> Result<(Layout, u64, bool), Error> {
 }
 
 fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
-    let result = core.rpc(
-        "doc.set",
-        json!({"name":"voyager-layout-v1","value":layout,"version":version}),
-    )?;
-    result
-        .get("version")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| Error::Uncertain("Core save result has no revision".into()))
+    Ok(core
+        .document_set("voyager-layout-v1", layout, version)?
+        .version)
 }
 
 #[cfg(test)]

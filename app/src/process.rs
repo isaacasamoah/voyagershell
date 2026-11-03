@@ -1,10 +1,8 @@
 use crate::{
     core::{Core, Error, MAX_INPUT_BYTES},
-    core_shapes::{InterruptResult, ReadResult, SendResult, Terminal},
+    core_shapes::Terminal,
     scope,
 };
-use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
 use std::sync::Arc;
 use voyager_contract::{
     ContentId, Context, CoreTerminalId, Layout,
@@ -16,11 +14,6 @@ fn refused(message: &str) -> Error {
         kind: "invalid_process".into(),
         message: message.into(),
     }
-}
-
-fn decoded<T: DeserializeOwned>(value: Value) -> Result<T, Error> {
-    serde_json::from_value(value)
-        .map_err(|error| Error::Uncertain(format!("Core process result is unconfirmed: {error}")))
 }
 
 fn info(content: &ContentId, terminal: Terminal) -> ProcessInfo {
@@ -107,7 +100,7 @@ pub(crate) fn run(
                 "Process input exceeds the owner's byte limit; nothing was submitted",
             ));
         }
-        let terminal: Terminal = decoded(core.rpc("terminal.get", json!({"terminal":address.0}))?)?;
+        let terminal = core.terminal_get(&address.0)?;
         if terminal.address != address.0 {
             return Err(refused(
                 "Core returned a different terminal identity; nothing was submitted",
@@ -116,9 +109,7 @@ pub(crate) fn run(
         let target = info(content, terminal);
         match action {
             ProcessAction::Read { lines, .. } => {
-                let read: ReadResult = decoded(
-                    core.rpc("terminal.read", json!({"terminal":address.0,"lines":lines}))?,
-                )?;
+                let read = core.terminal_read(&address.0, *lines)?;
                 let limited = read.text.len() > 16 * 1024;
                 let text = if limited {
                     read.text[read.text.ceil_char_boundary(read.text.len() - 16 * 1024)..]
@@ -141,10 +132,7 @@ pub(crate) fn run(
                         "The inspected running process identity has changed or ended; nothing was submitted",
                     ));
                 }
-                let sent: SendResult = decoded(core.rpc(
-                    "terminal.send",
-                    json!({"terminal":address.0,"text":text,"wait":false}),
-                )?)?;
+                let sent = core.terminal_send(&address.0, text)?;
                 Ok(ProcessOutput::Send {
                     target,
                     turn: sent.turn,
@@ -158,10 +146,7 @@ pub(crate) fn run(
                         "The inspected running process identity has changed or ended; no interrupt was sent",
                     ));
                 }
-                let interrupted: InterruptResult = decoded(core.rpc(
-                    "terminal.interrupt",
-                    json!({"terminal":address.0,"timeout":5}),
-                )?)?;
+                let interrupted = core.terminal_interrupt(&address.0)?;
                 Ok(ProcessOutput::Interrupt {
                     target,
                     key: interrupted.key,
@@ -174,19 +159,13 @@ pub(crate) fn run(
                         "The inspected running process identity has changed or ended; no stop was sent",
                     ));
                 }
-                let observed = decoded(core.rpc("terminal.kill", json!({"terminal":address.0}))?)?;
+                let observed = core.terminal_kill(&address.0)?;
                 stop_result(target, info(content, observed))
             }
             ProcessAction::List => Err(refused("This operation does not target one terminal")),
         }
     } else {
-        let listed = core.rpc("terminal.list", json!({"all":true}))?;
-        let listed: Vec<Terminal> = decoded(
-            listed
-                .get("terminals")
-                .cloned()
-                .ok_or_else(|| Error::Uncertain("Core terminal list is missing".into()))?,
-        )?;
+        let listed = core.terminal_list()?;
         let mut processes = Vec::new();
         let mut unavailable = Vec::new();
         for binding in visible
@@ -255,10 +234,6 @@ mod tests {
         observed.state = "unrecognized".into();
         assert!(matches!(
             stop_result(target, observed),
-            Err(Error::Uncertain(_))
-        ));
-        assert!(matches!(
-            decoded::<Terminal>(json!({})),
             Err(Error::Uncertain(_))
         ));
     }

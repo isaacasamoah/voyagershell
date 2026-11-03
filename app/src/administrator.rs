@@ -1165,7 +1165,7 @@ mod tests {
             )
             .unwrap();
         let mut cleanup = crate::core::Core::connect(&session).unwrap();
-        cleanup.rpc("server.stop", json!({})).unwrap();
+        cleanup.server_stop().unwrap();
         cleanup.close().unwrap();
         assert_eq!(wrong_tool["result"]["success"], false);
         assert_eq!(processes.outcome.name, "voyager_process");
@@ -1263,7 +1263,7 @@ mod tests {
             completed(&mut tools);
         }
         let mut cleanup = crate::core::Core::connect(&session).unwrap();
-        cleanup.rpc("server.stop", json!({})).unwrap();
+        cleanup.server_stop().unwrap();
         cleanup.close().unwrap();
         assert_eq!(first["result"], repeat["result"]);
         assert_eq!(first["result"]["success"], false);

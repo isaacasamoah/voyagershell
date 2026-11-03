@@ -734,7 +734,7 @@ mod tests {
             }
         }
         let mut cleanup = Core::connect(&session).unwrap();
-        let stopped = cleanup.rpc("server.stop", serde_json::json!({}));
+        let stopped = cleanup.server_stop();
         cleanup.close().unwrap();
         assert!(stopped.is_ok());
         assert!(matches!(result, Err(Error::Rejected { kind, .. }) if kind == "viewer_expired"));

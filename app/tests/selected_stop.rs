@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::json;
 use std::{panic, time::SystemTime};
 use voyager_app::{client::Client, core::Core};
 use voyager_contract::{
@@ -63,9 +63,11 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
         let target = processes.iter().find(|p| p.content_id == first).unwrap();
         let survivor = processes.iter().find(|p| p.content_id == sibling).unwrap();
         let unrelated = other
-            .rpc(
-                "terminal.run",
-                json!({"argv":["/bin/sleep","60"],"cwd":"/tmp","keep":false}),
+            .terminal_run_with(
+                serde_json::from_value(
+                    json!({"argv":["/bin/sleep","60"],"cwd":"/tmp","keep":false}),
+                )
+                .unwrap(),
             )
             .unwrap();
         let mut core = Core::connect(&session).unwrap();
@@ -73,13 +75,13 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
             "Selected Stop test identity: {}",
             json!({
                 "session": session,
-                "core": core.rpc("server.status", json!({})).unwrap()["pid"],
+                "core": core.server_status().unwrap().pid,
                 "target": target,
                 "sibling": survivor,
                 "otherSession": other_session,
-                "otherCore": other.rpc("server.status", json!({})).unwrap()["pid"],
-                "otherTerminal": unrelated["address"],
-                "otherPid": unrelated["pid"]
+                "otherCore": other.server_status().unwrap().pid,
+                "otherTerminal": unrelated.address,
+                "otherPid": unrelated.pid
             })
         );
         let stop = json!({
@@ -105,10 +107,8 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
                 .unwrap();
             assert_eq!(refused.status, Status::Rejected);
         }
-        let expected: Value = core
-            .rpc("terminal.get", json!({"terminal":target.terminal_id}))
-            .unwrap();
-        assert_eq!(expected["pid"], json!(target.pid));
+        let expected = core.terminal_get(&target.terminal_id.0).unwrap();
+        assert_eq!(expected.pid, target.pid);
         let stop_request = request(serde_json::from_value(stop).unwrap());
         let result = client.process(scope.clone(), stop_request.clone()).unwrap();
         assert_eq!(result.status, Status::Applied, "{result:?}");
@@ -139,18 +139,16 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
             matches!(&ended.output, Some(ProcessOutput::Read { target: actual, .. }) if actual.state == "finished" && actual.terminal_id == target.terminal_id)
         );
         for (connection, terminal, pid) in [
-            (&mut core, &json!(survivor.terminal_id), json!(survivor.pid)),
-            (&mut other, &unrelated["address"], unrelated["pid"].clone()),
+            (&mut core, &survivor.terminal_id.0, survivor.pid),
+            (&mut other, &unrelated.address, unrelated.pid),
         ] {
-            let actual = connection
-                .rpc("terminal.get", json!({"terminal":terminal}))
-                .unwrap();
-            assert_eq!(actual["state"], "live");
-            assert_eq!(actual["pid"], pid);
+            let actual = connection.terminal_get(terminal).unwrap();
+            assert_eq!(actual.state, "live");
+            assert_eq!(actual.pid, pid);
         }
     }));
-    let stopped = Core::connect(&session).and_then(|mut core| core.rpc("server.stop", json!({})));
-    let other_stopped = other.rpc("server.stop", json!({}));
+    let stopped = Core::connect(&session).and_then(|mut core| core.server_stop());
+    let other_stopped = other.server_stop();
     eprintln!("Owned test cleanup: {session} {stopped:?}; {other_session} {other_stopped:?}");
     assert!(stopped.is_ok(), "{stopped:?}");
     assert!(other_stopped.is_ok(), "{other_stopped:?}");

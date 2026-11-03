@@ -535,12 +535,7 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     let repeated_resize = client.call(resized_request).unwrap();
     let mut cleanup = Core::connect(&session).unwrap();
     cleanup
-        .rpc(
-            "doc.set",
-            serde_json::json!({
-                "name": "voyager-layout-v1", "value": resized.layout, "version": resized.version,
-            }),
-        )
+        .document_set("voyager-layout-v1", &resized.layout, resized.version)
         .unwrap();
     let external_conflict = call(
         Action::ResizeSplit {
@@ -563,7 +558,7 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     assert!(!refreshed.created_workspace);
     assert!(!reopened.created_workspace);
     let retained_outcome = client.call(request).unwrap();
-    let stopped = cleanup.rpc("server.stop", serde_json::json!({}));
+    let stopped = cleanup.server_stop();
     cleanup.close().unwrap();
     assert_eq!(saved.status, Status::Applied);
     assert_eq!(resized.status, Status::Applied);
@@ -686,7 +681,7 @@ fn administrator_scope_refuses_another_voyage_without_changing_it() {
         .unwrap();
     let observed = call(Action::Inspect, 0);
     let mut cleanup = Core::connect(&session).unwrap();
-    cleanup.rpc("server.stop", serde_json::json!({})).unwrap();
+    cleanup.server_stop().unwrap();
     cleanup.close().unwrap();
     assert_eq!(inspect.layout.voyages.len(), 1);
     assert_eq!(refused.status, Status::Rejected);
@@ -893,7 +888,9 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
             text,
         };
         let mut external = Core::connect(&session).unwrap();
-        let bumped = external.rpc("doc.set", serde_json::json!({"name":"voyager-layout-v1","version":bound.version,"value":bound.layout})).unwrap();
+        let bumped = external
+            .document_set("voyager-layout-v1", &bound.layout, bound.version)
+            .unwrap();
         let stale = client
             .process(
                 Context::Workspace,
@@ -908,11 +905,13 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
                 .unwrap()
                 .contains("revision changed")
         );
-        assert_eq!(stale.version, bumped["version"].as_u64().unwrap());
+        assert_eq!(stale.version, bumped.version);
         revision.set(inspect().version);
         let mut moved = (*bound.layout).clone();
         moved.contents[0].backend = Some(voyager_contract::CoreTerminalId("t999999".into()));
-        let changed = external.rpc("doc.set", serde_json::json!({"name":"voyager-layout-v1","version":bumped["version"],"value":moved})).unwrap();
+        let changed = external
+            .document_set("voyager-layout-v1", &moved, bumped.version)
+            .unwrap();
         let external_refusal = client
             .process(
                 Context::Workspace,
@@ -920,11 +919,10 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
             )
             .unwrap();
         assert_eq!(external_refusal.status, Status::Rejected);
-        assert_eq!(
-            external_refusal.version,
-            changed["version"].as_u64().unwrap()
-        );
-        external.rpc("doc.set", serde_json::json!({"name":"voyager-layout-v1","version":changed["version"],"value":bound.layout})).unwrap();
+        assert_eq!(external_refusal.version, changed.version);
+        external
+            .document_set("voyager-layout-v1", &bound.layout, changed.version)
+            .unwrap();
         revision.set(inspect().version);
         let refused = client
             .process(
@@ -1062,7 +1060,7 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
         );
     });
     let mut cleanup = Core::connect(&session).unwrap();
-    cleanup.rpc("server.stop", serde_json::json!({})).unwrap();
+    cleanup.server_stop().unwrap();
     checked.unwrap();
 }
 
@@ -1142,7 +1140,7 @@ fn scoped_creation_eligibility_is_consumed_and_never_replayed() {
         assert!(observed.created_contents.is_empty());
     }));
     let mut core = Core::connect(&session).unwrap();
-    let stopped = core.rpc("server.stop", serde_json::json!({}));
+    let stopped = core.server_stop();
     core.close().unwrap();
     checked.unwrap();
     assert!(stopped.is_ok());
