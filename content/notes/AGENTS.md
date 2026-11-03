@@ -4,7 +4,8 @@ Notes is one content type. A Vessel places an instance inside a Fleet. A Portal
 places another instance across its Voyage. Each instance has an independent
 content ID, title, body and revision. Its placement and data are separate.
 
-`main.js` composes the native Title and Body controls from the private
+`main.ts` is the checked shipped source; `main.js` is its emitted, editable native
+package entry. It composes the native Title and Body controls from the private
 `voyager_input` registry. `voyager_content` supplies only the captured instance's
 identity, request identity, theme, versioned change notification and typed data operations. It does not expose workspace controls
 or terminal constructors. The Rust content contract generates the validators in
@@ -19,9 +20,12 @@ confirmation is uncertain, so another unchanged blur must not repeat the save.
 The host binds the caller outside the request. Changing a content ID in JSON does
 not grant access to another instance.
 
-The integrated package is currently JavaScript and is outside the Header's strict
-TypeScript authoring gate. Its private registry and host declarations are exported
-by `export-script-types --notes`; they are not the broader Header registry.
+Run the existing `npm run scripts:generate` and `npm test` from the repository
+when changing the shipped TypeScript. The same strict pipeline checks Notes in its
+own private declaration scope using `export-script-types --notes` and the generated
+content definitions. It does not expose Header or Terminal constructors to Notes.
+The profile's personal JavaScript remains editable and is not overwritten or
+automatically typechecked by repository commands.
 The administrator source candidate exposes voyager_content describe, inspect and
 update through this same owner. First inspect voyager_workspace for the captured
 content ID and workspace version, then describe and inspect that exact Notes ID.

@@ -15,6 +15,8 @@ const entries = [
   "desktop/mods/header/chat.ts",
 ];
 
+const notesEntries = ["content/notes/main.ts"];
+
 function imports(source) {
   const names = new Set();
   function visit(node) {
@@ -32,7 +34,7 @@ function imports(source) {
   return names;
 }
 
-function selectDeclarations(raw) {
+function selectDeclarations(raw, sources) {
   const invalid =
     'export interface ElementBounds extends import("gpui-kit").Point {';
   if (raw.split(invalid).length !== 2)
@@ -56,7 +58,7 @@ function selectDeclarations(raw) {
     const previous = modules.get(node.name.text) || "";
     modules.set(node.name.text, previous + node.getFullText(parsed));
   }
-  const pending = entries.flatMap((name) => [
+  const pending = sources.flatMap((name) => [
     ...imports(fs.readFileSync(path.join(root, name), "utf8")),
   ]);
   const included = new Set();
@@ -77,7 +79,8 @@ function selectDeclarations(raw) {
   };
 }
 
-function compile(extra = []) {
+function compile(extra = [], scope = "header") {
+  if (!["header", "notes"].includes(scope)) throw Error("Unknown script scope");
   const filename = path.join(__dirname, "tsconfig.json");
   const config = ts.readConfigFile(filename, ts.sys.readFile);
   if (config.error)
@@ -90,7 +93,13 @@ function compile(extra = []) {
     __dirname,
   );
   const program = ts.createProgram(
-    [...parsed.fileNames, ...extra],
+    scope === "notes"
+      ? [
+          ...notesEntries.map((name) => path.join(root, name)),
+          path.join(directory, "notes.d.ts"),
+          ...extra,
+        ]
+      : [...parsed.fileNames, ...extra],
     parsed.options,
   );
   const diagnostics = [...parsed.errors, ...ts.getPreEmitDiagnostics(program)];
@@ -103,44 +112,53 @@ async function check(mode) {
   if (!["--write", "--check"].includes(mode))
     throw Error("Expected --write or --check");
   fs.mkdirSync(directory, { recursive: true });
-  const raw = execFileSync(
-    "cargo",
-    [
-      "run",
-      "--quiet",
-      "--locked",
-      "-p",
-      "voyager-desktop",
-      "--bin",
-      "export-script-types",
-    ],
-    { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
-  );
-  fs.writeFileSync(path.join(directory, "raw.d.ts"), raw);
-  const selected = selectDeclarations(raw);
-  fs.writeFileSync(path.join(directory, "gpui-kit.d.ts"), selected.source);
-  const diagnostics = compile();
-  if (diagnostics.length)
-    throw Error(
-      ts.formatDiagnostics(diagnostics, {
-        getCanonicalFileName: (name) => name,
-        getCurrentDirectory: () => root,
-        getNewLine: () => "\n",
-      }),
+  const metadata = {};
+  for (const scope of ["header", "notes"]) {
+    const notes = scope === "notes";
+    const raw = execFileSync(
+      "cargo",
+      [
+        "run",
+        "--quiet",
+        "--locked",
+        "-p",
+        "voyager-desktop",
+        "--bin",
+        "export-script-types",
+        ...(notes ? ["--", "--notes"] : []),
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
     );
+    fs.writeFileSync(
+      path.join(directory, notes ? "notes-raw.d.ts" : "raw.d.ts"),
+      raw,
+    );
+    const selected = selectDeclarations(raw, notes ? notesEntries : entries);
+    fs.writeFileSync(
+      path.join(directory, notes ? "notes.d.ts" : "gpui-kit.d.ts"),
+      selected.source,
+    );
+    const diagnostics = compile([], scope);
+    if (diagnostics.length)
+      throw Error(
+        ts.formatDiagnostics(diagnostics, {
+          getCanonicalFileName: (name) => name,
+          getCurrentDirectory: () => root,
+          getNewLine: () => "\n",
+        }),
+      );
+    metadata[scope] = {
+      rawSha256: crypto.createHash("sha256").update(raw).digest("hex"),
+      modules: selected.modules,
+    };
+  }
   const files = [
     [
       "desktop/script-types.json",
-      await prettier.format(
-        JSON.stringify({
-          rawSha256: crypto.createHash("sha256").update(raw).digest("hex"),
-          modules: selected.modules,
-        }),
-        { parser: "json" },
-      ),
+      await prettier.format(JSON.stringify(metadata), { parser: "json" }),
     ],
   ];
-  for (const name of entries) {
+  for (const name of [...entries, ...notesEntries]) {
     const filename = name.replace(/\.ts$/, ".js");
     const emitted = fs.readFileSync(
       path.join(directory, "emitted", filename),

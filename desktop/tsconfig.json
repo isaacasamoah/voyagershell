@@ -10,7 +10,7 @@
     "useDefineForClassFields": false,
     "rootDir": "..",
     "outDir": "../target/script-types/emitted",
-    "rootDirs": ["mods/header", "../contract/generated"],
+    "rootDirs": ["mods/header", "../content/notes", "../contract/generated"],
     "types": []
   },
   "files": [

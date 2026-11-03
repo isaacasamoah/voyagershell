@@ -5,7 +5,6 @@ import {
   contentRequest as validateRequest,
   contentResponse as validateResponse,
 } from "./validate.js";
-
 export default class Notes extends View {
   init(_props, cx) {
     this.id = identity();
@@ -34,7 +33,6 @@ export default class Notes extends View {
       }
     });
   }
-
   changed(field, cx) {
     if (this.hydrating) return;
     this.touched[field] = true;
@@ -42,7 +40,6 @@ export default class Notes extends View {
     this.dirty = true;
     cx.notify();
   }
-
   call(operation, extra = {}) {
     const request = {
       version: "1",
@@ -67,7 +64,6 @@ export default class Notes extends View {
       return result;
     });
   }
-
   read(cx) {
     if (this.reading) {
       this.readAgain = true;
@@ -82,7 +78,6 @@ export default class Notes extends View {
       this.reading = false;
     });
   }
-
   async load(task) {
     const generation = this.generation;
     const revision = this.revision;
@@ -130,7 +125,6 @@ export default class Notes extends View {
     }
     task.notify();
   }
-
   save(cx) {
     if (!this.dirty || this.unconfirmed === this.generation) return;
     if (!this.revision || this.saving) {
@@ -172,7 +166,6 @@ export default class Notes extends View {
       task.notify();
     });
   }
-
   render() {
     const colors = theme();
     return div()

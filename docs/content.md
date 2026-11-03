@@ -51,11 +51,29 @@ not submit it again on another unchanged blur. Title/body values stay local unti
 the owner confirms an update. Schema warnings and last-good data remain visible.
 
 Packages are seeded once into the selected profile. Personal JavaScript is not
-overwritten. The retained Notes JavaScript is outside the current strict
-TypeScript composition gate. Its actual private declarations are available through
-`cargo run --locked -p voyager-desktop --bin export-script-types -- --notes`.
-The Header's broader registry is not a substitute for those declarations.
-The emitted JavaScript and live customization path remain available.
+overwritten. The shipped Notes composition is authored in `content/notes/main.ts` and emitted
+to the same `main.js` by the existing strict TypeScript pipeline. The gate checks
+Header and Notes separately using the same compiler/configuration: Notes receives
+its actual `export-script-types --notes` declarations, not the Header's broader
+registry. Native Title/Body signatures and the content request/result types come
+from the actual registry exporter and generated Rust contract. Each scope records
+its declaration hash/modules in `desktop/script-types.json`. Wrong native calls,
+unknown builder properties, missing invoke arguments, invalid data types and
+Header-only imports fail the maintained control.
+
+The small host function declarations still live in `desktop/src/script_types.rs`;
+this seam checks calls against that exported ABI and does not infer the callback's
+Rust argument parsing from its implementation. The invocation remains three strings
+with correlated generated request/result validation. No owner or protocol changes
+are part of this authoring change. The emitted Notes runtime code is unchanged
+apart from blank-line formatting. Type-only fields use `declare` so they cannot
+initialize after View.init and overwrite native state. Catch and non-null type
+assertions preserve the existing host-error/base-revision assumptions without
+adding runtime behavior.
+
+The profile still receives editable JavaScript seeded once. Repository checking
+covers the shipped TypeScript and emitted bytes, not arbitrary later personal
+JavaScript edits. Personal files are not implicitly overwritten or migrated.
 
 The real native journey covers save/reopen, stale and forged refusal, delayed
 hydration, uncertain confirmation without replay, body resizing and independent
@@ -141,8 +159,8 @@ or an aggregate bound on old pending observers. Those lifecycle limits remain
 explicitly unproved under N4; no SDK cancellation claim is inferred.
 
 Actual-provider updates and native dirty-sibling refresh, remove/restore,
-strict Notes authoring, complete generation/lifecycle and aggregate proof-size
-acceptance remain separate work. These native checks establish no performance
+complete private-signature derivation, personal-package compatibility,
+generation/lifecycle and aggregate proof-size acceptance remain separate work. These native checks establish no performance
 gain, another platform or complete avatar/voice parity.
 
 Source basis is the retained Voyager Notes provider, GPUI Shell at

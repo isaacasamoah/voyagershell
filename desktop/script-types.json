@@ -1,14 +1,26 @@
 {
-  "rawSha256": "c11a18ed805bc9ecd799d080ce9a515800243f6c1d782c16940d032f040f801c",
-  "modules": [
-    "gpui-base",
-    "gpui-kit",
-    "gpui-shell",
-    "voyager_avatar",
-    "voyager_content_view",
-    "voyager_conversation",
-    "voyager_header",
-    "voyager_native",
-    "voyager_workspace"
-  ]
+  "header": {
+    "rawSha256": "c11a18ed805bc9ecd799d080ce9a515800243f6c1d782c16940d032f040f801c",
+    "modules": [
+      "gpui-base",
+      "gpui-kit",
+      "gpui-shell",
+      "voyager_avatar",
+      "voyager_content_view",
+      "voyager_conversation",
+      "voyager_header",
+      "voyager_native",
+      "voyager_workspace"
+    ]
+  },
+  "notes": {
+    "rawSha256": "d80f3af670562dc7def4c053aabfc2f739217e2bb0da6969ed986b9650157697",
+    "modules": [
+      "gpui-base",
+      "gpui-kit",
+      "gpui-shell",
+      "voyager_content",
+      "voyager_input"
+    ]
+  }
 }
