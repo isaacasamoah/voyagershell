@@ -157,13 +157,14 @@ impl Client {
                             let _ = reply.try_send(result.clone());
                         }
                         Ok(OwnerMessage::Call(call)) => {
-                            let _ = call.reply.send(Reply {
+                            let reply = owner.retained(&call.request).unwrap_or_else(|| Reply {
                                 request_id: call.request.request_id,
                                 delivery: Delivery::Rejected,
                                 error: Some(
                                     "Voyager is quitting; no private request was accepted".into(),
                                 ),
                             });
+                            let _ = call.reply.send(reply);
                         }
                         Err(_) => break,
                     }
@@ -507,6 +508,23 @@ impl Owner {
             .request(self.sequence, command)
     }
 
+    fn retained(&self, request: &Request) -> Option<Reply> {
+        self.receipts
+            .iter()
+            .find(|(previous, _)| previous.request_id == request.request_id)
+            .map(|(previous, reply)| {
+                if previous == request {
+                    reply.clone()
+                } else {
+                    Reply {
+                        request_id: request.request_id.clone(),
+                        delivery: Delivery::Rejected,
+                        error: Some("Changed request identity; nothing was repeated".into()),
+                    }
+                }
+            })
+    }
+
     fn call(
         &mut self,
         request: &Request,
@@ -514,20 +532,8 @@ impl Owner {
         issued: &AtomicU64,
         events: &SyncSender<Result<ProviderEvent, String>>,
     ) -> Reply {
-        if let Some((previous, reply)) = self
-            .receipts
-            .iter()
-            .find(|(p, _)| p.request_id == request.request_id)
-        {
-            return if previous == request {
-                reply.clone()
-            } else {
-                Reply {
-                    request_id: request.request_id.clone(),
-                    delivery: Delivery::Rejected,
-                    error: Some("Changed request identity; nothing was repeated".into()),
-                }
-            };
+        if let Some(reply) = self.retained(request) {
+            return reply;
         }
         let previous_sequence = self.sequence;
         let result = request
@@ -1022,6 +1028,12 @@ mod tests {
         }
         let workspace = Workspace::open("invalid-for-core-start".into(), "/tmp".into());
         let private = Client::open(std::env::temp_dir(), workspace.clone());
+        let prior = Request {
+            request_id: private.request_id(),
+            action: Action::Interrupt,
+        };
+        let original = private.call(prior.clone()).unwrap();
+        assert_eq!(original.delivery, Delivery::Rejected);
         private
             .projection
             .edit(|state| {
@@ -1030,6 +1042,14 @@ mod tests {
             })
             .unwrap();
         assert!(ready(private.quit()).is_ok());
+        assert_eq!(private.call(prior.clone()).unwrap(), original);
+        let changed = private
+            .call(Request {
+                request_id: prior.request_id,
+                action: Action::StartVoice,
+            })
+            .unwrap();
+        assert!(changed.error.unwrap().contains("Changed request identity"));
         assert_eq!(
             private.snapshot(None).unwrap().unwrap().phase,
             Phase::Interrupted
