@@ -1,4 +1,5 @@
 import { View, div } from "gpui-kit";
+import { Button, TextView } from "gpui-base";
 import {
   SessionState,
   RetainedTitleState as TitleState,
@@ -12,6 +13,7 @@ export default class Notes extends View {
     this.session = SessionState.new();
     this.title = TitleState.new();
     this.text = BodyState.new();
+    this.preview = false;
   }
   render() {
     const colors = theme();
@@ -27,7 +29,28 @@ export default class Notes extends View {
           : [],
       )
       .child(Title.new(this.title).w_full().py(8).text_size(20))
-      .child(Body.new(this.text).w_full().min_h(180).py(16).text_size(13))
+      .child(
+        Button.new("notes-preview")
+          .accessibility_label(this.preview ? "Edit note" : "Preview note")
+          .px(8)
+          .py(4)
+          .rounded(4)
+          .text_size(11)
+          .text_color(colors.muted)
+          .on_click((_event, cx) => {
+            this.preview = !this.preview;
+            cx.notify();
+          })
+          .child(this.preview ? "Edit" : "Preview"),
+      )
+      .child(
+        this.preview
+          ? TextView.markdown("notes-preview-body", this.text.value())
+              .w_full()
+              .py(16)
+              .selectable()
+          : Body.new(this.text).w_full().min_h(180).py(16).text_size(13),
+      )
       .child(
         div()
           .text_size(11)

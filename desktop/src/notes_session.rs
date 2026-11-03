@@ -85,7 +85,6 @@ impl Session {
         if self.observed[index] != value {
             self.observed[index] = value;
             self.draft.changed(field);
-            cx.notify();
         }
     }
 

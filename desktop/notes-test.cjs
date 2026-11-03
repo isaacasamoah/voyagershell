@@ -216,12 +216,21 @@ test("fresh Notes opts into its native session before requesting retained editor
   assert.ok(note.session && note.title && note.text);
 });
 
-test("Notes changes its heading without replacing its retained editors", () => {
-  const source = fs.readFileSync(`${root}/content/notes/main.js`, "utf8");
+test("Notes changes its heading and Markdown preview without replacing retained editors", () => {
+  const source = fs.readFileSync(
+    process.env.VOYAGER_NOTES_SOURCE || `${root}/content/notes/main.js`,
+    "utf8",
+  );
   let showHeading = true;
+  let reads = 0;
   const session = { status: () => "Draft", show_heading: () => showHeading };
   const title = {};
-  const text = {};
+  const text = {
+    value() {
+      reads += 1;
+      return "# Unsaved draft";
+    },
+  };
   const div = () => {
     const value = { nodes: [] };
     const view = new Proxy(value, {
@@ -230,6 +239,7 @@ test("Notes changes its heading without replacing its retained editors", () => {
         return (...args) => {
           if (key === "child") target.nodes.push(args[0]);
           if (key === "children") target.nodes.push(...args[0]);
+          if (key === "on_click") target.onClick = args[0];
           return view;
         };
       },
@@ -243,6 +253,8 @@ test("Notes changes its heading without replacing its retained editors", () => {
     "BodyState",
     "Title",
     "Body",
+    "Button",
+    "TextView",
     "div",
     "theme",
     source
@@ -255,6 +267,10 @@ test("Notes changes its heading without replacing its retained editors", () => {
     { new: () => text },
     { new: (state) => Object.assign(div(), { kind: "title", state }) },
     { new: (state) => Object.assign(div(), { kind: "body", state }) },
+    { new: div },
+    {
+      markdown: (id, value) => Object.assign(div(), { kind: "preview", value }),
+    },
     div,
     () => ({}),
   );
@@ -274,4 +290,27 @@ test("Notes changes its heading without replacing its retained editors", () => {
     assert.equal(view.nodes.find((child) => child.kind === "body").state, text);
     assert.equal(note.session, session);
   }
+  assert.equal(reads, 0);
+  let notifications = 0;
+  const click = (view, label) => {
+    const button = view.nodes.find((child) => child.nodes.includes(label));
+    assert.ok(button?.onClick, `${label} control is available`);
+    button.onClick({}, { notify: () => notifications++ });
+  };
+  click(note.render(), "Preview");
+  const preview = note.render();
+  assert.equal(
+    preview.nodes.find((child) => child.kind === "preview").value,
+    "# Unsaved draft",
+  );
+  assert.equal(reads, 1);
+  click(preview, "Edit");
+  assert.equal(
+    note.render().nodes.find((child) => child.kind === "body").state,
+    text,
+  );
+  assert.equal(note.title, title);
+  assert.equal(note.text, text);
+  assert.equal(reads, 1);
+  assert.equal(notifications, 2);
 });

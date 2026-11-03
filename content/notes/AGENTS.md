@@ -17,6 +17,11 @@ or terminal constructors. The Rust content contract generates the validators in
 Editing source affects all copies of that package. Editing instance data affects
 only its content ID.
 
+Raw Markdown editing is the default. Preview renders the current retained body
+with native TextView Markdown; Edit returns to the same editor state. Preview
+does not replace the draft, change its base revision or introduce another writer.
+Moving focus out of an editor retains the existing blur-save behavior.
+
 Per-instance presentation is separate from package source and title/body data.
 The supported setting is `showHeading`, a Boolean defaulting to true. The script
 reads `SessionState.show_heading()` to show the existing NOTES eyebrow. Keep the
