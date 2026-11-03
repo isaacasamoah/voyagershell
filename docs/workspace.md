@@ -27,6 +27,12 @@ after layout to apply committed proportions, including saved-layout loads and
 refusal restoration. This programmatic synchronization does not dispatch an
 application save. It does not access private SDK resize state or copy a divider
 implementation. Native children keep their existing content-owned entities.
+The measurement/event canvas is explicitly anchored at the group's top-left.
+An absolute second child with automatic insets otherwise takes the block-flow
+position after the full-height SDK group. The pinned layout-engine contrast
+reproduced that misplaced origin; actual native event delivery remains a
+separate check. Mouse-up defers clearing the held flag until the event's effect
+cycle ends, preserving the SDK's bubble-phase completion callback.
 The actual divider line declares a native Splitter role, an orientation and a name
 through the SDK's public handle appearance. The SDK still owns its wider hit
 band and drag behavior. Native accessibility exposure remains to be checked;

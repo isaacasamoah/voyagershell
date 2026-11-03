@@ -222,6 +222,8 @@ impl ComponentMaterializer for Split {
             },
         )
         .absolute()
+        .top_0()
+        .left_0()
         .size_full();
         request.finish(div().relative().size_full().child(group).child(tracker))
     }
