@@ -65,7 +65,7 @@ def prove(
     env,
     journey,
 ):
-    assert journey == "notes-lifetime"
+    assert journey in ("notes-lifetime", "notes-configuration")
     opened = True
     owned, errors = {}, []
     original_clipboard = None
@@ -201,22 +201,39 @@ def prove(
     def data():
         return [(profile / "data" / (id + ".json")).read_bytes() for id in ids]
 
-    def identity():
+    def identity(cold=False):
         current = document()
         assert current["value"] == created["value"], (
             "Workspace identity or state changed"
         )
         actual = rpc("terminal.get", {"terminal": target})
-        assert actual["pid"] == terminal["pid"] and actual["state"] == "live"
-        assert process_identity(actual["pid"], metadata_only=True) == {
-            key: value for key, value in owned["terminal"].items() if key != "pid"
-        }
         actual_core = rpc("server.status", {})
-        assert (actual_core["pid"], actual_core["core"]["id"]) == (
-            core["pid"],
-            core["core"]["id"],
-        )
+        if cold:
+            assert actual_core["pid"] != core["pid"]
+            assert actual_core["core"]["id"] == core["core"]["id"]
+            record("cold-core", actual_core["pid"])
+            assert actual["state"] == "finished"
+            assert actual.get("pid") in (None, terminal["pid"])
+            assert actual["created_ms"] == terminal["created_ms"]
+            terminals = rpc("terminal.list", {"all": True})
+            assert not [
+                item for item in terminals["terminals"] if item["state"] == "live"
+            ]
+            receipt("notes-configuration-cold-terminals", terminals)
+        else:
+            assert actual["pid"] == terminal["pid"] and actual["state"] == "live"
+            assert process_identity(actual["pid"], metadata_only=True) == {
+                key: value for key, value in owned["terminal"].items() if key != "pid"
+            }
+            assert (actual_core["pid"], actual_core["core"]["id"]) == (
+                core["pid"],
+                core["core"]["id"],
+            )
         return {"layout": current, "terminal": actual, "core": actual_core}
+
+    def settle():
+        observe_owned_exit(owned, session, env, wait, errors)
+        assert not errors, errors
 
     try:
         record("initial-app", pid())
@@ -249,9 +266,21 @@ def prove(
         original_clipboard = clipboard.preserve(
             evidence / "notes-lifetime-clipboard.json"
         )
-        stop()
-        notes.atomic(header, lifetime_setup(original_header.decode()))
-        start("notes-lifetime-setup")
+        if journey == "notes-configuration":
+            from proof_notes_configuration import configuration_setup
+
+            configuration_setup(
+                native=native,
+                pid=pid(),
+                evidence=evidence,
+                type_text=type_text,
+                click=click,
+                owned=owned,
+            )
+        else:
+            stop()
+            notes.atomic(header, lifetime_setup(original_header.decode()))
+            start("notes-lifetime-setup")
         created = wait(
             document,
             lambda doc: (
@@ -274,15 +303,20 @@ def prove(
         receipt(
             "notes-lifetime-setup",
             {
-                "kind": "three typed owner setup actions, not human/model creation; supported make-room, not default-overlay evidence",
+                "kind": (
+                    "actual private model owner setup; supported make-room, not default-overlay evidence"
+                    if journey == "notes-configuration"
+                    else "three typed owner setup actions, not human/model creation; supported make-room, not default-overlay evidence"
+                ),
                 "initial": initial,
                 "created": created,
                 "ids": ids,
             },
         )
-        stop()
-        notes.atomic(header, original_header)
-        start("notes-lifetime-fresh")
+        if journey != "notes-configuration":
+            stop()
+            notes.atomic(header, original_header)
+            start("notes-lifetime-fresh")
         marker = token_hex(6)
         expected = [
             {"title": "Lifetime Fleet", "text": "FLEET_" + marker},
@@ -299,14 +333,17 @@ def prove(
                 lambda values: json.loads(values[index]) == note,
                 "native blur save",
             )
-        stop()
-        start("notes-lifetime-reopened")
+        if journey != "notes-configuration":
+            stop()
+            start("notes-lifetime-reopened")
         for index, note in enumerate(expected):
             for name, key in (("Note title", "title"), ("Note text", "text")):
                 copied(name, index, note[key])
         saved = data()
         receipt(
-            "notes-lifetime-reopened",
+            "notes-configuration-initial-save"
+            if journey == "notes-configuration"
+            else "notes-lifetime-reopened",
             {
                 "identity": identity(),
                 "data": expected,
@@ -314,7 +351,37 @@ def prove(
                 "visualReviewRequired": True,
             },
         )
-        capture("notes-lifetime-both-reopened")
+        capture(
+            "notes-configuration-initial-save"
+            if journey == "notes-configuration"
+            else "notes-lifetime-both-reopened"
+        )
+        if journey == "notes-configuration":
+            from proof_notes_configuration import configuration
+
+            return configuration(
+                profile=profile,
+                evidence=evidence,
+                native=native,
+                pid=pid,
+                capture=capture,
+                stop=stop,
+                settle=settle,
+                start=start,
+                click=click,
+                tap=tap,
+                type_text=type_text,
+                focus=focus,
+                copied=copied,
+                data=data,
+                document=document,
+                identity=identity,
+                receipt=receipt,
+                ids=ids,
+                created=created,
+                expected=expected,
+                owned=owned,
+            )
         focus("Note text", 0)
         tap(65367)
         dirty = expected[0]["text"] + "_DIRTY"

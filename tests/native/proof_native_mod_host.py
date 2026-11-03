@@ -27,7 +27,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["canvas", "canvas-input", "workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "terminal-reported-status", "arrangement", "layouts", "split-resize", "notes", "notes-lifetime", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "session-quit", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
+    parser.add_argument("--journey", choices=["canvas", "canvas-input", "workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "terminal-reported-status", "arrangement", "layouts", "split-resize", "notes", "notes-lifetime", "notes-configuration", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "session-quit", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -43,7 +43,7 @@ def run():
     args = parser.parse_args()
     if args.journey in ("avatar", "portal-avatar") and not args.compositor:
         parser.error("Avatar journeys require compositor capture")
-    if args.journey in ("notes", "notes-lifetime") and not args.compositor:
+    if args.journey in ("notes", "notes-lifetime", "notes-configuration") and not args.compositor:
         parser.error("Notes journey requires compositor capture")
     if args.journey == "session-quit" and not args.compositor:
         parser.error("Session Quit requires compositor capture")
@@ -79,7 +79,7 @@ def run():
         env.update(json.loads((evidence / "launch.json").read_text())["desktopEnvironment"])
     wayland_display = env.pop("WAYLAND_DISPLAY", None)
     env.pop("VOYAGER_PROOF_WAYLAND_DISPLAY", None)
-    if args.journey in ("conversation-ux", "canvas", "notes-lifetime") and wayland_display:
+    if args.journey in ("conversation-ux", "canvas", "notes-lifetime", "notes-configuration") and wayland_display:
         env["VOYAGER_PROOF_WAYLAND_DISPLAY"] = wayland_display
     if args.journey in ("conversation-stop", "conversation-ux"):
         if env.get("HC_SOCKET"):
@@ -91,7 +91,7 @@ def run():
                 socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
                 if socket.exists():
                     raise RuntimeError("Selected Stop requires two fresh dedicated Core sessions")
-    if args.journey in ("avatar", "portal-avatar", "notes", "notes-lifetime", "split-resize", "canvas", "canvas-input", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "session-quit", "terminal-reported-status"):
+    if args.journey in ("avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration", "split-resize", "canvas", "canvas-input", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "session-quit", "terminal-reported-status"):
         if env.get("HC_SOCKET"):
             raise RuntimeError("This journey requires an unset HC_SOCKET before launch")
         env.pop("HC_SESSION", None)
@@ -104,7 +104,7 @@ def run():
     if args.journey == "conversation-scroll":
         env["VOYAGER_PROOF_PUBLIC_SNAPSHOT"] = str(args.public_snapshot)
     env["VOYAGER_WORKSPACE_SESSION"] = args.session
-    if args.journey in ("notes-lifetime", "session-quit") or args.journey and args.journey.startswith("conversation"):
+    if args.journey in ("notes-lifetime", "notes-configuration", "session-quit") or args.journey and args.journey.startswith("conversation"):
         env["VOYAGER_CONVERSATION_EVIDENCE"] = str(evidence / "conversation.json")
     if args.journey == "conversation-voice":
         env["VOYAGER_VOICE_EVIDENCE"] = str(evidence / "voice.json")
@@ -215,7 +215,7 @@ def run():
             print(f"Launch cleanup errors: {errors}", file=sys.stderr)
 
     def cleanup_initial_core():
-        if args.journey in ("notes", "notes-lifetime") and pending_process is not None and pending_process.poll() is not None:
+        if args.journey in ("notes", "notes-lifetime", "notes-configuration") and pending_process is not None and pending_process.poll() is not None:
             try:
                 from proof_workspace import stop_existing_core
 
@@ -332,7 +332,7 @@ def run():
         path = evidence / f"{name}.png"
         window = record["window"] if window is None else window
         assert int(execute("xdotool", "getwindowpid", window)) == record["pid"]
-        if not args.compositor or args.journey not in ("avatar", "portal-avatar", "notes", "notes-lifetime"):
+        if not args.compositor or args.journey not in ("avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration"):
             execute("import", "-window", window, str(path))
         if args.compositor:
             bounds = geometry(window)
@@ -398,11 +398,11 @@ def run():
             passed.append("native-quit")
         elif args.foundation:
             import importlib
-            module = "proof_session_quit" if args.journey == "session-quit" else "proof_voice" if args.journey == "conversation-voice" else "proof_canvas" if args.journey in ("canvas", "canvas-input") else "proof_split_resize" if args.journey == "split-resize" else "proof_notes_lifetime" if args.journey == "notes-lifetime" else "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey in ("terminal-agent", "terminal-agent-create") else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
+            module = "proof_session_quit" if args.journey == "session-quit" else "proof_voice" if args.journey == "conversation-voice" else "proof_canvas" if args.journey in ("canvas", "canvas-input") else "proof_split_resize" if args.journey == "split-resize" else "proof_notes_lifetime" if args.journey in ("notes-lifetime", "notes-configuration") else "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey in ("terminal-agent", "terminal-agent-create") else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
             proof_workspace = importlib.import_module(module)
 
             options = dict(native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame, evidence=evidence, session=args.session, env=env, journey=args.journey)
-            if args.journey in ("notes", "notes-lifetime"):
+            if args.journey in ("notes", "notes-lifetime", "notes-configuration"):
                 options.update(profile=profile, pid=lambda: record["pid"], resize_window=resize_window)
             passed.extend(proof_workspace.prove(**options))
         elif args.notes:

@@ -926,9 +926,19 @@ def prove(
     )
 
 
-def package_turn(*, native, pid, evidence, wait, type_text, operation, context, owned):
-    assert operation in ("remove", "restore") and context == {"kind": "workspace"}
-
+def private_turn(
+    *,
+    native,
+    pid,
+    evidence,
+    wait,
+    type_text,
+    prompt,
+    context,
+    owned,
+    name,
+    accepted=None,
+):
     def read():
         path = evidence / "conversation.json"
         return json.loads(path.read_text()) if path.exists() else None
@@ -956,7 +966,6 @@ def package_turn(*, native, pid, evidence, wait, type_text, operation, context, 
         lambda values: len(values) == 1 and values[0]["focused"],
         "focused private composer",
     )
-    prompt = f"Use voyager_workspace to inspect this workspace once, then perform exactly one {operation}-content-package action with typeId notes. Keep all content, data, canvas, context, programs and source files unchanged. Use no other tools or effects. Never repeat an uncertain action. Report the actual package outcome briefly."
     type_text(prompt)
     native("key", 65293, True)
     native("key", 65293, False)
@@ -966,7 +975,7 @@ def package_turn(*, native, pid, evidence, wait, type_text, operation, context, 
             message["role"] == "user" and message["requestId"] not in prior
             for message in state["messages"]
         ),
-        "new submitted package request",
+        "new submitted private request",
     )
     user = next(
         message
@@ -974,6 +983,13 @@ def package_turn(*, native, pid, evidence, wait, type_text, operation, context, 
         if message["role"] == "user" and message["requestId"] not in prior
     )
     assert user["text"] == prompt and user["context"]["scope"] == context
+    if accepted is not None:
+        accepted_state = wait(
+            read,
+            lambda state: bool(state["turn"]) and state["phase"] == "working",
+            "accepted private turn",
+        )
+        accepted(accepted_state, user)
     providers = wait(
         lambda: provider_processes(evidence), bool, "actual private provider", 20
     )
@@ -988,12 +1004,10 @@ def package_turn(*, native, pid, evidence, wait, type_text, operation, context, 
                 for message in state["messages"]
             )
         ),
-        "package turn completed without replay",
+        "private turn completed without replay",
         90,
     )
-    (evidence / ("notes-lifetime-package-" + operation + ".json")).write_text(
-        json.dumps(final, indent=2)
-    )
+    (evidence / (name + ".json")).write_text(json.dumps(final, indent=2))
     assert final["phase"] == "completed" and final["thread"] and final["turn"]
     assert not final["limited"]
     assert (
@@ -1005,6 +1019,35 @@ def package_turn(*, native, pid, evidence, wait, type_text, operation, context, 
             ]
         )
         == 1
+    )
+    assert any(
+        message["role"] == "assistant"
+        and message["requestId"] == user["requestId"]
+        and message["text"].strip()
+        for message in final["messages"]
+    )
+    assert all(
+        message["context"] == user["context"]
+        and (message["role"] != "tool" or message["tool"]["callId"] == message["id"])
+        for message in final["messages"]
+        if message["requestId"] == user["requestId"]
+    )
+    return final, user
+
+
+def package_turn(*, native, pid, evidence, wait, type_text, operation, context, owned):
+    assert operation in ("remove", "restore") and context == {"kind": "workspace"}
+    prompt = f"Use voyager_workspace to inspect this workspace once, then perform exactly one {operation}-content-package action with typeId notes. Keep all content, data, canvas, context, programs and source files unchanged. Use no other tools or effects. Never repeat an uncertain action. Report the actual package outcome briefly."
+    final, user = private_turn(
+        native=native,
+        pid=pid,
+        evidence=evidence,
+        wait=wait,
+        type_text=type_text,
+        prompt=prompt,
+        context=context,
+        owned=owned,
+        name="notes-lifetime-package-" + operation,
     )
     tools = [
         message

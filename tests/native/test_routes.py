@@ -165,6 +165,7 @@ class Routes(unittest.TestCase):
                 for journey in (
                     "canvas",
                     "notes-lifetime",
+                    "notes-configuration",
                     "conversation-voice",
                     "conversation-content",
                     "terminal-agent-create",
@@ -249,6 +250,7 @@ class Routes(unittest.TestCase):
             ("--foundation", "portal-avatar"),
             ("--foundation", "notes"),
             ("--foundation", "notes-lifetime"),
+            ("--foundation", "notes-configuration"),
             ("--foundation", "split-resize"),
             ("--foundation", "session-quit"),
             ("--foundation", "terminal-reported-status"),
@@ -267,6 +269,7 @@ class Routes(unittest.TestCase):
             "portal-avatar",
             "notes",
             "notes-lifetime",
+            "notes-configuration",
             "split-resize",
             "session-quit",
             "terminal-reported-status",
@@ -287,6 +290,7 @@ class Routes(unittest.TestCase):
                 in (
                     "notes",
                     "notes-lifetime",
+                    "notes-configuration",
                     "split-resize",
                     "session-quit",
                     "terminal-reported-status",
@@ -303,6 +307,7 @@ class Routes(unittest.TestCase):
                 "conversation-ux",
                 "notes",
                 "notes-lifetime",
+                "notes-configuration",
                 "split-resize",
                 "session-quit",
                 "terminal-reported-status",
@@ -512,6 +517,30 @@ class Routes(unittest.TestCase):
                 self.assertEqual(result.returncode == 0, case != "parse")
         with self.assertRaises(AssertionError):
             proof.source_variant(source + source, "valid", "duplicate")
+
+    def test_configuration_gate_refuses_absent_or_wrong_token_and_accepts_exact_token(
+        self,
+    ):
+        proof = importlib.import_module("proof_notes_configuration")
+        with tempfile.TemporaryDirectory() as directory:
+            script, gate = Path(directory) / "wait.py", Path(directory) / "gate"
+            script.write_text(proof.GATE_WAIT)
+            for value in (None, "wrong", "expected"):
+                if value is not None:
+                    gate.write_text(value)
+                result = subprocess.run(
+                    [sys.executable, str(script), str(gate), "expected", "0.02"],
+                    text=True,
+                    capture_output=True,
+                    timeout=5,
+                )
+                self.assertEqual(result.returncode == 0, value == "expected")
+                self.assertIn("WAITING expected", result.stdout)
+                self.assertEqual("READY expected" in result.stdout, value == "expected")
+                if value != "expected":
+                    self.assertIn(
+                        "GATE TIMED OUT; DO NOT CONFIGURE OR UPDATE", result.stderr
+                    )
 
     def test_notes_sibling_region_covers_both_editors_and_status(self):
         from PIL import Image
