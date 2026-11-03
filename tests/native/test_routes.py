@@ -72,6 +72,7 @@ class Routes(unittest.TestCase):
                     "conversation-content",
                     "terminal-agent-create",
                     "session-quit",
+                    "terminal-reported-status",
                     "arrangement",
                 ):
                     result = self.run_cli(
@@ -153,6 +154,7 @@ class Routes(unittest.TestCase):
             ("--foundation", "notes-lifetime"),
             ("--foundation", "split-resize"),
             ("--foundation", "session-quit"),
+            ("--foundation", "terminal-reported-status"),
             ("--native-mod-host", "--notes-case"),
             ("--native-avatar", "--reduced-motion"),
             ("--reference", "--direct-controls"),
@@ -170,6 +172,7 @@ class Routes(unittest.TestCase):
             "notes-lifetime",
             "split-resize",
             "session-quit",
+            "terminal-reported-status",
         ):
             result = self.run_cli(
                 "--foundation",
@@ -183,7 +186,14 @@ class Routes(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
                 "requires compositor capture"
-                if route in ("notes", "notes-lifetime", "split-resize", "session-quit")
+                if route
+                in (
+                    "notes",
+                    "notes-lifetime",
+                    "split-resize",
+                    "session-quit",
+                    "terminal-reported-status",
+                )
                 else "require compositor capture",
                 result.stderr,
             )
@@ -198,6 +208,7 @@ class Routes(unittest.TestCase):
                 "notes-lifetime",
                 "split-resize",
                 "session-quit",
+                "terminal-reported-status",
             ):
                 environment = dict(os.environ, HC_SOCKET="/tmp/not-a-test-session")
                 result = subprocess.run(

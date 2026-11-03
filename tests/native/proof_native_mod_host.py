@@ -27,7 +27,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["canvas", "canvas-input", "workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "split-resize", "notes", "notes-lifetime", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "session-quit", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
+    parser.add_argument("--journey", choices=["canvas", "canvas-input", "workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "terminal-reported-status", "arrangement", "layouts", "split-resize", "notes", "notes-lifetime", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "session-quit", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -47,6 +47,8 @@ def run():
         parser.error("Notes journey requires compositor capture")
     if args.journey == "session-quit" and not args.compositor:
         parser.error("Session Quit requires compositor capture")
+    if args.journey == "terminal-reported-status" and not args.compositor:
+        parser.error("Reported status requires compositor capture")
     if args.journey == "split-resize" and not args.compositor:
         parser.error("Split resize requires compositor capture")
     if args.journey in ("canvas", "canvas-input") and not args.compositor:
@@ -89,7 +91,7 @@ def run():
                 socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
                 if socket.exists():
                     raise RuntimeError("Selected Stop requires two fresh dedicated Core sessions")
-    if args.journey in ("avatar", "portal-avatar", "notes", "notes-lifetime", "split-resize", "canvas", "canvas-input", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "session-quit"):
+    if args.journey in ("avatar", "portal-avatar", "notes", "notes-lifetime", "split-resize", "canvas", "canvas-input", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "session-quit", "terminal-reported-status"):
         if env.get("HC_SOCKET"):
             raise RuntimeError("This journey requires an unset HC_SOCKET before launch")
         env.pop("HC_SESSION", None)

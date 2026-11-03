@@ -1,8 +1,11 @@
 import hashlib
 import json
+import os
 import re
 import subprocess
 import time
+from pathlib import Path
+from secrets import token_hex
 
 from PIL import ImageChops
 
@@ -26,9 +29,24 @@ def div_control_point(label, fleets, viewport, header_sha256):
 
 
 def terminal(
-    native, capture, geometry, close, evidence, session, env, portals=False, grid=False
+    native,
+    capture,
+    geometry,
+    close,
+    evidence,
+    session,
+    env,
+    portals=False,
+    grid=False,
+    reported=False,
 ):
     owner = json.loads((evidence / "launch.json").read_text())["pid"]
+    socket = (
+        Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
+        if reported
+        else None
+    )
+    owned = []
 
     def window_pid(window):
         return int(
@@ -44,6 +62,8 @@ def terminal(
         assert window_pid(window) == owner, "Candidate is not the active window"
 
     def rpc(method, params):
+        if reported:
+            assert socket.is_socket(), "The dedicated Core socket is absent"
         return core_rpc(session, env, method, params)
 
     def workspace_control(label):
@@ -127,6 +147,8 @@ def terminal(
     composing = False
     primary_failure = None
     try:
+        if reported:
+            wait_for(socket.is_socket, bool, "the dedicated Core socket")
         document = wait_for(
             lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
             lambda value: (
@@ -137,8 +159,281 @@ def terminal(
         )
         original_fleet_name = document["value"]["voyages"][0]["fleets"][0]["name"]
         address = document["value"]["contents"][0]["backend"]
-        original = rpc("terminal.get", {"terminal": address})
+        original = (
+            wait_for(
+                lambda: rpc("terminal.get", {"terminal": address}),
+                lambda item: item["state"] == "live" and bool(item.get("pid")),
+                "the actual live shell PID",
+            )
+            if reported
+            else rpc("terminal.get", {"terminal": address})
+        )
         assert original.get("pid"), "Terminal has no live process"
+        if reported:
+            from proof_terminal_agent import process_record
+
+            observations = {"nativeWords": [], "quietSeconds": 0.3}
+
+            def save():
+                (evidence / "reported-status-observed.json").write_text(
+                    json.dumps(observations, indent=2)
+                )
+
+            def record(pid, role):
+                item = {"pid": pid, "role": role, **process_record(pid)}
+                assert item["uid"] == os.getuid(), item
+                if not any(
+                    (old["pid"], old["start"]) == (pid, item["start"]) for old in owned
+                ):
+                    owned.append(item)
+                observations["owned"] = owned
+                save()
+                return item
+
+            def runtime():
+                status = rpc("server.status", {})
+                core = record(status["pid"], "core")
+                for holder in status["holders"]:
+                    assert (
+                        record(holder["pid"], "holder")["executable"]
+                        == core["executable"]
+                    )
+                connectors = []
+                for path in Path("/proc").glob("[0-9]*"):
+                    try:
+                        fields = (
+                            path.joinpath("stat").read_text().rsplit(") ", 1)[1].split()
+                        )
+                        if int(fields[1]) == owner:
+                            item = process_record(int(path.name))
+                            if item["argv"][1:] == ["connect", "--session", session]:
+                                connectors.append(record(int(path.name), "connector"))
+                    except (FileNotFoundError, ProcessLookupError):
+                        pass
+                assert (
+                    len(connectors) == 1
+                    and connectors[0]["executable"] == core["executable"]
+                ), connectors
+                return status
+
+            def focus_terminal():
+                items = wait_for(
+                    lambda: [
+                        item
+                        for item in native("fields", owner, ["Terminal"], "window")[
+                            "fields"
+                        ]
+                        if item["role"] == "terminal"
+                    ],
+                    lambda items: (
+                        len(items) == 1
+                        and items[0]["width"] > 0
+                        and items[0]["height"] > 0
+                    ),
+                    "one visible native terminal",
+                )
+                item = items[0]
+                observations["lastTerminalBounds"] = item
+                save()
+                click(
+                    (item["x"] + item["width"] / 2) / 2,
+                    (item["y"] + item["height"] / 2) / 2,
+                )
+
+            def output(target, label):
+                suffix = token_hex(8)
+                type_text(f"printf '{label}_%s\\n' {suffix}\n")
+                return wait_for(
+                    lambda: rpc("terminal.read", {"terminal": target}),
+                    lambda item: f"{label}_{suffix}" in item["text"].splitlines(),
+                    "constructed shell output beyond echo",
+                )
+
+            def visible(target, word, name):
+                time.sleep(0.2)
+                fields = native("fields", owner, [f"Reported: {word}"], "window")[
+                    "fields"
+                ]
+                assert all(item["width"] > 0 and item["height"] > 0 for item in fields)
+                capture(name)
+                item = {
+                    "target": target,
+                    "expectedWord": word,
+                    "fields": fields,
+                    "capture": name,
+                    "wordProof": "native-fields"
+                    if fields
+                    else "requires-compositor-review",
+                }
+                observations["nativeWords"].append(item)
+                save()
+
+            def report(word):
+                type_text(
+                    f"printf '\\033]7501;state={word}:app=voyager-proof\\033\\\\'\n"
+                )
+                value = wait_for(
+                    lambda: rpc("terminal.get", {"terminal": address}),
+                    lambda item: (
+                        (item.get("status") or {}).get("state") == word
+                        if word != "clear"
+                        else item.get("status") is None and not item.get("records")
+                    ),
+                    f"literal {word} report",
+                )
+                assert value["reported"] is True
+                return value
+
+            record(owner, "app")
+            first_runtime = runtime()
+            original_identity = record(original["pid"], "original-shell")
+            context = document["value"]["context"]
+            assert not native("fields", owner, ["Message Voyager"], "window")[
+                "fields"
+            ], "Chat must remain closed"
+            focus_terminal()
+            observations["originalOutput"] = output(address, "ORIGINAL")
+            workspace_control("Create Fleet")
+            second_document = wait_for(
+                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda item: (
+                    len(item["value"]["contents"]) == 2
+                    and bool(item["value"]["contents"][1].get("backend"))
+                ),
+                "one second Fleet shell binding",
+            )
+            sibling = second_document["value"]["contents"][1]["backend"]
+            assert sibling != address and second_document["value"]["context"] == context
+            second = wait_for(
+                lambda: rpc("terminal.get", {"terminal": sibling}),
+                lambda item: item["state"] == "live" and bool(item.get("pid")),
+                "the second live shell",
+            )
+            second_identity = record(second["pid"], "nonreporting-shell")
+            runtime()
+            second_fleet_name = second_document["value"]["voyages"][0]["fleets"][1][
+                "name"
+            ]
+            focus_terminal()
+            observations["nonreportingOutput"] = output(sibling, "NONREPORTING")
+            assert rpc("terminal.get", {"terminal": sibling})["reported"] is False
+            visible(sibling, "unknown", "reported-nonreporting-output")
+            quiet_before = rpc("terminal.read", {"terminal": sibling})
+            time.sleep(observations["quietSeconds"])
+            assert (
+                rpc("terminal.read", {"terminal": sibling})["text"]
+                == quiet_before["text"]
+            )
+            observations["nonreportingQuiet"] = rpc(
+                "terminal.get", {"terminal": sibling}
+            )
+            assert observations["nonreportingQuiet"]["reported"] is False
+            visible(sibling, "unknown", "reported-nonreporting-quiet")
+            workspace_control(original_fleet_name)
+            wait_for(
+                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda item: (
+                    item["value"]["selectedFleet"] == document["value"]["selectedFleet"]
+                ),
+                "the original Fleet selection",
+            )
+            focus_terminal()
+            baseline = rpc("doc.get", {"name": "voyager-layout-v1"})
+            observations["baseline"] = baseline
+            for word in ("working", "blocked", "idle", "done", "error"):
+                observations[word] = report(word)
+                assert (
+                    observations[word]["state"] == "live"
+                    and observations[word]["pid"] == original_identity["pid"]
+                )
+                observations[word + "Output"] = output(address, "REPORTED")
+                assert rpc("doc.get", {"name": "voyager-layout-v1"}) == baseline
+                visible(address, word, "reported-" + word)
+            cleared = report("clear")
+            assert cleared["reported"] is True
+            visible(address, "unknown", "reported-cleared")
+            type_text(
+                "printf '\\033]7501;state=working:id=child:app=voyager-proof\\033\\\\'\n"
+            )
+            observations["childOnly"] = wait_for(
+                lambda: rpc("terminal.get", {"terminal": address}),
+                lambda item: (
+                    item.get("status") is None and "child" in item.get("records", {})
+                ),
+                "child-only report",
+            )
+            visible(address, "unknown", "reported-child-only")
+            assert rpc("doc.get", {"name": "voyager-layout-v1"}) == baseline
+            suffix = token_hex(8)
+            type_text(
+                f"(sleep 6; printf '\\033]7501;state=blocked:kind=question:app=voyager-proof\\033\\\\'; printf 'HIDDEN_%s\\n' {suffix}) &\nprintf 'READY_%s\\n' {suffix}\n"
+            )
+            wait_for(
+                lambda: rpc("terminal.read", {"terminal": address}),
+                lambda item: f"READY_{suffix}" in item["text"].splitlines(),
+                "finite hidden report readiness",
+            )
+            workspace_control(second_fleet_name)
+            hidden = wait_for(
+                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda item: (
+                    item["value"]["selectedFleet"] != baseline["value"]["selectedFleet"]
+                ),
+                "the nonreporting Fleet selection",
+            )
+            assert hidden["value"]["context"] == context
+            assert rpc("terminal.get", {"terminal": address}).get("status") is None, (
+                "Scheduled report arrived before hiding"
+            )
+            observations["hiddenReport"] = wait_for(
+                lambda: rpc("terminal.get", {"terminal": address}),
+                lambda item: (item.get("status") or {}).get("state") == "blocked",
+                "actual hidden report",
+            )
+            wait_for(
+                lambda: rpc("terminal.read", {"terminal": address}),
+                lambda item: f"HIDDEN_{suffix}" in item["text"].splitlines(),
+                "hidden constructed output",
+            )
+            assert rpc("doc.get", {"name": "voyager-layout-v1"}) == hidden
+            visible(sibling, "unknown", "reported-hidden-sibling")
+            workspace_control(original_fleet_name)
+            wait_for(
+                lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
+                lambda item: (
+                    item["value"]["selectedFleet"] == baseline["value"]["selectedFleet"]
+                ),
+                "reveal original Fleet",
+            )
+            focus_terminal()
+            visible(address, "blocked", "reported-revealed")
+            for target, identity in (
+                (address, original_identity),
+                (sibling, second_identity),
+            ):
+                actual = rpc("terminal.get", {"terminal": target})
+                assert actual["state"] == "live" and actual["pid"] == identity["pid"]
+                assert process_record(actual["pid"]) == {
+                    key: value
+                    for key, value in identity.items()
+                    if key not in ("pid", "role")
+                }
+            final = rpc("doc.get", {"name": "voyager-layout-v1"})
+            assert final["value"]["context"] == context
+            assert final["value"]["contents"] == baseline["value"]["contents"]
+            assert runtime()["core"]["id"] == first_runtime["core"]["id"]
+            assert not native("fields", owner, ["Message Voyager"], "window")["fields"]
+            observations["final"] = final
+            observations["limit"] = (
+                "Two Fleets, no simultaneous split labels or provider inspection; captures require independent word review when AX text is absent."
+            )
+            save()
+            return [
+                "literal-five-state-reports-and-native-captures",
+                "nonreporting-clear-child-only-unknown-captures",
+                "hidden-report-reveal-retains-two-programs-and-context",
+                "product-quit-recorded-exits",
+            ]
         if grid:
             assert env.get("XMODIFIERS") == "@im=ibus", (
                 "Use candidate-local XMODIFIERS=@im=ibus for this input-method journey"
@@ -766,11 +1061,27 @@ def terminal(
                 }
             )
         try:
-            rpc("server.stop", {})
+            if reported:
+                from proof_session_quit import exit_observation
+
+                def observed_exit():
+                    value = exit_observation(owned, socket)
+                    (evidence / "reported-status-exits.json").write_text(
+                        json.dumps(value, indent=2)
+                    )
+                    return value
+
+                wait_for(
+                    observed_exit,
+                    lambda item: item["complete"],
+                    "recorded Quit exits and socket absence",
+                )
+            else:
+                rpc("server.stop", {})
         except Exception as error:
             cleanup_failures.append(
                 {
-                    "action": "owned-core-stop",
+                    "action": "recorded-quit-exits" if reported else "owned-core-stop",
                     "type": type(error).__name__,
                     "message": str(error),
                 }

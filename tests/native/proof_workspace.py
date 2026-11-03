@@ -103,7 +103,12 @@ def prove(
             env=env,
             journey=journey,
         )
-    if journey in ("terminal", "portal-terminal", "terminal-grid"):
+    if journey in (
+        "terminal",
+        "portal-terminal",
+        "terminal-grid",
+        "terminal-reported-status",
+    ):
         from proof_terminal import terminal
 
         return terminal(
@@ -116,6 +121,7 @@ def prove(
             env,
             portals=journey == "portal-terminal",
             grid=journey == "terminal-grid",
+            reported=journey == "terminal-reported-status",
         )
     if journey == "workspace-unavailable":
         for _ in range(30):
