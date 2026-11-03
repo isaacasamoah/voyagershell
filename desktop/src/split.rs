@@ -251,7 +251,7 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                 |args| {
                     let [
                         ComponentArgument::String(id),
-                        ComponentArgument::String(axis),
+                        ComponentArgument::Enum(axis),
                         ComponentArgument::Number(share),
                         ComponentArgument::String(revision),
                         ComponentArgument::Number(reset),
@@ -301,6 +301,50 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registered_split_constructor_accepts_axes_and_rejects_invalid_axis() {
+        let mut registry =
+            ComponentRegistry::new(gpui_shell::COMPONENT_REGISTRY_API_VERSION, "voyager_native")
+                .unwrap();
+        register(&mut registry).unwrap();
+        let runtime =
+            gpui_shell::ShellRuntime::new_isolated_with_components(registry.freeze().unwrap())
+                .unwrap();
+        runtime.set_editor_files(false);
+        let directory =
+            std::env::temp_dir().join(format!("voyager-split-constructor-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let outcomes = [
+            ("horizontal", true),
+            ("vertical", true),
+            ("diagonal", false),
+        ]
+        .map(|(axis, expected)| {
+            let package = directory.join(axis);
+            std::fs::create_dir(&package).unwrap();
+            std::fs::write(
+                package.join("main.js"),
+                format!(
+                    r#"import {{ View }} from "gpui-kit";
+import {{ Split }} from "voyager_native";
+Split.new("constructor-check", "{axis}", 5000, "1", 0, () => {{}});
+export default class extends View {{}}
+"#
+                ),
+            )
+            .unwrap();
+            (
+                axis,
+                expected,
+                runtime.load_application(&package, "main.js").map(drop),
+            )
+        });
+        std::fs::remove_dir_all(directory).unwrap();
+        for (axis, expected, result) in outcomes {
+            assert_eq!(result.is_ok(), expected, "{axis}: {result:?}");
+        }
+    }
 
     #[test]
     fn resize_cannot_substitute_a_newer_revision_or_retarget_a_gesture() {
