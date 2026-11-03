@@ -1,3 +1,4 @@
+export function contentCatalog(data: unknown): data is import("./contentCatalog").Catalog;
 export function contentRequest(data: unknown): data is import("./contentRequest").Request;
 export function contentResponse(data: unknown): data is import("./contentResponse").Response;
 export function contentTool(data: unknown): data is import("./contentTool").Input;
