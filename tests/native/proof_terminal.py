@@ -444,18 +444,16 @@ def terminal(
                 "value": changed,
             },
         )
-        bounds = geometry()
-        height = int(bounds["HEIGHT"]) / 2
-        click(367, 30)
+        click(*named_button(native, evidence, "Create Fleet"))
         time.sleep(0.4)
         assert (
             rpc("doc.get", {"name": "voyager-layout-v1"})["version"]
             == external["version"]
         )
         capture("terminal-stale-refused")
-        click(270, height - 30)
+        click(*named_button(native, evidence, "Refresh"))
         time.sleep(0.4)
-        click(367, 30)
+        click(*named_button(native, evidence, "Create Fleet"))
         rejected = wait_for(
             lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
             lambda value: (
@@ -468,7 +466,7 @@ def terminal(
         )
         capture("terminal-known-refusal")
         missing.mkdir()
-        click(270, height - 30)
+        click(*named_button(native, evidence, "Refresh"))
         recovered = wait_for(
             lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
             lambda value: value["value"]["contents"][1].get("backend") is not None,
@@ -520,7 +518,7 @@ def terminal(
             )
         )
         if portals:
-            click(70, height - 30)
+            click(*named_button(native, evidence, "Open Portal"))
             layout = wait_for(
                 lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
                 lambda value: (
@@ -547,9 +545,9 @@ def terminal(
                 "visible Portal input and output",
             )
             capture("portal-terminal-output")
-            click(width - 270, 80)
+            click(width - 270, 132)
             time.sleep(0.1)
-            click(width - 270, 80)
+            click(width - 270, 132)
             time.sleep(0.2)
             native("key", 65507, True)
             key(ord("a"))
@@ -620,7 +618,7 @@ def terminal(
             )
             before_refusal = rpc("doc.get", {"name": "voyager-layout-v1"})
             missing.rmdir()
-            click(460, 30)
+            click(*named_button(native, evidence, "Create Fleet"))
             wait_for(
                 lambda: rpc("doc.get", {"name": "voyager-layout-v1"}),
                 lambda value: (
