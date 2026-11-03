@@ -11,6 +11,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Routes(unittest.TestCase):
+    def test_quit_pane_selection_excludes_the_overlay_from_the_vessel(self):
+        from proof_session_quit import pane_candidates
+
+        vessel = {"x": 0, "y": 0, "width": 100, "height": 100}
+        portal = {**vessel, "x": 60, "width": 40}
+        left = {**vessel, "x": 10, "width": 20}
+        right = {**left, "x": 70}
+        items = [left, right, {**left, "width": 0}]
+        self.assertEqual(pane_candidates(items, vessel, portal), [left])
+        self.assertEqual(pane_candidates(items, portal), [right])
+        self.assertEqual(len(pane_candidates(items, vessel)), 2)
+
     def test_session_quit_requires_recorded_exits_and_socket_absence(self):
         from proof_session_quit import exit_observation
 
