@@ -35,14 +35,18 @@ at 32, and kinds/progress use the pinned supported values. Object overhead,
 transient parsing, script/result copies and the existing 16 MiB frame are
 separate from that 2.25 MiB retained observation budget. Oversized observation
 becomes limited/unknown and does not limit workspace creation or terminal input.
+The projection carries a cache-limit reason when bound addresses exceed the
+cache allowance. Uncovered headers show unknown with a limit label. A terminal
+absent from a snapshot remains unknown with a null reported flag; a present
+terminal's explicit false remains false.
 
 One coalesced owner wake retains the latest facts through a full mailbox.
 Activity has its own counter and does not change document CAS or packageRevision.
 Rendering reads cached data without a status polling loop or document read per
 event. Existing scoped process list/read results expose the same reported-data
 meaning after their normal caller/backend checks. Snapshots supply source time;
-a changed-word event clears it because Core omits that time. Local observed-at
-time is not substituted for Core's source timestamp. See the pinned protocol in
+an event without that time clears it, even when its word is unchanged. Local
+observed-at time is not substituted for Core's source timestamp. See the pinned protocol in
 [Core's event documentation](https://github.com/herdrdev/herdr-core/blob/e07c2a1bedd62cf4787ee026ee23ee79c7d95491/schema/README.md#events).
 
 ## Explicit session Quit

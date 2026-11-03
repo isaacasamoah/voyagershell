@@ -428,9 +428,9 @@ impl Header {
             notes,
             avatar,
             notice: Rc::new(Cell::new(WorkspaceNotice::default())),
-            activity: Rc::new(RefCell::new(voyager_contract::activity::Projection {
-                terminals: Default::default(),
-            })),
+            activity: Rc::new(RefCell::new(
+                voyager_contract::activity::Projection::default(),
+            )),
         };
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);

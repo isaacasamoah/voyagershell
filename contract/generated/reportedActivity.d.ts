@@ -1,6 +1,8 @@
 export type ActivityState = "unknown" | "working" | "blocked" | "idle" | "done" | "error";
 
 export interface Projection {
+  limited: boolean;
+  reason?: string | null;
   terminals: {
     [k: string]: ReportedActivity;
   };

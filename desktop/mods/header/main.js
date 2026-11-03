@@ -54,6 +54,7 @@ export default class Workspace extends View {
     this.status = "Opening workspace";
     this.activityRevision = "";
     this.reportedActivity = {};
+    this.activityLimit = null;
     this.terminals = new Map();
     this.openings = new Map();
     this.focused = null;
@@ -662,6 +663,9 @@ export default class Workspace extends View {
     if (!validateReportedActivity(value))
       throw Error("Invalid reported activity");
     this.reportedActivity = value.terminals;
+    this.activityLimit = value.limited
+      ? (value.reason ?? "Bound terminal observation limit exceeded")
+      : null;
     this.activityRevision = revision;
   }
   action(label, action, selected = false, rename = null) {
@@ -939,7 +943,7 @@ export default class Workspace extends View {
                       .text_color(colors.muted)
                       .child(
                         content.typeId === "terminal"
-                          ? `Reported: ${activity?.state ?? "unknown"}`
+                          ? `Reported: ${activity?.state ?? (this.activityLimit ? "unknown (limit)" : "unknown")}`
                           : "",
                       ),
                   ),

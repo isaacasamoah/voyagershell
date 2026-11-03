@@ -696,6 +696,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "vesselFrame",
     "reported_activity",
     "validateReportedActivity",
+    "vesselFrame",
     source,
   )(
     class {},
@@ -721,9 +722,12 @@ test("Home presents the retained out-of-view avatar without docking or starting 
       activityReads += 1;
       return JSON.stringify({
         terminals: { t1: { state: "done", reported: true, limited: false } },
+        limited: true,
+        reason: "Bound terminal observation limit exceeded",
       });
     },
     validateReportedActivity,
+    (node) => node,
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
@@ -763,6 +767,8 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     },
     focus: { focus() {} },
     names: new Map(),
+    terminals: new Map(),
+    openings: new Map(),
     status: "Avatar unavailable",
     editing: null,
     drag: null,
@@ -812,7 +818,15 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   view.render({});
   assert.equal(activityReads, 1);
   assert.equal(view.reportedActivity.t1.state, "done");
+  assert.equal(view.activityLimit, "Bound terminal observation limit exceeded");
   assert.deepEqual(view.layout, unchanged);
+  view.layout.contents[0].typeId = "terminal";
+  view.layout.contents[0].backend = "outside-cache";
+  view.content({ id: "vessel", content: "content" }, context);
+  assert.ok(
+    nodes.some((node) => node.calls.child?.[0] === "Reported: unknown (limit)"),
+  );
+  view.layout = unchanged;
   assert.equal(view.version, "7");
   assert.deepEqual(
     actions,

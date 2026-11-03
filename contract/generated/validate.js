@@ -17837,7 +17837,7 @@ return errors === 0;
 }
 
 export const reportedActivity = validate67;
-const schema99 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"ActivityState":{"enum":["unknown","working","blocked","idle","done","error"],"type":"string"},"ReportedActivity":{"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"}},"properties":{"terminals":{"additionalProperties":{"$ref":"#/definitions/ReportedActivity"},"type":"object"}},"required":["terminals"],"title":"Projection","type":"object"};
+const schema99 = {"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false,"definitions":{"ActivityState":{"enum":["unknown","working","blocked","idle","done","error"],"type":"string"},"ReportedActivity":{"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"}},"properties":{"limited":{"type":"boolean"},"reason":{"type":["string","null"]},"terminals":{"additionalProperties":{"$ref":"#/definitions/ReportedActivity"},"type":"object"}},"required":["terminals","limited"],"title":"Projection","type":"object"};
 const schema100 = {"additionalProperties":false,"properties":{"app":{"type":["string","null"]},"kind":{"type":["string","null"]},"limited":{"type":"boolean"},"message":{"type":["string","null"]},"observedMs":{"type":["string","null"]},"progress":{"maximum":100,"minimum":0,"type":["integer","null"]},"reason":{"type":["string","null"]},"reported":{"type":["boolean","null"]},"sequence":{"type":["string","null"]},"sourceMs":{"type":["string","null"]},"state":{"$ref":"#/definitions/ActivityState"},"title":{"type":["string","null"]}},"required":["state","limited"],"type":"object"};
 const schema101 = {"enum":["unknown","working","blocked","idle","done","error"],"type":"string"};
 
@@ -18063,32 +18063,57 @@ let errors = 0;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((data.terminals === undefined) && (missing0 = "terminals")){
+if(((data.terminals === undefined) && (missing0 = "terminals")) || ((data.limited === undefined) && (missing0 = "limited"))){
 validate67.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!(key0 === "terminals")){
+if(!(((key0 === "limited") || (key0 === "reason")) || (key0 === "terminals"))){
 validate67.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
 }
 }
 if(_errs1 === errors){
-if(data.terminals !== undefined){
-let data0 = data.terminals;
+if(data.limited !== undefined){
 const _errs2 = errors;
-if(errors === _errs2){
-if(data0 && typeof data0 == "object" && !Array.isArray(data0)){
-for(const key1 in data0){
-const _errs5 = errors;
-if(!(validate68(data0[key1], {instancePath:instancePath+"/terminals/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),parentData:data0,parentDataProperty:key1,rootData}))){
+if(typeof data.limited !== "boolean"){
+validate67.errors = [{instancePath:instancePath+"/limited",schemaPath:"#/properties/limited/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+return false;
+}
+var valid0 = _errs2 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.reason !== undefined){
+let data1 = data.reason;
+const _errs4 = errors;
+if((typeof data1 !== "string") && (data1 !== null)){
+validate67.errors = [{instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/type",keyword:"type",params:{type: schema99.properties.reason.type},message:"must be string,null"}];
+return false;
+}
+var valid0 = _errs4 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.terminals !== undefined){
+let data2 = data.terminals;
+const _errs6 = errors;
+if(errors === _errs6){
+if(data2 && typeof data2 == "object" && !Array.isArray(data2)){
+for(const key1 in data2){
+const _errs9 = errors;
+if(!(validate68(data2[key1], {instancePath:instancePath+"/terminals/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),parentData:data2,parentDataProperty:key1,rootData}))){
 vErrors = vErrors === null ? validate68.errors : vErrors.concat(validate68.errors);
 errors = vErrors.length;
 }
-var valid1 = _errs5 === errors;
+var valid1 = _errs9 === errors;
 if(!valid1){
 break;
 }
@@ -18097,6 +18122,12 @@ break;
 else {
 validate67.errors = [{instancePath:instancePath+"/terminals",schemaPath:"#/properties/terminals/type",keyword:"type",params:{type: "object"},message:"must be object"}];
 return false;
+}
+}
+var valid0 = _errs6 === errors;
+}
+else {
+var valid0 = true;
 }
 }
 }

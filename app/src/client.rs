@@ -191,13 +191,13 @@ fn next_message(
 
 impl Client {
     pub fn reported_activity(&self) -> voyager_contract::activity::Projection {
-        voyager_contract::activity::Projection {
-            terminals: self
-                .activity
-                .lock()
-                .map(|activity| activity.projection())
-                .unwrap_or_default(),
-        }
+        self.activity
+            .lock()
+            .map(|activity| activity.projection())
+            .unwrap_or_else(|_| voyager_contract::activity::Projection {
+                reason: Some("Activity observation is unavailable".into()),
+                ..Default::default()
+            })
     }
 
     pub async fn refresh_activity(&self) -> Result<(), String> {

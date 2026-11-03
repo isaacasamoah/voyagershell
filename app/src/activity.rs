@@ -4,7 +4,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     time::{SystemTime, UNIX_EPOCH},
 };
-use voyager_contract::activity::{ActivityState, ReportedActivity};
+use voyager_contract::activity::{ActivityState, Projection, ReportedActivity};
 
 pub(crate) const LINE_LIMIT: usize = 1024 * 1024;
 pub(crate) const EARLY_LIMIT: usize = 256 * 1024;
@@ -26,8 +26,7 @@ struct Root {
 #[derive(Deserialize)]
 struct Fact {
     status: Option<Root>,
-    #[serde(default)]
-    reported: bool,
+    reported: Option<bool>,
     status_ms: Option<u64>,
     #[serde(default)]
     records: HashMap<String, serde::de::IgnoredAny>,
@@ -66,6 +65,7 @@ pub(crate) struct Activity {
     pub(crate) revision: u64,
     sequence: Option<u64>,
     unavailable: Option<String>,
+    binding_limited: bool,
     pub(crate) channel: Option<u32>,
     pending: bool,
     ignored_channel: Option<u32>,
@@ -95,21 +95,23 @@ fn unknown(reason: &str) -> ReportedActivity {
 }
 
 fn observed(fact: Fact, seq: Option<u64>) -> ReportedActivity {
-    let mut result = unknown(if !fact.reported {
+    let mut result = unknown(if fact.reported.is_none() {
+        "Core reported flag is unavailable"
+    } else if fact.reported == Some(false) {
         "No status was reported"
     } else if !fact.records.is_empty() {
         "Only child records were reported"
     } else {
         "The root status was cleared"
     });
-    result.reported = Some(fact.reported);
+    result.reported = fact.reported;
     result.source_ms = fact.status_ms.map(|value| value.to_string());
     result.observed_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()
         .map(|value| value.as_millis().to_string());
     result.sequence = seq.map(|value| value.to_string());
-    if !fact.reported && fact.status.is_some() {
+    if fact.reported != Some(true) && fact.status.is_some() {
         result.reason = Some("Root metadata was not marked reported".into());
         return result;
     }
@@ -207,23 +209,39 @@ impl Activity {
             .unwrap_or_else(|_| unknown("Invalid terminal activity metadata"))
     }
 
-    pub(crate) fn projection(&self) -> BTreeMap<String, ReportedActivity> {
-        self.entries
-            .iter()
-            .map(|(address, entry)| (address.clone(), entry.fact.clone()))
-            .collect()
+    pub(crate) fn projection(&self) -> Projection {
+        Projection {
+            terminals: self
+                .entries
+                .iter()
+                .map(|(address, entry)| (address.clone(), entry.fact.clone()))
+                .collect(),
+            limited: self.binding_limited,
+            reason: self
+                .binding_limited
+                .then(|| "Bound terminal observation limit exceeded".into()),
+        }
     }
 
     pub(crate) fn bind<'a>(&mut self, addresses: impl IntoIterator<Item = &'a str>) {
-        let selected: BTreeSet<_> = addresses
-            .into_iter()
-            .filter(|address| address.len() <= 128)
-            .take(TERMINAL_LIMIT)
-            .collect();
+        let mut selected = BTreeSet::new();
+        let mut limited = false;
+        for address in addresses {
+            if address.len() > 128 {
+                limited = true;
+            } else if !selected.contains(address) {
+                if selected.len() < TERMINAL_LIMIT {
+                    selected.insert(address);
+                } else {
+                    limited = true;
+                }
+            }
+        }
         let before = self.entries.len();
         self.entries
             .retain(|address, _| selected.contains(address.as_str()));
-        let mut changed = before != self.entries.len();
+        let mut changed = before != self.entries.len() || limited != self.binding_limited;
+        self.binding_limited = limited;
         for address in selected {
             if !self.entries.contains_key(address) {
                 self.track(address);
@@ -294,15 +312,7 @@ impl Activity {
         self.unavailable = None;
         self.changed();
         for entry in self.entries.values_mut() {
-            entry.fact = observed(
-                Fact {
-                    status: None,
-                    reported: false,
-                    status_ms: None,
-                    records: HashMap::new(),
-                },
-                Some(snapshot.seq),
-            );
+            entry.fact = unknown("Terminal absent from Core snapshot");
             entry.revision = self.revision;
         }
         for terminal in snapshot.terminals {
@@ -390,11 +400,7 @@ impl Activity {
                     let fact: Fact =
                         serde_json::from_value(event.data).map_err(|error| error.to_string())?;
                     if self.entries.contains_key(&address) {
-                        let mut fact = observed(fact, Some(event.seq));
-                        let entry = &self.entries[&address];
-                        if entry.fact.state == fact.state {
-                            fact.source_ms = entry.fact.source_ms.clone();
-                        }
+                        let fact = observed(fact, Some(event.seq));
                         self.changed();
                         self.entries.insert(
                             address,
@@ -498,6 +504,9 @@ mod tests {
             Some("Program text is data, not authority")
         );
         assert_eq!(text.state, ActivityState::Blocked);
+        let absent = Activity::inspect(json!({"address":"t1"}));
+        assert_eq!(absent.reported, None);
+        assert_eq!(absent.state, ActivityState::Unknown);
         let oversized = Activity::inspect(
             json!({"address":"t1","status":{"state":"working","progress":40,"title":"x".repeat(193),"msg":"x".repeat(2049)},"reported":true}),
         );
@@ -529,17 +538,19 @@ mod tests {
     #[test]
     fn split_early_events_missed_and_timestamps_preserve_reported_facts() {
         let mut facts = Activity::default();
-        facts.bind(["t1", "t2"]);
+        facts.bind(["t1", "t2", "t3"]);
         facts.begin();
         let event = br#"{"jsonrpc":"2.0","method":"event","params":{"seq":2,"type":"status","terminal":"t1","data":{"status":{"state":"done"},"records":{},"reported":true}}}
 "#;
         assert_eq!(facts.data(9, &event[..31]), 0);
         assert_eq!(facts.data(9, &event[31..]), 0);
-        facts.install(json!({"seq":1,"channel":9,"terminals":[{"address":"t1","status":{"state":"working","app":"test"},"status_ms":42,"reported":true}]})).unwrap();
+        facts.install(json!({"seq":1,"channel":9,"terminals":[{"address":"t1","status":{"state":"working","app":"test"},"status_ms":42,"reported":true},{"address":"t3","reported":false}]})).unwrap();
         assert_eq!(facts.get("t1").state, ActivityState::Done);
         assert_eq!(facts.get("t1").source_ms, None);
         assert_eq!(facts.get("t2").state, ActivityState::Unknown);
-        assert_eq!(facts.get("t2").reported, Some(false));
+        assert_eq!(facts.get("t2").reported, None);
+        assert!(facts.get("t2").reason.unwrap().contains("absent"));
+        assert_eq!(facts.get("t3").reported, Some(false));
         assert_eq!(facts.get("t1").reported, Some(true));
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":2,"type":"status","terminal":"t1","data":{"status":{"state":"error"},"reported":true}}})).unwrap();
         assert_eq!(facts.get("t1").state, ActivityState::Done);
@@ -557,6 +568,14 @@ mod tests {
         facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":12,"type":"status","terminal":"t1","data":{"status":{"state":"idle"},"reported":true}}})).unwrap();
         assert_eq!(facts.get("t1").state, ActivityState::Unknown);
         assert!(facts.get("t1").reason.unwrap().contains("sequence"));
+        facts.notification(json!({"jsonrpc":"2.0","method":"missed","params":{"seq":13,"terminals":[{"address":"t1","status":{"state":"future"},"status_ms":81,"reported":true}]}})).unwrap();
+        facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":14,"type":"status","terminal":"t1","data":{"status":{"state":"different"},"reported":true}}})).unwrap();
+        assert_eq!(facts.get("t1").state, ActivityState::Unknown);
+        assert_eq!(facts.get("t1").source_ms, None);
+        facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":15,"type":"status","terminal":"t1","data":{"status":{"state":"working"},"status_ms":93,"reported":true}}})).unwrap();
+        assert_eq!(facts.get("t1").source_ms.as_deref(), Some("93"));
+        facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":16,"type":"status","terminal":"t1","data":{"status":{"state":"working"},"reported":true}}})).unwrap();
+        assert_eq!(facts.get("t1").source_ms, None);
     }
 
     #[test]
@@ -589,5 +608,22 @@ mod tests {
         facts.bind(names.iter().map(String::as_str));
         assert_eq!(facts.entries.len(), TERMINAL_LIMIT);
         assert_eq!(facts.get("not-bound").state, ActivityState::Unknown);
+        let projection = serde_json::to_value(facts.projection()).unwrap();
+        assert_eq!(projection["limited"], true);
+        assert_eq!(
+            projection["reason"],
+            "Bound terminal observation limit exceeded"
+        );
+        assert_eq!(
+            projection["terminals"].as_object().unwrap().len(),
+            TERMINAL_LIMIT
+        );
+        let before = facts.revision;
+        facts.bind(names[..TERMINAL_LIMIT].iter().map(String::as_str));
+        assert!(facts.revision > before);
+        assert_eq!(
+            serde_json::to_value(facts.projection()).unwrap()["limited"],
+            false
+        );
     }
 }

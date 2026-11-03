@@ -93,6 +93,15 @@
     }
   },
   "properties": {
+    "limited": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "terminals": {
       "additionalProperties": {
         "$ref": "#/definitions/ReportedActivity"
@@ -101,7 +110,8 @@
     }
   },
   "required": [
-    "terminals"
+    "terminals",
+    "limited"
   ],
   "title": "Projection",
   "type": "object"

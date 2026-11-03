@@ -30,10 +30,12 @@ pub struct ReportedActivity {
     pub limited: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Projection {
     pub terminals: std::collections::BTreeMap<String, ReportedActivity>,
+    pub limited: bool,
+    pub reason: Option<String>,
 }
 
 fn percent_schema(schema: &mut schemars::Schema) {
