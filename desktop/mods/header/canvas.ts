@@ -73,8 +73,8 @@ export function vesselFrame(
     .min_w(0)
     .min_h(0)
     .p(1)
-    .rounded(3)
-    .bg(arranging ? "#b3d2e5" : "#00000000");
+    .rounded(10)
+    .bg(arranging ? "#b3d2e5" : "#ffffff18");
   if (selected && !arranging)
     frame.children([
       div()
@@ -83,7 +83,7 @@ export function vesselFrame(
         .left(0)
         .right(0)
         .h("50%")
-        .rounded_t(3)
+        .rounded_t(10)
         .bg(Background.linear_gradient(135, "#59a5ff65", "#b07af560")),
       div()
         .absolute()
@@ -91,8 +91,8 @@ export function vesselFrame(
         .left(0)
         .right(0)
         .h("50%")
-        .rounded_b(3)
+        .rounded_b(10)
         .bg(Background.linear_gradient(135, "#b07af560", "#f7a34b45")),
     ]);
-  return frame.child(surface);
+  return frame.child(surface.rounded(9).overflow_hidden());
 }

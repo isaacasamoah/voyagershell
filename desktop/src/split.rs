@@ -4,7 +4,7 @@ use anyhow::{Context as _, ensure};
 use gpui::{
     AnyElement, AppContext as _, Axis, Bounds, DispatchPhase, Entity, InteractiveElement as _,
     IntoElement as _, MouseButton, Orientation, ParentElement as _, Pixels, Role,
-    StatefulInteractiveElement as _, Styled as _, canvas, div, px,
+    StatefulInteractiveElement as _, Styled as _, canvas, div, px, transparent_black,
 };
 use gpui_base::{ResizablePanelGroup, ResizableState, resizable_panel};
 use gpui_shell::{
@@ -95,7 +95,7 @@ impl ComponentMaterializer for Split {
                         .active_handle
                         .unwrap_or(theme.tokens.colors.ring)
                 } else {
-                    theme.resizable.handle.unwrap_or(theme.tokens.colors.border)
+                    transparent_black().into()
                 };
                 let (label, orientation) = match handle.axis() {
                     Axis::Horizontal => ("Resize side by side panes", Orientation::Vertical),
@@ -151,11 +151,18 @@ impl ComponentMaterializer for Split {
                     });
                 }
             });
-        for child in request.take_children()? {
+        for (index, child) in request.take_children()?.into_iter().enumerate() {
+            let content = div().size_full();
+            let content = match (config.axis, index) {
+                (Axis::Horizontal, 0) => content.pr(px(4.)),
+                (Axis::Horizontal, _) => content.pl(px(4.)),
+                (Axis::Vertical, 0) => content.pb(px(4.)),
+                (Axis::Vertical, _) => content.pt(px(4.)),
+            };
             group = group.child(
                 resizable_panel()
                     .size_range(px(24.)..Pixels::MAX)
-                    .child(child),
+                    .child(content.child(child)),
             );
         }
         let measuring = host.clone();
