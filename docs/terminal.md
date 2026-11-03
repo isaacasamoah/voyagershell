@@ -3,8 +3,62 @@
 Herdr Core owns the shell process and canonical terminal state. Voyager stores a
 Core terminal address on a content instance, separate from its placement. Its
 single framed Core connection carries RPC, viewer data, input, focus and credit.
-Closing a viewer sends CLOSE; it does not stop the terminal. Closing the app
-closes its connection, not the Core server.
+Closing a viewer sends CLOSE; it does not stop the terminal. Connection teardown
+by itself does not stop the Core server. Explicit Quit has a separate Rust-owned
+shutdown path described below, with native acceptance still pending.
+
+## Explicit session Quit
+
+The source candidate routes Ctrl+Q through the existing application owners before
+calling GPUI quit. One request remains pending, and its final result is retained.
+Repeated Quit does not issue another stop. Errors remain visible in the native
+Header. This is source behavior awaiting the actual integrated native journey.
+
+The workspace queue stops accepting new workspace, process, content-update and
+terminal-open effects after its Quit message. Existing receipts retain their
+outcomes. Cached Inspect remains available. Other reads retain their existing
+identity/version checks and may refuse when Core or freshness is unavailable. Quit never
+connects to or starts another Core to diagnose or stop a failed initial startup.
+
+The Core adapter retains the permanent Core ID validated by hello. Before the
+one typed server.stop call, it reads server.status on the same dedicated physical
+connection and compares that ID. Display name, release text and compatible
+additional metadata do not identify a different Core. Core owns its programs,
+holders and descendant cleanup. The app then stops and reaps its own connector
+child, allowing five seconds for confirmed exit. A lost or malformed result
+remains uncertain, and no second stop is sent automatically.
+
+The private conversation receives shutdown on its existing bounded queue. It
+rejects later requests and discards undispatched callbacks. Already dispatched
+application work keeps its original owner result. It cancels the current native
+audio generation and closes its actual app-server child. Provider and connector
+exit checks each allow five seconds. The audio owner allows six seconds for the
+existing worker's completion flag. That worker writes completion after closing
+and waiting for its actual helper, before sending Finished to the conversation
+queue. Shutdown therefore does not wait for an event that only its blocked
+queue could process. Audio stop alone is not treated as confirmed helper exit.
+The private owner retains a provider child when exit confirmation fails.
+
+The private queue keeps its existing eight-slot bound. It uses the already
+available asynchronous channel so Quit can wait for queue admission without
+blocking GPUI or falsely treating a full queue as completed shutdown. Ordinary
+conversation calls retain their existing nonblocking admission behavior.
+
+GPUI's final on_app_quit hook is limited to 200 ms and cannot cancel shutdown,
+so it does not perform this transaction. The existing native Quit action waits
+for both owners first. Forced process termination, platform logout and other
+OS-initiated termination paths are not accepted as equivalent verified Quit.
+
+Viewer close/minimize and floating-avatar restoration remain the unchanged
+controller behavior. They do not run this stop transaction. A later cold start
+loads the same saved spaces/content/backend bindings. It does not regain the
+in-memory permission for a saved agent launch or start a replacement. Ended
+programs remain ended. This adds no implicit draft save or agent-session restore.
+
+Focused owned-child and private-Core tests are preparation. Full acceptance
+still requires real viewer restoration, actual Quit with provider/helper/Core
+and program exits, a running unrelated survivor and cold reopen with no agent
+restart. The original avatar and other corrective histories remain binding.
 
 Before requesting a new terminal, the application saves an operation identity
 in the versioned workspace document and supplies the same identity as a Core
