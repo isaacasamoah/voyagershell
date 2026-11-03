@@ -130,6 +130,8 @@ pub struct Content {
     pub start_pending: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch: Option<launch::Launch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell_intent: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
