@@ -210,7 +210,12 @@ impl Pane {
         if self.screen.replies_overflow() {
             self.status = "Terminal reply limit exceeded".into();
         }
-        if !self.pending_reply.is_empty() && self.viewer.input(self.pending_reply.clone()).is_ok() {
+        if !self.pending_reply.is_empty()
+            && self
+                .viewer
+                .protocol_reply(self.pending_reply.clone())
+                .is_ok()
+        {
             self.pending_reply.clear();
         }
         self.pending_credit += consumed as u32;
@@ -288,7 +293,7 @@ impl Pane {
             self.pending_resize = None;
         }
         if !self.pending_reply.is_empty() {
-            if let Err(error) = self.viewer.input(self.pending_reply.clone()) {
+            if let Err(error) = self.viewer.protocol_reply(self.pending_reply.clone()) {
                 self.status = format!("Core resize: {error:?}");
                 return false;
             }

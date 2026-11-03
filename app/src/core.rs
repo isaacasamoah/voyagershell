@@ -76,6 +76,7 @@ pub struct Viewer {
     input: SyncSender<Frame>,
     control: SyncSender<Frame>,
     connected: Arc<AtomicBool>,
+    input_open: Arc<Mutex<bool>>,
 }
 
 impl Viewer {
@@ -145,6 +146,24 @@ impl Viewer {
     }
 
     pub fn input(&self, bytes: Vec<u8>) -> Result<(), Error> {
+        let open = self
+            .input_open
+            .lock()
+            .map_err(|error| Error::Uncertain(error.to_string()))?;
+        if !*open {
+            return Err(Error::Rejected {
+                kind: "quitting".into(),
+                message: "Voyager is quitting; no terminal input was queued".into(),
+            });
+        }
+        self.input_frame(bytes)
+    }
+
+    pub fn protocol_reply(&self, bytes: Vec<u8>) -> Result<(), Error> {
+        self.input_frame(bytes)
+    }
+
+    fn input_frame(&self, bytes: Vec<u8>) -> Result<(), Error> {
         if bytes.len() > MAX_INPUT_BYTES {
             return Err(Error::Rejected {
                 kind: "too_large".into(),
@@ -235,6 +254,7 @@ pub struct Core {
     expected: Arc<AtomicU64>,
     attaching: Arc<AtomicU64>,
     connected: Arc<AtomicBool>,
+    input_open: Arc<Mutex<bool>>,
     sequence: u64,
 }
 
@@ -431,6 +451,7 @@ impl Core {
             expected,
             attaching,
             connected,
+            input_open: Arc::new(Mutex::new(true)),
             sequence: 1,
         })
     }
@@ -596,6 +617,10 @@ impl Core {
     }
 
     pub(crate) fn quit(&mut self) -> Result<(), Error> {
+        *self
+            .input_open
+            .lock()
+            .map_err(|error| Error::Uncertain(error.to_string()))? = false;
         let actual = self.server_status()?;
         if actual.core.id != self.identity {
             return Err(Error::Rejected {
@@ -797,6 +822,7 @@ impl Core {
             input: self.input.clone(),
             control: self.control.clone(),
             connected: self.connected.clone(),
+            input_open: self.input_open.clone(),
         })
     }
 
@@ -831,6 +857,71 @@ impl Drop for Core {
 #[cfg(test)]
 mod adapter_tests {
     use super::*;
+
+    #[test]
+    fn quit_fences_cloned_viewer_input_without_closing_output_or_control() {
+        let (control, requests) = mpsc::sync_channel::<Frame>(2);
+        let (input, queued) = mpsc::sync_channel(2);
+        let (reply, replies) = mpsc::sync_channel(1);
+        let worker = thread::spawn(move || {
+            let request = requests.recv().unwrap();
+            let value: Value = serde_json::from_slice(&request.payload).unwrap();
+            assert_eq!(value["method"], "server.status");
+            reply.send(json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"fixture refusal","data":{"kind":"blocked"}}})).unwrap();
+            requests.recv().unwrap()
+        });
+        let child = Command::new(env::current_exe().unwrap())
+            .arg("--list")
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut streams = Streams::default();
+        streams.buffers.insert(
+            7,
+            Stream {
+                bytes: VecDeque::from([42]),
+                ..Default::default()
+            },
+        );
+        streams.total = 1;
+        let mut core = Core {
+            child,
+            identity: "static-core".into(),
+            control,
+            input,
+            replies,
+            streams: Arc::new(Mutex::new(streams)),
+            expected: Arc::default(),
+            attaching: Arc::default(),
+            connected: Arc::new(AtomicBool::new(true)),
+            input_open: Arc::new(Mutex::new(true)),
+            sequence: 1,
+        };
+        let viewer = core.viewer(7).unwrap();
+        let cloned = viewer.clone();
+        viewer.input(b"before".to_vec()).unwrap();
+        let quit = core.quit();
+        let refused = cloned.input(b"after".to_vec());
+        let before = queued.recv().unwrap();
+        let empty = queued.try_recv().is_err();
+        viewer.protocol_reply(b"reply".to_vec()).unwrap();
+        let protocol = queued.recv().unwrap();
+        viewer.credit(1).unwrap();
+        let output = cloned.take(1).unwrap();
+        let close = core.close();
+        let credit = worker.join().unwrap();
+        assert!(close.is_ok());
+        assert!(matches!(quit, Err(Error::Rejected {kind, ..}) if kind == "blocked"));
+        assert!(matches!(refused, Err(Error::Rejected {kind, ..}) if kind == "quitting"));
+        assert_eq!(before.payload, b"before");
+        assert!(empty);
+        assert_eq!(
+            (protocol.channel, protocol.kind, protocol.payload),
+            (7, 0, b"reply".to_vec())
+        );
+        assert_eq!((credit.channel, credit.kind), (7, 1));
+        assert_eq!(output, [42]);
+    }
 
     #[test]
     fn protocol_envelopes_preserve_refusals_and_uncertainty() {
@@ -895,6 +986,7 @@ mod adapter_tests {
                 expected: Arc::default(),
                 attaching: Arc::default(),
                 connected: Arc::new(AtomicBool::new(true)),
+                input_open: Arc::new(Mutex::new(true)),
                 sequence: 1,
             };
             let result = core.rpc("doc.set", json!({}));
@@ -980,6 +1072,7 @@ mod resize_tests {
             input,
             control,
             connected: Arc::new(AtomicBool::new(true)),
+            input_open: Arc::new(Mutex::new(true)),
         };
         viewer.resize(120, 38).unwrap();
         viewer
