@@ -35,6 +35,51 @@ pub enum Side {
     Bottom,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(try_from = "u16", into = "u16")]
+#[schemars(transform = share_schema)]
+pub struct SplitShare(u16);
+
+impl SplitShare {
+    pub const TOTAL: u16 = 10000;
+}
+
+fn share_schema(schema: &mut schemars::Schema) {
+    schema.remove("format");
+    schema.insert("minimum".into(), serde_json::json!(1));
+    schema.insert("maximum".into(), serde_json::json!(SplitShare::TOTAL - 1));
+}
+
+impl Default for SplitShare {
+    fn default() -> Self {
+        Self(Self::TOTAL / 2)
+    }
+}
+
+impl TryFrom<u16> for SplitShare {
+    type Error = &'static str;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        (1..Self::TOTAL)
+            .contains(&value)
+            .then_some(Self(value))
+            .ok_or("Split share must be between 1 and 9999")
+    }
+}
+
+impl From<SplitShare> for u16 {
+    fn from(value: SplitShare) -> Self {
+        value.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SplitChild {
+    First,
+    Second,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Context {
@@ -62,6 +107,8 @@ pub enum Split {
     },
     Branch {
         axis: Axis,
+        #[serde(default)]
+        share: SplitShare,
         first: Box<Split>,
         second: Box<Split>,
     },
@@ -179,6 +226,12 @@ pub enum Action {
         fleet: FleetId,
         after: PlacementId,
         axis: Axis,
+    },
+    ResizeSplit {
+        fleet: FleetId,
+        #[schemars(length(max = 128))]
+        path: Vec<SplitChild>,
+        share: SplitShare,
     },
     MoveVessel {
         id: PlacementId,

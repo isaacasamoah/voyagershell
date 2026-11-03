@@ -443,6 +443,7 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::CreatePortal { .. } => "Voyage Portal created",
             Action::Rename { .. } => "Name changed",
             Action::Split { .. } => "Vessel split",
+            Action::ResizeSplit { .. } => "Split resized",
             Action::MoveVessel { .. } => "Vessel moved",
             Action::MoveVoyage { .. } => "Voyage reordered",
             Action::MoveFleet { .. } => "Fleet reordered",

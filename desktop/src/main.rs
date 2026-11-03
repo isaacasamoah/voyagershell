@@ -5,6 +5,7 @@ mod conversation;
 mod host;
 mod platform;
 mod script_types;
+mod split;
 mod terminal;
 mod terminal_screen;
 mod text;
@@ -153,6 +154,11 @@ fn run() -> Result<()> {
             }
             if let Err(error) = arrangement::register(&mut registry) {
                 eprintln!("Arrangement registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = split::register(&mut registry) {
+                eprintln!("Split registration: {error}");
                 cx.quit();
                 return;
             }

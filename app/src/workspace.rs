@@ -1,6 +1,6 @@
 use voyager_contract::{
     Action, Axis, Content, ContentId, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget,
-    SavedLayout, Side, Split, Vessel, Voyage, VoyageId, WorkspaceView,
+    SavedLayout, Side, Split, SplitChild, Vessel, Voyage, VoyageId, WorkspaceView,
 };
 
 #[derive(Default)]
@@ -249,6 +249,7 @@ impl Model {
                     );
                     fleet.root = Split::Branch {
                         axis: Axis::Horizontal,
+                        share: Default::default(),
                         first: Box::new(first),
                         second: Box::new(Split::Leaf { placement: id }),
                     };
@@ -280,6 +281,24 @@ impl Model {
                     return Err("Dock target not found".into());
                 }
                 self.layout.context = context;
+            }
+            Action::ResizeSplit { fleet, path, share } => {
+                if path.len() > 128 {
+                    return Err("Split path exceeds 128 steps".into());
+                }
+                let (v, f) = self.fleet_index(&fleet).ok_or("Fleet not found")?;
+                let mut node = &mut self.layout.voyages[v].fleets[f].root;
+                for child in path {
+                    node = match (node, child) {
+                        (Split::Branch { first, .. }, SplitChild::First) => first,
+                        (Split::Branch { second, .. }, SplitChild::Second) => second,
+                        _ => return Err("Split branch not found".into()),
+                    };
+                }
+                let Split::Branch { share: current, .. } = node else {
+                    return Err("Split branch not found".into());
+                };
+                *current = share;
             }
             Action::Split { fleet, after, axis } => {
                 let (v, f) = self.fleet_index(&fleet).ok_or("Fleet not found")?;
@@ -402,6 +421,7 @@ fn remove_leaf(root: Split, id: &PlacementId) -> (Option<Split>, bool) {
         Split::Leaf { .. } => (Some(root), false),
         Split::Branch {
             axis,
+            share,
             first,
             second,
         } => {
@@ -414,6 +434,7 @@ fn remove_leaf(root: Split, id: &PlacementId) -> (Option<Split>, bool) {
             let root = match (first, second) {
                 (Some(first), Some(second)) => Some(Split::Branch {
                     axis,
+                    share,
                     first: Box::new(first),
                     second: Box::new(second),
                 }),
@@ -447,6 +468,7 @@ fn insert_leaf(root: &mut Split, target: &PlacementId, id: &PlacementId, side: S
             };
             *root = Split::Branch {
                 axis,
+                share: Default::default(),
                 first: Box::new(first),
                 second: Box::new(second),
             };
@@ -499,6 +521,7 @@ fn replace_leaf(
         Split::Leaf { placement } if placement == target => {
             *root = Split::Branch {
                 axis,
+                share: Default::default(),
                 first: Box::new(Split::Leaf {
                     placement: target.clone(),
                 }),

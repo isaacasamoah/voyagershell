@@ -41,6 +41,15 @@ export type Action =
       operation: "split";
     }
   | {
+      fleet: string;
+      operation: "resize-split";
+      /**
+       * @maxItems 128
+       */
+      path: SplitChild[];
+      share: SplitShare;
+    }
+  | {
       id: string;
       operation: "move-vessel";
       side: Side;
@@ -92,6 +101,8 @@ export type RenameTarget =
       kind: "portal";
     };
 export type Axis = "horizontal" | "vertical";
+export type SplitChild = "first" | "second";
+export type SplitShare = number;
 export type Side = "left" | "right" | "top" | "bottom";
 export type Context =
   | {

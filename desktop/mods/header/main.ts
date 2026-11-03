@@ -5,8 +5,9 @@ import { Brand, Layer, Target } from "voyager_avatar";
 import { take_result, window_epoch } from "voyager_avatar";
 import { response as validateResponse } from "./validate.js";
 import { invoke, openTerminal } from "./workspace.js";
+import { request_id } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
-import { Terminal, TerminalState } from "voyager_native";
+import { Terminal, TerminalState, Split as NativeSplit } from "voyager_native";
 import { Chat } from "./chat.js";
 import { homeOverview } from "./home.js";
 
@@ -84,6 +85,8 @@ export default class Workspace extends View {
   declare refreshRequested: boolean;
   declare focused: string | null;
   declare splitHover: string | null;
+  declare splitReset: number;
+  declare splitSession: string;
   declare pendingShortcuts: string[];
   declare drag: Drag | null;
   declare layoutName: LayoutName | null | undefined;
@@ -111,6 +114,8 @@ export default class Workspace extends View {
     this.openings = new Map();
     this.focused = null;
     this.splitHover = null;
+    this.splitReset = 0;
+    this.splitSession = request_id();
     this.pendingShortcuts = [];
     this.drag = null;
     this.run({ operation: "inspect" }, cx);
@@ -120,9 +125,17 @@ export default class Workspace extends View {
     action: Action,
     cx: UIContext,
     done?: (result: Response | null, cx: AsyncContext) => void,
+    expectedVersion: string = this.version,
   ) {
     this.drag = null;
     if (this.busy) {
+      if (action.operation === "resize-split") {
+        this.splitReset += 1;
+        this.status =
+          "Resize was not saved while another workspace request was pending.";
+        cx.notify();
+        return;
+      }
       if (action.operation === "save-layout" && this.savingLayout) {
         this.pendingLayout = action;
       } else if (this.editing?.saving || this.savingLayout) {
@@ -164,7 +177,7 @@ export default class Workspace extends View {
       let result: Response | null = null;
       let prepared = false;
       try {
-        result = await invoke(action, this.version);
+        result = await invoke(action, expectedVersion);
         const accepted = this.acceptSnapshot(result, task);
         if (
           accepted &&
@@ -220,6 +233,7 @@ export default class Workspace extends View {
       } catch (error) {
         this.status = errorMessage(error);
         this.fresh = false;
+        this.splitReset += 1;
       }
       this.busy = false;
       if (done) done(result, task);
@@ -268,6 +282,7 @@ export default class Workspace extends View {
       return false;
     }
     this.version = result.version;
+    this.splitReset += 1;
     this.layout = result.layout;
     this.fresh = result.fresh;
     this.status = result.message || "";
@@ -804,15 +819,38 @@ export default class Workspace extends View {
       .child(selected ? "●" : "○");
   }
 
-  pane(tree: Split, fleet: Fleet): NativeElement {
+  pane(
+    tree: Split,
+    fleet: Fleet,
+    path: Extract<Action, { operation: "resize-split" }>["path"] = [],
+  ): NativeElement {
     const colors = projection();
     if (tree.kind === "branch") {
-      const row = div().flex().flex_1().min_w(0).min_h(0).gap(6);
-      if (tree.axis === "vertical") row.flex_col();
-      else row.flex_row();
-      return row
-        .child(this.pane(tree.first, fleet))
-        .child(this.pane(tree.second, fleet));
+      return NativeSplit.new(
+        JSON.stringify([this.splitSession, fleet.id, path]),
+        tree.axis,
+        tree.share ?? 5000,
+        this.version,
+        this.splitReset,
+        (revision, share, cx) =>
+          this.run(
+            { operation: "resize-split", fleet: fleet.id, path, share },
+            cx,
+            (result, task) => {
+              if (result?.status === "applied") return;
+              const message = this.status;
+              this.run({ operation: "inspect" }, task, () => {
+                this.status = message;
+              });
+            },
+            revision,
+          ),
+      )
+        .flex_1()
+        .min_w(0)
+        .min_h(0)
+        .child(this.pane(tree.first, fleet, [...path, "first"]))
+        .child(this.pane(tree.second, fleet, [...path, "second"]));
     }
     const placement = fleet.vessels.find((item) => item.id === tree.placement);
     if (!placement) throw Error("Split placement is unavailable.");

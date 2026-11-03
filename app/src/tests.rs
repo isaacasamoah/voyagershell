@@ -2,6 +2,99 @@ use crate::workspace::Model;
 use voyager_contract::{Action, Axis, Context, FleetId};
 
 #[test]
+fn resize_legacy_splits_default_to_half_and_reject_invalid_shares() {
+    let legacy = serde_json::json!({"kind":"branch","axis":"horizontal","first":{"kind":"leaf","placement":"a"},"second":{"kind":"leaf","placement":"b"}});
+    let split: voyager_contract::Split = serde_json::from_value(legacy).unwrap();
+    let mut current = serde_json::to_value(&split).unwrap();
+    assert_eq!(current["share"], 5000);
+    for share in [0, 10000, 65536] {
+        current["share"] = share.into();
+        assert!(serde_json::from_value::<voyager_contract::Split>(current.clone()).is_err());
+    }
+}
+
+#[test]
+fn resize_changes_one_branch_and_saved_layout_restores_its_share() {
+    let mut model = Model::default();
+    model
+        .apply(Action::CreateVoyage {
+            name: "Resize".into(),
+            cwd: "/tmp".into(),
+        })
+        .unwrap();
+    let fleet = model.layout.voyages[0].fleets[0].id.clone();
+    let placement = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+    for axis in [Axis::Horizontal, Axis::Vertical] {
+        model
+            .apply(Action::Split {
+                fleet: fleet.clone(),
+                after: placement.clone(),
+                axis,
+            })
+            .unwrap();
+    }
+    let contents = model.layout.contents.clone();
+    let context = model.layout.context.clone();
+    let resize = |path: serde_json::Value, share| {
+        serde_json::from_value::<Action>(
+            serde_json::json!({"operation":"resize-split","fleet":fleet,"path":path,"share":share}),
+        )
+        .unwrap()
+    };
+    model
+        .apply(resize(serde_json::json!(["first"]), 3500))
+        .unwrap();
+    let tree = serde_json::to_value(&model.layout.voyages[0].fleets[0].root).unwrap();
+    assert_eq!(tree["share"], 5000);
+    assert_eq!(tree["first"]["share"], 3500);
+    model
+        .apply(Action::SaveLayout {
+            fleet: fleet.clone(),
+            name: "Sizes".into(),
+        })
+        .unwrap();
+    model
+        .apply(resize(serde_json::json!(["first"]), 7200))
+        .unwrap();
+    model
+        .apply(Action::LoadLayout {
+            fleet: fleet.clone(),
+            name: "Sizes".into(),
+        })
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&model.layout.voyages[0].fleets[0].root).unwrap(),
+        tree
+    );
+    let before = model.layout.clone();
+    assert!(
+        model
+            .apply(resize(serde_json::json!(["second"]), 6000))
+            .is_err()
+    );
+    assert_eq!(model.layout, before);
+    let layout = std::sync::Arc::new(before);
+    assert!(
+        crate::scope::check(
+            &layout,
+            Some(&Context::Fleet { id: fleet.clone() }),
+            &resize(serde_json::json!([]), 6000)
+        )
+        .is_ok()
+    );
+    assert!(
+        crate::scope::check(
+            &layout,
+            Some(&Context::Vessel { id: placement }),
+            &resize(serde_json::json!([]), 6000)
+        )
+        .is_err()
+    );
+    assert_eq!(model.layout.contents, contents);
+    assert_eq!(model.layout.context, context);
+}
+
+#[test]
 fn home_and_saved_layouts_respect_captured_scope() {
     let mut model = Model::default();
     model
@@ -341,15 +434,42 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
         initial.version,
     );
     let final_state = call(Action::Inspect, 0);
-    let mut cleanup = Core::connect(&session).unwrap();
-    cleanup.rpc("doc.set", serde_json::json!({
-        "name": "voyager-layout-v1", "value": final_state.layout, "version": final_state.version,
-    })).unwrap();
-    let external_conflict = call(
-        Action::Dock {
-            context: Context::Workspace,
+    let fleet = &final_state.layout.voyages[0].fleets[0];
+    let divided = call(
+        Action::Split {
+            fleet: fleet.id.clone(),
+            after: fleet.vessels[0].id.clone(),
+            axis: Axis::Horizontal,
         },
         final_state.version,
+    );
+    let resized_request = Request {
+        request_id: client.request_id(),
+        expected_version: divided.version,
+        action: Action::ResizeSplit {
+            fleet: fleet.id.clone(),
+            path: vec![],
+            share: 3500.try_into().unwrap(),
+        },
+    };
+    let resized = client.call(resized_request.clone()).unwrap();
+    let repeated_resize = client.call(resized_request).unwrap();
+    let mut cleanup = Core::connect(&session).unwrap();
+    cleanup
+        .rpc(
+            "doc.set",
+            serde_json::json!({
+                "name": "voyager-layout-v1", "value": resized.layout, "version": resized.version,
+            }),
+        )
+        .unwrap();
+    let external_conflict = call(
+        Action::ResizeSplit {
+            fleet: fleet.id.clone(),
+            path: vec![],
+            share: 7200.try_into().unwrap(),
+        },
+        resized.version,
     );
     let refreshed = call(Action::Inspect, 0);
     let reconnect = Client::open(session.clone(), "/tmp".into());
@@ -367,6 +487,14 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     let stopped = cleanup.rpc("server.stop", serde_json::json!({}));
     cleanup.close().unwrap();
     assert_eq!(saved.status, Status::Applied);
+    assert_eq!(resized.status, Status::Applied);
+    assert_eq!(resized, repeated_resize);
+    assert_eq!(refreshed.layout.contents, divided.layout.contents);
+    assert_eq!(refreshed.layout.context, divided.layout.context);
+    assert_eq!(
+        serde_json::to_value(&refreshed.layout.voyages[0].fleets[0].root).unwrap()["share"],
+        3500
+    );
     assert_eq!(saved, duplicate);
     assert_eq!(refused_identity.status, Status::Rejected);
     assert_eq!(stale.status, Status::Rejected);
@@ -562,6 +690,7 @@ fn saved_fleet_layout_restores_existing_placements_without_creating_backends() {
     let first_leaf = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
     model.layout.saved_layouts[0].root = Split::Branch {
         axis: Axis::Horizontal,
+        share: Default::default(),
         first: Box::new(Split::Leaf {
             placement: first_leaf.clone(),
         }),
@@ -1049,6 +1178,7 @@ fn reveal_hidden_vessel_keeps_identity_context_and_original_fleet() {
         model.layout.voyages[0].fleets[0].root,
         voyager_contract::Split::Branch {
             axis: Axis::Horizontal,
+            share: Default::default(),
             first: Box::new(tree),
             second: Box::new(voyager_contract::Split::Leaf {
                 placement: hidden.id.clone()

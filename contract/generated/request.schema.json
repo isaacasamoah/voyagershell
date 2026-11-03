@@ -180,6 +180,35 @@
         {
           "additionalProperties": false,
           "properties": {
+            "fleet": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "resize-split",
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "$ref": "#/definitions/SplitChild"
+              },
+              "maxItems": 128,
+              "type": "array"
+            },
+            "share": {
+              "$ref": "#/definitions/SplitShare"
+            }
+          },
+          "required": [
+            "operation",
+            "fleet",
+            "path",
+            "share"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "id": {
               "type": "string"
             },
@@ -494,6 +523,18 @@
         "bottom"
       ],
       "type": "string"
+    },
+    "SplitChild": {
+      "enum": [
+        "first",
+        "second"
+      ],
+      "type": "string"
+    },
+    "SplitShare": {
+      "maximum": 9999,
+      "minimum": 1,
+      "type": "integer"
     }
   },
   "properties": {

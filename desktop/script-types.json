@@ -1,5 +1,5 @@
 {
-  "rawSha256": "6a061aaf2c031c75230f20f83085695fa57ba4a0ba5f0bd86baf5ec43079ea8c",
+  "rawSha256": "e8defe442655b0db6c7d943d1636f5d580f944eec00e2e7d3416d3b692fd3eb0",
   "modules": [
     "gpui-base",
     "gpui-kit",
