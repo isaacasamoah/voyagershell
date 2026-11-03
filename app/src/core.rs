@@ -1,9 +1,11 @@
 use crate::{
+    activity::Activity,
     core_shapes::{
         AttachParams, AttachResult, DocGetParams, DocGetResult, DocSetParams, DocSetResult,
         GetParams, HelloParams, HelloResult, InterruptParams, InterruptResult, KillParams,
         ListParams, ReadParams, ReadResult, RunParams, RunResult, SendParams, SendResult,
-        StatusParams, StatusResult, StopParams, StopResult, Terminal,
+        StatusParams, StatusResult, StopParams, StopResult, SubscribeParams, SubscribeResult,
+        Terminal,
     },
     wire::Frame,
 };
@@ -256,10 +258,19 @@ pub struct Core {
     connected: Arc<AtomicBool>,
     input_open: Arc<Mutex<bool>>,
     sequence: u64,
+    activity: Arc<Mutex<Activity>>,
+    activity_supported: bool,
 }
 
 impl Core {
     pub fn connect(session: &str) -> Result<Self, Error> {
+        Self::connect_activity(session, Arc::default())
+    }
+
+    pub(crate) fn connect_activity(
+        session: &str,
+        activity: Arc<Mutex<Activity>>,
+    ) -> Result<Self, Error> {
         if !session.starts_with("voyager-")
             || !session
                 .bytes()
@@ -289,7 +300,7 @@ impl Core {
                 .take()
                 .ok_or_else(|| Error::Uncertain("Core output pipe missing".into()))?,
         );
-        let handshake = (|| -> Result<String, Error> {
+        let handshake = (|| -> Result<(String, bool), Error> {
             let params = Self::hello_params();
             let mut hello = serde_json::to_vec(
                 &json!({"jsonrpc":"2.0","id":1,"method":"hello","params":params}),
@@ -313,9 +324,17 @@ impl Core {
             }
             let result: Value =
                 serde_json::from_slice(&line).map_err(|e| Error::Uncertain(e.to_string()))?;
-            Self::validate_hello(result)
+            let supported = result
+                .pointer("/result/methods")
+                .and_then(Value::as_array)
+                .is_some_and(|methods| {
+                    methods
+                        .iter()
+                        .any(|method| method.as_str() == Some("events.subscribe"))
+                });
+            Self::validate_hello(result).map(|identity| (identity, supported))
         })();
-        let identity = match handshake {
+        let (identity, activity_supported) = match handshake {
             Ok(identity) => identity,
             Err(error) => {
                 if let Err(cleanup) = child.kill() {
@@ -336,6 +355,7 @@ impl Core {
         let connected = Arc::new(AtomicBool::new(true));
         let writer_alive = connected.clone();
         let writer_streams = streams.clone();
+        let writer_activity = activity.clone();
         thread::spawn(move || {
             while writer_alive.load(Ordering::Acquire) {
                 let frame = match controls.try_recv() {
@@ -363,6 +383,9 @@ impl Core {
                 }
             }
             writer_alive.store(false, Ordering::Release);
+            if let Ok(mut activity) = writer_activity.lock() {
+                activity.fail("Core is disconnected");
+            }
             if let Ok(streams) = writer_streams.lock() {
                 for stream in streams.buffers.values() {
                     let _ = stream.wake.try_send(());
@@ -373,11 +396,21 @@ impl Core {
         let reader_expected = expected.clone();
         let reader_attaching = attaching.clone();
         let reader_alive = connected.clone();
+        let reader_activity = activity.clone();
+        let reader_control = control.clone();
         thread::spawn(move || {
             while reader_alive.load(Ordering::Acquire) {
                 let Ok(frame) = Frame::read_from(&mut output) else {
                     break;
                 };
+                let terminal_channel = reader_streams
+                    .lock()
+                    .is_ok_and(|streams| streams.buffers.contains_key(&frame.channel));
+                if !terminal_channel
+                    && Self::activity_frame(&reader_activity, &reader_control, &frame)
+                {
+                    continue;
+                }
                 if frame.channel == 0 && frame.kind == 0 {
                     let Ok(message) = serde_json::from_slice::<Value>(&frame.payload) else {
                         break;
@@ -435,6 +468,9 @@ impl Core {
                 }
             }
             reader_alive.store(false, Ordering::Release);
+            if let Ok(mut activity) = reader_activity.lock() {
+                activity.fail("Core is disconnected");
+            }
             if let Ok(streams) = reader_streams.lock() {
                 for stream in streams.buffers.values() {
                     let _ = stream.wake.try_send(());
@@ -453,7 +489,127 @@ impl Core {
             connected,
             input_open: Arc::new(Mutex::new(true)),
             sequence: 1,
+            activity,
+            activity_supported,
         })
+    }
+
+    fn activity_flow(activity: &Arc<Mutex<Activity>>, control: &SyncSender<Frame>, credit: u32) {
+        let (channel, close) = match activity.lock() {
+            Ok(mut activity) => (activity.channel, activity.take_close()),
+            Err(_) => return,
+        };
+        if let Some(channel) = close {
+            let _ = control.try_send(Frame {
+                channel,
+                kind: 2,
+                payload: Vec::new(),
+            });
+        }
+        if credit != 0
+            && let Some(channel) = channel
+            && control
+                .try_send(Frame {
+                    channel,
+                    kind: 1,
+                    payload: credit.to_le_bytes().to_vec(),
+                })
+                .is_err()
+            && let Ok(mut activity) = activity.lock()
+        {
+            activity.fail("Activity credit is unavailable");
+        }
+    }
+
+    fn activity_frame(
+        activity: &Arc<Mutex<Activity>>,
+        control: &SyncSender<Frame>,
+        frame: &Frame,
+    ) -> bool {
+        let credit = {
+            let Ok(mut activity) = activity.lock() else {
+                return false;
+            };
+            if !activity.accepts(frame.channel) {
+                return false;
+            }
+            match frame.kind {
+                0 => activity.data(frame.channel, &frame.payload),
+                2 => {
+                    activity.fail("Activity channel closed");
+                    0
+                }
+                _ => {
+                    activity.fail("Invalid activity frame");
+                    0
+                }
+            }
+        };
+        Self::activity_flow(activity, control, credit);
+        true
+    }
+
+    pub(crate) fn observe_activity(&mut self, wake: Box<dyn Fn() + Send + Sync>) {
+        if let Ok(mut activity) = self.activity.lock() {
+            activity.wake_with(wake);
+        }
+        self.refresh_activity();
+    }
+
+    pub(crate) fn refresh_activity(&mut self) {
+        if !self.activity_supported || !self.connected.load(Ordering::Acquire) {
+            if let Ok(mut activity) = self.activity.lock() {
+                activity.fail("Activity subscription is unavailable");
+            }
+            return;
+        }
+        if let Ok(mut activity) = self.activity.lock() {
+            activity.begin();
+        }
+        Self::activity_flow(&self.activity, &self.control, 0);
+        let result: Result<SubscribeResult, Error> =
+            self.call("events.subscribe", SubscribeParams::default());
+        let result = result
+            .map_err(|error| format!("{error:?}"))
+            .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string()));
+        let credit = if let Ok(mut activity) = self.activity.lock() {
+            match result.and_then(|result| {
+                if result
+                    .get("channel")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|channel| {
+                        self.streams
+                            .lock()
+                            .is_ok_and(|streams| streams.buffers.contains_key(&(channel as u32)))
+                    })
+                {
+                    return Err("Activity channel conflicts with a terminal".into());
+                }
+                activity.install(result)
+            }) {
+                Ok(credit) => credit,
+                Err(_) => {
+                    activity.fail("Activity subscription is unavailable");
+                    0
+                }
+            }
+        } else {
+            0
+        };
+        Self::activity_flow(&self.activity, &self.control, credit);
+    }
+
+    pub(crate) fn activity_revision(&self) -> u64 {
+        self.activity
+            .lock()
+            .map(|activity| activity.revision)
+            .unwrap_or(0)
+    }
+
+    pub(crate) fn reported_activity(
+        terminal: &Terminal,
+    ) -> voyager_contract::activity::ReportedActivity {
+        Activity::inspect(serde_json::to_value(terminal).unwrap_or(Value::Null))
     }
 
     fn hello_params() -> HelloParams {
@@ -529,8 +685,32 @@ impl Core {
         self.call("server.status", StatusParams(Default::default()))
     }
 
+    fn activity_seed_start(&self, terminal: &str) -> u64 {
+        self.activity
+            .lock()
+            .map(|mut activity| {
+                activity.track(terminal);
+                activity.revision
+            })
+            .unwrap_or(0)
+    }
+
+    fn activity_seed_finish(&self, terminal: &Terminal, before: u64) {
+        if let Ok(mut activity) = self.activity.lock()
+            && activity
+                .seed(
+                    serde_json::to_value(terminal).unwrap_or(Value::Null),
+                    before,
+                )
+                .is_err()
+        {
+            activity.fail("Invalid terminal activity metadata");
+        }
+    }
+
     pub fn terminal_attach(&mut self, terminal: &str) -> Result<AttachResult, Error> {
-        self.call(
+        let before = self.activity_seed_start(terminal);
+        let result: AttachResult = self.call(
             "terminal.attach",
             AttachParams {
                 caller: None,
@@ -542,17 +722,22 @@ impl Core {
                 rows: 24,
                 terminal: terminal.into(),
             },
-        )
+        )?;
+        self.activity_seed_finish(&result.terminal, before);
+        Ok(result)
     }
 
     pub fn terminal_get(&mut self, terminal: &str) -> Result<Terminal, Error> {
-        self.call(
+        let before = self.activity_seed_start(terminal);
+        let result: Terminal = self.call(
             "terminal.get",
             GetParams {
                 caller: None,
                 terminal: terminal.into(),
             },
-        )
+        )?;
+        self.activity_seed_finish(&result, before);
+        Ok(result)
     }
 
     pub fn terminal_list(&mut self) -> Result<Vec<Terminal>, Error> {
@@ -617,6 +802,10 @@ impl Core {
     }
 
     pub(crate) fn quit(&mut self) -> Result<(), Error> {
+        if let Ok(mut activity) = self.activity.lock() {
+            activity.fail("Voyager is quitting");
+        }
+        Self::activity_flow(&self.activity, &self.control, 0);
         *self
             .input_open
             .lock()
@@ -859,6 +1048,68 @@ mod adapter_tests {
     use super::*;
 
     #[test]
+    fn reported_activity_frames_credit_close_and_control_are_separate() {
+        let activity = Arc::new(Mutex::new(Activity::default()));
+        let (control, receive) = mpsc::sync_channel(4);
+        {
+            let mut facts = activity.lock().unwrap();
+            facts.bind(["t1"]);
+            facts.begin();
+        }
+        let mut payload = serde_json::to_vec(&json!({"jsonrpc":"2.0","method":"event","params":{"seq":1,"type":"status","terminal":"t1","data":{"status":{"state":"working"},"reported":true}}})).unwrap();
+        payload.push(b'\n');
+        let frame = Frame {
+            channel: 7,
+            kind: 0,
+            payload,
+        };
+        let mut wire = Vec::new();
+        frame.write_to(&mut wire).unwrap();
+        let actual = Frame::read_from(&mut wire.as_slice()).unwrap();
+        assert!(Core::activity_frame(&activity, &control, &actual));
+        assert!(receive.try_recv().is_err());
+        let credit = activity
+            .lock()
+            .unwrap()
+            .install(json!({"seq":0,"channel":7,"terminals":[]}))
+            .unwrap();
+        Core::activity_flow(&activity, &control, credit);
+        let returned = receive.try_recv().unwrap();
+        assert_eq!((returned.channel, returned.kind), (7, 1));
+        assert_eq!(
+            returned.payload,
+            (actual.payload.len() as u32).to_le_bytes()
+        );
+        assert_eq!(
+            activity.lock().unwrap().get("t1").state,
+            voyager_contract::activity::ActivityState::Working
+        );
+        assert!(!Core::activity_frame(
+            &activity,
+            &control,
+            &Frame {
+                channel: 0,
+                kind: 0,
+                payload: Vec::new()
+            }
+        ));
+        assert!(Core::activity_frame(
+            &activity,
+            &control,
+            &Frame {
+                channel: 7,
+                kind: 2,
+                payload: Vec::new()
+            }
+        ));
+        assert_eq!(receive.try_recv().unwrap().kind, 2);
+        assert_eq!(
+            activity.lock().unwrap().get("t1").state,
+            voyager_contract::activity::ActivityState::Unknown
+        );
+    }
+
+    #[test]
     fn quit_fences_cloned_viewer_input_without_closing_output_or_control() {
         let (control, requests) = mpsc::sync_channel::<Frame>(2);
         let (input, queued) = mpsc::sync_channel(2);
@@ -896,6 +1147,8 @@ mod adapter_tests {
             connected: Arc::new(AtomicBool::new(true)),
             input_open: Arc::new(Mutex::new(true)),
             sequence: 1,
+            activity: Arc::default(),
+            activity_supported: false,
         };
         let viewer = core.viewer(7).unwrap();
         let cloned = viewer.clone();
@@ -988,6 +1241,8 @@ mod adapter_tests {
                 connected: Arc::new(AtomicBool::new(true)),
                 input_open: Arc::new(Mutex::new(true)),
                 sequence: 1,
+                activity: Arc::default(),
+                activity_supported: false,
             };
             let result = core.rpc("doc.set", json!({}));
             worker.join().unwrap();

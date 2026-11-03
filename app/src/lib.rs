@@ -1,3 +1,4 @@
+mod activity;
 mod administrator;
 mod canvas;
 pub mod client;
