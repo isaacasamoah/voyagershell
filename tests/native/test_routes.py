@@ -490,19 +490,6 @@ class Routes(unittest.TestCase):
     def test_notes_lifetime_source_variants_preserve_real_editor_composition(self):
         proof = importlib.import_module("proof_notes_lifetime")
         source = (ROOT / "content/notes/main.js").read_text()
-        setup = proof.lifetime_setup((ROOT / "desktop/mods/header/main.js").read_text())
-        self.assertEqual(setup.count('operation: "create-content"'), 2)
-        self.assertEqual(
-            setup.count('operation: "update-canvas"'),
-            (ROOT / "desktop/mods/header/main.js")
-            .read_text()
-            .count('operation: "update-canvas"')
-            + 1,
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "setup.mjs"
-            path.write_text(setup)
-            subprocess.run(["node", "--check", str(path)], check=True, timeout=5)
         for case in ("valid", "parse", "render", "component"):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
                 variant = proof.source_variant(source, case, "LIFETIME_MARKER")
@@ -540,6 +527,60 @@ class Routes(unittest.TestCase):
                 if value != "expected":
                     self.assertIn(
                         "GATE TIMED OUT; DO NOT CONFIGURE OR UPDATE", result.stderr
+                    )
+
+    def test_warm_restore_clicks_only_the_owned_floating_window(self):
+        proof = importlib.import_module("proof_avatar_window")
+        original = {"pid": 7, "window": "main"}
+        for pointer in ("floating", "other"):
+            native_calls = []
+            states = iter(("Iconic", "Normal"))
+
+            def execute(arguments, **_options):
+                if arguments[0] == "xprop":
+                    return next(states)
+                if arguments[1] == "getmouselocation":
+                    return "WINDOW=" + pointer
+                self.assertEqual(arguments, ("xdotool", "windowquit", "main"))
+                return ""
+
+            def wait_once(get, predicate, _label):
+                value = get()
+                self.assertTrue(predicate(value))
+                return value
+
+            with (
+                patch.object(proof, "floating_windows", return_value=["floating"]),
+                patch.object(proof.subprocess, "check_output", side_effect=execute),
+            ):
+                options = dict(
+                    original=original,
+                    native=lambda *args: native_calls.append(args),
+                    capture=lambda *_args: None,
+                    geometry=lambda *_args: {
+                        "X": "10",
+                        "Y": "20",
+                        "WIDTH": "240",
+                        "HEIGHT": "240",
+                    },
+                    env={},
+                    wait=wait_once,
+                    name="test",
+                )
+                if pointer == "other":
+                    with self.assertRaises(AssertionError):
+                        proof.warm_restore(**options)
+                    self.assertEqual(native_calls, [("move", 130, 140, 2)])
+                else:
+                    receipt = proof.warm_restore(**options)
+                    self.assertEqual(receipt["restorePointer"]["WINDOW"], "floating")
+                    self.assertEqual(
+                        native_calls,
+                        [
+                            ("move", 130, 140, 2),
+                            ("button", True),
+                            ("button", False),
+                        ],
                     )
 
     def test_notes_sibling_region_covers_both_editors_and_status(self):

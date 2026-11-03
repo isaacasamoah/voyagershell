@@ -6,9 +6,10 @@ import time
 from pathlib import Path
 from secrets import token_hex
 
+from proof_avatar_window import warm_restore
 from proof_clipboard import Clipboard
 from proof_conversation import chat_close_point, package_turn, provider_processes
-from proof_foundation_notes import notes, setup_source, observe_owned_exit, wait
+from proof_foundation_notes import notes, observe_owned_exit, wait
 from proof_process import process_identity
 from proof_workspace import core_rpc, named_button
 
@@ -33,23 +34,6 @@ def source_variant(source, case, marker):
     return source
 
 
-def lifetime_setup(source):
-    return notes.once(
-        setup_source(source),
-        'this.run({ operation: "create-content", typeId: "notes", destination: { kind: "portal", voyage: voyage.id } }, next);',
-        """this.run({
-          operation: "create-content", typeId: "notes",
-          destination: { kind: "portal", voyage: voyage.id }
-        }, next, (portal, done) => {
-          if (portal?.status !== "applied" || !portal.fresh)
-            throw Error("Portal setup was not confirmed");
-          this.run({ operation: "update-canvas",
-            canvas: { ...portal.layout.canvas, portalMode: "make-room" }
-          }, done);
-        });""",
-    )
-
-
 def prove(
     *,
     profile,
@@ -72,6 +56,7 @@ def prove(
     header = profile / "mods/header/main.js"
     package = profile / "mods/notes/main.js"
     original_header = original_source = None
+    cold = False
 
     def receipt(name, value):
         (evidence / (name + ".json")).write_text(json.dumps(value, indent=2))
@@ -211,7 +196,15 @@ def prove(
         if cold:
             assert actual_core["pid"] != core["pid"]
             assert actual_core["core"]["id"] == core["core"]["id"]
-            record("cold-core", actual_core["pid"])
+            if "cold-core" in owned:
+                assert actual_core["pid"] == owned["cold-core"]["pid"]
+                assert process_identity(actual_core["pid"], metadata_only=True) == {
+                    key: value
+                    for key, value in owned["cold-core"].items()
+                    if key != "pid"
+                }
+            else:
+                record("cold-core", actual_core["pid"])
             assert actual["state"] == "finished"
             assert actual.get("pid") in (None, terminal["pid"])
             assert actual["created_ms"] == terminal["created_ms"]
@@ -266,21 +259,16 @@ def prove(
         original_clipboard = clipboard.preserve(
             evidence / "notes-lifetime-clipboard.json"
         )
-        if journey == "notes-configuration":
-            from proof_notes_configuration import configuration_setup
+        from proof_notes_configuration import configuration_setup
 
-            configuration_setup(
-                native=native,
-                pid=pid(),
-                evidence=evidence,
-                type_text=type_text,
-                click=click,
-                owned=owned,
-            )
-        else:
-            stop()
-            notes.atomic(header, lifetime_setup(original_header.decode()))
-            start("notes-lifetime-setup")
+        configuration_setup(
+            native=native,
+            pid=pid(),
+            evidence=evidence,
+            type_text=type_text,
+            click=click,
+            owned=owned,
+        )
         created = wait(
             document,
             lambda doc: (
@@ -303,20 +291,12 @@ def prove(
         receipt(
             "notes-lifetime-setup",
             {
-                "kind": (
-                    "actual private model owner setup; supported make-room, not default-overlay evidence"
-                    if journey == "notes-configuration"
-                    else "three typed owner setup actions, not human/model creation; supported make-room, not default-overlay evidence"
-                ),
+                "kind": "actual private model owner setup; supported make-room, not default-overlay evidence",
                 "initial": initial,
                 "created": created,
                 "ids": ids,
             },
         )
-        if journey != "notes-configuration":
-            stop()
-            notes.atomic(header, original_header)
-            start("notes-lifetime-fresh")
         marker = token_hex(6)
         expected = [
             {"title": "Lifetime Fleet", "text": "FLEET_" + marker},
@@ -333,9 +313,20 @@ def prove(
                 lambda values: json.loads(values[index]) == note,
                 "native blur save",
             )
-        if journey != "notes-configuration":
-            stop()
-            start("notes-lifetime-reopened")
+        if journey == "notes-lifetime":
+            receipt("notes-lifetime-before-warm-restore", identity())
+            original = json.loads((evidence / "launch.json").read_text())
+            restored = warm_restore(
+                original=original,
+                native=native,
+                capture=capture,
+                geometry=geometry,
+                env=env,
+                wait=wait,
+                name="notes-lifetime",
+            )
+            assert json.loads((evidence / "launch.json").read_text()) == original
+            receipt("notes-lifetime-warm-restore", {**restored, "identity": identity()})
         for index, note in enumerate(expected):
             for name, key in (("Note title", "title"), ("Note text", "text")):
                 copied(name, index, note[key])
@@ -454,8 +445,12 @@ def prove(
                 preserved = profile / "mods/.notes.removed/main.js"
                 assert preserved.read_bytes() == personal_source and data() == saved
                 capture("notes-lifetime-removed")
+                receipt("notes-lifetime-before-removed-quit", identity())
                 stop()
+                settle()
                 start("notes-lifetime-removed-reopened")
+                receipt("notes-lifetime-cold-reopened", identity(cold=True))
+                cold = True
                 assert not package.parent.exists() and not fields(), (
                     "Launch reseeded a removed package"
                 )
@@ -471,18 +466,18 @@ def prove(
             receipt(
                 "notes-lifetime-" + operation,
                 {
-                    "identity": identity(),
+                    "identity": identity(cold=cold),
                     "data": expected,
                     "sourceSha256": hashlib.sha256(personal_source).hexdigest(),
                     "visualReviewRequired": True,
                 },
             )
         return [
-            "typed-owner-notes-setup",
-            "fresh-native-vessel-portal-save-reopen",
+            "actual-owner-notes-setup",
+            "native-vessel-portal-save-and-warm-viewer-restore",
             "dirty-native-edit-through-valid-broken-repaired-source",
             "retained-draft-native-blur-save",
-            "real-tool-remove-survives-reopen",
+            "real-tool-remove-survives-cold-reopen-with-ended-backend",
             "real-tool-restore-same-content",
         ]
     finally:

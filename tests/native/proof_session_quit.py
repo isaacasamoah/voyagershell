@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from secrets import randbelow, token_hex
 
-from proof_avatar_window import floating_windows
+from proof_avatar_window import warm_restore
 from proof_conversation import chat_close_point, provider_processes
 from proof_terminal_agent import process_record
 from proof_workspace import core_rpc, named_button
@@ -346,40 +346,17 @@ def prove(
         capture("quit-completed-private-answer")
         click(*chat_close_point(native, launch()["pid"], evidence))
         original = launch()
-        geometry()
-        execute("xdotool", "windowquit", original["window"])
-        observed["warmWindowState"] = wait(
-            lambda: execute("xprop", "-id", original["window"], "WM_STATE"),
-            lambda state: "Iconic" in state,
-            "warm workspace close",
+        observed.update(
+            warm_restore(
+                original=original,
+                native=native,
+                capture=capture,
+                geometry=geometry,
+                env=env,
+                wait=wait,
+                name="quit",
+            )
         )
-        floating = wait(
-            lambda: floating_windows(original, geometry, env),
-            lambda items: len(items) == 1,
-            "one retained floating avatar",
-        )[0]
-        capture("quit-warm-floating", floating)
-        bounds = geometry(floating)
-        native(
-            "move",
-            int(bounds["X"]) + int(bounds["WIDTH"]) // 2,
-            int(bounds["Y"]) + int(bounds["HEIGHT"]) // 2,
-            2,
-        )
-        location = dict(
-            line.split("=", 1)
-            for line in execute("xdotool", "getmouselocation", "--shell").splitlines()
-        )
-        observed["restorePointer"] = location
-        assert location["WINDOW"] == floating, location
-        native("button", True)
-        native("button", False)
-        wait(
-            lambda: execute("xprop", "-id", original["window"], "WM_STATE"),
-            lambda state: "Normal" in state,
-            "same workspace Restore",
-        )
-        assert floating_windows(original, geometry, env) == [floating]
         assert launch() == original
         observed["warm"] = {
             "document": document(),
