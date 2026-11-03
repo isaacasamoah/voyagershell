@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub mod administrator;
+pub mod canvas;
 pub mod content;
 pub mod conversation;
 pub mod voice;
@@ -188,6 +189,8 @@ pub struct Layout {
     pub selected_fleet: Option<FleetId>,
     pub context: Context,
     #[serde(default)]
+    pub canvas: canvas::Canvas,
+    #[serde(default)]
     pub view: WorkspaceView,
     #[serde(default)]
     pub saved_layouts: Vec<SavedLayout>,
@@ -214,6 +217,12 @@ pub enum ContentDestination {
 pub enum Action {
     Inspect,
     Home,
+    UpdateCanvas {
+        canvas: canvas::Canvas,
+    },
+    SetSidebar {
+        collapsed: bool,
+    },
     SaveLayout {
         fleet: FleetId,
         name: String,

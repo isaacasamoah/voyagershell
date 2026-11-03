@@ -1120,8 +1120,9 @@ fn load(core: &mut Core) -> Result<(Layout, u64, bool), Error> {
     if value.is_null() {
         return Ok((Layout::default(), version, true));
     }
-    let layout = serde_json::from_value(value)
+    let layout: Layout = serde_json::from_value(value)
         .map_err(|e| rejected(format!("Stored workspace is invalid: {e}")))?;
+    crate::canvas::validate(&layout.canvas).map_err(rejected)?;
     Ok((layout, version, false))
 }
 

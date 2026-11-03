@@ -1,5 +1,30 @@
 # Native workspace boundary
 
+## Outer canvas
+
+The workspace document owns an outer canvas separately from each Fleet's Vessel
+split tree. `contract/src/canvas.rs` defines rows, columns, named blocks and
+fixed/content/fill sizing. Older documents receive the supported default through
+Serde. Existing Fleet names are retained; a new Voyage starts with Fleet 1.
+
+`update-canvas` and `set-sidebar` use the same request identity, expected version,
+Client queue, receipt and Core document save as other workspace actions. Only the
+application/Workspace caller can change global composition. Collapsing the rail
+does not dock Voyager. Invalid definitions are refused before mutation. A bad
+stored definition preserves the Client's last usable layout with its error.
+
+The definition retains exactly one Sidebar, Fleet strip, active Fleet, Portals
+and context region. Maximum depth is 12, maximum node count is 64, and fixed sizes
+contain 1 to 4096 logical pixels. These bounds limit the native composition, not
+total application memory. The Portal block defaults to overlay; explicit
+make-room uses the same instance in flow. Stack selection and Portal reveal/hide
+choices are not supplied by this increment.
+
+This first source checkpoint validates the model and backwards-compatible data.
+Native region rendering, the actual layout panel and matched UX verification
+remain pending their focused continuation. The model checks establish no app
+build or native result.
+
 The native workspace creates, selects and renames Voyages and Fleets, splits a
 placement and sets explicit dock context. Voyage-wide Portals use the same
 placement/content interface and remain present across Fleet selection. Herdr Core

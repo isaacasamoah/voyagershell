@@ -22,6 +22,7 @@ fn main() {
             "contentRequest":schema::<voyager_contract::content::Request>(),
             "contentResponse":schema::<voyager_contract::content::Response>(),
             "contentCatalog":schema::<voyager_contract::content::Catalog>(),
+            "canvas":schema::<voyager_contract::canvas::Canvas>(),
             "notes":schema::<voyager_contract::content::Notes>(),
             "voiceState":schema::<voyager_contract::voice::State>()}),
     ) {

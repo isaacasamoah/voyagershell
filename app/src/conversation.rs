@@ -252,10 +252,7 @@ mod tests {
             .unwrap();
         let captured = focus(&model.layout, 42).unwrap();
         assert_eq!(captured.scope, model.layout.context);
-        assert_eq!(
-            captured.path,
-            ["Workspace", "Alpha", "Workbench", "terminal"]
-        );
+        assert_eq!(captured.path, ["Workspace", "Alpha", "Fleet 1", "terminal"]);
         assert_eq!(captured.cwd.as_deref(), Some("/alpha"));
         assert_eq!(captured.revision, 42);
         model.layout.voyages[0].name = "Renamed".into();
@@ -263,7 +260,7 @@ mod tests {
         model.layout.context = Context::Fleet { id: fleet };
         assert_eq!(
             focus(&model.layout, 43).unwrap().path,
-            ["Workspace", "Renamed", "Workbench"]
+            ["Workspace", "Renamed", "Fleet 1"]
         );
         model.layout.context = Context::Voyage { id: voyage };
         assert_eq!(

@@ -608,6 +608,8 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
         Status::Applied => match action {
             Action::Inspect => "Workspace inspected",
             Action::Home => "Home opened",
+            Action::UpdateCanvas { .. } => "Workspace layout updated",
+            Action::SetSidebar { .. } => "Sidebar updated",
             Action::SaveLayout { .. } => "Fleet layout saved",
             Action::LoadLayout { .. } => "Fleet layout loaded",
             Action::CreateVoyage { .. } => "Voyage created",

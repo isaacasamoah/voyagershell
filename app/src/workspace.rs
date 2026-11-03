@@ -66,6 +66,11 @@ impl Model {
         match action {
             Action::Inspect => (),
             Action::Home => self.layout.view = WorkspaceView::Home,
+            Action::UpdateCanvas { canvas } => {
+                crate::canvas::validate(&canvas)?;
+                self.layout.canvas = canvas;
+            }
+            Action::SetSidebar { collapsed } => self.layout.canvas.sidebar_collapsed = collapsed,
             Action::SaveLayout { fleet, name } => {
                 let name = name.trim().to_owned();
                 if name.is_empty() || name.len() > 128 {
@@ -112,7 +117,7 @@ impl Model {
                     return Err("A Voyage needs a name and absolute working directory".into());
                 }
                 let id = VoyageId(self.id("voyage")?);
-                let fleet = self.fleet("Workbench".into(), cwd)?;
+                let fleet = self.fleet("Fleet 1".into(), cwd)?;
                 self.layout.selected_voyage = Some(id.clone());
                 self.layout.selected_fleet = Some(fleet.id.clone());
                 self.layout.view = WorkspaceView::Fleet;

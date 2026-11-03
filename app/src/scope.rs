@@ -9,6 +9,7 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
     };
     let mut scoped = Layout {
         context: scope.clone(),
+        canvas: layout.canvas.clone(),
         next_id: layout.next_id,
         view: layout.view.clone(),
         ..Layout::default()
@@ -126,6 +127,7 @@ pub(crate) fn check(
             matches!(scope, Context::Voyage { .. } | Context::Fleet { .. }) && fleet(id).is_some()
         }
         Action::CreateVoyage { .. } => false,
+        Action::UpdateCanvas { .. } | Action::SetSidebar { .. } => false,
         Action::MoveVoyage { .. } => false,
         Action::MoveFleet { id, target, .. } => {
             matches!(scope, Context::Voyage { .. })

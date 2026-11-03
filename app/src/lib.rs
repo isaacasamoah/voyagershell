@@ -1,4 +1,5 @@
 mod administrator;
+mod canvas;
 pub mod client;
 pub mod content;
 pub mod core;
