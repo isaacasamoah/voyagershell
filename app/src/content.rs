@@ -1,3 +1,7 @@
+mod description;
+pub(crate) use description::supports_type;
+pub use description::{describe, discover, require_action};
+
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
@@ -12,6 +16,24 @@ use voyager_contract::{
 
 pub const LIMIT: usize = 1024 * 1024;
 pub const ENVELOPE_LIMIT: usize = LIMIT + 16 * 1024;
+const INITIAL_NOTES: &[u8] = br#"{"title":"Working notes","text":"A little space to think."}"#;
+
+fn schema(package: &Path) -> Result<Option<serde_json::Value>, String> {
+    let mut bytes = Vec::new();
+    fs::File::open(package.join("mod.json"))
+        .and_then(|file| file.take(ENVELOPE_LIMIT as u64 + 1).read_to_end(&mut bytes))
+        .map_err(|error| error.to_string())?;
+    if bytes.len() > ENVELOPE_LIMIT {
+        return Err("Notes schema exceeds the content envelope limit".into());
+    }
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    let Some(schema) = manifest.get("stateSchema") else {
+        return Ok(None);
+    };
+    jsonschema::validator_for(schema).map_err(|error| error.to_string())?;
+    Ok(Some(schema.clone()))
+}
 
 pub(crate) fn fingerprint(value: &impl serde::Serialize) -> [u8; 32] {
     let mut value = serde_json::to_value(value).expect("Content identity serializes");
@@ -287,7 +309,7 @@ impl Owner {
             .write(true)
             .create_new(true)
             .open(self.path(id)?)?;
-        file.write_all(br#"{"title":"Working notes","text":"A little space to think."}"#)?;
+        file.write_all(INITIAL_NOTES)?;
         file.sync_all()?;
         self.instances.insert(id.0.clone());
         Ok(Binding(id.clone()))
@@ -319,25 +341,8 @@ impl Owner {
     }
 
     fn schema(&self) -> Result<Option<serde_json::Value>, String> {
-        let path = self
-            .root
-            .parent()
-            .expect("profile root")
-            .join("mods/notes/mod.json");
-        let mut bytes = Vec::new();
-        fs::File::open(path)
-            .and_then(|file| file.take(ENVELOPE_LIMIT as u64 + 1).read_to_end(&mut bytes))
-            .map_err(|error| error.to_string())?;
-        if bytes.len() > ENVELOPE_LIMIT {
-            return Err("Notes schema exceeds the content envelope limit".into());
-        }
-        let manifest: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
-        let Some(schema) = manifest.get("stateSchema") else {
-            return Ok(None);
-        };
-        jsonschema::validator_for(schema).map_err(|error| error.to_string())?;
-        Ok(Some(schema.clone()))
+        let package = self.root.parent().expect("profile root").join("mods/notes");
+        schema(&package)
     }
 
     fn read(&mut self, id: &ContentId) -> Result<DataRead, String> {
@@ -433,14 +438,20 @@ impl Owner {
             return rejected("That content is outside this view".into());
         }
         match request {
-            Request::Describe { .. } => match self.schema() {
-                Ok(schema) => Response::Described {
-                    version: Version::V1,
-                    request_id,
-                    content_id: id,
-                    schema_declared: schema.is_some(),
-                    state_schema: schema,
-                },
+            Request::Describe { .. } => match describe(
+                &self.root.parent().expect("profile root").join("mods"),
+                "notes",
+            ) {
+                Ok(description) => {
+                    let schema = description.state.and_then(|state| state.schema);
+                    Response::Described {
+                        version: Version::V1,
+                        request_id,
+                        content_id: id,
+                        schema_declared: schema.is_some(),
+                        state_schema: schema,
+                    }
+                }
                 Err(error) => rejected(format!("State schema unavailable: {error}")),
             },
             Request::Inspect { .. } => match self.read(&id).map(DataRead::snapshot) {
@@ -519,6 +530,84 @@ impl Owner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn descriptions_reuse_the_bound_schema_and_refuse_unsupported_capabilities() {
+        let directory =
+            std::env::temp_dir().join(format!("voyager-description-test-{}", std::process::id()));
+        let packages = directory.join("mods");
+        let package = packages.join("notes");
+        fs::create_dir_all(&package).unwrap();
+        fs::write(
+            package.join("mod.json"),
+            include_str!("../../content/notes/mod.json"),
+        )
+        .unwrap();
+        let catalog = discover(&packages).unwrap();
+        assert_eq!(catalog.types.len(), 2);
+        let terminal = describe(&packages, "terminal").unwrap();
+        let notes = describe(&packages, "notes").unwrap();
+        assert_eq!(terminal.view.module, "voyager_native");
+        assert_eq!(terminal.view.component, "Terminal");
+        assert!(terminal.backend.is_some());
+        assert_eq!(notes.view.module, "voyager_content_view");
+        assert_eq!(notes.view.component, "Notes");
+        assert!(notes.backend.is_none());
+        assert!(notes.configuration.is_none());
+        assert!(terminal.configuration.is_none());
+        assert!(require_action(&notes, "update").is_ok());
+        assert!(require_action(&notes, "configure").is_err());
+        assert!(require_action(&terminal, "launch-another-program").is_err());
+        assert!(describe(&packages, "unknown").is_err());
+        let mut model = crate::workspace::Model::default();
+        model
+            .apply(voyager_contract::Action::CreateVoyage {
+                name: "Test".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let before_layout = model.layout.clone();
+        assert!(
+            model
+                .apply(voyager_contract::Action::CreateContent {
+                    type_id: "unknown".into(),
+                    destination: voyager_contract::ContentDestination::Portal {
+                        voyage: before_layout.voyages[0].id.clone()
+                    }
+                })
+                .is_err()
+        );
+        assert_eq!(model.layout, before_layout);
+        let validator = jsonschema::validator_for(&notes.actions.input_schema).unwrap();
+        let mut input = serde_json::json!({"expectedVersion":"7","action":{"operation":"update","contentId":"opaque-id","expectedRevision":"revision","data":{"title":"Title","text":"Body"}}});
+        assert!(validator.is_valid(&input));
+        input["action"]["data"]["unsupported"] = true.into();
+        assert!(!validator.is_valid(&input));
+        let mut owner = Owner::open(&directory).unwrap();
+        let id = ContentId("opaque-id".into());
+        let binding = owner.initialize(&id).unwrap();
+        let before = fs::read(directory.join("data/opaque-id.json")).unwrap();
+        assert_eq!(
+            notes.state.as_ref().unwrap().defaults,
+            serde_json::from_slice::<serde_json::Value>(&before).unwrap()
+        );
+        let response = owner.call(
+            &binding,
+            Request::Describe {
+                version: Version::V1,
+                request_id: "description".into(),
+                content_id: id,
+            },
+        );
+        assert!(
+            matches!(response, Response::Described { state_schema, .. } if state_schema == notes.state.as_ref().and_then(|state| state.schema.clone()))
+        );
+        assert_eq!(
+            fs::read(directory.join("data/opaque-id.json")).unwrap(),
+            before
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn fingerprints_ignore_nested_object_order_but_keep_payload_identity() {

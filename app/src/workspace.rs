@@ -183,7 +183,7 @@ impl Model {
                 type_id,
                 destination,
             } => {
-                if !matches!(type_id.as_str(), "terminal" | "notes") {
+                if !crate::content::supports_type(&type_id) {
                     return Err("Unsupported content type".into());
                 }
                 let action = match destination {

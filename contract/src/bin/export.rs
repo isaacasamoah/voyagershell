@@ -21,6 +21,7 @@ fn main() {
             "contentTool":schema::<voyager_contract::content::Input>(),
             "contentRequest":schema::<voyager_contract::content::Request>(),
             "contentResponse":schema::<voyager_contract::content::Response>(),
+            "contentCatalog":schema::<voyager_contract::content::Catalog>(),
             "notes":schema::<voyager_contract::content::Notes>()}),
     ) {
         Ok(value) => println!("{value}"),

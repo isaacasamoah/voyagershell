@@ -73,8 +73,26 @@ impl Host {
 
     pub fn module(&self, colors: Colors) -> HostModule {
         let host = self.clone();
+        let packages = self.package.parent().map(std::path::Path::to_path_buf);
         HostModule::new(crate::script_types::CONTENT_VIEW_MODULE)
             .declarations(crate::script_types::CONTENT_VIEW)
+            .async_function("descriptions", move |_| {
+                let packages = packages.clone();
+                Ok(async move {
+                    let packages = packages
+                        .ok_or_else(|| HostError::new("Content package root is unavailable"))?;
+                    let catalog =
+                        voyager_app::content::discover(&packages).map_err(HostError::new)?;
+                    let raw = serde_json::to_string(&catalog)
+                        .map_err(|error| HostError::new(error.to_string()))?;
+                    if raw.len() > voyager_app::content::ENVELOPE_LIMIT {
+                        return Err(HostError::new(
+                            "Content descriptions exceed the envelope limit",
+                        ));
+                    }
+                    Ok(HostValue::from(raw))
+                })
+            })
             .component("Notes", move |args, window, cx| {
                 let id = match args.props() {
                     HostValue::Object(fields) => fields.iter().find_map(|(key, value)| {

@@ -14,6 +14,29 @@ with an explicit type ID. The supported type IDs are `terminal` and `notes`.
 Changing a placement does not change its content ID or data. A Notes placement
 never enters terminal preparation or starts a Core process.
 
+`app/src/content/description.rs` describes the two supported content types through
+the generated `contentCatalog` contract. Each description names its current
+GPUI Shell host version, registered native view, supported placement scopes,
+generated action input and owner-result schemas, and optional Core terminal
+backend. Notes state uses the same bounded package schema lookup as a bound
+Describe request and the same defaults as workspace-owned initialization.
+Descriptions contain no content-instance binding or authority. Discovery reads
+metadata, creates no content and starts no backend.
+
+Neither type currently has a separate configuration operation, so configuration
+is explicitly absent. Action names come from the existing generated tool schema;
+the capability lookup refuses unknown actions, including configure. It does not
+dispatch an action or replace the existing caller, revision or receipt checks.
+The workspace validates a requested type through the shared lookup, rather than
+its own list of type names. The native factory still owns actual view creation.
+
+The Header-only `voyager_content_view.descriptions()` binding returns typed
+contract data as JSON from background host work, within the existing content
+envelope limit. It does not extend the private Notes registry. The catalogue and
+existing bound Describe are source-tested; the creation picker has not yet been
+wired to this binding or observed in a native trial. Existing Notes appearance,
+editing and profile JavaScript are unchanged by this source increment.
+
 `desktop/src/notes.rs` installs a `voyager_content_view` component only in the
 Header policy. Its native factory retains one view per content ID. Before opening
 data, background work asks the existing Client worker for a binding. That worker

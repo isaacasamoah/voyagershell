@@ -27,6 +27,7 @@ export function snapshot(after: string | null): Promise<string>;
 pub const CONTENT_VIEW_MODULE: &str = "voyager_content_view";
 pub const CONTENT_VIEW: &str = r#"
 export const Notes: { new: (id: string, props: { contentId: string }) => import("gpui-kit").NativeElement };
+export function descriptions(): Promise<string>;
 "#;
 
 pub const CONTENT_MODULE: &str = "voyager_content";
