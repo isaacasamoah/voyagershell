@@ -175,6 +175,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                 Context::Workspace,
                 request(Action::CreateContent {
                     type_id: "notes".into(),
+                    launch: None,
                     destination: voyager_contract::ContentDestination::Portal {
                         voyage: initial.layout.selected_voyage.clone().unwrap(),
                     },

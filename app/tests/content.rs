@@ -79,6 +79,11 @@ fn named_schema_reload_and_legacy_data_remain_truthful() {
     fs::create_dir_all(path.join("mods/notes")).unwrap();
     let manifest = path.join("mods/notes/mod.json");
     fs::write(&manifest, include_str!("../../content/notes/mod.json")).unwrap();
+    fs::write(
+        path.join("mods/notes/main.js"),
+        include_str!("../../content/notes/main.js"),
+    )
+    .unwrap();
     let mut owner = Owner::open(&path).unwrap();
     let binding = owner.initialize(&ContentId("notes-a".into())).unwrap();
     let describe = || Request::Describe {
@@ -95,7 +100,11 @@ fn named_schema_reload_and_legacy_data_remain_truthful() {
             }
         ));
     }
-    fs::write(&manifest, r#"{"name":"Notes"}"#).unwrap();
+    fs::write(
+        &manifest,
+        r#"{"name":"Notes","version":1,"entry":"main.js"}"#,
+    )
+    .unwrap();
     assert!(matches!(
         owner.call(&binding, describe()),
         Response::Described {
