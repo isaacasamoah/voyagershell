@@ -28,6 +28,7 @@ impl Model {
             cwd,
             backend: None,
             start_pending: None,
+            launch: None,
         });
         Ok(Vessel {
             id: placement,
@@ -187,9 +188,16 @@ impl Model {
             Action::CreateContent {
                 type_id,
                 destination,
+                launch,
             } => {
                 if !crate::content::supports_type(&type_id) {
                     return Err("Unsupported content type".into());
+                }
+                if let Some(launch) = &launch {
+                    if type_id != "terminal" {
+                        return Err("Only terminal content accepts a program launch".into());
+                    }
+                    crate::launch::argv(launch)?;
                 }
                 let action = match destination {
                     ContentDestination::Vessel { fleet, after, axis } => {
@@ -198,11 +206,13 @@ impl Model {
                     ContentDestination::Portal { voyage } => Action::CreatePortal { voyage },
                 };
                 self.apply(action)?;
-                self.layout
+                let content = self
+                    .layout
                     .contents
                     .last_mut()
-                    .ok_or("Content was not created")?
-                    .type_id = type_id;
+                    .ok_or("Content was not created")?;
+                content.type_id = type_id;
+                content.launch = launch;
             }
             Action::Rename { target, name } => {
                 let name = name.trim().to_owned();
@@ -358,6 +368,7 @@ impl Model {
                     cwd,
                     backend: None,
                     start_pending: None,
+                    launch: None,
                 });
             }
             Action::MoveVessel { id, target, side } => {

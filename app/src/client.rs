@@ -18,6 +18,9 @@ use voyager_contract::{
 };
 
 enum Message {
+    Launches {
+        reply: async_channel::Sender<Result<voyager_contract::launch::Catalog, String>>,
+    },
     ContextFacts {
         reply: async_channel::Sender<Result<voyager_contract::context::Facts, String>>,
     },
@@ -120,7 +123,25 @@ impl Client {
         Self::start(session, cwd, Some(owner))
     }
 
-    fn start(session: String, cwd: String, mut content: Option<crate::content::Owner>) -> Self {
+    pub fn with_content_and_launches(
+        session: String,
+        cwd: String,
+        owner: crate::content::Owner,
+        launches: std::path::PathBuf,
+    ) -> Self {
+        Self::start_with_launches(session, cwd, Some(owner), Some(launches))
+    }
+
+    fn start(session: String, cwd: String, content: Option<crate::content::Owner>) -> Self {
+        Self::start_with_launches(session, cwd, content, None)
+    }
+
+    fn start_with_launches(
+        session: String,
+        cwd: String,
+        mut content: Option<crate::content::Owner>,
+        launches: Option<std::path::PathBuf>,
+    ) -> Self {
         let (sender, receiver) = async_channel::bounded::<Message>(8);
         thread::spawn(move || {
             let mut core = Core::connect(&session);
@@ -138,6 +159,10 @@ impl Client {
             let mut workspace_listener: Option<async_channel::Sender<u64>> = None;
             while let Ok(message) = receiver.recv_blocking() {
                 let (request, scope, reply) = match message {
+                    Message::Launches { reply } => {
+                        let _ = reply.try_send(crate::launch::catalog(launches.as_deref(), &cwd));
+                        continue;
+                    }
                     Message::ContextFacts { reply } => {
                         let _ = reply.try_send(crate::context::capture(&layout, version));
                         continue;
@@ -666,6 +691,18 @@ impl Client {
             .map_err(|_| "Workspace observer unconfirmed".into())
     }
 
+    pub async fn launches(&self) -> Result<voyager_contract::launch::Catalog, String> {
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .send(Message::Launches { reply })
+            .await
+            .map_err(|_| "Worker settings owner is unavailable")?;
+        receive
+            .recv()
+            .await
+            .map_err(|_| "Worker settings read was not confirmed")?
+    }
+
     pub async fn content_changes(
         &self,
         binding: crate::content::Binding,
@@ -1004,6 +1041,15 @@ fn open_terminal(
         )));
     }
     let cwd = target.cwd.clone();
+    let launch = target.launch.clone().unwrap_or_default();
+    if target.backend.is_none()
+        && !matches!(launch, voyager_contract::launch::Launch::Terminal)
+        && !created_contents.contains(content)
+    {
+        return Err(rejected(
+            "This saved worker has no new-creation permission; no command was restarted".into(),
+        ));
+    }
     let mut created = false;
     let address = if let Some(address) = &target.backend {
         address.0.clone()
@@ -1036,7 +1082,17 @@ fn open_terminal(
                 });
             }
         }
-        let run = core.terminal_run(&cwd, &operation);
+        let run = crate::launch::command(&launch, &cwd)
+            .map_err(rejected)
+            .and_then(|argv| {
+                core.terminal_run_with(crate::core_shapes::RunParams {
+                    argv,
+                    cwd: Some(cwd.clone()),
+                    no_parent: true,
+                    labels: HashMap::from([("voyager-operation".into(), operation.clone())]),
+                    ..Default::default()
+                })
+            });
         if !matches!(run, Err(Error::Rejected { .. })) {
             created_contents.retain(|item| item != content);
         }
@@ -1170,6 +1226,7 @@ mod terminal_outcome_tests {
         let previous = model.layout.clone();
         model
             .apply(Action::CreateContent {
+                launch: None,
                 type_id: "notes".into(),
                 destination: voyager_contract::ContentDestination::Vessel {
                     fleet: fleet.clone(),
@@ -1185,6 +1242,7 @@ mod terminal_outcome_tests {
         let previous = model.layout.clone();
         model
             .apply(Action::CreateContent {
+                launch: None,
                 type_id: "terminal".into(),
                 destination: voyager_contract::ContentDestination::Vessel {
                     fleet,

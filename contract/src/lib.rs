@@ -7,6 +7,7 @@ pub mod canvas;
 pub mod content;
 pub mod context;
 pub mod conversation;
+pub mod launch;
 pub mod voice;
 
 macro_rules! id {
@@ -127,6 +128,8 @@ pub struct Content {
     pub backend: Option<CoreTerminalId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_pending: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch: Option<launch::Launch>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -247,6 +250,8 @@ pub enum Action {
         #[serde(rename = "typeId")]
         type_id: String,
         destination: ContentDestination,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        launch: Option<launch::Launch>,
     },
     Rename {
         target: RenameTarget,

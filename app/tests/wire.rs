@@ -77,6 +77,7 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
                 request_id: client.request_id(),
                 expected_version: applied.version,
                 action: Action::CreateContent {
+                    launch: None,
                     type_id: "notes".into(),
                     destination: ContentDestination::Portal {
                         voyage: initial.layout.selected_voyage.clone().unwrap(),

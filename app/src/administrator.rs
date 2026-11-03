@@ -717,6 +717,7 @@ mod tests {
             let fleet = initial.layout.voyages[0].fleets[0].id.clone();
             let created = call(
                 Action::CreateContent {
+                    launch: None,
                     type_id: "notes".into(),
                     destination: ContentDestination::Vessel {
                         fleet,
@@ -736,6 +737,7 @@ mod tests {
                 .clone();
             let created = call(
                 Action::CreateContent {
+                    launch: None,
                     type_id: "notes".into(),
                     destination: ContentDestination::Portal { voyage },
                 },

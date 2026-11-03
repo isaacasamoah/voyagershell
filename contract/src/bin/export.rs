@@ -25,7 +25,8 @@ fn main() {
             "canvas":schema::<voyager_contract::canvas::Canvas>(),
             "contextFacts":schema::<voyager_contract::context::Facts>(),
             "notes":schema::<voyager_contract::content::Notes>(),
-            "voiceState":schema::<voyager_contract::voice::State>()}),
+            "voiceState":schema::<voyager_contract::voice::State>(),
+            "launchCatalog":schema::<voyager_contract::launch::Catalog>()}),
     ) {
         Ok(value) => println!("{value}"),
         Err(error) => {

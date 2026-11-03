@@ -570,6 +570,7 @@ mod tests {
         assert!(
             model
                 .apply(voyager_contract::Action::CreateContent {
+                    launch: None,
                     type_id: "unknown".into(),
                     destination: voyager_contract::ContentDestination::Portal {
                         voyage: before_layout.voyages[0].id.clone()
@@ -644,6 +645,7 @@ mod tests {
         let fleet = old.voyages[0].fleets[0].id.clone();
         model
             .apply(Action::CreateContent {
+                launch: None,
                 type_id: "notes".into(),
                 destination: ContentDestination::Vessel {
                     fleet: fleet.clone(),
@@ -661,6 +663,7 @@ mod tests {
             .clone();
         model
             .apply(Action::CreateContent {
+                launch: None,
                 type_id: "notes".into(),
                 destination: ContentDestination::Portal { voyage },
             })

@@ -52,6 +52,7 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
     assert!(
         model
             .apply(Action::CreateContent {
+                launch: None,
                 type_id: "unknown".into(),
                 destination: voyager_contract::ContentDestination::Portal {
                     voyage: voyage.clone()

@@ -5,6 +5,7 @@ pub mod content;
 pub mod context;
 pub mod core;
 mod core_endpoint;
+pub mod launch;
 mod process;
 mod scope;
 pub mod workspace;
