@@ -143,6 +143,74 @@ test("context metadata rejects a late different dock and notifies only changed f
   assert.equal(notified, 2);
 });
 
+test("Chat stays below the primary dock before Home and Voyages, using one retained instance", () => {
+  const buttons = new Map();
+  const Workspace = new Function(
+    "View",
+    "div",
+    "Button",
+    "Brand",
+    "projection",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(
+    class {},
+    element,
+    {
+      new(id) {
+        const node = element();
+        buttons.set(id, node);
+        return node;
+      },
+    },
+    { new: element },
+    () => ({}),
+  );
+  const panel = element();
+  const toggle = element();
+  let renders = 0;
+  const chat = {
+    toggleView: () => toggle,
+    render() {
+      renders += 1;
+      return panel;
+    },
+  };
+  const view = Object.assign(new Workspace(), {
+    sidebar: true,
+    chat,
+    target: (_id, _scope, child) => child,
+  });
+  const layout = { voyages: [], context: { kind: "workspace" } };
+  const sidebar = view.sidebarRegion(layout);
+  const children = sidebar.calls
+    .filter(([name]) => name === "child")
+    .map(([, child]) => child);
+  const controls = children.findIndex((node) =>
+    node.calls.some(
+      ([name, value]) =>
+        name === "id" && value === "primary-conversation-controls",
+    ),
+  );
+  const home = children.findIndex((node) =>
+    node.calls.some(
+      ([name, value]) =>
+        name === "child" && value === buttons.get("home-navigation"),
+    ),
+  );
+  assert.equal(controls, 1);
+  assert.equal(children[controls + 1], panel);
+  assert.ok(home > controls + 1);
+  assert.ok(
+    children[controls].calls.some(
+      ([name, value]) => name === "child" && value === toggle,
+    ),
+  );
+  view.sidebar = false;
+  view.sidebarRegion(layout);
+  assert.equal(renders, 1);
+  assert.equal(view.chat, chat);
+});
+
 test("the real layout editor keeps its captured revision, refuses invalid input and gates uncertainty", async () => {
   const { canvas: validateCanvas } =
     await import("../contract/generated/validate.js");

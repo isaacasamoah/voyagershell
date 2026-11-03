@@ -31,7 +31,11 @@ Stack selection and Portal reveal/hide choices are not supplied by this incremen
 Header region factories. It retains the existing terminal, Notes, native split,
 avatar and conversation owners. Collapsing the sidebar keeps a 48-pixel rail
 and sends only `set-sidebar`, without Dock. Native named controls expose
-creation, Refresh, Home, sidebar and Workspace layout actions. Empty dock circles
+creation, Refresh, Home, sidebar and Workspace layout actions. The same retained
+Chat toggle and panel sit directly below the primary Brand/avatar dock, before
+Home and Voyages. The compact rail has its own control row without another Chat
+instance. The primary row also takes the reviewed native Speech control during
+Root's deliberate voice integration. Empty dock circles
 and the redundant top context bar are removed. Compact dock names reserve the
 existing controller footprint. Only the selected Vessel gets the subtle
 blue/purple/amber frame, composed from the public SDK's two-stop gradients.

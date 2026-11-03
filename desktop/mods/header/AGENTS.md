@@ -14,7 +14,9 @@ current definition. Unconfirmed effects are never submitted again automatically.
 Overlay Portals occupy the first or last edge of their parent row or column.
 Make-room Portals take ordinary flow space. This does not add reveal, hide or
 pin behavior. Collapsing the sidebar retains a rail and does not change the
-avatar's explicit dock context.
+avatar's explicit dock context. Keep the primary speech/chat control row and
+Chat panel immediately beneath the Brand/avatar dock, ahead of Home and Voyages.
+Compact placement reuses the same Chat state.
 
 The bottom region shows the dock scope's configured starting folder and the Git
 branch read there. It does not follow a shell's later `cd`. Unavailable or multiple

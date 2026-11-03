@@ -936,7 +936,7 @@ export default class Workspace extends View {
       .border_r_1()
       .border_color("#ffffff0c")
       .bg("#16181c");
-    if (this.sidebar)
+    if (this.sidebar) {
       sidebar.child(
         div()
           .relative()
@@ -954,6 +954,19 @@ export default class Workspace extends View {
             ),
           ),
       );
+      sidebar.child(
+        div()
+          .id("primary-conversation-controls")
+          .flex()
+          .items_center()
+          .justify_center()
+          .h(30)
+          .flex_shrink_0()
+          .gap(6)
+          .child(this.chat.toggleView(colors)),
+      );
+      sidebar.child(this.chat.render(colors, layout.context) || div());
+    }
     sidebar.child(
       div()
         .flex()
@@ -1095,8 +1108,6 @@ export default class Workspace extends View {
             ),
           ),
       );
-    if (this.sidebar)
-      sidebar.child(this.chat.render(colors, layout.context) || div());
     sidebar.child(div().flex_1());
     if (voyage && this.sidebar && layout.view !== "home")
       sidebar.child(
@@ -1120,8 +1131,19 @@ export default class Workspace extends View {
             .child(this.sidebar ? "Workspace layout" : "⚙")
             .on_click((_event, cx) => this.settings(cx)),
         )
-        .child(
-          div().flex().items_center().h(30).child(this.chat.toggleView(colors)),
+        .children(
+          !this.sidebar
+            ? [
+                div()
+                  .id("compact-conversation-controls")
+                  .flex()
+                  .flex_col()
+                  .items_center()
+                  .gap(4)
+                  .py(2)
+                  .child(this.chat.toggleView(colors)),
+              ]
+            : [],
         ),
     );
     return sidebar;
