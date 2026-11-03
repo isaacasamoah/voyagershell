@@ -989,12 +989,13 @@ def private_turn(
             lambda state: bool(state["turn"]) and state["phase"] == "working",
             "accepted private turn",
         )
-        accepted(accepted_state, user)
     providers = wait(
         lambda: provider_processes(evidence), bool, "actual private provider", 20
     )
     for provider in providers:
         owned[f"provider-{provider['pid']}-{provider['start']}"] = provider
+    if accepted is not None:
+        accepted(accepted_state, user)
     final = wait(
         read,
         lambda state: (
