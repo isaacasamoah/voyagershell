@@ -1,4 +1,4 @@
-use serde_json::Value;
+use crate::provider::Visible;
 use std::collections::VecDeque;
 use voyager_contract::conversation::{Focus, Message, Phase, Role, Snapshot};
 use voyager_contract::{Context, Layout, Vessel};
@@ -79,14 +79,14 @@ fn directory<'a>(layout: &Layout, placements: impl Iterator<Item = &'a Vessel>) 
         .then(|| first.clone())
 }
 
-pub(crate) fn defer(state: &mut Snapshot, events: &mut VecDeque<Value>, value: Value) -> bool {
+pub(crate) fn defer(state: &mut Snapshot, events: &mut VecDeque<Visible>, value: Visible) -> bool {
     if events.len() < 16 {
         events.push_back(value);
         return false;
     }
     state.limited = true;
     state.error = Some("The displayed response is incomplete because early provider events exceeded the display bound. Native work continues; nothing was replayed.".into());
-    if value.get("method").and_then(Value::as_str) == Some("turn/completed") {
+    if matches!(value, Visible::Completed { .. }) {
         events.pop_front();
         events.push_back(value);
     }
@@ -104,56 +104,37 @@ pub(crate) fn fail(state: &mut Snapshot, error: String, phase: Phase) -> bool {
     true
 }
 
-pub(crate) fn notification(state: &mut Snapshot, value: &Value, request: &str) -> bool {
-    let Some(params) = value.get("params") else {
-        return false;
+pub(crate) fn notification(state: &mut Snapshot, value: &Visible, request: &str) -> bool {
+    let (thread, turn) = match value {
+        Visible::Message { thread, turn, .. }
+        | Visible::Started { thread, turn }
+        | Visible::Completed { thread, turn, .. }
+        | Visible::Error { thread, turn, .. } => (thread, turn),
     };
-    let Some(thread) = state.thread.as_deref() else {
-        return false;
-    };
-    if params.get("threadId").and_then(Value::as_str) != Some(thread) {
+    if state.thread.as_deref() != Some(thread.as_str())
+        || state.turn.as_deref() != Some(turn.as_str())
+    {
         return false;
     }
-    match value.get("method").and_then(Value::as_str) {
-        Some("item/agentMessage/delta" | "item/completed") if state.phase == Phase::Working => {
-            if state.limited {
-                return false;
-            }
-            let Some(turn) = state.turn.as_deref() else {
-                return false;
-            };
-            if params.get("turnId").and_then(Value::as_str) != Some(turn) {
-                return false;
-            }
-            let completed = value["method"] == "item/completed";
-            if completed
-                && params.pointer("/item/type").and_then(Value::as_str) != Some("agentMessage")
-            {
-                return false;
-            }
-            let (Some(id), Some(text)) = (if completed {
-                (
-                    params.pointer("/item/id").and_then(Value::as_str),
-                    params.pointer("/item/text").and_then(Value::as_str),
-                )
-            } else {
-                (
-                    params.get("itemId").and_then(Value::as_str),
-                    params.get("delta").and_then(Value::as_str),
-                )
-            }) else {
-                return false;
-            };
-            if id.is_empty() {
+    match value {
+        Visible::Message {
+            item: id,
+            text,
+            complete,
+            ..
+        } if state.phase == Phase::Working => {
+            if state.limited || id.is_empty() {
                 return false;
             }
             let existing = state.messages.iter().find(|message| {
-                message.id == id && message.role == Role::Assistant && message.request_id == request
+                message.id == *id
+                    && message.role == Role::Assistant
+                    && message.request_id == request
             });
-            let next_size = if completed {
+            let next_size = if *complete {
                 text.len()
             } else {
-                existing.map_or(0, |m| m.text.len()) + text.len()
+                existing.map_or(0, |message| message.text.len()) + text.len()
             };
             let retained = state
                 .messages
@@ -161,19 +142,22 @@ pub(crate) fn notification(state: &mut Snapshot, value: &Value, request: &str) -
                 .map(|message| message.text.len())
                 .sum::<usize>();
             if next_size > 65536
-                || retained + next_size.saturating_sub(existing.map_or(0, |m| m.text.len()))
+                || retained
+                    + next_size.saturating_sub(existing.map_or(0, |message| message.text.len()))
                     > 256 * 1024
                 || state.messages.len() >= 128
             {
                 state.limited = true;
-                state.error=Some("The displayed response is incomplete because it exceeded its display bound. Native work continues; nothing was replayed.".into());
+                state.error = Some("The displayed response is incomplete because it exceeded its display bound. Native work continues; nothing was replayed.".into());
                 return true;
             }
             if let Some(message) = state.messages.iter_mut().find(|message| {
-                message.id == id && message.role == Role::Assistant && message.request_id == request
+                message.id == *id
+                    && message.role == Role::Assistant
+                    && message.request_id == request
             }) {
-                if completed {
-                    message.text = text.into();
+                if *complete {
+                    message.text.clone_from(text);
                 } else {
                     message.text.push_str(text);
                 }
@@ -185,51 +169,35 @@ pub(crate) fn notification(state: &mut Snapshot, value: &Value, request: &str) -
                     .find(|message| message.role == Role::User && message.request_id == request)
                     .and_then(|message| message.context.clone());
                 state.messages.push(Message {
-                    id: id.into(),
+                    id: id.clone(),
                     request_id: request.into(),
                     role: Role::Assistant,
-                    text: text.into(),
+                    text: text.clone(),
                     context,
                     tool: None,
                 });
             }
         }
-        Some("error")
-            if state.turn.is_some()
-                && params.get("turnId").and_then(Value::as_str) == state.turn.as_deref() =>
-        {
-            let error = params
-                .pointer("/error/message")
-                .and_then(Value::as_str)
-                .unwrap_or("Private provider reported an error")
-                .to_owned();
-            let phase = if params.get("willRetry").and_then(Value::as_bool) == Some(true) {
+        Visible::Error {
+            message, retrying, ..
+        } => {
+            let phase = if *retrying {
                 state.phase.clone()
             } else {
                 Phase::Failed
             };
-            return fail(state, error, phase);
+            return fail(state, message.clone(), phase);
         }
-        Some("turn/completed")
-            if state.turn.is_some()
-                && params.pointer("/turn/id").and_then(Value::as_str) == state.turn.as_deref() =>
-        {
+        Visible::Completed { phase, error, .. } => {
             if matches!(
                 state.phase,
                 Phase::Completed | Phase::Interrupted | Phase::Failed
             ) {
                 return false;
             }
-            state.phase = match params.pointer("/turn/status").and_then(Value::as_str) {
-                Some("completed") => Phase::Completed,
-                Some("interrupted") => Phase::Interrupted,
-                _ => Phase::Failed,
-            };
+            state.phase = phase.clone();
             if !state.limited {
-                state.error = params
-                    .pointer("/turn/error/message")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
+                state.error.clone_from(error);
             }
         }
         _ => return false,
@@ -240,7 +208,22 @@ pub(crate) fn notification(state: &mut Snapshot, value: &Value, request: &str) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use serde_json::{Value, json};
+    fn notification(state: &mut Snapshot, value: &Value, request: &str) -> bool {
+        match crate::codex::normalize(value.clone(), None) {
+            Some(crate::provider::Event::Visible(event)) => {
+                super::notification(state, &event, request)
+            }
+            _ => false,
+        }
+    }
+
+    fn defer(state: &mut Snapshot, events: &mut VecDeque<Visible>, value: Value) -> bool {
+        match crate::codex::normalize(value, None) {
+            Some(crate::provider::Event::Visible(event)) => super::defer(state, events, event),
+            _ => false,
+        }
+    }
 
     #[test]
     fn focus_names_and_directory_follow_the_dock_not_navigation() {
@@ -327,7 +310,7 @@ mod tests {
         );
         state.turn = Some("turn".into());
         for event in events {
-            notification(&mut state, &event, "request");
+            super::notification(&mut state, &event, "request");
         }
         assert_eq!(state.phase, Phase::Completed);
         assert!(state.limited && state.error.is_some());

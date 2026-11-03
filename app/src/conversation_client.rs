@@ -3,6 +3,10 @@ use crate::{
     client::Client as Workspace,
     codex::Codex,
     conversation::{defer, fail, focus, notification},
+    provider::{
+        Answer, Capabilities, Command, Event as ProviderEvent, Operation, Outcome, ToolCall,
+        Visible,
+    },
 };
 use serde_json::{Value, json};
 use std::{
@@ -62,6 +66,10 @@ pub struct Client {
 }
 
 impl Client {
+    pub fn capabilities() -> Capabilities {
+        Codex::capabilities()
+    }
+
     pub fn open(profile: PathBuf, workspace: Workspace) -> Self {
         let (sender, commands) = mpsc::sync_channel::<Call>(8);
         let projection = Arc::new(Projection {
@@ -184,7 +192,7 @@ impl Client {
 
 struct Pending {
     id: u64,
-    method: &'static str,
+    operation: Operation,
     deadline: Instant,
 }
 
@@ -199,8 +207,8 @@ struct Owner {
     effort: String,
     active: String,
     interrupt: bool,
-    deferred: VecDeque<Value>,
-    callbacks: VecDeque<Value>,
+    deferred: VecDeque<Visible>,
+    callbacks: VecDeque<ToolCall>,
     profile: PathBuf,
     workspace: Workspace,
     receipts: VecDeque<(Request, Reply)>,
@@ -214,27 +222,27 @@ impl Owner {
         let _ = self.projection.edit(|state| fail(state, error, phase));
     }
 
-    fn rpc(&mut self, method: &'static str, params: Value) -> Result<(), String> {
+    fn rpc(&mut self, command: Command) -> Result<(), String> {
         self.sequence = self
             .sequence
             .checked_add(1)
             .ok_or("Provider identity exhausted")?;
         self.pending = Some(Pending {
             id: self.sequence,
-            method,
+            operation: command.operation(),
             deadline: Instant::now() + Duration::from_secs(25),
         });
         self.provider
             .as_mut()
             .ok_or("Private provider unavailable")?
-            .request(self.sequence, method, params)
+            .request(self.sequence, command)
     }
 
     fn call(
         &mut self,
         request: &Request,
         issued: &AtomicU64,
-        events: &SyncSender<Result<Value, String>>,
+        events: &SyncSender<Result<ProviderEvent, String>>,
     ) -> Reply {
         if let Some((previous, reply)) = self
             .receipts
@@ -292,7 +300,7 @@ impl Owner {
     fn apply(
         &mut self,
         request: &Request,
-        events: &SyncSender<Result<Value, String>>,
+        events: &SyncSender<Result<ProviderEvent, String>>,
     ) -> Result<(), String> {
         if self.disconnected {
             return Err(
@@ -385,7 +393,7 @@ impl Owner {
                     return Ok(());
                 }
             }
-            self.rpc("initialize", json!({"clientInfo":{"name":"voyager_native","version":"0.1.0"},"capabilities":{"experimentalApi":true}}))
+            self.rpc(Command::Initialize)
         } else {
             self.start_turn()
         }
@@ -403,7 +411,12 @@ impl Owner {
             state.phase = Phase::Working;
             true
         })?;
-        self.rpc("turn/start", json!({"threadId":thread.ok_or("Missing private thread identity")?, "input":[{"type":"text","text":message.ok_or("Missing accepted user message")?}],"effort":self.effort,"additionalContext":{"voyager.focus":{"kind":"application","value":serde_json::to_string(&context).map_err(|e|e.to_string())?}}}))
+        self.rpc(Command::StartTurn {
+            thread: thread.ok_or("Missing private thread identity")?,
+            text: message.ok_or("Missing accepted user message")?,
+            effort: self.effort.clone(),
+            focus: context,
+        })
     }
 
     fn interrupt_turn(&mut self) -> Result<(), String> {
@@ -411,123 +424,128 @@ impl Owner {
             .projection
             .read(|state| (state.thread.clone(), state.turn.clone()))?;
         if let (Some(thread), Some(turn)) = (thread, turn) {
-            self.rpc("turn/interrupt", json!({"threadId":thread,"turnId":turn}))?;
+            self.rpc(Command::InterruptTurn { thread, turn })?;
             self.interrupt = false;
         }
         Ok(())
     }
 
-    fn event(&mut self, value: Value) -> Result<(), String> {
-        if value.get("id").is_some() && value.get("method").is_some() {
-            if self
-                .pending
-                .as_ref()
-                .is_some_and(|pending| pending.method == "turn/start")
-                && self.callbacks.len() < 16
-            {
-                self.callbacks.push_back(value);
-                return Ok(());
-            }
-            let (thread, turn, active) = self.projection.read(|state| {
-                (
-                    state.thread.clone(),
-                    state.turn.clone(),
-                    state.phase == Phase::Working,
-                )
-            })?;
-            if let Some(reply) = self.tools.callback(
-                &value,
-                thread.as_deref(),
-                turn.as_deref(),
-                active,
-                self.context.as_ref(),
-                &self.workspace,
-            ) {
-                self.provider
-                    .as_mut()
-                    .ok_or("Private provider unavailable")?
-                    .tool_reply(reply, value["params"]["tool"] == "voyager_content")?;
-            }
-            return Ok(());
-        }
-        if let Some(id) = value.get("id").and_then(Value::as_u64) {
-            if self.pending.as_ref().is_none_or(|p| p.id != id) {
-                return Ok(());
-            }
-            let pending = self
-                .pending
-                .take()
-                .ok_or("Missing provider request identity")?;
-            if let Some(error) = value.pointer("/error/message").and_then(Value::as_str) {
-                self.fail(error.into(), Phase::Failed);
-                return Ok(());
-            }
-            let result = value
-                .get("result")
-                .ok_or("Provider response missing its result")?;
-            match pending.method {
-                "initialize" => {
+    fn event(&mut self, event: ProviderEvent) -> Result<(), String> {
+        match event {
+            ProviderEvent::Tool(call) => {
+                if self
+                    .pending
+                    .as_ref()
+                    .is_some_and(|pending| pending.operation == Operation::StartTurn)
+                {
+                    if self.callbacks.len() >= 16 {
+                        return Err("Early tool callbacks exceeded their bound; no extra tools were dispatched".into());
+                    }
+                    self.callbacks.push_back(call);
+                    return Ok(());
+                }
+                let (thread, turn, active) = self.projection.read(|state| {
+                    (
+                        state.thread.clone(),
+                        state.turn.clone(),
+                        state.phase == Phase::Working,
+                    )
+                })?;
+                if let Some(reply) = self.tools.call(
+                    &call,
+                    thread.as_deref(),
+                    turn.as_deref(),
+                    active,
+                    self.context.as_ref(),
+                    &self.workspace,
+                ) {
                     self.provider
                         .as_mut()
                         .ok_or("Private provider unavailable")?
-                        .write(json!({"method":"initialized"}))?;
-                    self.rpc("thread/start", json!({"model":self.model,"allowProviderModelFallback":false,"ephemeral":true,"cwd":self.profile.join("conversation"),"approvalPolicy":"never","sandbox":"read-only","config":{"model_reasoning_effort":self.effort},"dynamicTools":administrator::catalog()?,"baseInstructions":ADMINISTRATOR}))
+                        .reply(&reply, call.name == "voyager_content")?;
                 }
-                "thread/start" => {
-                    let thread = result
-                        .pointer("/thread/id")
-                        .and_then(Value::as_str)
-                        .filter(|s| !s.is_empty())
-                        .ok_or("Provider did not return a private thread identity")?
-                        .to_owned();
-                    let model = result
-                        .get("model")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned);
-                    self.projection.edit(|state| {
-                        state.thread = Some(thread);
-                        state.model = model;
-                        true
-                    })?;
-                    self.start_turn()
-                }
-                "turn/start" => {
-                    let turn = result
-                        .pointer("/turn/id")
-                        .and_then(Value::as_str)
-                        .filter(|s| !s.is_empty())
-                        .ok_or("Provider did not return its accepted turn identity")?
-                        .to_owned();
-                    self.projection.edit(|state| {
-                        state.turn = Some(turn);
-                        true
-                    })?;
-                    while let Some(value) = self.deferred.pop_front() {
-                        self.reduce(value)?;
-                    }
-                    while let Some(value) = self.callbacks.pop_front() {
-                        self.event(value)?;
-                    }
-                    if self.interrupt {
-                        self.interrupt_turn()?;
-                    }
-                    Ok(())
-                }
-                _ => Ok(()),
+                Ok(())
             }
-        } else if self
-            .pending
-            .as_ref()
-            .is_some_and(|p| p.method == "turn/start")
-        {
-            self.projection
-                .edit(|state| defer(state, &mut self.deferred, value))
-        } else {
-            self.reduce(value)
+            ProviderEvent::CallbackError { id, code, message } => self
+                .provider
+                .as_mut()
+                .ok_or("Private provider unavailable")?
+                .reply(
+                    &crate::provider::ToolReply::Error { id, code, message },
+                    false,
+                ),
+            ProviderEvent::Response { id, outcome } => {
+                if self.pending.as_ref().is_none_or(|pending| pending.id != id) {
+                    return Ok(());
+                }
+                self.pending
+                    .take()
+                    .ok_or("Missing provider request identity")?;
+                let result = match outcome {
+                    Outcome::Applied(answer) => answer,
+                    Outcome::Rejected(error) => {
+                        self.fail(error, Phase::Failed);
+                        return Ok(());
+                    }
+                    Outcome::Unconfirmed(error) => return Err(error),
+                };
+                match result {
+                    Answer::Initialized => {
+                        self.provider
+                            .as_mut()
+                            .ok_or("Private provider unavailable")?
+                            .initialized()?;
+                        self.rpc(Command::OpenConversation {
+                            model: self.model.clone(),
+                            effort: self.effort.clone(),
+                            cwd: self.profile.join("conversation"),
+                            tools: administrator::catalog()?,
+                            instructions: ADMINISTRATOR,
+                        })
+                    }
+                    Answer::Conversation { thread, model } => {
+                        self.projection.edit(|state| {
+                            state.thread = Some(thread);
+                            state.model = model;
+                            true
+                        })?;
+                        self.start_turn()
+                    }
+                    Answer::Turn { id } => {
+                        self.projection.edit(|state| {
+                            state.turn = Some(id);
+                            true
+                        })?;
+                        while let Some(value) = self.deferred.pop_front() {
+                            self.reduce(value)?;
+                        }
+                        while let Some(value) = self.callbacks.pop_front() {
+                            self.event(ProviderEvent::Tool(value))?;
+                        }
+                        if self.interrupt {
+                            self.interrupt_turn()?;
+                        }
+                        Ok(())
+                    }
+                    Answer::Acknowledged => Ok(()),
+                }
+            }
+            ProviderEvent::Visible(value) => {
+                if self
+                    .pending
+                    .as_ref()
+                    .is_some_and(|pending| pending.operation == Operation::StartTurn)
+                {
+                    self.projection
+                        .edit(|state| defer(state, &mut self.deferred, value))
+                } else {
+                    self.reduce(value)
+                }
+            }
         }
     }
 
-    fn reduce(&self, value: Value) -> Result<(), String> {
+    fn reduce(&self, value: Visible) -> Result<(), String> {
         self.projection
             .edit(|state| notification(state, &value, &self.active))
     }
@@ -550,7 +568,7 @@ impl Owner {
             self.provider
                 .as_mut()
                 .ok_or("Private provider unavailable")?
-                .tool_reply(reply, content)?;
+                .reply(&reply, content)?;
         }
         Ok(())
     }

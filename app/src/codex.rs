@@ -1,10 +1,18 @@
+#[path = "codex_protocol.rs"]
+mod protocol;
+use crate::provider::{
+    Capabilities, Command as ProviderCommand, Event, Operation, Support, ToolReply,
+};
+pub(crate) use protocol::decode as normalize;
+#[cfg(test)]
+pub(crate) use protocol::tool_reply as encode_tool_reply;
 use serde_json::{Value, json};
 use std::{
     env,
     io::{BufRead, BufReader, Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
-    sync::mpsc::SyncSender,
+    sync::{Arc, Mutex, mpsc::SyncSender},
     thread,
 };
 
@@ -36,12 +44,31 @@ fn encode(value: &Value, limit: usize) -> Result<Vec<u8>, String> {
 pub(crate) struct Codex {
     child: Child,
     input: ChildStdin,
+    pending: Arc<Mutex<Option<(u64, Operation)>>>,
 }
 
 impl Codex {
+    pub(crate) fn executable() -> Result<PathBuf, String> {
+        let selected = env::var_os("VOYAGER_CODEX_BIN").unwrap_or_else(|| "codex".into());
+        let path = PathBuf::from(&selected);
+        if path.components().count() > 1 || path.is_absolute() {
+            return path
+                .canonicalize()
+                .map_err(|_| "Selected Codex executable is unavailable".into());
+        }
+        env::var_os("PATH")
+            .and_then(|paths| {
+                env::split_paths(&paths)
+                    .map(|path| path.join(&selected))
+                    .find(|path| path.is_file())
+            })
+            .ok_or_else(|| "Codex is not installed on the current application path".to_owned())?
+            .canonicalize()
+            .map_err(|_| "Selected Codex executable is unavailable".into())
+    }
     pub(crate) fn open(
         cwd: &Path,
-        events: SyncSender<Result<Value, String>>,
+        events: SyncSender<Result<Event, String>>,
     ) -> Result<Self, String> {
         let mut child =
             Command::new(env::var_os("VOYAGER_CODEX_BIN").unwrap_or_else(|| "codex".into()))
@@ -64,6 +91,8 @@ impl Codex {
                 .map_err(|e| format!("Starting the private Codex runtime: {e}"))?;
         let input = child.stdin.take().ok_or("Codex input unavailable")?;
         let output = child.stdout.take().ok_or("Codex output unavailable")?;
+        let pending = Arc::new(Mutex::new(None));
+        let reading = pending.clone();
         thread::spawn(move || {
             let mut output = BufReader::new(output);
             loop {
@@ -74,37 +103,38 @@ impl Codex {
                     .read_until(b'\n', &mut bytes)
                     .map_err(|e| e.to_string())
                     .and_then(|_| decode(&bytes));
-                let failed = parsed.is_err();
-                let relevant = match parsed.as_ref() {
-                    Err(_) => true,
+                match parsed {
                     Ok(value) => {
-                        value.get("id").is_some()
-                            || matches!(
-                                value.get("method").and_then(Value::as_str),
-                                Some(
-                                    "item/agentMessage/delta"
-                                        | "item/completed"
-                                        | "turn/started"
-                                        | "turn/completed"
-                                        | "error"
-                                )
-                            )
+                        let expected = reading.lock().ok().and_then(|pending| *pending);
+                        if let Some(event) = normalize(value, expected)
+                            && events.send(Ok(event)).is_err()
+                        {
+                            break;
+                        }
                     }
-                };
-                if relevant && events.send(parsed).is_err() || failed {
-                    break;
+                    Err(error) => {
+                        let _ = events.send(Err(error));
+                        break;
+                    }
                 }
             }
         });
-        Ok(Self { child, input })
+        Ok(Self {
+            child,
+            input,
+            pending,
+        })
     }
 
-    pub(crate) fn write(&mut self, value: Value) -> Result<(), String> {
+    fn write(&mut self, value: Value) -> Result<(), String> {
         self.write_bounded(value, 65536)
     }
 
-    pub(crate) fn tool_reply(&mut self, value: Value, content: bool) -> Result<(), String> {
-        self.write_bounded(value, if content { CONTENT_FRAME_LIMIT } else { 65536 })
+    pub(crate) fn reply(&mut self, reply: &ToolReply, content: bool) -> Result<(), String> {
+        self.write_bounded(
+            protocol::tool_reply(reply),
+            if content { CONTENT_FRAME_LIMIT } else { 65536 },
+        )
     }
 
     fn write_bounded(&mut self, value: Value, limit: usize) -> Result<(), String> {
@@ -114,8 +144,32 @@ impl Codex {
         self.input.flush().map_err(|e| e.to_string())
     }
 
-    pub(crate) fn request(&mut self, id: u64, method: &str, params: Value) -> Result<(), String> {
+    pub(crate) fn request(&mut self, id: u64, command: ProviderCommand) -> Result<(), String> {
+        let operation = command.operation();
+        let (method, params) = protocol::encode(command)?;
+        *self
+            .pending
+            .lock()
+            .map_err(|_| "Provider correlation unavailable")? = Some((id, operation));
         self.write(json!({"id": id, "method": method, "params": params}))
+    }
+
+    pub(crate) fn initialized(&mut self) -> Result<(), String> {
+        self.write(json!({"method":"initialized"}))
+    }
+
+    pub(crate) fn capabilities() -> Capabilities {
+        let support = if Self::executable().is_ok() {
+            Support::Protocol
+        } else {
+            Support::Unavailable
+        };
+        Capabilities {
+            text: support,
+            tools: support,
+            interruption: support,
+            voice: Support::Unavailable,
+        }
     }
 
     pub(crate) fn close(mut self) -> Result<(), String> {

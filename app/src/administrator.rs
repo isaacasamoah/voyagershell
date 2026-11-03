@@ -1,4 +1,5 @@
 use crate::client::{CallError, Client};
+use crate::provider::{ToolCall, ToolDefinition, ToolReply, ToolResult};
 use serde_json::{Value, json};
 use std::{sync::mpsc, thread};
 use voyager_contract::{
@@ -49,7 +50,7 @@ struct Receipt {
     replies: Vec<Value>,
     waiting: Vec<Value>,
     refused_ids: Vec<Value>,
-    result: Option<Value>,
+    result: Option<ToolResult>,
 }
 
 pub(crate) struct Work {
@@ -61,7 +62,7 @@ pub(crate) struct Work {
 }
 
 struct EffectResult {
-    value: Value,
+    value: ToolResult,
     text: String,
     status: Status,
     version: Option<String>,
@@ -75,13 +76,13 @@ pub(crate) struct Tools {
 }
 
 pub(crate) struct Completed {
-    pub replies: Vec<Value>,
+    pub replies: Vec<ToolReply>,
     pub outcome: ToolOutcome,
     pub text: String,
     pub context: Focus,
 }
 
-pub(crate) fn catalog() -> Result<Value, String> {
+pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
     let schema: Value = serde_json::from_str(include_str!(
         "../../contract/generated/workspaceTool.schema.json"
     ))
@@ -94,19 +95,34 @@ pub(crate) fn catalog() -> Result<Value, String> {
         "../../contract/generated/contentTool.schema.json"
     ))
     .map_err(|error| error.to_string())?;
-    Ok(json!([
-        {"type":"function","name":"voyager_workspace","description":"Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.","inputSchema":schema},
-        {"type":"function","name":"voyager_process","description":"Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact contentId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_content tool.","inputSchema":process_schema},
-        {"type":"function","name":"voyager_content","description":"Describe, inspect and update an existing Notes instance only inside the immutable captured focus. Inspect workspace for expectedVersion and exact contentId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-content initializes new Notes. Never repeat an uncertain update. The application supplies request identity and actor scope outside arguments.","inputSchema":content_schema}
-    ]))
+    Ok(vec![
+        ToolDefinition {
+            name: "voyager_workspace",
+            description: "Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
+            schema,
+        },
+        ToolDefinition {
+            name: "voyager_process",
+            description: "Operate only bound terminals within this request's captured focus. Inspect workspace for the current expectedVersion, then list processes for exact contentId/terminalId/PID. Ended processes remain readable without PID. Read returns screen plus at most 160 history lines, not a complete conversation. Send uses Core's paste-and-Enter. Interrupt sends the program's stop key without escalation. Stop ends that terminal's program and descendants only when explicitly requested; it reports Core's observed state and does not restart it. These three effects require the inspected running PID. Input submitted or stop requested does not mean work completed or program ended. Do not interrupt, stop, resume, restart or repeat an uncertain effect automatically. All arguments, including text, share the 8 KiB callback limit. Notes content uses the separate voyager_content tool.",
+            schema: process_schema,
+        },
+        ToolDefinition {
+            name: "voyager_content",
+            description: "Describe, inspect and update an existing Notes instance only inside the immutable captured focus. Inspect workspace for expectedVersion and exact contentId, then inspect Notes for its exact expectedRevision before update. Preserve schema/freshness warnings. A dirty visible draft retains its original revision; do not bypass stale refusal. Notes data is limited to 1 MiB and content arguments/results to 1 MiB plus 16 KiB. Oversized reads explicitly refuse; missing data is never initialized by inspect. Only workspace create-content initializes new Notes. Never repeat an uncertain update. The application supplies request identity and actor scope outside arguments.",
+            schema: content_schema,
+        },
+    ])
 }
 
-fn result(success: bool, text: String) -> Value {
-    json!({"success":success,"contentItems":[{"type":"inputText","text":text}]})
+fn result(success: bool, text: String) -> ToolResult {
+    ToolResult { success, text }
 }
 
-fn refusal(id: Value, message: &str) -> Value {
-    json!({"id":id,"result":result(false, format!("Rejected before dispatch: {message}"))})
+fn refusal(id: Value, message: &str) -> ToolReply {
+    ToolReply::Result {
+        id,
+        result: result(false, format!("Rejected before dispatch: {message}")),
+    }
 }
 
 fn valid_id(id: &Value) -> bool {
@@ -117,6 +133,27 @@ fn valid_id(id: &Value) -> bool {
 }
 
 impl Tools {
+    #[cfg(test)]
+    fn callback(
+        &mut self,
+        value: &Value,
+        thread: Option<&str>,
+        turn: Option<&str>,
+        active: bool,
+        context: Option<&Focus>,
+        workspace: &Client,
+    ) -> Option<Value> {
+        match crate::codex::normalize(value.clone(), None)? {
+            crate::provider::Event::Tool(call) => self
+                .call(&call, thread, turn, active, context, workspace)
+                .map(|reply| crate::codex::encode_tool_reply(&reply)),
+            crate::provider::Event::CallbackError { id, code, message } => {
+                Some(json!({"id":id,"error":{"code":code,"message":message}}))
+            }
+            _ => None,
+        }
+    }
+
     pub fn busy(&self) -> bool {
         self.work.is_some()
     }
@@ -128,7 +165,7 @@ impl Tools {
         call: &str,
         arguments: Option<Value>,
         message: &str,
-    ) -> Option<Value> {
+    ) -> Option<ToolReply> {
         let reply = refusal(id.clone(), message);
         self.receipts.push(Receipt {
             tool: tool.into(),
@@ -137,42 +174,34 @@ impl Tools {
             replies: vec![id],
             waiting: Vec::new(),
             refused_ids: Vec::new(),
-            result: Some(reply["result"].clone()),
+            result: Some(result(
+                false,
+                format!("Rejected before dispatch: {message}"),
+            )),
         });
         Some(reply)
     }
 
-    pub fn callback(
+    pub fn call(
         &mut self,
-        value: &Value,
+        value: &ToolCall,
         thread: Option<&str>,
         turn: Option<&str>,
         active: bool,
         context: Option<&Focus>,
         workspace: &Client,
-    ) -> Option<Value> {
-        let id = value.get("id")?.clone();
-        if !valid_id(&id) {
-            return Some(
-                json!({"id":null,"error":{"code":-32600,"message":"Invalid callback identity"}}),
-            );
-        }
-        if value["method"] != "item/tool/call" {
-            return Some(
-                json!({"id":id,"error":{"code":-32601,"message":"Unsupported private provider callback; nothing was dispatched"}}),
-            );
-        }
-        let params = &value["params"];
-        let tool = params["tool"].as_str().unwrap_or_default();
-        let matches = value["method"] == "item/tool/call"
-            && thread.is_some_and(|thread| !thread.is_empty() && params["threadId"] == thread)
-            && turn.is_some_and(|turn| !turn.is_empty() && params["turnId"] == turn)
+    ) -> Option<ToolReply> {
+        let id = value.id.clone();
+        let tool = value.name.as_str();
+        let matches = valid_id(&id)
+            && thread.is_some_and(|thread| !thread.is_empty() && value.thread == thread)
+            && turn.is_some_and(|turn| !turn.is_empty() && value.turn == turn)
             && matches!(
                 tool,
                 "voyager_workspace" | "voyager_process" | "voyager_content"
             )
-            && params.get("namespace").is_none_or(Value::is_null);
-        let call = params["callId"].as_str().unwrap_or_default();
+            && value.namespace.is_none();
+        let call = value.call.as_str();
         if !matches || call.is_empty() || call.len() > 128 {
             return Some(refusal(
                 id,
@@ -189,7 +218,7 @@ impl Tools {
                 "Callback request identity already belongs to another tool call",
             ));
         }
-        let fingerprint = crate::content::fingerprint(&params["arguments"]);
+        let fingerprint = crate::content::fingerprint(&value.arguments);
         if let Some(receipt) = self
             .receipts
             .iter_mut()
@@ -198,7 +227,7 @@ impl Tools {
             if !receipt.replies.contains(&id) {
                 if receipt.replies.len() >= 4 {
                     return Some(
-                        json!({"id":id,"error":{"code":-32001,"message":"This call's response identity capacity is full. The original outcome remains recorded; nothing was repeated."}}),
+                        ToolReply::Error { id, code: -32001, message: "This call's response identity capacity is full. The original outcome remains recorded; nothing was repeated.".into() },
                     );
                 }
                 receipt.replies.push(id.clone());
@@ -225,7 +254,10 @@ impl Tools {
                 ));
             }
             if let Some(result) = &receipt.result {
-                return Some(json!({"id":id,"result":result}));
+                return Some(ToolReply::Result {
+                    id,
+                    result: result.clone(),
+                });
             }
             if !receipt.waiting.contains(&id) {
                 receipt.waiting.push(id);
@@ -244,7 +276,7 @@ impl Tools {
             8192
         };
         let arguments =
-            (params["arguments"].to_string().len() <= limit).then(|| params["arguments"].clone());
+            (value.arguments.to_string().len() <= limit).then(|| value.arguments.clone());
         let Some(arguments) = arguments else {
             let message = if tool == "voyager_content" {
                 "Content arguments exceed 1 MiB plus 16 KiB. This call ID remains refused; use a new call for a different request."
@@ -430,7 +462,10 @@ impl Tools {
             replies: receipt
                 .waiting
                 .drain(..)
-                .map(|id| json!({"id":id,"result":result.value}))
+                .map(|id| ToolReply::Result {
+                    id,
+                    result: result.value.clone(),
+                })
                 .collect(),
             outcome,
             text: result.text,
@@ -633,9 +668,7 @@ mod tests {
         let response = crate::content::bounded_response(&request, response);
         let result = content_result(&response);
         assert_eq!(result.status, Status::Rejected);
-        let limited: Value =
-            serde_json::from_str(result.value["contentItems"][0]["text"].as_str().unwrap())
-                .unwrap();
+        let limited: Value = serde_json::from_str(&result.value.text).unwrap();
         assert_eq!(limited["requestId"], "read");
         assert_eq!(limited["revision"], "revision");
         assert_eq!(limited["status"], "limited");
@@ -785,12 +818,14 @@ mod tests {
             );
             let applied = completed(&mut tools);
             assert_eq!(applied.outcome.status, Status::Applied);
-            let applied_content: ContentResponse = serde_json::from_str(
-                applied.replies[0]["result"]["contentItems"][0]["text"]
-                    .as_str()
-                    .unwrap(),
-            )
-            .unwrap();
+            let applied_content: ContentResponse =
+                serde_json::from_str(
+                    crate::codex::encode_tool_reply(&applied.replies[0])["result"]["contentItems"]
+                        [0]["text"]
+                        .as_str()
+                        .unwrap(),
+                )
+                .unwrap();
             let applied_revision = match applied_content {
                 ContentResponse::Applied { snapshot, .. } => snapshot.revision,
                 other => panic!("{other:?}"),
@@ -826,7 +861,10 @@ mod tests {
                     &workspace,
                 )
                 .unwrap();
-            assert_eq!(duplicate["result"], applied.replies[0]["result"]);
+            assert_eq!(
+                duplicate["result"],
+                crate::codex::encode_tool_reply(&applied.replies[0])["result"]
+            );
             callback["id"] = "changed".into();
             callback["params"]["arguments"]["action"]["contentId"] = json!(b);
             assert_eq!(
@@ -1022,12 +1060,14 @@ mod tests {
             )
             .unwrap();
         let numeric_id = serde_json::to_value(&inspection.outcome.callback_ids).unwrap();
-        let observed: Response = serde_json::from_str(
-            inspection.replies[0]["result"]["contentItems"][0]["text"]
-                .as_str()
-                .unwrap(),
-        )
-        .unwrap();
+        let observed: Response =
+            serde_json::from_str(
+                crate::codex::encode_tool_reply(&inspection.replies[0])["result"]["contentItems"]
+                    [0]["text"]
+                    .as_str()
+                    .unwrap(),
+            )
+            .unwrap();
         callback["id"] = "callback-two".into();
         callback["params"]["callId"] = "call-two".into();
         callback["params"]["arguments"] = json!({"expectedVersion":observed.version.to_string(),"action":{"operation":"create-fleet","voyage":observed.layout.voyages[0].id,"name":"Delegated"}});
@@ -1179,7 +1219,10 @@ mod tests {
         assert_eq!(large_refusal["result"]["success"], false);
         assert_eq!(replacement_refusal["result"], large_refusal["result"]);
         assert!(invalid_identity && refused && untouched && duplicate_pending);
-        assert_eq!(effect.replies[0]["id"], "callback-two");
+        assert_eq!(
+            crate::codex::encode_tool_reply(&effect.replies[0])["id"],
+            "callback-two"
+        );
         assert_eq!(
             numeric_id,
             json!([{"kind":"integer","value":u64::MAX.to_string()}])
@@ -1191,7 +1234,10 @@ mod tests {
         assert_eq!(effect.replies.len(), 1);
         assert!(same_pending.is_none());
         assert_eq!(pending_refused["result"]["success"], false);
-        assert_eq!(effect.replies[0]["result"], duplicate["result"]);
+        assert_eq!(
+            crate::codex::encode_tool_reply(&effect.replies[0])["result"],
+            duplicate["result"]
+        );
         assert_eq!(duplicate["result"], replay["result"]);
         assert!(
             !redispatched && reused_id.is_some_and(|reply| reply["result"]["success"] == false)

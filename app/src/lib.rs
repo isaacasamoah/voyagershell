@@ -18,3 +18,4 @@ pub mod core_shapes {
 mod codex;
 pub mod conversation;
 pub mod conversation_client;
+pub mod provider;

@@ -174,3 +174,27 @@ terminals array into the generated Terminal type and ignores unused federation
 metadata. It does not change the upstream schema. New integer fields emit
 standard integer/minimum/maximum constraints in place of nonstandard uint32
 format annotations; strict validators still reject fractions and overflow.
+
+## Typed provider conversion
+
+The Codex adapter owns native request encoding, bounded frame decoding and
+conversion into the values in app/src/provider.rs. The common conversation owner
+consumes typed responses, visible events and tool calls. The administrator retains
+the current workspace, process, Stop and content dispatch, caller checks and
+receipt policy. Its generated tool definitions remain the same three schemas.
+The adapter encodes tool replies without moving authority into the transport.
+
+The text-stage capability reports Protocol only when the selected executable can
+be resolved. This describes an implemented route, not a running connection or a
+successful account/model operation. Voice is Unavailable in this integration
+stage. The preserved native-helper/audio-lease candidate requires separate
+integration and actual audible full-duplex proof. No Header, avatar, device or
+platform implementation is replaced by this conversion.
+
+Ordinary outbound frames remain limited to 64 KiB. Content-only framing retains
+2 * (1 MiB + 16 KiB) + 4096 bytes to allow escaped serialized Notes results.
+Non-content inbound frames remain limited to 1 MiB. Tool argument admission
+remains 8 KiB for workspace/process and 1 MiB + 16 KiB for content. The adapter
+accepts only a response matching the outstanding numeric request ID; the owner
+also checks that ID before settling its request. Invalid or unsupported provider
+callbacks receive explicit errors without dispatching an application effect.
