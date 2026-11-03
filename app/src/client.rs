@@ -84,6 +84,23 @@ struct Outcome {
     created_workspace: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CreatedTerminal {
+    id: ContentId,
+    launch: voyager_contract::launch::Launch,
+}
+
+impl CreatedTerminal {
+    fn matches(&self, content: &voyager_contract::Content) -> bool {
+        self.id == content.id
+            && &self.launch
+                == content
+                    .launch
+                    .as_ref()
+                    .unwrap_or(&voyager_contract::launch::Launch::Terminal)
+    }
+}
+
 struct ContentReceipt {
     access: crate::content::Access,
     request_id: String,
@@ -150,7 +167,7 @@ impl Client {
             let mut fresh = false;
             let mut receipts: VecDeque<(Request, Option<Context>, Outcome)> = VecDeque::new();
             let mut unconfirmed = HashMap::<String, String>::new();
-            let mut created_contents = Vec::<ContentId>::new();
+            let mut created_contents = Vec::<CreatedTerminal>::new();
             let mut terminal_requests: VecDeque<(TerminalRequest, Result<Viewer, Error>)> =
                 VecDeque::new();
             let mut process_requests: VecDeque<(Context, ProcessRequest, Arc<ProcessResponse>)> =
@@ -441,7 +458,7 @@ impl Client {
                             ))
                         } else if let Some(message) = unconfirmed.get(&content.0) {
                             Err(Error::Uncertain(message.clone()))
-                        } else if created_contents.contains(&content)
+                        } else if created_contents.iter().any(|pending| pending.id == content)
                             && !visible_content(&layout, &content)
                         {
                             Err(rejected(
@@ -543,9 +560,9 @@ impl Client {
                                             &item.id.0 == id && item.start_pending.is_some()
                                         })
                                     });
-                                    created_contents.retain(|id| {
+                                    created_contents.retain(|pending| {
                                         candidate.layout.contents.iter().any(|item| {
-                                            &item.id == id
+                                            item.id == pending.id
                                                 && item.backend.is_none()
                                                 && item.start_pending.is_none()
                                         })
@@ -576,7 +593,7 @@ impl Client {
                                     .map_err(rejected)
                                     .and_then(|()| {
                                         let revision = save(core, &candidate.layout, version)?;
-                                        if scope.is_some()
+                                        if (scope.is_some() || matches!(request.action, Action::CreateContent { .. }))
                                             && matches!(
                                                 request.action,
                                                 Action::CreateVoyage { .. }
@@ -932,12 +949,12 @@ mod voice_scope_tests {
 }
 
 fn settle_created_content(
-    pending: &mut Vec<ContentId>,
+    pending: &mut Vec<CreatedTerminal>,
     content: &ContentId,
     result: &Result<Viewer, Error>,
 ) {
     if matches!(result, Err(Error::Uncertain(_))) {
-        pending.retain(|item| item != content);
+        pending.retain(|item| &item.id != content);
     }
 }
 
@@ -984,7 +1001,11 @@ fn visible_content(layout: &Layout, content: &ContentId) -> bool {
     contains(&fleet.root, fleet, content)
 }
 
-fn record_created_terminals(pending: &mut Vec<ContentId>, previous: &Layout, current: &Layout) {
+fn record_created_terminals(
+    pending: &mut Vec<CreatedTerminal>,
+    previous: &Layout,
+    current: &Layout,
+) {
     pending.extend(
         current
             .contents
@@ -992,27 +1013,30 @@ fn record_created_terminals(pending: &mut Vec<ContentId>, previous: &Layout, cur
             .filter(|item| {
                 item.type_id == "terminal" && !previous.contents.iter().any(|old| old.id == item.id)
             })
-            .map(|item| item.id.clone()),
+            .map(|item| CreatedTerminal {
+                id: item.id.clone(),
+                launch: item.launch.clone().unwrap_or_default(),
+            }),
     );
 }
 
 fn eligible_contents(
     layout: &Arc<Layout>,
     scope: Option<&Context>,
-    pending: &[ContentId],
+    pending: &[CreatedTerminal],
 ) -> Vec<ContentId> {
     let projection = crate::scope::project(layout, scope);
     pending
         .iter()
-        .filter(|id| {
+        .filter(|pending| {
             projection.contents.iter().any(|item| {
-                &item.id == *id
+                pending.matches(item)
                     && item.type_id == "terminal"
                     && item.backend.is_none()
                     && item.start_pending.is_none()
             })
         })
-        .cloned()
+        .map(|pending| pending.id.clone())
         .collect()
 }
 
@@ -1022,7 +1046,7 @@ fn open_terminal(
     version: &mut u64,
     fresh: &mut bool,
     unconfirmed: &mut HashMap<String, String>,
-    created_contents: &mut Vec<ContentId>,
+    created_contents: &mut Vec<CreatedTerminal>,
     request: &TerminalRequest,
 ) -> Result<Viewer, Error> {
     let content = &request.content_id;
@@ -1042,13 +1066,20 @@ fn open_terminal(
     }
     let cwd = target.cwd.clone();
     let launch = target.launch.clone().unwrap_or_default();
-    if target.backend.is_none()
-        && !matches!(launch, voyager_contract::launch::Launch::Terminal)
-        && !created_contents.contains(content)
-    {
-        return Err(rejected(
-            "This saved worker has no new-creation permission; no command was restarted".into(),
-        ));
+    if target.backend.is_none() {
+        let accepted = created_contents
+            .iter()
+            .find(|pending| &pending.id == content);
+        if accepted.is_some_and(|pending| !pending.matches(target)) {
+            return Err(rejected(
+                "The creation launch changed; no program was started".into(),
+            ));
+        }
+        if !matches!(launch, voyager_contract::launch::Launch::Terminal) && accepted.is_none() {
+            return Err(rejected(
+                "This saved worker has no new-creation permission; no command was restarted".into(),
+            ));
+        }
     }
     let mut created = false;
     let address = if let Some(address) = &target.backend {
@@ -1094,7 +1125,7 @@ fn open_terminal(
                 })
             });
         if !matches!(run, Err(Error::Rejected { .. })) {
-            created_contents.retain(|item| item != content);
+            created_contents.retain(|item| &item.id != content);
         }
         let started = match run {
             Ok(result) => result,
@@ -1236,9 +1267,13 @@ mod terminal_outcome_tests {
             })
             .unwrap();
         let notes = model.layout.contents.last().unwrap().id.clone();
-        let mut pending = vec![terminal.clone()];
+        let record = |id| CreatedTerminal {
+            id,
+            launch: Default::default(),
+        };
+        let mut pending = vec![record(terminal.clone())];
         record_created_terminals(&mut pending, &previous, &model.layout);
-        assert_eq!(pending, vec![terminal.clone()]);
+        assert_eq!(pending, vec![record(terminal.clone())]);
         let previous = model.layout.clone();
         model
             .apply(Action::CreateContent {
@@ -1253,9 +1288,34 @@ mod terminal_outcome_tests {
             .unwrap();
         let new_terminal = model.layout.contents.last().unwrap().id.clone();
         record_created_terminals(&mut pending, &previous, &model.layout);
-        assert_eq!(pending, vec![terminal.clone(), new_terminal.clone()]);
-        let layout = Arc::new(model.layout);
-        pending.push(notes);
+        assert_eq!(
+            pending,
+            vec![record(terminal.clone()), record(new_terminal.clone())]
+        );
+        let mut layout = Arc::new(model.layout);
+        pending.push(record(notes));
+        assert_eq!(
+            eligible_contents(&layout, None, &pending),
+            vec![terminal.clone(), new_terminal.clone()]
+        );
+        let changed = Arc::make_mut(&mut layout)
+            .contents
+            .iter_mut()
+            .find(|item| item.id == new_terminal)
+            .unwrap();
+        changed.launch = Some(voyager_contract::launch::Launch::Program {
+            argv: vec!["/different".into()],
+        });
+        assert_eq!(
+            eligible_contents(&layout, None, &pending),
+            vec![terminal.clone()]
+        );
+        let changed = Arc::make_mut(&mut layout)
+            .contents
+            .iter_mut()
+            .find(|item| item.id == new_terminal)
+            .unwrap();
+        changed.launch = Some(voyager_contract::launch::Launch::Terminal);
         assert_eq!(
             eligible_contents(&layout, None, &pending),
             vec![terminal, new_terminal]
@@ -1266,16 +1326,20 @@ mod terminal_outcome_tests {
     fn uncertain_start_discards_only_its_automatic_eligibility() {
         let first = ContentId("first".into());
         let other = ContentId("other".into());
-        let mut pending = vec![first.clone(), other.clone()];
+        let record = |id| CreatedTerminal {
+            id,
+            launch: Default::default(),
+        };
+        let mut pending = vec![record(first.clone()), record(other.clone())];
         let refused = Err(Error::Rejected {
             kind: "refused".into(),
             message: "not started".into(),
         });
         settle_created_content(&mut pending, &first, &refused);
-        assert_eq!(pending, vec![first.clone(), other.clone()]);
+        assert_eq!(pending, vec![record(first.clone()), record(other.clone())]);
         let uncertain = Err(Error::Uncertain("marker cleanup not confirmed".into()));
         settle_created_content(&mut pending, &first, &uncertain);
-        assert_eq!(pending, vec![other]);
+        assert_eq!(pending, vec![record(other)]);
     }
 
     #[test]

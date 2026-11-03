@@ -133,7 +133,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
     assert!(!socket.exists());
     let mut core = Core::connect(&session).unwrap();
     let client = Client::open(session.clone(), "/tmp".into());
-    let checked = std::panic::catch_unwind(|| {
+    let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let initial = client
             .call(Request {
                 request_id: client.request_id(),
@@ -168,7 +168,9 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
         );
         let id = created.layout.contents.last().unwrap().id.clone();
         let refused = client.terminal(id.clone(), client.request_id(), created.version);
-        assert!(matches!(refused, Err(Error::Rejected { .. })));
+        assert!(
+            matches!(refused, Err(Error::Rejected { kind, message }) if kind == "spawn_failed" && message.contains("/no-voyager-worker-here"))
+        );
         let inspected = client
             .call(Request {
                 request_id: client.request_id(),
@@ -186,6 +188,56 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
         assert_eq!(
             worker.launch,
             created.layout.contents.last().unwrap().launch
+        );
+        let original_launch = worker.launch.clone();
+        let mut changed = (*inspected.layout).clone();
+        changed
+            .contents
+            .iter_mut()
+            .find(|item| item.id == id)
+            .unwrap()
+            .launch = Some(voyager_contract::launch::Launch::Terminal);
+        core.document_set("voyager-layout-v1", &changed, inspected.version)
+            .unwrap();
+        let observed = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: 0,
+                action: Action::Inspect,
+            })
+            .unwrap();
+        assert!(!observed.created_contents.contains(&id));
+        let refused = client.terminal(id.clone(), client.request_id(), observed.version);
+        assert!(
+            matches!(refused, Err(Error::Rejected { message, .. }) if message.contains("creation launch changed"))
+        );
+        let unchanged = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: 0,
+                action: Action::Inspect,
+            })
+            .unwrap();
+        assert_eq!(unchanged.version, observed.version);
+        assert_eq!(unchanged.layout, observed.layout);
+        changed
+            .contents
+            .iter_mut()
+            .find(|item| item.id == id)
+            .unwrap()
+            .launch = original_launch;
+        core.document_set("voyager-layout-v1", &changed, observed.version)
+            .unwrap();
+        let restored = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: 0,
+                action: Action::Inspect,
+            })
+            .unwrap();
+        let retry = client.terminal(id.clone(), client.request_id(), restored.version);
+        assert!(
+            matches!(retry, Err(Error::Rejected { kind, message }) if kind == "spawn_failed" && message.contains("/no-voyager-worker-here"))
         );
         assert_eq!(client.call(request).unwrap().status, Status::Applied);
         assert_eq!(inspected.layout.contents.len(), 2);
@@ -210,7 +262,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
             .unwrap();
         assert_eq!(after.version, snapshot.version);
         assert_eq!(after.layout, snapshot.layout);
-    });
+    }));
     let status = core.server_status();
     let mut identities = Vec::new();
     if let Ok(status) = &status {
