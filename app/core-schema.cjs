@@ -53,6 +53,7 @@ for (const [method, name] of [
   ["terminal.send", "SendParams"],
   ["terminal.interrupt", "InterruptParams"],
   ["terminal.kill", "KillParams"],
+  ["events.subscribe", "SubscribeParams"],
 ]) {
   const entry = schema.methods.find((item) => item.name === method);
   if (!entry) throw Error(`Core method missing: ${method}`);
@@ -84,6 +85,8 @@ const output =
         runResult: { $ref: "#/definitions/RunResult" },
         attachParams: { $ref: "#/definitions/AttachParams" },
         attachResult: { $ref: "#/definitions/AttachResult" },
+        subscribeParams: { $ref: "#/definitions/SubscribeParams" },
+        subscribeResult: { $ref: "#/definitions/SubscribeResult" },
       },
     },
     null,

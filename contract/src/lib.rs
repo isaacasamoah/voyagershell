@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+pub mod activity;
 pub mod administrator;
 pub mod canvas;
 pub mod content;

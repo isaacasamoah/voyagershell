@@ -430,6 +430,34 @@
         "terminal"
       ]
     },
+    "SubscribeParams": {
+      "type": "object",
+      "properties": {
+        "children_of": {
+          "description": "Only children of this terminal.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Only terminals carrying all of these labels (repeatable).",
+          "type": "object"
+        },
+        "terminal": {
+          "description": "Only this terminal.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": []
+    },
     "CoreInfo": {
       "properties": {
         "id": {
@@ -1240,6 +1268,37 @@
       ],
       "type": "object"
     },
+    "SubscribeResult": {
+      "properties": {
+        "channel": {
+          "description": "Framed mode: the channel events arrive on (JSON lines, with credit).\nPlain mode: none; this connection now carries only notifications.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "seq": {
+          "description": "Events after this sequence follow. After a `missed` snapshot, ignore\nevents whose seq is not above the snapshot's.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "terminals": {
+          "description": "Matching terminals here and on connected machines (`machine/t7`).",
+          "items": {
+            "$ref": "#/definitions/Terminal"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "seq",
+        "terminals"
+      ],
+      "type": "object"
+    },
     "Foreground": {
       "properties": {
         "argv": {
@@ -1518,6 +1577,12 @@
     },
     "attachResult": {
       "$ref": "#/definitions/AttachResult"
+    },
+    "subscribeParams": {
+      "$ref": "#/definitions/SubscribeParams"
+    },
+    "subscribeResult": {
+      "$ref": "#/definitions/SubscribeResult"
     }
   }
 }
