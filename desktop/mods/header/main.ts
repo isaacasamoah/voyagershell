@@ -6,12 +6,15 @@ import { take_result, window_epoch } from "voyager_avatar";
 import {
   response as validateResponse,
   contextFacts as validateFacts,
+  reportedActivity as validateReportedActivity,
 } from "./validate.js";
 import { invoke, openTerminal } from "./workspace.js";
 import {
   request_id,
   notice as workspace_notice,
   context_facts,
+  reported_activity,
+  refresh_activity,
 } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { Terminal, TerminalState, Split as NativeSplit } from "voyager_native";
@@ -23,6 +26,7 @@ import { homeOverview } from "./home.js";
 import { composeCanvas, vesselFrame } from "./canvas.js";
 import { LayoutPanel } from "./layout-panel.js";
 import { CreationPicker } from "./creation.js";
+import type { Projection as ActivityProjection } from "../../../contract/generated/reportedActivity";
 import type { Facts } from "../../../contract/generated/contextFacts";
 
 import type {
@@ -98,6 +102,8 @@ export default class Workspace extends View {
   declare focus: FocusHandle;
   declare names: Map<string, { focus: FocusHandle; name: string }>;
   declare status: string;
+  declare activityRevision: string;
+  declare reportedActivity: ActivityProjection["terminals"];
   declare terminals: Map<string, TerminalState>;
   declare openings: Map<string, Opening>;
   declare editing: Editing | null | undefined;
@@ -131,9 +137,15 @@ export default class Workspace extends View {
     this.focus = cx.focus_handle();
     this.names = new Map();
     this.refreshRequested = false;
-    this.workspaceNotice = { revision: "0", packageRevision: "0" };
+    this.workspaceNotice = {
+      revision: "0",
+      packageRevision: "0",
+      activityRevision: "0",
+    };
     this.automaticRefresh = false;
     this.status = "Opening workspace";
+    this.activityRevision = "";
+    this.reportedActivity = {};
     this.terminals = new Map();
     this.openings = new Map();
     this.focused = null;
@@ -763,6 +775,26 @@ export default class Workspace extends View {
     }
   }
 
+  refreshActivity(cx: UIContext) {
+    cx.spawn(async (task) => {
+      try {
+        await refresh_activity();
+      } catch (error) {
+        this.status = errorMessage(error);
+      }
+      task.notify();
+    });
+  }
+
+  readActivity(revision: string) {
+    if (this.activityRevision === revision) return;
+    const value: unknown = JSON.parse(reported_activity());
+    if (!validateReportedActivity(value))
+      throw Error("Invalid reported activity");
+    this.reportedActivity = value.terminals;
+    this.activityRevision = revision;
+  }
+
   action(
     label: string,
     action: Action | null,
@@ -808,7 +840,11 @@ export default class Workspace extends View {
         else if (!["create-fleet", "inspect"].includes(action?.operation || ""))
           this.focus.focus();
         if (event.click_count === 2 && rename) this.editName(rename, label, cx);
-        else if (action) this.run(action, cx);
+        else if (action) {
+          if (label === "Refresh" && action.operation === "inspect")
+            this.refreshActivity(cx);
+          this.run(action, cx);
+        }
       })
       .child(placement && label === "Terminal" ? "" : label);
     if (["create-fleet", "inspect"].includes(action?.operation || ""))
@@ -1004,6 +1040,9 @@ export default class Workspace extends View {
             expectedBackend: content.backend,
           }
         : null;
+    const activity = content.backend
+      ? this.reportedActivity?.[content.backend]
+      : null;
     return this.target(
       `${scope.kind}-${placement.id}`,
       scope,
@@ -1035,6 +1074,9 @@ export default class Workspace extends View {
               .child(
                 div()
                   .flex_1()
+                  .flex()
+                  .items_center()
+                  .gap(6)
                   .text_size(11)
                   .text_color(colors.muted)
                   .on_mouse_down("left", (event, cx) => {
@@ -1048,6 +1090,16 @@ export default class Workspace extends View {
                       false,
                       scope,
                     ),
+                  )
+                  .child(
+                    div()
+                      .text_size(9)
+                      .text_color(colors.muted)
+                      .child(
+                        content.typeId === "terminal"
+                          ? `Reported: ${activity?.state ?? "unknown"}`
+                          : "",
+                      ),
                   ),
               )
               .children(
@@ -1634,6 +1686,13 @@ export default class Workspace extends View {
       this.status = errorMessage(error);
     }
     const ownerNotice = workspace_notice();
+    if (ownerNotice.activityRevision !== undefined) {
+      try {
+        this.readActivity(ownerNotice.activityRevision);
+      } catch (error) {
+        this.status = errorMessage(error);
+      }
+    }
     if (
       ownerNotice.revision !== this.workspaceNotice.revision ||
       ownerNotice.packageRevision !== this.workspaceNotice.packageRevision

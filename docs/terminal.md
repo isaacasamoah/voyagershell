@@ -7,6 +7,39 @@ Closing a viewer sends CLOSE; it does not stop the terminal. Connection teardown
 by itself does not stop the Core server. Explicit Quit has a separate Rust-owned
 shutdown path described below, with native acceptance still pending.
 
+## Program-reported activity
+
+The source candidate adds optional OSC 7501 observation on the existing framed
+Core connection. Its native protocol journey is pending. Existing Vessel and
+Portal headers show the program's reported working, blocked, idle, done or error
+word. Unknown has an explicit reason. Reported done is not process exit or a
+verified task result. Private conversation progress remains separate.
+
+The adapter applies subscription snapshots, ordered events and Core's missed
+replacement snapshots. It does not classify output or infer activity from
+silence. Unsupported observation, malformed metadata, gaps and channel loss
+remain unknown without an automatic repair RPC. Explicit Refresh can renew the
+observation on the same connection. Input, workspace effects and Quit keep their
+existing owners and admission rules.
+
+Retained observation payload is capped at 1 MiB of partial line, 256 KiB of early
+bytes and 1 MiB of root metadata across at most 256 bound addresses. Only root
+word, optional app/kind/progress and source/observation times are retained; title,
+message and child histories are omitted. Addresses are capped at 128 bytes, app
+at 32, and kinds/progress use the pinned supported values. Object overhead,
+transient parsing, script/result copies and the existing 16 MiB frame are
+separate from that 2.25 MiB retained observation budget. Oversized observation
+becomes limited/unknown and does not limit workspace creation or terminal input.
+
+One coalesced owner wake retains the latest facts through a full mailbox.
+Activity has its own counter and does not change document CAS or packageRevision.
+Rendering reads cached data without a status polling loop or document read per
+event. Existing scoped process list/read results expose the same reported-data
+meaning after their normal caller/backend checks. Snapshots supply source time;
+a changed-word event clears it because Core omits that time. Local observed-at
+time is not substituted for Core's source timestamp. See the pinned protocol in
+[Core's event documentation](https://github.com/herdrdev/herdr-core/blob/e07c2a1bedd62cf4787ee026ee23ee79c7d95491/schema/README.md#events).
+
 ## Explicit session Quit
 
 The source candidate routes Ctrl+Q through the existing application owners before

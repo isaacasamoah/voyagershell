@@ -642,7 +642,11 @@ test("a non-Error open rejection remains uncertain and is not replayed", async (
   assert.equal(count(), 1, "An unknown rejection caused an uncertain replay");
 });
 
-test("Home presents the retained out-of-view avatar without docking or starting content", () => {
+test("Home presents the retained out-of-view avatar without docking or starting content", async () => {
+  const { reportedActivity: validateReportedActivity } =
+    await import("../contract/generated/validate.js");
+  let activityRevision;
+  let activityReads = 0;
   const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
   let ownerRevision = "7";
   let packageRevision = "0";
@@ -690,6 +694,8 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "workspace_notice",
     "composeCanvas",
     "vesselFrame",
+    "reported_activity",
+    "validateReportedActivity",
     source,
   )(
     class {},
@@ -702,7 +708,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     target,
     () => null,
     () => div(),
-    () => ({ revision: ownerRevision, packageRevision }),
+    () => ({ revision: ownerRevision, packageRevision, activityRevision }),
     new Function(
       "div",
       fs
@@ -711,6 +717,13 @@ test("Home presents the retained out-of-view avatar without docking or starting 
         .replaceAll("export function", "function") + "\nreturn composeCanvas;",
     )(div),
     (node) => node,
+    () => {
+      activityReads += 1;
+      return JSON.stringify({
+        terminals: { t1: { state: "done", reported: true, limited: false } },
+      });
+    },
+    validateReportedActivity,
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
@@ -793,6 +806,19 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     ),
   );
   assert.deepEqual(actions, []);
+  const unchanged = structuredClone(view.layout);
+  activityRevision = "1";
+  view.render({});
+  view.render({});
+  assert.equal(activityReads, 1);
+  assert.equal(view.reportedActivity.t1.state, "done");
+  assert.deepEqual(view.layout, unchanged);
+  assert.equal(view.version, "7");
+  assert.deepEqual(
+    actions,
+    [],
+    "Activity must not request Inspect or prepare content",
+  );
   const goThere = nodes.find((node) => node.calls.child?.[0] === "Go there");
   assert.ok(goThere);
   goThere.calls.on_click[0]({ click_count: 1 }, {});

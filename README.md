@@ -4,6 +4,11 @@ VoyagerShell is a configurable workspace for people and agents, built on Herdr C
 
 The working Electron prototype is preserved in [experiments/electron-reference](experiments/electron-reference/README.md). The native avatar, content-host and earlier typed-content work are organised under [experiments](experiments/README.md), with their acceptance limits recorded. This source reorganisation does not complete the native application or establish a performance improvement.
 
+The reported-activity source candidate uses Core's OSC 7501 events in existing
+Vessel/Portal headers and scoped process inspection. Its native protocol proof is
+pending. Reported done remains separate from process exit and verified work.
+See [reported activity](docs/terminal.md#program-reported-activity).
+
 ## Run the reference
 
 Use Node 24 and Herdr Core 0.1.16 on PATH. Chat and voice require the existing configured Codex installation.

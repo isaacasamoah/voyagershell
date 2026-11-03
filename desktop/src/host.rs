@@ -185,6 +185,7 @@ struct WorkspaceBinding {
     notes: crate::notes::Host,
     avatar: crate::avatar::Binding,
     notice: Rc<Cell<WorkspaceNotice>>,
+    activity: Rc<RefCell<voyager_contract::activity::Projection>>,
 }
 
 fn load(
@@ -212,6 +213,8 @@ fn load(
     let calls = client.clone();
     let context_reader = client.clone();
     let launches_reader = client.clone();
+    let activity_reader = workspace_binding.activity.clone();
+    let activity_refresh = client.clone();
     let terminal_client = client.clone();
     let revision = workspace_binding.notice.clone();
     let notice = workspace_binding.notice.clone();
@@ -231,6 +234,21 @@ fn load(
                 let value = serde_json::to_string(&catalog)
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
                 Ok(gpui_shell::HostValue::from(value))
+            })
+        })
+        .function("reported_activity", move |_| {
+            let raw = serde_json::to_string(&*activity_reader.borrow())
+                .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+            Ok(HostValue::from(raw))
+        })
+        .async_function("refresh_activity", move |_| {
+            let client = activity_refresh.clone();
+            Ok(async move {
+                client
+                    .refresh_activity()
+                    .await
+                    .map_err(gpui_shell::HostError::new)?;
+                Ok(HostValue::Null)
             })
         })
         .function("request_id", move |_| {
@@ -330,6 +348,10 @@ fn load(
             let notice = notice.get();
             Ok(HostValue::Object(vec![
                 (
+                    "activityRevision".into(),
+                    HostValue::from(notice.activity_revision.to_string()),
+                ),
+                (
                     "packageRevision".into(),
                     HostValue::from(notice.package_revision.to_string()),
                 ),
@@ -406,6 +428,9 @@ impl Header {
             notes,
             avatar,
             notice: Rc::new(Cell::new(WorkspaceNotice::default())),
+            activity: Rc::new(RefCell::new(voyager_contract::activity::Projection {
+                terminals: Default::default(),
+            })),
         };
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
@@ -439,6 +464,7 @@ impl Header {
         };
         let changed_client = workspace_binding.client.clone();
         let changed_revision = workspace_binding.notice.clone();
+        let changed_activity = workspace_binding.activity.clone();
         let changed_runtime = runtime.clone();
         let workspace_task = cx.spawn(async move |this, cx| {
             let mut after = None;
@@ -451,11 +477,24 @@ impl Header {
                     Err(error) => Err(error),
                 };
                 let failed = next.is_err();
+                let activity = if next.is_ok() {
+                    let reader = changed_client.clone();
+                    Some(
+                        cx.background_executor()
+                            .spawn(async move { reader.reported_activity() })
+                            .await,
+                    )
+                } else {
+                    None
+                };
                 let updated = this.update(cx, |header, cx| {
                     match next {
                         Ok(notice) => {
                             after = Some(notice);
                             changed_revision.set(notice);
+                            if let Some(activity) = activity {
+                                *changed_activity.borrow_mut() = activity;
+                            }
                             if let Some(root) = &header.root
                                 && let Err(error) = changed_runtime.refresh(root, cx)
                             {

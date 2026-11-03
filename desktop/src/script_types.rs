@@ -17,7 +17,9 @@ export function terminal_open(request: string): Promise<string>;
 export function revision(): string;
 export function context_facts(): Promise<string>;
 export function launches(): Promise<string>;
-export function notice(): { revision: string; packageRevision: string };
+export function notice(): { revision: string; packageRevision: string; activityRevision: string };
+export function reported_activity(): string;
+export function refresh_activity(): Promise<void>;
 "#;
 
 pub const CONVERSATION_MODULE: &str = "voyager_conversation";
