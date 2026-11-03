@@ -47,6 +47,7 @@ class Routes(unittest.TestCase):
             ("--foundation", "avatar"),
             ("--foundation", "portal-avatar"),
             ("--foundation", "notes"),
+            ("--foundation", "split-resize"),
             ("--native-mod-host", "--notes-case"),
             ("--native-avatar", "--reduced-motion"),
             ("--reference", "--direct-controls"),
@@ -57,7 +58,7 @@ class Routes(unittest.TestCase):
                 self.assertIn(option, result.stdout)
 
     def test_avatar_routes_require_compositor_before_launch(self):
-        for route in ("avatar", "portal-avatar", "notes"):
+        for route in ("avatar", "portal-avatar", "notes", "split-resize"):
             result = self.run_cli(
                 "--foundation",
                 "--journey",
@@ -70,14 +71,20 @@ class Routes(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
                 "requires compositor capture"
-                if route == "notes"
+                if route in ("notes", "split-resize")
                 else "require compositor capture",
                 result.stderr,
             )
 
     def test_avatar_routes_refuse_fixed_core_socket_before_launch(self):
         with tempfile.TemporaryDirectory() as directory:
-            for route in ("avatar", "portal-avatar", "conversation-ux", "notes"):
+            for route in (
+                "avatar",
+                "portal-avatar",
+                "conversation-ux",
+                "notes",
+                "split-resize",
+            ):
                 environment = dict(os.environ, HC_SOCKET="/tmp/not-a-test-session")
                 result = subprocess.run(
                     [
@@ -123,12 +130,26 @@ class Routes(unittest.TestCase):
             "proof_selected_stop",
             "proof_avatar",
             "proof_foundation_notes",
+            "proof_split_resize",
             "proof_conversation",
             "proof_conversation_scroll",
         ):
             self.assertEqual(
                 Path(importlib.import_module(name).__file__).parent, directory
             )
+
+    def test_resize_observer_preserves_real_invoke_and_valid_source(self):
+        proof = importlib.import_module("proof_split_resize")
+        source = proof.observer_source(
+            (ROOT / "desktop/mods/header/main.js").read_text()
+        )
+        self.assertEqual(
+            source.count("result = await invoke(action, expectedVersion);"), 1
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "observed.mjs"
+            path.write_text(source)
+            subprocess.run(["node", "--check", str(path)], check=True, timeout=5)
 
     def test_notes_setup_and_source_controls_match_actual_packages(self):
         from contextlib import contextmanager

@@ -22,7 +22,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "notes", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-process", "conversation-ux", "terminal-agent", "conversation-scroll", "conversation-stop", "avatar", "portal-avatar"])
+    parser.add_argument("--journey", choices=["workspace", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "arrangement", "layouts", "split-resize", "notes", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-process", "conversation-ux", "terminal-agent", "conversation-scroll", "conversation-stop", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--notes", action="store_true")
@@ -40,6 +40,8 @@ def run():
         parser.error("Avatar journeys require compositor capture")
     if args.journey == "notes" and not args.compositor:
         parser.error("Notes journey requires compositor capture")
+    if args.journey == "split-resize" and not args.compositor:
+        parser.error("Split resize requires compositor capture")
     if args.journey == "conversation-scroll":
         if args.public_snapshot is None or not args.public_snapshot.is_absolute() or not args.public_snapshot.is_file():
             parser.error("conversation-scroll requires an absolute public Snapshot file")
@@ -78,7 +80,7 @@ def run():
                 socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
                 if socket.exists():
                     raise RuntimeError("Selected Stop requires two fresh dedicated Core sessions")
-    if args.journey in ("avatar", "portal-avatar", "notes"):
+    if args.journey in ("avatar", "portal-avatar", "notes", "split-resize"):
         if env.get("HC_SOCKET"):
             raise RuntimeError("This journey requires an unset HC_SOCKET before launch")
         env.pop("HC_SESSION", None)
@@ -364,7 +366,7 @@ def run():
             passed.append("native-quit")
         elif args.foundation:
             import importlib
-            module = "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey == "terminal-agent" else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
+            module = "proof_split_resize" if args.journey == "split-resize" else "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey == "terminal-agent" else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
             proof_workspace = importlib.import_module(module)
 
             options = dict(native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame, evidence=evidence, session=args.session, env=env, journey=args.journey)

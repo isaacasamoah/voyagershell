@@ -22,7 +22,7 @@ spec.loader.exec_module(notes)
 
 def setup_source(source):
     anchor = (
-        '    this.run({ operation: "inspect" }, cx);\n  }\n  run(action, cx, done) {'
+        '    this.run({ operation: "inspect" }, cx);\n  }\n  run(action, cx, done, expectedVersion = this.version) {'
     )
     setup = """    this.run({ operation: "inspect" }, cx, (initial, task) => {
       if (initial?.status !== "applied" || !initial.fresh) throw Error("Proof setup inspect failed");
@@ -36,7 +36,7 @@ def setup_source(source):
       });
     });
   }
-  run(action, cx, done) {"""
+  run(action, cx, done, expectedVersion = this.version) {"""
     return notes.once(source, anchor, setup)
 
 
