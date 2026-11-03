@@ -951,8 +951,13 @@ def package_turn(*, native, pid, evidence, wait, type_text, operation, context, 
         for message in before["messages"]
         if message["role"] == "user"
     }
-    fields = native("fields", pid, ["Message Voyager"], "window")["fields"]
-    assert len(fields) == 1 and fields[0]["width"] > 0 and fields[0]["height"] > 0
+    wait(
+        lambda: native("fields", pid, ["Message Voyager"], "window")["fields"],
+        lambda fields: (
+            len(fields) == 1 and fields[0]["width"] > 0 and fields[0]["height"] > 0
+        ),
+        "visible private composer",
+    )
     native("focus", pid, "Message Voyager", 0)
     wait(
         lambda: native("fields", pid, ["Message Voyager"], "window")["fields"],
