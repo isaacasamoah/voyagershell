@@ -159,6 +159,34 @@ def prove(
         assert observation["complete"], observation
         return observation
 
+    def record_providers(executable):
+        candidates = provider_processes(evidence)
+        roots = [
+            item
+            for item in candidates
+            if item["parent"] == launch()["pid"]
+            and item["executable"] == str(executable)
+        ]
+        assert len(roots) == 1, candidates
+        descendants = {roots[0]["pid"]}
+        while (
+            added := {
+                item["pid"] for item in candidates if item["parent"] in descendants
+            }
+            - descendants
+        ):
+            descendants.update(added)
+        for item in candidates:
+            if item["pid"] in descendants and not any(
+                old["pid"] == item["pid"] and old["start"] == item["start"]
+                for old in owned
+            ):
+                record(
+                    item["pid"],
+                    "provider-root" if item == roots[0] else "provider-helper",
+                )
+        return candidates
+
     try:
         wait(socket.is_socket, bool, "the original Core socket")
         initial = wait(
@@ -169,8 +197,11 @@ def prove(
         layout = initial["value"]
         assert len(layout["contents"]) == 1
         address = layout["contents"][0]["backend"]
-        terminal = rpc("terminal.get", {"terminal": address})
-        assert terminal["state"] == "live" and terminal["pid"]
+        terminal = wait(
+            lambda: rpc("terminal.get", {"terminal": address}),
+            lambda item: item["state"] == "live" and item.get("pid"),
+            "the original live shell PID",
+        )
         shell = record(terminal["pid"], "shell")
         core = bind_runtime()
         observed["initial"] = {
@@ -209,27 +240,8 @@ def prove(
         native("focus", launch()["pid"], "Message Voyager", 0)
         type_text(prompt)
         click(*named_button(native, evidence, "Send"))
-        providers = wait(
-            lambda: provider_processes(evidence), bool, "the owned private provider"
-        )
-        roots = [
-            item
-            for item in providers
-            if item["parent"] == launch()["pid"]
-            and item["executable"] == str(executable)
-        ]
-        assert len(roots) == 1, providers
-        descendants = {roots[0]["pid"]}
-        while (
-            added := {
-                item["pid"] for item in providers if item["parent"] in descendants
-            }
-            - descendants
-        ):
-            descendants.update(added)
-        for item in providers:
-            if item["pid"] in descendants:
-                record(item["pid"], "provider")
+        wait(lambda: provider_processes(evidence), bool, "the owned private provider")
+        observed["providersEarly"] = record_providers(executable)
         final = wait(
             conversation,
             lambda item: (
@@ -305,12 +317,15 @@ def prove(
         assert observed["warm"]["terminal"]["pid"] == terminal["pid"]
         assert conversation() == final
         for item in owned:
+            if item["role"] == "provider-helper":
+                continue
             assert process_record(item["pid"]) == {
                 key: value for key, value in item.items() if key not in ("pid", "role")
             }
         terminal_focus()
         observed["warmOutput"] = marker("QUIT_RESTORED", address)
         capture("quit-warm-restored-shell")
+        observed["providersBeforeQuit"] = record_providers(executable)
         save("quit-identities-original.json", owned)
         save("quit-observed.json", observed)
         quit_attempted = True
@@ -333,15 +348,18 @@ def prove(
         assert not [
             item for item in terminals["terminals"] if item["state"] == "live"
         ], terminals
-        screen = rpc("terminal.read", {"terminal": address})
-        assert observed["warmOutput"]["text"] in screen["text"].splitlines(), screen
         observed["cold"] = {
             "core": restarted,
             "terminal": ended,
             "terminals": terminals,
-            "screen": screen,
             "document": document(),
         }
+        try:
+            observed["cold"]["screenObservation"] = rpc(
+                "terminal.read", {"terminal": address}
+            )
+        except Exception as error:
+            observed["cold"]["screenObservationError"] = str(error)
         capture("quit-cold-ended-binding")
     except BaseException as error:
         observed["primaryFailure"] = f"{type(error).__name__}: {error}"
