@@ -5,8 +5,10 @@
 The current owner contract uses `PanelOwner`: a Fleet ID or a Voyage's Portal
 column. Home is one retained internal Voyage/Fleet with its own Portal column,
 kept outside the ordinary Voyage list. Entering Home preserves the selected
-ordinary Voyage/Fleet and explicit dock context. Its primary arrangement starts
-empty. New ordinary Voyages and Fleets keep their initial plain shell.
+ordinary Voyage/Fleet and explicit dock context. A previously absent Home starts
+with an ordinary Agents 1 panel. Every stored Home, including an empty or
+customized arrangement, remains unchanged. Closing that panel does not seed it
+again. New ordinary Voyages and Fleets keep their initial plain shell.
 
 `create-content` names the chosen content type and a panel destination. Insertion
 is either `empty` or `beside` a captured placement with a left, right, top or
@@ -23,14 +25,32 @@ visible panel. Hidden-leaf pruning preserves original accepted resize paths.
 Save captures the visible arrangement; load shows its included retained panels.
 Neither operation stops or restarts a program or changes explicit context.
 
+`reopen-panel` takes a retained placement ID and the same destination as
+`create-content`. It inserts that instance into the chosen empty or beside slot,
+preserving its content, data, name and Core binding. A closed Fleet panel may
+transfer between Fleets in the same Voyage. A Portal stays in its column, and
+Home stays separate. A transfer prunes only that leaf from source saved layouts,
+retaining their names and other leaves. Duplicate human names remain unchanged;
+placement IDs and owner paths distinguish the panels. Reopening does not select
+a Fleet, reveal a column or change the explicit dock context.
+
+The owner rechecks source and destination scope, the current workspace revision
+and insertion target. It refuses panels already placed, including siblings
+occluded by maximization. Terminal reopening additionally requires a confirmed
+binding and a fresh Core observation of the same live backend and PID. Missing,
+ended or unconfirmed programs refuse unchanged. Reopening grants no creation
+permission and never starts or resumes a process. Duplicate and uncertain
+requests retain the existing receipt and no-replay rules. These owner checks do
+not establish the new corner controls or native chooser journey.
+
 Each Voyage's Portal visibility, overlay/make-room mode and width persist in the
 existing Core workspace document. Portal moves remain within that column.
 Legacy Portal lists, nonempty Fleet roots, saved Fleet arrangements and missing
 names are decoded at the same owner boundary. This does not rewrite personal
 package source or save a migration merely because the workspace is inspected.
 
-New names are stored once as Terminal 1, Notes 1 and the next available suffix in
-that owner. Hidden and unplaced names remain reserved. Legacy missing names are
+New names are stored once as Terminal 1, Notes 1, Agents 1 and the next available
+suffix in that owner. Hidden and unplaced names remain reserved. Legacy missing names are
 resolved deterministically before projection. UI, context facts and conversation
 tools receive the same required name; rendering and reordering do not renumber
 panels. Explicit rename preserves identity and may deliberately duplicate a name.

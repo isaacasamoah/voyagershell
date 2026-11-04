@@ -685,9 +685,10 @@ mod tests {
         .unwrap();
         fs::write(package.join("main.js"), "personal source").unwrap();
         let catalog = discover(&packages).unwrap();
-        assert_eq!(catalog.types.len(), 2);
+        assert_eq!(catalog.types.len(), 3);
         let terminal = describe(&packages, "terminal").unwrap();
         let notes = describe(&packages, "notes").unwrap();
+        let agents = describe(&packages, "agents").unwrap();
         assert_eq!(terminal.view.module, "voyager_native");
         assert_eq!(terminal.view.component, "Terminal");
         assert!(terminal.backend.is_some());
@@ -696,6 +697,28 @@ mod tests {
         assert!(notes.backend.is_none());
         assert!(notes.configuration.is_none());
         assert!(terminal.configuration.is_none());
+        assert_eq!(agents.view.module, "./agents.js");
+        assert_eq!(agents.view.component, "agentsView");
+        assert!(agents.backend.is_none());
+        assert!(agents.state.is_none());
+        assert_eq!(agents.actions.as_ref().unwrap().names, ["list"]);
+        assert!(require_action(&agents, "list").is_ok());
+        assert!(require_action(&agents, "send").is_err());
+        let agents_validator =
+            jsonschema::validator_for(&agents.actions.as_ref().unwrap().input_schema).unwrap();
+        assert!(agents_validator.is_valid(&serde_json::json!({
+            "expectedVersion": "7", "action": {"operation": "list"}
+        })));
+        let stop = serde_json::json!({
+            "expectedVersion": "7",
+            "action": {"operation": "stop", "contentId": "opaque-id", "terminalId": "terminal", "pid": 7}
+        });
+        assert!(
+            jsonschema::validator_for(&terminal.actions.as_ref().unwrap().input_schema)
+                .unwrap()
+                .is_valid(&stop)
+        );
+        assert!(!agents_validator.is_valid(&stop));
         assert!(require_action(&notes, "update").is_ok());
         assert!(require_action(&notes, "configure").is_err());
         assert!(require_action(&terminal, "launch-another-program").is_err());

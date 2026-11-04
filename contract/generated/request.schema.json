@@ -413,6 +413,27 @@
         {
           "additionalProperties": false,
           "properties": {
+            "destination": {
+              "$ref": "#/definitions/ContentDestination"
+            },
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "reopen-panel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "destination"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "context": {
               "$ref": "#/definitions/Context"
             },

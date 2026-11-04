@@ -131,6 +131,11 @@ export type Action =
       operation: "reveal-panel";
     }
   | {
+      destination: ContentDestination;
+      id: string;
+      operation: "reopen-panel";
+    }
+  | {
       context: Context;
       operation: "dock";
     }

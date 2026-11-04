@@ -49,7 +49,7 @@ fn all_four_insertions_keep_the_captured_owner_and_chosen_type() {
             &Split::Leaf { placement: anchor }
         );
         assert_eq!(model.layout.contents[0], terminal);
-        assert_eq!(model.layout.contents[1].type_id, "notes");
+        assert_eq!(model.layout.contents.last().unwrap().type_id, "notes");
         assert_eq!(fleet.vessels[0].name, "Terminal 1");
         assert_eq!(fleet.vessels[1].name, "Notes 1");
     }
@@ -70,7 +70,22 @@ fn home_portals_hide_remove_reveal_and_presentation_retain_the_instance() {
     );
     model.apply(Action::Home).unwrap();
     let home = model.layout.home.as_ref().unwrap();
-    assert!(home.fleets[0].root.is_none());
+    assert_eq!(
+        home.fleets[0].root,
+        Some(Split::Leaf {
+            placement: home.fleets[0].vessels[0].id.clone()
+        })
+    );
+    assert_eq!(
+        model
+            .layout
+            .contents
+            .iter()
+            .find(|item| item.id == home.fleets[0].vessels[0].content)
+            .unwrap()
+            .type_id,
+        "agents"
+    );
     let owner = PanelOwner::Portals {
         voyage: home.id.clone(),
     };

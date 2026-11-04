@@ -828,12 +828,15 @@ impl Client {
                                 {
                                     owner.require_available(type_id).map_err(rejected)?;
                                 }
-                                if matches!(request.action, Action::StartNewShell { .. }) {
+                                if matches!(
+                                    request.action,
+                                    Action::StartNewShell { .. } | Action::ReopenPanel { .. }
+                                ) {
                                     let (current, revision, missing) = load(core, &cwd)?;
                                     layout = Arc::new(current);
                                     version = revision;
                                     if missing || request.expected_version != version {
-                                        return Err(rejected("Workspace changed; inspect before starting a new shell".into()));
+                                        return Err(rejected("Workspace changed; inspect before changing a terminal viewer".into()));
                                     }
                                     crate::scope::check(&layout, scope.as_ref(), &request.action)
                                         .map_err(rejected)?;
@@ -853,6 +856,12 @@ impl Client {
                                             let observed = core.terminal_get(&expected_backend.0)?;
                                             require_finished(&observed, expected_backend)?;
                                         }
+                                        if let Action::ReopenPanel { id, .. } = &request.action
+                                            && let Some(backend) = reopen_backend(&layout, id, &unconfirmed).map_err(rejected)? {
+                                                let observed = core.terminal_get(&backend.0)
+                                                    .map_err(|error| rejected(format!("Terminal liveness unavailable; no viewer was reopened: {error:?}")))?;
+                                                require_live(&observed, backend)?;
+                                            }
                                         let revision = save(core, &candidate.layout, version)?;
                                         if let Action::StartNewShell { content_id, expected_backend } = &request.action {
                                             grant_new_shell(&mut created_contents, content_id, expected_backend, &request.request_id);
@@ -1462,6 +1471,54 @@ fn require_finished(
     Ok(())
 }
 
+fn reopen_backend<'a>(
+    layout: &'a Layout,
+    id: &voyager_contract::PlacementId,
+    unconfirmed: &HashMap<String, String>,
+) -> Result<Option<&'a CoreTerminalId>, String> {
+    let owner = crate::panels::owner_of(layout, id)?;
+    let panel = crate::panels::group(layout, &owner)?
+        .members
+        .iter()
+        .find(|panel| &panel.id == id)
+        .ok_or("Panel not found")?;
+    let content = layout
+        .contents
+        .iter()
+        .find(|item| item.id == panel.content)
+        .ok_or("Panel content not found")?;
+    if content.type_id != "terminal" {
+        return Ok(None);
+    }
+    if content.start_pending.is_some()
+        || content.shell_intent.is_some()
+        || unconfirmed.contains_key(&content.id.0)
+    {
+        return Err("Terminal binding is unconfirmed; no viewer was reopened".into());
+    }
+    content
+        .backend
+        .as_ref()
+        .map(Some)
+        .ok_or_else(|| "Terminal has no confirmed backend; no program was started".into())
+}
+
+fn require_live(
+    observed: &crate::core_shapes::Terminal,
+    expected: &CoreTerminalId,
+) -> Result<(), Error> {
+    if observed.address != expected.0
+        || observed.state != "live"
+        || observed.pid.is_none_or(|pid| pid == 0)
+        || observed.reason.as_deref() == Some("spawn_pending")
+    {
+        return Err(rejected(
+            "Terminal is not confirmed live; no program was started".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn grant_new_shell(
     pending: &mut Vec<CreatedTerminal>,
     content: &ContentId,
@@ -1809,6 +1866,158 @@ mod terminal_outcome_tests {
     use super::*;
 
     #[test]
+    fn reopen_uses_live_core_identity_and_refuses_stale_or_ended_programs() {
+        use voyager_contract::{ContentDestination, PanelInsertion, PanelOwner};
+        for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
+            assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
+        }
+        let runtime = std::path::PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap());
+        let session = format!("voyager-reopen-{}", std::process::id());
+        assert!(
+            !runtime
+                .join("herdr-core")
+                .join(format!("{session}.sock"))
+                .exists()
+        );
+        let client = Client::open(session.clone(), "/tmp".into());
+        let checked = std::panic::catch_unwind(|| {
+            let request = |version, action| Request {
+                request_id: client.request_id(),
+                expected_version: version,
+                action,
+            };
+            let initial = client.call(request(0, Action::Inspect)).unwrap();
+            assert_eq!(initial.status, Status::Applied, "{:?}", initial.message);
+            let panel = initial.layout.voyages[0].fleets[0].vessels[0].clone();
+            let _viewer = client
+                .terminal(panel.content.clone(), client.request_id(), initial.version)
+                .unwrap();
+            let bound = client.call(request(0, Action::Inspect)).unwrap();
+            let created = client
+                .call(request(
+                    bound.version,
+                    Action::CreateFleet {
+                        voyage: bound.layout.voyages[0].id.clone(),
+                        name: "Next".into(),
+                    },
+                ))
+                .unwrap();
+            assert_eq!(created.status, Status::Applied);
+            let target = created.layout.voyages[0].fleets[1].clone();
+            let _other_viewer = client
+                .terminal(
+                    target.vessels[0].content.clone(),
+                    client.request_id(),
+                    created.version,
+                )
+                .unwrap();
+            let bound = client.call(request(0, Action::Inspect)).unwrap();
+            let backend = bound
+                .layout
+                .contents
+                .iter()
+                .find(|item| item.id == panel.content)
+                .unwrap()
+                .backend
+                .clone()
+                .unwrap();
+            let mut core = Core::connect(&session).unwrap();
+            let live = core.terminal_get(&backend.0).unwrap();
+            require_live(&live, &backend).unwrap();
+            for state in ["finished", "unknown"] {
+                let mut invalid = live.clone();
+                invalid.state = state.into();
+                assert!(require_live(&invalid, &backend).is_err());
+            }
+            assert!(require_live(&live, &CoreTerminalId("other".into())).is_err());
+            let mut uncertain = (*bound.layout).clone();
+            uncertain
+                .contents
+                .iter_mut()
+                .find(|item| item.id == panel.content)
+                .unwrap()
+                .start_pending = Some("pending".into());
+            assert!(reopen_backend(&uncertain, &panel.id, &HashMap::new()).is_err());
+            assert!(
+                reopen_backend(
+                    &bound.layout,
+                    &panel.id,
+                    &HashMap::from([(panel.content.0.clone(), "uncertain".into())])
+                )
+                .is_err()
+            );
+            let closed = client
+                .call(request(
+                    bound.version,
+                    Action::RemovePanel {
+                        id: panel.id.clone(),
+                    },
+                ))
+                .unwrap();
+            assert_eq!(closed.status, Status::Applied);
+            let action = Action::ReopenPanel {
+                id: panel.id.clone(),
+                destination: ContentDestination::Panel {
+                    owner: PanelOwner::Fleet {
+                        id: target.id.clone(),
+                    },
+                    insertion: PanelInsertion::Beside {
+                        id: target.vessels[0].id.clone(),
+                        side: voyager_contract::Side::Right,
+                    },
+                },
+            };
+            let external = core
+                .document_set("voyager-layout-v1", &closed.layout, closed.version)
+                .unwrap();
+            let stale = client
+                .call(request(closed.version, action.clone()))
+                .unwrap();
+            assert_eq!(stale.status, Status::Rejected);
+            assert_eq!(stale.version, external.version);
+            assert_eq!(stale.layout, closed.layout);
+            let inspected = client.call(request(0, Action::Inspect)).unwrap();
+            let reopen = request(inspected.version, action.clone());
+            let opened = client.call(reopen.clone()).unwrap();
+            assert_eq!(opened.status, Status::Applied);
+            assert_eq!(client.call(reopen).unwrap(), opened);
+            assert_eq!(opened.layout.contents, bound.layout.contents);
+            assert!(opened.layout.voyages[0].fleets[0].vessels.is_empty());
+            let placed = &opened.layout.voyages[0].fleets[1].vessels;
+            assert_eq!(placed[0], target.vessels[0]);
+            assert_eq!(placed[1], panel);
+            assert_eq!(placed[0].name, placed[1].name);
+            assert_ne!(placed[0].id, placed[1].id);
+            assert_eq!(core.terminal_get(&backend.0).unwrap().pid, live.pid);
+            assert_eq!(core.terminal_list().unwrap().len(), 2);
+            let closed = client
+                .call(request(
+                    opened.version,
+                    Action::RemovePanel { id: panel.id },
+                ))
+                .unwrap();
+            core.terminal_kill(&backend.0).unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while core.terminal_get(&backend.0).unwrap().state == "live" {
+                assert!(std::time::Instant::now() < deadline);
+                thread::sleep(Duration::from_millis(10));
+            }
+            let refused = client.call(request(closed.version, action)).unwrap();
+            assert_eq!(refused.status, Status::Rejected);
+            assert_eq!(refused.layout, closed.layout);
+            assert_eq!(refused.version, closed.version);
+            assert_eq!(core.terminal_list().unwrap().len(), 2);
+            core.close().unwrap();
+        });
+        let mut cleanup = Core::connect(&session).unwrap();
+        let stopped = cleanup.server_stop();
+        cleanup.close().unwrap();
+        drop(client);
+        stopped.unwrap();
+        checked.unwrap();
+    }
+
+    #[test]
     fn explicit_new_shell_preserves_placement_and_grants_only_a_fresh_shell() {
         let mut model = Model::default();
         model
@@ -1874,7 +2083,7 @@ mod terminal_outcome_tests {
                 id: model.layout.voyages[0].portals[0].id.clone(),
             }),
             &Action::StartNewShell {
-                content_id: model.layout.contents[1].id.clone(),
+                content_id: model.layout.voyages[0].portals[0].content.clone(),
                 expected_backend: CoreTerminalId("t2".into()),
             },
         )

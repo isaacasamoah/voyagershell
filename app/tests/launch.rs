@@ -240,7 +240,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
             matches!(retry, Err(Error::Rejected { kind, message }) if kind == "spawn_failed" && message.contains("/no-voyager-worker-here"))
         );
         assert_eq!(client.call(request).unwrap().status, Status::Applied);
-        assert_eq!(inspected.layout.contents.len(), 2);
+        assert_eq!(inspected.layout.contents.len(), 3);
         let reopened = Client::open(session.clone(), "/tmp".into());
         let snapshot = reopened
             .call(Request {

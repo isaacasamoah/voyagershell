@@ -310,6 +310,10 @@ pub enum Action {
     RevealPanel {
         id: PlacementId,
     },
+    ReopenPanel {
+        id: PlacementId,
+        destination: ContentDestination,
+    },
     Dock {
         context: Context,
     },

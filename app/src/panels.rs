@@ -133,6 +133,51 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             *current.root = Some(root);
             repair_maximized(current);
         }
+        Action::ReopenPanel {
+            id,
+            destination: voyager_contract::ContentDestination::Panel { owner, insertion },
+        } => {
+            let source = owner_of(layout, &id)?;
+            if source != owner {
+                let same_voyage = matches!((&source, &owner),
+                    (PanelOwner::Fleet { id: source }, PanelOwner::Fleet { id: target })
+                        if layout.containers().any(|voyage|
+                            voyage.fleets.iter().any(|fleet| &fleet.id == source)
+                                && voyage.fleets.iter().any(|fleet| &fleet.id == target)));
+                if !same_voyage {
+                    return Err("Panel must remain in its Voyage and arrangement kind".into());
+                }
+            }
+            let current = group(layout, &source)?;
+            if contains(&visible(current.root, current.members), &id) {
+                return Err("Panel is already placed in its arrangement".into());
+            }
+            insertion_cwd(layout, &owner, &insertion)?;
+            let current = group_mut(layout, &source)?;
+            let index = current
+                .members
+                .iter()
+                .position(|panel| panel.id == id)
+                .ok_or("Panel not found")?;
+            let mut panel = current.members.remove(index);
+            panel.hidden = false;
+            if let Some(root) = current.root.take() {
+                *current.root = remove_leaf(root, &id).0;
+            }
+            repair_maximized(current);
+            if source != owner {
+                for saved in layout
+                    .saved_layouts
+                    .iter_mut()
+                    .filter(|saved| saved.owner == source)
+                {
+                    if let Some(root) = saved.root.take() {
+                        saved.root = remove_leaf(root, &id).0;
+                    }
+                }
+            }
+            insert(group_mut(layout, &owner)?, &owner, insertion, panel)?;
+        }
         Action::RevealPanel { id } => {
             let owner = owner_of(layout, &id)?;
             let current = group_mut(layout, &owner)?;
@@ -484,10 +529,10 @@ pub(crate) fn insert(
 }
 
 pub(crate) fn default_name(members: &[Vessel], type_id: &str) -> String {
-    let base = if type_id == "notes" {
-        "Notes"
-    } else {
-        "Terminal"
+    let base = match type_id {
+        "notes" => "Notes",
+        "agents" => "Agents",
+        _ => "Terminal",
     };
     let mut suffix = 1_u64;
     loop {
@@ -707,5 +752,160 @@ pub(crate) fn insert_leaf(
             insert_leaf(first, target, id, side) || insert_leaf(second, target, id, side)
         }
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::workspace::Model;
+    use voyager_contract::{Action, ContentDestination};
+
+    #[test]
+    fn reopen_transfers_only_the_retained_panel_inside_its_voyage() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Work".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let voyage = model.layout.voyages[0].id.clone();
+        let first = model.layout.voyages[0].fleets[0].vessels[0].clone();
+        model
+            .apply(Action::CreateContent {
+                type_id: "notes".into(),
+                destination: ContentDestination::Panel {
+                    owner: PanelOwner::Fleet {
+                        id: model.layout.voyages[0].fleets[0].id.clone(),
+                    },
+                    insertion: PanelInsertion::Beside {
+                        id: first.id.clone(),
+                        side: Side::Right,
+                    },
+                },
+                launch: None,
+            })
+            .unwrap();
+        let source = model.layout.voyages[0].fleets[0].clone();
+        let panel = source.vessels[0].clone();
+        let retained = source.vessels[1].clone();
+        model
+            .apply(Action::SavePanelLayout {
+                owner: PanelOwner::Fleet {
+                    id: source.id.clone(),
+                },
+                name: "Original".into(),
+            })
+            .unwrap();
+        model
+            .apply(Action::RemovePanel {
+                id: panel.id.clone(),
+            })
+            .unwrap();
+        model
+            .apply(Action::CreateFleet {
+                voyage,
+                name: "Next".into(),
+            })
+            .unwrap();
+        let target = &mut model.layout.voyages[0].fleets[1];
+        let owner = PanelOwner::Fleet {
+            id: target.id.clone(),
+        };
+        let insertion = PanelInsertion::Beside {
+            id: target.vessels[0].id.clone(),
+            side: Side::Left,
+        };
+        let action = Action::ReopenPanel {
+            id: panel.id.clone(),
+            destination: ContentDestination::Panel {
+                owner: owner.clone(),
+                insertion: insertion.clone(),
+            },
+        };
+        let snapshot = std::sync::Arc::new(model.layout.clone());
+        crate::scope::check(
+            &snapshot,
+            Some(&voyager_contract::Context::Voyage {
+                id: model.layout.voyages[0].id.clone(),
+            }),
+            &action,
+        )
+        .unwrap();
+        for scope in [
+            voyager_contract::Context::Fleet {
+                id: source.id.clone(),
+            },
+            voyager_contract::Context::Fleet {
+                id: model.layout.voyages[0].fleets[1].id.clone(),
+            },
+            voyager_contract::Context::Vessel {
+                id: panel.id.clone(),
+            },
+        ] {
+            assert!(crate::scope::check(&snapshot, Some(&scope), &action).is_err());
+        }
+        for destination in [
+            PanelOwner::Portals {
+                voyage: model.layout.voyages[0].id.clone(),
+            },
+            PanelOwner::Fleet {
+                id: model.layout.home.as_ref().unwrap().fleets[0].id.clone(),
+            },
+        ] {
+            let before = model.layout.clone();
+            assert!(
+                model
+                    .apply(Action::ReopenPanel {
+                        id: panel.id.clone(),
+                        destination: ContentDestination::Panel {
+                            owner: destination,
+                            insertion: PanelInsertion::Empty
+                        }
+                    })
+                    .is_err()
+            );
+            assert_eq!(model.layout, before);
+        }
+        let contents = model.layout.contents.clone();
+        let context = model.layout.context.clone();
+        let selected = model.layout.selected_fleet.clone();
+        model.apply(action).unwrap();
+        assert_eq!(model.layout.contents, contents);
+        assert_eq!(model.layout.context, context);
+        assert_eq!(model.layout.selected_fleet, selected);
+        assert_eq!(
+            model.layout.voyages[0].fleets[0].vessels.as_slice(),
+            std::slice::from_ref(&retained)
+        );
+        let target = group(&model.layout, &owner).unwrap();
+        assert_eq!(target.members[0].name, "Terminal 1");
+        assert_eq!(target.members[1].name, "Terminal 1");
+        assert_ne!(target.members[0].id, target.members[1].id);
+        assert_eq!(
+            group(&model.layout, &owner).unwrap().members.last(),
+            Some(&panel)
+        );
+        assert!(contains(
+            group(&model.layout, &owner).unwrap().root,
+            &panel.id
+        ));
+        assert_eq!(
+            model.layout.saved_layouts[0].root,
+            Some(Split::Leaf {
+                placement: retained.id
+            })
+        );
+        let before = model.layout.clone();
+        assert!(
+            model
+                .apply(Action::ReopenPanel {
+                    id: panel.id.clone(),
+                    destination: ContentDestination::Panel { owner, insertion }
+                })
+                .is_err()
+        );
+        assert_eq!(model.layout, before);
     }
 }

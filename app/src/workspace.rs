@@ -13,11 +13,14 @@ impl Model {
     fn ensure_home(&mut self, cwd: &str) -> Result<(), String> {
         if self.layout.home.is_none() {
             let id = VoyageId(self.id("home-voyage")?);
+            let panel = self.placement(cwd.into(), "agents".into(), "Agents 1".into(), None)?;
             let fleet = Fleet {
                 id: FleetId(self.id("home-fleet")?),
                 name: "Home".into(),
-                vessels: Vec::new(),
-                root: None,
+                root: Some(Split::Leaf {
+                    placement: panel.id.clone(),
+                }),
+                vessels: vec![panel],
                 maximized_placement: None,
             };
             self.layout.home = Some(Voyage {
@@ -307,6 +310,7 @@ impl Model {
             | Action::SetPanelHidden { .. }
             | Action::RemovePanel { .. }
             | Action::RevealPanel { .. }
+            | Action::ReopenPanel { .. }
             | Action::SavePanelLayout { .. }
             | Action::LoadPanelLayout { .. }
             | Action::RemovePanelLayout { .. }
@@ -360,4 +364,38 @@ fn reorder<T>(items: &mut Vec<T>, source: usize, destination: usize, before: boo
     let item = items.remove(source);
     let destination = destination - usize::from(source < destination);
     items.insert(destination + usize::from(!before), item);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_agents_seed_only_a_previously_absent_home() {
+        let initial = Model::prepare(Layout::default(), "/tmp").unwrap();
+        let home = initial.home.as_ref().unwrap();
+        let panel = &home.fleets[0].vessels[0];
+        let content = initial
+            .contents
+            .iter()
+            .find(|item| item.id == panel.content)
+            .unwrap();
+        assert_eq!(content.type_id, "agents");
+        assert_eq!(panel.name, "Agents 1");
+        assert!(content.backend.is_none());
+        assert!(content.launch.is_none());
+        let mut model = Model { layout: initial };
+        let id = model.layout.home.as_ref().unwrap().fleets[0].vessels[0]
+            .id
+            .clone();
+        model.apply(Action::RemovePanel { id }).unwrap();
+        let empty = model.layout.clone();
+        assert_eq!(Model::prepare(empty.clone(), "/elsewhere").unwrap(), empty);
+        model.layout.home.as_mut().unwrap().fleets[0].name = "My landing".into();
+        let customized = model.layout;
+        assert_eq!(
+            Model::prepare(customized.clone(), "/elsewhere").unwrap(),
+            customized
+        );
+    }
 }

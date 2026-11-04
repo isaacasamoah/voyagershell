@@ -188,6 +188,10 @@ pub(crate) fn check(
         Action::CreateContent {
             destination: ContentDestination::Panel { owner, insertion },
             ..
+        }
+        | Action::ReopenPanel {
+            destination: ContentDestination::Panel { owner, insertion },
+            ..
         } => {
             let members = scoped.containers().find_map(|voyage| match owner {
                 PanelOwner::Fleet { id } => voyage
@@ -243,7 +247,9 @@ pub(crate) fn check(
         }),
         Action::SelectFleet { id } => fleet(id).is_some(),
     };
-    if allowed {
+    let retained_in_scope = !matches!(action, Action::ReopenPanel { id, .. }
+        if crate::panels::owner_of(&scoped, id).is_err());
+    if allowed && retained_in_scope {
         Ok(())
     } else {
         Err("That target is outside this request's captured avatar focus. Ask the human before changing focus.".into())
@@ -270,6 +276,11 @@ mod tests {
             id: home.fleets[0].id.clone(),
         };
         model
+            .apply(Action::RemovePanel {
+                id: home.fleets[0].vessels[0].id.clone(),
+            })
+            .unwrap();
+        model
             .apply(Action::CreateContent {
                 type_id: "notes".into(),
                 destination: ContentDestination::Panel {
@@ -279,7 +290,7 @@ mod tests {
                 launch: None,
             })
             .unwrap();
-        let panel = model.layout.home.as_ref().unwrap().fleets[0].vessels[0].clone();
+        let panel = model.layout.home.as_ref().unwrap().fleets[0].vessels[1].clone();
         model
             .apply(Action::Dock {
                 context: Context::Vessel {

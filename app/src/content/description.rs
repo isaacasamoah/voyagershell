@@ -37,6 +37,18 @@ const IMPLEMENTATIONS: &[Implementation] = &[
         state: None,
     },
     Implementation {
+        type_id: "agents",
+        name: "Agents",
+        module: "./agents.js",
+        component: "agentsView",
+        backend: None,
+        tool: "voyager_process",
+        input: include_str!("../../../contract/generated/processTool.schema.json"),
+        output: include_str!("../../../contract/generated/processResponse.schema.json"),
+        action_definition: "ProcessAction",
+        state: None,
+    },
+    Implementation {
         type_id: "notes",
         name: "Notes",
         module: "voyager_content_view",
@@ -131,11 +143,14 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
         .then(|| configuration(packages))
         .transpose()?
         .flatten();
-    if configuration.is_none()
-        && let Some(actions) =
-            input_schema["definitions"][kind.action_definition]["oneOf"].as_array_mut()
+    if let Some(actions) =
+        input_schema["definitions"][kind.action_definition]["oneOf"].as_array_mut()
     {
-        actions.retain(|action| action["properties"]["operation"]["const"] != "configure");
+        actions.retain(|action| {
+            let operation = action["properties"]["operation"]["const"].as_str();
+            (configuration.is_some() || operation != Some("configure"))
+                && (kind.type_id != "agents" || operation == Some("list"))
+        });
     }
     let names = input_schema["definitions"][kind.action_definition]["oneOf"]
         .as_array()

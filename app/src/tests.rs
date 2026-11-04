@@ -895,7 +895,7 @@ fn a_voyage_portal_retains_its_identity_while_fleets_change() {
         })
         .unwrap();
     assert!(matches!(model.layout.context, Context::Portal { .. }));
-    assert_eq!(model.layout.contents.len(), 3);
+    assert_eq!(model.layout.contents.len(), 4);
 }
 
 #[test]
@@ -983,7 +983,7 @@ fn saved_fleet_layout_restores_existing_placements_without_creating_backends() {
             launch: None,
         })
         .unwrap();
-    model.layout.contents[1].backend = Some(CoreTerminalId("second".into()));
+    model.layout.contents.last_mut().unwrap().backend = Some(CoreTerminalId("second".into()));
     let saved = model.layout.voyages[0].fleets[0].root.clone();
     model
         .apply(Action::SavePanelLayout {
@@ -1005,7 +1005,7 @@ fn saved_fleet_layout_restores_existing_placements_without_creating_backends() {
             launch: None,
         })
         .unwrap();
-    model.layout.contents[2].backend = Some(CoreTerminalId("third".into()));
+    model.layout.contents.last_mut().unwrap().backend = Some(CoreTerminalId("third".into()));
     let contents = model.layout.contents.clone();
     let placements = model.layout.voyages[0].fleets[0].vessels.clone();
     let context = model.layout.context.clone();

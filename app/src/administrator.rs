@@ -648,6 +648,7 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::SelectVoyage { .. } => "Voyage selected",
             Action::SelectFleet { .. } => "Fleet selected",
             Action::RevealPanel { .. } => "Panel revealed",
+            Action::ReopenPanel { .. } => "Existing panel reopened",
             Action::Dock { .. } => "Focus changed",
             Action::StartNewShell { .. } => "New shell authorized",
         }
