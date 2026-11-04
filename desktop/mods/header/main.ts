@@ -1390,10 +1390,36 @@ export default class Workspace extends View {
     return group ? this.groupRegion(group) : div().flex_1();
   }
 
+  compactPortalContext(): boolean {
+    const layout = this.layout;
+    const voyage = layout && currentVoyage(layout);
+    const context = layout?.context;
+    return (
+      context?.kind === "portal" &&
+      !voyage?.portalLayout?.visible &&
+      Boolean(voyage?.portals.some((panel) => panel.id === context.id))
+    );
+  }
+
   portalControls(voyage: Voyage): NativeElement {
     const column = voyage.portalLayout;
     if (!column) return div();
     const controls = div().flex().items_center().gap(4).flex_shrink_0();
+    if (this.layout && this.compactPortalContext())
+      controls.child(
+        div()
+          .w(44)
+          .h(40)
+          .flex_shrink_0()
+          .child(
+            this.target(
+              "hidden-portal-avatar",
+              this.layout.context,
+              div(),
+              true,
+            ),
+          ),
+      );
     const label = column.visible ? "Hide Portals" : "Show Portals";
     controls.child(
       Button.new("toggle-portals")

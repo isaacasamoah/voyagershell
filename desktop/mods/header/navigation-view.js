@@ -374,7 +374,9 @@ export function renderContext(workspace, layout, voyage, fleet) {
   const context = layout.context;
   const compactPrimary = context.kind === "workspace" && !workspace.sidebar;
   const visible =
-    compactPrimary || dock_target_visible(JSON.stringify(context));
+    compactPrimary ||
+    workspace.compactPortalContext() ||
+    dock_target_visible(JSON.stringify(context));
   let goThere;
   if (context.kind === "fleet")
     goThere = { operation: "select-fleet", id: context.id };

@@ -9,6 +9,7 @@ from pathlib import Path
 from proof_workspace import chord, core_rpc, named_button
 from proof_avatar_window import floating_windows as owned_floating_windows
 from proof_foundation_notes import wait
+from proof_process import process_identity
 
 
 def prove(
@@ -630,6 +631,59 @@ def prove(
         focused_portal = scope("portal")
         assert focused_portal["value"]["context"]["id"] == portal["id"]
         capture("avatar-real-portal")
+        content = next(
+            item
+            for item in focused_portal["value"]["contents"]
+            if item["id"] == portal["content"]
+        )
+        process = rpc("terminal.get", {"terminal": content["backend"]})
+        process_before = process_identity(process["pid"], metadata_only=True)
+
+        def retained_backend(document):
+            assert (
+                next(
+                    item
+                    for item in document["value"]["contents"]
+                    if item["id"] == content["id"]
+                )
+                == content
+            )
+            actual = rpc("terminal.get", {"terminal": content["backend"]})
+            assert actual["state"] == "live" and actual["pid"] == process["pid"]
+            assert (
+                process_identity(process["pid"], metadata_only=True) == process_before
+            )
+
+        press("Hide Portals")
+        hidden_portal = wait(
+            state,
+            lambda doc: not doc["value"]["voyages"][0]["portalLayout"]["visible"],
+            "hidden Portal presentation",
+        )
+        assert hidden_portal["value"]["context"] == focused_portal["value"]["context"]
+        assert hidden_portal["value"]["voyages"][0]["portals"] == [portal]
+        retained_backend(hidden_portal)
+        controls = native(
+            "fields", launch["pid"], ["Voyager avatar", "Show Portals"], "window"
+        )["fields"]
+        avatar = next(item for item in controls if item["name"] == "Voyager avatar")
+        toggle = next(item for item in controls if item["name"] == "Show Portals")
+        assert avatar["width"] <= 80 and avatar["height"] <= 80
+        assert avatar["x"] + avatar["width"] <= toggle["x"]
+        assert (
+            abs(avatar["y"] + avatar["height"] / 2 - toggle["y"] - toggle["height"] / 2)
+            <= 4
+        ), controls
+        capture("avatar-hidden-portal-edge")
+        press("Show Portals")
+        revealed_portal = wait(
+            state,
+            lambda doc: doc["value"]["voyages"][0]["portalLayout"]["visible"],
+            "revealed Portal presentation",
+        )
+        retained_backend(revealed_portal)
+        assert scope("portal")["value"]["context"] == focused_portal["value"]["context"]
+        stages.append("hidden-portal-retained-compact-edge-and-context")
         fields = focus_target("Fleet dock", "Fleet dock did not receive focus")
         (evidence / "avatar-create-fleet-focus.json").write_text(
             json.dumps(fields, indent=2)
