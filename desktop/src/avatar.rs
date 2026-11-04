@@ -683,6 +683,8 @@ impl Binding {
                     .id(args.id().to_owned())
                     .relative()
                     .size_full()
+                    .flex()
+                    .flex_col()
                     .occlude()
                     .children(args.take_children())
                     .child(canvas(move |bounds, window, cx| {

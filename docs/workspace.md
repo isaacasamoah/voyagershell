@@ -130,6 +130,12 @@ establish matched appearance, input behavior or performance.
 
 ## Native overlay input
 
+The PortalArea native module owns its full-size flex column and measured
+occlusion. Its Header composition uses an ordinary script div for the opaque
+theme background. The pinned module host does not apply script style refinement
+to the native component returned by its callback. Keep the native layout and
+ordinary wrapper aligned so the visible column matches the blocked input area.
+
 `desktop/src/occluding.rs` registers `Occluding.new()` in the actual
 `voyager_native` component registry. Its generated declaration comes from the
 same registry used by the application. It has no arguments or state. The public

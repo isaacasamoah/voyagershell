@@ -44,6 +44,11 @@ underlying canvas; make-room gives the column ordinary flow space. Rust persists
 visibility, mode and width per Voyage, including Home's own column. Do not infer
 these preferences from the global legacy canvas fields or add another store.
 
+PortalArea's native inner element owns its full-size flex layout and occlusion.
+Use an ordinary script div around it for the theme background. The pinned host
+does not apply chained script styles to this native module component. Keep the
+painted background and measured occluder the same size.
+
 Individual Portal targets remain separate from the opaque column. Avatar hit
 testing, landing and fallback visibility use measured native geometry.
 `dock_target_visible` supplies the footer's visibility decision. Keep explicit

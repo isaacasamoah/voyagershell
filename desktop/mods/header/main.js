@@ -1423,11 +1423,16 @@ export default class Workspace extends View {
                   group.owner.voyage === voyage.id,
               );
               if (!group) return null;
-              return PortalArea.new(`portal-area-${voyage.id}`, {})
+              return div()
                 .flex()
                 .flex_col()
+                .size_full()
                 .bg(colors.background)
-                .child(this.groupRegion(group));
+                .child(
+                  PortalArea.new(`portal-area-${voyage.id}`, {}).child(
+                    this.groupRegion(group),
+                  ),
+                );
             }
           }
         },
