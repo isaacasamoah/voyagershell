@@ -277,19 +277,23 @@ impl AvatarView {
             return None;
         }
         let geometry = self.targets.borrow();
-        let target = geometry
-            .targets
-            .iter()
-            .find(|target| target.scope == avatar.scope && !target.fallback)
-            .or_else(|| geometry.targets.iter().find(|target| target.fallback))?;
-        let b = geometry.bounds(target);
+        let (b, fallback) = geometry
+            .dock_target(&avatar.scope)
+            .map(|bounds| (bounds, false))
+            .or_else(|| {
+                geometry
+                    .targets
+                    .iter()
+                    .find(|target| target.fallback)
+                    .map(|target| (target.bounds, true))
+            })?;
         if b.size.width <= px(0.) || b.size.height <= px(0.) {
             return None;
         }
-        if target.fallback {
+        if fallback {
             return Some((b.origin + point(px(5.), px(2.)), 38.));
         }
-        match target.scope {
+        match avatar.scope {
             Scope::Workspace => Some(workspace_landing(b)),
             Scope::Voyage { .. } | Scope::Fleet { .. } => {
                 Some((b.origin + point(px(12.), px(2.)), 38.))

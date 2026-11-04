@@ -28,6 +28,7 @@ pub struct Avatar {
     client: Client,
     version: u64,
     scope: Scope,
+    dock_visible: bool,
     projection_key: String,
     dock_receipt: String,
     drag: Option<Drag>,
@@ -83,12 +84,8 @@ impl Geometry {
             .map(|target| (&target.scope, target.bounds))
     }
 
-    fn bounds(&self, target: &Target) -> Bounds<Pixels> {
-        if target.fallback {
-            target.bounds
-        } else {
-            visible_bounds(&target.scope, target.bounds, self.targets())
-        }
+    fn dock_target(&self, scope: &Scope) -> Option<Bounds<Pixels>> {
+        dock_target_bounds(scope, self.targets())
     }
 
     fn target_at(&self, desktop: Point<Pixels>) -> Option<(&Scope, Bounds<Pixels>)> {
@@ -98,6 +95,17 @@ impl Geometry {
         let local = desktop - self.workspace.origin;
         hit_target(self.targets(), local)
     }
+}
+
+fn dock_target_bounds<'a>(
+    scope: &Scope,
+    targets: impl Iterator<Item = (&'a Scope, Bounds<Pixels>)> + Clone,
+) -> Option<Bounds<Pixels>> {
+    targets
+        .clone()
+        .find(|(candidate, _)| *candidate == scope)
+        .map(|(_, bounds)| visible_bounds(scope, bounds, targets))
+        .filter(|bounds| !bounds.is_empty())
 }
 
 fn visible_bounds<'a>(
@@ -184,6 +192,14 @@ fn asset(name: &str) -> PathBuf {
 }
 
 impl Avatar {
+    fn update_dock_visibility(&mut self, cx: &mut Context<Self>) {
+        let visible = self.geometry.borrow().dock_target(&self.scope).is_some();
+        if self.dock_visible != visible {
+            self.dock_visible = visible;
+            cx.emit(Changed);
+        }
+    }
+
     fn applied_dock(&mut self, request_id: &str, expected_epoch: u64, cx: &mut Context<Self>) {
         if request_id.is_empty() || request_id == self.dock_receipt {
             return;
@@ -536,6 +552,7 @@ impl Binding {
             client,
             version: 0,
             scope: Scope::Workspace,
+            dock_visible: false,
             projection_key: String::new(),
             dock_receipt: String::new(),
             drag: None,
@@ -606,8 +623,14 @@ impl Binding {
         let target_view = self.view.downgrade();
         let result = Rc::clone(&self.result);
         let epoch = Rc::clone(&self.window_epoch);
+        let visibility = Rc::clone(&self.targets);
         HostModule::new(crate::script_types::AVATAR_MODULE)
             .declarations(crate::script_types::AVATAR)
+            .function("dock_target_visible", move |arguments| {
+                let scope: Scope = serde_json::from_str(arguments.string(0)?)
+                    .map_err(|error| HostError::new(error.to_string()))?;
+                Ok(HostValue::from(visibility.borrow().dock_target(&scope).is_some()))
+            })
             .component("Brand", |_, _, _| {
                 div()
                     .id("voyager-brand")
@@ -667,7 +690,6 @@ impl Binding {
                 };
                 avatar.update(cx, |avatar, cx| {
                     if retired {
-                        cx.emit(Changed);
                         cx.notify();
                     }
                     if let Some(epoch) = receipt_epoch {
@@ -688,6 +710,7 @@ impl Binding {
                             cx.notify();
                         }
                     }
+                    avatar.update_dock_visibility(cx);
                 });
                 div()
                     .relative()
@@ -785,7 +808,7 @@ impl Binding {
                                     let avatar = geometry_avatar.clone();
                                     window.defer(cx, move |_, cx| {
                                         let _ = view.update(cx, |_, cx| cx.notify());
-                                        let _ = avatar.update(cx, |_, cx| cx.emit(Changed));
+                                        let _ = avatar.update(cx, |avatar, cx| avatar.update_dock_visibility(cx));
                                     });
                                 }
                             },
@@ -855,6 +878,10 @@ mod tests {
         let visible = Bounds::new(raw.origin, size(px(150.), px(100.)));
         assert_eq!(visible_bounds(&vessel, raw, targets.into_iter()), visible);
         assert_eq!(
+            dock_target_bounds(&vessel, targets.into_iter()),
+            Some(visible)
+        );
+        assert_eq!(
             hit_target(targets.into_iter(), point(px(80.), px(60.))),
             Some((&vessel, visible))
         );
@@ -875,6 +902,7 @@ mod tests {
         };
         let raw = Bounds::new(point(px(10.), px(20.)), size(px(200.), px(100.)));
         assert_eq!(visible_bounds(&vessel, raw, [].into_iter()), raw);
+        assert_eq!(dock_target_bounds(&vessel, [].into_iter()), None);
         for origin in [point(px(210.), px(20.)), point(px(160.), px(120.))] {
             let disjoint = Bounds::new(origin, size(px(50.), px(100.)));
             assert_eq!(
@@ -884,6 +912,10 @@ mod tests {
         }
         let covered = visible_bounds(&vessel, raw, [(&portal, raw)].into_iter());
         assert!(covered.is_empty());
+        assert_eq!(
+            dock_target_bounds(&vessel, [(&vessel, raw), (&portal, raw)].into_iter()),
+            None
+        );
         assert!(hit_target([(&vessel, covered)].into_iter(), raw.center()).is_none());
     }
 }
