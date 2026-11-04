@@ -19,6 +19,13 @@ fn workspace_landing(bounds: Bounds<Pixels>) -> (Point<Pixels>, f32) {
     )
 }
 
+fn small_landing(bounds: Bounds<Pixels>) -> Point<Pixels> {
+    let inset = ((bounds.size.width - px(38.)) / 2.)
+        .max(px(0.))
+        .min(px(12.));
+    bounds.origin + point(inset, px(2.))
+}
+
 fn landing_preview(scope: &Scope, bounds: Bounds<Pixels>) -> (Bounds<Pixels>, bool) {
     if matches!(scope, Scope::Workspace) {
         let (origin, diameter) = workspace_landing(bounds);
@@ -295,9 +302,7 @@ impl AvatarView {
         }
         match avatar.scope {
             Scope::Workspace => Some(workspace_landing(b)),
-            Scope::Voyage { .. } | Scope::Fleet { .. } => {
-                Some((b.origin + point(px(12.), px(2.)), 38.))
-            }
+            Scope::Voyage { .. } | Scope::Fleet { .. } => Some((small_landing(b), 38.)),
             Scope::Vessel { .. } | Scope::Portal { .. } => Some((
                 point(
                     b.center().x - px(47.),
@@ -569,5 +574,8 @@ mod tests {
         );
         assert!(!circular);
         assert_eq!(other, brand);
+        assert_eq!(small_landing(brand), brand.origin + point(px(12.), px(2.)));
+        let compact = Bounds::new(brand.origin, size(px(40.), px(50.)));
+        assert_eq!(small_landing(compact), brand.origin + point(px(1.), px(2.)));
     }
 }

@@ -74,9 +74,17 @@ struct Geometry {
     workspace: Bounds<Pixels>,
     visible: bool,
     diagnostics: u8,
+    portal_area: Option<Bounds<Pixels>>,
+    portal_area_seen: bool,
 }
 
 impl Geometry {
+    fn retire_portal_area(&mut self) -> bool {
+        let retired = !self.portal_area_seen && self.portal_area.take().is_some();
+        self.portal_area_seen = false;
+        retired
+    }
+
     fn targets(&self) -> impl Iterator<Item = (&Scope, Bounds<Pixels>)> + Clone {
         self.targets
             .iter()
@@ -85,7 +93,7 @@ impl Geometry {
     }
 
     fn dock_target(&self, scope: &Scope) -> Option<Bounds<Pixels>> {
-        dock_target_bounds(scope, self.targets())
+        dock_target_bounds(scope, self.targets(), self.portal_area)
     }
 
     fn target_at(&self, desktop: Point<Pixels>) -> Option<(&Scope, Bounds<Pixels>)> {
@@ -93,35 +101,50 @@ impl Geometry {
             return None;
         }
         let local = desktop - self.workspace.origin;
-        hit_target(self.targets(), local)
+        hit_target(self.targets(), local, self.portal_area)
     }
 }
 
 fn dock_target_bounds<'a>(
     scope: &Scope,
-    targets: impl Iterator<Item = (&'a Scope, Bounds<Pixels>)> + Clone,
+    mut targets: impl Iterator<Item = (&'a Scope, Bounds<Pixels>)>,
+    portal_area: Option<Bounds<Pixels>>,
 ) -> Option<Bounds<Pixels>> {
     targets
-        .clone()
         .find(|(candidate, _)| *candidate == scope)
-        .map(|(_, bounds)| visible_bounds(scope, bounds, targets))
+        .map(|(_, bounds)| visible_bounds(scope, bounds, portal_area))
         .filter(|bounds| !bounds.is_empty())
 }
 
-fn visible_bounds<'a>(
+fn visible_bounds(
     scope: &Scope,
-    mut bounds: Bounds<Pixels>,
-    targets: impl Iterator<Item = (&'a Scope, Bounds<Pixels>)>,
+    bounds: Bounds<Pixels>,
+    portal_area: Option<Bounds<Pixels>>,
 ) -> Bounds<Pixels> {
-    if matches!(scope, Scope::Vessel { .. }) {
-        for (scope, portal) in targets {
-            if matches!(scope, Scope::Portal { .. })
-                && !portal.is_empty()
-                && !bounds.intersect(&portal).is_empty()
-            {
-                bounds.size.width = (portal.origin.x - bounds.origin.x).max(px(0.));
-            }
-        }
+    if matches!(scope, Scope::Vessel { .. })
+        && let Some(portal) = portal_area
+        && !portal.is_empty()
+        && !bounds.intersect(&portal).is_empty()
+    {
+        let covered = bounds.intersect(&portal);
+        return [
+            Bounds::from_corners(bounds.origin, point(covered.left(), bounds.bottom())),
+            Bounds::from_corners(point(covered.right(), bounds.top()), bounds.bottom_right()),
+            Bounds::from_corners(bounds.origin, point(bounds.right(), covered.top())),
+            Bounds::from_corners(
+                point(bounds.left(), covered.bottom()),
+                bounds.bottom_right(),
+            ),
+        ]
+        .into_iter()
+        .filter(|candidate| !candidate.is_empty())
+        .max_by(|left, right| {
+            let area = |bounds: Bounds<Pixels>| {
+                f32::from(bounds.size.width) * f32::from(bounds.size.height)
+            };
+            area(*left).total_cmp(&area(*right))
+        })
+        .unwrap_or_default();
     }
     bounds
 }
@@ -129,6 +152,7 @@ fn visible_bounds<'a>(
 fn hit_target<'a>(
     targets: impl Iterator<Item = (&'a Scope, Bounds<Pixels>)> + Clone,
     local: Point<Pixels>,
+    portal_area: Option<Bounds<Pixels>>,
 ) -> Option<(&'a Scope, Bounds<Pixels>)> {
     targets
         .clone()
@@ -139,10 +163,26 @@ fn hit_target<'a>(
                 .filter(|(scope, _)| !matches!(scope, Scope::Portal { .. })),
         )
         .filter(|(_, bounds)| !bounds.is_empty() && bounds.contains(&local))
-        .find_map(|(scope, bounds)| {
-            let bounds = visible_bounds(scope, bounds, targets.clone());
-            (!bounds.is_empty() && bounds.contains(&local)).then_some((scope, bounds))
+        .filter(|(scope, _)| {
+            !matches!(scope, Scope::Vessel { .. })
+                || portal_area.is_none_or(|area| area.is_empty() || !area.contains(&local))
         })
+        .find_map(|(scope, bounds)| {
+            let bounds = visible_bounds(scope, bounds, portal_area);
+            (!bounds.is_empty()).then_some((scope, bounds))
+        })
+}
+
+fn notify_geometry(
+    view: gpui::WeakEntity<AvatarView>,
+    avatar: gpui::WeakEntity<Avatar>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    window.defer(cx, move |_, cx| {
+        let _ = view.update(cx, |_, cx| cx.notify());
+        let _ = avatar.update(cx, |avatar, cx| avatar.update_dock_visibility(cx));
+    });
 }
 
 struct Drag {
@@ -624,12 +664,38 @@ impl Binding {
         let result = Rc::clone(&self.result);
         let epoch = Rc::clone(&self.window_epoch);
         let visibility = Rc::clone(&self.targets);
+        let area_targets = Rc::clone(&self.targets);
+        let area_view = self.view.downgrade();
+        let area_avatar = self.avatar.downgrade();
         HostModule::new(crate::script_types::AVATAR_MODULE)
             .declarations(crate::script_types::AVATAR)
             .function("dock_target_visible", move |arguments| {
                 let scope: Scope = serde_json::from_str(arguments.string(0)?)
                     .map_err(|error| HostError::new(error.to_string()))?;
                 Ok(HostValue::from(visibility.borrow().dock_target(&scope).is_some()))
+            })
+            .component("PortalArea", move |mut args, _, _| {
+                area_targets.borrow_mut().portal_area_seen = true;
+                let measure = Rc::clone(&area_targets);
+                let view = area_view.clone();
+                let avatar = area_avatar.clone();
+                div()
+                    .id(args.id().to_owned())
+                    .relative()
+                    .size_full()
+                    .occlude()
+                    .children(args.take_children())
+                    .child(canvas(move |bounds, window, cx| {
+                        let clipped = bounds.intersect(&window.content_mask().bounds);
+                        let mut geometry = measure.borrow_mut();
+                        let changed = geometry.portal_area != Some(clipped);
+                        geometry.portal_area = Some(clipped);
+                        drop(geometry);
+                        if changed {
+                            notify_geometry(view.clone(), avatar.clone(), window, cx);
+                        }
+                    }, |_, _, _, _| {}).absolute().size_full())
+                    .into_any_element()
             })
             .component("Brand", |_, _, _| {
                 div()
@@ -686,7 +752,8 @@ impl Binding {
                     for target in &mut geometry.targets {
                         target.seen = false;
                     }
-                    geometry.targets.len() != before
+                    let targets_retired = geometry.targets.len() != before;
+                    geometry.retire_portal_area() || targets_retired
                 };
                 avatar.update(cx, |avatar, cx| {
                     if retired {
@@ -804,12 +871,7 @@ impl Binding {
                                 }
                                 drop(geometry);
                                 if changed {
-                                    let view = view.clone();
-                                    let avatar = geometry_avatar.clone();
-                                    window.defer(cx, move |_, cx| {
-                                        let _ = view.update(cx, |_, cx| cx.notify());
-                                        let _ = avatar.update(cx, |avatar, cx| avatar.update_dock_visibility(cx));
-                                    });
+                                    notify_geometry(view.clone(), geometry_avatar.clone(), window, cx);
                                 }
                             },
                             |_, _, _, _| {},
@@ -872,24 +934,24 @@ mod tests {
         let overlay = Bounds::new(point(px(160.), px(40.)), size(px(50.), px(80.)));
         let targets = [(&vessel, raw), (&portal, overlay)];
         assert_eq!(
-            hit_target(targets.into_iter(), point(px(180.), px(60.))),
+            hit_target(targets.into_iter(), point(px(180.), px(60.)), Some(overlay)),
             Some((&portal, overlay))
         );
         let visible = Bounds::new(raw.origin, size(px(150.), px(100.)));
-        assert_eq!(visible_bounds(&vessel, raw, targets.into_iter()), visible);
+        assert_eq!(visible_bounds(&vessel, raw, Some(overlay)), visible);
         assert_eq!(
-            dock_target_bounds(&vessel, targets.into_iter()),
+            dock_target_bounds(&vessel, targets.into_iter(), Some(overlay)),
             Some(visible)
         );
         assert_eq!(
-            hit_target(targets.into_iter(), point(px(80.), px(60.))),
+            hit_target(targets.into_iter(), point(px(80.), px(60.)), Some(overlay)),
             Some((&vessel, visible))
         );
-        assert!(hit_target(targets.into_iter(), point(px(180.), px(30.))).is_none());
         assert_eq!(
-            visible_bounds(&portal, overlay, targets.into_iter()),
-            overlay
+            hit_target(targets.into_iter(), point(px(180.), px(30.)), Some(overlay)),
+            Some((&vessel, visible))
         );
+        assert_eq!(visible_bounds(&portal, overlay, Some(overlay)), overlay);
     }
 
     #[test]
@@ -897,25 +959,38 @@ mod tests {
         let vessel = Scope::Vessel {
             id: voyager_contract::PlacementId("vessel".into()),
         };
-        let portal = Scope::Portal {
-            id: voyager_contract::PlacementId("portal".into()),
-        };
         let raw = Bounds::new(point(px(10.), px(20.)), size(px(200.), px(100.)));
-        assert_eq!(visible_bounds(&vessel, raw, [].into_iter()), raw);
-        assert_eq!(dock_target_bounds(&vessel, [].into_iter()), None);
+        assert_eq!(visible_bounds(&vessel, raw, None), raw);
+        let empty = Bounds::new(raw.origin, size(px(0.), raw.size.height));
+        assert_eq!(
+            hit_target([(&vessel, raw)].into_iter(), raw.origin, Some(empty)),
+            Some((&vessel, raw))
+        );
+        assert_eq!(dock_target_bounds(&vessel, [].into_iter(), None), None);
         for origin in [point(px(210.), px(20.)), point(px(160.), px(120.))] {
             let disjoint = Bounds::new(origin, size(px(50.), px(100.)));
-            assert_eq!(
-                visible_bounds(&vessel, raw, [(&portal, disjoint)].into_iter()),
-                raw
-            );
+            assert_eq!(visible_bounds(&vessel, raw, Some(disjoint)), raw);
         }
-        let covered = visible_bounds(&vessel, raw, [(&portal, raw)].into_iter());
+        let covered = visible_bounds(&vessel, raw, Some(raw));
         assert!(covered.is_empty());
         assert_eq!(
-            dock_target_bounds(&vessel, [(&vessel, raw), (&portal, raw)].into_iter()),
+            dock_target_bounds(&vessel, [(&vessel, raw)].into_iter(), Some(raw)),
             None
         );
-        assert!(hit_target([(&vessel, covered)].into_iter(), raw.center()).is_none());
+        assert!(hit_target([(&vessel, raw)].into_iter(), raw.center(), Some(raw)).is_none());
+        let middle = Bounds::new(point(px(10.), px(40.)), size(px(200.), px(20.)));
+        assert_eq!(
+            visible_bounds(&vessel, raw, Some(middle)),
+            Bounds::new(point(px(10.), px(60.)), size(px(200.), px(60.)))
+        );
+        let mut geometry = Geometry {
+            portal_area: Some(raw),
+            portal_area_seen: true,
+            ..Geometry::default()
+        };
+        assert!(!geometry.retire_portal_area());
+        assert_eq!(geometry.portal_area, Some(raw));
+        assert!(geometry.retire_portal_area());
+        assert_eq!(geometry.portal_area, None);
     }
 }
