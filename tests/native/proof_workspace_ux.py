@@ -512,7 +512,13 @@ def prove(
             )["typeId"]
             == "agents"
         )
-        one("No agents running")
+        observations["emptyHomeCoreRoster"] = rpc("terminal.list", {"all": True})
+        assert all(
+            item.get("foreground", {}).get("name") == "bash"
+            for item in observations["emptyHomeCoreRoster"]["terminals"]
+            if item["state"] == "live"
+        )
+        capture("ux-home-no-agents-visual-review")
         button(initial["value"]["voyages"][0]["name"])
         ready(lambda value: value["view"] == "fleet")
         button("Split Vessel bottom", original["name"])
