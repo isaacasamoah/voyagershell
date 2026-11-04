@@ -272,8 +272,9 @@ test("context metadata rejects a late different dock and notifies only changed f
   )(class {}, async () => result, validateFacts);
   const view = Object.assign(new Workspace(), {
     version: "2",
-    layout: { context: { kind: "workspace" } },
+    layout: { context: { kind: "workspace" }, voyages: [] },
     contextFacts: null,
+    names: new Map(),
   });
   const facts = {
     version: "2",
@@ -284,10 +285,21 @@ test("context metadata rejects a late different dock and notifies only changed f
   };
   let notified = 0;
   const cx = {
+    spawn(callback) {
+      pending.push(callback(cx));
+    },
     notify() {
       notified += 1;
     },
   };
+  const pending = [];
+  result = JSON.stringify(facts);
+  view.acceptSnapshot({ version: "2", layout: view.layout }, cx);
+  assert.equal(pending.length, 1);
+  await pending[0];
+  assert.equal(view.contextFacts.path[0], "Workspace");
+  view.contextFacts = null;
+  notified = 0;
   result = JSON.stringify({ ...facts, version: "1" });
   await view.readContext(cx);
   assert.equal(view.contextFacts, null);
@@ -302,6 +314,16 @@ test("context metadata rejects a late different dock and notifies only changed f
   await view.readContext(cx);
   assert.equal(view.contextFacts, null);
   assert.equal(notified, 2);
+  let reject;
+  result = new Promise((_resolve, failure) => {
+    reject = failure;
+  });
+  const earlier = view.readContext(cx);
+  result = JSON.stringify(facts);
+  await view.readContext(cx);
+  reject(Error("Earlier read failed"));
+  await earlier;
+  assert.deepEqual(view.contextFacts, facts);
 });
 
 test("Chat stays below the primary dock before Home and Voyages, using one retained instance", () => {
@@ -508,7 +530,12 @@ test("right-click actions retain their opening revision and dismiss before actin
     version: "7",
   });
   const actions = [];
-  const cx = { notify() {} };
+  const cx = {
+    notify() {},
+    spawn(callback) {
+      return callback(cx);
+    },
+  };
   const items = [
     {
       label: "Save layout",

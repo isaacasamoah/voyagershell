@@ -106,6 +106,7 @@ export default class Workspace extends View {
   declare menus: WorkspaceMenu;
   declare version: Response["version"];
   declare contextFacts: Facts | null;
+  declare contextRead: number;
   declare sidebar: boolean;
   declare dockReceipt: string;
   declare dockEpoch: string;
@@ -183,6 +184,9 @@ export default class Workspace extends View {
 
   async readContext(cx: AsyncContext) {
     if (!this.layout) return;
+    const version = this.version;
+    const scope = JSON.stringify(this.layout.context);
+    const read = (this.contextRead = (this.contextRead ?? 0) + 1);
     let facts: Facts | null = null;
     try {
       const value: unknown = JSON.parse(await context_facts());
@@ -196,6 +200,12 @@ export default class Workspace extends View {
     } catch (_) {
       facts = null;
     }
+    if (
+      read !== this.contextRead ||
+      version !== this.version ||
+      scope !== JSON.stringify(this.layout?.context)
+    )
+      return;
     if (JSON.stringify(this.contextFacts) !== JSON.stringify(facts)) {
       this.contextFacts = facts;
       cx.notify();
@@ -412,8 +422,10 @@ export default class Workspace extends View {
       this.contextFacts?.version !== result.version ||
       JSON.stringify(this.contextFacts?.scope) !==
         JSON.stringify(result.layout.context)
-    )
+    ) {
       this.contextFacts = null;
+      task.spawn((cx) => this.readContext(cx));
+    }
     this.fresh = result.fresh;
     this.status = result.message || "";
     const retain = (target: RenameTarget, name: string) => {
@@ -1099,6 +1111,7 @@ export default class Workspace extends View {
     trigger: NativeElement,
     items: MenuItem[],
   ): NativeElement {
+    if (this.editing || this.layoutName) return trigger;
     return this.menus.render(
       id,
       this.version,

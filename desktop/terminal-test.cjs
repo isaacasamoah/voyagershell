@@ -596,7 +596,7 @@ test("pending shortcut intents run only after success and stop after failed prep
     view.shortcut({ key: "o", modifiers }, cx);
     view.shortcut({ key: "e", modifiers }, cx);
     await pending[0];
-    assert.equal(pending.length, 1);
+    assert.equal(view.busy, false);
     assert.deepEqual(actions, ["inspect", "inspect"]);
     assert.equal(count(), 1);
     if (status === "applied") {
@@ -618,7 +618,7 @@ test("refused and uncertain workspace outcomes discard unsent shortcuts", async 
     view.run({ operation: "inspect" }, cx);
     view.shortcut({ key: "o", modifiers }, cx);
     await pending[0];
-    assert.equal(pending.length, 1);
+    assert.equal(view.busy, false);
     assert.equal(count(), 0);
     assert.deepEqual(view.pendingShortcuts, []);
   }
@@ -714,7 +714,7 @@ test("new content does not start an older unbound placement", async () => {
 
 test("navigation waits for a layout save and is cleared on refusal or uncertainty", async () => {
   for (const status of ["applied", "rejected", "uncertain"]) {
-    const { view, cx, pending, layout } = fixture("applied", status);
+    const { view, cx, pending, layout, actions } = fixture("applied", status);
     layout.contents = [];
     view.savingLayout = true;
     view.run(
@@ -729,9 +729,13 @@ test("navigation waits for a layout save and is cleared on refusal or uncertaint
       },
     );
     view.run({ operation: "home" }, cx);
-    await pending[0];
-    if (pending[1]) await pending[1];
-    assert.equal(pending.length, status === "applied" ? 2 : 1);
+    for (let index = 0; index < pending.length; index++) await pending[index];
+    assert.deepEqual(
+      actions,
+      status === "applied"
+        ? ["save-panel-layout", "home"]
+        : ["save-panel-layout"],
+    );
     assert.equal(view.afterRename, null);
   }
 });

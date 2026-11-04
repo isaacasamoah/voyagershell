@@ -85,6 +85,9 @@ export default class Workspace extends View {
   }
   async readContext(cx) {
     if (!this.layout) return;
+    const version = this.version;
+    const scope = JSON.stringify(this.layout.context);
+    const read = (this.contextRead = (this.contextRead ?? 0) + 1);
     let facts = null;
     try {
       const value = JSON.parse(await context_facts());
@@ -98,6 +101,12 @@ export default class Workspace extends View {
     } catch (_) {
       facts = null;
     }
+    if (
+      read !== this.contextRead ||
+      version !== this.version ||
+      scope !== JSON.stringify(this.layout?.context)
+    )
+      return;
     if (JSON.stringify(this.contextFacts) !== JSON.stringify(facts)) {
       this.contextFacts = facts;
       cx.notify();
@@ -311,8 +320,10 @@ export default class Workspace extends View {
       this.contextFacts?.version !== result.version ||
       JSON.stringify(this.contextFacts?.scope) !==
         JSON.stringify(result.layout.context)
-    )
+    ) {
       this.contextFacts = null;
+      task.spawn((cx) => this.readContext(cx));
+    }
     this.fresh = result.fresh;
     this.status = result.message || "";
     const retain = (target, name) => {
@@ -946,6 +957,7 @@ export default class Workspace extends View {
       );
   }
   contextMenu(id, trigger, items) {
+    if (this.editing || this.layoutName) return trigger;
     return this.menus.render(
       id,
       this.version,
