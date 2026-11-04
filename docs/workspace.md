@@ -92,11 +92,11 @@ Matched native/reference screenshots must resolve that discrepancy rather than
 introducing an arbitrary scale adjustment. Maximum depth is 12, maximum node count is 64, and fixed sizes
 contain 1 to 4096 logical pixels. These bounds limit the native composition, not
 total application memory. The Portal block defaults to overlay; explicit
-make-room uses the same instance in flow. Overlay Portals follow the parent row or column: first means left/top and last
-means right/bottom. A middle overlay position and intrinsic/content overlay size
-are refused with an explanation. Fixed sizing follows that parent axis; fill
-covers the parent. Make-room follows ordinary authored flow at any position.
-Stack selection and Portal reveal/hide choices are not supplied by this increment.
+make-room uses the same instance in flow. In both modes the Portal block must be
+the last child of a row with the active Fleet in another sibling subtree. Left,
+top, bottom and middle Portal placement refuses unchanged. Intrinsic/content
+overlay size is also refused. Fixed sizing sets the column width; fill covers
+the row. Stack selection remains outside this increment.
 
 `desktop/mods/header/canvas.ts` composes the actual saved outer tree through
 Header region factories. It retains the existing terminal, Notes, native split,
@@ -135,7 +135,8 @@ The layout editor, overlay-mode Portal region and compact Chat overlay use this
 container. Make-room Portals stay in ordinary canvas flow. The renderer derives
 an overlay's edge from its original authored axis/index, then paints that
 absolute child after ordinary siblings inside the same parent. Flow order stays
-unchanged, so first/left and first/top overlays also receive foreground input.
+unchanged. The owner now permits only the right Portal column; the retained
+overlay implementation's other anchoring directions are not valid saved layouts.
 Geometry, content
 identity, context and all durable actions remain in their existing owners.
 Outside the actual container rectangle, ordinary workspace controls remain

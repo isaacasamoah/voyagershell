@@ -7,7 +7,7 @@ pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
         count: &mut usize,
         regions: &mut Vec<Region>,
         overlay: bool,
-    ) -> Result<(), String> {
+    ) -> Result<bool, String> {
         *count += 1;
         if depth > 12 || *count > 64 {
             return Err("Canvas exceeds its 12-level or 64-node limit".into());
@@ -23,31 +23,38 @@ pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
                 if children.is_empty() {
                     return Err("Canvas containers need at least one child".into());
                 }
+                let mut active_fleet = false;
                 for (index, child) in children.iter().enumerate() {
-                    if overlay
-                        && let Node::Block {
-                            region: Region::Portals,
-                            size,
-                        } = child
+                    if let Node::Block {
+                        region: Region::Portals,
+                        size,
+                    } = child
                     {
-                        if index != 0 && index + 1 != children.len() {
-                            return Err("Overlay Portals must be the first or last child of their row or column".into());
+                        if !matches!(node, Node::Row { .. })
+                            || index + 1 != children.len()
+                            || !active_fleet
+                        {
+                            return Err(
+                                "Portals must be the rightmost column beside the active Fleet"
+                                    .into(),
+                            );
                         }
-                        if matches!(size, Size::Content) {
+                        if overlay && matches!(size, Size::Content) {
                             return Err("Overlay Portals need fixed or fill sizing".into());
                         }
                     }
-                    visit(child, depth + 1, count, regions, overlay)?;
+                    active_fleet |= visit(child, depth + 1, count, regions, overlay)?;
                 }
+                Ok(active_fleet)
             }
             Node::Block { region, .. } => {
                 if regions.contains(region) {
                     return Err("Each canvas region can appear only once".into());
                 }
                 regions.push(*region);
+                Ok(*region == Region::ActiveFleet)
             }
         }
-        Ok(())
     }
     let mut regions = Vec::new();
     let mut count = 0;
@@ -132,7 +139,59 @@ mod tests {
         };
         assert!(validate(&positioned).is_err());
         positioned.portal_mode = voyager_contract::canvas::PortalMode::MakeRoom;
-        assert!(validate(&positioned).is_ok());
+        assert!(validate(&positioned).is_err());
+        for mode in [PortalMode::Overlay, PortalMode::MakeRoom] {
+            let canonical = Canvas {
+                portal_mode: mode,
+                ..Canvas::default()
+            };
+            assert!(validate(&canonical).is_ok());
+            for (row, portal_index) in [(true, 0), (true, 2), (false, 0), (false, 4)] {
+                let mut children: Vec<_> = [
+                    Region::Sidebar,
+                    Region::FleetStrip,
+                    Region::ActiveFleet,
+                    Region::ContextBar,
+                ]
+                .map(|region| Node::Block {
+                    region,
+                    size: Size::Fill,
+                })
+                .into();
+                children.insert(
+                    portal_index,
+                    Node::Block {
+                        region: Region::Portals,
+                        size: Size::Fixed { pixels: 340 },
+                    },
+                );
+                let invalid = Canvas {
+                    root: if row {
+                        Node::Row {
+                            size: Size::Fill,
+                            children,
+                        }
+                    } else {
+                        Node::Column {
+                            size: Size::Fill,
+                            children,
+                        }
+                    },
+                    portal_mode: mode,
+                    ..Canvas::default()
+                };
+                let mut model = crate::workspace::Model {
+                    layout: (*layout).clone(),
+                };
+                let before = model.layout.clone();
+                assert!(
+                    model
+                        .apply(Action::UpdateCanvas { canvas: invalid })
+                        .is_err()
+                );
+                assert_eq!(model.layout, before);
+            }
+        }
         for pixels in [0, 4097] {
             let mut invalid = Canvas::default();
             if let Node::Row { size, .. } = &mut invalid.root {
