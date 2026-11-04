@@ -69,11 +69,23 @@ def prove(
         native("button", True, code)
         native("button", False, code)
 
+    def position_button(name, edge=None):
+        def settled():
+            target = named_button(native, evidence, name, edge=edge)
+            move(target)
+            return target == named_button(native, evidence, name, edge=edge)
+
+        wait(settled, bool, f"stable native button {name}")
+
     def button(name):
-        click(named_button(native, evidence, name))
+        position_button(name)
+        native("button", True)
+        native("button", False)
 
     def menu(name, action):
-        click(named_button(native, evidence, name, edge="left"), 273)
+        position_button(name, "left")
+        native("button", True, 273)
+        native("button", False, 273)
         item = one(action)
         assert item["role"] in ("menu item", "menu_item"), item
         click(point(item))
@@ -95,6 +107,20 @@ def prove(
         assert identity["uid"] == os.getuid(), identity
         owned.append({"pid": process, **identity})
 
+    def drag(start, end):
+        move(start)
+        native("button", True)
+        try:
+            for step in range(1, 7):
+                move(
+                    tuple(
+                        start[axis] + (end[axis] - start[axis]) * step / 6
+                        for axis in (0, 1)
+                    )
+                )
+        finally:
+            native("button", False)
+
     def resize_column():
         box = one("Portal dock")
         separators = fields("Resize side by side panes")
@@ -104,14 +130,45 @@ def prove(
         assert abs(divider["x"] + divider["width"] / 2 - box["x"]) < 64
         start, _ = splitter_point(divider, separators)
         start = [coordinate / 2 for coordinate in start]
-        move(start)
-        native("button", True)
-        try:
-            for step in range(1, 7):
-                move((start[0] - step * 6, start[1]))
-        finally:
-            native("button", False)
+        drag(start, (start[0] - 36, start[1]))
         return box
+
+    def reopen(expected, stage="cold"):
+        nonlocal opened, owned, pid
+        opened = False
+        close()
+        exits = observe_core_exit(session, env, owned)
+        owned = []
+        start_frame(f"ux-{stage}-reopened")
+        opened = True
+        reopened = json.loads((evidence / "launch.json").read_text())
+        pid = reopened["pid"]
+        assert pid != launch["pid"]
+        assert (
+            reopened["command"] == launch["command"]
+            and reopened["binarySha256"] == launch["binarySha256"]
+        )
+        cold = ready(lambda value: value == expected["value"])
+        cold_core = rpc("server.status", {})
+        record(cold_core["pid"])
+        if (holder := cold_core.get("holder")) and holder.get("current"):
+            record(holder["pid"])
+        assert (
+            cold_core["pid"] != core["pid"]
+            and cold_core["core"]["id"] == core["core"]["id"]
+        )
+        ended = rpc("terminal.list", {"all": True})["terminals"]
+        assert {item["address"] for item in ended} == {
+            item["address"] for item in roster
+        }
+        assert all(item["state"] == "finished" for item in ended), ended
+        return {
+            "document": cold,
+            "core": cold_core,
+            "launch": reopened,
+            "terminals": ended,
+            "exits": exits,
+        }
 
     try:
         initial = ready(lambda value: bool(value["contents"][0].get("backend")))
@@ -162,17 +219,70 @@ def prove(
         ready(lambda value: fleet(value)["vessels"][1]["name"] == "UX Notes")
         one("UX Notes")
         button("Show Portals")
+        capture("ux-empty-portal-before-choice")
         button("Choose Portal content")
+        capture("ux-empty-portal-after-choice")
         button("Create Notes Portal")
         created = ready(lambda value: len(value["voyages"][0]["portals"]) == 1)
         portal = created["value"]["voyages"][0]["portals"][0]
-        box = one("Portal dock")
-        title = next(
+
+        def portal_titles():
+            snapshot = native("fields", pid, ["Portal dock", "Note title"], "window")[
+                "fields"
+            ]
+            boxes = [
+                item
+                for item in snapshot
+                if item["name"] == "Portal dock"
+                and item["width"] > 0
+                and item["height"] > 0
+            ]
+            if len(boxes) != 1:
+                return []
+            box = boxes[0]
+            return [
+                item
+                for item in snapshot
+                if item["name"] == "Note title"
+                and item["width"] > 0
+                and item["height"] > 0
+                and all(
+                    box[axis] <= item[axis]
+                    and item[axis] + item[extent] <= box[axis] + box[extent]
+                    for axis, extent in (("x", "width"), ("y", "height"))
+                )
+            ]
+
+        title = wait(
+            portal_titles,
+            lambda items: len(items) == 1,
+            "settled Portal title in one native snapshot",
+        )[0]
+        bounds = native("fields", pid, ["Portal dock", "Vessel dock"], "window")[
+            "fields"
+        ]
+        portals = [
             item
-            for item in fields("Note title")
-            if box["x"] <= item["x"]
-            and item["x"] + item["width"] <= box["x"] + box["width"]
-        )
+            for item in bounds
+            if item["name"] == "Portal dock"
+            and item["width"] > 0
+            and item["height"] > 0
+        ]
+        vessels = [
+            item
+            for item in bounds
+            if item["name"] == "Vessel dock"
+            and item["width"] > 0
+            and item["height"] > 0
+        ]
+        observations["singlePortalBounds"] = bounds
+        capture("ux-single-portal-full-panel-bounds")
+        assert len(portals) == 1 and len(vessels) == 2, bounds
+        assert all(
+            abs(portals[0]["y"] - item["y"]) <= 2
+            and abs(portals[0]["height"] - item["height"]) <= 2
+            for item in vessels
+        ), bounds
         text(title, "Portal retained")
         button("Embed Portals")
         data_path = evidence / "profile/data" / (portal["content"] + ".json")
@@ -290,6 +400,26 @@ def prove(
                 )
             )
             assert revealed["value"]["voyages"][0]["portals"] == [portal, second]
+        first_box = min(fields("Portal dock"), key=lambda item: item["y"])
+        drag(
+            point(one(second["name"])),
+            ((first_box["x"] + first_box["width"] / 2) / 2, (first_box["y"] + 2) / 2),
+        )
+        reordered = ready(
+            lambda value: (
+                value["voyages"][0]["portalLayout"]["root"]["first"].get("placement")
+                == second["id"]
+            )
+        )
+        assert (
+            reordered["value"]["voyages"][0]["portalLayout"]["root"]["second"].get(
+                "placement"
+            )
+            == portal["id"]
+        )
+        assert reordered["value"]["voyages"][0]["portals"] == [portal, second]
+        assert reordered["value"]["contents"] == revealed["value"]["contents"]
+        assert reordered["value"]["context"] == initial["value"]["context"]
         button("Home")
         home = ready(lambda value: value["view"] == "home")
         assert home["value"]["home"]["fleets"][0]["root"] is None
@@ -325,33 +455,8 @@ def prove(
             overlay=overlay, divided=divided, home=shown_home, beforeCold=before_cold
         )
         capture("ux-portals-and-home-before-quit")
-        opened = False
-        close()
-        observations["warmExits"] = observe_core_exit(session, env, owned)
-        owned = []
-        start_frame("ux-cold-reopened")
-        opened = True
-        reopened = json.loads((evidence / "launch.json").read_text())
-        pid = reopened["pid"]
-        assert pid != launch["pid"]
-        assert (
-            reopened["command"] == launch["command"]
-            and reopened["binarySha256"] == launch["binarySha256"]
-        )
-        cold = ready(lambda value: value == before_cold["value"])
-        cold_core = rpc("server.status", {})
-        record(cold_core["pid"])
-        if (holder := cold_core.get("holder")) and holder.get("current"):
-            record(holder["pid"])
-        assert (
-            cold_core["pid"] != core["pid"]
-            and cold_core["core"]["id"] == core["core"]["id"]
-        )
-        ended = rpc("terminal.list", {"all": True})["terminals"]
-        assert {item["address"] for item in ended} == {
-            item["address"] for item in roster
-        }
-        assert all(item["state"] == "finished" for item in ended), ended
+        observations["cold"] = reopen(before_cold)
+        observations["warmExits"] = observations["cold"]["exits"]
         assert (
             len(
                 wait(
@@ -365,13 +470,24 @@ def prove(
         one("Hide Portals")
         one("Embed Portals")
         assert data_path.read_bytes() == saved
-        observations["cold"] = {
-            "document": cold,
-            "core": cold_core,
-            "launch": reopened,
-            "terminals": ended,
-        }
         capture("ux-cold-retained-column-and-no-agents")
+        button("Hide Portals")
+        hidden_column = ready(
+            lambda value: not value["voyages"][0]["portalLayout"]["visible"]
+        )
+        observations["hiddenCold"] = reopen(hidden_column, "hidden-cold")
+        one("Show Portals")
+        assert not fields("Portal dock")
+        button("Show Portals")
+        reshown = ready(lambda value: value["voyages"][0]["portalLayout"]["visible"])
+        assert reshown["value"] == before_cold["value"]
+        wait(
+            lambda: fields("Portal dock"),
+            lambda items: len(items) == 2,
+            "revealed retained Portal pair",
+        )
+        assert data_path.read_bytes() == saved
+        capture("ux-hidden-cold-column-revealed")
     except BaseException as error:
         failure = repr(error)
         try:
@@ -403,5 +519,6 @@ def prove(
         "portal-split-and-retained-hide-remove-reveal",
         "home-shared-empty-create-hide-show",
         "overlay-and-embedded-width-through-cold-reopen-without-program-restart",
+        "same-owner-portal-reorder-and-hidden-column-cold-reopen",
         "native-quit-owned-exits",
     ]
