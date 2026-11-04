@@ -2,15 +2,13 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, ensure};
 use gpui::{
-    AnyElement, App, AppContext as _, Axis, Context, DragMoveEvent, Empty, Entity, EntityId,
-    InteractiveElement as _, MouseButton, ParentElement as _, Pixels, Refineable as _, Render,
-    Role, Styled as _, Window, div, px,
+    AnyElement, App, AppContext as _, Entity, InteractiveElement as _, MouseButton,
+    ParentElement as _, Role, Styled as _, Window, px,
 };
 use gpui_base::input::{
     Input, InputAccessibility, InputBase, InputMode, InputState, Textarea, TextareaMode,
     TextareaState,
 };
-use gpui_base::{HandleEdge, resize_handle};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, COMPONENT_REGISTRY_API_VERSION, ComponentArgument,
     ComponentDataValue, ComponentDescriptor, ComponentMaterializer, ComponentPayload,
@@ -43,27 +41,6 @@ pub(crate) fn new_body(value: String, window: &mut Window, cx: &mut App) -> Enti
     })
 }
 
-pub(crate) struct BodyHeight {
-    height: Pixels,
-    start: Option<(Pixels, Pixels)>,
-}
-
-pub(crate) fn new_height(cx: &mut App) -> Entity<BodyHeight> {
-    cx.new(|_| BodyHeight {
-        height: px(180.),
-        start: None,
-    })
-}
-
-#[derive(Clone)]
-struct ResizeBody(EntityId);
-
-impl Render for ResizeBody {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
-        Empty
-    }
-}
-
 impl ComponentMaterializer for Title {
     fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
         crate::notes_scope::component((|| {
@@ -92,7 +69,7 @@ impl ComponentMaterializer for Title {
 }
 
 impl ComponentMaterializer for Body {
-    fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
+    fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
         crate::notes_scope::component((|| {
             ensure!(request.children_len() == 0, "Body does not accept children");
             let argument = request
@@ -100,65 +77,18 @@ impl ComponentMaterializer for Body {
                 .downcast_ref::<ComponentArgument>()
                 .context("Body requires a retained body state")?;
             let state = request.with_state::<Entity<TextareaState>, _>(argument, Clone::clone)?;
-            let editor = state.entity_id();
-            let (size, height) = request.with_window_app(|window, cx| {
-                let size = crate::notes_scope::body_height(editor, cx).unwrap_or_else(|| {
-                    window.use_keyed_state(("voyager-body-height", editor), cx, |_, _| BodyHeight {
-                        height: px(180.),
-                        start: None,
-                    })
-                });
-                let height = size.read(cx).height;
-                Ok((size, height))
-            })?;
             let focus = state.clone();
-            let resized = size.clone();
-            let handle = resize_handle("body-resize", Axis::Vertical)
-                .inside(HandleEdge::Trailing)
-                .on_mouse_down(MouseButton::Left, move |event, _, cx| {
-                    size.update(cx, |size, _| {
-                        size.start = Some((event.position.y, size.height));
-                    });
-                })
-                .on_drag(ResizeBody(editor), |drag, _, _, cx| {
-                    cx.new(|_| drag.clone())
-                });
-            let mut frame = InputBase::new(request.element_id().clone())
+            let frame = InputBase::new(request.element_id().clone())
                 .role(None::<Role>)
-                .relative()
                 .flex()
-                .items_start()
-                .w_full()
+                .flex_col()
+                .size_full()
+                .min_w(px(0.))
+                .min_h(px(0.))
                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     focus.update(cx, |state, cx| state.focus(window, cx));
                 })
-                .on_drag_move(move |event: &DragMoveEvent<ResizeBody>, _, cx| {
-                    if event.drag(cx).0 != editor {
-                        return;
-                    }
-                    resized.update(cx, |size, cx| {
-                        if let Some((pointer_y, initial_height)) = size.start {
-                            let next =
-                                (initial_height + event.event.position.y - pointer_y).max(px(180.));
-                            if next != size.height {
-                                size.height = next;
-                                cx.notify();
-                            }
-                        }
-                    });
-                })
-                .child(Textarea::new(&state))
-                .child(
-                    div()
-                        .absolute()
-                        .bottom_0()
-                        .right_0()
-                        .w(px(16.))
-                        .h(px(16.))
-                        .child(handle),
-                );
-            frame.style().refine(&request.take_style());
-            let frame = frame.h(height);
+                .child(Textarea::new(&state));
             request.finish(frame)
         })())
     }

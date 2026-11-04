@@ -17,7 +17,6 @@ pub enum Intent {
 pub struct Session {
     pub title: Entity<InputState>,
     pub text: Entity<TextareaState>,
-    pub(crate) height: Entity<crate::notes_input::BodyHeight>,
     pub draft: Draft,
     pub configuration: NotesConfiguration,
     id: ContentId,
@@ -42,7 +41,6 @@ impl Session {
     pub fn new(id: ContentId, client: Client, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let title = crate::notes_input::new_title(String::new(), window, cx);
         let text = crate::notes_input::new_body(String::new(), window, cx);
-        let height = crate::notes_input::new_height(cx);
         let title_events = cx.subscribe(&title, |session, _, event: &InputEvent, cx| match event {
             InputEvent::Change => session.changed(Field::Title, cx),
             InputEvent::Blur => session.save(Intent::Native, cx),
@@ -56,7 +54,6 @@ impl Session {
         Self {
             title,
             text,
-            height,
             draft: Draft::default(),
             configuration: NotesConfiguration::default(),
             id,

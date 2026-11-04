@@ -1,6 +1,6 @@
-use crate::{notes_input::BodyHeight, notes_session::Session};
+use crate::notes_session::Session;
 use anyhow::{Result, ensure};
-use gpui::{App, Entity, EntityId};
+use gpui::{App, Entity};
 use gpui_base::input::{InputState, TextareaState};
 use std::{cell::RefCell, rc::Rc};
 use voyager_app::content::ViewBinding;
@@ -13,7 +13,6 @@ struct Loading {
 
 #[derive(Clone)]
 struct Frame {
-    session: Entity<Session>,
     error: Rc<RefCell<Option<String>>>,
 }
 
@@ -103,9 +102,8 @@ pub struct Build {
 }
 
 impl Build {
-    pub fn enter(session: Entity<Session>) -> Self {
+    pub fn enter() -> Self {
         let frame = Frame {
-            session,
             error: Rc::new(RefCell::new(None)),
         };
         let previous = FRAME.with(|current| current.replace(Some(frame.clone())));
@@ -121,15 +119,6 @@ impl Drop for Build {
     fn drop(&mut self) {
         FRAME.with(|frame| *frame.borrow_mut() = self.previous.take());
     }
-}
-
-pub(crate) fn body_height(editor: EntityId, cx: &App) -> Option<Entity<BodyHeight>> {
-    FRAME.with(|frame| {
-        frame.borrow().as_ref().and_then(|frame| {
-            let session = frame.session.read(cx);
-            (session.text.entity_id() == editor).then(|| session.height.clone())
-        })
-    })
 }
 
 pub fn component<T>(result: Result<T>) -> Result<T> {

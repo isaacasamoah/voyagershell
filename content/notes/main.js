@@ -18,8 +18,11 @@ export default class Notes extends View {
   render() {
     const colors = theme();
     return div()
+      .flex()
+      .flex_col()
       .w_full()
       .h_full()
+      .min_h(0)
       .p(24)
       .bg(colors.background)
       .text_color(colors.foreground)
@@ -28,13 +31,14 @@ export default class Notes extends View {
           ? [div().text_size(9).text_color("#92939e").child("NOTES")]
           : [],
       )
-      .child(Title.new(this.title).w_full().py(8).text_size(20))
+      .child(Title.new(this.title).w_full().flex_shrink_0().py(8).text_size(20))
       .child(
         Button.new("notes-preview")
           .accessibility_label(this.preview ? "Edit note" : "Preview note")
           .px(8)
           .py(4)
           .rounded(4)
+          .flex_shrink_0()
           .text_size(11)
           .text_color(colors.muted)
           .on_click((_event, cx) => {
@@ -47,12 +51,16 @@ export default class Notes extends View {
         this.preview
           ? TextView.markdown("notes-preview-body", this.text.value())
               .w_full()
+              .flex_1()
+              .min_h(0)
               .py(16)
               .selectable()
-          : Body.new(this.text).w_full().min_h(180).py(16).text_size(13),
+              .scrollable()
+          : Body.new(this.text).w_full().flex_1().min_h(0).py(16).text_size(13),
       )
       .child(
         div()
+          .flex_shrink_0()
           .text_size(11)
           .text_color(colors.muted)
           .child(this.session.status()),

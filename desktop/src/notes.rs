@@ -544,11 +544,10 @@ impl Note {
 
     fn draw(
         candidate: &Candidate,
-        session: Entity<crate::notes_session::Session>,
         window: &mut Window,
         cx: &mut App,
     ) -> (AnyElement, Option<String>) {
-        let frame = crate::notes_scope::Build::enter(session);
+        let frame = crate::notes_scope::Build::enter();
         let element = candidate
             .view
             .update(cx, |view, cx| view.render(window, cx).into_any_element());
@@ -562,7 +561,7 @@ impl Note {
 impl Render for Note {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
         if let Some(candidate) = &self.pending {
-            let (_, error) = Self::draw(candidate, self.session.clone(), window, cx);
+            let (_, error) = Self::draw(candidate, window, cx);
             if let Some(error) = error {
                 self.pending = None;
                 self.error = Some(format!("Notes reload failed: {error}"));
@@ -577,9 +576,7 @@ impl Render for Note {
             }
         }
         let content = match &self.current {
-            Some(current) if !current.binding.is_retired() => {
-                Self::draw(current, self.session.clone(), window, cx).0
-            }
+            Some(current) if !current.binding.is_retired() => Self::draw(current, window, cx).0,
             _ => div()
                 .p_4()
                 .child(if self.current.is_some() {
