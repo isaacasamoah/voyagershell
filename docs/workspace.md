@@ -93,8 +93,9 @@ introducing an arbitrary scale adjustment. Maximum depth is 12, maximum node cou
 contain 1 to 4096 logical pixels. These bounds limit the native composition, not
 total application memory. The Portal block defaults to overlay; explicit
 make-room uses the same instance in flow. In both modes the Portal block must be
-the last child of a row with the active Fleet in another sibling subtree. Left,
-top, bottom and middle Portal placement refuses unchanged. Intrinsic/content
+the last child of a row with the active Fleet in another sibling subtree. Its
+subtree must also be last in every enclosing row; columns may retain chrome
+above and below it. Left, top, bottom and middle Portal placement refuses unchanged. Intrinsic/content
 overlay size is also refused. Fixed sizing sets the column width; fill covers
 the row. Stack selection remains outside this increment.
 

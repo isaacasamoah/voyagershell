@@ -7,7 +7,7 @@ pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
         count: &mut usize,
         regions: &mut Vec<Region>,
         overlay: bool,
-    ) -> Result<bool, String> {
+    ) -> Result<(bool, bool), String> {
         *count += 1;
         if depth > 12 || *count > 64 {
             return Err("Canvas exceeds its 12-level or 64-node limit".into());
@@ -24,6 +24,7 @@ pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
                     return Err("Canvas containers need at least one child".into());
                 }
                 let mut active_fleet = false;
+                let mut portals = false;
                 for (index, child) in children.iter().enumerate() {
                     if let Node::Block {
                         region: Region::Portals,
@@ -43,16 +44,25 @@ pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
                             return Err("Overlay Portals need fixed or fill sizing".into());
                         }
                     }
-                    active_fleet |= visit(child, depth + 1, count, regions, overlay)?;
+                    let (child_fleet, child_portals) =
+                        visit(child, depth + 1, count, regions, overlay)?;
+                    if child_portals
+                        && matches!(node, Node::Row { .. })
+                        && index + 1 != children.len()
+                    {
+                        return Err("The Portal column must remain on the right edge".into());
+                    }
+                    active_fleet |= child_fleet;
+                    portals |= child_portals;
                 }
-                Ok(active_fleet)
+                Ok((active_fleet, portals))
             }
             Node::Block { region, .. } => {
                 if regions.contains(region) {
                     return Err("Each canvas region can appear only once".into());
                 }
                 regions.push(*region);
-                Ok(*region == Region::ActiveFleet)
+                Ok((*region == Region::ActiveFleet, *region == Region::Portals))
             }
         }
     }
@@ -146,6 +156,11 @@ mod tests {
                 ..Canvas::default()
             };
             assert!(validate(&canonical).is_ok());
+            let mut nested = canonical.clone();
+            if let Node::Row { children, .. } = &mut nested.root {
+                children.swap(0, 1);
+            }
+            assert!(validate(&nested).is_err());
             for (row, portal_index) in [(true, 0), (true, 2), (false, 0), (false, 4)] {
                 let mut children: Vec<_> = [
                     Region::Sidebar,
