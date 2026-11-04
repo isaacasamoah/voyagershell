@@ -282,7 +282,7 @@ impl AvatarView {
             .iter()
             .find(|target| target.scope == avatar.scope && !target.fallback)
             .or_else(|| geometry.targets.iter().find(|target| target.fallback))?;
-        let b = target.bounds;
+        let b = geometry.bounds(target);
         if b.size.width <= px(0.) || b.size.height <= px(0.) {
             return None;
         }
@@ -522,9 +522,10 @@ impl Render for AvatarView {
         if self.surface == Surface::Workspace
             && let Some(drag) = &avatar.drag
             && drag.moved
-            && let Some(target) = self.targets.borrow().target_at(drag.position + drag.offset)
+            && let Some((scope, bounds)) =
+                self.targets.borrow().target_at(drag.position + drag.offset)
         {
-            let (bounds, circular) = landing_preview(&target.scope, target.bounds);
+            let (bounds, circular) = landing_preview(scope, bounds);
             layer = layer.child(
                 div()
                     .absolute()
