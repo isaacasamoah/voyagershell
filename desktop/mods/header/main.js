@@ -21,6 +21,7 @@ import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding } from "voyager_native";
 import { Chat } from "./chat.js";
 import { composeCanvas } from "./canvas.js";
+import { inspectProcesses } from "./processes.js";
 import { CreationPicker } from "./creation.js";
 import { renderPanel } from "./panel-view.js";
 import {
@@ -34,6 +35,7 @@ import {
   currentVoyage,
   panelGroups,
   visiblePanels,
+  hiddenPanels,
 } from "./panels.js";
 const CONTEXT_REFRESH_MS = 3000;
 function errorMessage(error) {
@@ -67,7 +69,10 @@ export default class Workspace extends View {
     this.terminals = new Map();
     this.openings = new Map();
     this.focused = null;
-    this.splitHover = null;
+    this.hoveredPanel = null;
+    this.processes = [];
+    this.processPending = false;
+    this.processError = "Loading agent status";
     this.splitReset = 0;
     this.splitSession = request_id();
     this.pendingShortcuts = [];
@@ -79,6 +84,18 @@ export default class Workspace extends View {
     cx.spawn(async (task) => {
       while (true) {
         await this.readContext(task);
+        if (
+          this.layout &&
+          activeGroups(this.layout).some((group) =>
+            visiblePanels(group, true).some((panel) =>
+              this.layout?.contents.some(
+                (content) =>
+                  content.id === panel.content && content.typeId === "agents",
+              ),
+            ),
+          )
+        )
+          await this.readProcesses(task);
         await task.sleep(CONTEXT_REFRESH_MS);
       }
     });
@@ -111,6 +128,38 @@ export default class Workspace extends View {
       this.contextFacts = facts;
       cx.notify();
     }
+  }
+  async readProcesses(cx) {
+    if (this.processPending) return;
+    const version = this.version;
+    this.processPending = true;
+    try {
+      const observed = await inspectProcesses(version);
+      if (this.version === version) {
+        this.processes = observed;
+        this.processError = "";
+      }
+    } catch (error) {
+      if (this.version === version) {
+        this.processes = [];
+        this.processError = errorMessage(error);
+      }
+    } finally {
+      this.processPending = false;
+      cx.notify();
+    }
+  }
+  async hiddenChoices(destination, version) {
+    let observed = [];
+    let error;
+    try {
+      observed = await inspectProcesses(version);
+    } catch (failure) {
+      error = `Running viewers unavailable: ${errorMessage(failure)}`;
+    }
+    if (!this.layout || this.version !== version)
+      throw Error("Workspace changed; reopen the content chooser.");
+    return { panels: hiddenPanels(this.layout, destination, observed), error };
   }
   run(
     action,
@@ -151,7 +200,11 @@ export default class Workspace extends View {
     const oldLayout = this.layout;
     const maximization =
       action.operation === "set-panel-maximized" ? action : null;
-    const creating = action.operation === "create-content" ? action : null;
+    const creating =
+      ["create-content", "reopen-panel"].includes(action.operation) &&
+      "destination" in action
+        ? action
+        : null;
     const oldGroups = oldLayout ? activeGroups(oldLayout) : [];
     const splitMaximized = Boolean(
       creating &&
@@ -315,6 +368,7 @@ export default class Workspace extends View {
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
+    task.spawn((cx) => this.readProcesses(cx));
     this.sidebar = !result.layout.canvas?.sidebarCollapsed;
     if (
       this.contextFacts?.version !== result.version ||
@@ -866,21 +920,6 @@ export default class Workspace extends View {
     state.focus();
     cx.notify();
   }
-  retainedPanels(group) {
-    const visible = new Set(visiblePanels(group).map((panel) => panel.id));
-    return group.members
-      .filter((panel) => !visible.has(panel.id))
-      .map((panel) => ({
-        label: `Show ${panel.name}`,
-        choose: (version, cx) =>
-          this.run(
-            { operation: "reveal-panel", id: panel.id },
-            cx,
-            undefined,
-            version,
-          ),
-      }));
-  }
   layoutItems(group) {
     const owner = group.owner;
     const items = [
@@ -914,7 +953,7 @@ export default class Workspace extends View {
         },
       );
     }
-    return [...items, ...this.retainedPanels(group)];
+    return items;
   }
   fleetMenu(fleet, voyage) {
     const items = [
@@ -991,6 +1030,7 @@ export default class Workspace extends View {
         this.run(action, cx, undefined, version);
       },
       trigger,
+      () => this.hiddenChoices(destination, this.version),
     );
   }
   statusView() {
@@ -1015,6 +1055,7 @@ export default class Workspace extends View {
       destination,
       this.version,
       cx,
+      () => this.hiddenChoices(destination, this.version),
     );
   }
   pane(
@@ -1066,54 +1107,40 @@ export default class Workspace extends View {
       .child(first)
       .child(second);
   }
-  splitEdges(panel, group) {
-    const edges = ["left", "right", "top", "bottom"].map((side) => {
-      const id = `split-${panel.id}-${side}`;
-      const trigger = Button.new(id)
-        .accessibility_label(
-          `Split ${group.owner.kind === "portals" ? "Portal" : "Vessel"} ${side}`,
+  splitControl(panel, group, side) {
+    const entity = group.owner.kind === "portals" ? "Portal" : "Vessel";
+    const id = `split-${panel.id}-${side}`;
+    return this.creationControl(
+      id,
+      {
+        kind: "panel",
+        owner: group.owner,
+        insertion: { kind: "beside", id: panel.id, side },
+      },
+      Button.new(id)
+        .accessibility_label(`Split ${entity} ${side}`)
+        .tooltip(
+          side === "right" ? "Split side by side" : "Split above and below",
         )
-        .tooltip(`Split ${side}`)
         .opacity(
-          this.splitHover === id || this.creation?.current?.id === id ? 1 : 0,
+          this.hoveredPanel === panel.id || this.creation?.current?.id === id
+            ? 1
+            : 0,
         )
         .hover((element) => element.opacity(1))
         .focus((element) => element.opacity(1))
-        .w(18)
-        .h(18)
-        .p(0)
-        .rounded(5)
-        .bg("#16181cf0")
-        .child({ left: "‹", right: "›", top: "⌃", bottom: "⌄" }[side]);
-      const edge = div()
-        .absolute()
-        .w(18)
-        .h(18)
-        .on_hover((hovered, cx) => {
-          this.splitHover = hovered ? id : null;
-          cx.notify();
-        });
-      if (side === "left" || side === "right") {
-        edge.top("50%");
-        if (side === "left") edge.left(0);
-        else edge.right(0);
-      } else {
-        edge.left("50%");
-        if (side === "top") edge.top(0);
-        else edge.bottom(0);
-      }
-      return edge.child(
-        this.creationControl(
-          id,
-          {
-            kind: "panel",
-            owner: group.owner,
-            insertion: { kind: "beside", id: panel.id, side },
-          },
-          trigger,
+        .w(22)
+        .h(22)
+        .p(4)
+        .child(
+          svg(
+            side === "right" ? "split-horizontal.svg" : "split-vertical.svg",
+          ).size(12),
         ),
-      );
-    });
+    );
+  }
+  splitPreview(panel) {
+    const edges = [];
     const opening = this.creation?.current;
     if (
       opening?.destination.kind === "panel" &&
@@ -1185,17 +1212,7 @@ export default class Workspace extends View {
           trigger,
         ),
       );
-    const retained = group.members.map((panel) => ({
-      label: `Show ${panel.name}`,
-      choose: (version, cx) =>
-        this.run(
-          { operation: "reveal-panel", id: panel.id },
-          cx,
-          undefined,
-          version,
-        ),
-    }));
-    return this.contextMenu(id, empty, retained);
+    return empty;
   }
   activeRegion(layout, fleet) {
     const group = activeGroups(layout).find(

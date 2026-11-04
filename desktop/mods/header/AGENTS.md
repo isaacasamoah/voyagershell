@@ -31,7 +31,7 @@ separate operations. Never resubmit an uncertain effect automatically.
 Home uses the same retained panel layout and content controls. The Rust owner
 keeps its internal Voyage/Fleet and Portal column outside the ordinary Voyage
 list. Entering Home preserves the selected ordinary Voyage/Fleet and explicit
-dock context. Its empty arrangement waits for a deliberate content choice.
+dock context. A newly created Home starts with one ordinary Agents Vessel. Existing Home arrangements, including empty ones, remain unchanged. Agents is also available through the normal content chooser. It is a read-only list over the existing process owner, not a process registry or launch surface.
 Do not restore the former special overview or add a status/usage dashboard here.
 
 ## Portal column and dock context
@@ -84,3 +84,12 @@ restore compatible source.
 
 These instructions describe the current source. They do not accept the complete
 native UX revision, its appearance, input behavior or performance.
+
+
+## Viewer controls
+
+Each panel header has hover/focus controls for splitting side by side or above and below, maximize/restore and close. A split opens the content chooser for that exact destination. Close uses `remove-panel`: it removes the visible slot and retains the identified content, name, data and backend. It does not stop a process. Stop through the terminal or agent command; do not add a UI Stop here.
+
+The chooser's Hidden vessels section reads the existing typed process list. Reopening uses `reopen-panel` with the retained placement and chosen destination. Rust checks revision, scope, name and live backend again before saving. Vessels may reopen into another Fleet in the same Voyage. Portals stay in their Voyage column. Ordinary Notes and Agents remain recoverable without a backend. Never restart an ended process implicitly.
+
+`processes(version)` is a fixed read-only Header binding returning the generated ProcessResponse. It runs off the UI executor. The Home Agents view uses the same snapshot and program-reported activity. Silence is not success, and an ordinary shell is not an agent.

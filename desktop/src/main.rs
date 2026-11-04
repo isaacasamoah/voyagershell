@@ -120,6 +120,14 @@ fn run() -> Result<()> {
         include_str!("../mods/header/activity.js"),
     )?;
     seed(
+        &package.join("agents.js"),
+        include_str!("../mods/header/agents.js"),
+    )?;
+    seed(
+        &package.join("processes.js"),
+        include_str!("../mods/header/processes.js"),
+    )?;
+    seed(
         &package.join("home.js"),
         include_str!("../mods/header/home.js"),
     )?;
@@ -145,6 +153,15 @@ fn run() -> Result<()> {
         include_str!("../mods/header/chat.svg"),
     )?;
     for (name, source) in [
+        (
+            "split-horizontal.svg",
+            include_str!("../mods/header/split-horizontal.svg"),
+        ),
+        (
+            "split-vertical.svg",
+            include_str!("../mods/header/split-vertical.svg"),
+        ),
+        ("close.svg", include_str!("../mods/header/close.svg")),
         ("embed.svg", include_str!("../mods/header/embed.svg")),
         ("overlay.svg", include_str!("../mods/header/overlay.svg")),
         ("maximize.svg", include_str!("../mods/header/maximize.svg")),

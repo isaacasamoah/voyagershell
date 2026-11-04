@@ -276,6 +276,7 @@ test("context metadata rejects a late different dock and notifies only changed f
     contextFacts: null,
     names: new Map(),
   });
+  view.readProcesses = async () => {};
   const facts = {
     version: "2",
     scope: { kind: "workspace" },
@@ -295,8 +296,8 @@ test("context metadata rejects a late different dock and notifies only changed f
   const pending = [];
   result = JSON.stringify(facts);
   view.acceptSnapshot({ version: "2", layout: view.layout }, cx);
-  assert.equal(pending.length, 1);
-  await pending[0];
+  assert.equal(pending.length, 2);
+  await Promise.all(pending);
   assert.equal(view.contextFacts.path[0], "Workspace");
   view.contextFacts = null;
   notified = 0;
@@ -584,4 +585,199 @@ test("right-click actions retain their opening revision and dismiss before actin
   assert.equal(view.menus.current, null);
   click({}, cx);
   assert.equal(actions.length, 1);
+});
+
+test("hidden choices retain process-free data and require matching live backends", () => {
+  const exports = {};
+  new Function(
+    "exports",
+    ts.transpileModule(
+      fs.readFileSync(`${__dirname}/mods/header/panels.ts`, "utf8"),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          target: ts.ScriptTarget.ES2022,
+        },
+      },
+    ).outputText,
+  )(exports);
+  const panel = (id, content) => ({ id, content, name: id, hidden: false });
+  const first = {
+    id: "first",
+    vessels: [
+      panel("visible", "shown"),
+      panel("notes", "note"),
+      panel("shell", "live"),
+      panel("ended", "dead"),
+    ],
+    root: { kind: "leaf", placement: "visible" },
+  };
+  const second = {
+    id: "second",
+    vessels: [panel("other", "other-note")],
+    root: null,
+  };
+  const voyage = {
+    id: "voyage",
+    fleets: [first, second],
+    portals: [panel("portal", "portal-note")],
+    portalLayout: { root: null },
+  };
+  const layout = {
+    voyages: [
+      voyage,
+      {
+        id: "elsewhere",
+        fleets: [
+          {
+            id: "foreign",
+            vessels: [panel("foreign", "foreign-note")],
+            root: null,
+          },
+        ],
+        portals: [],
+      },
+    ],
+    contents: [
+      ...["shown", "live", "dead"].map((id) => ({
+        id,
+        typeId: "terminal",
+        backend: id,
+      })),
+      ...["note", "other-note", "portal-note", "foreign-note"].map((id) => ({
+        id,
+        typeId: "notes",
+      })),
+    ],
+  };
+  const destination = {
+    kind: "panel",
+    owner: { kind: "fleet", id: "first" },
+    insertion: { kind: "beside", id: "visible", side: "right" },
+  };
+  const choices = (processes) =>
+    exports
+      .hiddenPanels(layout, destination, processes)
+      .map((panel) => panel.id);
+  assert.deepEqual(choices([]), ["notes", "other"]);
+  assert.deepEqual(
+    choices([
+      { contentId: "live", terminalId: "wrong", state: "live", pid: 42 },
+    ]),
+    ["notes", "other"],
+  );
+  assert.deepEqual(
+    choices([
+      { contentId: "live", terminalId: "live", state: "live", pid: 42 },
+      { contentId: "dead", terminalId: "dead", state: "finished", pid: 43 },
+    ]),
+    ["notes", "shell", "other"],
+  );
+  first.maximizedPlacement = "visible";
+  assert.deepEqual(choices([]), ["notes", "other"]);
+});
+
+test("Agents joins live identities, excludes Bash and navigates the renamed placement", async () => {
+  const { activityBadge } = await import("./mods/header/activity.js");
+  const buttons = new Map();
+  const exports = {};
+  const source = ts.transpileModule(
+    fs.readFileSync(`${__dirname}/mods/header/agents.ts`, "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    },
+  ).outputText;
+  new Function("exports", "require", source)(exports, (name) => {
+    if (name === "gpui-kit") return { div: element };
+    if (name === "gpui-base")
+      return {
+        Button: {
+          new(id) {
+            const node = element();
+            buttons.set(id, node);
+            return node;
+          },
+        },
+      };
+    if (name === "voyager_header") return { projection: () => ({}) };
+    return { activityBadge };
+  });
+  const contents = [
+    {
+      id: "agent",
+      typeId: "terminal",
+      backend: "agent-terminal",
+      launch: { kind: "codex" },
+    },
+    { id: "shell", typeId: "terminal", backend: "shell-terminal" },
+  ];
+  const layout = {
+    contents,
+    voyages: [
+      {
+        id: "voyage",
+        name: "Voyage",
+        portals: [],
+        fleets: [
+          {
+            name: "Fleet 1",
+            vessels: [
+              { id: "same-placement", content: "agent", name: "Renamed agent" },
+              { id: "bash", content: "shell", name: "Bash" },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const agent = {
+    contentId: "agent",
+    terminalId: "agent-terminal",
+    state: "live",
+    foreground: "codex",
+    pid: 42,
+  };
+  const shell = {
+    contentId: "shell",
+    terminalId: "shell-terminal",
+    state: "live",
+    foreground: "bash",
+    pid: 43,
+  };
+  const navigated = [];
+  const render = (processes, error) =>
+    exports.agentsView(
+      layout,
+      processes,
+      {},
+      (...args) => navigated.push(args),
+      error,
+    );
+  render([agent, shell]);
+  assert.deepEqual([...buttons.keys()], ["agent-same-placement"]);
+  const row = buttons.get("agent-same-placement");
+  assert.match(
+    row.calls.find(([name]) => name === "accessibility_label")[1],
+    /Renamed agent, Codex, No reported status/,
+  );
+  const cx = {};
+  row.calls.find(([name]) => name === "on_click")[1]({}, cx);
+  assert.deepEqual(navigated, [["same-placement", cx]]);
+  for (const observed of [
+    { ...agent, terminalId: "wrong" },
+    { ...agent, state: "finished" },
+  ]) {
+    buttons.clear();
+    render([observed, shell]);
+    assert.equal(buttons.size, 0);
+  }
+  const unavailable = render([], "Core observation failed");
+  const children = unavailable.calls.find(([name]) => name === "children")[1];
+  assert.equal(
+    children[0].calls.find(([name]) => name === "accessibility_label")[1],
+    "Agent status unavailable",
+  );
 });

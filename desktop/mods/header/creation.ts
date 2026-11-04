@@ -8,9 +8,12 @@ import {
 } from "./validate.js";
 import type { Context, NativeElement } from "gpui-kit";
 import type { Catalog } from "../../../contract/generated/launchCatalog";
+import type { HiddenPanel } from "./panels.js";
 import type { Request } from "../../../contract/generated/request";
 
 type Create = Extract<Request["action"], { operation: "create-content" }>;
+export type HiddenChoices = { panels: HiddenPanel[]; error?: string };
+type Reopen = Extract<Request["action"], { operation: "reopen-panel" }>;
 type Opening = {
   id: string;
   version: string;
@@ -21,6 +24,9 @@ export class CreationPicker {
   current: Opening | null = null;
   catalog: Catalog | null = null;
   notes = false;
+  agents = false;
+  hidden: HiddenPanel[] = [];
+  expanded = false;
   error = "";
 
   open(
@@ -28,19 +34,34 @@ export class CreationPicker {
     destination: Create["destination"],
     version: string,
     cx: Context,
+    hidden: () => Promise<HiddenChoices> = async () => ({ panels: [] }),
   ) {
     const requested = { id, version, destination };
     this.current = requested;
     this.catalog = null;
     this.notes = false;
+    this.agents = false;
+    this.hidden = [];
+    this.expanded = false;
     this.error = "";
     cx.spawn(async (task) => {
-      const results = await Promise.allSettled([launches(), descriptions()]);
+      const results = await Promise.allSettled([
+        launches(),
+        descriptions(),
+        hidden(),
+      ]);
       if (this.current !== requested) return;
       for (const [index, result] of results.entries()) {
         try {
           if (result.status === "rejected") throw result.reason;
-          const value: unknown = JSON.parse(result.value);
+          if (index === 2) {
+            const hidden = result.value as HiddenChoices;
+            this.hidden = hidden.panels;
+            if (hidden.error)
+              this.error += (this.error ? "\n" : "") + hidden.error;
+            continue;
+          }
+          const value: unknown = JSON.parse(result.value as string);
           if (index === 0) {
             if (!validateCatalog(value))
               throw Error("Invalid worker choices from the application");
@@ -48,6 +69,11 @@ export class CreationPicker {
           } else {
             if (!validateContentCatalog(value))
               throw Error("Invalid content choices from the application");
+            this.agents = value.types.some(
+              (kind) =>
+                kind.typeId === "agents" &&
+                kind.availability.status === "ready",
+            );
             this.notes = value.types.some(
               (kind) => kind.typeId === "notes" && Boolean(kind.state),
             );
@@ -67,8 +93,9 @@ export class CreationPicker {
     id: string,
     destination: Create["destination"],
     version: string,
-    create: (action: Create, version: string, cx: Context) => void,
+    create: (action: Create | Reopen, version: string, cx: Context) => void,
     trigger: NativeElement,
+    hidden: () => Promise<HiddenChoices> = async () => ({ panels: [] }),
   ): NativeElement {
     const opening = this.current?.id === id ? this.current : null;
     const entity = destination.owner.kind === "portals" ? "Portal" : "Vessel";
@@ -152,6 +179,70 @@ export class CreationPicker {
               );
             }),
         );
+      if (this.agents)
+        content.child(
+          Button.new("create-agents-vessel")
+            .accessibility_label(`Create Agents ${entity}`)
+            .justify_start()
+            .child("Agents")
+            .on_click((_event, cx) => {
+              if (this.current !== opening) return;
+              this.current = null;
+              create(
+                {
+                  operation: "create-content",
+                  typeId: "agents",
+                  destination: opening.destination,
+                },
+                opening.version,
+                cx,
+              );
+            }),
+        );
+      if (this.hidden.length)
+        content.child(
+          Button.new("hidden-vessels")
+            .accessibility_label("Hidden vessels")
+            .justify_start()
+            .child(
+              `${this.expanded ? "⌄" : "›"} Hidden vessels (${this.hidden.length})`,
+            )
+            .on_click((_event, cx) => {
+              this.expanded = !this.expanded;
+              cx.notify();
+            }),
+        );
+      if (this.expanded)
+        for (const panel of this.hidden)
+          content.child(
+            Button.new(`reopen-${panel.id}`)
+              .accessibility_label(
+                `Reopen ${panel.name}${this.hidden.filter((item) => item.name === panel.name).length > 1 ? ` in ${panel.path}` : ""}`,
+              )
+              .tooltip(panel.path)
+              .justify_start()
+              .child(
+                div()
+                  .flex()
+                  .flex_col()
+                  .gap(2)
+                  .child(panel.name)
+                  .child(div().text_size(9).child(panel.path)),
+              )
+              .on_click((_event, cx) => {
+                if (this.current !== opening) return;
+                this.current = null;
+                create(
+                  {
+                    operation: "reopen-panel",
+                    id: panel.id,
+                    destination: opening.destination,
+                  },
+                  opening.version,
+                  cx,
+                );
+              }),
+          );
       if (this.error)
         content.child(
           div().text_size(10).text_color("#ffcad3").child(this.error),
@@ -165,7 +256,8 @@ export class CreationPicker {
           cx.notify();
           return;
         }
-        if (this.current?.id !== id) this.open(id, destination, version, cx);
+        if (this.current?.id !== id)
+          this.open(id, destination, version, cx, hidden);
       })
       .trigger(trigger)
       .content(content);

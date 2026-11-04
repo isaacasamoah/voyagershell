@@ -1,6 +1,7 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { Terminal } from "voyager_native";
+import { agentsView } from "./agents.js";
 import { Notes } from "voyager_content_view";
 import { projection } from "voyager_header";
 import { activityBadge } from "./activity.js";
@@ -45,6 +46,12 @@ export function renderPanel(workspace, placement, scope, group) {
         .min_h(0)
         .rounded(3)
         .bg(colors.background)
+        .on_hover((hovered, cx) => {
+          if (hovered) workspace.hoveredPanel = placement.id;
+          else if (workspace.hoveredPanel === placement.id)
+            workspace.hoveredPanel = null;
+          cx.notify();
+        })
         .on_mouse_down("left", (_event, cx) => {
           workspace.focused = placement.id;
           cx.notify();
@@ -88,30 +95,6 @@ export function renderPanel(workspace, placement, scope, group) {
                         choose: (_version, cx) =>
                           workspace.editName(scope, placement.name, cx),
                       },
-                      {
-                        label: "Hide",
-                        choose: (version, cx) =>
-                          workspace.run(
-                            {
-                              operation: "set-panel-hidden",
-                              id: placement.id,
-                              hidden: true,
-                            },
-                            cx,
-                            undefined,
-                            version,
-                          ),
-                      },
-                      {
-                        label: "Remove from layout",
-                        choose: (version, cx) =>
-                          workspace.run(
-                            { operation: "remove-panel", id: placement.id },
-                            cx,
-                            undefined,
-                            version,
-                          ),
-                      },
                       ...(scope.kind === "portal"
                         ? workspace.layoutItems(group)
                         : []),
@@ -131,43 +114,53 @@ export function renderPanel(workspace, placement, scope, group) {
                     : [],
                 ),
             )
-            .children(
-              canMaximize
-                ? [
-                    Button.new(`maximize-${placement.id}`)
-                      .accessibility_label(
-                        `${maximized ? "Restore" : "Maximize"} ${entity}`,
-                      )
-                      .tooltip(
-                        `${maximized ? "Restore" : "Maximize"} ${entity}`,
-                      )
-                      .opacity(0)
-                      .hover((element) => element.opacity(1))
-                      .focus((element) => element.opacity(1))
-                      .w(24)
-                      .h(24)
-                      .p(4)
-                      .on_mouse_down("left", (_event, cx) =>
-                        cx.stop_propagation(),
-                      )
-                      .child(
-                        svg(maximized ? "restore.svg" : "maximize.svg").size(
-                          12,
-                        ),
-                      )
-                      .on_click((_event, cx) => {
-                        workspace.focused = placement.id;
-                        workspace.run(
-                          {
-                            operation: "set-panel-maximized",
-                            id: placement.id,
-                            maximized: !maximized,
-                          },
-                          cx,
-                        );
-                      }),
-                  ]
-                : [],
+            .child(workspace.splitControl(placement, group, "right"))
+            .child(workspace.splitControl(placement, group, "bottom"))
+            .child(
+              Button.new(`maximize-${placement.id}`)
+                .accessibility_label(
+                  `${maximized ? "Restore" : "Maximize"} ${entity}`,
+                )
+                .tooltip(`${maximized ? "Restore" : "Maximize"} ${entity}`)
+                .disabled(!maximized && !canMaximize)
+                .opacity(workspace.hoveredPanel === placement.id ? 1 : 0)
+                .hover((element) => element.opacity(1))
+                .focus((element) => element.opacity(1))
+                .w(22)
+                .h(22)
+                .p(4)
+                .on_mouse_down("left", (_event, cx) => cx.stop_propagation())
+                .child(svg(maximized ? "restore.svg" : "maximize.svg").size(12))
+                .on_click((_event, cx) => {
+                  workspace.focused = placement.id;
+                  workspace.run(
+                    {
+                      operation: "set-panel-maximized",
+                      id: placement.id,
+                      maximized: !maximized,
+                    },
+                    cx,
+                  );
+                }),
+            )
+            .child(
+              Button.new(`close-${placement.id}`)
+                .accessibility_label(`Close ${entity} ${placement.name}`)
+                .tooltip("Close viewer. The process keeps running.")
+                .opacity(workspace.hoveredPanel === placement.id ? 1 : 0)
+                .hover((element) => element.opacity(1))
+                .focus((element) => element.opacity(1))
+                .w(22)
+                .h(22)
+                .p(4)
+                .on_mouse_down("left", (_event, cx) => cx.stop_propagation())
+                .child(svg("close.svg").size(12))
+                .on_click((_event, cx) =>
+                  workspace.run(
+                    { operation: "remove-panel", id: placement.id },
+                    cx,
+                  ),
+                ),
             ),
         )
         .child(
@@ -175,31 +168,40 @@ export function renderPanel(workspace, placement, scope, group) {
             .flex_1()
             .min_h(0)
             .child(
-              content.typeId === "notes"
-                ? Notes.new(content.id, { contentId: content.id })
-                : terminal
-                  ? Terminal.new(terminal).size_full()
-                  : div()
-                      .p(20)
-                      .text_size(12)
-                      .text_color(colors.muted)
-                      .child(workspace.terminalStatus(content))
-                      .children(
-                        startShell
-                          ? [
-                              Button.new(`start-shell-${placement.id}`)
-                                .accessibility_label("Start new shell")
-                                .disabled(workspace.busy || !workspace.fresh)
-                                .child("Start new shell")
-                                .on_click((_event, cx) =>
-                                  workspace.run(startShell, cx),
-                                ),
-                            ]
-                          : [],
-                      ),
+              content.typeId === "agents"
+                ? agentsView(
+                    workspace.layout,
+                    workspace.processes,
+                    workspace.reportedActivity,
+                    (id, cx) =>
+                      workspace.run({ operation: "reveal-panel", id }, cx),
+                    workspace.processError,
+                  )
+                : content.typeId === "notes"
+                  ? Notes.new(content.id, { contentId: content.id })
+                  : terminal
+                    ? Terminal.new(terminal).size_full()
+                    : div()
+                        .p(20)
+                        .text_size(12)
+                        .text_color(colors.muted)
+                        .child(workspace.terminalStatus(content))
+                        .children(
+                          startShell
+                            ? [
+                                Button.new(`start-shell-${placement.id}`)
+                                  .accessibility_label("Start new shell")
+                                  .disabled(workspace.busy || !workspace.fresh)
+                                  .child("Start new shell")
+                                  .on_click((_event, cx) =>
+                                    workspace.run(startShell, cx),
+                                  ),
+                              ]
+                            : [],
+                        ),
             ),
         )
-        .children(workspace.splitEdges(placement, group))
+        .children(workspace.splitPreview(placement))
         .children(
           workspace.drag?.kind === "vessel" &&
             workspace.drag.target === placement.id &&

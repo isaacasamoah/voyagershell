@@ -25,7 +25,8 @@ use voyager_app::{
     client::{Client, WorkspaceNotice},
     core::{Error, Viewer},
 };
-use voyager_contract::Request;
+use voyager_contract::administrator::{ProcessAction, ProcessInput, ProcessRequest};
+use voyager_contract::{Context as WorkspaceContext, Request};
 
 use crate::terminal::Viewers;
 
@@ -213,6 +214,8 @@ fn load(
     let calls = client.clone();
     let context_reader = client.clone();
     let launches_reader = client.clone();
+    let process_reader = client.clone();
+    let process_executor = cx.background_executor().clone();
     let activity_reader = workspace_binding.activity.clone();
     let activity_refresh = client.clone();
     let terminal_client = client.clone();
@@ -234,6 +237,44 @@ fn load(
                 let value = serde_json::to_string(&catalog)
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
                 Ok(gpui_shell::HostValue::from(value))
+            })
+        })
+        .async_function("processes", move |arguments| {
+            let revision = arguments.string(0)?.to_owned();
+            let version = revision.parse::<u64>().map_err(|_| {
+                gpui_shell::HostError::new("processes expects a workspace revision")
+            })?;
+            if arguments.len() != 1 || version.to_string() != revision {
+                return Err(gpui_shell::HostError::new(
+                    "processes expects one decimal revision",
+                ));
+            }
+            let client = process_reader.clone();
+            let executor = process_executor.clone();
+            Ok(async move {
+                let response = executor
+                    .spawn(async move {
+                        client.process(
+                            WorkspaceContext::Workspace,
+                            ProcessRequest {
+                                request_id: client.request_id(),
+                                input: ProcessInput {
+                                    expected_version: version,
+                                    action: ProcessAction::List,
+                                },
+                            },
+                        )
+                    })
+                    .await
+                    .map_err(|error| match error {
+                        voyager_app::client::CallError::Rejected(message)
+                        | voyager_app::client::CallError::Unconfirmed(message) => {
+                            gpui_shell::HostError::new(message)
+                        }
+                    })?;
+                let value = serde_json::to_string(&response)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                Ok(HostValue::from(value))
             })
         })
         .function("reported_activity", move |_| {

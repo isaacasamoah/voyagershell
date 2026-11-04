@@ -388,6 +388,27 @@ export function renderFleets(
       ),
     );
   }
+  tabs.child(
+    Button.new("create-fleet-tab")
+      .accessibility_label("Create Fleet")
+      .tooltip("New Fleet")
+      .w(24)
+      .h(26)
+      .p(2)
+      .flex_shrink_0()
+      .child("+")
+      .on_mouse_down("left", (_event, cx) => cx.stop_propagation())
+      .on_click((_event, cx) =>
+        workspace.run(
+          {
+            operation: "create-fleet",
+            voyage: voyage.id,
+            name: `Fleet ${voyage.fleets.length + 1}`,
+          },
+          cx,
+        ),
+      ),
+  );
   return strip.child(tabs).child(workspace.portalControls(voyage));
 }
 
