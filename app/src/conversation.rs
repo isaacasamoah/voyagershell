@@ -6,7 +6,7 @@ use voyager_contract::{Context, Layout, Vessel};
 pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
     let mut focus = Focus {
         scope: layout.context.clone(),
-        path: vec!["Workspace".into()],
+        path: vec!["Overwatch".into()],
         cwd: None,
         revision,
     };
@@ -21,7 +21,7 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
         let prefix = if home {
             vec!["Home".to_owned()]
         } else {
-            vec!["Workspace".to_owned(), voyage.name.clone()]
+            vec![voyage.name.clone()]
         };
         if matches!(&layout.context, Context::Voyage { id } if id == &voyage.id) {
             focus.path = prefix.clone();
@@ -74,9 +74,7 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
                 .find(|c| c.id == placement.content)
                 .ok_or("Focused content is missing")?;
             focus.path = prefix;
-            focus
-                .path
-                .extend(["Portals".to_owned(), placement.name.clone()]);
+            focus.path.push(placement.name.clone());
             focus.cwd = Some(content.cwd.clone());
             return Ok(focus);
         }
@@ -265,20 +263,18 @@ mod tests {
             .unwrap();
         let captured = focus(&model.layout, 42).unwrap();
         assert_eq!(captured.scope, model.layout.context);
-        assert_eq!(
-            captured.path,
-            ["Workspace", "Alpha", "Fleet 1", "Terminal 1"]
-        );
+        assert_eq!(captured.path, ["Alpha", "Fleet 1", "Terminal 1"]);
         assert_eq!(captured.cwd.as_deref(), Some("/alpha"));
         assert_eq!(captured.revision, 42);
         model.layout.voyages[0].name = "Renamed".into();
-        assert_eq!(captured.path[1], "Alpha");
+        assert_eq!(captured.path[0], "Alpha");
         model.layout.context = Context::Fleet { id: fleet };
         assert_eq!(
             focus(&model.layout, 43).unwrap().path,
-            ["Workspace", "Renamed", "Fleet 1"]
+            ["Renamed", "Fleet 1"]
         );
         model.layout.context = Context::Voyage { id: voyage };
+        assert_eq!(focus(&model.layout, 44).unwrap().path, ["Renamed"]);
         assert_eq!(
             focus(&model.layout, 44).unwrap().cwd.as_deref(),
             Some("/alpha")
@@ -294,9 +290,11 @@ mod tests {
         };
         assert_eq!(
             focus(&model.layout, 45).unwrap().path,
-            ["Workspace", "Renamed", "Portals", "Portal test"]
+            ["Renamed", "Portal test"]
         );
         model.layout.context = Context::Workspace;
+        assert_eq!(focus(&model.layout, 46).unwrap().path, ["Overwatch"]);
+        assert_eq!(focus(&model.layout, 46).unwrap().scope, Context::Workspace);
         assert!(focus(&model.layout, 46).unwrap().cwd.is_none());
     }
 
