@@ -4,6 +4,13 @@ use std::ops::Range;
 
 pub(super) fn workspace_shortcut(key: &gpui::Keystroke) -> bool {
     let modifiers = key.modifiers;
+    if !modifiers.function
+        && modifiers.alt
+        && (modifiers.control ^ modifiers.platform)
+        && key.key.eq_ignore_ascii_case("p")
+    {
+        return true;
+    }
     if !modifiers.shift || modifiers.alt || modifiers.function {
         return false;
     }
@@ -206,6 +213,8 @@ mod tests {
             "ctrl-shift-o",
             "ctrl-shift-e",
             "ctrl-shift-t",
+            "ctrl-alt-p",
+            "ctrl-alt-shift-p",
             if cfg!(target_os = "macos") {
                 "cmd-shift-enter"
             } else {
@@ -217,7 +226,16 @@ mod tests {
                 "{key}"
             );
         }
-        for key in ["z", "ctrl-z", "ctrl-alt-shift-z", "enter", "shift-enter"] {
+        for key in [
+            "z",
+            "ctrl-z",
+            "ctrl-alt-shift-z",
+            "enter",
+            "shift-enter",
+            "alt-p",
+            "ctrl-p",
+            "ctrl-alt-o",
+        ] {
             assert!(
                 !super::workspace_shortcut(&gpui::Keystroke::parse(key).unwrap()),
                 "{key}"

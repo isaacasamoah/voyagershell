@@ -44,8 +44,9 @@ Core checks do not establish the separate integrated native UX journey.
 
 ## Pane maximize and restore
 
-Each Fleet optionally records `maximizedPlacement` in the existing workspace
-document. `set-panel-maximized` names one placement and an explicit Boolean.
+Each Fleet and Portal arrangement optionally records `maximizedPlacement` in the
+existing workspace document. `set-panel-maximized` names one placement and an
+explicit Boolean.
 The Rust owner checks scope, accepted tree membership and the existing version
 before saving. A restore for another placement refuses unchanged. Stored invalid
 targets are rejected before publication; a narrow projection omits other IDs.
@@ -91,36 +92,41 @@ capture appears wider, but its equal-scale provenance has not been established.
 Matched native/reference screenshots must resolve that discrepancy rather than
 introducing an arbitrary scale adjustment. Maximum depth is 12, maximum node count is 64, and fixed sizes
 contain 1 to 4096 logical pixels. These bounds limit the native composition, not
-total application memory. The Portal block defaults to overlay; explicit
-make-room uses the same instance in flow. In both modes the Portal block must be
+total application memory. In both modes the Portal block must be
 the last child of a row with the active Fleet in another sibling subtree. Its
 subtree must also be last in every enclosing row; columns may retain chrome
-above and below it. Left, top, bottom and middle Portal placement refuses unchanged. Intrinsic/content
-overlay size is also refused. Fixed sizing sets the column width; fill covers
-the row. Stack selection remains outside this increment.
+above and below it. Left, top, bottom and middle Portal placement refuses unchanged.
+Intrinsic/content overlay size is also refused. Legacy canvas mode and fixed
+width supply defaults when older data has no Portal presentation. The current
+owner projects `portalLayout` per Voyage, with visibility, overlay/make-room mode
+and pixel width. Home has its own settings. The Header uses that projection and
+the native `Column` control for the full-height right column. Stack selection
+remains outside this canvas contract.
 
-`desktop/mods/header/canvas.ts` composes the actual saved outer tree through
-Header region factories. It retains the existing terminal, Notes, native split,
-avatar and conversation owners. Collapsing the sidebar keeps a 48-pixel rail
-and sends only `set-sidebar`, without Dock. Native named controls expose
-creation, Refresh, Home, sidebar and Workspace layout actions. The same retained
-Chat toggle and panel sit directly below the primary Brand/avatar dock, before
-Home and Voyages. The compact rail has its own control row without another Chat
-instance. The primary row also takes the reviewed native Speech control during
-Root's deliberate voice integration. Empty dock circles
-and the redundant top context bar are removed. Compact dock names reserve the
-existing controller footprint. Only the selected Vessel gets the subtle
-blue/purple/amber frame, composed from the public SDK's two-stop gradients.
+`desktop/mods/header/main.ts` controls retained preparation and versioned actions.
+`panel-view.ts` renders shared panel controls and content; `navigation-view.ts`
+renders the sidebar, Fleet tabs and context bar. `panels.ts` selects groups and
+visible members from the Rust projection. `canvas.ts` composes the saved outer
+tree and panel frames. Home uses the same panel factories and its retained global
+arrangement, rather than the former overview. These modules retain the existing
+terminal, Notes, divider, avatar and conversation owners.
 
-The Workspace layout panel uses the SDK's retained multiline Textarea. Apply
-validates the generated shape and sends the exact opening revision. A refusal
-retains the draft. Uncertainty blocks another Apply until explicit Reload,
-which reads the owner and replaces the draft/revision without repeating an
-effect. Header shortcuts do not act on the workspace while this editor is open.
-The current source checks establish no app build, matched native screenshot or
-interaction acceptance. The original avatar controller's Home pose and rectangular
-drag-preview geometry still cannot represent an exact circular landing target.
-Speech/lifecycle declarations are deliberately integrated separately.
+Collapsing the sidebar keeps a 48-pixel rail and sends only `set-sidebar`, without
+Dock. Expanded and compact speech/chat controls share their retained owners.
+Humans arrange panels through gestures, keyboard shortcuts and context menus.
+Split captures its destination and revision before offering content choice;
+cancelling creates nothing. Fleet context menus expose saved arrangements.
+Authorized agents use the generated JSON actions, including `update-canvas`,
+through the same owner. The current Header exposes no raw layout JSON editor.
+
+The retained `layout-panel.ts` belongs to the earlier Workspace layout-editor
+trial. That editor used a native Textarea and revision-bound Apply/Reload, with
+draft retention after refusal and no automatic replay after uncertainty. Its
+recorded click-through failure remains historical evidence. It is not the current
+human layout workflow. The original avatar trial's Home pose and rectangular
+preview are also historical; current source has a circular primary landing
+preview. These source changes do not complete the full native UX checkpoint or
+establish matched appearance, input behavior or performance.
 
 ## Native overlay input
 
@@ -132,18 +138,25 @@ GPUI `div().occlude()` excludes mouse and scroll hitboxes behind that container;
 children once. Child editors retain their native focus/input/scroll handlers.
 There is no full-window input shield, terminal mute or second panel owner.
 
-The layout editor, overlay-mode Portal region and compact Chat overlay use this
-container. Make-room Portals stay in ordinary canvas flow. The renderer derives
-an overlay's edge from its original authored axis/index, then paints that
-absolute child after ordinary siblings inside the same parent. Flow order stays
-unchanged. The owner now permits only the right Portal column; the retained
-overlay implementation's other anchoring directions are not valid saved layouts.
-Geometry, content
-identity, context and all durable actions remain in their existing owners.
-Outside the actual container rectangle, ordinary workspace controls remain
-available. These source changes address the recorded editor click-through;
-constructor/typing checks do not establish native focus or pointer routing.
-The real saved failure and Root's fresh native rerun remain the comparison.
+Compact Chat and the retained earlier layout-editor trial use this container.
+The current Portal region uses `PortalArea.new(id, {})` from `voyager_avatar`.
+It applies the same native occlusion and measures the opaque column, including
+empty space, in workspace-local coordinates. The existing avatar Geometry keeps
+one optional area and retires it when the wrapper disappears. Individual Portal
+targets still identify the panel under a drop. Vessel hit testing excludes only
+the actual area; landing, preview and visibility use the largest uncovered
+rectangle. The measured `dock_target_visible` read drives the existing compact
+footer fallback without changing explicit context.
+
+`Column` in `desktop/src/split.rs` provides the same pixel-width resize control
+in both modes. Overlay paints it above the Fleet canvas; make-room places both
+in ordinary flow. Accepted width changes use `set-portal-presentation` with the
+captured workspace version. Rust persists that Voyage's visibility, mode and
+width. Content identity and durable actions remain in their existing owners.
+Outside the actual opaque rectangle, ordinary controls remain available.
+Constructor, typing and geometry checks do not establish native focus, pointer
+routing or the complete UX revision. Keep earlier editor evidence at its original
+scope when comparing the current application.
 
 Pinned Herdr App `1581a587` uses this public mechanism for float content in
 `src/window/floats.rs:209`. The pinned GPUI implementation sets
@@ -308,7 +321,8 @@ claim new platform support or a measured performance improvement.
 
 ## Script authoring and checking
 
-The repository authors the workspace composition, Home and chat in TypeScript.
+The repository authors workspace, shared panel, navigation and chat views in
+TypeScript.
 The profile receives the emitted JavaScript through the existing seed-once and
 live-edit path. Contract generation produces typed workspace and conversation
 wrappers alongside their runtime validators. Run `npm run contract:generate` after
@@ -346,13 +360,13 @@ unavailable. The profile's seeded JavaScript stays editable and is preserved;
 repository checks do not automatically validate later personal edits. See
 [native Notes](content.md) for remaining owner, signature and lifecycle limits.
 
-Go there for a hidden Vessel uses its existing placement identity. The workspace
-owner selects that Vessel's original Voyage and Fleet, keeps the current split
-tree intact and adds the hidden leaf beside it only when absent. It does not
-change the captured avatar context, content, backend or ID counter, and an
-unknown placement is refused before mutation. Requests from a captured scope
-remain limited to the Vessel visible in that scope's projection. The integrated
-Linux journey verifies the revealed Vessel's same live PID and process start.
+Go there sends `reveal-panel` with a retained Vessel or Portal placement ID. The
+owner selects its original arrangement, clears hidden state and reinserts its
+leaf only when absent. A Portal reveal also opens its own Voyage's column. This
+preserves content, backend and explicit dock context. Unknown placements refuse
+before mutation, and captured scope still limits each request. The earlier Linux
+Vessel-reveal journey recorded the same live PID and process start; it does not
+accept the new shared Portal/Home UI or the full native UX checkpoint.
 
 Name and Composer share the native text adapter in desktop/src/text.rs. Each
 retains one gpui-base InputState and supplies accessibility metadata through that

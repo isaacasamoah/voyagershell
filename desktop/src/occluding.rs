@@ -71,16 +71,16 @@ mod tests {
         let outcomes = [
             (
                 "creation",
-                "new CreationPicker().render('pane', {kind:'vessel', fleet:'fleet', after:'pane', axis:'horizontal'}, '7', () => {});",
+                "new CreationPicker().render('pane', {kind:'panel', owner:{kind:'fleet', id:'fleet'}, insertion:{kind:'beside', id:'pane', side:'right'}}, '7', () => {}, div());",
                 true,
             ),
             (
                 "creation-open",
                 r#"const picker = new CreationPicker();
-const destination = {kind:'vessel', fleet:'fleet', after:'pane', axis:'horizontal'};
+const destination = {kind:'panel', owner:{kind:'fleet', id:'fleet'}, insertion:{kind:'beside', id:'pane', side:'right'}};
 picker.current = {id:'pane', version:'7', destination};
 picker.catalog = {settings:{default:'codex', entries:[{id:'codex', name:'Codex', launch:{kind:'codex', model:'gpt-6.1-sol', effort:'high', permissions:'yolo'}}]}, available:['codex'], errors:[], path:null};
-picker.render('pane', destination, '7', () => {});"#,
+picker.render('pane', destination, '7', () => {}, div());"#,
                 true,
             ),
             (

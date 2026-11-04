@@ -5,17 +5,16 @@ import type { Canvas, Node, Region } from "../../../contract/generated/canvas";
 export function composeCanvas(
   canvas: Canvas,
   region: (name: Region) => NativeElement | null,
+  column: (underlay: NativeElement, portals: NativeElement) => NativeElement,
 ): NativeElement {
-  function visit(
-    node: Node,
-    axis: "row" | "column",
-    first = true,
-  ): NativeElement | null {
+  function visit(node: Node, axis: "row" | "column"): NativeElement | null {
     const block = node.kind === "block";
     const element = block ? region(node.region) : div().relative().flex();
     if (!element) return null;
     element.min_w(0).min_h(0);
-    const size = node.size?.kind || "fill";
+    if (block && node.region === "portals") {
+      return element.w_full().h_full();
+    }
     if (block && node.region === "sidebar" && canvas.sidebarCollapsed) {
       if (axis === "row") element.w(48);
       else element.h(48);
@@ -24,35 +23,27 @@ export function composeCanvas(
       if (axis === "row") element.w(node.size.pixels);
       else element.h(node.size.pixels);
       element.flex_shrink_0();
-    } else if (size === "fill") element.flex_1();
+    } else if (!node.size || node.size.kind === "fill") element.flex_1();
     else element.flex_shrink_0();
     if (!block) {
       if (node.kind === "column") element.flex_col();
       const children: NativeElement[] = [];
-      const overlays: NativeElement[] = [];
-      for (const [index, child] of node.children.entries()) {
-        const rendered = visit(child, node.kind, index === 0);
+      let portals: NativeElement | null = null;
+      for (const child of node.children) {
+        const rendered = visit(child, node.kind);
         if (!rendered) continue;
-        const overlay =
-          canvas.portalMode !== "make-room" &&
-          child.kind === "block" &&
-          child.region === "portals";
-        (overlay ? overlays : children).push(rendered);
+        if (child.kind === "block" && child.region === "portals")
+          portals = rendered;
+        else children.push(rendered);
       }
-      element.children([...children, ...overlays]);
-    } else if (node.region === "portals" && canvas.portalMode !== "make-room") {
-      element.absolute();
-      if (axis === "row") {
-        element.top(0).bottom(0);
-        if (first) element.left(0);
-        else element.right(0);
-        if (size === "fill") element.w_full();
-      } else {
-        element.left(0).right(0);
-        if (first) element.top(0);
-        else element.bottom(0);
-        if (size === "fill") element.h_full();
-      }
+      if (portals)
+        element.child(
+          column(
+            div().flex().flex_1().min_w(0).min_h(0).children(children),
+            portals,
+          ),
+        );
+      else element.children(children);
     }
     return element;
   }

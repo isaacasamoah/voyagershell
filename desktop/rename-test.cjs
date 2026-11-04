@@ -218,7 +218,7 @@ test("missing owner references fail with explicit invariant errors", async () =>
   const { view, cx, reply, layout } = fixture();
   await reply();
   assert.throws(
-    () => view.pane({ kind: "leaf", placement: "missing" }, { vessels: [] }),
+    () => view.pane({ kind: "leaf", placement: "missing" }, { members: [] }),
     /Split placement is unavailable/,
   );
   layout.contents = [];

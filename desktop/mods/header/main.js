@@ -1,7 +1,7 @@
 import { View, div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { projection } from "voyager_header";
-import { Brand, Layer, Target } from "voyager_avatar";
+import { Layer, Target, PortalArea } from "voyager_avatar";
 import { take_result, window_epoch } from "voyager_avatar";
 import {
   response as validateResponse,
@@ -17,16 +17,24 @@ import {
   refresh_activity,
 } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture } from "voyager_native";
-import { Terminal, TerminalState, Split as NativeSplit } from "voyager_native";
+import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding } from "voyager_native";
 import { Chat } from "./chat.js";
-import { Speech } from "voyager_conversation";
-import { Notes } from "voyager_content_view";
-import { homeOverview } from "./home.js";
-import { composeCanvas, vesselFrame } from "./canvas.js";
+import { composeCanvas } from "./canvas.js";
 import { CreationPicker } from "./creation.js";
-import { activityBadge } from "./activity.js";
+import { renderPanel } from "./panel-view.js";
+import {
+  renderSidebar,
+  renderFleets,
+  renderContext,
+} from "./navigation-view.js";
 import { WorkspaceMenu } from "./menu.js";
+import {
+  activeGroups,
+  currentVoyage,
+  panelGroups,
+  visiblePanels,
+} from "./panels.js";
 const CONTEXT_REFRESH_MS = 3000;
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
@@ -104,14 +112,14 @@ export default class Workspace extends View {
   ) {
     this.drag = null;
     if (this.busy) {
-      if (action.operation === "resize-split") {
+      if (action.operation === "resize-panel-split") {
         this.splitReset += 1;
         this.status =
           "Resize was not saved while another workspace request was pending.";
         cx.notify();
         return;
       }
-      if (action.operation === "save-layout" && this.savingLayout) {
+      if (action.operation === "save-panel-layout" && this.savingLayout) {
         this.pendingLayout = action;
       } else if (this.editing?.saving || this.savingLayout) {
         if (
@@ -132,25 +140,26 @@ export default class Workspace extends View {
       "select-voyage",
     ].includes(action.operation);
     const oldLayout = this.layout;
-    const oldVoyage = oldLayout?.voyages.find(
-      (item) => item.id === oldLayout.selectedVoyage,
-    );
-    const oldFleet = oldVoyage?.fleets.find(
-      (item) => item.id === oldLayout?.selectedFleet,
-    );
     const maximization =
-      action.operation === "set-vessel-maximized" ? action : null;
-    const splitMaximized =
-      !!oldFleet?.maximizedPlacement &&
-      (action.operation === "split" ||
-        (action.operation === "create-content" &&
-          action.destination.kind === "vessel"));
+      action.operation === "set-panel-maximized" ? action : null;
+    const creating = action.operation === "create-content" ? action : null;
+    const oldGroups = oldLayout ? activeGroups(oldLayout) : [];
+    const splitMaximized = Boolean(
+      creating &&
+      oldGroups.find(
+        (group) =>
+          JSON.stringify(group.owner) ===
+          JSON.stringify(creating.destination.owner),
+      )?.maximizedPlacement,
+    );
     const transferFocus =
-      (changesSelection || !!maximization || splitMaximized) &&
-      this.displayedVessels(oldFleet).some(
-        (vessel) =>
-          this.terminals.get(vessel.content)?.rememberFocus() === true,
-      );
+      (changesSelection || Boolean(maximization) || splitMaximized) &&
+      oldGroups
+        .flatMap((group) => visiblePanels(group, true))
+        .some(
+          (panel) =>
+            this.terminals.get(panel.content)?.rememberFocus() === true,
+        );
     this.busy = true;
     const dockEpoch = action.operation === "dock" ? window_epoch() : "";
     const previousContents = new Set(
@@ -195,8 +204,7 @@ export default class Workspace extends View {
             const creates = [
               "create-voyage",
               "create-fleet",
-              "create-portal",
-              "split",
+              "create-content",
             ].includes(action.operation);
             const allowed = new Set(result.createdContents);
             if (creates)
@@ -204,21 +212,22 @@ export default class Workspace extends View {
                 if (!previousContents.has(item.id)) allowed.add(item.id);
             await this.prepare(task, !result.createdWorkspace, retry, allowed);
             prepared = true;
+            const current = this.layout;
+            const shown = current
+              ? activeGroups(current).flatMap((group) =>
+                  visiblePanels(group, true),
+                )
+              : [];
+            const created = shown.find(
+              (panel) => !previousContents.has(panel.content),
+            );
+            if (creating && created) this.focused = created.id;
             if (transferFocus) {
-              const current = this.layout;
-              const voyage = current?.voyages.find(
-                (item) => item.id === current.selectedVoyage,
-              );
-              const fleet = voyage?.fleets.find(
-                (item) => item.id === current?.selectedFleet,
-              );
               const target = maximization
-                ? fleet?.vessels.find((vessel) => vessel.id === maximization.id)
+                ? shown.find((panel) => panel.id === maximization.id)
                 : splitMaximized
-                  ? fleet?.vessels.find(
-                      (vessel) => !previousContents.has(vessel.content),
-                    )
-                  : this.displayedVessels(fleet)[0];
+                  ? created
+                  : shown[0];
               if (target && (maximization || splitMaximized))
                 this.focused = target.id;
               if (target)
@@ -293,6 +302,7 @@ export default class Workspace extends View {
       return false;
     }
     if (this.menus) this.menus.current = null;
+    if (this.creation) this.creation.current = null;
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
@@ -311,7 +321,10 @@ export default class Workspace extends View {
       if (retained) retained.name = name;
       else this.names.set(key, { focus: task.focus_handle(), name });
     };
-    for (const voyage of this.layout.voyages) {
+    for (const voyage of [
+      ...this.layout.voyages,
+      ...(this.layout.home ? [this.layout.home] : []),
+    ]) {
       retain({ kind: "voyage", id: voyage.id }, voyage.name);
       for (const portal of voyage.portals)
         retain({ kind: "portal", id: portal.id }, this.contentName(portal));
@@ -344,30 +357,31 @@ export default class Workspace extends View {
     }).child(shell);
   }
   contentName(placement) {
-    const type = this.layout?.contents.find(
-      (content) => content.id === placement.content,
-    )?.typeId;
-    return placement.name || (type === "notes" ? "Notes" : "Terminal");
+    return placement.name;
   }
   visibleVessels(fleet) {
-    if (!fleet) return [];
-    if (!fleet.root) return fleet.vessels;
-    const visible = new Set();
-    const collect = (tree) => {
-      if (tree.kind === "leaf") visible.add(tree.placement);
-      else {
-        collect(tree.first);
-        collect(tree.second);
-      }
-    };
-    collect(fleet.root);
-    return fleet.vessels.filter((vessel) => visible.has(vessel.id));
+    return fleet
+      ? visiblePanels({ root: fleet.root ?? null, members: fleet.vessels })
+      : [];
   }
   displayedVessels(fleet) {
-    const vessels = this.visibleVessels(fleet);
-    return fleet?.maximizedPlacement
-      ? vessels.filter((vessel) => vessel.id === fleet.maximizedPlacement)
-      : vessels;
+    return fleet
+      ? visiblePanels(
+          {
+            root: fleet.root ?? null,
+            members: fleet.vessels,
+            maximizedPlacement: fleet.maximizedPlacement,
+          },
+          true,
+        )
+      : [];
+  }
+  panelGroup(id) {
+    return this.layout
+      ? panelGroups(this.layout).find((group) =>
+          group.members.some((panel) => panel.id === id),
+        )
+      : undefined;
   }
   async prepare(
     task,
@@ -377,18 +391,10 @@ export default class Workspace extends View {
   ) {
     const layout = this.layout;
     if (!layout) throw Error("Workspace snapshot is unavailable.");
-    if (layout.view === "home") return;
-    const voyage = layout.voyages.find(
-      (item) => item.id === layout.selectedVoyage,
-    );
-    const fleet = voyage?.fleets.find(
-      (item) => item.id === layout.selectedFleet,
-    );
     const errors = [];
-    for (const vessel of [
-      ...this.visibleVessels(fleet),
-      ...(voyage?.portals || []),
-    ]) {
+    for (const vessel of activeGroups(layout).flatMap((group) =>
+      visiblePanels(group, true),
+    )) {
       const content = layout.contents.find(
         (item) => item.id === vessel.content,
       );
@@ -549,6 +555,22 @@ export default class Workspace extends View {
   targetDrag(kind, id, event, cx) {
     if (!this.drag?.moved || this.drag.kind !== kind || this.drag.id === id)
       return;
+    if (kind === "vessel") {
+      const origin = this.panelGroup(this.drag.id);
+      const destination = this.panelGroup(id);
+      if (
+        !origin ||
+        !destination ||
+        JSON.stringify(origin.owner) !== JSON.stringify(destination.owner)
+      ) {
+        if (this.drag.target) {
+          this.drag.target = undefined;
+          this.drag.bounds = undefined;
+          cx.notify();
+        }
+        return;
+      }
+    }
     const { x, y, width, height } = event.bounds;
     if (width <= 0 || height <= 0) return;
     let side;
@@ -598,7 +620,7 @@ export default class Workspace extends View {
     ) {
       this.run(
         kind === "vessel" && typeof side === "string"
-          ? { operation: "move-vessel", id, target, side }
+          ? { operation: "move-panel", id, target, side }
           : {
               operation: kind === "voyage" ? "move-voyage" : "move-fleet",
               id,
@@ -623,13 +645,11 @@ export default class Workspace extends View {
       )
     )
       return;
-    const fleet = this.layout?.voyages
-      .flatMap((voyage) => voyage.fleets)
-      .find((fleet) => fleet.id === this.layout?.selectedFleet);
+    const group = this.panelGroup(id);
     if (
-      !fleet ||
-      this.visibleVessels(fleet).length < 2 ||
-      !this.displayedVessels(fleet).some((vessel) => vessel.id === id)
+      !group ||
+      visiblePanels(group).length < 2 ||
+      !visiblePanels(group, true).some((panel) => panel.id === id)
     )
       return;
     cx.stop_propagation();
@@ -641,9 +661,9 @@ export default class Workspace extends View {
     }
     this.run(
       {
-        operation: "set-vessel-maximized",
+        operation: "set-panel-maximized",
         id,
-        maximized: fleet.maximizedPlacement !== id,
+        maximized: group.maximizedPlacement !== id,
       },
       cx,
     );
@@ -651,6 +671,32 @@ export default class Workspace extends View {
   shortcut(event, cx) {
     if (this.editing || this.layoutName || this.menus?.current) return;
     const { control, shift, alt, platform } = event.modifiers;
+    if (
+      ((control && !platform) || (platform && !control)) &&
+      alt &&
+      event.key.toLowerCase() === "p"
+    ) {
+      const voyage = this.layout ? currentVoyage(this.layout) : undefined;
+      if (voyage?.portalLayout) {
+        const action = shift
+          ? {
+              operation: "set-portal-presentation",
+              voyage: voyage.id,
+              mode:
+                voyage.portalLayout.mode === "overlay"
+                  ? "make-room"
+                  : "overlay",
+            }
+          : {
+              operation: "set-portal-presentation",
+              voyage: voyage.id,
+              visible: !voyage.portalLayout.visible,
+            };
+        this.run(action, cx);
+        cx.stop_propagation();
+      }
+      return;
+    }
     if (
       (!control && !platform) ||
       (control && platform) ||
@@ -671,19 +717,18 @@ export default class Workspace extends View {
   }
   flushShortcuts(cx, applied) {
     if (!applied) this.pendingShortcuts = [];
-    const key = this.pendingShortcuts.shift();
-    if (key) this.dispatchShortcut(key, cx);
+    while (!this.busy && this.pendingShortcuts.length) {
+      const key = this.pendingShortcuts.shift();
+      if (key) this.dispatchShortcut(key, cx);
+    }
   }
   dispatchShortcut(key, cx) {
     const layout = this.layout;
-    const voyage = layout?.voyages.find(
-      (item) => item.id === layout.selectedVoyage,
-    );
-    const fleet = voyage?.fleets.find(
-      (item) => item.id === layout?.selectedFleet,
-    );
-    if (!voyage || !fleet) return;
+    if (!layout) return;
+    const voyage = currentVoyage(layout);
+    if (!voyage) return;
     if (key === "t") {
+      if (layout.view === "home") return;
       this.run(
         {
           operation: "create-fleet",
@@ -692,21 +737,18 @@ export default class Workspace extends View {
         },
         cx,
       );
-    } else {
-      const visible = this.displayedVessels(fleet);
-      const vessel =
-        visible.find((item) => item.id === this.focused) || visible[0];
-      if (!vessel) return;
-      this.run(
-        {
-          operation: "split",
-          fleet: fleet.id,
-          after: vessel.id,
-          axis: key === "o" ? "horizontal" : "vertical",
-        },
-        cx,
-      );
+      return;
     }
+    const groups = activeGroups(layout);
+    const group =
+      groups.find((group) =>
+        visiblePanels(group, true).some((panel) => panel.id === this.focused),
+      ) || groups[0];
+    if (!group) return;
+    const panels = visiblePanels(group, true);
+    const panel =
+      panels.find((panel) => panel.id === this.focused) || panels[0];
+    this.openSplit(group, panel?.id, key === "o" ? "right" : "bottom", cx);
   }
   refreshActivity(cx) {
     cx.spawn(async (task) => {
@@ -751,16 +793,15 @@ export default class Workspace extends View {
       .line_height(1.618034)
       .role("button")
       .accessibility_label(
-        action?.operation === "create-fleet"
-          ? "Create Fleet"
-          : action?.operation === "split"
-            ? "Split Vessel"
-            : label,
+        action?.operation === "create-fleet" ? "Create Fleet" : label,
       )
       .h(fleet ? 45 : placement ? 35 : 38)
       .px(fleet ? 15 : 10)
       .py(0)
       .rounded(fleet ? 0 : 5)
+      .overflow_hidden()
+      .whitespace_nowrap()
+      .tooltip(label)
       .text_size(fleet ? 11 : placement ? 10 : 13)
       .text_color(selected ? "#ded8ef" : colors.muted)
       .bg(selected && voyage ? "#c0b1f00b" : "#00000000")
@@ -790,10 +831,10 @@ export default class Workspace extends View {
         });
     return button;
   }
-  saveLayout(fleet, cx) {
+  saveLayout(owner, cx) {
     if (this.layoutName || this.savingLayout) return;
     const state = NameState.new("");
-    const editing = { state, fleet, submitted: false };
+    const editing = { state, owner, submitted: false };
     this.layoutName = editing;
     const finish = (_event, task) => {
       if (this.layoutName !== editing || editing.submitted) return;
@@ -803,7 +844,7 @@ export default class Workspace extends View {
       state.release();
       if (name) {
         this.savingLayout = true;
-        this.run({ operation: "save-layout", fleet, name }, task, () => {
+        this.run({ operation: "save-panel-layout", owner, name }, task, () => {
           this.savingLayout = false;
         });
       } else this.status = "A layout name is required.";
@@ -813,6 +854,56 @@ export default class Workspace extends View {
     state.on("blur", finish);
     state.focus();
     cx.notify();
+  }
+  retainedPanels(group) {
+    const visible = new Set(visiblePanels(group).map((panel) => panel.id));
+    return group.members
+      .filter((panel) => !visible.has(panel.id))
+      .map((panel) => ({
+        label: `Show ${panel.name}`,
+        choose: (version, cx) =>
+          this.run(
+            { operation: "reveal-panel", id: panel.id },
+            cx,
+            undefined,
+            version,
+          ),
+      }));
+  }
+  layoutItems(group) {
+    const owner = group.owner;
+    const items = [
+      {
+        label: "Save layout",
+        choose: (_version, cx) => this.saveLayout(owner, cx),
+      },
+    ];
+    for (const saved of this.layout?.savedLayouts || []) {
+      if (JSON.stringify(saved.owner) !== JSON.stringify(owner)) continue;
+      items.push(
+        {
+          label: `Load ${saved.name}`,
+          choose: (version, cx) =>
+            this.run(
+              { operation: "load-panel-layout", owner, name: saved.name },
+              cx,
+              undefined,
+              version,
+            ),
+        },
+        {
+          label: `Remove saved ${saved.name}`,
+          choose: (version, cx) =>
+            this.run(
+              { operation: "remove-panel-layout", owner, name: saved.name },
+              cx,
+              undefined,
+              version,
+            ),
+        },
+      );
+    }
+    return [...items, ...this.retainedPanels(group)];
   }
   fleetMenu(fleet, voyage) {
     const items = [
@@ -833,25 +924,14 @@ export default class Workspace extends View {
             cx,
           ),
       },
-      {
-        label: "Save layout",
-        choose: (_version, cx) => this.saveLayout(fleet.id, cx),
-      },
     ];
-    for (const saved of this.layout?.savedLayouts || []) {
-      if (saved.fleet === fleet.id)
-        items.push({
-          label: `Load ${saved.name}`,
-          choose: (version, cx) =>
-            this.run(
-              { operation: "load-layout", fleet: fleet.id, name: saved.name },
-              cx,
-              undefined,
-              version,
-            ),
-        });
-    }
-    return items;
+    const group = this.layout
+      ? panelGroups(this.layout).find(
+          (group) =>
+            group.owner.kind === "fleet" && group.owner.id === fleet.id,
+        )
+      : undefined;
+    return group ? [...items, ...this.layoutItems(group)] : items;
   }
   sidebarToggle() {
     return Button.new("toggle-sidebar")
@@ -883,7 +963,7 @@ export default class Workspace extends View {
       })),
     );
   }
-  creationControl(id, destination) {
+  creationControl(id, destination, trigger) {
     const creation = (this.creation ??= new CreationPicker());
     return creation.render(
       id,
@@ -898,6 +978,7 @@ export default class Workspace extends View {
         }
         this.run(action, cx, undefined, version);
       },
+      trigger,
     );
   }
   statusView() {
@@ -909,707 +990,303 @@ export default class Workspace extends View {
       .child(div().text_size(11).text_color("#ffcad3").child(this.status))
       .child(this.action("Refresh", { operation: "inspect" }));
   }
-  pane(tree, fleet, path = []) {
-    const colors = projection();
-    if (tree.kind === "branch") {
-      return NativeSplit.new(
-        JSON.stringify([this.splitSession, fleet.id, path]),
-        tree.axis,
-        tree.share ?? 5000,
-        this.version,
-        this.splitReset,
-        (revision, share, cx) =>
-          this.run(
-            { operation: "resize-split", fleet: fleet.id, path, share },
-            cx,
-            (result, task) => {
-              if (result?.status === "applied") return;
-              const message = this.status;
-              this.run({ operation: "inspect" }, task, () => {
-                this.status = message;
-              });
-            },
-            revision,
-          ),
-      )
-        .flex_1()
-        .min_w(0)
-        .min_h(0)
-        .child(this.pane(tree.first, fleet, [...path, "first"]))
-        .child(this.pane(tree.second, fleet, [...path, "second"]));
-    }
-    const placement = fleet.vessels.find((item) => item.id === tree.placement);
-    if (!placement) throw Error("Split placement is unavailable.");
-    return this.content(
-      placement,
-      { kind: "vessel", id: placement.id },
-      {
-        operation: "split",
-        fleet: fleet.id,
-        after: placement.id,
-        axis: "horizontal",
-      },
+  openSplit(group, id, side, cx) {
+    if (this.busy || this.editing || this.layoutName) return;
+    const insertion = id ? { kind: "beside", id, side } : { kind: "empty" };
+    const destination = {
+      kind: "panel",
+      owner: group.owner,
+      insertion,
+    };
+    (this.creation ??= new CreationPicker()).open(
+      id ? `split-${id}-${side}` : `empty-${JSON.stringify(group.owner)}`,
+      destination,
+      this.version,
+      cx,
     );
   }
-  content(placement, scope, split = null) {
-    const colors = projection();
-    const content = this.layout?.contents.find(
-      (item) => item.id === placement.content,
-    );
-    if (!content) throw Error("Placement content is unavailable.");
-    const terminal = this.terminals.get(content.id);
-    const opening = this.openings.get(content.id);
-    const startShell =
-      opening?.status === "rejected" &&
-      opening.reason === "ended" &&
-      content.backend &&
-      !content.startPending
-        ? {
-            operation: "start-new-shell",
-            contentId: content.id,
-            expectedBackend: content.backend,
-          }
-        : null;
-    const activity = content.backend
-      ? this.reportedActivity?.[content.backend]
-      : null;
-    const badge = activityBadge(activity || undefined, this.activityLimit);
-    const fleet = split
-      ? this.layout?.voyages
-          .flatMap((voyage) => voyage.fleets)
-          .find((fleet) => fleet.id === split.fleet)
-      : undefined;
-    const maximized = fleet?.maximizedPlacement === placement.id;
-    const canMaximize = this.visibleVessels(fleet).length > 1;
-    return this.target(
-      `${scope.kind}-${placement.id}`,
-      scope,
-      vesselFrame(
+  pane(
+    tree,
+    group,
+    path = [],
+    members = new Map(group.members.map((panel) => [panel.id, panel])),
+  ) {
+    if (!tree) return null;
+    if (tree.kind === "leaf") {
+      const panel = members.get(tree.placement);
+      if (!panel) throw Error("Split placement is unavailable.");
+      if (panel.hidden) return null;
+      return this.content(
+        panel,
+        {
+          kind: group.owner.kind === "portals" ? "portal" : "vessel",
+          id: panel.id,
+        },
+        group,
+      );
+    }
+    const first = this.pane(tree.first, group, [...path, "first"], members);
+    const second = this.pane(tree.second, group, [...path, "second"], members);
+    if (!first || !second) return first || second;
+    return NativeSplit.new(
+      JSON.stringify([this.splitSession, group.owner, path]),
+      tree.axis,
+      tree.share ?? 5000,
+      this.version,
+      this.splitReset,
+      (revision, share, cx) =>
+        this.run(
+          { operation: "resize-panel-split", owner: group.owner, path, share },
+          cx,
+          (result, task) => {
+            if (result?.status === "applied") return;
+            const message = this.status;
+            this.run({ operation: "inspect" }, task, () => {
+              this.status = message;
+            });
+          },
+          revision,
+        ),
+    )
+      .flex_1()
+      .min_w(0)
+      .min_h(0)
+      .child(first)
+      .child(second);
+  }
+  splitEdges(panel, group) {
+    const edges = ["left", "right", "top", "bottom"].map((side) => {
+      const id = `split-${panel.id}-${side}`;
+      const trigger = Button.new(id)
+        .accessibility_label(
+          `Split ${group.owner.kind === "portals" ? "Portal" : "Vessel"} ${side}`,
+        )
+        .tooltip(`Split ${side}`)
+        .opacity(
+          this.splitHover === id || this.creation?.current?.id === id ? 1 : 0,
+        )
+        .hover((element) => element.opacity(1))
+        .focus((element) => element.opacity(1))
+        .w(18)
+        .h(18)
+        .p(0)
+        .rounded(5)
+        .bg("#16181cf0")
+        .child({ left: "‹", right: "›", top: "⌃", bottom: "⌄" }[side]);
+      const edge = div()
+        .absolute()
+        .w(18)
+        .h(18)
+        .on_hover((hovered, cx) => {
+          this.splitHover = hovered ? id : null;
+          cx.notify();
+        });
+      if (side === "left" || side === "right") {
+        edge.top("50%");
+        if (side === "left") edge.left(0);
+        else edge.right(0);
+      } else {
+        edge.left("50%");
+        if (side === "top") edge.top(0);
+        else edge.bottom(0);
+      }
+      return edge.child(
+        this.creationControl(
+          id,
+          {
+            kind: "panel",
+            owner: group.owner,
+            insertion: { kind: "beside", id: panel.id, side },
+          },
+          trigger,
+        ),
+      );
+    });
+    const opening = this.creation?.current;
+    if (
+      opening?.destination.kind === "panel" &&
+      opening.destination.insertion.kind === "beside" &&
+      opening.destination.insertion.id === panel.id
+    ) {
+      const side = opening.destination.insertion.side;
+      edges.unshift(
         div()
-          .relative()
-          .flex()
-          .flex_col()
-          .flex_1()
-          .min_w(0)
-          .min_h(0)
-          .rounded(3)
-          .bg(colors.background)
-          .on_mouse_down("left", (_event, cx) => {
-            this.focused = placement.id;
-            cx.notify();
-          })
-          .on_key_down((event, cx) => {
-            if (scope.kind === "vessel")
-              this.maximizeShortcut(placement.id, event, cx);
-          })
-          .on_mouse_move((event, cx) => {
-            if (scope.kind === "vessel")
-              this.targetDrag("vessel", placement.id, event, cx);
-          })
-          .child(
-            div()
-              .flex()
-              .items_center()
-              .h(35)
-              .flex_shrink_0()
-              .px(5)
-              .child(
-                div()
-                  .flex_1()
-                  .flex()
-                  .items_center()
-                  .gap(6)
-                  .text_size(11)
-                  .text_color(colors.muted)
-                  .on_mouse_down("left", (event, cx) => {
-                    if (scope.kind === "vessel")
-                      this.startDrag("vessel", placement.id, event, cx);
-                  })
-                  .child(
-                    this.action(
-                      this.contentName(placement),
-                      null,
-                      false,
-                      scope,
-                    ),
-                  )
-                  .children(
-                    content.typeId === "terminal" && badge.label
-                      ? [
-                          div()
-                            .text_size(9)
-                            .text_color(colors.muted)
-                            .accessibility_label(badge.hint)
-                            .tooltip(badge.hint)
-                            .child(badge.label),
-                        ]
-                      : [],
-                  ),
-              )
-              .children(
-                split
-                  ? [
-                      div()
-                        .id(`split-zone-${placement.id}`)
-                        .w(canMaximize ? 116 : 90)
-                        .h(35)
-                        .flex()
-                        .items_center()
-                        .on_hover((hovered, cx) => {
-                          this.splitHover = hovered ? placement.id : null;
-                          cx.notify();
-                        })
-                        .children(
-                          this.splitHover === placement.id ||
-                            this.creation?.current?.id === placement.id
-                            ? [
-                                this.creationControl(placement.id, {
-                                  kind: "vessel",
-                                  fleet: split.fleet,
-                                  after: placement.id,
-                                  axis: "horizontal",
-                                }),
-                                Button.new(`split-horizontal-${placement.id}`)
-                                  .accessibility_label(
-                                    "Split this Vessel side by side",
-                                  )
-                                  .child("◫")
-                                  .on_click((_event, cx) =>
-                                    this.run(
-                                      { ...split, axis: "horizontal" },
-                                      cx,
-                                    ),
-                                  ),
-                                Button.new(`split-vertical-${placement.id}`)
-                                  .accessibility_label(
-                                    "Split this Vessel top and bottom",
-                                  )
-                                  .child("⬒")
-                                  .on_click((_event, cx) =>
-                                    this.run(
-                                      { ...split, axis: "vertical" },
-                                      cx,
-                                    ),
-                                  ),
-                              ]
-                            : [],
-                        )
-                        .children(
-                          canMaximize
-                            ? [
-                                Button.new(`maximize-${placement.id}`)
-                                  .accessibility_label(
-                                    maximized
-                                      ? "Restore Vessel"
-                                      : "Maximize Vessel",
-                                  )
-                                  .opacity(
-                                    this.splitHover === placement.id ? 1 : 0,
-                                  )
-                                  .focus((element) => element.opacity(1))
-                                  .on_mouse_down("left", (_event, cx) =>
-                                    cx.stop_propagation(),
-                                  )
-                                  .child(
-                                    svg(
-                                      maximized
-                                        ? "restore.svg"
-                                        : "maximize.svg",
-                                    ).size(12),
-                                  )
-                                  .on_click((_event, cx) => {
-                                    this.focused = placement.id;
-                                    this.run(
-                                      {
-                                        operation: "set-vessel-maximized",
-                                        id: placement.id,
-                                        maximized: !maximized,
-                                      },
-                                      cx,
-                                    );
-                                  }),
-                              ]
-                            : [],
-                        ),
-                    ]
-                  : [],
-              ),
-          )
-          .child(
-            div()
-              .flex_1()
-              .min_h(0)
-              .child(
-                content.typeId === "notes"
-                  ? Notes.new(content.id, { contentId: content.id })
-                  : terminal
-                    ? Terminal.new(terminal).size_full()
-                    : div()
-                        .p(20)
-                        .text_size(12)
-                        .text_color(colors.muted)
-                        .child(this.terminalStatus(content))
-                        .children(
-                          startShell
-                            ? [
-                                Button.new(`start-shell-${placement.id}`)
-                                  .accessibility_label("Start new shell")
-                                  .disabled(this.busy || !this.fresh)
-                                  .child("Start new shell")
-                                  .on_click((_event, cx) =>
-                                    this.run(startShell, cx),
-                                  ),
-                              ]
-                            : [],
-                        ),
-              ),
-          )
-          .children(
-            this.drag?.kind === "vessel" &&
-              this.drag.target === placement.id &&
-              this.drag.bounds
-              ? [
-                  div()
-                    .absolute()
-                    .left(
-                      this.drag.side === "right"
-                        ? this.drag.bounds.width / 2
-                        : 0,
-                    )
-                    .top(
-                      this.drag.side === "bottom"
-                        ? this.drag.bounds.height / 2
-                        : 0,
-                    )
-                    .w(
-                      this.drag.side === "left" || this.drag.side === "right"
-                        ? this.drag.bounds.width / 2
-                        : this.drag.bounds.width,
-                    )
-                    .h(
-                      this.drag.side === "top" || this.drag.side === "bottom"
-                        ? this.drag.bounds.height / 2
-                        : this.drag.bounds.height,
-                    )
-                    .bg("#b3d2e525"),
-                ]
-              : [],
-          ),
-        this.focused === placement.id,
-        this.drag?.kind === "vessel" &&
-          (this.drag.id === placement.id || this.drag.target === placement.id),
-      ),
-    );
+          .absolute()
+          .left(side === "right" ? "50%" : 0)
+          .top(side === "bottom" ? "50%" : 0)
+          .w(side === "left" || side === "right" ? "50%" : "100%")
+          .h(side === "top" || side === "bottom" ? "50%" : "100%")
+          .bg("#b3d2e514")
+          .border_1()
+          .border_color("#b3d2e540"),
+      );
+    }
+    return edges;
+  }
+  content(placement, scope, group) {
+    return renderPanel(this, placement, scope, group);
   }
   sidebarRegion(layout, voyage) {
-    const colors = projection();
-    const sidebar = div()
+    return renderSidebar(this, layout, voyage);
+  }
+  fleetRegion(layout, voyage, fleet) {
+    return renderFleets(this, layout, voyage, fleet);
+  }
+  groupRegion(group) {
+    const root = group.maximizedPlacement
+      ? { kind: "leaf", placement: group.maximizedPlacement }
+      : group.root;
+    const panel = this.pane(root, group);
+    const body = div()
+      .relative()
       .flex()
       .flex_col()
-      .flex_shrink_0()
-      .px(this.sidebar ? 12 : 4)
-      .border_r_1()
-      .border_color("#ffffff0c")
-      .bg("#16181c");
-    sidebar.child(
-      div()
-        .flex()
-        .items_center()
-        .h(40)
-        .justify_end()
-        .flex_shrink_0()
-        .children(
-          this.sidebar
-            ? [div().flex_1(), this.sidebarToggle()]
-            : [this.sidebarToggle()],
-        ),
-    );
-    if (this.sidebar) {
-      sidebar.child(
-        div()
-          .relative()
-          .w(200)
-          .h(202)
-          .self_center()
-          .flex_shrink_0()
-          .mt(12)
-          .mb(8)
-          .child(
-            this.target(
-              "workspace-dock",
-              { kind: "workspace" },
-              Brand.new("brand", {}),
-            ),
-          ),
-      );
-      sidebar.child(
-        div()
-          .id("primary-conversation-controls")
-          .flex()
-          .items_center()
-          .justify_center()
-          .min_h(30)
-          .flex_shrink_0()
-          .gap(6)
-          .child(Speech.new("voyager-speech", {}))
-          .child(this.chat.toggleView(colors)),
-      );
-      sidebar.child(this.chat.render(colors, layout.context) || div());
-    }
-    sidebar.child(
-      div()
-        .flex()
-        .items_center()
-        .h(36)
-        .flex_shrink_0()
-        .child(
-          Button.new("home-navigation")
-            .accessibility_label("Home")
-            .h(28)
-            .px(this.sidebar ? 10 : 12)
-            .w(this.sidebar ? 180 : 38)
-            .justify_start()
-            .text_size(13)
-            .child(this.sidebar ? "Home" : "⌂")
-            .on_click((_event, cx) => this.run({ operation: "home" }, cx)),
-        ),
-    );
-    if (this.sidebar)
-      sidebar.child(
-        div()
-          .flex()
-          .items_center()
-          .h(34)
-          .mt(12)
-          .child(
-            div()
-              .flex_1()
-              .px(10)
-              .text_size(10)
-              .text_color("#92939d")
-              .child("VOYAGES"),
-          )
-          .child(
-            Button.new("create-voyage")
-              .accessibility_label("Create Voyage")
-              .w(24)
-              .h(24)
-              .p(2)
-              .child("+")
-              .on_click((_event, cx) =>
-                this.run(
-                  {
-                    operation: "create-voyage",
-                    name: `Voyage ${layout.voyages.length + 1}`,
-                    cwd: layout.contents[0].cwd,
-                  },
-                  cx,
-                ),
-              ),
-          ),
-      );
-    for (const [index, item] of layout.voyages.entries()) {
-      const scope = { kind: "voyage", id: item.id };
-      const docked =
-        layout.context.kind === "voyage" && layout.context.id === item.id;
-      const row = div()
-        .relative()
-        .flex()
-        .items_center()
-        .h(42)
-        .rounded(4)
-        .bg(item.id === voyage?.id ? "#c0b1f00b" : "#00000000")
-        .border_1()
-        .border_color(
-          this.drag?.kind === "voyage" &&
-            (this.drag.id === item.id || this.drag.target === item.id)
-            ? "#b3d2e5"
-            : "#00000000",
-        )
-        .on_mouse_down("left", (event, cx) =>
-          this.startDrag("voyage", item.id, event, cx),
-        )
-        .on_mouse_move((event, cx) =>
-          this.targetDrag("voyage", item.id, event, cx),
-        );
-      if (this.sidebar)
-        row.child(
-          div()
-            .flex_1()
-            .pl(docked ? 48 : 0)
-            .child(
-              this.action(
-                item.name,
-                { operation: "select-voyage", id: item.id },
-                item.id === voyage?.id,
-                scope,
-              ),
-            ),
-        );
-      else
-        row.child(
-          Button.new(`rail-voyage-${item.id}`)
-            .accessibility_label(`Open Voyage ${item.name}`)
-            .w(38)
-            .h(38)
-            .p(4)
-            .justify_center()
-            .text_size(12)
-            .child(String(index + 1))
-            .on_click((_event, cx) =>
-              this.run({ operation: "select-voyage", id: item.id }, cx),
-            ),
-        );
-      if (
-        this.drag?.kind === "voyage" &&
-        this.drag.target === item.id &&
-        this.drag.bounds
+      .flex_1()
+      .min_w(0)
+      .min_h(0)
+      .p(8);
+    if (
+      this.layoutName &&
+      JSON.stringify(this.layoutName.owner) === JSON.stringify(group.owner) &&
+      (group.owner.kind === "portals" || this.layout?.view === "home")
+    )
+      body.child(Name.new(this.layoutName.state).w(160).h(29));
+    if (panel) return body.child(panel);
+    const id = `empty-${JSON.stringify(group.owner)}`;
+    const trigger = Button.new(`choose-${id}`)
+      .accessibility_label(
+        group.owner.kind === "portals"
+          ? "Choose Portal content"
+          : "Choose Vessel content",
       )
-        row.child(
-          div()
-            .absolute()
-            .left(0)
-            .top(this.drag.side ? 0 : this.drag.bounds.height - 2)
-            .w(this.drag.bounds.width)
-            .h(2)
-            .bg("#b3d2e5"),
-        );
-      sidebar.child(
-        this.sidebar
-          ? div()
-              .h(42)
-              .flex_shrink_0()
-              .child(this.target(`voyage-${item.id}`, scope, row))
-          : row,
+      .h(28)
+      .px(10)
+      .text_size(12)
+      .child("Choose content");
+    const empty = body
+      .items_center()
+      .justify_center()
+      .child(
+        this.creationControl(
+          id,
+          { kind: "panel", owner: group.owner, insertion: { kind: "empty" } },
+          trigger,
+        ),
       );
-    }
-    if (!this.sidebar)
-      sidebar.child(
-        Button.new("rail-create-voyage")
-          .accessibility_label("Create Voyage")
-          .w(38)
-          .h(28)
-          .p(2)
-          .child("+")
+    const retained = group.members.map((panel) => ({
+      label: `Show ${panel.name}`,
+      choose: (version, cx) =>
+        this.run(
+          { operation: "reveal-panel", id: panel.id },
+          cx,
+          undefined,
+          version,
+        ),
+    }));
+    return this.contextMenu(id, empty, retained);
+  }
+  activeRegion(layout, fleet) {
+    const group = activeGroups(layout).find(
+      (group) => group.owner.kind === "fleet" && group.owner.id === fleet?.id,
+    );
+    return group ? this.groupRegion(group) : div().flex_1();
+  }
+  portalControls(voyage) {
+    const column = voyage.portalLayout;
+    if (!column) return div();
+    const controls = div().flex().items_center().gap(4).flex_shrink_0();
+    const label = column.visible ? "Hide Portals" : "Show Portals";
+    controls.child(
+      Button.new("toggle-portals")
+        .accessibility_label(label)
+        .tooltip(`${label} · Ctrl+Alt+P / ⌘⌥P`)
+        .w(32)
+        .h(26)
+        .p(3)
+        .text_size(11)
+        .child(column.visible ? "P ›" : "‹ P")
+        .on_click((_event, cx) =>
+          this.run(
+            {
+              operation: "set-portal-presentation",
+              voyage: voyage.id,
+              visible: !column.visible,
+            },
+            cx,
+          ),
+        ),
+    );
+    if (column.visible)
+      controls.child(
+        Button.new("portal-presentation")
+          .accessibility_label(
+            column.mode === "overlay" ? "Embed Portals" : "Overlay Portals",
+          )
+          .tooltip(
+            `${column.mode === "overlay" ? "Embed Portals" : "Overlay Portals"} · Ctrl+Alt+Shift+P / ⌘⌥⇧P`,
+          )
+          .w(26)
+          .h(26)
+          .p(4)
+          .child(
+            svg(column.mode === "overlay" ? "embed.svg" : "overlay.svg").size(
+              14,
+            ),
+          )
           .on_click((_event, cx) =>
             this.run(
               {
-                operation: "create-voyage",
-                name: `Voyage ${layout.voyages.length + 1}`,
-                cwd: layout.contents[0].cwd,
+                operation: "set-portal-presentation",
+                voyage: voyage.id,
+                mode: column.mode === "overlay" ? "make-room" : "overlay",
               },
               cx,
             ),
           ),
       );
-    sidebar.child(div().flex_1());
-    if (!this.sidebar)
-      sidebar.child(
-        div()
-          .flex()
-          .flex_col()
-          .items_center()
-          .gap(4)
-          .pb(8)
-          .child(Speech.new("voyager-speech", {}))
-          .child(this.chat.toggleView(colors)),
-      );
-    return sidebar;
+    return controls;
   }
-  fleetRegion(layout, voyage, fleet) {
-    const strip = div()
-      .flex()
-      .items_center()
-      .px(8)
-      .gap(7)
-      .bg(projection().background)
-      .border_b_1()
-      .border_color("#ffffff0c");
-    if (layout.view === "home")
-      return strip.child(
-        div().text_size(11).text_color(projection().muted).child("Home"),
-      );
-    if (!voyage) return strip;
-    const tabs = div().flex().items_center().min_w(0).h_full().gap(7);
-    for (const item of voyage.fleets) {
-      const selected = item.id === fleet?.id;
-      const docked =
-        layout.context.kind === "fleet" && layout.context.id === item.id;
-      const row = div()
-        .relative()
-        .flex()
-        .items_center()
-        .h(docked ? 40 : 29)
-        .min_w(90)
-        .max_w(220)
-        .rounded(5)
-        .border_1()
-        .border_color(
-          this.drag?.kind === "fleet" &&
-            (this.drag.id === item.id || this.drag.target === item.id)
-            ? "#b3d2e5"
-            : selected
-              ? "#c4b5fd3b"
-              : "#00000000",
-        )
-        .bg(selected ? "#c4b5fd0c" : "#00000000")
-        .pl(docked ? 48 : 6)
-        .pr(6)
-        .on_mouse_down("left", (event, cx) =>
-          this.startDrag("fleet", item.id, event, cx),
-        )
-        .on_mouse_move((event, cx) =>
-          this.targetDrag("fleet", item.id, event, cx),
-        )
-        .child(
-          this.layoutName?.fleet === item.id
-            ? Name.new(this.layoutName.state).w(160).h(29)
-            : this.action(
-                item.name,
-                { operation: "select-fleet", id: item.id },
-                selected,
-                { kind: "fleet", id: item.id },
-              )
-                .flex_1()
-                .min_w(0)
-                .h(docked ? 40 : 29)
-                .justify_center(),
-        );
-      if (
-        this.drag?.kind === "fleet" &&
-        this.drag.target === item.id &&
-        this.drag.bounds
-      )
-        row.child(
-          div()
-            .absolute()
-            .top(0)
-            .left(this.drag.side ? 0 : this.drag.bounds.width - 2)
-            .w(2)
-            .h(this.drag.bounds.height)
-            .bg("#b3d2e5"),
-        );
-      tabs.child(
-        this.contextMenu(
-          `fleet-${item.id}`,
-          this.target(`fleet-${item.id}`, { kind: "fleet", id: item.id }, row),
-          this.fleetMenu(item, voyage),
+  portalColumn(underlay, panels, voyage) {
+    const column = voyage.portalLayout;
+    if (!column) throw Error("Portal presentation is unavailable.");
+    const revision = this.version;
+    const split = Column.new(
+      `portal-column-${this.splitSession}-${voyage.id}`,
+      column.width,
+      revision,
+      this.splitReset,
+      (version, width, cx) =>
+        this.run(
+          { operation: "set-portal-presentation", voyage: voyage.id, width },
+          cx,
+          undefined,
+          version,
         ),
+    )
+      .min_w(0)
+      .min_h(0)
+      .flex_1();
+    if (column.mode === "make-room") return split.child(underlay).child(panels);
+    return div()
+      .relative()
+      .flex()
+      .flex_1()
+      .min_w(0)
+      .min_h(0)
+      .child(underlay)
+      .child(
+        split
+          .absolute()
+          .left(0)
+          .right(0)
+          .top(0)
+          .bottom(0)
+          .child(div().size_full())
+          .child(panels),
       );
-    }
-    return strip.child(tabs).child(div().flex_1());
-  }
-  activeRegion(layout, fleet) {
-    const body = div().flex().flex_col().flex_1().min_w(0).min_h(0);
-    if (layout.view === "home")
-      return body
-        .p(20)
-        .child(homeOverview(layout, (action, cx) => this.run(action, cx)));
-    if (fleet)
-      body.child(
-        div()
-          .flex()
-          .flex_1()
-          .min_w(0)
-          .min_h(0)
-          .p(8)
-          .child(
-            this.pane(
-              fleet.maximizedPlacement
-                ? { kind: "leaf", placement: fleet.maximizedPlacement }
-                : fleet.root,
-              fleet,
-            ),
-          ),
-      );
-    return body;
   }
   contextRegion(layout, voyage, fleet) {
-    const context = layout.context;
-    const visible =
-      context.kind === "workspace" || context.kind === "voyage"
-        ? this.sidebar
-        : layout.view === "home"
-          ? false
-          : context.kind === "fleet"
-            ? !!voyage?.fleets.some((item) => item.id === context.id)
-            : context.kind === "vessel"
-              ? this.displayedVessels(fleet).some(
-                  (item) => item.id === context.id,
-                )
-              : !!voyage?.portals.some((item) => item.id === context.id);
-    let goThere;
-    if (context.kind === "fleet")
-      goThere = { operation: "select-fleet", id: context.id };
-    else if (context.kind === "voyage")
-      goThere = { operation: "select-voyage", id: context.id };
-    else if (context.kind === "vessel")
-      goThere = { operation: "reveal-vessel", id: context.id };
-    else if (context.kind === "portal") {
-      const original = layout.voyages.find((item) =>
-        item.portals.some((portal) => portal.id === context.id),
-      );
-      if (original) goThere = { operation: "select-voyage", id: original.id };
-    }
-    const facts = this.contextFacts;
-    const directory =
-      facts?.directory.kind === "known"
-        ? facts.directory.path
-        : facts?.directory.kind === "multiple"
-          ? "Multiple starting folders"
-          : "Starting folder unavailable";
-    const branch =
-      facts?.branch.kind === "named"
-        ? facts.branch.name
-        : facts?.branch.kind === "detached"
-          ? "Detached HEAD"
-          : "Branch unavailable";
-    const row = div()
-      .flex()
-      .items_center()
-      .h(38)
-      .flex_shrink_0()
-      .px(10)
-      .gap(12)
-      .text_size(10)
-      .text_color(projection().muted)
-      .border_t_1()
-      .border_color("#ffffff0c");
-    if (!visible)
-      row.child(
-        div()
-          .w(48)
-          .h(38)
-          .flex_shrink_0()
-          .child(this.target("out-of-view-avatar", context, div(), true)),
-      );
-    row.child(
-      div()
-        .flex_1()
-        .min_w(0)
-        .overflow_hidden()
-        .child(
-          div()
-            .flex()
-            .items_center()
-            .gap(6)
-            .child(svg("folder.svg").size(13))
-            .child(
-              div()
-                .accessibility_label(`Folder: ${directory}`)
-                .child(directory),
-            )
-            .child(svg("branch.svg").size(13).ml(6))
-            .child(
-              div().accessibility_label(`Branch: ${branch}`).child(branch),
-            ),
-        ),
-    );
-    if (facts) row.child(div().child(facts.path.join(" / ")));
-    if (!visible && goThere) row.child(this.action("Go there", goThere));
-    const region = div().flex().flex_col().child(row);
-    if (this.status) region.child(this.statusView());
-    return region;
+    return renderContext(this, layout, voyage, fleet);
   }
   render(cx) {
     try {
@@ -1676,48 +1353,52 @@ export default class Workspace extends View {
       .bg(colors.background)
       .text_color(colors.foreground);
     const layout = this.layout;
-    if (!layout?.voyages.length || !layout.canvas)
+    if (!layout?.canvas || (!layout.voyages.length && !layout.home))
       return shell
         .flex_col()
         .p(24)
         .child(this.status || "Workspace canvas unavailable")
         .child(this.action("Refresh", { operation: "inspect" }));
     const canvas = layout.canvas;
-    const voyage = layout.voyages.find(
-      (item) => item.id === layout.selectedVoyage,
-    );
-    const fleet = voyage?.fleets.find(
-      (item) => item.id === layout.selectedFleet,
-    );
+    const voyage = currentVoyage(layout);
+    const fleet =
+      layout.view === "home"
+        ? voyage?.fleets[0]
+        : voyage?.fleets.find((item) => item.id === layout.selectedFleet);
     shell.child(
-      composeCanvas(canvas, (region) => {
-        switch (region) {
-          case "sidebar":
-            return this.sidebarRegion(layout, voyage);
-          case "fleet-strip":
-            return this.fleetRegion(layout, voyage, fleet);
-          case "active-fleet":
-            return this.activeRegion(layout, fleet);
-          case "context-bar":
-            return this.contextRegion(layout, voyage, fleet);
-          case "portals": {
-            if (layout.view === "home" || !voyage?.portals.length) return null;
-            const portals = (
-              canvas.portalMode === "make-room" ? div() : Occluding.new()
-            )
-              .flex()
-              .flex_col()
-              .gap(8)
-              .px(7)
-              .py(5);
-            for (const placement of voyage.portals)
-              portals.child(
-                this.content(placement, { kind: "portal", id: placement.id }),
+      composeCanvas(
+        canvas,
+        (region) => {
+          switch (region) {
+            case "sidebar":
+              return this.sidebarRegion(layout, voyage);
+            case "fleet-strip":
+              return this.fleetRegion(layout, voyage, fleet);
+            case "active-fleet":
+              return this.activeRegion(layout, fleet);
+            case "context-bar":
+              return this.contextRegion(layout, voyage, fleet);
+            case "portals": {
+              if (!voyage?.portalLayout?.visible) return null;
+              const group = panelGroups(layout).find(
+                (group) =>
+                  group.owner.kind === "portals" &&
+                  group.owner.voyage === voyage.id,
               );
-            return portals;
+              if (!group) return null;
+              return PortalArea.new(`portal-area-${voyage.id}`, {})
+                .flex()
+                .flex_col()
+                .bg(colors.background)
+                .child(this.groupRegion(group));
+            }
           }
-        }
-      }),
+        },
+        (underlay, panels) => {
+          if (!voyage) throw Error("Portal owner is unavailable.");
+          return this.portalColumn(underlay, panels, voyage);
+        },
+      ),
     );
     if (!this.sidebar) {
       const chat = this.chat.render(colors, layout.context, true);

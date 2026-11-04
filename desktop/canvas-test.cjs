@@ -44,7 +44,13 @@ test("maximization renders the selected leaf while retaining preparation of the 
       return element();
     },
   });
-  view.activeRegion({ view: "fleet" }, fleet);
+  const layout = {
+    view: "fleet",
+    selectedVoyage: "voyage",
+    selectedFleet: fleet.id,
+    voyages: [{ id: "voyage", fleets: [fleet] }],
+  };
+  view.activeRegion(layout, fleet);
   assert.deepEqual(rendered.pop(), { kind: "leaf", placement: "second" });
   assert.deepEqual(
     view.visibleVessels(fleet).map((vessel) => vessel.id),
@@ -55,7 +61,7 @@ test("maximization renders the selected leaf while retaining preparation of the 
     ["second"],
   );
   delete fleet.maximizedPlacement;
-  view.activeRegion({ view: "fleet" }, fleet);
+  view.activeRegion(layout, fleet);
   assert.equal(rendered.pop(), fleet.root);
 });
 
@@ -106,10 +112,9 @@ test("worker creation keeps its opening target and revision across a delayed cat
   });
   const picker = new exports.CreationPicker();
   const destination = {
-    kind: "vessel",
-    fleet: "fleet",
-    after: "original",
-    axis: "horizontal",
+    kind: "panel",
+    owner: { kind: "fleet", id: "fleet" },
+    insertion: { kind: "beside", id: "original", side: "right" },
   };
   const actions = [];
   const create = (...value) => actions.push(value);
@@ -148,7 +153,15 @@ test("worker creation keeps its opening target and revision across a delayed cat
   );
   await pending[0];
   assert.equal(picker.error, "Notes metadata unavailable");
-  picker.render("original", { ...destination, after: "later" }, "99", create);
+  picker.render(
+    "original",
+    {
+      ...destination,
+      insertion: { kind: "beside", id: "later", side: "bottom" },
+    },
+    "99",
+    create,
+  );
   assert.equal(buttons.has("create-worker-missing"), false);
   const choose = buttons
     .get("create-worker-codex")
@@ -164,7 +177,8 @@ test("worker creation keeps its opening target and revision across a delayed cat
   assert.equal(picker.current, null);
 });
 
-test("the actual canvas renderer uses saved order, sizing and Portal presentation", () => {
+test("the actual canvas composes a retained right column through native presentation", () => {
+  const exports = {};
   const source = ts.transpileModule(
     fs.readFileSync(`${__dirname}/mods/header/canvas.ts`, "utf8"),
     {
@@ -174,90 +188,76 @@ test("the actual canvas renderer uses saved order, sizing and Portal presentatio
       },
     },
   ).outputText;
-  const exports = {};
   new Function("exports", "require", source)(exports, () => ({ div: element }));
+  const columnCalls = [];
+  const Workspace = new Function(
+    "View",
+    "div",
+    "Column",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(class {}, element, {
+    new(...args) {
+      const node = element();
+      columnCalls.push({ args, node });
+      return node;
+    },
+  });
+  const actions = [];
+  const view = Object.assign(new Workspace(), {
+    version: "7",
+    splitSession: "test",
+    splitReset: 0,
+    run: (...args) => actions.push(args),
+  });
   const canvas = JSON.parse(
     fs.readFileSync(`${__dirname}/../contract/generated/response.schema.json`),
   ).definitions.Layout.properties.canvas.default;
   for (const mode of ["overlay", "make-room"]) {
     const regions = new Map();
-    const result = exports.composeCanvas(
-      { ...canvas, portalMode: mode },
-      (region) => {
+    const voyage = {
+      id: "voyage",
+      portalLayout: { mode, width: 340, visible: true },
+    };
+    const rendered = exports.composeCanvas(
+      { ...canvas, sidebarCollapsed: true },
+      (name) => {
         const node = element();
-        regions.set(region, node);
+        regions.set(name, node);
         return node;
       },
+      (underlay, panels) => view.portalColumn(underlay, panels, voyage),
     );
     assert.equal(regions.size, 5);
-    assert.ok(result.calls.some(([name]) => name === "flex"));
-    const portal = regions.get("portals");
-    assert.equal(
-      portal.calls.some(([name]) => name === "absolute"),
-      mode === "overlay",
+    assert.ok(
+      regions
+        .get("sidebar")
+        .calls.some(([name, value]) => name === "w" && value === 48),
     );
     assert.ok(
-      portal.calls.some(([name, value]) => name === "w" && value === 340),
+      regions
+        .get("fleet-strip")
+        .calls.some(([name, value]) => name === "h" && value === 40),
     );
+    const column = columnCalls.at(-1);
+    assert.equal(column.args[1], 340);
+    assert.equal(column.args[2], "7");
+    assert.equal(
+      column.node.calls.some(([name]) => name === "absolute"),
+      mode === "overlay",
+    );
+    assert.equal(
+      column.node.calls.filter(([name]) => name === "child").at(-1)[1],
+      regions.get("portals"),
+    );
+    column.args[4]("7", 420, {});
+    assert.deepEqual(actions.at(-1)[0], {
+      operation: "set-portal-presentation",
+      voyage: "voyage",
+      width: 420,
+    });
+    assert.equal(actions.at(-1)[3], "7");
+    assert.ok(rendered.calls.some(([name]) => name === "children"));
   }
-  for (const axis of ["row", "column"]) {
-    for (const first of [true, false]) {
-      const portal = {
-        kind: "block",
-        region: "portals",
-        size: { kind: "fixed", pixels: 240 },
-      };
-      const flow = [
-        { kind: "block", region: "fleet-strip" },
-        { kind: "block", region: "active-fleet" },
-      ];
-      let actual;
-      const rendered = exports.composeCanvas(
-        {
-          root: {
-            kind: axis,
-            children: first ? [portal, ...flow] : [...flow, portal],
-          },
-        },
-        (region) => {
-          const node = element();
-          node.calls.push(["region", region]);
-          if (region === "portals") actual = node;
-          return node;
-        },
-      );
-      const edge =
-        axis === "row" ? (first ? "left" : "right") : first ? "top" : "bottom";
-      assert.ok(
-        actual.calls.some(([name, value]) => name === edge && value === 0),
-      );
-      assert.ok(
-        actual.calls.some(
-          ([name, value]) =>
-            name === (axis === "row" ? "w" : "h") && value === 240,
-        ),
-      );
-      const children = rendered.calls.find(([name]) => name === "children")[1];
-      assert.equal(children.at(-1), actual);
-      assert.equal(children.length, 3);
-      for (const [index, block] of flow.entries()) {
-        const flowCalls = children[index].calls;
-        assert.ok(!flowCalls.some(([name]) => name === "absolute"));
-        assert.equal(
-          flowCalls.find(([name]) => name === "region")[1],
-          block.region,
-        );
-      }
-    }
-  }
-  const result = exports.composeCanvas(
-    { ...canvas, sidebarCollapsed: true },
-    () => element(),
-  );
-  const sidebar = result.calls.find(([name]) => name === "children")[1][0];
-  assert.ok(
-    sidebar.calls.some(([name, value]) => name === "w" && value === 48),
-  );
 });
 
 test("context metadata rejects a late different dock and notifies only changed facts", async () => {

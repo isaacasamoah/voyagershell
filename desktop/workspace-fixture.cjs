@@ -5,7 +5,7 @@ module.exports = function workspaceSource(
   declaration = "class",
   filename = "main.js",
 ) {
-  return fs
+  const source = fs
     .readFileSync(
       process.env[environmentKey] || `${__dirname}/mods/header/${filename}`,
       "utf8",
@@ -14,4 +14,16 @@ module.exports = function workspaceSource(
     .replace("export default class", declaration)
     .replace("export class", declaration)
     .replace("export function", declaration);
+  const helpers =
+    filename === "main.js"
+      ? ["panels.js", "panel-view.js", "navigation-view.js"]
+          .map((name) =>
+            fs
+              .readFileSync(`${__dirname}/mods/header/${name}`, "utf8")
+              .replace(/^import [\s\S]*?;\n/gm, "")
+              .replace(/^export /gm, ""),
+          )
+          .join("\n")
+      : "";
+  return helpers + "\n" + source;
 };

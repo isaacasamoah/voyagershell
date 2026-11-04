@@ -55,13 +55,21 @@ function fixture(
       {
         id: "voyage",
         portals: [],
-        fleets: [{ id: "fleet", vessels: [{ content: "content" }] }],
+        fleets: [
+          {
+            id: "fleet",
+            name: "Fleet 1",
+            vessels: [{ id: "vessel", name: "Terminal 1", content: "content" }],
+            root: { kind: "leaf", placement: "vessel" },
+          },
+        ],
       },
     ],
   };
   let opened = 0;
   let version = 1;
   const actions = [];
+  const choices = [];
   const versions = [];
   const Workspace = new Function(
     "View",
@@ -114,6 +122,8 @@ function fixture(
     focus: { focus() {} },
     names: new Map(),
   });
+  view.openSplit = (group, id, side) =>
+    choices.push({ owner: group.owner, id, side, version: view.version });
   const task = { notify() {}, focus_handle: () => ({ focus() {} }) };
   const pending = [];
   const cx = {
@@ -134,6 +144,7 @@ function fixture(
     versions,
     version: () => String(version),
     actions,
+    choices,
   };
 }
 
@@ -200,6 +211,16 @@ test("explicit Refresh retries a known refusal after inspection", async () => {
 
 test("drag targets preserve identity and stale gestures dispatch nothing", () => {
   const { view, cx } = fixture("applied");
+  const fleet = view.layout.voyages[0].fleets[0];
+  fleet.vessels = [
+    { id: "first", content: "content" },
+    { id: "second", content: "other" },
+  ];
+  fleet.root = {
+    kind: "branch",
+    first: { kind: "leaf", placement: "first" },
+    second: { kind: "leaf", placement: "second" },
+  };
   const calls = [];
   view.run = (action) => calls.push(action);
   const point = {
@@ -207,7 +228,7 @@ test("drag targets preserve identity and stale gestures dispatch nothing", () =>
     bounds: { x: 0, y: 0, width: 100, height: 100 },
   };
   for (const [kind, expected] of [
-    ["vessel", "move-vessel"],
+    ["vessel", "move-panel"],
     ["fleet", "move-fleet"],
     ["voyage", "move-voyage"],
   ]) {
@@ -287,20 +308,34 @@ test("Create Fleet and Refresh expose native buttons while preserving their pres
 });
 
 test("shortcuts target the focused Vessel and queue only while busy", () => {
-  const { view, cx } = fixture("applied");
+  const { view, cx, choices } = fixture("applied");
   const fleet = view.layout.voyages[0].fleets[0];
   fleet.vessels.push({ id: "second", content: "other" });
+  fleet.root = {
+    kind: "branch",
+    first: { kind: "leaf", placement: fleet.vessels[0].id },
+    second: { kind: "leaf", placement: "second" },
+  };
   view.focused = "second";
   const calls = [];
   view.run = (action) => calls.push(action);
   const modifiers = { control: true, shift: true, alt: false, platform: false };
   view.shortcut({ key: "o", modifiers }, cx);
-  assert.equal(calls[0].after, "second");
+  assert.deepEqual(choices, [
+    {
+      owner: { kind: "fleet", id: "fleet" },
+      id: "second",
+      side: "right",
+      version: "1",
+    },
+  ]);
+  assert.deepEqual(calls, []);
   view.busy = true;
   view.shortcut({ key: "e", modifiers }, cx);
   assert.deepEqual(view.pendingShortcuts, ["e"]);
   view.flushShortcuts(cx, false);
   assert.deepEqual(view.pendingShortcuts, []);
+  assert.equal(choices.length, 1);
 });
 
 test("selection focus uses the actual current-Fleet terminal and preserves outside focus", async () => {
@@ -309,6 +344,11 @@ test("selection focus uses the actual current-Fleet terminal and preserves outsi
     const calls = [];
     const fleet = layout.voyages[0].fleets[0];
     fleet.vessels.push({ id: "second", content: "other" });
+    fleet.root = {
+      kind: "branch",
+      first: { kind: "leaf", placement: fleet.vessels[0].id },
+      second: { kind: "leaf", placement: "second" },
+    };
     view.focused = "second";
     view.terminals.set("content", {
       rememberFocus() {
@@ -364,7 +404,7 @@ test("maximizing another terminal transfers unchanged native focus to that retai
     for (const id of ["content", "other"])
       view.openings.set(id, { status: "applied" });
     view.run(
-      { operation: "set-vessel-maximized", id: "second", maximized: true },
+      { operation: "set-panel-maximized", id: "second", maximized: true },
       cx,
     );
     fleet.maximizedPlacement = "second";
@@ -385,7 +425,17 @@ test("explicit Refresh never repeats an uncertain start", async () => {
 
 test("a Voyage Portal retains its terminal view while Fleets change", async () => {
   const { view, task, layout, count } = fixture("applied");
-  layout.voyages[0].portals.push({ id: "portal", content: "portal-content" });
+  layout.voyages[0].portals.push({
+    id: "portal",
+    name: "Terminal 2",
+    content: "portal-content",
+  });
+  layout.voyages[0].portalLayout = {
+    root: { kind: "leaf", placement: "portal" },
+    visible: true,
+    mode: "overlay",
+    width: 340,
+  };
   layout.contents.push({
     id: "portal-content",
     typeId: "terminal",
@@ -408,7 +458,17 @@ test("a known refusal reconciles revision and permits another visible Portal", a
   const { view, task, layout, version } = fixture((content) =>
     content === "content" ? "rejected" : "applied",
   );
-  layout.voyages[0].portals.push({ id: "portal", content: "portal-content" });
+  layout.voyages[0].portals.push({
+    id: "portal",
+    name: "Terminal 2",
+    content: "portal-content",
+  });
+  layout.voyages[0].portalLayout = {
+    root: { kind: "leaf", placement: "portal" },
+    visible: true,
+    mode: "overlay",
+    width: 340,
+  };
   layout.contents.push({
     id: "portal-content",
     typeId: "terminal",
@@ -450,36 +510,55 @@ test("an unrelated action keeps the refusal visible without retry", async () => 
 });
 
 test("workspace shortcuts use the selected Fleet and focused Vessel", () => {
-  const { view, cx } = fixture("applied");
+  const { view, cx, choices } = fixture("applied");
   view.layout.voyages[0].fleets[0].vessels.push({
     id: "second",
     content: "other",
   });
   view.layout.voyages[0].fleets[0].vessels[0].id = "first";
+  view.layout.voyages[0].fleets[0].root = {
+    kind: "branch",
+    first: { kind: "leaf", placement: "first" },
+    second: { kind: "leaf", placement: "second" },
+  };
   view.focused = "second";
   const calls = [];
   view.run = (action) => calls.push(action);
   const modifiers = { control: true, shift: true, alt: false, platform: false };
   for (const key of ["o", "e", "t"]) view.shortcut({ key, modifiers }, cx);
   assert.deepEqual(calls, [
-    { operation: "split", fleet: "fleet", after: "second", axis: "horizontal" },
-    { operation: "split", fleet: "fleet", after: "second", axis: "vertical" },
     { operation: "create-fleet", voyage: "voyage", name: "Fleet 2" },
   ]);
+  assert.deepEqual(choices, [
+    {
+      owner: { kind: "fleet", id: "fleet" },
+      id: "second",
+      side: "right",
+      version: "1",
+    },
+    {
+      owner: { kind: "fleet", id: "fleet" },
+      id: "second",
+      side: "bottom",
+      version: "1",
+    },
+  ]);
   view.shortcut({ key: "o", modifiers: { ...modifiers, shift: false } }, cx);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 1);
+  assert.equal(choices.length, 2);
   view.shortcut(
     { key: "O", modifiers: { ...modifiers, control: false, platform: true } },
     cx,
   );
-  assert.equal(calls.at(-1).axis, "horizontal");
+  assert.equal(choices.at(-1).side, "right");
   view.shortcut({ key: "o", modifiers: { ...modifiers, alt: true } }, cx);
   view.shortcut({ key: "o", modifiers: { ...modifiers, function: true } }, cx);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 1);
+  assert.equal(choices.length, 3);
 });
 
 test("shortcuts wait in order for a confirmed workspace action", async () => {
-  const { view, cx, pending } = fixture("applied");
+  const { view, cx, pending, choices } = fixture("applied");
   view.pendingShortcuts = [];
   const calls = [];
   view.busy = true;
@@ -490,8 +569,12 @@ test("shortcuts wait in order for a confirmed workspace action", async () => {
   view.run = (action) => calls.push(action);
   view.busy = false;
   view.flushShortcuts(cx, true);
-  assert.equal(calls[0].axis, "horizontal");
-  assert.deepEqual(view.pendingShortcuts, ["e"]);
+  assert.deepEqual(
+    choices.map((choice) => choice.side),
+    ["right", "bottom"],
+  );
+  assert.deepEqual(calls, []);
+  assert.deepEqual(view.pendingShortcuts, []);
   view.flushShortcuts(cx, false);
   assert.deepEqual(view.pendingShortcuts, []);
   assert.equal(pending.length, 0);
@@ -500,24 +583,29 @@ test("shortcuts wait in order for a confirmed workspace action", async () => {
 test("pending shortcut intents run only after success and stop after failed preparation", async () => {
   const modifiers = { control: true, shift: true, alt: false, platform: false };
   for (const status of ["applied", "rejected", "uncertain"]) {
-    const { view, cx, pending } = fixture(status, "applied", true);
-    view.layout.voyages[0].fleets[0].vessels[0].id = "first";
+    const { view, cx, pending, choices, actions, count } = fixture(
+      status,
+      "applied",
+      true,
+    );
     view.run({ operation: "inspect" }, cx);
     if (status === "applied") {
-      view.openings.set("content", { status: "applied" });
       view.workspaceNotice.packageRevision = "1";
       view.refreshRequested = true;
     }
     view.shortcut({ key: "o", modifiers }, cx);
     view.shortcut({ key: "e", modifiers }, cx);
     await pending[0];
+    assert.equal(pending.length, 1);
+    assert.deepEqual(actions, ["inspect", "inspect"]);
+    assert.equal(count(), 1);
     if (status === "applied") {
-      assert.equal(pending.length, 2);
-      await pending[1];
-      assert.equal(pending.length, 3);
-      await pending[2];
+      assert.deepEqual(
+        choices.map((choice) => choice.side),
+        ["right", "bottom"],
+      );
     } else {
-      assert.equal(pending.length, 1);
+      assert.deepEqual(choices, []);
     }
     assert.deepEqual(view.pendingShortcuts, []);
   }
@@ -536,7 +624,7 @@ test("refused and uncertain workspace outcomes discard unsent shortcuts", async 
   }
 });
 
-test("Home never starts content and loaded layouts prepare only visible bound content", async () => {
+test("Home and loaded layouts prepare only their visible bound content", async () => {
   const opened = [];
   const { view, task, layout } = fixture((content) => {
     opened.push(content);
@@ -553,13 +641,32 @@ test("Home never starts content and loaded layouts prepare only visible bound co
     { id: "live", typeId: "terminal", backend: "t1" },
     { id: "unbound", typeId: "terminal", backend: null },
     { id: "unbound-portal", typeId: "terminal", backend: null },
+    { id: "home-live", typeId: "terminal", backend: "home-t1" },
   ];
+  layout.home = {
+    id: "home-voyage",
+    name: "Home",
+    portals: [],
+    fleets: [
+      {
+        id: "home-fleet",
+        name: "Home",
+        root: null,
+        vessels: [
+          { id: "home-shown", name: "Terminal 1", content: "home-live" },
+        ],
+      },
+    ],
+  };
   layout.view = "home";
   await view.prepare(task, true);
   assert.deepEqual(opened, []);
+  layout.home.fleets[0].root = { kind: "leaf", placement: "home-shown" };
+  await view.prepare(task, true);
+  assert.deepEqual(opened, ["home-live"]);
   layout.view = "fleet";
   await view.prepare(task, true);
-  assert.deepEqual(opened, ["live"]);
+  assert.deepEqual(opened, ["home-live", "live"]);
 });
 
 test("only a newly created workspace starts an unbound initial terminal", async () => {
@@ -588,7 +695,12 @@ test("new content does not start an older unbound placement", async () => {
     return "applied";
   });
   const fleet = layout.voyages[0].fleets[0];
-  fleet.vessels.push({ content: "new" });
+  fleet.vessels.push({ id: "new-panel", name: "Terminal 2", content: "new" });
+  fleet.root = {
+    kind: "branch",
+    first: fleet.root,
+    second: { kind: "leaf", placement: "new-panel" },
+  };
   layout.contents = [
     { id: "content", typeId: "terminal", backend: null },
     { id: "new", typeId: "terminal", backend: null },
@@ -606,7 +718,11 @@ test("navigation waits for a layout save and is cleared on refusal or uncertaint
     layout.contents = [];
     view.savingLayout = true;
     view.run(
-      { operation: "save-layout", fleet: "fleet", name: "Focus" },
+      {
+        operation: "save-panel-layout",
+        owner: { kind: "fleet", id: "fleet" },
+        name: "Focus",
+      },
       cx,
       () => {
         view.savingLayout = false;
@@ -631,7 +747,7 @@ test("Home is retained while an entity rename is saving", () => {
 test("a pending layout save cannot open another name editor", () => {
   const { view, cx } = fixture("applied");
   view.savingLayout = true;
-  view.saveLayout("fleet", cx);
+  view.saveLayout({ kind: "fleet", id: "fleet" }, cx);
   assert.equal(view.layoutName, undefined);
 });
 
@@ -640,14 +756,21 @@ test("a layout save begun during an existing request waits before navigation", a
   layout.contents = [];
   view.run({ operation: "inspect" }, cx);
   view.savingLayout = true;
-  view.run({ operation: "save-layout", fleet: "fleet", name: "Focus" }, cx);
+  view.run(
+    {
+      operation: "save-panel-layout",
+      owner: { kind: "fleet", id: "fleet" },
+      name: "Focus",
+    },
+    cx,
+  );
   view.run({ operation: "home" }, cx);
   for (let index = 0; index < pending.length; index++) await pending[index];
-  assert.deepEqual(actions, ["inspect", "save-layout", "home"]);
+  assert.deepEqual(actions, ["inspect", "save-panel-layout", "home"]);
 });
 
 test("layout shortcuts ignore a retained hidden Vessel", () => {
-  const { view, cx, layout } = fixture("applied");
+  const { view, cx, layout, choices } = fixture("applied");
   const fleet = layout.voyages[0].fleets[0];
   fleet.vessels = [
     { id: "hidden", content: "old" },
@@ -658,7 +781,19 @@ test("layout shortcuts ignore a retained hidden Vessel", () => {
   const calls = [];
   view.run = (action) => calls.push(action);
   view.dispatchShortcut("o", cx);
-  assert.equal(calls[0].after, "visible");
+  assert.equal(choices[0].id, "visible");
+  assert.deepEqual(calls, []);
+});
+
+test("New Fleet in Home never becomes a panel split", () => {
+  const { view, cx, layout, choices } = fixture("applied");
+  layout.view = "home";
+  layout.home = layout.voyages[0];
+  const calls = [];
+  view.run = (action) => calls.push(action);
+  view.dispatchShortcut("t", cx);
+  assert.deepEqual(choices, []);
+  assert.deepEqual(calls, []);
 });
 
 test("workspace shortcuts leave the layout-name editor alone", () => {
@@ -697,7 +832,7 @@ test("maximize shortcuts bind the displayed event origin and refuse busy intents
   };
   view.maximizeShortcut("second", event, cx);
   assert.deepEqual(calls.pop(), {
-    operation: "set-vessel-maximized",
+    operation: "set-panel-maximized",
     id: "second",
     maximized: true,
   });
@@ -740,6 +875,11 @@ test("owner-created content is prepared without starting older unbound content",
     { id: "old", content: "content" },
     { id: "new", content: "new" },
   ];
+  fleet.root = {
+    kind: "branch",
+    first: { kind: "leaf", placement: "old" },
+    second: { kind: "leaf", placement: "new" },
+  };
   layout.contents.push({ id: "new", typeId: "terminal", backend: null });
   view.run({ operation: "inspect" }, cx);
   await pending[0];
@@ -822,6 +962,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "vesselFrame",
     "svg",
     "activityBadge",
+    "dock_target_visible",
     source,
   )(
     class {},
@@ -854,6 +995,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     (node) => node,
     div,
     activityBadge,
+    () => false,
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
@@ -875,6 +1017,18 @@ test("Home presents the retained out-of-view avatar without docking or starting 
       context,
       selectedVoyage: "voyage",
       selectedFleet: "fleet",
+      home: {
+        id: "home-voyage",
+        name: "Home",
+        portals: [],
+        portalLayout: {
+          root: null,
+          visible: false,
+          mode: "overlay",
+          width: 340,
+        },
+        fleets: [{ id: "home-fleet", name: "Home", vessels: [], root: null }],
+      },
       contents: [{ id: "content", cwd: "/tmp" }],
       voyages: [
         {
@@ -885,7 +1039,10 @@ test("Home presents the retained out-of-view avatar without docking or starting 
             {
               id: "fleet",
               name: "Fleet",
-              vessels: [{ id: "vessel", content: "content" }],
+              vessels: [
+                { id: "vessel", name: "Terminal 1", content: "content" },
+              ],
+              root: { kind: "leaf", placement: "vessel" },
             },
           ],
         },
@@ -903,13 +1060,19 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   });
   const actions = [];
   view.run = (action) => actions.push(action);
+  view.contextMenu = (_id, trigger) => trigger;
+  view.creationControl = (_id, _destination, trigger) => trigger;
   view.terminals = new Map();
   view.openings = new Map([
     ["content", { status: "rejected", reason: "ended" }],
   ]);
   view.layout.contents[0].typeId = "terminal";
   view.layout.contents[0].backend = "t1";
-  view.content(view.layout.voyages[0].fleets[0].vessels[0], context);
+  view.content(
+    view.layout.voyages[0].fleets[0].vessels[0],
+    context,
+    view.panelGroup("vessel"),
+  );
   const start = nodes.filter(
     (node) => node.calls.accessibility_label?.[0] === "Start new shell",
   );
@@ -921,12 +1084,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     first: { kind: "leaf", placement: "vessel" },
     second: { kind: "leaf", placement: "other" },
   };
-  view.content(fleet.vessels[0], context, {
-    operation: "split",
-    fleet: fleet.id,
-    after: "vessel",
-    axis: "horizontal",
-  });
+  view.content(fleet.vessels[0], context, view.panelGroup("vessel"));
   const maximize = nodes.find(
     (node) => node.calls.accessibility_label?.[0] === "Maximize Vessel",
   );
@@ -952,7 +1110,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   maximize.calls.on_click[0]({}, {});
   assert.equal(view.focused, "vessel");
   assert.deepEqual(actions.pop(), {
-    operation: "set-vessel-maximized",
+    operation: "set-panel-maximized",
     id: "vessel",
     maximized: true,
   });
@@ -990,7 +1148,11 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   assert.deepEqual(view.layout, unchanged);
   view.layout.contents[0].typeId = "terminal";
   view.layout.contents[0].backend = "outside-cache";
-  view.content({ id: "vessel", content: "content" }, context);
+  view.content(
+    { id: "vessel", name: "Terminal 1", content: "content" },
+    context,
+    view.panelGroup("vessel"),
+  );
   assert.ok(
     nodes.some((node) => node.calls.child?.[0] === "Status unavailable"),
   );
@@ -1010,7 +1172,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   const goThere = nodes.find((node) => node.calls.child?.[0] === "Go there");
   assert.ok(goThere);
   goThere.calls.on_click[0]({ click_count: 1 }, {});
-  assert.deepEqual(actions, [{ operation: "reveal-vessel", id: "vessel" }]);
+  assert.deepEqual(actions, [{ operation: "reveal-panel", id: "vessel" }]);
   actions.length = 0;
   packageRevision = "1";
   view.render({});
@@ -1099,8 +1261,8 @@ test("a delayed request cannot rewind a newer native dock snapshot", async () =>
 test("resize dispatch keeps the captured revision and restores a busy preview without sending", async () => {
   const { view, cx, pending, versions } = fixture("applied");
   const action = {
-    operation: "resize-split",
-    fleet: "fleet",
+    operation: "resize-panel-split",
+    owner: { kind: "fleet", id: "fleet" },
     path: [],
     share: 3500,
   };

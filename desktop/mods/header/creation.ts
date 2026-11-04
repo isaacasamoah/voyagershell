@@ -23,13 +23,55 @@ export class CreationPicker {
   notes = false;
   error = "";
 
+  open(
+    id: string,
+    destination: Create["destination"],
+    version: string,
+    cx: Context,
+  ) {
+    const requested = { id, version, destination };
+    this.current = requested;
+    this.catalog = null;
+    this.notes = false;
+    this.error = "";
+    cx.spawn(async (task) => {
+      const results = await Promise.allSettled([launches(), descriptions()]);
+      if (this.current !== requested) return;
+      for (const [index, result] of results.entries()) {
+        try {
+          if (result.status === "rejected") throw result.reason;
+          const value: unknown = JSON.parse(result.value);
+          if (index === 0) {
+            if (!validateCatalog(value))
+              throw Error("Invalid worker choices from the application");
+            this.catalog = value;
+          } else {
+            if (!validateContentCatalog(value))
+              throw Error("Invalid content choices from the application");
+            this.notes = value.types.some(
+              (kind) => kind.typeId === "notes" && Boolean(kind.state),
+            );
+          }
+        } catch (error) {
+          this.error +=
+            (this.error ? "\n" : "") +
+            (error instanceof Error ? error.message : String(error));
+        }
+      }
+      task.notify();
+    });
+    cx.notify();
+  }
+
   render(
     id: string,
     destination: Create["destination"],
     version: string,
     create: (action: Create, version: string, cx: Context) => void,
+    trigger: NativeElement,
   ): NativeElement {
     const opening = this.current?.id === id ? this.current : null;
+    const entity = destination.owner.kind === "portals" ? "Portal" : "Vessel";
     const content = div()
       .id(`worker-choices-${id}`)
       .flex()
@@ -57,7 +99,7 @@ export class CreationPicker {
               : "";
           content.child(
             Button.new(`create-worker-${entry.id}`)
-              .accessibility_label(`Create ${entry.name} Vessel`)
+              .accessibility_label(`Create ${entry.name} ${entity}`)
               .justify_start()
               .child(
                 entry.name +
@@ -84,23 +126,16 @@ export class CreationPicker {
         }
         for (const error of this.catalog.errors)
           content.child(div().text_size(10).text_color("#ffcad3").child(error));
-        content.child(
-          div()
-            .text_size(10)
-            .child(
-              `Worker defaults: ${this.catalog.path || "built in"}. Reopen to reload edits.`,
-            ),
-        );
       } else if (!this.error && !this.notes)
         content.child(
           div()
             .text_size(11)
-            .child(this.error || "Reading worker choices"),
+            .child(this.error || "Loading choices"),
         );
       if (this.notes)
         content.child(
           Button.new("create-notes-vessel")
-            .accessibility_label("Create Notes Vessel")
+            .accessibility_label(`Create Notes ${entity}`)
             .justify_start()
             .child("Notes")
             .on_click((_event, cx) => {
@@ -130,49 +165,9 @@ export class CreationPicker {
           cx.notify();
           return;
         }
-        const requested = { id, version, destination };
-        this.current = requested;
-        this.catalog = null;
-        this.notes = false;
-        this.error = "";
-        cx.spawn(async (task) => {
-          const results = await Promise.allSettled([
-            launches(),
-            descriptions(),
-          ]);
-          if (this.current !== requested) return;
-          for (const [index, result] of results.entries()) {
-            try {
-              if (result.status === "rejected") throw result.reason;
-              const value: unknown = JSON.parse(result.value);
-              if (index === 0) {
-                if (!validateCatalog(value))
-                  throw Error("Invalid worker choices from the application");
-                this.catalog = value;
-              } else {
-                if (!validateContentCatalog(value))
-                  throw Error("Invalid content choices from the application");
-                this.notes = value.types.some(
-                  (kind) => kind.typeId === "notes" && Boolean(kind.state),
-                );
-              }
-            } catch (error) {
-              this.error +=
-                (this.error ? "\n" : "") +
-                (error instanceof Error ? error.message : String(error));
-            }
-          }
-          task.notify();
-        });
-        cx.notify();
+        if (this.current?.id !== id) this.open(id, destination, version, cx);
       })
-      .trigger(
-        Button.new(`new-vessel-${id}`)
-          .accessibility_label("Create Vessel")
-          .w(24)
-          .h(28)
-          .child("+"),
-      )
+      .trigger(trigger)
       .content(content);
   }
 }
