@@ -21,12 +21,13 @@ enum Allocation {
 }
 
 impl Allocation {
-    fn first_size(self, extent: Pixels) -> Pixels {
+    fn resize_target(self, extent: Pixels) -> (usize, Pixels) {
         match self {
-            Self::Ratio(share) => {
-                extent * (f32::from(u16::from(share)) / f32::from(SplitShare::TOTAL))
-            }
-            Self::TrailingPixels(width) => extent - px(f32::from(width)),
+            Self::Ratio(share) => (
+                0,
+                extent * (f32::from(u16::from(share)) / f32::from(SplitShare::TOTAL)),
+            ),
+            Self::TrailingPixels(width) => (1, px(f32::from(width))),
         }
     }
 
@@ -189,11 +190,12 @@ impl ComponentMaterializer for Split {
             });
         for (index, child) in request.take_children()?.into_iter().enumerate() {
             let content = div().size_full();
-            let content = match (config.axis, index) {
-                (Axis::Horizontal, 0) => content.pr(px(4.)),
-                (Axis::Horizontal, _) => content.pl(px(4.)),
-                (Axis::Vertical, 0) => content.pb(px(4.)),
-                (Axis::Vertical, _) => content.pt(px(4.)),
+            let content = match (config.allocation, config.axis, index) {
+                (Allocation::TrailingPixels(_), _, _) => content,
+                (_, Axis::Horizontal, 0) => content.pr(px(4.)),
+                (_, Axis::Horizontal, _) => content.pl(px(4.)),
+                (_, Axis::Vertical, 0) => content.pb(px(4.)),
+                (_, Axis::Vertical, _) => content.pt(px(4.)),
             };
             let maximum =
                 if index == 1 && matches!(config.allocation, Allocation::TrailingPixels(_)) {
@@ -201,11 +203,13 @@ impl ComponentMaterializer for Split {
                 } else {
                     Pixels::MAX
                 };
-            group = group.child(
-                resizable_panel()
-                    .size_range(px(24.)..maximum)
-                    .child(content.child(child)),
-            );
+            let mut panel = resizable_panel().size_range(px(24.)..maximum);
+            if index == 1
+                && let Allocation::TrailingPixels(width) = config.allocation
+            {
+                panel = panel.size(px(f32::from(width))).fixed();
+            }
+            group = group.child(panel.child(content.child(child)));
         }
         let measuring = host.clone();
         let observing = host;
@@ -233,9 +237,9 @@ impl ComponentMaterializer for Split {
                         if state.config != expected || state.gesture.pressed {
                             return;
                         }
-                        let size = expected.allocation.first_size(extent);
+                        let (index, size) = expected.allocation.resize_target(extent);
                         state.native.update(cx, |native, cx| {
-                            native.resize_panel(0, size, window, cx);
+                            native.resize_panel(index, size, window, cx);
                         });
                         state.awaiting = None;
                         state.applied = Some((expected, extent));
@@ -486,9 +490,9 @@ export default class extends View {{}}
     fn column_allocation_keeps_pixels_while_split_keeps_its_ratio() {
         let ratio = Allocation::Ratio(SplitShare::default());
         let column = Allocation::TrailingPixels(340);
-        assert_eq!(ratio.first_size(px(1000.)), px(500.));
-        assert_eq!(column.first_size(px(1000.)), px(660.));
-        assert_eq!(column.first_size(px(1200.)), px(860.));
+        assert_eq!(ratio.resize_target(px(1000.)), (0, px(500.)));
+        assert_eq!(column.resize_target(px(1000.)), (1, px(340.)));
+        assert_eq!(column.resize_target(px(1200.)), (1, px(340.)));
         assert_eq!(ratio.completed(&[px(660.), px(340.)]), Some(6600));
         assert_eq!(column.completed(&[px(660.), px(340.)]), Some(340));
         assert_eq!(column.completed(&[px(24.), px(24.)]), Some(24));

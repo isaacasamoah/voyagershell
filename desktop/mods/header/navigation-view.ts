@@ -1,7 +1,7 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { Name } from "voyager_native";
-import { Brand, dock_target_visible } from "voyager_avatar";
+import { Name, MeasureHeight } from "voyager_native";
+import { Brand, dock_target_visible, speech_in_primary } from "voyager_avatar";
 import { Speech } from "voyager_conversation";
 import { projection } from "voyager_header";
 import type Workspace from "./main.js";
@@ -23,30 +23,28 @@ export function renderSidebar(
   const sidebar = div()
     .flex()
     .flex_col()
-    .flex_shrink_0()
-    .px(workspace.sidebar ? 12 : 4)
+    .flex_1()
+    .min_h(0)
     .border_r_1()
     .border_color("#ffffff0c")
     .bg("#16181c");
-  sidebar.child(
+  const heading = div().flex().flex_col().flex_shrink_0();
+  heading.child(
     div()
       .flex()
       .items_center()
       .h(40)
       .justify_end()
+      .pr(2)
       .flex_shrink_0()
-      .children(
-        workspace.sidebar
-          ? [div().flex_1(), workspace.sidebarToggle()]
-          : [workspace.sidebarToggle()],
-      ),
+      .child(workspace.sidebarToggle()),
   );
   if (!workspace.sidebar)
-    sidebar.child(
+    heading.child(
       div()
         .w(48)
         .h(44)
-        .ml(-4)
+        .self_center()
         .flex_shrink_0()
         .children(
           layout.context.kind === "workspace"
@@ -61,8 +59,8 @@ export function renderSidebar(
             : [],
         ),
     );
-  if (workspace.sidebar) {
-    sidebar.child(
+  else
+    heading.child(
       div()
         .relative()
         .w(200)
@@ -79,52 +77,68 @@ export function renderSidebar(
           ),
         ),
     );
-    sidebar.child(
-      div()
-        .id("primary-conversation-controls")
-        .flex()
-        .items_center()
-        .justify_center()
-        .min_h(30)
-        .flex_shrink_0()
-        .gap(6)
-        .child(Speech.new("voyager-speech", {}))
-        .child(workspace.chat.toggleView(colors)),
-    );
-    sidebar.child(workspace.chat.render(colors, layout.context) || div());
-  }
-  sidebar.child(
+  heading.child(
+    div()
+      .id("primary-conversation-controls")
+      .flex()
+      .items_center()
+      .justify_center()
+      .min_h(30)
+      .flex_shrink_0()
+      .gap(workspace.sidebar ? 6 : 2)
+      .children(speech_in_primary() ? [Speech.new("voyager-speech", {})] : [])
+      .child(workspace.chat.toggleView(colors)),
+  );
+  const navigation = div()
+    .flex()
+    .flex_col()
+    .w_full()
+    .min_h(0)
+    .overflow_y_scroll()
+    .px(workspace.sidebar ? 12 : 0);
+  const home = Button.new("home-navigation")
+    .accessibility_label("Home")
+    .h(28)
+    .px(workspace.sidebar ? 10 : 4)
+    .w(workspace.sidebar ? 200 : 38)
+    .text_size(13)
+    .gap(9)
+    .children(workspace.sidebar ? [svg("home.svg").size(14)] : [])
+    .child(workspace.sidebar ? "Home" : svg("home.svg").size(16))
+    .on_click((_event, cx) => workspace.run({ operation: "home" }, cx));
+  if (workspace.sidebar) home.justify_start();
+  else home.justify_center();
+  navigation.child(
     div()
       .flex()
       .items_center()
+      .justify_center()
+      .w_full()
       .h(36)
       .flex_shrink_0()
-      .child(
-        Button.new("home-navigation")
-          .accessibility_label("Home")
-          .h(28)
-          .px(workspace.sidebar ? 10 : 12)
-          .w(workspace.sidebar ? 180 : 38)
-          .justify_start()
-          .text_size(13)
-          .child(workspace.sidebar ? "Home" : "⌂")
-          .on_click((_event, cx) => workspace.run({ operation: "home" }, cx)),
-      ),
+      .child(home),
   );
-  if (workspace.sidebar)
-    sidebar.child(
+  if (!workspace.sidebar) {
+    navigation.child(div().h(6).flex_shrink_0());
+  } else
+    navigation.child(
       div()
         .flex()
         .items_center()
         .h(34)
         .mt(12)
+        .flex_shrink_0()
         .child(
           div()
             .flex_1()
+            .flex()
+            .items_center()
+            .gap(9)
             .px(10)
-            .text_size(10)
-            .text_color("#92939d")
-            .child("VOYAGES"),
+            .text_size(13)
+            .text_color(colors.muted)
+            .child(svg("voyager.svg").size(15))
+            .child("Voyages"),
         )
         .child(
           Button.new("create-voyage")
@@ -153,6 +167,8 @@ export function renderSidebar(
       .relative()
       .flex()
       .items_center()
+      .justify_center()
+      .w_full()
       .h(42)
       .rounded(4)
       .bg(item.id === voyage?.id ? "#c0b1f00b" : "#00000000")
@@ -173,7 +189,22 @@ export function renderSidebar(
       row.child(
         div()
           .flex_1()
-          .pl(docked ? 48 : 0)
+          .pl(docked ? 48 : 8)
+          .flex()
+          .items_center()
+          .children(
+            !docked
+              ? [
+                  svg("orbit.svg")
+                    .size(14)
+                    .text_color(
+                      (["#b3d2e5", "#bcb3e5", "#e5c9ad", "#b8d3bd"] as const)[
+                        index % 4
+                      ],
+                    ),
+                ]
+              : [],
+          )
           .child(
             workspace.action(
               item.name,
@@ -212,9 +243,10 @@ export function renderSidebar(
           .h(2)
           .bg("#b3d2e5"),
       );
-    sidebar.child(
+    navigation.child(
       div()
         .h(42)
+        .w_full()
         .flex_shrink_0()
         .child(
           workspace.contextMenu(
@@ -244,10 +276,11 @@ export function renderSidebar(
     );
   }
   if (!workspace.sidebar)
-    sidebar.child(
+    navigation.child(
       Button.new("rail-create-voyage")
         .accessibility_label("Create Voyage")
         .w(38)
+        .self_center()
         .h(28)
         .p(2)
         .child("+")
@@ -262,19 +295,26 @@ export function renderSidebar(
           ),
         ),
     );
+
+  const measure = (
+    name: "sidebar" | "heading" | "navigation",
+    child: NativeElement,
+  ): NativeElement =>
+    MeasureHeight.new(
+      `${workspace.splitSession}-${name}`,
+      (height, cx) => workspace.chat.measure(name, height, cx),
+      name === "sidebar" ? "Workspace sidebar" : undefined,
+    ).child(child);
+  sidebar.child(measure("heading", heading).flex_shrink_0());
+  if (workspace.sidebar)
+    sidebar.child(workspace.chat.render(colors, layout.context) || div());
+  sidebar.child(
+    measure("navigation", navigation)
+      .flex_shrink_0()
+      .max_h(workspace.chat.open && workspace.sidebar ? "40%" : "100%"),
+  );
   sidebar.child(div().flex_1());
-  if (!workspace.sidebar)
-    sidebar.child(
-      div()
-        .flex()
-        .flex_col()
-        .items_center()
-        .gap(4)
-        .pb(8)
-        .child(Speech.new("voyager-speech", {}))
-        .child(workspace.chat.toggleView(colors)),
-    );
-  return sidebar;
+  return measure("sidebar", sidebar);
 }
 
 export function renderFleets(

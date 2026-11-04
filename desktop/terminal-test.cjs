@@ -941,6 +941,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
       return div();
     },
   };
+  let occluders = 0;
   const layers = [];
   const layer = {
     new(id, props) {
@@ -967,6 +968,9 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "svg",
     "activityBadge",
     "dock_target_visible",
+    "speech_in_primary",
+    "MeasureHeight",
+    "Occluding",
     source,
   )(
     class {},
@@ -1000,6 +1004,14 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     div,
     activityBadge,
     () => false,
+    () => true,
+    component,
+    {
+      new() {
+        occluders += 1;
+        return div();
+      },
+    },
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
@@ -1168,6 +1180,29 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   );
   view.layout = unchanged;
   assert.equal(view.version, "7");
+  view.sidebar = false;
+  view.chat.render = () => div();
+  view.chat.present = false;
+  view.render({});
+  assert.equal(
+    occluders,
+    0,
+    "Closed compact chat must not cover the workspace",
+  );
+  view.chat.present = true;
+  view.render({});
+  assert.equal(
+    occluders,
+    1,
+    "Visible or closing chat keeps its native occluder",
+  );
+  view.chat.present = false;
+  view.render({});
+  assert.equal(
+    occluders,
+    1,
+    "The occluder disappears after the closing transition",
+  );
   assert.deepEqual(
     actions,
     [],

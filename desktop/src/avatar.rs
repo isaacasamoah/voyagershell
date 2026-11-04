@@ -29,6 +29,7 @@ pub struct Avatar {
     version: u64,
     scope: Scope,
     dock_visible: bool,
+    primary_speech: Rc<Cell<bool>>,
     projection_key: String,
     dock_receipt: String,
     drag: Option<Drag>,
@@ -56,6 +57,7 @@ pub struct Binding {
     targets: Rc<RefCell<Geometry>>,
     result: Rc<RefCell<Option<Result<Response, String>>>>,
     window_epoch: Rc<Cell<u64>>,
+    primary_speech: Rc<Cell<bool>>,
 }
 
 #[derive(Clone)]
@@ -225,6 +227,10 @@ fn scope_name(scope: &Scope) -> &'static str {
     }
 }
 
+fn speech_in_primary(scope: &Scope, visible: bool, floating: bool) -> bool {
+    !floating && (!visible || matches!(scope, Scope::Voyage { .. } | Scope::Fleet { .. }))
+}
+
 fn asset(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("assets")
@@ -232,10 +238,20 @@ fn asset(name: &str) -> PathBuf {
 }
 
 impl Avatar {
+    fn speech_in_primary(&self) -> bool {
+        speech_in_primary(
+            &self.scope,
+            self.geometry.borrow().dock_target(&self.scope).is_some(),
+            self.floating.is_some(),
+        )
+    }
+
     fn update_dock_visibility(&mut self, cx: &mut Context<Self>) {
         let visible = self.geometry.borrow().dock_target(&self.scope).is_some();
-        if self.dock_visible != visible {
+        let primary_speech = self.speech_in_primary();
+        if self.dock_visible != visible || self.primary_speech.get() != primary_speech {
             self.dock_visible = visible;
+            self.primary_speech.set(primary_speech);
             cx.emit(Changed);
         }
     }
@@ -265,6 +281,7 @@ impl Avatar {
             cx.defer(move |cx| {
                 let _ = floating.update(cx, |_, window, _| window.remove_window());
             });
+            self.update_dock_visibility(cx);
         }
         crate::platform::tone(true);
         cx.notify();
@@ -566,6 +583,7 @@ impl Avatar {
                     Ok(window) => {
                         avatar.drag = None;
                         avatar.floating = Some(window.into());
+                        avatar.update_dock_visibility(cx);
                         crate::platform::tone(false);
                     }
                     Err(error) => {
@@ -588,11 +606,13 @@ impl Binding {
         let result = Rc::default();
         let window_epoch = Rc::new(Cell::new(0));
         let targets = Rc::default();
+        let primary_speech = Rc::new(Cell::new(true));
         let avatar = cx.new(|cx| Avatar {
             client,
             version: 0,
             scope: Scope::Workspace,
             dock_visible: false,
+            primary_speech: Rc::clone(&primary_speech),
             projection_key: String::new(),
             dock_receipt: String::new(),
             drag: None,
@@ -651,6 +671,7 @@ impl Binding {
             targets,
             result,
             window_epoch,
+            primary_speech,
         }
     }
 
@@ -664,11 +685,15 @@ impl Binding {
         let result = Rc::clone(&self.result);
         let epoch = Rc::clone(&self.window_epoch);
         let visibility = Rc::clone(&self.targets);
+        let primary_speech = Rc::clone(&self.primary_speech);
         let area_targets = Rc::clone(&self.targets);
         let area_view = self.view.downgrade();
         let area_avatar = self.avatar.downgrade();
         HostModule::new(crate::script_types::AVATAR_MODULE)
             .declarations(crate::script_types::AVATAR)
+            .function("speech_in_primary", move |_| {
+                Ok(HostValue::from(primary_speech.get()))
+            })
             .function("dock_target_visible", move |arguments| {
                 let scope: Scope = serde_json::from_str(arguments.string(0)?)
                     .map_err(|error| HostError::new(error.to_string()))?;
@@ -923,6 +948,35 @@ impl Binding {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn speech_uses_primary_controls_only_for_compact_or_fallback_avatars() {
+        for scope in [
+            Scope::Workspace,
+            Scope::Vessel {
+                id: voyager_contract::PlacementId("v".into()),
+            },
+            Scope::Portal {
+                id: voyager_contract::PlacementId("p".into()),
+            },
+        ] {
+            assert!(!speech_in_primary(&scope, true, false));
+            assert!(speech_in_primary(&scope, false, false));
+            assert!(!speech_in_primary(&scope, false, true));
+        }
+        for scope in [
+            Scope::Voyage {
+                id: voyager_contract::VoyageId("v".into()),
+            },
+            Scope::Fleet {
+                id: voyager_contract::FleetId("f".into()),
+            },
+        ] {
+            assert!(speech_in_primary(&scope, true, false));
+            assert!(speech_in_primary(&scope, false, false));
+            assert!(!speech_in_primary(&scope, true, true));
+        }
+    }
 
     #[test]
     fn portal_hit_precedes_an_earlier_vessel_and_uses_its_visible_bounds() {

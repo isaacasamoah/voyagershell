@@ -547,7 +547,20 @@ impl Render for AvatarView {
                     .border_color(rgb(0xb3d2e5)),
             );
         }
-        layer.child(image).into_any_element()
+        layer = layer.child(image);
+        if s > 38.
+            && !avatar.primary_speech.get()
+            && let Some(speech) = crate::speech::view(cx)
+        {
+            layer = layer.child(
+                div()
+                    .absolute()
+                    .left(position.x + px(s * 0.06 + 2.5 - 10.))
+                    .top(position.y + px(s * 0.83 - 2.5 - 10.))
+                    .child(speech),
+            );
+        }
+        layer.into_any_element()
     }
 }
 

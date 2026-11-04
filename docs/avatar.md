@@ -121,3 +121,16 @@ The earlier unexpected floating startups remain unexplained. The retained P4
 material and live-underlay difference, audible sound and motion comparison,
 proof-size gate and exhausted corrective-build ledger remain open. The single
 successful unprepared journey does not establish a startup fix or complete P4.
+
+
+## Voice control placement
+
+The feedback candidate retains one native Speech entity and audio lease. Full-size
+Home, panel and floating avatars render that control on their lower-left edge,
+opposite the unchanged status dot. Compact Voyage/Fleet docks and the bottom
+fallback use the primary controls beside Chat. The avatar publishes this routing
+through its existing presentation update, independently of explicit context.
+Listening uses the existing status green. Routine Listening/Speaking captions are
+absent; connection and capability failures remain in the control's accessible
+description and bounded hover hint. This placement does not establish working
+provider audio or another platform's microphone behavior.

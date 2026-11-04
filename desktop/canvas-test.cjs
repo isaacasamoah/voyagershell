@@ -21,6 +21,31 @@ function element() {
   return node;
 }
 
+function menuModule(Button) {
+  const exports = {};
+  new Function(
+    "exports",
+    "require",
+    ts.transpileModule(
+      fs.readFileSync(
+        process.env.VOYAGER_MENU_SOURCE || `${__dirname}/mods/header/menu.ts`,
+        "utf8",
+      ),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          target: ts.ScriptTarget.ES2022,
+        },
+      },
+    ).outputText,
+  )(exports, (name) =>
+    name === "gpui-kit"
+      ? { div: element }
+      : { Button, Popover: { new: element } },
+  );
+  return exports;
+}
+
 test("maximization renders the selected leaf while retaining preparation of the whole tree", () => {
   const Workspace = new Function(
     "View",
@@ -82,21 +107,23 @@ test("worker creation keeps its opening target and revision across a delayed cat
     },
   ).outputText;
   const buttons = new Map();
+  const Button = {
+    new(id) {
+      const node = element();
+      buttons.set(id, node);
+      return node;
+    },
+  };
   let resolve;
   const exports = {};
   new Function("exports", "require", source)(exports, (name) => {
     if (name === "gpui-kit") return { div: element };
     if (name === "gpui-base")
       return {
-        Button: {
-          new(id) {
-            const node = element();
-            buttons.set(id, node);
-            return node;
-          },
-        },
+        Button,
         Popover: { new: element },
       };
+    if (name === "./menu.js") return menuModule(Button);
     if (name === "voyager_workspace")
       return {
         launches: () =>
@@ -125,6 +152,18 @@ test("worker creation keeps its opening target and revision across a delayed cat
     },
     notify() {},
   };
+  const controlled = picker.render(
+    "portal",
+    destination,
+    "7",
+    create,
+    element(),
+    undefined,
+    false,
+  );
+  controlled.calls.find(([name]) => name === "on_open_change")[1](true, cx);
+  assert.equal(picker.current, null);
+  assert.equal(pending.length, 0);
   const root = picker.render("original", destination, "7", create);
   root.calls.find(([name]) => name === "on_open_change")[1](true, cx);
   const launch = {
@@ -163,6 +202,12 @@ test("worker creation keeps its opening target and revision across a delayed cat
     create,
   );
   assert.equal(buttons.has("create-worker-missing"), false);
+  assert.deepEqual(
+    buttons
+      .get("create-worker-codex")
+      .calls.filter(([name]) => name === "child"),
+    [["child", "Codex"]],
+  );
   const choose = buttons
     .get("create-worker-codex")
     .calls.find(([name]) => name === "on_click")[1];
@@ -175,6 +220,19 @@ test("worker creation keeps its opening target and revision across a delayed cat
     cx,
   ]);
   assert.equal(picker.current, null);
+  picker.current = { id: "portal", version: "99", destination };
+  const cancel = picker.render(
+    "portal",
+    destination,
+    "99",
+    create,
+    element(),
+    undefined,
+    false,
+  );
+  cancel.calls.find(([name]) => name === "on_open_change")[1](false, cx);
+  assert.equal(picker.current, null);
+  assert.equal(actions.length, 1);
 });
 
 test("the actual canvas composes a retained right column through native presentation", () => {
@@ -336,6 +394,9 @@ test("Chat stays below the primary dock before Home and Voyages, using one retai
     "Brand",
     "Speech",
     "projection",
+    "svg",
+    "MeasureHeight",
+    "speech_in_primary",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(
     class {},
@@ -350,6 +411,9 @@ test("Chat stays below the primary dock before Home and Voyages, using one retai
     { new: element },
     { new: element },
     () => ({}),
+    element,
+    { new: element },
+    () => false,
   );
   const panel = element();
   const toggle = element();
@@ -367,30 +431,36 @@ test("Chat stays below the primary dock before Home and Voyages, using one retai
     target: (_id, _scope, child) => child,
   });
   const layout = { voyages: [], context: { kind: "workspace" } };
-  const sidebar = view.sidebarRegion(layout);
+  const measured = view.sidebarRegion(layout);
+  const sidebar = measured.calls.find(([name]) => name === "child")[1];
   const children = sidebar.calls
     .filter(([name]) => name === "child")
     .map(([, child]) => child);
+  function contains(node, predicate) {
+    if (!node?.calls) return false;
+    if (predicate(node)) return true;
+    return node.calls.some(([name, value]) =>
+      name === "child"
+        ? contains(value, predicate)
+        : name === "children" &&
+          value.some((child) => contains(child, predicate)),
+    );
+  }
   const controls = children.findIndex((node) =>
-    node.calls.some(
-      ([name, value]) =>
-        name === "id" && value === "primary-conversation-controls",
+    contains(node, (candidate) =>
+      candidate.calls.some(
+        ([name, value]) =>
+          name === "id" && value === "primary-conversation-controls",
+      ),
     ),
   );
   const home = children.findIndex((node) =>
-    node.calls.some(
-      ([name, value]) =>
-        name === "child" && value === buttons.get("home-navigation"),
-    ),
+    contains(node, (candidate) => candidate === buttons.get("home-navigation")),
   );
-  assert.equal(controls, 2);
+  assert.equal(controls, 0);
   assert.equal(children[controls + 1], panel);
   assert.ok(home > controls + 1);
-  assert.ok(
-    children[controls].calls.some(
-      ([name, value]) => name === "child" && value === toggle,
-    ),
-  );
+  assert.ok(contains(children[controls], (node) => node === toggle));
   view.sidebar = false;
   view.sidebarRegion(layout);
   assert.equal(renders, 1);
@@ -506,22 +576,13 @@ test("the real layout editor keeps its captured revision, refuses invalid input 
 
 test("right-click actions retain their opening revision and dismiss before acting", () => {
   const nodes = new Map();
-  const Menu = new Function(
-    "div",
-    "Button",
-    "Popover",
-    workspaceSource("VOYAGER_MENU_SOURCE", "return class", "menu.js"),
-  )(
-    element,
-    {
-      new(id) {
-        const node = element();
-        nodes.set(id, node);
-        return node;
-      },
+  const Menu = menuModule({
+    new(id) {
+      const node = element();
+      nodes.set(id, node);
+      return node;
     },
-    { new: element },
-  );
+  }).WorkspaceMenu;
   const Workspace = new Function(
     "View",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),

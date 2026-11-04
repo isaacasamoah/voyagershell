@@ -58,9 +58,14 @@ fn register_text(
     methods.push(StateMethodDescriptor::new::<Entity<InputState>>(
         "focus",
         "(): void",
-        |state, args, window, cx| {
+        move |state, args, window, cx| {
             ensure!(args.is_empty(), "focus takes no arguments");
-            state.update(cx, |state, cx| state.focus(window, cx));
+            state.update(cx, |state, cx| {
+                state.focus(window, cx);
+                if !composer {
+                    state.select_all(window, cx);
+                }
+            });
             Ok(ComponentDataValue::Null)
         },
     ));
@@ -76,7 +81,7 @@ fn register_text(
                 let value = value.clone();
                 Ok(Box::new(cx.new(|cx| {
                     let mut state = if composer {
-                        InputState::new(window, cx).placeholder(value.clone())
+                        InputState::new(window, cx)
                     } else {
                         InputState::new(window, cx).default_value(value.clone())
                     };

@@ -9,6 +9,9 @@ import type { projection } from "voyager_header";
 
 export class Chat {
   open: boolean;
+  present: boolean;
+  transition: number;
+  heights: Record<string, number>;
   observing: boolean;
   pending: boolean;
   state: Snapshot | null;
@@ -16,6 +19,9 @@ export class Chat {
   input: ComposerState;
   constructor(cx: AsyncContext) {
     this.open = false;
+    this.present = false;
+    this.transition = 0;
+    this.heights = {};
     this.observing = false;
     this.pending = false;
     this.state = null;
@@ -26,6 +32,18 @@ export class Chat {
 
   toggle(cx: Context) {
     this.open = !this.open;
+    const transition = ++this.transition;
+    if (this.open) {
+      this.present = true;
+      this.input.focus();
+    } else
+      cx.spawn(async (task) => {
+        await task.sleep(180);
+        if (!this.open && this.transition === transition) {
+          this.present = false;
+          task.notify();
+        }
+      });
     if (this.open && !this.observing) {
       this.observing = true;
       cx.spawn(async (task) => {
@@ -101,9 +119,33 @@ export class Chat {
       .child(svg("chat.svg").w(18).h(16));
   }
 
+  measure(
+    region: "sidebar" | "heading" | "navigation",
+    height: number,
+    cx: Context,
+  ) {
+    if (
+      !Number.isFinite(height) ||
+      height <= 0 ||
+      Math.abs((this.heights[region] || 0) - height) < 0.5
+    )
+      return;
+    this.heights[region] = height;
+    cx.notify();
+  }
+
+  availableHeight(): number {
+    return Math.max(
+      0,
+      (this.heights.sidebar || 0) -
+        (this.heights.heading || 0) -
+        (this.heights.navigation || 0),
+    );
+  }
+
   render(
     colors: ReturnType<typeof projection>,
-    context: Scope,
+    _context: Scope,
     compact = false,
   ): NativeElement | null {
     const panel = div()
@@ -111,20 +153,15 @@ export class Chat {
       .flex()
       .flex_col()
       .w_full()
-      .h(this.open ? 380 : 0)
-      .min_h(this.open ? 210 : 0)
-      .max_h(this.open ? (compact ? "100%" : "40%") : 0)
+      .flex_shrink_0()
+      .h(this.open ? (compact ? 380 : this.availableHeight()) : 0)
+      .min_h(0)
       .opacity(this.open ? 1 : 0)
-      .transition("height", 220)
+      .transition("height", 180)
       .transition("opacity", 180)
       .overflow_hidden()
-      .mt(this.open && !compact ? -8 : 0)
-      .mb(this.open && !compact ? 14 : 0)
-      .rounded(10)
-      .bg(compact ? "#16181c" : "#10121580")
-      .border_1()
-      .border_color(this.open ? "#ffffff0c" : "#00000000");
-    if (!this.open) return panel;
+      .bg(compact ? "#16181c" : "#00000000");
+    if (!this.present) return panel;
     const messages = div()
       .id("voyager-chat-messages")
       .flex()
@@ -164,47 +201,15 @@ export class Chat {
     const phase = this.state?.phase || "idle";
     const active = phase === "starting" || phase === "working";
     const error = this.error || this.state?.error;
-    panel
-      .child(
+    panel.child(messages);
+    if (this.state?.limited)
+      panel.child(
         div()
-          .flex()
-          .items_center()
-          .h(44)
-          .flex_shrink_0()
           .px(12)
-          .border_b_1()
-          .border_color("#7a9bac25")
-          .child(
-            div()
-              .flex_1()
-              .text_size(11)
-              .text_color(colors.foreground)
-              .child("Voyager"),
-          )
-          .child(this.button("Close chat", (cx) => this.toggle(cx), colors)),
-      )
-      .child(
-        div()
-          .px(16)
-          .py(6)
-          .text_size(10)
-          .text_color(colors.muted)
-          .child(`Context: ${context?.kind || "workspace"}`),
-      )
-      .child(messages)
-      .child(
-        div()
-          .px(16)
-          .py(6)
+          .py(4)
           .text_size(9)
           .text_color(colors.muted)
-          .child(
-            this.state?.limited
-              ? "Display limit reached"
-              : active
-                ? "Thinking…"
-                : phase,
-          ),
+          .child("Display limit reached"),
       );
     if (error)
       panel.child(

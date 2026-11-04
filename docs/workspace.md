@@ -398,8 +398,9 @@ Name and Composer share the native text adapter in desktop/src/text.rs. Each
 retains one gpui-base InputState and supplies accessibility metadata through that
 editor. The current Linux bridge exposes its label and focus but lacks the Text
 interface needed for an external accessibility text read. Name keeps its initial text and rename
-events. Composer uses its constructor string as the placeholder and accessible
-label, with an initially empty buffer. Chat keeps that same state through its
+events. Entering Name selects its current value; only submit or blur commits
+the rename. Composer uses its constructor string as its accessible label, with
+an empty visible placeholder and initially empty buffer. Chat keeps that same state through its
 open, close and sidebar placements. This adapter addresses the pinned Shell
 Input materializer's omitted accessibility metadata; it does not introduce
 another editor or change the conversation/provider contract. The integrated
@@ -409,3 +410,24 @@ Compact chat is anchored below the Fleet row and uses the opaque sidebar surface
 to keep terminal output from crossing its text. The regular sidebar keeps its
 original translucent surface. Following the newest reply automatically remains
 an open parity requirement.
+
+
+## Sidebar disclosure and content menus
+
+The current feedback candidate gives Chat the sidebar's width beneath the primary
+avatar. Opening it pushes Home and Voyages down; closing uses the same chat icon
+and retains the draft. Native height and opacity transitions use 180 milliseconds,
+matching the original Electron disclosure. MeasureHeight reports changed native
+container heights to the script so it can reserve room for navigation. It has
+one retained measurement per container and reports no unchanged height. It does
+not own conversation state or persistence. The compact conversation overlay
+exists only while Chat is present, including its closing transition.
+
+Creation and right-click menus share the same bordered surface and menu-item
+builders. Launch labels omit configuration details; the captured launch settings
+and destination remain unchanged. Revealing an empty Portal column opens the
+chooser under P after a successful current-owner response. Cancelling creates
+nothing. Revealing an existing column retains its content. The native Column
+starts its trailing panel at the saved width and keeps its resize handle on the
+visible seam. These feedback changes require the combined native journey before
+UX acceptance.

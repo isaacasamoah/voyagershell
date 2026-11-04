@@ -105,12 +105,14 @@ picker.render('pane', destination, '7', () => {}, div());"#,
         .map(|(name, expression, expected)| {
             let package = root.join(name);
             std::fs::create_dir(&package).unwrap();
+            std::fs::write(package.join("menu.js"), include_str!("../mods/header/menu.js")).unwrap();
             std::fs::write(
                 package.join("main.js"),
                 format!(
                     r#"import {{ View, div }} from "gpui-kit";
 import {{ Occluding }} from "voyager_native";
 import {{ Button, Popover }} from "gpui-base";
+import {{ menuButton, menuSurface }} from "./menu.js";
 {creation}
 {expression}
 export default class extends View {{}}

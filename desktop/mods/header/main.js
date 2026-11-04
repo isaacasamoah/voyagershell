@@ -743,20 +743,17 @@ export default class Workspace extends View {
     ) {
       const voyage = this.layout ? currentVoyage(this.layout) : undefined;
       if (voyage?.portalLayout) {
-        const action = shift
-          ? {
-              operation: "set-portal-presentation",
-              voyage: voyage.id,
-              mode:
-                voyage.portalLayout.mode === "overlay"
-                  ? "make-room"
-                  : "overlay",
-            }
-          : {
-              operation: "set-portal-presentation",
-              voyage: voyage.id,
-              visible: !voyage.portalLayout.visible,
-            };
+        if (!shift) {
+          this.togglePortals(voyage, cx);
+          cx.stop_propagation();
+          return;
+        }
+        const action = {
+          operation: "set-portal-presentation",
+          voyage: voyage.id,
+          mode:
+            voyage.portalLayout.mode === "overlay" ? "make-room" : "overlay",
+        };
         this.run(action, cx);
         cx.stop_propagation();
       }
@@ -987,10 +984,10 @@ export default class Workspace extends View {
     return Button.new("toggle-sidebar")
       .accessibility_label(this.sidebar ? "Collapse sidebar" : "Expand sidebar")
       .tooltip(this.sidebar ? "Collapse sidebar" : "Expand sidebar")
-      .w(28)
-      .h(28)
-      .p(4)
-      .child("◧")
+      .w(32)
+      .h(32)
+      .p(5)
+      .child(svg("sidebar.svg").size(17))
       .on_click((_event, cx) =>
         this.run({ operation: "set-sidebar", collapsed: this.sidebar }, cx),
       );
@@ -1014,7 +1011,7 @@ export default class Workspace extends View {
       })),
     );
   }
-  creationControl(id, destination, trigger) {
+  creationControl(id, destination, trigger, triggerOpens = true) {
     const creation = (this.creation ??= new CreationPicker());
     return creation.render(
       id,
@@ -1031,6 +1028,7 @@ export default class Workspace extends View {
       },
       trigger,
       () => this.hiddenChoices(destination, this.version),
+      triggerOpens,
     );
   }
   statusView() {
@@ -1191,13 +1189,10 @@ export default class Workspace extends View {
     )
       body.child(Name.new(this.layoutName.state).w(160).h(29));
     if (panel) return body.child(panel);
+    if (group.owner.kind === "portals") return body;
     const id = `empty-${JSON.stringify(group.owner)}`;
     const trigger = Button.new(`choose-${id}`)
-      .accessibility_label(
-        group.owner.kind === "portals"
-          ? "Choose Portal content"
-          : "Choose Vessel content",
-      )
+      .accessibility_label("Choose Vessel content")
       .h(28)
       .px(10)
       .text_size(12)
@@ -1230,6 +1225,48 @@ export default class Workspace extends View {
       Boolean(voyage?.portals.some((panel) => panel.id === context.id))
     );
   }
+  togglePortals(voyage, cx) {
+    const column = voyage.portalLayout;
+    if (!column) return;
+    const visible = !column.visible;
+    this.run(
+      { operation: "set-portal-presentation", voyage: voyage.id, visible },
+      cx,
+      (result, task) => {
+        if (
+          !visible ||
+          result?.status !== "applied" ||
+          !result.fresh ||
+          result.version !== this.version
+        )
+          return;
+        const group = panelGroups(result.layout).find(
+          (item) =>
+            item.owner.kind === "portals" && item.owner.voyage === voyage.id,
+        );
+        if (
+          !group ||
+          visiblePanels(group).length ||
+          !group.voyage.portalLayout?.visible ||
+          !this.layout ||
+          currentVoyage(this.layout)?.id !== voyage.id
+        )
+          return;
+        const destination = {
+          kind: "panel",
+          owner: group.owner,
+          insertion: { kind: "empty" },
+        };
+        (this.creation ??= new CreationPicker()).open(
+          `portal-choices-${voyage.id}`,
+          destination,
+          result.version,
+          task,
+          () => this.hiddenChoices(destination, result.version),
+        );
+      },
+    );
+  }
   portalControls(voyage) {
     const column = voyage.portalLayout;
     if (!column) return div();
@@ -1250,25 +1287,26 @@ export default class Workspace extends View {
           ),
       );
     const label = column.visible ? "Hide Portals" : "Show Portals";
+    const trigger = Button.new("toggle-portals")
+      .accessibility_label(label)
+      .tooltip(`${label} · Ctrl+Alt+P / ⌘⌥P`)
+      .w(32)
+      .h(26)
+      .p(3)
+      .text_size(11)
+      .child(column.visible ? "P ›" : "‹ P")
+      .on_click((_event, cx) => this.togglePortals(voyage, cx));
     controls.child(
-      Button.new("toggle-portals")
-        .accessibility_label(label)
-        .tooltip(`${label} · Ctrl+Alt+P / ⌘⌥P`)
-        .w(32)
-        .h(26)
-        .p(3)
-        .text_size(11)
-        .child(column.visible ? "P ›" : "‹ P")
-        .on_click((_event, cx) =>
-          this.run(
-            {
-              operation: "set-portal-presentation",
-              voyage: voyage.id,
-              visible: !column.visible,
-            },
-            cx,
-          ),
-        ),
+      this.creationControl(
+        `portal-choices-${voyage.id}`,
+        {
+          kind: "panel",
+          owner: { kind: "portals", voyage: voyage.id },
+          insertion: { kind: "empty" },
+        },
+        trigger,
+        false,
+      ),
     );
     if (column.visible)
       controls.child(
@@ -1459,7 +1497,7 @@ export default class Workspace extends View {
         },
       ),
     );
-    if (!this.sidebar) {
+    if (!this.sidebar && this.chat.present) {
       const chat = this.chat.render(colors, layout.context, true);
       if (chat)
         shell.child(

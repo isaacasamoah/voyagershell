@@ -1,8 +1,9 @@
 use gpui::{
-    App, AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled, Task, Window,
-    div, px, rgb, svg,
+    App, AppContext, Context, Entity, IntoElement, ParentElement, Render,
+    StatefulInteractiveElement as _, Styled, Task, Window, div, prelude::FluentBuilder as _, px,
+    rgb, svg,
 };
-use gpui_base::{Button, Theme};
+use gpui_base::{Button, Theme, Tooltip};
 use std::{sync::Arc, time::Duration};
 use voyager_app::conversation_client::{AudioLease, Client};
 use voyager_contract::{
@@ -14,23 +15,31 @@ struct Controller(Entity<Speech>);
 
 impl gpui::Global for Controller {}
 
+pub(crate) fn initialize(client: Client, cx: &mut App) {
+    if cx.try_global::<Controller>().is_none() {
+        let speech = cx.new(|cx| Speech::new(client.audio_lease(), cx));
+        cx.set_global(Controller(speech));
+    }
+}
+
+pub(crate) fn view(cx: &App) -> Option<Entity<Speech>> {
+    cx.try_global::<Controller>()
+        .map(|controller| controller.0.clone())
+}
+
 pub fn component(
     client: Client,
 ) -> impl Fn(gpui_shell::ComponentArgs<'_>, &mut Window, &mut App) -> gpui::AnyElement {
     move |_args, _window, cx| {
-        let speech = match cx.try_global::<Controller>() {
-            Some(controller) => controller.0.clone(),
-            None => {
-                let speech = cx.new(|cx| Speech::new(client.audio_lease(), cx));
-                cx.set_global(Controller(speech.clone()));
-                speech
-            }
-        };
-        speech.into_any_element()
+        initialize(client.clone(), cx);
+        match view(cx) {
+            Some(speech) => speech.into_any_element(),
+            None => div().into_any_element(),
+        }
     }
 }
 
-struct Speech {
+pub(crate) struct Speech {
     audio: Option<Arc<AudioLease>>,
     state: Option<State>,
     error: String,
@@ -186,11 +195,7 @@ impl Drop for Speech {
 
 impl Render for Speech {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let colors = Theme::global(cx).tokens.colors;
         let state = self.state.as_ref();
-        if state.is_some_and(|state| matches!(state.capability, Capability::Unavailable { .. })) {
-            return div().into_any_element();
-        }
         let active = state.is_some_and(|state| state.phase == Phase::Active);
         let stopping = state.is_some_and(|state| state.phase == Phase::Stopping);
         let unavailable = state.is_none_or(|state| {
@@ -199,19 +204,33 @@ impl Render for Speech {
                 Capability::Checking | Capability::Unavailable { .. }
             )
         });
-        let color = if active {
-            colors.accent
-        } else {
-            rgb(0x989ba9).into()
-        };
+        let color = if active { rgb(0x94bda0) } else { rgb(0x989ba9) };
         let wave = svg()
             .path("speech-wave.svg")
             .w(px(14.))
             .h(px(12.))
             .text_color(color);
+        let status = if !self.error.is_empty() {
+            self.error.clone()
+        } else {
+            state
+                .and_then(|state| {
+                    state.error.clone().or_else(|| match &state.capability {
+                        Capability::Unavailable { reason } => Some(reason.clone()),
+                        _ => None,
+                    })
+                })
+                .unwrap_or_else(|| match state.map(|state| &state.phase) {
+                    Some(Phase::Preparing | Phase::Negotiating) => "Connecting voice…".into(),
+                    Some(Phase::Stopping) => "Stopping voice…".into(),
+                    Some(Phase::Unconfirmed) => "Audio stop is unconfirmed".into(),
+                    _ => String::new(),
+                })
+        };
         let label = if active { "Stop voice" } else { "Start voice" };
-        let control = Button::new("voyager-speech")
+        Button::new("voyager-speech")
             .accessibility_label(label)
+            .aria_description(status.clone())
             .disabled(unavailable || self.pending || stopping)
             .flex()
             .items_center()
@@ -220,37 +239,26 @@ impl Render for Speech {
             .h(px(20.))
             .rounded(px(10.))
             .on_click(cx.listener(|speech, _, _, cx| speech.activate(cx)))
-            .child(wave);
-        let status = if !self.error.is_empty() {
-            self.error.clone()
-        } else {
-            state
-                .and_then(|state| state.error.clone())
-                .unwrap_or_else(|| match state.map(|state| &state.phase) {
-                    Some(Phase::Preparing | Phase::Negotiating) => "Connecting voice…".into(),
-                    Some(Phase::Active) => {
-                        if state.is_some_and(|state| state.speaker_peak > 0) {
-                            "Speaking".into()
-                        } else {
-                            "Listening".into()
-                        }
-                    }
-                    Some(Phase::Stopping) => "Stopping voice…".into(),
-                    Some(Phase::Unconfirmed) => "Audio stop is unconfirmed".into(),
-                    _ => String::new(),
-                })
-        };
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(3.))
-            .child(control)
-            .child(
-                div()
-                    .text_size(px(10.))
-                    .text_color(colors.muted_foreground)
-                    .child(status),
-            )
+            .child(wave)
+            .when(!status.is_empty(), |control| {
+                control.tooltip(move |_, cx| cx.new(|_| VoiceHint(status.clone())).into())
+            })
             .into_any_element()
+    }
+}
+
+struct VoiceHint(String);
+
+impl Render for VoiceHint {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let colors = Theme::global(cx).tokens.colors;
+        Tooltip::new("voyager-voice-detail")
+            .max_w(px(110.))
+            .p(px(5.))
+            .rounded(px(4.))
+            .bg(rgb(0x16181c))
+            .text_size(px(10.))
+            .text_color(colors.muted_foreground)
+            .child(self.0.clone())
     }
 }

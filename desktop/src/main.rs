@@ -4,6 +4,7 @@ mod avatar_motion;
 mod content_budget;
 mod conversation;
 mod host;
+mod measure;
 mod notes;
 mod notes_draft;
 mod notes_input;
@@ -153,6 +154,10 @@ fn run() -> Result<()> {
         include_str!("../mods/header/chat.svg"),
     )?;
     for (name, source) in [
+        ("home.svg", include_str!("../mods/header/home.svg")),
+        ("sidebar.svg", include_str!("../mods/header/sidebar.svg")),
+        ("orbit.svg", include_str!("../mods/header/orbit.svg")),
+        ("voyager.svg", include_str!("../mods/header/voyager.svg")),
         (
             "split-horizontal.svg",
             include_str!("../mods/header/split-horizontal.svg"),
@@ -237,6 +242,11 @@ fn run() -> Result<()> {
                     return;
                 }
             };
+            if let Err(error) = measure::register(&mut registry) {
+                eprintln!("Native measurement registration: {error}");
+                cx.quit();
+                return;
+            }
             if let Err(error) = text::register(&mut registry) {
                 eprintln!("Native text registration: {error}");
                 cx.quit();
@@ -296,6 +306,7 @@ fn run() -> Result<()> {
             if let Err(error) = cx.open_window(options, |window, cx| {
                 let quit_workspace = client.clone();
                 let quit_conversation = conversation.clone();
+                speech::initialize(conversation.clone(), cx);
                 let avatar = avatar::Binding::new(client.clone(), window, cx);
                 let header = cx.new(|cx| {
                     host::Header::new(

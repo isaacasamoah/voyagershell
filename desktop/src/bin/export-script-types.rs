@@ -1,5 +1,7 @@
 #[path = "../arrangement.rs"]
 mod arrangement;
+#[path = "../measure.rs"]
+mod measure;
 #[path = "../notes_draft.rs"]
 pub mod notes_draft;
 #[path = "../notes_input.rs"]
@@ -37,6 +39,7 @@ fn main() -> Result<()> {
     }
     let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, "voyager_native")?;
     text::register(&mut registry)?;
+    measure::register(&mut registry)?;
     arrangement::register(&mut registry)?;
     split::register(&mut registry)?;
     occluding::register(&mut registry)?;

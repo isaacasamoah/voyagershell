@@ -61,5 +61,6 @@ export const Target: { new: (id: string, props: { scope: string; fallback: boole
 export const PortalArea: { new: (id: string, props: Record<string, never>) => import("gpui-kit").NativeElement };
 export function window_epoch(): string;
 export function dock_target_visible(scope: string): boolean;
+export function speech_in_primary(): boolean;
 export function take_result(): string | null;
 "#;

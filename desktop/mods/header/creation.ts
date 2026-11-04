@@ -1,5 +1,6 @@
 import { div } from "gpui-kit";
-import { Button, Popover } from "gpui-base";
+import { Popover } from "gpui-base";
+import { menuButton, menuSurface } from "./menu.js";
 import { launches } from "voyager_workspace";
 import { descriptions } from "voyager_content_view";
 import {
@@ -96,20 +97,13 @@ export class CreationPicker {
     create: (action: Create | Reopen, version: string, cx: Context) => void,
     trigger: NativeElement,
     hidden: () => Promise<HiddenChoices> = async () => ({ panels: [] }),
+    triggerOpens = true,
   ): NativeElement {
     const opening = this.current?.id === id ? this.current : null;
     const entity = destination.owner.kind === "portals" ? "Portal" : "Vessel";
-    const content = div()
-      .id(`worker-choices-${id}`)
-      .flex()
-      .flex_col()
-      .gap(5)
-      .p(8)
-      .w(260)
+    const content = menuSurface(`worker-choices-${id}`, "Content choices")
       .max_h(320)
-      .overflow_y_scroll()
-      .bg("#16181c")
-      .text_color("#ded8ef");
+      .overflow_y_scroll();
     if (opening) {
       if (this.catalog) {
         const entries = [...this.catalog.settings.entries].sort(
@@ -120,20 +114,12 @@ export class CreationPicker {
         for (const entry of entries) {
           if (!this.catalog.available.includes(entry.id)) continue;
           const launch = entry.launch;
-          const detail =
-            launch.kind === "codex"
-              ? `${launch.model} · ${launch.effort} · ${launch.permissions}`
-              : "";
           content.child(
-            Button.new(`create-worker-${entry.id}`)
-              .accessibility_label(`Create ${entry.name} ${entity}`)
-              .justify_start()
-              .child(
-                entry.name +
-                  (entry.id === this.catalog.settings.default
-                    ? " (default)"
-                    : ""),
-              )
+            menuButton(
+              `create-worker-${entry.id}`,
+              `Create ${entry.name} ${entity}`,
+            )
+              .child(entry.name)
               .on_click((_event, cx) => {
                 if (this.current !== opening) return;
                 this.current = null;
@@ -149,7 +135,6 @@ export class CreationPicker {
                 );
               }),
           );
-          if (detail) content.child(div().text_size(10).child(detail));
         }
         for (const error of this.catalog.errors)
           content.child(div().text_size(10).text_color("#ffcad3").child(error));
@@ -161,9 +146,7 @@ export class CreationPicker {
         );
       if (this.notes)
         content.child(
-          Button.new("create-notes-vessel")
-            .accessibility_label(`Create Notes ${entity}`)
-            .justify_start()
+          menuButton("create-notes-vessel", `Create Notes ${entity}`)
             .child("Notes")
             .on_click((_event, cx) => {
               if (this.current !== opening) return;
@@ -181,9 +164,7 @@ export class CreationPicker {
         );
       if (this.agents)
         content.child(
-          Button.new("create-agents-vessel")
-            .accessibility_label(`Create Agents ${entity}`)
-            .justify_start()
+          menuButton("create-agents-vessel", `Create Agents ${entity}`)
             .child("Agents")
             .on_click((_event, cx) => {
               if (this.current !== opening) return;
@@ -201,9 +182,7 @@ export class CreationPicker {
         );
       if (this.hidden.length)
         content.child(
-          Button.new("hidden-vessels")
-            .accessibility_label("Hidden vessels")
-            .justify_start()
+          menuButton("hidden-vessels", "Hidden vessels")
             .child(
               `${this.expanded ? "⌄" : "›"} Hidden vessels (${this.hidden.length})`,
             )
@@ -215,12 +194,11 @@ export class CreationPicker {
       if (this.expanded)
         for (const panel of this.hidden)
           content.child(
-            Button.new(`reopen-${panel.id}`)
-              .accessibility_label(
-                `Reopen ${panel.name}${this.hidden.filter((item) => item.name === panel.name).length > 1 ? ` in ${panel.path}` : ""}`,
-              )
+            menuButton(
+              `reopen-${panel.id}`,
+              `Reopen ${panel.name}${this.hidden.filter((item) => item.name === panel.name).length > 1 ? ` in ${panel.path}` : ""}`,
+            )
               .tooltip(panel.path)
-              .justify_start()
               .child(
                 div()
                   .flex()
@@ -256,8 +234,9 @@ export class CreationPicker {
           cx.notify();
           return;
         }
-        if (this.current?.id !== id)
+        if (triggerOpens && this.current?.id !== id)
           this.open(id, destination, version, cx, hidden);
+        else cx.notify();
       })
       .trigger(trigger)
       .content(content);

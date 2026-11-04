@@ -13,7 +13,10 @@ module.exports = function workspaceSource(
     .replace(/^import [\s\S]*?;\n/gm, "")
     .replace("export default class", declaration)
     .replace("export class", declaration)
-    .replace("export function", declaration);
+    .replaceAll(
+      "export function",
+      declaration.includes("function") ? declaration : "function",
+    );
   const helpers =
     filename === "main.js"
       ? ["panels.js", "panel-view.js", "navigation-view.js"]
