@@ -14,11 +14,52 @@ use gpui_shell::{
 };
 use voyager_contract::SplitShare;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Allocation {
+    Ratio(SplitShare),
+    TrailingPixels(u16),
+}
+
+impl Allocation {
+    fn first_size(self, extent: Pixels) -> Pixels {
+        match self {
+            Self::Ratio(share) => {
+                extent * (f32::from(u16::from(share)) / f32::from(SplitShare::TOTAL))
+            }
+            Self::TrailingPixels(width) => extent - px(f32::from(width)),
+        }
+    }
+
+    fn completed(self, sizes: &[Pixels]) -> Option<u16> {
+        let [first, second] = sizes else {
+            return None;
+        };
+        if !f32::from(*first).is_finite()
+            || !f32::from(*second).is_finite()
+            || *first <= px(0.)
+            || *second <= px(0.)
+        {
+            return None;
+        }
+        match self {
+            Self::Ratio(_) => Some(
+                (f32::from(SplitShare::TOTAL) * f32::from(*first) / f32::from(*first + *second))
+                    .round()
+                    .clamp(1., f32::from(SplitShare::TOTAL - 1)) as u16,
+            ),
+            Self::TrailingPixels(_) => {
+                let width = f32::from(*second).round();
+                (1. ..=4096.).contains(&width).then_some(width as u16)
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct Config {
     id: String,
     axis: Axis,
-    share: SplitShare,
+    allocation: Allocation,
     revision: String,
     reset: u64,
 }
@@ -95,7 +136,7 @@ impl ComponentMaterializer for Split {
                         .active_handle
                         .unwrap_or(theme.tokens.colors.ring)
                 } else {
-                    transparent_black().into()
+                    transparent_black()
                 };
                 let (label, orientation) = match handle.axis() {
                     Axis::Horizontal => ("Resize side by side panes", Orientation::Vertical),
@@ -113,32 +154,27 @@ impl ComponentMaterializer for Split {
                 )
             }))
             .on_resize(move |native, window, cx| {
-                let sizes = native.read(cx).sizes();
-                let share = match sizes.as_slice() {
-                    [first, second] if *first > px(0.) && *second > px(0.) => {
-                        let value = (f32::from(SplitShare::TOTAL) * f32::from(*first)
-                            / f32::from(*first + *second))
-                        .round()
-                        .clamp(1., f32::from(SplitShare::TOTAL - 1))
-                            as u16;
-                        SplitShare::try_from(value).ok()
-                    }
-                    _ => None,
-                };
+                let value = complete
+                    .read(cx)
+                    .config
+                    .allocation
+                    .completed(native.read(cx).sizes());
                 let original = complete.update(cx, |state, cx| {
                     let config = state.config.clone();
                     let original = state.gesture.finish(&config);
                     let callback = state.callback.clone();
-                    state.awaiting = original.clone().filter(|_| share.is_some());
+                    state.awaiting = original.clone().filter(|_| value.is_some());
                     state.applied = None;
                     cx.notify();
-                    original.map(|original| (original, callback))
+                    original
+                        .zip(value)
+                        .map(|(original, value)| (original, callback, value))
                 });
-                if let (Some((original, callback)), Some(share)) = (original, share)
+                if let Some((original, callback, value)) = original
                     && let Err(error) = callback.invoke_with(
                         &[
                             ComponentCallbackArgument::String(original.revision),
-                            ComponentCallbackArgument::Number(u16::from(share).into()),
+                            ComponentCallbackArgument::Number(value.into()),
                         ],
                         window,
                         cx,
@@ -159,9 +195,15 @@ impl ComponentMaterializer for Split {
                 (Axis::Vertical, 0) => content.pb(px(4.)),
                 (Axis::Vertical, _) => content.pt(px(4.)),
             };
+            let maximum =
+                if index == 1 && matches!(config.allocation, Allocation::TrailingPixels(_)) {
+                    px(4096.)
+                } else {
+                    Pixels::MAX
+                };
             group = group.child(
                 resizable_panel()
-                    .size_range(px(24.)..Pixels::MAX)
+                    .size_range(px(24.)..maximum)
                     .child(content.child(child)),
             );
         }
@@ -191,8 +233,7 @@ impl ComponentMaterializer for Split {
                         if state.config != expected || state.gesture.pressed {
                             return;
                         }
-                        let size = extent
-                            * (f32::from(u16::from(expected.share)) / f32::from(SplitShare::TOTAL));
+                        let size = expected.allocation.first_size(extent);
                         state.native.update(cx, |native, cx| {
                             native.resize_panel(0, size, window, cx);
                         });
@@ -236,6 +277,17 @@ impl ComponentMaterializer for Split {
     }
 }
 
+fn valid_identity(id: &str, revision: &str, reset: f64) -> bool {
+    !id.is_empty()
+        && id.len() <= 2048
+        && revision.len() <= 20
+        && revision.parse::<u64>().is_ok()
+        && reset.is_finite()
+        && reset >= 0.
+        && reset.fract() == 0.
+        && reset <= 9007199254740991.
+}
+
 pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     registry.register(
         ComponentDescriptor::new("Split", Arc::new(Split)).with_constructors(vec![
@@ -272,16 +324,9 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                                 .into(),
                         );
                     };
-                    if id.is_empty()
-                        || id.len() > 2048
-                        || revision.len() > 20
-                        || revision.parse::<u64>().is_err()
+                    if !valid_identity(id, revision, *reset)
                         || !share.is_finite()
                         || share.fract() != 0.
-                        || !reset.is_finite()
-                        || *reset < 0.
-                        || reset.fract() != 0.
-                        || *reset > 9007199254740991.
                     {
                         return Err("Invalid split configuration".into());
                     }
@@ -294,7 +339,57 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                                 "vertical" => Axis::Vertical,
                                 _ => return Err("Invalid split axis".into()),
                             },
-                            share,
+                            allocation: Allocation::Ratio(share),
+                            revision: revision.clone(),
+                            reset: *reset as u64,
+                        },
+                        callback: callback.clone(),
+                    }))
+                },
+            ),
+        ]),
+    )?;
+    registry.register(
+        ComponentDescriptor::new("Column", Arc::new(Split)).with_constructors(vec![
+            ConstructorDescriptor::new(
+                "Column",
+                vec![
+                    ArgumentDescriptor::new("id", ArgumentSchema::String),
+                    ArgumentDescriptor::new("widthPixels", ArgumentSchema::Number),
+                    ArgumentDescriptor::new("revision", ArgumentSchema::String),
+                    ArgumentDescriptor::new("reset", ArgumentSchema::Number),
+                    ArgumentDescriptor::new(
+                        "callback",
+                        ArgumentSchema::Callback(
+                            "(revision: string, widthPixels: number, cx: Context) => void",
+                        ),
+                    ),
+                ],
+                |args| {
+                    let [
+                        ComponentArgument::String(id),
+                        ComponentArgument::Number(width),
+                        ComponentArgument::String(revision),
+                        ComponentArgument::Number(reset),
+                        callback @ ComponentArgument::Callback(_),
+                    ] = args
+                    else {
+                        return Err(
+                            "Column requires identity, width, revision, reset and callback".into(),
+                        );
+                    };
+                    if !valid_identity(id, revision, *reset)
+                        || !width.is_finite()
+                        || width.fract() != 0.
+                        || !(1. ..=4096.).contains(width)
+                    {
+                        return Err("Invalid column configuration".into());
+                    }
+                    Ok(ComponentPayload::new(Payload {
+                        config: Config {
+                            id: id.clone(),
+                            axis: Axis::Horizontal,
+                            allocation: Allocation::TrailingPixels(*width as u16),
                             revision: revision.clone(),
                             reset: *reset as u64,
                         },
@@ -325,19 +420,51 @@ mod tests {
             std::env::temp_dir().join(format!("voyager-split-constructor-{}", std::process::id()));
         std::fs::create_dir(&directory).unwrap();
         let outcomes = [
-            ("horizontal", true),
-            ("vertical", true),
-            ("diagonal", false),
+            (
+                "horizontal",
+                "Split.new('check', 'horizontal', 5000, '1', 0, () => {});",
+                true,
+            ),
+            (
+                "vertical",
+                "Split.new('check', 'vertical', 5000, '1', 0, () => {});",
+                true,
+            ),
+            (
+                "diagonal",
+                "Split.new('check', 'diagonal', 5000, '1', 0, () => {});",
+                false,
+            ),
+            (
+                "column",
+                "Column.new('check', 340, '1', 0, () => {});",
+                true,
+            ),
+            (
+                "column-zero",
+                "Column.new('check', 0, '1', 0, () => {});",
+                false,
+            ),
+            (
+                "column-large",
+                "Column.new('check', 4097, '1', 0, () => {});",
+                false,
+            ),
+            (
+                "column-fraction",
+                "Column.new('check', 340.5, '1', 0, () => {});",
+                false,
+            ),
         ]
-        .map(|(axis, expected)| {
+        .map(|(axis, expression, expected)| {
             let package = directory.join(axis);
             std::fs::create_dir(&package).unwrap();
             std::fs::write(
                 package.join("main.js"),
                 format!(
                     r#"import {{ View }} from "gpui-kit";
-import {{ Split }} from "voyager_native";
-Split.new("constructor-check", "{axis}", 5000, "1", 0, () => {{}});
+import {{ Split, Column }} from "voyager_native";
+{expression}
 export default class extends View {{}}
 "#
                 ),
@@ -356,11 +483,25 @@ export default class extends View {{}}
     }
 
     #[test]
+    fn column_allocation_keeps_pixels_while_split_keeps_its_ratio() {
+        let ratio = Allocation::Ratio(SplitShare::default());
+        let column = Allocation::TrailingPixels(340);
+        assert_eq!(ratio.first_size(px(1000.)), px(500.));
+        assert_eq!(column.first_size(px(1000.)), px(660.));
+        assert_eq!(column.first_size(px(1200.)), px(860.));
+        assert_eq!(ratio.completed(&[px(660.), px(340.)]), Some(6600));
+        assert_eq!(column.completed(&[px(660.), px(340.)]), Some(340));
+        assert_eq!(column.completed(&[px(24.), px(24.)]), Some(24));
+        assert_eq!(column.completed(&[px(100.), px(4097.)]), None);
+        assert_eq!(column.completed(&[px(0.), px(340.)]), None);
+    }
+
+    #[test]
     fn resize_cannot_substitute_a_newer_revision_or_retarget_a_gesture() {
         let original = Config {
             id: "fleet:first".into(),
             axis: Axis::Horizontal,
-            share: SplitShare::default(),
+            allocation: Allocation::Ratio(SplitShare::default()),
             revision: "10".into(),
             reset: 0,
         };
@@ -378,6 +519,10 @@ export default class extends View {{}}
             },
             Config {
                 reset: 1,
+                ..original.clone()
+            },
+            Config {
+                allocation: Allocation::TrailingPixels(340),
                 ..original.clone()
             },
         ] {
