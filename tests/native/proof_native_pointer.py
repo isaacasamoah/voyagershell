@@ -106,12 +106,15 @@ class Pointer:
             "acknowledged": acknowledged,
         }
 
-    def button(self, pressed):
+    def button(self, pressed, code=272):
+        assert isinstance(pressed, bool) and type(code) is int and code in (272, 273), (
+            "Unsupported native button"
+        )
         self.invoke(
             self.session,
             remote + ".Session",
             "NotifyPointerButton",
-            GLib.Variant("(ib)", (272, pressed)),
+            GLib.Variant("(ib)", (code, pressed)),
         )
 
     def capture(self, path, rect, device_scale):

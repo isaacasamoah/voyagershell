@@ -43,7 +43,7 @@ try:
                 elif action == "capture":
                     result["capture"] = pointer.capture(*args[1:])
                 else:
-                    pointer.button(args[1])
+                    pointer.button(*args[1:])
             elif action == "accessibility-state":
                 from proof_native_accessibility import enabled
 

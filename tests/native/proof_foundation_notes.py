@@ -28,9 +28,9 @@ def setup_source(source):
       const voyage = layout.voyages.find((item) => item.id === layout.selectedVoyage);
       const fleet = voyage?.fleets.find((item) => item.id === layout.selectedFleet);
       if (!voyage || !fleet || fleet.vessels.length !== 1 || voyage.portals.length) throw Error("Proof setup requires its fresh workspace");
-      this.run({ operation: "create-content", typeId: "notes", destination: { kind: "vessel", fleet: fleet.id, after: fleet.vessels[0].id, axis: "horizontal" } }, task, (first, next) => {
+      this.run({ operation: "create-content", typeId: "notes", destination: { kind: "panel", owner: { kind: "fleet", id: fleet.id }, insertion: { kind: "beside", id: fleet.vessels[0].id, side: "right" } } }, task, (first, next) => {
         if (first?.status !== "applied" || !first.fresh) throw Error("Proof Vessel setup was not confirmed");
-        this.run({ operation: "create-content", typeId: "notes", destination: { kind: "portal", voyage: voyage.id } }, next);
+        this.run({ operation: "create-content", typeId: "notes", destination: { kind: "panel", owner: { kind: "portals", voyage: voyage.id }, insertion: { kind: "empty" } } }, next);
       });
     });
     this.startContext(cx);"""

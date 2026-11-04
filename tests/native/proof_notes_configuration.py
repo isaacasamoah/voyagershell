@@ -26,8 +26,8 @@ def configuration_setup(*, native, pid, evidence, type_text, click, owned):
     prompt = (
         "Use voyager_workspace to inspect the workspace. Keep the original terminal and Workspace context. "
         "Create exactly two Notes content instances: one Vessel beside the existing terminal in the selected Fleet, "
-        "and one Portal in its Voyage. Then inspect the workspace again and update its existing canvas "
-        "with portalMode make-room, preserving all other canvas fields. Use fresh expectedVersion for each action. "
+        "and one Portal in its Voyage. Then inspect the workspace again and use set-portal-presentation "
+        "with that Voyage ID and mode make-room, preserving its other presentation fields. Use fresh expectedVersion for each action. "
         "Do not create another Fleet, change data, edit files, launch programs or repeat an uncertain action. "
         "Report the actual owner outcomes briefly."
     )
@@ -54,10 +54,10 @@ def configuration_setup(*, native, pid, evidence, type_text, click, owned):
     operations = [tool["action"]["action"]["operation"] for tool in tools]
     assert (
         operations.count("create-content") == 2
-        and operations.count("update-canvas") == 1
+        and operations.count("set-portal-presentation") == 1
     )
     assert all(
-        operation in ("inspect", "create-content", "update-canvas")
+        operation in ("inspect", "create-content", "set-portal-presentation")
         for operation in operations
     )
     click(chat_close_point(native, pid, evidence))

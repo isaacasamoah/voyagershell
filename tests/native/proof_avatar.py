@@ -6,8 +6,9 @@ import sys
 import time
 from pathlib import Path
 
-from proof_workspace import chord, core_rpc
+from proof_workspace import chord, core_rpc, named_button
 from proof_avatar_window import floating_windows as owned_floating_windows
+from proof_foundation_notes import wait
 
 
 def prove(
@@ -240,7 +241,7 @@ def prove(
 
     def scope(kind):
         target_name = {
-            "workspace": "Whole workspace dock",
+            "workspace": "Overwatch dock",
             "voyage": "Voyage dock",
             "fleet": "Fleet dock",
             "vessel": "Vessel dock",
@@ -332,14 +333,28 @@ def prove(
             (control["y"] + control["height"] / 2) / 2,
         )
 
-    def click(x, y):
+    def click(x, y, code=272):
         move(x, y)
         expected = commanded_pointer()
         _, delivered = delivered_pointer(expected, "click")
         assert delivered, "Fixture click motion was not delivered"
-        native("button", True)
-        native("button", False)
+        native("button", True, code)
+        native("button", False, code)
         time.sleep(0.4)
+
+    def press(name):
+        click(*named_button(native, evidence, name))
+
+    def menu(name, action):
+        click(*control_point(name, button=True), code=273)
+        wait(
+            lambda: native("fields", launch["pid"], [action], "window")["fields"],
+            lambda items: (
+                len(items) == 1 and items[0]["role"] in ("menu item", "menu_item")
+            ),
+            action,
+        )
+        click(*control_point(action))
 
     def restore(floating, expected):
         floating_bounds = geometry(floating)
@@ -448,8 +463,7 @@ def prove(
         assert len(fleet["vessels"]) == 1, (
             "Reveal journey requires its initial one-Vessel Fleet"
         )
-        click(*control_point("Fleet layouts", button=True))
-        click(*control_point("Save Fleet layout", button=True))
+        menu(fleet["name"], "Save layout")
         for _ in range(50):
             names = native("fields", launch["pid"], ["Name"], "window")["fields"]
             if len(names) == 1 and names[0]["focused"]:
@@ -463,7 +477,8 @@ def prove(
         for _ in range(50):
             saved = state()["value"]
             if any(
-                item["fleet"] == fleet["id"] and item["name"] == "avatar"
+                item["owner"] == {"kind": "fleet", "id": fleet["id"]}
+                and item["name"] == "avatar"
                 for item in saved["savedLayouts"]
             ):
                 break
@@ -472,6 +487,7 @@ def prove(
             raise AssertionError("Saved layout was not recorded")
         focus_target("Vessel dock", "Vessel dock did not receive focus")
         chord(native, "o")
+        press("Create Terminal Vessel")
         for _ in range(100):
             split = state()["value"]
             current_fleet = original_fleet(split)
@@ -525,9 +541,7 @@ def prove(
         process_start = (
             Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()[19]
         )
-        if not native("fields", launch["pid"], ["Load avatar"], "window")["fields"]:
-            click(*control_point("Fleet layouts", button=True))
-        click(*control_point("Load avatar", button=True))
+        menu(fleet["name"], "Load avatar")
         for _ in range(50):
             loaded = state()["value"]
             current_fleet = original_fleet(loaded)
@@ -594,8 +608,21 @@ def prove(
         stages.append("hidden-vessel-go-there-retained-backend-and-context")
 
     def portal_journey():
-        click(*control_point("Open Portal", button=True))
-        created = state()
+        press("Show Portals")
+        press("Choose Portal content")
+        press("Create Terminal Portal")
+        created = wait(
+            state,
+            lambda doc: (
+                len(doc["value"]["voyages"][0]["portals"]) == 1
+                and any(
+                    item["id"] == doc["value"]["voyages"][0]["portals"][0]["content"]
+                    and item.get("backend")
+                    for item in doc["value"]["contents"]
+                )
+            ),
+            "chosen Portal terminal backend",
+        )
         original_voyage = created["value"]["voyages"][0]
         assert len(original_voyage["portals"]) == 1
         portal = original_voyage["portals"][0]
@@ -639,7 +666,7 @@ def prove(
             (evidence / "avatar-preparation.json").write_text(
                 json.dumps({"owner": state(), "floating": floating_windows()}, indent=2)
             )
-            dock_key("Whole workspace dock", "workspace")
+            dock_key("Overwatch dock", "workspace")
             stages.append("explicit-native-workspace-dock-preparation")
         initial = scope("workspace")
         frame = capture("avatar-initial")
@@ -657,7 +684,7 @@ def prove(
         recorder = record()
         names = [
             "Voyager avatar",
-            "Whole workspace dock",
+            "Overwatch dock",
             "Voyage dock",
             "Fleet dock",
             "Vessel dock",
@@ -682,7 +709,7 @@ def prove(
             for item in controls
         ), "Native avatar controls extend outside the workspace viewport"
         dock_key("Voyage dock", "voyage")
-        dock_key("Whole workspace dock", "workspace")
+        dock_key("Overwatch dock", "workspace")
         capture("avatar-keyboard-dock")
         stages.append("native-accessibility-and-focused-keyboard-docking")
         if journey == "portal-avatar":
@@ -716,13 +743,13 @@ def prove(
         source = restore(floating, vessel)
         capture("avatar-workspace-restored")
         stages.append("restore-retained-floating-window-and-context")
-        drag(source, control_point("Whole workspace dock"))
+        drag(source, control_point("Overwatch dock"))
         capture("avatar-cross-window-release")
         workspace = scope("workspace")
         stages.append("floating-to-workspace-dock")
         occlusion(workspace)
         capture("avatar-after-occlusion")
-        workspace = dock_key("Whole workspace dock", "workspace")
+        workspace = dock_key("Overwatch dock", "workspace")
         assert not floating_windows(), "Dock after occluded minimise retained a float"
         stages.append("occlusion-did-not-float-and-later-minimize-did")
         geometry()
@@ -847,7 +874,7 @@ def prove(
         assert state() == workspace, "Desktop move changed context"
         capture("avatar-desktop-moved", moved)
         source = restore(moved, workspace)
-        drag(source, control_point("Whole workspace dock"))
+        drag(source, control_point("Overwatch dock"))
         scope("workspace")
         assert not floating_windows(), "Dock retained a floating view"
         stages.append("native-desktop-release-moved-and-docked-one-controller")
@@ -858,7 +885,7 @@ def prove(
         closed = state()
         capture("avatar-os-close-floated", floating)
         restore(floating, closed)
-        dock_key("Whole workspace dock", "workspace")
+        dock_key("Overwatch dock", "workspace")
         assert not floating_windows(), "Dock after close retained a floating view"
         stages.append("native-window-close-floated-and-restored")
         reveal_hidden_vessel()

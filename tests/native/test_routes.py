@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,12 +13,73 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Routes(unittest.TestCase):
+    def test_native_button_codes_keep_the_owned_window_press_guard(self):
+        tree = ast.parse(
+            (Path(__file__).parent / "proof_native_mod_host.py").read_text()
+        )
+        native = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "native"
+        )
+        condition = compile(
+            ast.Expression(native.body[0].test), "native-press-guard", "eval"
+        )
+        for action, expected in [
+            (("button", True), True),
+            (("button", True, 273), True),
+            (("button", False, 273), False),
+            (("key", 65, True), True),
+            (("key", 65, False), False),
+        ]:
+            self.assertEqual(
+                eval(
+                    condition,
+                    {"args": SimpleNamespace(foundation=True), "action": action},
+                ),
+                expected,
+            )
+        source = ast.parse(
+            (Path(__file__).parent / "proof_native_pointer.py").read_text()
+        )
+        button = next(
+            node
+            for node in ast.walk(source)
+            if isinstance(node, ast.FunctionDef) and node.name == "button"
+        )
+        calls = []
+        namespace = {
+            "remote": "mutter",
+            "GLib": SimpleNamespace(
+                Variant=lambda signature, value: (signature, value)
+            ),
+        }
+        exec(
+            compile(
+                ast.Module(body=[button], type_ignores=[]), "pointer-button", "exec"
+            ),
+            namespace,
+        )
+        pointer = SimpleNamespace(
+            session="owned", invoke=lambda *args: calls.append(args)
+        )
+        namespace["button"](pointer, True)
+        namespace["button"](pointer, False, 273)
+        self.assertEqual(
+            [call[-1] for call in calls],
+            [("(ib)", (272, True)), ("(ib)", (273, False))],
+        )
+        with self.assertRaisesRegex(AssertionError, "Unsupported native button"):
+            namespace["button"](pointer, True, 274)
+        self.assertEqual(len(calls), 2)
+
     def test_uncertain_quit_is_not_submitted_again_by_cleanup(self):
         for name, flag, initial in (
             ("proof_terminal.py", "quit_attempted", False),
             ("proof_canvas.py", "opened", True),
             ("proof_foundation_notes.py", "opened", True),
             ("proof_notes_lifetime.py", "opened", True),
+            ("proof_workspace_ux.py", "opened", True),
         ):
             tree = ast.parse((Path(__file__).parent / name).read_text())
             calls = [
@@ -167,6 +229,7 @@ class Routes(unittest.TestCase):
                     "notes-lifetime",
                     "notes-configuration",
                     "pane-maximize",
+                    "workspace-ux",
                     "conversation-voice",
                     "conversation-content",
                     "terminal-agent-create",
@@ -254,6 +317,7 @@ class Routes(unittest.TestCase):
             ("--foundation", "notes-configuration"),
             ("--foundation", "split-resize"),
             ("--foundation", "pane-maximize"),
+            ("--foundation", "workspace-ux"),
             ("--foundation", "session-quit"),
             ("--foundation", "terminal-reported-status"),
             ("--native-mod-host", "--notes-case"),
@@ -274,6 +338,7 @@ class Routes(unittest.TestCase):
             "notes-configuration",
             "split-resize",
             "pane-maximize",
+            "workspace-ux",
             "session-quit",
             "terminal-reported-status",
         ):
@@ -296,6 +361,7 @@ class Routes(unittest.TestCase):
                     "notes-configuration",
                     "split-resize",
                     "pane-maximize",
+                    "workspace-ux",
                     "session-quit",
                     "terminal-reported-status",
                 )
@@ -314,6 +380,7 @@ class Routes(unittest.TestCase):
                 "notes-configuration",
                 "split-resize",
                 "pane-maximize",
+                "workspace-ux",
                 "session-quit",
                 "terminal-reported-status",
             ):
@@ -365,6 +432,7 @@ class Routes(unittest.TestCase):
             "proof_notes_lifetime",
             "proof_split_resize",
             "proof_pane_maximize",
+            "proof_workspace_ux",
             "proof_conversation",
             "proof_conversation_scroll",
         ):

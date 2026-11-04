@@ -273,7 +273,7 @@ def prove(
             document,
             lambda doc: (
                 len(doc["value"]["contents"]) == 3
-                and doc["value"]["canvas"]["portalMode"] == "make-room"
+                and doc["value"]["voyages"][0]["portalLayout"]["mode"] == "make-room"
             ),
             "typed Notes/make-room setup",
         )
@@ -373,6 +373,69 @@ def prove(
                 expected=expected,
                 owned=owned,
             )
+        markdown = "# Preview " + marker + " **raw**"
+        focus("Note text", 0)
+        select_all()
+        type_text(markdown)
+        copied("Note text", 0, markdown, False)
+        tap(65361)
+        assert data() == saved, "The Markdown draft was saved before Preview"
+        buttons = native("fields", pid(), ["Preview note"], "window")["fields"]
+        assert len(buttons) == 2, buttons
+        button = min(buttons, key=lambda item: item["x"])
+        receipt(
+            "notes-preview-unsaved",
+            {"draft": markdown, "button": button, "identity": identity()},
+        )
+        click(
+            (
+                (button["x"] + button["width"] / 2) / 2,
+                (button["y"] + button["height"] / 2) / 2,
+            )
+        )
+        wait(
+            fields,
+            lambda items: sum(item["name"] == "Note text" for item in items) == 1,
+            "Fleet body replaced by native Markdown preview",
+        )
+        capture("notes-markdown-preview")
+        click(named_button(native, evidence, "Edit note"))
+        editors()
+        native("focus", pid(), "Note text", 0)
+        wait(
+            fields,
+            lambda items: [item for item in items if item["name"] == "Note text"][0][
+                "focused"
+            ],
+            "retained editor accessibility focus without a caret-positioning click",
+        )
+        type_text("!")
+        copied("Note text", 0, markdown[:-1] + "!" + markdown[-1], False)
+        native("key", 65507, True)
+        tap(ord("z"))
+        native("key", 65507, False)
+        copied("Note text", 0, markdown, False)
+        wait(
+            data,
+            lambda values: (
+                json.loads(values[0]) == {**expected[0], "text": markdown}
+                and values[1] == saved[1]
+            ),
+            "Preview's ordinary blur save and unchanged sibling",
+        )
+        expected[0]["text"] = markdown
+        saved = data()
+        receipt(
+            "notes-markdown-edit",
+            {
+                "draft": markdown,
+                "fields": editors(),
+                "identity": identity(),
+                "visualReviewRequired": True,
+                "undo": "post-Preview insertion only",
+            },
+        )
+        capture("notes-markdown-edit-caret-undo")
         focus("Note text", 0)
         tap(65367)
         dirty = expected[0]["text"] + "_DIRTY"
@@ -475,6 +538,7 @@ def prove(
         return [
             "actual-owner-notes-setup",
             "native-vessel-portal-save-and-warm-viewer-restore",
+            "native-markdown-preview-edit-retained-caret-and-ordinary-undo",
             "dirty-native-edit-through-valid-broken-repaired-source",
             "retained-draft-native-blur-save",
             "real-tool-remove-survives-cold-reopen-with-ended-backend",
