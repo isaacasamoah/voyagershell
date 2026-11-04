@@ -177,7 +177,7 @@ impl Drop for Position {
 
 fn scope_name(scope: &Scope) -> &'static str {
     match scope {
-        Scope::Workspace => "Whole workspace",
+        Scope::Workspace => "Overwatch",
         Scope::Voyage { .. } => "Voyage",
         Scope::Fleet { .. } => "Fleet",
         Scope::Vessel { .. } => "Vessel",
