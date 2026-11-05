@@ -1,6 +1,6 @@
 {
   "header": {
-    "rawSha256": "7db2bd58598df00c338cd6f6b9705d0b0f211839a00c8be89b3cf976a6a908c8",
+    "rawSha256": "81c9a54e05e8a76e1c091a477b648f4aef43cf7cf860616dc1514c0526139356",
     "modules": [
       "gpui-base",
       "gpui-kit",
@@ -14,7 +14,7 @@
     ]
   },
   "notes": {
-    "rawSha256": "b75350cad10d3abb72ac6a69d08117a76a85e29e13c6c85938d24024266052b9",
+    "rawSha256": "e6d4051831126a4cee8d312cdc61d1399392993d18cb8056ecb4a1bb6e9749d6",
     "modules": [
       "gpui-base",
       "gpui-kit",

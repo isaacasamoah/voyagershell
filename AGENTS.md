@@ -2,6 +2,13 @@
 
 Read CONSTRAINTS.md and CONTRIBUTING.md before changing code. Do not weaken the written checks or acceptance criteria.
 
+Prepare the pinned native SDK with `python3 desktop/prepare-sdk.py` before native
+Cargo or Node checks. The reviewed overlay patch belongs in `desktop/patches/`;
+the prepared user-cache checkout and generated `.cargo/config.toml` are local
+build inputs. Preserve one coherent SDK graph and installed dependency
+checkouts. The selected retained-rendering baseline is canonical development
+work, not completed foundation acceptance.
+
 VoyagerShell is a configurable workspace built on Herdr Core. Herdr Core owns terminals, screens and processes. Voyager owns workspace presentation, explicit context and its application policy. Do not introduce a second process supervisor or recreate native agent session recovery.
 
 This is an application for extensible content, not only a terminal manager. A terminal or coding agent is one content type. A content package may instead provide a document, graph, dashboard, game or another supported view, with an optional backend run by Core. Starting a program does not establish that its interface can be embedded or understood by an agent.

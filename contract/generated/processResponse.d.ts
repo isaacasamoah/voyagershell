@@ -43,13 +43,19 @@ export interface ProcessResponse {
   version: string;
 }
 export interface ProcessInfo {
+  agentName?: string | null;
   contentId: string;
   cwd: string;
   foreground?: string | null;
   pid?: number | null;
+  placementNames?: PlacementName[];
   reportedActivity?: ReportedActivity | null;
   state: string;
   terminalId: string;
+}
+export interface PlacementName {
+  effectiveName: string;
+  placementId: string;
 }
 export interface ReportedActivity {
   app?: string | null;

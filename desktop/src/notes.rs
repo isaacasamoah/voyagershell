@@ -24,6 +24,18 @@ use crate::{content_budget::Budget, host::LoadGuard};
 
 type Colors = Rc<dyn Fn() -> Result<HostValue, HostError>>;
 
+fn file_signature(path: &Path) -> Result<u64, String> {
+    let mut file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(voyager_app::content::LIMIT as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| error.to_string())?;
+    let mut hash = DefaultHasher::new();
+    bytes.hash(&mut hash);
+    Ok(hash.finish())
+}
+
 fn validate_identity<'a>(
     request_id: &'a str,
     revision: &'a str,
@@ -172,6 +184,7 @@ impl Host {
         let handle = window.window_handle();
         *watch = Some(cx.spawn(async move |cx| {
             let mut prior = None;
+            let mut prior_files = None;
             let mut package_revision = loader.client.package_revision();
             loop {
                 cx.background_executor()
@@ -197,6 +210,43 @@ impl Host {
                     .iter()
                     .map(|(id, view)| (ContentId(id.clone()), view.clone()))
                     .collect();
+                let Ok(paths) = handle.update(cx, |_, _, cx| {
+                    targets
+                        .iter()
+                        .filter_map(|(id, view)| {
+                            view.update(cx, |note, cx| {
+                                note.session.read(cx).configuration.notes_file.as_ref().map(
+                                    |file| {
+                                        (
+                                            id.0.clone(),
+                                            Path::new(&file.directory).join(&file.filename),
+                                        )
+                                    },
+                                )
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                }) else {
+                    break;
+                };
+                let signatures = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let mut signatures = paths
+                            .into_iter()
+                            .map(|(id, path)| {
+                                let result = file_signature(&path);
+                                (id, path, result)
+                            })
+                            .collect::<Vec<_>>();
+                        signatures.sort_by(|a, b| a.0.cmp(&b.0));
+                        signatures
+                    })
+                    .await;
+                if prior_files.as_ref() != Some(&signatures) {
+                    prior_files = Some(signatures);
+                    let _ = loader.client.refresh_content_views().await;
+                }
                 let Ok(targets) = handle.update(cx, |_, _, cx| {
                     targets
                         .into_iter()
@@ -406,7 +456,11 @@ impl Loader {
                             }
                             let response = if matches!(
                                 &request,
-                                Request::Update { .. } | Request::Configure { .. }
+                                Request::Update { .. }
+                                    | Request::Configure { .. }
+                                    | Request::MigrateNote { .. }
+                                    | Request::NewNote { .. }
+                                    | Request::OpenNote { .. }
                             ) {
                                 client.content_view(&binding, request)
                             } else {
@@ -606,6 +660,18 @@ impl Render for Note {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_file_signature_detects_same_length_external_edits() {
+        let path =
+            std::env::temp_dir().join(format!("voyager-note-observer-{}", std::process::id()));
+        std::fs::write(&path, b"before").unwrap();
+        let before = file_signature(&path).unwrap();
+        std::fs::write(&path, b"after!").unwrap();
+        assert_ne!(file_signature(&path).unwrap(), before);
+        std::fs::remove_file(&path).unwrap();
+        assert!(file_signature(&path).is_err());
+    }
 
     #[test]
     fn identity_is_borrowed_after_bounded_validation() {

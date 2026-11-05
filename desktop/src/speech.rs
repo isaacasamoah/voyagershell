@@ -1,5 +1,5 @@
 use gpui::{
-    App, AppContext, Context, Entity, IntoElement, ParentElement, Render,
+    App, AppContext, Context, Entity, InteractiveElement as _, IntoElement, ParentElement, Render,
     StatefulInteractiveElement as _, Styled, Task, Window, div, prelude::FluentBuilder as _, px,
     rgb, svg,
 };
@@ -229,6 +229,7 @@ impl Render for Speech {
         };
         let label = if active { "Stop voice" } else { "Start voice" };
         Button::new("voyager-speech")
+            .block_mouse_except_scroll()
             .accessibility_label(label)
             .aria_description(status.clone())
             .disabled(unavailable || self.pending || stopping)

@@ -94,11 +94,17 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
                 },
             })
             .unwrap();
-        assert_eq!(partial.status, Status::Uncertain);
-        assert!(partial.version > applied.version);
-        let partial_notice = committed.try_recv().unwrap();
-        assert_eq!(partial_notice.revision, partial.version);
-        assert_ne!(partial_notice, applied_notice);
+        assert_eq!(partial.status, Status::Rejected);
+        assert_eq!(
+            partial.message.as_deref(),
+            Some("invalid_workspace: Content owner unavailable; Notes was not created")
+        );
+        assert_eq!(partial.version, applied.version);
+        assert_eq!(partial.layout, applied.layout);
+        assert!(matches!(
+            committed.try_recv(),
+            Err(async_channel::TryRecvError::Empty)
+        ));
     });
     let mut cleanup = Core::connect(&session).unwrap();
     let stopped = cleanup.server_stop();

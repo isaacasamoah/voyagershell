@@ -5,6 +5,7 @@ import { Layer, Target, PortalArea } from "voyager_avatar";
 import { take_result, window_epoch } from "voyager_avatar";
 import {
   response as validateResponse,
+  workspaceObservation as validateObservation,
   contextFacts as validateFacts,
   reportedActivity as validateReportedActivity,
 } from "./validate.js";
@@ -13,6 +14,7 @@ import {
   request_id,
   notice as workspace_notice,
   context_facts,
+  workspace_observation,
   reported_activity,
   refresh_activity,
 } from "voyager_workspace";
@@ -23,7 +25,7 @@ import { Chat } from "./chat.js";
 import { composeCanvas } from "./canvas.js";
 import { inspectProcesses } from "./processes.js";
 import type { ProcessInfo } from "../../../contract/generated/processResponse";
-import type { HiddenChoices } from "./creation.js";
+import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
 import { renderPanel } from "./panel-view.js";
 import {
@@ -32,6 +34,7 @@ import {
   renderContext,
 } from "./navigation-view.js";
 import { WorkspaceMenu } from "./menu.js";
+import { WorktreeControls } from "./worktrees.js";
 import {
   activeGroups,
   currentVoyage,
@@ -42,6 +45,8 @@ import {
 import type { PanelGroup } from "./panels.js";
 import type { MenuItem } from "./menu.js";
 import type { Projection as ActivityProjection } from "../../../contract/generated/reportedActivity";
+import type { WorkspaceObservation } from "../../../contract/generated/workspaceObservation";
+import type { DirectorySource } from "../../../contract/generated/request";
 import type { Facts } from "../../../contract/generated/contextFacts";
 
 import type {
@@ -108,9 +113,18 @@ function errorMessage(error: unknown): string {
 export default class Workspace extends View {
   declare creation: CreationPicker | undefined;
   declare menus: WorkspaceMenu;
+  declare worktrees: WorktreeControls;
+  declare expandedVoyages: Set<string>;
   declare version: Response["version"];
   declare contextFacts: Facts | null;
   declare contextRead: number;
+  declare observation: WorkspaceObservation | null;
+  declare observedPanels: WorkspaceObservation["panels"];
+  declare observationRead: number;
+  declare fleetChoice: {
+    destination: Extract<CreationDestination, { kind: "new-fleet" }>;
+    version: string;
+  } | null;
   declare sidebar: boolean;
   declare dockReceipt: string;
   declare dockEpoch: string;
@@ -133,9 +147,12 @@ export default class Workspace extends View {
   declare automaticRefresh: boolean;
   declare focused: string | null;
   declare hoveredPanel: string | null;
+  declare hoveredFleet: string | null;
   declare processes: ProcessInfo[];
   declare processPending: boolean;
   declare processError: string;
+  declare collapsedGroups: Set<string>;
+  declare recentOpen: boolean;
   declare splitReset: number;
   declare splitSession: string;
   declare pendingShortcuts: string[];
@@ -146,10 +163,18 @@ export default class Workspace extends View {
     Extract<Action, { operation: "save-panel-layout" }> | null | undefined;
   init(_props: unknown, cx: AsyncContext) {
     this.menus = new WorkspaceMenu();
+    this.worktrees = new WorktreeControls();
+    this.expandedVoyages = new Set();
     this.chat = new Chat(cx);
     this.version = "0";
     this.contextFacts = null;
+    this.observation = null;
+    this.observedPanels = [];
+    this.observationRead = 0;
+    this.fleetChoice = null;
     this.sidebar = true;
+    this.collapsedGroups = new Set(["agents"]);
+    this.recentOpen = false;
     this.dockReceipt = "";
     this.dockEpoch = "";
     this.layout = null;
@@ -172,6 +197,7 @@ export default class Workspace extends View {
     this.openings = new Map();
     this.focused = null;
     this.hoveredPanel = null;
+    this.hoveredFleet = null;
     this.processes = [];
     this.processPending = false;
     this.processError = "Loading agent status";
@@ -187,6 +213,7 @@ export default class Workspace extends View {
     cx.spawn(async (task) => {
       while (true) {
         await this.readContext(task);
+        await this.readObservation(task);
         if (
           this.layout &&
           activeGroups(this.layout).some((group) =>
@@ -202,6 +229,159 @@ export default class Workspace extends View {
         await task.sleep(CONTEXT_REFRESH_MS);
       }
     });
+  }
+
+  activePlacement(): Vessel | undefined {
+    if (!this.layout) return;
+    const shown = activeGroups(this.layout).flatMap((group) =>
+      visiblePanels(group, true),
+    );
+    return shown.find((panel) => panel.id === this.focused) || shown[0];
+  }
+
+  async readObservation(
+    cx: AsyncContext,
+  ): Promise<WorkspaceObservation | null> {
+    if (!this.layout) return null;
+    const version = this.version;
+    const active = this.activePlacement()?.id || null;
+    const read = ++this.observationRead;
+    let result: WorkspaceObservation | null = null;
+    try {
+      const value: unknown = JSON.parse(
+        await workspace_observation(version, active),
+      );
+      if (!validateObservation(value))
+        throw Error("Invalid workspace observation");
+      if (value.version !== version || value.active !== active)
+        throw Error("Workspace observation changed");
+      if (
+        value.panels.some(
+          (panel) =>
+            !this.layout?.contents.some(
+              (content) =>
+                content.id === panel.contentId &&
+                (content.backend || null) === panel.backend,
+            ),
+        )
+      )
+        throw Error("Workspace observation belongs to different content");
+      result = value;
+    } catch (_) {
+      result = null;
+    }
+    if (
+      version !== this.version ||
+      active !== (this.activePlacement()?.id || null)
+    )
+      return null;
+    if (read === this.observationRead) {
+      const changed =
+        JSON.stringify(result) !== JSON.stringify(this.observation) ||
+        JSON.stringify(result?.panels || []) !==
+          JSON.stringify(this.observedPanels);
+      this.observation = result;
+      this.observedPanels = result?.panels || [];
+      if (changed) cx.notify();
+    }
+    return result;
+  }
+
+  directorySource(observed: WorkspaceObservation): DirectorySource {
+    const directory = observed.directory;
+    if (directory.kind === "unavailable")
+      throw Error("Working directory is unavailable");
+    const panel = observed.panels.find(
+      (item) => item.placementId === observed.active,
+    );
+    if (directory.kind === "live" && panel?.backend)
+      return {
+        kind: "live",
+        placementId: panel.placementId,
+        contentId: panel.contentId,
+        backend: panel.backend,
+        cwd: directory.path,
+      };
+    if (directory.kind === "starting" && panel)
+      return {
+        kind: "starting",
+        placementId: panel.placementId,
+        contentId: panel.contentId,
+        cwd: directory.path,
+      };
+    const voyage = this.layout && currentVoyage(this.layout);
+    if (directory.kind === "voyage" && voyage)
+      return { kind: "voyage", voyageId: voyage.id, cwd: directory.path };
+    throw Error("Working directory source changed");
+  }
+
+  createVoyage(cx: UIContext) {
+    cx.spawn(async (task) => {
+      try {
+        const observed = await this.readObservation(task);
+        if (!observed) throw Error("Working directory changed; try again");
+        this.run(
+          {
+            operation: "create-voyage-from-source",
+            source: this.directorySource(observed),
+          },
+          task,
+        );
+      } catch (error) {
+        this.status = errorMessage(error);
+        task.notify();
+      }
+    });
+  }
+
+  openFleetChoices(voyage: Voyage, cx: UIContext) {
+    cx.spawn(async (task) => {
+      try {
+        const observed = await this.readObservation(task);
+        if (!observed || this.layout?.selectedVoyage !== voyage.id)
+          throw Error("Select this Voyage before creating a Fleet");
+        const destination = {
+          kind: "new-fleet" as const,
+          voyage: voyage.id,
+          name: `Fleet ${voyage.fleets.length + 1}`,
+          source: this.directorySource(observed),
+        };
+        this.fleetChoice = { destination, version: observed.version };
+        this.creation ||= new CreationPicker();
+        this.creation.open(
+          `fleet-choices-${voyage.id}`,
+          destination,
+          observed.version,
+          task,
+        );
+      } catch (error) {
+        this.status = errorMessage(error);
+        task.notify();
+      }
+    });
+  }
+
+  fleetCreationControl(voyage: Voyage, trigger: NativeElement): NativeElement {
+    trigger.on_click((_event, cx) => this.openFleetChoices(voyage, cx));
+    const choice = this.fleetChoice;
+    if (!choice || choice.destination.voyage !== voyage.id || !this.creation)
+      return trigger;
+    return this.creation.render(
+      `fleet-choices-${voyage.id}`,
+      choice.destination,
+      choice.version,
+      (action, version, cx) => {
+        if (version !== this.version) {
+          this.status = "Workspace changed; reopen the Fleet choices";
+          cx.notify();
+          return;
+        }
+        this.run(action, cx);
+      },
+      trigger,
+      undefined,
+      false,
+    );
   }
 
   async readContext(cx: AsyncContext) {
@@ -305,6 +485,12 @@ export default class Workspace extends View {
     const retryRefusals = !this.automaticRefresh;
     if (action.operation === "inspect") this.refreshRequested = false;
     const changesSelection = [
+      "create-voyage-from-source",
+      "create-fleet-with-content",
+      "close-fleet",
+      "reopen-fleet",
+      "close-voyage",
+      "reopen-voyage",
       "create-fleet",
       "select-fleet",
       "create-voyage",
@@ -378,6 +564,8 @@ export default class Workspace extends View {
           try {
             const creates = [
               "create-voyage",
+              "create-voyage-from-source",
+              "create-fleet-with-content",
               "create-fleet",
               "create-content",
             ].includes(action.operation);
@@ -396,7 +584,8 @@ export default class Workspace extends View {
             const created = shown.find(
               (panel) => !previousContents.has(panel.content),
             );
-            if (creating && created) this.focused = created.id;
+            if (changesSelection) this.focused = shown[0]?.id || null;
+            else if (creating && created) this.focused = created.id;
             if (transferFocus) {
               const target = maximization
                 ? shown.find((panel) => panel.id === maximization.id)
@@ -483,7 +672,31 @@ export default class Workspace extends View {
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
+    const activeVoyage = currentVoyage(result.layout);
+    if (activeVoyage?.cwd)
+      this.worktrees?.inspect(
+        activeVoyage.id,
+        activeVoyage.cwd,
+        result.version,
+        task,
+      );
+    this.observedPanels = (this.observedPanels || []).filter((panel) =>
+      panelGroups(result.layout).some((group) =>
+        group.members.some(
+          (placement) =>
+            placement.id === panel.placementId &&
+            placement.content === panel.contentId &&
+            result.layout.contents.some(
+              (content) =>
+                content.id === panel.contentId &&
+                (content.backend || null) === panel.backend,
+            ),
+        ),
+      ),
+    );
     task.spawn((cx) => this.readProcesses(cx));
+    this.observation = null;
+    task.spawn((cx) => this.readObservation(cx));
     this.sidebar = !result.layout.canvas?.sidebarCollapsed;
     if (
       this.contextFacts?.version !== result.version ||
@@ -545,7 +758,36 @@ export default class Workspace extends View {
   }
 
   contentName(placement: Vessel): string {
-    return placement.name;
+    return (
+      (placement.nameOrigin === "automatic" ? this.observedPanels : [])?.find(
+        (panel) => panel.placementId === placement.id,
+      )?.effectiveName || placement.name
+    );
+  }
+
+  panelLabel(placement: Vessel): string {
+    const observed = this.observedPanels?.find(
+      (panel) => panel.placementId === placement.id,
+    );
+    const content = this.layout?.contents.find(
+      (item) => item.id === placement.content,
+    );
+    const directory = observed?.directory;
+    const path =
+      directory && directory.kind !== "unavailable"
+        ? directory.path
+        : content?.cwd;
+    const folder = path
+      ?.replace(/[\\/]+$/, "")
+      .split(/[\\/]/)
+      .pop();
+    const program =
+      observed?.program ||
+      (content?.typeId === "terminal" ? "Terminal" : content?.typeId);
+    const name = this.contentName(placement);
+    return [program, folder, name !== folder ? name : null]
+      .filter(Boolean)
+      .join(" · ");
   }
 
   visibleVessels(fleet: Fleet | undefined): Vessel[] {
@@ -940,14 +1182,7 @@ export default class Workspace extends View {
     if (!voyage) return;
     if (key === "t") {
       if (layout.view === "home") return;
-      this.run(
-        {
-          operation: "create-fleet",
-          voyage: voyage.id,
-          name: `Fleet ${voyage.fleets.length + 1}`,
-        },
-        cx,
-      );
+      this.openFleetChoices(voyage, cx);
       return;
     }
     const groups = activeGroups(layout);
@@ -990,6 +1225,7 @@ export default class Workspace extends View {
     action: Action | null,
     selected = false,
     rename: RenameTarget | null = null,
+    displayLabel = label,
   ): NativeElement {
     const colors = projection();
     const key = JSON.stringify(rename);
@@ -1023,7 +1259,7 @@ export default class Workspace extends View {
       .tooltip(label)
       .text_size(fleet ? 11 : placement ? 10 : 13)
       .text_color(selected ? "#ded8ef" : colors.muted)
-      .bg(selected && voyage ? "#c0b1f00b" : "#00000000")
+      .bg("#00000000")
       .on_click((event, cx) => {
         if (focus) focus.focus();
         else if (!["create-fleet", "inspect"].includes(action?.operation || ""))
@@ -1035,7 +1271,12 @@ export default class Workspace extends View {
           this.run(action, cx);
         }
       })
-      .child(placement && label === "Terminal" ? "" : label);
+      .child(
+        voyage
+          ? div().flex_1().min_w(0).truncate().child(displayLabel)
+          : displayLabel,
+      );
+    if (voyage) button.flex_1().min_w(0).px(0);
     if (["create-fleet", "inspect"].includes(action?.operation || ""))
       button.on_mouse_down("left", (_event, cx) => cx.stop_propagation());
     if (focus)
@@ -1112,6 +1353,42 @@ export default class Workspace extends View {
     return items;
   }
 
+  closedVoyageItems(): MenuItem[] {
+    return (this.layout?.voyages || [])
+      .filter((item) => item.closed)
+      .sort((a, b) => {
+        const first = BigInt(a.closedOrder || "0");
+        const second = BigInt(b.closedOrder || "0");
+        return first === second ? 0 : first > second ? -1 : 1;
+      })
+      .slice(0, 10)
+      .map((item) => ({
+        label: `Reopen ${item.name}`,
+        choose: (version, cx) =>
+          this.run(
+            { operation: "reopen-voyage", id: item.id },
+            cx,
+            undefined,
+            version,
+          ),
+      }));
+  }
+
+  closedFleetItems(voyage: Voyage): MenuItem[] {
+    return voyage.fleets
+      .filter((item) => item.closed)
+      .map((item) => ({
+        label: `Reopen ${item.name}`,
+        choose: (version, cx) =>
+          this.run(
+            { operation: "reopen-fleet", id: item.id },
+            cx,
+            undefined,
+            version,
+          ),
+      }));
+  }
+
   fleetMenu(fleet: Fleet, voyage: Voyage): MenuItem[] {
     const items: MenuItem[] = [
       {
@@ -1121,17 +1398,21 @@ export default class Workspace extends View {
       },
       {
         label: "New Fleet",
-        choose: (_version, cx) =>
-          this.run(
-            {
-              operation: "create-fleet",
-              voyage: voyage.id,
-              name: `Fleet ${voyage.fleets.length + 1}`,
-            },
-            cx,
-          ),
+        choose: (_version, cx) => this.openFleetChoices(voyage, cx),
       },
     ];
+    if (voyage.id !== this.layout?.home?.id)
+      items.push({
+        label: "Close",
+        choose: (version, cx) =>
+          this.run(
+            { operation: "close-fleet", id: fleet.id },
+            cx,
+            undefined,
+            version,
+          ),
+      });
+    items.push(...this.closedFleetItems(voyage));
     const group = this.layout
       ? panelGroups(this.layout).find(
           (group) =>
@@ -1148,7 +1429,9 @@ export default class Workspace extends View {
       .w(32)
       .h(32)
       .p(5)
-      .child(svg("sidebar.svg").size(17))
+      .child(
+        svg(this.sidebar ? "sidebar-collapse.svg" : "sidebar.svg").size(17),
+      )
       .on_click((_event, cx) =>
         this.run({ operation: "set-sidebar", collapsed: this.sidebar }, cx),
       );
@@ -1159,7 +1442,7 @@ export default class Workspace extends View {
     trigger: NativeElement,
     items: MenuItem[],
   ): NativeElement {
-    if (this.editing || this.layoutName) return trigger;
+    if (this.editing || this.layoutName || !items.length) return trigger;
     return this.menus.render(
       id,
       this.version,
@@ -1213,7 +1496,12 @@ export default class Workspace extends View {
       .flex_col()
       .px(12)
       .py(6)
-      .child(div().text_size(11).text_color("#ffcad3").child(this.status))
+      .child(
+        div()
+          .text_size(11)
+          .text_color("#ffcad3")
+          .child(this.status || this.worktrees?.status || ""),
+      )
       .child(this.action("Refresh", { operation: "inspect" }));
   }
 
@@ -1501,7 +1789,7 @@ export default class Workspace extends View {
       .h(26)
       .p(3)
       .text_size(11)
-      .child(column.visible ? "P ›" : "‹ P")
+      .child(column.visible ? "›" : "‹")
       .on_click((_event, cx) => this.togglePortals(voyage, cx));
     controls.child(
       this.creationControl(
@@ -1734,6 +2022,17 @@ export default class Workspace extends View {
           if (kind === "move") this.moveDrag(x, y, task);
           else this.finishDrag(x, y, task);
         }),
+      );
+    const worktrees = this.worktrees?.render((task) =>
+      this.run({ operation: "inspect" }, task),
+    );
+    if (worktrees)
+      shell.child(
+        div()
+          .absolute()
+          .left(this.sidebar ? 230 : 50)
+          .top(80)
+          .child(worktrees),
       );
     return this.layer(shell, layout);
   }

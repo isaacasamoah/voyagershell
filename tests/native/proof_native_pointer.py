@@ -1,6 +1,10 @@
 import math
+import json
+import signal
 import subprocess
+import threading
 import time
+from pathlib import Path
 
 from gi.repository import Gio, GLib
 
@@ -17,6 +21,7 @@ class Pointer:
         self.bus = bus
         self.streams = []
         self.nodes = {}
+        self.recording = None
         session_id = invoke(
             session,
             properties,
@@ -74,7 +79,7 @@ class Pointer:
         if any(stream[0] == path for stream in self.streams):
             self.nodes[path] = params.unpack()[0]
 
-    def move(self, x, y, device_scale):
+    def move(self, x, y, device_scale, settle_seconds=0.08):
         x = float(x) / float(device_scale)
         y = float(y) / float(device_scale)
         matches = [
@@ -95,7 +100,7 @@ class Pointer:
             GLib.Variant("(sdd)", (stream, *sent)),
         )
         acknowledged = time.monotonic()
-        time.sleep(0.08)
+        time.sleep(settle_seconds)
         return {
             "stream": stream,
             "position": list(position),
@@ -197,7 +202,149 @@ class Pointer:
             "finishedAt": time.time(),
         }
 
+    def record_start(self, path, capture):
+        assert self.recording is None, "A native video is already recording"
+        assert self.nodes.get(capture["stream"]) == capture["node"], (
+            "Stale capture stream"
+        )
+        width, height = capture["sourceDimensions"]
+        left, top, cropped_width, cropped_height = capture["streamCrop"]
+        assert 0 <= left < left + cropped_width <= width
+        assert 0 <= top < top + cropped_height <= height
+        path = Path(path)
+        assert path.is_absolute(), "Video needs an absolute evidence path"
+        with path.open("xb"):
+            pass
+        log = path.with_suffix(".gst.log").open("xb")
+        command = [
+            "gst-launch-1.0",
+            "-q",
+            "-e",
+            "pipewiresrc",
+            f"path={capture['node']}",
+            "!",
+            "videoconvert",
+            "!",
+            f"video/x-raw,format=RGB,width={width},height={height}",
+            "!",
+            "videocrop",
+            f"left={left}",
+            f"top={top}",
+            f"right={width - left - cropped_width}",
+            f"bottom={height - top - cropped_height}",
+            "!",
+            "videoscale",
+            "!",
+            "video/x-raw,width=1450,height=940",
+            "!",
+            "videorate",
+            "!",
+            "video/x-raw,framerate=30/1",
+            "!",
+            "videoconvert",
+            "!",
+            "vp8enc",
+            "deadline=1",
+            "!",
+            "webmmux",
+            "!",
+            "filesink",
+            f"location={path}",
+        ]
+        try:
+            process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        except BaseException:
+            log.close()
+            raise
+        expired = threading.Event()
+
+        def stop():
+            if process.poll() is None:
+                process.send_signal(signal.SIGINT)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=2)
+
+        def watchdog():
+            expired.set()
+            stop()
+
+        timer = threading.Timer(30, watchdog)
+        timer.daemon = True
+        receipt = {
+            "path": str(path),
+            "pid": process.pid,
+            "command": command,
+            "capture": capture,
+            "startedMonotonic": time.monotonic(),
+            "canonicalDimensions": [1450, 940],
+            "fps": 30,
+            "timingLimit": "Resampled diagnostic video; PTS are not calibrated to host input clocks",
+        }
+        self.recording = (process, log, timer, stop, expired, receipt)
+        timer.start()
+        deadline = time.monotonic() + 5
+        while path.stat().st_size == 0:
+            assert process.poll() is None, (
+                "Native recording exited before producing output"
+            )
+            assert time.monotonic() < deadline, "Native recording produced no output"
+            time.sleep(0.01)
+        receipt["readyMonotonic"] = time.monotonic()
+        return receipt.copy()
+
+    def record_stop(self):
+        if self.recording is None:
+            return None
+        process, log, timer, stop, expired, receipt = self.recording
+        self.recording = None
+        timer.cancel()
+        try:
+            stop()
+        finally:
+            log.close()
+        receipt.update(
+            returncode=process.returncode,
+            expired=expired.is_set(),
+            stoppedMonotonic=time.monotonic(),
+        )
+        saved = Path(receipt["path"]).with_suffix(".json")
+        saved.write_text(json.dumps(receipt, indent=2))
+        probe = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-count_frames",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height,nb_read_frames,avg_frame_rate:format=duration",
+                "-of",
+                "json",
+                receipt["path"],
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        receipt["decoded"] = json.loads(probe.stdout)
+        saved.write_text(json.dumps(receipt, indent=2))
+        video = receipt["decoded"]["streams"][0]
+        assert (video["width"], video["height"]) == (1450, 940), receipt
+        assert int(video["nb_read_frames"]) > 1 and video["avg_frame_rate"] == "30/1", (
+            receipt
+        )
+        assert not receipt["expired"] and receipt["returncode"] == 0, receipt
+        return receipt
+
     def close(self):
-        if self.subscription is not None:
-            self.bus.signal_unsubscribe(self.subscription)
-            self.subscription = None
+        try:
+            self.record_stop()
+        finally:
+            if self.subscription is not None:
+                self.bus.signal_unsubscribe(self.subscription)
+                self.subscription = None

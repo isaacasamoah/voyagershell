@@ -222,13 +222,37 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
                 PanelOwner::Portals { .. } => layout
                     .selected_fleet
                     .clone()
-                    .filter(|id| voyage.fleets.iter().any(|fleet| &fleet.id == id))
-                    .or_else(|| voyage.fleets.first().map(|fleet| fleet.id.clone())),
+                    .filter(|id| {
+                        voyage
+                            .fleets
+                            .iter()
+                            .any(|fleet| &fleet.id == id && !fleet.closed)
+                    })
+                    .or_else(|| {
+                        voyage
+                            .fleets
+                            .iter()
+                            .find(|fleet| !fleet.closed)
+                            .map(|fleet| fleet.id.clone())
+                    }),
             };
             let home = layout
                 .home
                 .as_ref()
                 .is_some_and(|home| home.id == voyage_id);
+            if !home {
+                let voyage = layout
+                    .voyages
+                    .iter_mut()
+                    .find(|item| item.id == voyage_id)
+                    .ok_or("Panel Voyage not found")?;
+                voyage.closed = false;
+                if let Some(id) = &fleet_id
+                    && let Some(fleet) = voyage.fleets.iter_mut().find(|fleet| &fleet.id == id)
+                {
+                    fleet.closed = false;
+                }
+            }
             if matches!(owner, PanelOwner::Portals { .. }) {
                 layout
                     .containers_mut()

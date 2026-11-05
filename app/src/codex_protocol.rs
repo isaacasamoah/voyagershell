@@ -338,6 +338,10 @@ mod tests {
         assert_eq!(params["allowProviderModelFallback"], false);
         let schemas = [
             (
+                "voyager_worktree",
+                include_str!("../../contract/generated/worktreeTool.schema.json"),
+            ),
+            (
                 "voyager_workspace",
                 include_str!("../../contract/generated/workspaceTool.schema.json"),
             ),

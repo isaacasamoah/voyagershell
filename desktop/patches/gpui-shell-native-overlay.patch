@@ -1,0 +1,40 @@
+diff --git a/crates/shell/src/root.rs b/crates/shell/src/root.rs
+index cc9d54b8..f83b2f36 100644
+--- a/crates/shell/src/root.rs
++++ b/crates/shell/src/root.rs
+@@ -134,6 +134,7 @@ const TOAST_WIDTH: gpui::Pixels = px(320.);
+ /// of what goes *inside* an overlay belongs to the script.
+ pub struct ShellRoot {
+     content: AnyView,
++    native_overlay: Option<AnyView>,
+     application: Option<MountedApplication>,
+     /// Retains a script application's policy and cancels its work when this
+     /// window root is dropped. Ordinary Rust content leaves it empty.
+@@ -223,6 +224,7 @@ impl ShellRoot {
+ 
+         Self {
+             content,
++            native_overlay: None,
+             application: None,
+             application_policy: None,
+             application_generation: None,
+@@ -300,6 +302,11 @@ impl ShellRoot {
+         &self.content
+     }
+ 
++    pub fn with_native_overlay(mut self, overlay: AnyView) -> Self {
++        self.native_overlay = Some(overlay);
++        self
++    }
++
+     pub(crate) fn application(&self) -> Option<&MountedApplication> {
+         self.application.as_ref()
+     }
+@@ -867,6 +874,7 @@ impl Render for ShellRoot {
+                     .clone()
+                     .cached(StyleRefinement::default().size_full()),
+             )
++            .children(self.native_overlay.clone())
+             .children(self.sheet_layer(&colors, &spacing, cx))
+             .children(self.dialog_layer(&colors, &radius, &spacing, cx))
+             .child(self.toast_layer(&colors, &radius, &spacing, cx))

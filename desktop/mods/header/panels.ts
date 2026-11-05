@@ -17,7 +17,9 @@ export type PanelGroup = {
 export function currentVoyage(layout: Layout): Voyage | undefined {
   return layout.view === "home"
     ? (layout.home ?? undefined)
-    : layout.voyages.find((voyage) => voyage.id === layout.selectedVoyage);
+    : layout.voyages.find(
+        (voyage) => !voyage.closed && voyage.id === layout.selectedVoyage,
+      );
 }
 
 export function panelGroups(layout: Layout): PanelGroup[] {
@@ -51,9 +53,14 @@ export function activeGroups(layout: Layout): PanelGroup[] {
   if (!voyage) return [];
   const fleetId =
     layout.view === "home" ? voyage.fleets[0]?.id : layout.selectedFleet;
+  const closed = new Set(
+    voyage.fleets.filter((fleet) => fleet.closed).map((fleet) => fleet.id),
+  );
   return panelGroups(layout).filter(
     (group) =>
+      !group.voyage.closed &&
       group.voyage.id === voyage.id &&
+      (group.owner.kind !== "fleet" || !closed.has(group.owner.id)) &&
       (group.owner.kind === "fleet"
         ? group.owner.id === fleetId
         : Boolean(voyage.portalLayout?.visible)),

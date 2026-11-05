@@ -27,9 +27,10 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["canvas", "canvas-input", "workspace", "workspace-ux", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "terminal-reported-status", "arrangement", "layouts", "split-resize", "pane-maximize", "notes", "notes-lifetime", "notes-configuration", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "session-quit", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
+    parser.add_argument("--journey", choices=["feedback-ux", "rename-typing", "canvas", "canvas-input", "workspace", "workspace-ux", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "terminal-reported-status", "arrangement", "layouts", "split-resize", "pane-maximize", "notes", "notes-lifetime", "notes-configuration", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "session-quit", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
+    parser.add_argument("--review", action="store_true")
     parser.add_argument("--notes", action="store_true")
     parser.add_argument("--notes-case", choices=["standard", "delayed", "uncertain", "resilience", "refusal"], default="standard")
     parser.add_argument("--pointer-only", action="store_true")
@@ -41,6 +42,18 @@ def run():
     parser.add_argument("--window-origin", nargs=2, type=int)
     parser.add_argument("--public-snapshot", type=Path)
     args = parser.parse_args()
+    if args.review and (
+        not args.foundation
+        or not args.compositor
+        or args.quit
+        or args.notes
+        or args.journey
+    ):
+        parser.error(
+            "--review requires --foundation --compositor without --journey, --notes or --quit"
+        )
+    if args.journey in ("feedback-ux", "rename-typing") and not args.foundation:
+        parser.error("Feedback journeys require the foundation route")
     if args.journey in ("avatar", "portal-avatar") and not args.compositor:
         parser.error("Avatar journeys require compositor capture")
     if args.journey in ("notes", "notes-lifetime", "notes-configuration") and not args.compositor:
@@ -51,7 +64,7 @@ def run():
         parser.error("Reported status requires compositor capture")
     if args.journey in ("split-resize", "pane-maximize") and not args.compositor:
         parser.error("Split resize requires compositor capture")
-    if args.journey in ("canvas", "canvas-input", "workspace-ux") and not args.compositor:
+    if args.journey in ("canvas", "canvas-input", "workspace-ux", "feedback-ux", "rename-typing") and not args.compositor:
         parser.error("Canvas requires compositor capture")
     if args.journey == "conversation-scroll":
         if args.public_snapshot is None or not args.public_snapshot.is_absolute() or not args.public_snapshot.is_file():
@@ -79,7 +92,7 @@ def run():
         env.update(json.loads((evidence / "launch.json").read_text())["desktopEnvironment"])
     wayland_display = env.pop("WAYLAND_DISPLAY", None)
     env.pop("VOYAGER_PROOF_WAYLAND_DISPLAY", None)
-    if args.journey in ("conversation-ux", "canvas", "notes-lifetime", "notes-configuration") and wayland_display:
+    if args.journey in ("conversation-ux", "canvas", "notes-lifetime", "notes-configuration", "feedback-ux") and wayland_display:
         env["VOYAGER_PROOF_WAYLAND_DISPLAY"] = wayland_display
     if args.journey in ("conversation-stop", "conversation-ux"):
         if env.get("HC_SOCKET"):
@@ -91,7 +104,7 @@ def run():
                 socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
                 if socket.exists():
                     raise RuntimeError("Selected Stop requires two fresh dedicated Core sessions")
-    if args.journey in ("avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration", "split-resize", "pane-maximize", "canvas", "canvas-input", "workspace-ux", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "session-quit", "terminal-reported-status"):
+    if args.review or args.journey in ("avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration", "split-resize", "pane-maximize", "canvas", "canvas-input", "workspace-ux", "feedback-ux", "rename-typing", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "session-quit", "terminal-reported-status"):
         if env.get("HC_SOCKET"):
             raise RuntimeError("This journey requires an unset HC_SOCKET before launch")
         env.pop("HC_SESSION", None)
@@ -296,7 +309,7 @@ def run():
                 location = dict(line.split("=", 1) for line in execute("xdotool", "getmouselocation", "--shell").splitlines())
                 target = location["WINDOW"]
             owner = int(execute("xdotool", "getwindowpid", target))
-            input_targets.append({"action": action, "window": target, "pid": owner})
+            input_targets.append({"action": action, "window": target, "pid": owner, **({"pointerPosition": location} if action[0] != "key" else {})})
             input_file = "input-targets-quit.json" if args.quit else "input-targets.json"
             (evidence / input_file).write_text(json.dumps(input_targets, indent=2))
             assert owner == record["pid"], "Native input target is not the owned candidate"
@@ -304,6 +317,8 @@ def run():
         pointer.stdin.flush()
         result = json.loads(pointer.stdout.readline())
         assert result.get("ok"), f"Native input refused: {result}"
+        if action[0] == "move":
+            result["pointerPosition"] = dict(line.split("=", 1) for line in execute("xdotool", "getmouselocation", "--shell").splitlines())
         return result
 
     def close():
@@ -394,12 +409,14 @@ def run():
         raise AssertionError(f"{name} did not visibly change within 750 ms")
 
     try:
-        if args.quit:
+        if args.review:
+            capture("review-initial")
+        elif args.quit:
             close()
             passed.append("native-quit")
         elif args.foundation:
             import importlib
-            module = "proof_workspace_ux" if args.journey == "workspace-ux" else "proof_session_quit" if args.journey == "session-quit" else "proof_voice" if args.journey == "conversation-voice" else "proof_canvas" if args.journey in ("canvas", "canvas-input") else "proof_split_resize" if args.journey in ("split-resize", "pane-maximize") else "proof_notes_lifetime" if args.journey in ("notes-lifetime", "notes-configuration") else "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey in ("terminal-agent", "terminal-agent-create") else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
+            module = "proof_feedback_ux" if args.journey in ("feedback-ux", "rename-typing") else "proof_workspace_ux" if args.journey == "workspace-ux" else "proof_session_quit" if args.journey == "session-quit" else "proof_voice" if args.journey == "conversation-voice" else "proof_canvas" if args.journey in ("canvas", "canvas-input") else "proof_split_resize" if args.journey in ("split-resize", "pane-maximize") else "proof_notes_lifetime" if args.journey in ("notes-lifetime", "notes-configuration") else "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey in ("terminal-agent", "terminal-agent-create") else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
             proof_workspace = importlib.import_module(module)
 
             options = dict(native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame, evidence=evidence, session=args.session, env=env, journey=args.journey)
@@ -475,8 +492,12 @@ def run():
                 "module-theme-error-and-recovery",
                 "import-error-and-recovery",
             ])
-        completed = True
-        print(json.dumps({"passed": passed, "visualReviewRequired": True}))
+        completed = not args.review
+        print(json.dumps({
+            "passed": passed,
+            "visualReviewRequired": True,
+            "reviewOpened": args.review,
+        }))
     finally:
         primary = sys.exc_info()[0] is not None
         primary_error = str(sys.exc_info()[1])
@@ -506,6 +527,7 @@ def run():
         (evidence / check_file).write_text(json.dumps({
             "passed": passed, "reloadObservedUpperBoundMs": timings,
             "completed": completed and not cleanup_errors, "error": primary_error,
+            "reviewOnly": args.review,
             "cleanupErrors": cleanup_errors,
             "visualReviewRequired": True,
         }, indent=2))

@@ -14,6 +14,8 @@ const entries = [
   "desktop/mods/header/creation.ts",
   "desktop/mods/header/activity.ts",
   "desktop/mods/header/agents.ts",
+  "desktop/mods/header/process-icons.ts",
+  "desktop/mods/header/worktrees.ts",
   "desktop/mods/header/processes.ts",
   "desktop/mods/header/menu.ts",
   "desktop/mods/header/panels.ts",

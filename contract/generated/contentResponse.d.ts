@@ -26,6 +26,22 @@ export type Response =
       version: Version;
     }
   | {
+      contentId: string;
+      filenames: string[];
+      requestId: string;
+      status: "notes-list";
+      version: Version;
+    }
+  | {
+      configuration: NotesConfiguration;
+      contentId: string;
+      requestId: string;
+      snapshot: Snapshot;
+      status: "note-opened";
+      version: Version;
+      workspaceVersion: string;
+    }
+  | {
       configuration: NotesConfiguration;
       contentId: string;
       requestId: string;
@@ -67,7 +83,12 @@ export interface ConfigurationSnapshot {
   workspaceVersion: string;
 }
 export interface NotesConfiguration {
+  notesFile?: NotesFile | null;
   showHeading: boolean;
+}
+export interface NotesFile {
+  directory: string;
+  filename: string;
 }
 export interface Snapshot {
   contentId: string;

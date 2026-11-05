@@ -3,9 +3,12 @@ use std::sync::Arc;
 use anyhow::{Context as _, ensure};
 use gpui::{
     AnyElement, AppContext as _, Entity, InteractiveElement as _, MouseButton, ParentElement as _,
-    Role, Styled as _,
+    Role, Styled as _, px,
 };
-use gpui_base::input::{Input, InputAccessibility, InputBase, InputMode, InputState};
+use gpui_base::{
+    Theme,
+    input::{Input, InputAccessibility, InputBase, InputEditorStyle, InputMode, InputState},
+};
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDataValue, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
@@ -34,7 +37,14 @@ impl ComponentMaterializer for Text {
                 focus.update(cx, |state, cx| state.focus(window, cx));
             });
         let frame = if self.composer {
-            frame.flex().items_center()
+            frame
+                .flex()
+                .items_center()
+                .h(px(32.))
+                .min_h(px(32.))
+                .px(px(10.))
+                .text_size(px(12.))
+                .line_height(px(18.))
         } else {
             frame
         };
@@ -85,6 +95,14 @@ fn register_text(
                     } else {
                         InputState::new(window, cx).default_value(value.clone())
                     };
+                    let colors = Theme::global(cx).tokens.colors;
+                    state.set_editor_style(InputEditorStyle {
+                        foreground: colors.foreground,
+                        muted_foreground: colors.muted_foreground,
+                        selection: colors.selection,
+                        caret: colors.foreground,
+                        ..Default::default()
+                    });
                     state.set_accessibility(
                         InputAccessibility::new(Some(Role::TextInput)).with_label(Some(
                             if composer {

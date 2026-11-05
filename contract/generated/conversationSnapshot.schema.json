@@ -130,6 +130,23 @@
         {
           "additionalProperties": false,
           "properties": {
+            "operation": {
+              "const": "create-voyage-from-source",
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/definitions/DirectorySource"
+            }
+          },
+          "required": [
+            "operation",
+            "source"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "name": {
               "type": "string"
             },
@@ -145,6 +162,45 @@
             "operation",
             "voyage",
             "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "launch": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Launch"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "create-fleet-with-content",
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/definitions/DirectorySource"
+            },
+            "typeId": {
+              "type": "string"
+            },
+            "voyage": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "voyage",
+            "name",
+            "source",
+            "typeId"
           ],
           "type": "object"
         },
@@ -383,7 +439,75 @@
               "type": "string"
             },
             "operation": {
+              "const": "close-voyage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "reopen-voyage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
               "const": "select-fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "close-fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "reopen-fleet",
               "type": "string"
             }
           },
@@ -571,6 +695,82 @@
         }
       ]
     },
+    "Action2": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "base": {
+              "type": "string"
+            },
+            "branch": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "create",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "name",
+            "branch",
+            "base"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "open",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "remove",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "path"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "CallbackId": {
       "oneOf": [
         {
@@ -744,6 +944,85 @@
         }
       ]
     },
+    "DirectorySource": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "backend": {
+              "type": "string"
+            },
+            "contentId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "live",
+              "type": "string"
+            },
+            "placementId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "placementId",
+            "contentId",
+            "backend",
+            "cwd"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "voyage",
+              "type": "string"
+            },
+            "voyageId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "voyageId",
+            "cwd"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "starting",
+              "type": "string"
+            },
+            "placementId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "placementId",
+            "contentId",
+            "cwd"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Effort": {
       "enum": [
         "low",
@@ -781,6 +1060,26 @@
         "scope",
         "path",
         "revision"
+      ],
+      "type": "object"
+    },
+    "Input": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/definitions/Action2"
+        },
+        "expectedVersion": {
+          "type": "string"
+        },
+        "voyage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedVersion",
+        "voyage",
+        "action"
       ],
       "type": "object"
     },
@@ -1280,6 +1579,82 @@
             "contentId": {
               "type": "string"
             },
+            "operation": {
+              "const": "migrate-note",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "list-notes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "new-note",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "filename": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "open-note",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "filename"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
             "expectedRevision": {
               "type": "string"
             },
@@ -1509,6 +1884,23 @@
             },
             "tool": {
               "const": "content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/Input"
+            },
+            "tool": {
+              "const": "worktree",
               "type": "string"
             }
           },

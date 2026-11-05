@@ -11,7 +11,9 @@ pub mod content;
 pub mod context;
 pub mod conversation;
 pub mod launch;
+pub mod observation;
 pub mod voice;
+pub mod worktree;
 
 macro_rules! id {
     ($name:ident) => {
@@ -145,8 +147,28 @@ pub struct Vessel {
     pub id: PlacementId,
     pub content: ContentId,
     pub name: String,
+    #[serde(
+        default,
+        rename = "nameOrigin",
+        skip_serializing_if = "NameOrigin::is_deliberate"
+    )]
+    pub name_origin: NameOrigin,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum NameOrigin {
+    Automatic,
+    #[default]
+    Deliberate,
+}
+
+impl NameOrigin {
+    fn is_deliberate(&self) -> bool {
+        *self == Self::Deliberate
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -163,6 +185,8 @@ pub enum RenameTarget {
 pub struct Fleet {
     pub id: FleetId,
     pub name: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub closed: bool,
     pub vessels: Vec<Vessel>,
     pub root: Option<Split>,
     #[serde(
@@ -178,6 +202,11 @@ pub struct Fleet {
 pub struct Voyage {
     pub id: VoyageId,
     pub name: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub closed: bool,
+    #[serde(default, rename = "closedOrder", with = "decimal")]
+    #[schemars(with = "String")]
+    pub closed_order: u64,
     pub fleets: Vec<Fleet>,
     pub portals: Vec<Vessel>,
     #[serde(
@@ -188,6 +217,31 @@ pub struct Voyage {
     pub portal_layout: Option<PortalLayout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum DirectorySource {
+    Live {
+        placement_id: PlacementId,
+        content_id: ContentId,
+        backend: CoreTerminalId,
+        cwd: String,
+    },
+    Voyage {
+        voyage_id: VoyageId,
+        cwd: String,
+    },
+    Starting {
+        placement_id: PlacementId,
+        content_id: ContentId,
+        cwd: String,
+    },
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -251,9 +305,21 @@ pub enum Action {
         name: String,
         cwd: String,
     },
+    CreateVoyageFromSource {
+        source: DirectorySource,
+    },
     CreateFleet {
         voyage: VoyageId,
         name: String,
+    },
+    CreateFleetWithContent {
+        voyage: VoyageId,
+        name: String,
+        source: DirectorySource,
+        #[serde(rename = "typeId")]
+        type_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        launch: Option<launch::Launch>,
     },
     CreateContent {
         #[serde(rename = "typeId")]
@@ -304,7 +370,19 @@ pub enum Action {
     SelectVoyage {
         id: VoyageId,
     },
+    CloseVoyage {
+        id: VoyageId,
+    },
+    ReopenVoyage {
+        id: VoyageId,
+    },
     SelectFleet {
+        id: FleetId,
+    },
+    CloseFleet {
+        id: FleetId,
+    },
+    ReopenFleet {
         id: FleetId,
     },
     RevealPanel {

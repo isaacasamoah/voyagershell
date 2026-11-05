@@ -1,5 +1,6 @@
 use std::{
     fs,
+    path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 use voyager_app::content::Owner;
@@ -61,7 +62,7 @@ fn bound_updates_preserve_other_data_and_refuse_stale_or_forged() {
         Response::Rejected { .. }
     ));
     assert!(
-        matches!(owner.call(&b, read("notes-b")), Response::Snapshot { snapshot, .. } if snapshot.data.title == "Working notes")
+        matches!(owner.call(&b, read("notes-b")), Response::Snapshot { snapshot, .. } if snapshot.data.title == "Title")
     );
     fs::remove_dir_all(path).unwrap();
 }
@@ -177,7 +178,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
     let mut cleanup = Core::connect(&session).unwrap();
     let client = Client::with_content(
         session.clone(),
-        "/tmp".into(),
+        profile.to_string_lossy().into_owned(),
         Owner::open(&profile).unwrap(),
     );
     let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -231,12 +232,27 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         else {
             panic!("{before:?}")
         };
-        assert_eq!(metadata.configuration, NotesConfiguration::default());
+        assert!(metadata.configuration.show_heading);
+        assert!(metadata.configuration.notes_file.is_some());
         assert_eq!(metadata.workspace_version, workspace.version);
-        let data: Vec<_> = ids
+        let paths: Vec<_> = ids
             .iter()
-            .map(|id| fs::read(profile.join(format!("data/{}.json", id.0))).unwrap())
+            .map(|id| {
+                let content = workspace
+                    .layout
+                    .contents
+                    .iter()
+                    .find(|content| content.id == *id)
+                    .unwrap();
+                let configuration: NotesConfiguration = serde_json::from_value(
+                    serde_json::Value::Object(content.configuration.clone().unwrap()),
+                )
+                .unwrap();
+                let file = configuration.notes_file.unwrap();
+                Path::new(&file.directory).join(file.filename)
+            })
             .collect();
+        let data: Vec<_> = paths.iter().map(|path| fs::read(path).unwrap()).collect();
         let changed = wait(client.content_changes(binding.clone(), None)).unwrap();
         let counter = wait(changed.recv()).unwrap();
         let changed = wait(client.content_changes(binding.clone(), Some(counter))).unwrap();
@@ -250,6 +266,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             expected_version: workspace.version,
             configuration: NotesConfiguration {
                 show_heading: false,
+                notes_file: metadata.configuration.notes_file.clone(),
             },
         };
         let configured = client.content(access.clone(), request.clone()).unwrap();
@@ -311,22 +328,17 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
                 .unwrap(),
             Response::Rejected { .. }
         ));
-        for (index, id) in ids.iter().enumerate() {
-            assert_eq!(
-                fs::read(profile.join(format!("data/{}.json", id.0))).unwrap(),
-                data[index]
-            );
+        for (index, _) in ids.iter().enumerate() {
+            assert_eq!(fs::read(&paths[index]).unwrap(), data[index]);
         }
-        fs::write(
-            profile.join(format!("data/{}.json", ids[0].0)),
-            "broken data",
-        )
-        .unwrap();
-        let fallback = client.content(access.clone(), inspect()).unwrap();
+        fs::write(&paths[0], [0xff]).unwrap();
+        let unreadable = client.content(access.clone(), inspect()).unwrap();
+        assert!(matches!(&*unreadable, Response::Rejected { .. }));
+        fs::write(&paths[0], &data[0]).unwrap();
+        let restored = client.content(access.clone(), inspect()).unwrap();
         assert!(
-            matches!(&*fallback, Response::Snapshot {snapshot,configuration:Some(current),..} if snapshot.revision == original.revision && snapshot.warning.is_some() && !current.configuration.show_heading && current.workspace_version == *workspace_version)
+            matches!(&*restored, Response::Snapshot {snapshot,configuration:Some(current),..} if snapshot.revision == original.revision && !current.configuration.show_heading && current.workspace_version == *workspace_version)
         );
-        fs::write(profile.join(format!("data/{}.json", ids[0].0)), &data[0]).unwrap();
         let header_path = profile.join("mods/header/mod.json");
         let header = fs::read(&header_path).unwrap();
         let mut legacy: serde_json::Value = serde_json::from_slice(&header).unwrap();
@@ -451,6 +463,51 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             matches!(&*read, Response::Snapshot {snapshot,configuration:Some(current),..} if snapshot.revision == original.revision && !current.configuration.show_heading)
         );
         drop(reopened);
+        let current_workspace = call(Action::Inspect, 0);
+        assert_eq!(current_workspace.version, repaired.version);
+        let first = wait(client.content_changes(binding.clone(), None)).unwrap();
+        let counter = wait(first.recv()).unwrap();
+        let changes = wait(client.content_changes(binding.clone(), Some(counter))).unwrap();
+        let docked = call(
+            Action::Dock {
+                context: Context::Voyage {
+                    id: workspace.layout.voyages[0].id.clone(),
+                },
+            },
+            repaired.version,
+        );
+        assert_eq!(docked.status, Status::Applied);
+        assert!(wait(changes.recv()).unwrap() > counter);
+        let refreshed = client
+            .content(Access::View(binding.clone()), inspect())
+            .unwrap();
+        let Response::Snapshot {
+            configuration: Some(current),
+            ..
+        } = &*refreshed
+        else {
+            panic!("{refreshed:?}")
+        };
+        assert_eq!(current.workspace_version, docked.version);
+        let opened = client
+            .content(
+                Access::View(binding.clone()),
+                Request::OpenNote {
+                    version: Version::V1,
+                    request_id: client.request_id(),
+                    content_id: ids[0].clone(),
+                    expected_version: current.workspace_version,
+                    filename: current
+                        .configuration
+                        .notes_file
+                        .as_ref()
+                        .unwrap()
+                        .filename
+                        .clone(),
+                },
+            )
+            .unwrap();
+        assert!(matches!(&*opened, Response::NoteOpened { .. }));
         wait(client.quit()).unwrap();
         let mut after_quit = request;
         if let Request::Configure {

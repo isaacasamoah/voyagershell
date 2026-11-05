@@ -39,6 +39,7 @@ pub struct Avatar {
     workspace: AnyWindowHandle,
     floating: Option<AnyWindowHandle>,
     opening: Option<u64>,
+    restore: Option<Restore>,
     window_epoch: Rc<Cell<u64>>,
     pending: Option<Task<()>>,
     position: Option<Position>,
@@ -74,6 +75,8 @@ struct Target {
 struct Geometry {
     targets: Vec<Target>,
     workspace: Bounds<Pixels>,
+    avatar: Option<Bounds<Pixels>>,
+    window_bounds: Option<WindowBounds>,
     visible: bool,
     diagnostics: u8,
     portal_area: Option<Bounds<Pixels>>,
@@ -197,6 +200,25 @@ struct Drag {
     moved: bool,
 }
 
+struct Restore {
+    native: u32,
+    bounds: WindowBounds,
+    scale: f32,
+    requested: bool,
+}
+
+impl Restore {
+    fn failed(&mut self, error: &crate::platform::RestoreError) {
+        if matches!(error, crate::platform::RestoreError::Refused(_)) {
+            self.requested = false;
+        }
+    }
+}
+
+fn floating_origin(avatar: Bounds<Pixels>) -> Point<Pixels> {
+    avatar.center() - point(px(60.), px(60.))
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum Surface {
     Workspace,
@@ -267,6 +289,7 @@ impl Avatar {
         self.drag = None;
         let epoch = self.advance_window_epoch();
         self.opening = None;
+        self.restore = None;
         let avatar = cx.weak_entity();
         let workspace = self.workspace;
         cx.defer(move |cx| {
@@ -300,25 +323,115 @@ impl Avatar {
         cx.emit(Changed);
     }
 
-    fn activate(&mut self, window: &Window, origin: Point<Pixels>, cx: &mut Context<Self>) {
+    fn activate(&mut self, window: &Window, cx: &mut Context<Self>) {
         if self.floating == Some(window.window_handle()) {
-            let workspace = self.workspace;
-            let epoch = self.window_epoch.get();
-            let avatar = cx.weak_entity();
-            cx.defer(move |cx| {
-                if avatar
-                    .upgrade()
-                    .is_some_and(|avatar| avatar.read(cx).window_epoch.get() == epoch)
-                {
-                    let _ = workspace.update(cx, |_, window, _| window.activate_window());
-                }
-            });
+            self.restore_workspace(cx);
         } else {
             if std::env::var_os("VOYAGER_AVATAR_DIAGNOSTICS").is_some() {
                 eprintln!("Avatar float trigger: activation");
             }
-            self.float(origin, cx);
+            self.float(window, cx);
         }
+    }
+
+    fn restore_workspace(&mut self, cx: &mut Context<Self>) {
+        let Some(restore) = self.restore.as_ref().filter(|restore| !restore.requested) else {
+            return;
+        };
+        let (native, bounds, scale) = (restore.native, restore.bounds, restore.scale);
+        if self
+            .workspace
+            .update(cx, |_, window, _| {
+                crate::platform::native_window(window).ok() == Some(native)
+            })
+            .ok()
+            != Some(true)
+        {
+            self.report("The saved workspace window no longer matches".into(), cx);
+            return;
+        }
+        if let Some(restore) = self.restore.as_mut() {
+            restore.requested = true;
+        }
+        let epoch = self.advance_window_epoch();
+        let workspace = self.workspace;
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let desired = bounds
+            .get_bounds()
+            .origin
+            .scale(scale)
+            .map(|value| i32::from(gpui::DevicePixels::from(value)));
+        self.position = Some(Position {
+            window: workspace,
+            native,
+            epoch,
+            desired,
+            cancelled: Arc::clone(&cancelled),
+        });
+        self.position_task = Some(cx.spawn(async move |avatar, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    if let WindowBounds::Windowed(bounds) = bounds {
+                        crate::platform::WindowPosition::new()
+                            .map_err(crate::platform::RestoreError::Refused)?
+                            .restore_bounds(
+                                native,
+                                Bounds::new(bounds.origin.scale(scale), bounds.size.scale(scale)),
+                                &cancelled,
+                            )
+                    } else {
+                        Ok(!cancelled.load(Ordering::Acquire))
+                    }
+                })
+                .await;
+            let _ = workspace.update(cx, |_, window, cx| {
+                let _ = avatar.update(cx, |avatar, cx| {
+                    if avatar.window_epoch.get() != epoch
+                        || crate::platform::native_window(window).ok() != Some(native)
+                    {
+                        return;
+                    }
+                    match result {
+                        Ok(true) => window.activate_window(),
+                        Ok(false) => (),
+                        Err(error) => {
+                            if let Some(restore) = avatar.restore.as_mut() {
+                                restore.failed(&error);
+                            }
+                            let message = match error {
+                                crate::platform::RestoreError::Refused(message) => {
+                                    format!("Workspace restore failed: {message}")
+                                }
+                                crate::platform::RestoreError::Uncertain(message) => {
+                                    format!("Workspace restore is unconfirmed: {message}")
+                                }
+                            };
+                            avatar.report(message, cx);
+                        }
+                    }
+                });
+            });
+        }));
+    }
+
+    fn restored(&mut self, window: &Window, cx: &mut Context<Self>) {
+        if self.restore.as_ref().is_none_or(|restore| {
+            !restore.requested
+                || crate::platform::native_window(window).ok() != Some(restore.native)
+        }) {
+            return;
+        }
+        self.restore = None;
+        self.advance_window_epoch();
+        self.drag = None;
+        if let Some(floating) = self.floating.take() {
+            cx.defer(move |cx| {
+                let _ = floating.update(cx, |_, window, _| window.remove_window());
+            });
+        }
+        self.update_dock_visibility(cx);
+        cx.notify();
     }
 
     fn moving(&mut self, event: &gpui::MouseMoveEvent, window: &Window, cx: &mut Context<Self>) {
@@ -402,7 +515,7 @@ impl Avatar {
                 crate::platform::tone(true);
             }
         } else if drag.began.elapsed().as_millis() < 350 {
-            self.activate(window, drag.position - point(px(13.), px(13.)), cx);
+            self.activate(window, cx);
         }
         cx.notify();
     }
@@ -531,9 +644,37 @@ impl Avatar {
         }));
     }
 
-    fn float(&mut self, origin: Point<Pixels>, cx: &mut Context<Self>) -> bool {
+    fn float(&mut self, window: &Window, cx: &mut Context<Self>) -> bool {
+        if self.opening.is_some() {
+            return true;
+        }
+        if self.floating.is_none() {
+            let Some((_, bounds)) = ({
+                let geometry = self.geometry.borrow();
+                geometry.avatar.zip(geometry.window_bounds)
+            }) else {
+                self.report("The avatar has no painted screen position".into(), cx);
+                return false;
+            };
+            let native = match crate::platform::native_window(window) {
+                Ok(native) => native,
+                Err(message) => {
+                    self.report(message, cx);
+                    return false;
+                }
+            };
+            self.restore = Some(Restore {
+                native,
+                bounds,
+                scale: window.scale_factor(),
+                requested: false,
+            });
+        }
         let epoch = self.advance_window_epoch();
         if self.floating.is_some() {
+            if let Some(restore) = self.restore.as_mut() {
+                restore.requested = false;
+            }
             let workspace = self.workspace;
             let avatar = cx.weak_entity();
             cx.defer(move |cx| {
@@ -546,6 +687,10 @@ impl Avatar {
             });
             return true;
         }
+        let Some(painted) = self.geometry.borrow().avatar else {
+            return false;
+        };
+        let origin = floating_origin(painted);
         self.opening = Some(epoch);
         let avatar = cx.entity();
         let workspace = self.workspace;
@@ -558,6 +703,7 @@ impl Avatar {
             titlebar: None,
             kind: WindowKind::PopUp,
             is_resizable: false,
+            display_id: window.display(cx).map(|display| display.id()),
             window_background: WindowBackgroundAppearance::Transparent,
             app_id: Some("voyager-floating-avatar".into()),
             ..Default::default()
@@ -577,6 +723,7 @@ impl Avatar {
                 return;
             }
             let opened = result.is_ok();
+            let opened_window = result.as_ref().ok().copied();
             avatar.update(cx, |avatar, cx| {
                 avatar.opening = None;
                 match result {
@@ -587,11 +734,17 @@ impl Avatar {
                         crate::platform::tone(false);
                     }
                     Err(error) => {
+                        avatar.restore = None;
                         avatar.report(format!("Floating avatar unavailable: {error:#}"), cx)
                     }
                 }
                 cx.notify();
             });
+            if let Some(floating) = opened_window {
+                let _ = floating.update(cx, |_, window, cx| {
+                    avatar.update(cx, |avatar, cx| avatar.position_float(origin, window, cx));
+                });
+            }
             if opened {
                 let _ = workspace.update(cx, |_, window, _| window.minimize_window());
             }
@@ -600,7 +753,22 @@ impl Avatar {
     }
 }
 
+pub(crate) fn target_frame() -> gpui::Div {
+    div()
+        .relative()
+        .size_full()
+        .flex()
+        .flex_col()
+        .min_w(px(0.))
+        .min_h(px(0.))
+        .flex_1()
+}
+
 impl Binding {
+    pub fn view(&self) -> gpui::AnyView {
+        self.view.clone().into()
+    }
+
     pub fn new(client: Client, window: &mut Window, cx: &mut App) -> Self {
         let workspace = window.window_handle();
         let result = Rc::default();
@@ -624,6 +792,7 @@ impl Binding {
             workspace,
             floating: None,
             opening: None,
+            restore: None,
             window_epoch: Rc::clone(&window_epoch),
             pending: None,
             position: None,
@@ -659,9 +828,8 @@ impl Binding {
             if std::env::var_os("VOYAGER_AVATAR_DIAGNOSTICS").is_some() {
                 eprintln!("Avatar float trigger: workspace-close");
             }
-            let origin = window.bounds().origin + point(px(80.), px(60.));
             let floated = weak
-                .update(cx, |avatar, cx| avatar.float(origin, cx))
+                .update(cx, |avatar, cx| avatar.float(window, cx))
                 .unwrap_or(false);
             !floated
         });
@@ -676,7 +844,7 @@ impl Binding {
     }
 
     pub fn module(&self) -> HostModule {
-        let view = self.view.clone();
+        let layer_view = self.view.downgrade();
         let avatar = self.avatar.clone();
         let targets = Rc::clone(&self.targets);
         let layout_targets = Rc::clone(&self.targets);
@@ -750,7 +918,7 @@ impl Binding {
                     )
                     .into_any_element()
             })
-            .component("Layer", move |mut args, _, cx| {
+            .component("Layer", move |mut args, window, cx| {
                 let key = args
                     .props()
                     .get("layoutKey")
@@ -782,35 +950,41 @@ impl Binding {
                     let targets_retired = geometry.targets.len() != before;
                     geometry.retire_portal_area() || targets_retired
                 };
-                avatar.update(cx, |avatar, cx| {
+                let changed = avatar.update(cx, |avatar, cx| {
+                    let mut changed = retired;
                     if retired {
                         cx.notify();
                     }
                     if let Some(epoch) = receipt_epoch {
+                        changed |= !receipt.is_empty() && receipt != avatar.dock_receipt;
                         avatar.applied_dock(receipt, epoch, cx);
                     }
                     if let (Some(raw), Some(version)) = (scope, version)
                         && version >= avatar.version
                         && let Ok(scope) = serde_json::from_str::<Scope>(raw)
                     {
-                        let changed = avatar.scope != scope || avatar.projection_key != key;
+                        let projection_changed = avatar.scope != scope || avatar.projection_key != key;
+                        changed |= projection_changed;
                         avatar.scope = scope;
                         avatar.version = version;
                         if avatar.projection_key != key {
                             avatar.cancel_drag(cx);
                         }
                         avatar.projection_key = key.to_owned();
-                        if changed {
+                        if projection_changed {
                             cx.notify();
                         }
                     }
                     avatar.update_dock_visibility(cx);
+                    changed
                 });
+                if changed {
+                    notify_geometry(layer_view.clone(), avatar.downgrade(), window, cx);
+                }
                 div()
                     .relative()
                     .size_full()
                     .children(args.take_children())
-                    .child(view.clone())
                     .into_any_element()
             })
             .component("Target", move |mut args, _, cx| {
@@ -855,15 +1029,8 @@ impl Binding {
                 let geometry_avatar = target_avatar.downgrade();
                 let keyboard = target_avatar.clone();
                 let key_scope = scope.clone();
-                let element = div()
+                let element = target_frame()
                     .id(args.id().to_owned())
-                    .relative()
-                    .size_full()
-                    .flex()
-                    .flex_col()
-                    .min_w(px(0.))
-                    .min_h(px(0.))
-                    .flex_1()
                     .when(!fallback, |element| {
                         element
                             .track_focus(&focus)
@@ -948,6 +1115,34 @@ impl Binding {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refused_restore_allows_another_human_click_without_replaying_uncertain_work() {
+        let mut restore = Restore {
+            native: 42,
+            bounds: WindowBounds::default(),
+            scale: 1.,
+            requested: true,
+        };
+        restore.failed(&crate::platform::RestoreError::Uncertain(
+            "disconnected".into(),
+        ));
+        assert!(restore.requested);
+        restore.failed(&crate::platform::RestoreError::Refused(
+            "invalid bounds".into(),
+        ));
+        assert!(!restore.requested);
+    }
+
+    #[test]
+    fn floating_anchor_keeps_the_painted_center_for_full_and_compact_docks() {
+        for diameter in [38., 94.] {
+            let painted = Bounds::new(point(px(413.), px(227.)), size(px(diameter), px(diameter)));
+            let origin = floating_origin(painted);
+            let floating = Bounds::new(origin + point(px(13.), px(13.)), size(px(94.), px(94.)));
+            assert_eq!(floating.center(), painted.center());
+        }
+    }
 
     #[test]
     fn speech_uses_primary_controls_only_for_compact_or_fallback_avatars() {

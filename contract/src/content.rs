@@ -81,15 +81,27 @@ pub struct Notes {
     pub text: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NotesConfiguration {
     pub show_heading: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes_file: Option<NotesFile>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NotesFile {
+    pub directory: String,
+    pub filename: String,
 }
 
 impl Default for NotesConfiguration {
     fn default() -> Self {
-        Self { show_heading: true }
+        Self {
+            show_heading: true,
+            notes_file: None,
+        }
     }
 }
 
@@ -120,6 +132,20 @@ pub enum Action {
     Inspect {
         content_id: ContentId,
     },
+    MigrateNote {
+        content_id: ContentId,
+    },
+    ListNotes {
+        content_id: ContentId,
+    },
+    NewNote {
+        content_id: ContentId,
+        title: String,
+    },
+    OpenNote {
+        content_id: ContentId,
+        filename: String,
+    },
     Update {
         content_id: ContentId,
         expected_revision: String,
@@ -143,6 +169,20 @@ pub enum Receipt {
     },
     Inspect {
         content_id: ContentId,
+    },
+    MigrateNote {
+        content_id: ContentId,
+    },
+    ListNotes {
+        content_id: ContentId,
+    },
+    NewNote {
+        content_id: ContentId,
+        title: String,
+    },
+    OpenNote {
+        content_id: ContentId,
+        filename: String,
     },
     Update {
         content_id: ContentId,
@@ -187,6 +227,41 @@ pub enum Request {
         version: Version,
         request_id: String,
         content_id: ContentId,
+    },
+    #[serde(rename = "content.migrate-note")]
+    MigrateNote {
+        version: Version,
+        request_id: String,
+        content_id: ContentId,
+        #[serde(with = "crate::decimal")]
+        #[schemars(with = "String")]
+        expected_version: u64,
+    },
+    #[serde(rename = "content.list-notes")]
+    ListNotes {
+        version: Version,
+        request_id: String,
+        content_id: ContentId,
+    },
+    #[serde(rename = "content.new-note")]
+    NewNote {
+        version: Version,
+        request_id: String,
+        content_id: ContentId,
+        #[serde(with = "crate::decimal")]
+        #[schemars(with = "String")]
+        expected_version: u64,
+        title: String,
+    },
+    #[serde(rename = "content.open-note")]
+    OpenNote {
+        version: Version,
+        request_id: String,
+        content_id: ContentId,
+        #[serde(with = "crate::decimal")]
+        #[schemars(with = "String")]
+        expected_version: u64,
+        filename: String,
     },
     #[serde(rename = "content.update")]
     Update {
@@ -244,6 +319,24 @@ pub enum Response {
         snapshot: Snapshot,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         configuration: Option<ConfigurationSnapshot>,
+    },
+    #[serde(rename = "notes-list")]
+    NotesList {
+        version: Version,
+        request_id: String,
+        content_id: ContentId,
+        filenames: Vec<String>,
+    },
+    #[serde(rename = "note-opened")]
+    NoteOpened {
+        version: Version,
+        request_id: String,
+        content_id: ContentId,
+        snapshot: Snapshot,
+        configuration: NotesConfiguration,
+        #[serde(with = "crate::decimal")]
+        #[schemars(with = "String")]
+        workspace_version: u64,
     },
     #[serde(rename = "configured")]
     Configured {

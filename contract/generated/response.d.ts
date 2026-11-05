@@ -77,6 +77,7 @@ export type Split =
     };
 export type Axis = "horizontal" | "vertical";
 export type SplitShare = number;
+export type NameOrigin = "automatic" | "deliberate";
 export type PanelOwner =
   | {
       id: string;
@@ -129,6 +130,8 @@ export interface Content {
   typeId: string;
 }
 export interface Voyage {
+  closed?: boolean;
+  closedOrder?: string;
   cwd?: string | null;
   fleets: Fleet[];
   id: string;
@@ -137,6 +140,7 @@ export interface Voyage {
   portals: Vessel[];
 }
 export interface Fleet {
+  closed?: boolean;
   id: string;
   maximizedPlacement?: string | null;
   name: string;
@@ -148,6 +152,7 @@ export interface Vessel {
   hidden?: boolean;
   id: string;
   name: string;
+  nameOrigin?: NameOrigin;
 }
 export interface PortalLayout {
   maximizedPlacement?: string | null;

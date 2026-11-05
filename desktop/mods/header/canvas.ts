@@ -39,7 +39,7 @@ export function composeCanvas(
       if (portals)
         element.child(
           column(
-            div().flex().flex_1().min_w(0).min_h(0).children(children),
+            div().flex().flex_1().h_full().min_w(0).min_h(0).children(children),
             portals,
           ),
         );

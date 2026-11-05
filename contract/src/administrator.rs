@@ -81,7 +81,18 @@ pub struct ProcessInfo {
     pub state: String,
     pub foreground: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub placement_names: Vec<PlacementName>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reported_activity: Option<std::sync::Arc<crate::activity::ReportedActivity>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PlacementName {
+    pub placement_id: crate::PlacementId,
+    pub effective_name: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -147,4 +158,5 @@ pub enum ToolAction {
     Workspace(Action),
     Process(ProcessAction),
     Content(crate::content::Receipt),
+    Worktree(crate::worktree::Input),
 }

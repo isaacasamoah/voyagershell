@@ -31,6 +31,8 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
         let mut selected = Voyage {
             id: voyage.id.clone(),
             name: voyage.name.clone(),
+            closed: voyage.closed,
+            closed_order: voyage.closed_order,
             fleets: Vec::new(),
             portals: Vec::new(),
             portal_layout: None,
@@ -46,6 +48,7 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
                 selected.fleets.push(Fleet {
                     id: fleet.id.clone(),
                     name: fleet.name.clone(),
+                    closed: fleet.closed,
                     vessels: vec![vessel.clone()],
                     maximized_placement: fleet
                         .maximized_placement
@@ -159,13 +162,19 @@ pub(crate) fn check(
         Action::SetPortalPresentation { voyage, .. } => {
             matches!(scope, Context::Voyage { id } if id == voyage)
         }
-        Action::CreateVoyage { .. } => false,
+        Action::CreateVoyage { .. } | Action::CreateVoyageFromSource { .. } => false,
         Action::UpdateCanvas { .. } | Action::SetSidebar { .. } => false,
         Action::RemoveContentPackage { .. } | Action::RestoreContentPackage { .. } => false,
         Action::StartNewShell { content_id, .. } => {
             scoped.contents.iter().any(|item| &item.id == content_id)
         }
         Action::MoveVoyage { .. } => false,
+        Action::CloseVoyage { id } | Action::ReopenVoyage { id } => {
+            matches!(scope, Context::Voyage { id: selected } if selected == id)
+        }
+        Action::CloseFleet { id } | Action::ReopenFleet { id } => {
+            matches!(scope, Context::Voyage { .. } | Context::Fleet { .. }) && fleet(id).is_some()
+        }
         Action::MoveFleet { id, target, .. } => {
             matches!(scope, Context::Voyage { .. })
                 && fleet(id).is_some()
@@ -182,7 +191,9 @@ pub(crate) fn check(
                         && members.iter().any(|panel| &panel.id == target)
                 })
         }),
-        Action::CreateFleet { voyage, .. } | Action::SelectVoyage { id: voyage } => {
+        Action::CreateFleet { voyage, .. }
+        | Action::CreateFleetWithContent { voyage, .. }
+        | Action::SelectVoyage { id: voyage } => {
             matches!(scope, Context::Voyage { id } if id == voyage)
         }
         Action::CreateContent {

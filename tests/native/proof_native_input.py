@@ -36,12 +36,16 @@ try:
             args = json.loads(line)
             action = args[0]
             result = {"ok": True}
-            if action in ("move", "button", "capture"):
+            if action in ("move", "button", "capture", "record-start", "record-stop"):
                 assert pointer is not None, "Pointer session was not prepared"
                 if action == "move":
                     result["move"] = pointer.move(*args[1:])
                 elif action == "capture":
                     result["capture"] = pointer.capture(*args[1:])
+                elif action == "record-start":
+                    result["recording"] = pointer.record_start(*args[1:])
+                elif action == "record-stop":
+                    result["recording"] = pointer.record_stop()
                 else:
                     pointer.button(*args[1:])
             elif action == "accessibility-state":
@@ -88,12 +92,19 @@ try:
                     )
                     assert targets[args[3]][0].get_component_iface().grab_focus()
             elif action == "key":
+                before = time.monotonic()
                 call(
                     session,
                     service + ".Session",
                     "NotifyKeyboardKeysym",
                     GLib.Variant("(ub)", (args[1], args[2])),
                 )
+                result["key"] = {
+                    "keysym": args[1],
+                    "down": args[2],
+                    "before": before,
+                    "acknowledged": time.monotonic(),
+                }
             elif action == "scroll":
                 call(
                     session,

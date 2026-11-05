@@ -283,6 +283,7 @@ mod tests {
             id: voyager_contract::PlacementId("portal".into()),
             content: placement.content,
             name: "Portal test".into(),
+            name_origin: voyager_contract::NameOrigin::Deliberate,
             hidden: false,
         });
         model.layout.context = Context::Portal {

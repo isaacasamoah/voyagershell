@@ -524,11 +524,11 @@ test("workspace shortcuts use the selected Fleet and focused Vessel", () => {
   view.focused = "second";
   const calls = [];
   view.run = (action) => calls.push(action);
+  view.openFleetChoices = (voyage) =>
+    calls.push({ picker: true, voyage: voyage.id });
   const modifiers = { control: true, shift: true, alt: false, platform: false };
   for (const key of ["o", "e", "t"]) view.shortcut({ key, modifiers }, cx);
-  assert.deepEqual(calls, [
-    { operation: "create-fleet", voyage: "voyage", name: "Fleet 2" },
-  ]);
+  assert.deepEqual(calls, [{ picker: true, voyage: "voyage" }]);
   assert.deepEqual(choices, [
     {
       owner: { kind: "fleet", id: "fleet" },
@@ -1075,8 +1075,12 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     chat: { toggleView: div, render: () => null },
   });
   const actions = [];
+  const panelMenus = new Map();
   view.run = (action) => actions.push(action);
-  view.contextMenu = (_id, trigger) => trigger;
+  view.contextMenu = (id, trigger, items) => {
+    if (id.startsWith("panel-")) panelMenus.set(id, items);
+    return trigger;
+  };
   view.creationControl = (_id, _destination, trigger) => trigger;
   view.terminals = new Map();
   view.openings = new Map([
@@ -1130,6 +1134,19 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     id: "vessel",
     maximized: true,
   });
+  const menu = panelMenus.get("panel-vessel");
+  assert.deepEqual(
+    menu.map((item) => item.label),
+    [
+      "Rename",
+      "Split side by side",
+      "Split above and below",
+      "Maximize Vessel",
+      "Close Vessel",
+    ],
+  );
+  menu.find((item) => item.label === "Close Vessel").choose("7", {});
+  assert.deepEqual(actions.pop(), { operation: "remove-panel", id: "vessel" });
   start[0].calls.on_click[0]({}, {});
   assert.deepEqual(actions.pop(), {
     operation: "start-new-shell",

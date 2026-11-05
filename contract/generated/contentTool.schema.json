@@ -65,6 +65,82 @@
             "contentId": {
               "type": "string"
             },
+            "operation": {
+              "const": "migrate-note",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "list-notes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "new-note",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "filename": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "open-note",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "filename"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
             "data": {
               "$ref": "#/definitions/Notes"
             },
@@ -105,12 +181,38 @@
     "NotesConfiguration": {
       "additionalProperties": false,
       "properties": {
+        "notesFile": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NotesFile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "showHeading": {
           "type": "boolean"
         }
       },
       "required": [
         "showHeading"
+      ],
+      "type": "object"
+    },
+    "NotesFile": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory",
+        "filename"
       ],
       "type": "object"
     }

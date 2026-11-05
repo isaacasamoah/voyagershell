@@ -14,6 +14,7 @@ use voyager_contract::{
 enum Dispatch {
     Workspace(Action),
     Process(ProcessAction),
+    Worktree(voyager_contract::worktree::Input),
     Content(voyager_contract::content::Action),
 }
 
@@ -23,6 +24,7 @@ impl Dispatch {
         match self {
             Self::Workspace(action) => ToolAction::Workspace(action.clone()),
             Self::Process(action) => ToolAction::Process(action.clone()),
+            Self::Worktree(input) => ToolAction::Worktree(input.clone()),
             Self::Content(action) => ToolAction::Content(match action {
                 Content::Configure { content_id, .. } => Receipt::Configure {
                     content_id: content_id.clone(),
@@ -32,6 +34,23 @@ impl Dispatch {
                 },
                 Content::Inspect { content_id } => Receipt::Inspect {
                     content_id: content_id.clone(),
+                },
+                Content::MigrateNote { content_id } => Receipt::MigrateNote {
+                    content_id: content_id.clone(),
+                },
+                Content::ListNotes { content_id } => Receipt::ListNotes {
+                    content_id: content_id.clone(),
+                },
+                Content::NewNote { content_id, title } => Receipt::NewNote {
+                    content_id: content_id.clone(),
+                    title: title.clone(),
+                },
+                Content::OpenNote {
+                    content_id,
+                    filename,
+                } => Receipt::OpenNote {
+                    content_id: content_id.clone(),
+                    filename: filename.clone(),
                 },
                 Content::Update {
                     content_id,
@@ -98,7 +117,16 @@ pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
         "../../contract/generated/contentTool.schema.json"
     ))
     .map_err(|error| error.to_string())?;
+    let worktree_schema: Value = serde_json::from_str(include_str!(
+        "../../contract/generated/worktreeTool.schema.json"
+    ))
+    .map_err(|error| error.to_string())?;
     Ok(vec![
+        ToolDefinition {
+            name: "voyager_worktree",
+            description: "List, create, open or remove registered Git worktrees inside the captured Voyage or whole-workspace focus. Inspect the workspace first for its exact version and Voyage ID. New checkouts use .worktree. Create and Open select or create the corresponding Voyage. Remove never forces, deletes branches or stops programs; live process use is refused. Never repeat an unconfirmed effect.",
+            schema: worktree_schema,
+        },
         ToolDefinition {
             name: "voyager_workspace",
             description: "Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
@@ -201,7 +229,7 @@ impl Tools {
             && turn.is_some_and(|turn| !turn.is_empty() && value.turn == turn)
             && matches!(
                 tool,
-                "voyager_workspace" | "voyager_process" | "voyager_content"
+                "voyager_workspace" | "voyager_process" | "voyager_content" | "voyager_worktree"
             )
             && value.namespace.is_none();
         let call = value.call.as_str();
@@ -302,6 +330,10 @@ impl Tools {
                 .map(|input| (input.expected_version, Dispatch::Workspace(input.action))),
             "voyager_process" => serde_json::from_value::<ProcessInput>(arguments.clone())
                 .map(|input| (input.expected_version, Dispatch::Process(input.action))),
+            "voyager_worktree" => {
+                serde_json::from_value::<voyager_contract::worktree::Input>(arguments.clone())
+                    .map(|input| (input.expected_version, Dispatch::Worktree(input)))
+            }
             _ => serde_json::from_value::<voyager_contract::content::Input>(arguments.clone())
                 .map(|input| (input.expected_version, Dispatch::Content(input.action))),
         };
@@ -386,6 +418,36 @@ impl Tools {
                             }
                         }
                         Err(error) => failed(error, "Process"),
+                    }
+                }
+                Dispatch::Worktree(input) => {
+                    let request = voyager_contract::worktree::Request {
+                        request_id: effect_id,
+                        expected_version: input.expected_version,
+                        voyage: input.voyage,
+                        action: input.action,
+                    };
+                    match client.worktree(Some(scope), request) {
+                        Ok(response) => {
+                            let status = match response.status {
+                                voyager_contract::worktree::Status::Applied => Status::Applied,
+                                voyager_contract::worktree::Status::Rejected => Status::Rejected,
+                                voyager_contract::worktree::Status::Uncertain => Status::Uncertain,
+                            };
+                            let text = response
+                                .message
+                                .clone()
+                                .unwrap_or_else(|| "Worktree operation completed".into());
+                            let raw =
+                                serde_json::to_string(&response).unwrap_or_else(|_| text.clone());
+                            EffectResult {
+                                value: result(status == Status::Applied, raw),
+                                text,
+                                status,
+                                version: None,
+                            }
+                        }
+                        Err(error) => failed(error, "Worktree"),
                     }
                 }
                 Dispatch::Content(action) => {
@@ -481,10 +543,15 @@ fn reads(action: &Dispatch) -> bool {
     matches!(
         action,
         Dispatch::Workspace(Action::Inspect)
+            | Dispatch::Worktree(voyager_contract::worktree::Input {
+                action: voyager_contract::worktree::Action::List,
+                ..
+            })
             | Dispatch::Process(ProcessAction::List | ProcessAction::Read { .. })
             | Dispatch::Content(
                 voyager_contract::content::Action::Describe { .. }
                     | voyager_contract::content::Action::Inspect { .. }
+                    | voyager_contract::content::Action::ListNotes { .. }
             )
     )
 }
@@ -492,7 +559,9 @@ fn reads(action: &Dispatch) -> bool {
 fn content_result(response: &voyager_contract::content::Response) -> EffectResult {
     use voyager_contract::content::Response;
     let (status, id, revision, warning) = match response {
-        Response::Described { content_id, .. } => (Status::Applied, content_id, None, None),
+        Response::Described { content_id, .. } | Response::NotesList { content_id, .. } => {
+            (Status::Applied, content_id, None, None)
+        }
         Response::Configured {
             content_id,
             workspace_version,
@@ -503,7 +572,12 @@ fn content_result(response: &voyager_contract::content::Response) -> EffectResul
             Some(workspace_version.to_string()),
             None,
         ),
-        Response::Snapshot {
+        Response::NoteOpened {
+            content_id,
+            snapshot,
+            ..
+        }
+        | Response::Snapshot {
             content_id,
             snapshot,
             ..
@@ -631,8 +705,8 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::SetSidebar { .. } => "Sidebar updated",
             Action::SavePanelLayout { .. } => "Panel layout saved",
             Action::LoadPanelLayout { .. } => "Panel layout loaded",
-            Action::CreateVoyage { .. } => "Voyage created",
-            Action::CreateFleet { .. } => "Fleet created",
+            Action::CreateVoyage { .. } | Action::CreateVoyageFromSource { .. } => "Voyage created",
+            Action::CreateFleet { .. } | Action::CreateFleetWithContent { .. } => "Fleet created",
             Action::CreateContent { .. } => "Content created",
             Action::SetPanelHidden { .. } => "Panel visibility changed",
             Action::RemovePanel { .. } => "Panel removed from layout",
@@ -646,7 +720,11 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::MoveVoyage { .. } => "Voyage reordered",
             Action::MoveFleet { .. } => "Fleet reordered",
             Action::SelectVoyage { .. } => "Voyage selected",
+            Action::CloseVoyage { .. } => "Voyage closed",
+            Action::ReopenVoyage { .. } => "Voyage reopened",
             Action::SelectFleet { .. } => "Fleet selected",
+            Action::CloseFleet { .. } => "Fleet closed",
+            Action::ReopenFleet { .. } => "Fleet reopened",
             Action::RevealPanel { .. } => "Panel revealed",
             Action::ReopenPanel { .. } => "Existing panel reopened",
             Action::Dock { .. } => "Focus changed",
@@ -729,7 +807,7 @@ mod tests {
         let session = format!("voyager-n3-owner-{}", std::process::id());
         let workspace = Client::with_content(
             session.clone(),
-            "/tmp".into(),
+            directory.to_string_lossy().into_owned(),
             Owner::open(&directory).unwrap(),
         );
         let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -779,7 +857,27 @@ mod tests {
                 created.version,
             );
             let b = created.layout.contents.last().unwrap().id.clone();
-            let b_before = std::fs::read(directory.join(format!("data/{}.json", b.0))).unwrap();
+            let note_path = |id: &voyager_contract::ContentId| {
+                let content = created
+                    .layout
+                    .contents
+                    .iter()
+                    .find(|content| content.id == *id)
+                    .unwrap();
+                let configuration: voyager_contract::content::NotesConfiguration =
+                    serde_json::from_value(serde_json::Value::Object(
+                        content.configuration.clone().unwrap(),
+                    ))
+                    .unwrap();
+                let file = configuration.notes_file.unwrap();
+                std::path::Path::new(&file.directory).join(file.filename)
+            };
+            let a_path = note_path(&a);
+            let b_path = note_path(&b);
+            assert_ne!(a_path, b_path);
+            assert!(a_path.starts_with(directory.join("notes")));
+            assert!(b_path.starts_with(directory.join("notes")));
+            let b_before = std::fs::read(&b_path).unwrap();
             let mut binding = Box::pin(workspace.bind_content(a.clone()));
             let deadline = Instant::now() + Duration::from_secs(5);
             let binding = loop {
@@ -955,10 +1053,7 @@ mod tests {
                     .is_none()
             );
             assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
-            assert_eq!(
-                std::fs::read(directory.join(format!("data/{}.json", b.0))).unwrap(),
-                b_before
-            );
+            assert_eq!(std::fs::read(&b_path).unwrap(), b_before);
             std::fs::write(
                 directory.join("mods/notes/mod.json"),
                 br#"{"name":"Notes"}"#,
@@ -976,14 +1071,14 @@ mod tests {
             assert!(
                 matches!(&*current, ContentResponse::Snapshot { snapshot, .. } if snapshot.warning.as_deref() == Some("No state schema declared") && snapshot.data.title == "Agent")
             );
-            std::fs::remove_file(directory.join(format!("data/{}.json", a.0))).unwrap();
+            std::fs::remove_file(&a_path).unwrap();
             assert!(matches!(
                 &*workspace
                     .content(Access::View(binding), inspect(&a))
                     .unwrap(),
                 ContentResponse::Rejected { .. }
             ));
-            assert!(!directory.join(format!("data/{}.json", a.0)).exists());
+            assert!(!a_path.exists());
             external.close().unwrap();
         }));
         let mut cleanup = Core::connect(&session).unwrap();

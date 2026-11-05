@@ -212,7 +212,11 @@ fn load(
     let viewers = &workspace_binding.viewers;
     let identity = client.clone();
     let calls = client.clone();
+    let worktree_calls = client.clone();
+    let worktree_executor = cx.background_executor().clone();
     let context_reader = client.clone();
+    let observation_reader = client.clone();
+    let observation_executor = cx.background_executor().clone();
     let launches_reader = client.clone();
     let process_reader = client.clone();
     let process_executor = cx.background_executor().clone();
@@ -295,6 +299,32 @@ fn load(
         .function("request_id", move |_| {
             Ok(HostValue::from(identity.request_id()))
         })
+        .async_function("worktree", move |arguments| {
+            let raw = arguments.string(0)?;
+            if raw.len() > 65536 {
+                return Err(gpui_shell::HostError::new(
+                    "Worktree request exceeds 64 KiB",
+                ));
+            }
+            let request: voyager_contract::worktree::Request = serde_json::from_str(raw)
+                .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+            let client = worktree_calls.clone();
+            let executor = worktree_executor.clone();
+            Ok(async move {
+                let response = executor
+                    .spawn(async move { client.worktree(None, request) })
+                    .await
+                    .map_err(|error| match error {
+                        voyager_app::client::CallError::Rejected(message)
+                        | voyager_app::client::CallError::Unconfirmed(message) => {
+                            gpui_shell::HostError::new(message)
+                        }
+                    })?;
+                let raw = serde_json::to_string(&*response)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                Ok(HostValue::from(raw))
+            })
+        })
         .async_function("context_facts", move |_| {
             let client = context_reader.clone();
             Ok(async move {
@@ -307,6 +337,42 @@ fn load(
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
                 if raw.len() > 65536 {
                     return Err(gpui_shell::HostError::new("Context facts exceed 64 KiB"));
+                }
+                Ok(HostValue::from(raw))
+            })
+        })
+        .async_function("workspace_observation", move |arguments| {
+            let raw = arguments.string(0)?;
+            let version = raw
+                .parse::<u64>()
+                .map_err(|_| gpui_shell::HostError::new("Invalid workspace revision"))?;
+            if arguments.len() != 2 || version.to_string() != raw {
+                return Err(gpui_shell::HostError::new(
+                    "Invalid workspace observation arguments",
+                ));
+            }
+            let active = match arguments.get(1) {
+                Some(HostValue::Null) => None,
+                _ => Some(voyager_contract::PlacementId(
+                    arguments.string(1)?.to_owned(),
+                )),
+            };
+            let client = observation_reader.clone();
+            let executor = observation_executor.clone();
+            Ok(async move {
+                let result = client
+                    .workspace_observation(WorkspaceContext::Workspace, version, active)
+                    .await
+                    .map_err(gpui_shell::HostError::new)?;
+                let result = executor
+                    .spawn(async move { voyager_app::observation::resolve(result) })
+                    .await;
+                let raw = serde_json::to_string(&result)
+                    .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+                if raw.len() > 65536 {
+                    return Err(gpui_shell::HostError::new(
+                        "Workspace observation exceeds 64 KiB",
+                    ));
                 }
                 Ok(HostValue::from(raw))
             })

@@ -93,6 +93,11 @@ pub struct WindowPosition {
     connection: x11rb::rust_connection::RustConnection,
 }
 
+pub enum RestoreError {
+    Refused(String),
+    Uncertain(String),
+}
+
 impl WindowPosition {
     pub fn new() -> Result<Self, String> {
         #[cfg(target_os = "linux")]
@@ -134,6 +139,53 @@ impl WindowPosition {
             Err("Native avatar positioning is not implemented on this platform".into())
         }
     }
+
+    pub fn restore_bounds(
+        &mut self,
+        window: u32,
+        bounds: gpui::Bounds<gpui::ScaledPixels>,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<bool, RestoreError> {
+        if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+            return Ok(false);
+        }
+        #[cfg(target_os = "linux")]
+        {
+            use x11rb::errors::ReplyError;
+            use x11rb::protocol::xproto::{ConfigureWindowAux, ConnectionExt};
+            self.connection
+                .configure_window(
+                    window,
+                    &ConfigureWindowAux::new()
+                        .x(i32::from(gpui::DevicePixels::from(bounds.origin.x)))
+                        .y(i32::from(gpui::DevicePixels::from(bounds.origin.y)))
+                        .width(
+                            u32::try_from(i32::from(gpui::DevicePixels::from(bounds.size.width)))
+                                .map_err(|error| RestoreError::Refused(error.to_string()))?,
+                        )
+                        .height(
+                            u32::try_from(i32::from(gpui::DevicePixels::from(bounds.size.height)))
+                                .map_err(|error| RestoreError::Refused(error.to_string()))?,
+                        ),
+                )
+                .map_err(|error| RestoreError::Uncertain(error.to_string()))?
+                .check()
+                .map_err(|error| match error {
+                    ReplyError::X11Error(error) => RestoreError::Refused(format!("{error:?}")),
+                    ReplyError::ConnectionError(error) => {
+                        RestoreError::Uncertain(error.to_string())
+                    }
+                })?;
+            Ok(true)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (window, bounds);
+            Err(RestoreError::Refused(
+                "Native workspace restoration is not implemented on this platform".into(),
+            ))
+        }
+    }
 }
 
 pub struct WindowState {
@@ -143,6 +195,7 @@ pub struct WindowState {
     readiness: async_io::Async<std::os::fd::OwnedFd>,
     window: u32,
     atom: u32,
+    hidden: u32,
     ready: bool,
     alive: bool,
 }
@@ -155,13 +208,19 @@ impl WindowState {
             use x11rb::protocol::xproto::{ChangeWindowAttributesAux, ConnectionExt, EventMask};
             let (connection, _) = x11rb::connect(None).map_err(|error| error.to_string())?;
             let atom = connection
-                .intern_atom(true, b"WM_STATE")
+                .intern_atom(true, b"_NET_WM_STATE")
                 .map_err(|error| error.to_string())?
                 .reply()
                 .map_err(|error| error.to_string())?
                 .atom;
-            if atom == 0 {
-                return Err("The window manager does not expose WM_STATE".into());
+            let hidden = connection
+                .intern_atom(true, b"_NET_WM_STATE_HIDDEN")
+                .map_err(|error| error.to_string())?
+                .reply()
+                .map_err(|error| error.to_string())?
+                .atom;
+            if atom == 0 || hidden == 0 {
+                return Err("The window manager does not expose native hidden state".into());
             }
             connection
                 .change_window_attributes(
@@ -184,6 +243,7 @@ impl WindowState {
                 readiness,
                 window,
                 atom,
+                hidden,
                 ready: true,
                 alive: true,
             })
@@ -243,15 +303,14 @@ impl WindowState {
     pub fn read(&mut self) -> Result<Option<bool>, String> {
         #[cfg(target_os = "linux")]
         {
-            use x11rb::protocol::xproto::ConnectionExt;
+            use x11rb::protocol::xproto::{AtomEnum, ConnectionExt};
             loop {
                 let property = self
                     .connection
-                    .get_property(false, self.window, self.atom, self.atom, 0, 2)
+                    .get_property(false, self.window, self.atom, AtomEnum::ATOM, 0, u32::MAX)
                     .map_err(|error| error.to_string())?
                     .reply()
                     .map_err(|error| error.to_string())?;
-                let state = property.value32().and_then(|mut values| values.next());
                 let changed = self.drain()?;
                 if !self.alive {
                     return Ok(None);
@@ -259,16 +318,51 @@ impl WindowState {
                 if changed {
                     continue;
                 }
-                return match state {
-                    Some(3) => Ok(Some(true)),
-                    Some(0 | 1) => Ok(Some(false)),
-                    None => Ok(None),
-                    Some(state) => Err(format!("Unknown window manager state {state}")),
-                };
+                return hidden_state(&property, self.hidden);
             }
         }
         #[cfg(not(target_os = "linux"))]
         Err("OS minimise observation is not implemented on this platform".into())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn hidden_state(
+    property: &x11rb::protocol::xproto::GetPropertyReply,
+    hidden: u32,
+) -> Result<Option<bool>, String> {
+    use x11rb::protocol::xproto::AtomEnum;
+    if property.type_ == 0 {
+        return Ok(None);
+    }
+    if property.type_ != u32::from(AtomEnum::ATOM) || property.format != 32 {
+        return Err("Native window state is not an atom list".into());
+    }
+    Ok(property
+        .value32()
+        .map(|mut atoms| atoms.any(|atom| atom == hidden)))
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::hidden_state;
+    use x11rb::protocol::xproto::{AtomEnum, GetPropertyReply};
+
+    #[test]
+    fn hidden_atom_distinguishes_minimize_from_iconic_and_other_window_states() {
+        let mut property = GetPropertyReply {
+            format: 32,
+            type_: AtomEnum::ATOM.into(),
+            ..Default::default()
+        };
+        property.value = [3_u32, 41].into_iter().flat_map(u32::to_ne_bytes).collect();
+        assert_eq!(hidden_state(&property, 75), Ok(Some(false)));
+        property.value.extend(75_u32.to_ne_bytes());
+        assert_eq!(hidden_state(&property, 75), Ok(Some(true)));
+        property.type_ = 90;
+        assert!(hidden_state(&property, 75).is_err());
+        property.type_ = 0;
+        assert_eq!(hidden_state(&property, 75), Ok(None));
     }
 }
 

@@ -2,6 +2,7 @@ import { div } from "gpui-kit";
 import { Button } from "gpui-base";
 import { projection } from "voyager_header";
 import { activityBadge } from "./activity.js";
+import { processIcon } from "./process-icons.js";
 const AGENT_NAMES = {
   codex: "Codex",
   claude: "Claude",
@@ -15,17 +16,45 @@ const AGENT_NAMES = {
   gemini: "Gemini",
   grok: "Grok",
 };
-function agentName(value) {
-  const name = value
-    ?.split(/[\\/]/)
-    .pop()
-    ?.toLowerCase()
-    .replace(/\.exe$/, "");
-  return name && Object.hasOwn(AGENT_NAMES, name)
-    ? AGENT_NAMES[name]
-    : undefined;
+function programName(value) {
+  return (
+    value
+      ?.split(/[\\/]/)
+      .pop()
+      ?.toLowerCase()
+      .replace(/\.exe$/, "") || undefined
+  );
 }
-export function agentsView(layout, processes, reported, navigate, unavailable) {
+function statusGroup(activity, unavailable) {
+  if (unavailable) return "Status unavailable";
+  switch (activity?.state) {
+    case "blocked":
+    case "error":
+      return "Needs attention";
+    case "working":
+      return "Working";
+    case "done":
+      return "Done";
+    case "idle":
+      return "Idle";
+  }
+  if (
+    !activity ||
+    activity.reported === false ||
+    activity.reason === "The root status was cleared" ||
+    activity.reason === "Only child records were reported"
+  )
+    return "Other agents";
+  return "Status unavailable";
+}
+export function agentsView(
+  layout,
+  processes,
+  reported,
+  navigate,
+  unavailable,
+  options,
+) {
   const colors = projection();
   const rows = [];
   for (const voyage of [
@@ -39,59 +68,196 @@ export function agentsView(layout, processes, reported, navigate, unavailable) {
       })),
       { name: `${voyage.name} / Portals`, placements: voyage.portals },
     ];
-    for (const group of groups) {
+    for (const group of groups)
       for (const placement of group.placements) {
         const content = layout.contents.find(
           (item) => item.id === placement.content,
         );
-        if (!content?.backend) continue;
-        const process = processes.find(
-          (item) =>
-            item.contentId === content.id &&
-            item.terminalId === content.backend &&
-            item.state === "live",
-        );
-        if (!process) continue;
-        const activity =
-          reported[content.backend] || process.reportedActivity || undefined;
-        const launch = content.launch;
-        const name =
-          agentName(activity?.app) ||
-          agentName(process.foreground) ||
-          (launch?.kind === "codex"
-            ? "Codex"
-            : launch?.kind === "program"
-              ? agentName(launch.argv[0])
-              : undefined);
-        if (!name) continue;
+        if (!content || content.typeId === "agents") continue;
+        const process = content.backend
+          ? processes.find(
+              (item) =>
+                item.contentId === content.id &&
+                item.terminalId === content.backend,
+            )
+          : undefined;
+        const activity = content.backend
+          ? reported[content.backend] || process?.reportedActivity || undefined
+          : undefined;
+        const foreground =
+          process?.state === "live"
+            ? programName(process.foreground)
+            : undefined;
+        const reportedProgram =
+          process?.state === "live" && !foreground
+            ? programName(activity?.app)
+            : undefined;
+        const recognized = foreground || reportedProgram;
+        const agent = recognized ? AGENT_NAMES[recognized] : undefined;
         const badge = activityBadge(activity, unavailable);
-        const status = badge.label || "No reported status";
-        rows.push(
-          Button.new(`agent-${placement.id}`)
-            .accessibility_label(`${placement.name}, ${name}, ${status}`)
-            .tooltip(badge.hint)
+        let name =
+          process?.agentName && agent
+            ? process.agentName
+            : process?.placementNames?.find(
+                (item) => item.placementId === placement.id,
+              )?.effectiveName || placement.name;
+        const program =
+          agent ||
+          (foreground === "bash"
+            ? "Bash"
+            : foreground ||
+              (content.typeId === "notes"
+                ? "Notes"
+                : content.typeId === "terminal"
+                  ? "Terminal"
+                  : content.typeId));
+        if (/^Terminal\s+\d+$/i.test(name)) {
+          const folder =
+            process?.agentName ||
+            (process?.cwd || content.cwd)
+              ?.replace(/[\\/]+$/, "")
+              .split(/[\\/]/)
+              .pop() ||
+            "/";
+          name = agent ? folder : `${program} · ${folder}`;
+        }
+        const state =
+          !content.backend && content.typeId === "terminal"
+            ? content.startPending
+              ? "Starting"
+              : "Not started"
+            : process?.state === "finished"
+              ? "Ended"
+              : content.typeId === "terminal" && !process
+                ? "Status unavailable"
+                : "";
+        rows.push({
+          id: placement.id,
+          name,
+          program,
+          agent: Boolean(agent),
+          group: agent ? statusGroup(activity, unavailable) : program,
+          detail: [
+            agent
+              ? statusGroup(activity, unavailable) === "Other agents"
+                ? ""
+                : statusGroup(activity, unavailable)
+              : state,
+            group.name,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          hint: agent ? badge.hint : state,
+        });
+      }
+  }
+  const row = (item) =>
+    Button.new(`vessel-${item.id}`)
+      .accessibility_label(
+        [item.name, item.program, item.detail].filter(Boolean).join(", "),
+      )
+      .tooltip(item.hint)
+      .w_full()
+      .justify_start()
+      .px(10)
+      .py(8)
+      .on_click((_event, cx) => navigate(item.id, cx))
+      .child(
+        div()
+          .flex()
+          .items_center()
+          .gap(8)
+          .child(processIcon(item.program))
+          .child(
+            div()
+              .flex()
+              .flex_col()
+              .gap(3)
+              .child(div().text_size(13).child(item.name))
+              .child(
+                div()
+                  .text_size(11)
+                  .text_color(colors.muted)
+                  .child(
+                    [item.program, item.detail].filter(Boolean).join(" · "),
+                  ),
+              ),
+          ),
+      );
+  const section = (id, title, items) => {
+    const collapsed = options?.collapsed.has(id) || false;
+    return div()
+      .flex()
+      .flex_col()
+      .pl(id.startsWith("status-") ? 12 : 0)
+      .child(
+        Button.new(`vessels-group-${id}`)
+          .accessibility_label(
+            `${collapsed ? "Expand" : "Collapse"} ${title}, ${items.length}`,
+          )
+          .tooltip(`${title}: ${items.length}`)
+          .w_full()
+          .justify_start()
+          .px(8)
+          .py(4)
+          .on_click((_event, cx) => options?.toggle(id, cx))
+          .child(`${collapsed ? "▸" : "▾"} ${title} (${items.length})`),
+      )
+      .children(collapsed ? [] : items.map(row));
+  };
+  const agents = rows.filter((item) => item.agent);
+  const types = [
+    ...new Set(rows.filter((item) => !item.agent).map((item) => item.group)),
+  ].sort();
+  const agentGroups = [
+    "Needs attention",
+    "Working",
+    "Done",
+    "Idle",
+    "Other agents",
+    "Status unavailable",
+  ];
+  const agentCollapsed = options?.collapsed.has("agents") || false;
+  const children = [div().text_size(14).child("Vessels")];
+  if (agents.length) {
+    children.push(
+      div()
+        .flex()
+        .flex_col()
+        .child(
+          Button.new("vessels-group-agents")
+            .accessibility_label(
+              `${agentCollapsed ? "Expand" : "Collapse"} Agents, ${agents.length}`,
+            )
             .w_full()
             .justify_start()
-            .px(10)
-            .py(8)
-            .on_click((_event, cx) => navigate(placement.id, cx))
-            .child(
-              div()
-                .flex()
-                .flex_col()
-                .gap(3)
-                .child(div().text_size(13).child(placement.name))
-                .child(
-                  div()
-                    .text_size(11)
-                    .text_color(colors.muted)
-                    .child(`${name} · ${status} · ${group.name}`),
-                ),
-            ),
-        );
-      }
-    }
+            .px(8)
+            .py(4)
+            .on_click((_event, cx) => options?.toggle("agents", cx))
+            .child(`${agentCollapsed ? "▸" : "▾"} Agents (${agents.length})`),
+        )
+        .children(
+          agentCollapsed
+            ? []
+            : agentGroups.flatMap((group) => {
+                const items = agents.filter((item) => item.group === group);
+                return items.length
+                  ? [section(`status-${group}`, group, items)]
+                  : [];
+              }),
+        ),
+    );
   }
+  children.push(
+    ...types.map((type) =>
+      section(
+        `type-${type}`,
+        type,
+        rows.filter((item) => !item.agent && item.group === type),
+      ),
+    ),
+  );
+  if (!rows.length) children.push(div().role("label").child("No vessels"));
   return div()
     .flex()
     .flex_col()
@@ -101,23 +267,5 @@ export function agentsView(layout, processes, reported, navigate, unavailable) {
     .gap(4)
     .text_color(colors.foreground)
     .overflow_y_scroll()
-    .children(
-      unavailable
-        ? [
-            div()
-              .role("label")
-              .accessibility_label("Agent status unavailable")
-              .tooltip(unavailable)
-              .child("Agent status unavailable"),
-            ...rows,
-          ]
-        : rows.length
-          ? rows
-          : [
-              div()
-                .role("label")
-                .accessibility_label("No agents running")
-                .child("No agents running"),
-            ],
-    );
+    .children(children);
 }

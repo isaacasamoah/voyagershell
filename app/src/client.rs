@@ -44,6 +44,14 @@ enum Message {
     ContextFacts {
         reply: async_channel::Sender<Result<voyager_contract::context::Facts, String>>,
     },
+    WorkspaceObservation {
+        scope: Context,
+        version: u64,
+        active: Option<voyager_contract::PlacementId>,
+        reply: async_channel::Sender<
+            Result<voyager_contract::observation::WorkspaceObservation, String>,
+        >,
+    },
     WorkspaceChanges {
         after: Option<WorkspaceNotice>,
         reply: async_channel::Sender<async_channel::Receiver<WorkspaceNotice>>,
@@ -61,6 +69,23 @@ enum Message {
         access: crate::content::Access,
         request: voyager_contract::content::Request,
         reply: ContentReply,
+    },
+    Worktree {
+        scope: Option<Context>,
+        request: voyager_contract::worktree::Request,
+        reply: SyncSender<Arc<voyager_contract::worktree::Response>>,
+    },
+    WorktreeRemoveReady {
+        request_id: String,
+        source_directory: String,
+        checkout: voyager_contract::worktree::Checkout,
+        reply: SyncSender<Result<(), String>>,
+    },
+    WorktreeDone {
+        request_id: String,
+        source_directory: String,
+        response: voyager_contract::worktree::Response,
+        reply: SyncSender<Arc<voyager_contract::worktree::Response>>,
     },
     Process {
         scope: Context,
@@ -244,6 +269,7 @@ impl Client {
         let activity = Arc::new(Mutex::new(Activity::default()));
         let observed_activity = activity.clone();
         let activity_sender = sender.clone();
+        let worktree_sender = sender.clone();
         thread::spawn(move || {
             let mut core = Core::connect_activity(&session, observed_activity.clone());
             if let Ok(core) = &mut core {
@@ -262,6 +288,11 @@ impl Client {
             let mut process_requests: VecDeque<(Context, ProcessRequest, Arc<ProcessResponse>)> =
                 VecDeque::new();
             let mut content_requests: VecDeque<ContentReceipt> = VecDeque::new();
+            let mut worktree_requests: VecDeque<(
+                Option<Context>,
+                voyager_contract::worktree::Request,
+                Option<Arc<voyager_contract::worktree::Response>>,
+            )> = VecDeque::new();
             let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
             let mut quit_result: Option<Result<(), Error>> = None;
             while let Ok(message) = next_message(
@@ -317,6 +348,30 @@ impl Client {
                         let _ = reply.try_send(crate::context::capture(&layout, version));
                         continue;
                     }
+                    Message::WorkspaceObservation {
+                        scope,
+                        version: expected,
+                        active,
+                        reply,
+                    } => {
+                        let result = if !fresh || expected != version {
+                            Err("Workspace changed; observe it again".into())
+                        } else {
+                            let terminals = core
+                                .as_mut()
+                                .ok()
+                                .and_then(|core| core.terminal_list().ok());
+                            crate::observation::capture(
+                                &layout,
+                                version,
+                                &scope,
+                                active,
+                                terminals.as_deref(),
+                            )
+                        };
+                        let _ = reply.try_send(result);
+                        continue;
+                    }
                     Message::WorkspaceChanges { after, reply } => {
                         let (send, receive) = async_channel::bounded(1);
                         let current = WorkspaceNotice {
@@ -344,9 +399,7 @@ impl Client {
                             fresh = true;
                             crate::content::member(&layout, None, &id)?;
                             let owner = content.as_mut().ok_or("Content owner unavailable")?;
-                            let binding = owner
-                                .register_existing(&id)
-                                .map_err(|error| error.to_string())?;
+                            let binding = crate::content::register_content(owner, &layout, &id)?;
                             Ok(binding)
                         })();
                         let _ = reply.try_send(result);
@@ -395,6 +448,9 @@ impl Client {
                                     request,
                                     voyager_contract::content::Request::Update { .. }
                                         | voyager_contract::content::Request::Configure { .. }
+                                        | voyager_contract::content::Request::MigrateNote { .. }
+                                        | voyager_contract::content::Request::NewNote { .. }
+                                        | voyager_contract::content::Request::OpenNote { .. }
                                 )
                             {
                                 return Err("Voyager is quitting; no content was changed".into());
@@ -407,9 +463,12 @@ impl Client {
                             {
                                 return Err("Invalid content request identity".into());
                             }
-                            if receipts
+                            if worktree_requests
                                 .iter()
-                                .any(|(prior, _, _)| prior.request_id == request_id)
+                                .any(|(_, prior, _)| prior.request_id == request_id)
+                                || receipts
+                                    .iter()
+                                    .any(|(prior, _, _)| prior.request_id == request_id)
                                 || process_requests
                                     .iter()
                                     .any(|(_, prior, _)| prior.request_id == request_id)
@@ -435,6 +494,22 @@ impl Client {
                             version = revision;
                             fresh = true;
                             let owner = content.as_mut().ok_or("Content owner unavailable")?;
+                            if matches!(
+                                request,
+                                voyager_contract::content::Request::MigrateNote { .. }
+                                    | voyager_contract::content::Request::NewNote { .. }
+                                    | voyager_contract::content::Request::OpenNote { .. }
+                            ) {
+                                return Ok(select_note(
+                                    core,
+                                    &mut layout,
+                                    &mut version,
+                                    &mut fresh,
+                                    owner,
+                                    &access,
+                                    &request,
+                                ));
+                            }
                             if matches!(
                                 request,
                                 voyager_contract::content::Request::Configure { .. }
@@ -464,15 +539,24 @@ impl Client {
                         if (matches!(
                             &*response,
                             voyager_contract::content::Response::Configured { .. }
+                                | voyager_contract::content::Response::NoteOpened { .. }
                         ) || (matches!(
                             request,
                             voyager_contract::content::Request::Configure { .. }
+                                | voyager_contract::content::Request::NewNote { .. }
+                                | voyager_contract::content::Request::OpenNote { .. }
+                                | voyager_contract::content::Request::MigrateNote { .. }
                         ) && matches!(
                             &*response,
                             voyager_contract::content::Response::Uncertain { .. }
                         ))) && let Some(owner) = content.as_mut()
                         {
                             owner.notify(&response);
+                        }
+                        if version != previous_version
+                            && let Some(owner) = content.as_mut()
+                        {
+                            owner.refresh_views();
                         }
                         if version != previous_version
                             && let Some(listener) = &workspace_listener
@@ -496,6 +580,371 @@ impl Client {
                             content_requests.pop_front();
                         }
                         reply.deliver(response);
+                        continue;
+                    }
+                    Message::WorktreeRemoveReady {
+                        request_id,
+                        source_directory,
+                        checkout,
+                        reply,
+                    } => {
+                        let preflight = (|| -> Result<(), String> {
+                            let (scope, request, _) = worktree_requests
+                                .iter()
+                                .find(|(_, request, result)| {
+                                    request.request_id == request_id && result.is_none()
+                                })
+                                .ok_or("Worktree request is no longer pending")?;
+                            if quit_result.is_some() {
+                                return Err("Voyager is quitting; no worktree was removed".into());
+                            }
+                            let core = core
+                                .as_mut()
+                                .map_err(|error| format!("Core unavailable: {error:?}"))?;
+                            let (current, revision, missing) = load(core, &cwd)
+                                .map_err(|error| format!("Workspace unavailable: {error:?}"))?;
+                            layout = Arc::new(current);
+                            version = revision;
+                            fresh = !missing;
+                            if missing || version != request.expected_version {
+                                return Err("Workspace changed; no worktree was removed".into());
+                            }
+                            if !matches!(scope, None | Some(Context::Workspace))
+                                && !matches!(scope, Some(Context::Voyage { id }) if id == &request.voyage)
+                            {
+                                return Err(
+                                    "Captured focus no longer authorizes this Voyage".into()
+                                );
+                            }
+                            let source = layout
+                                .voyages
+                                .iter()
+                                .find(|voyage| voyage.id == request.voyage)
+                                .and_then(|voyage| voyage.cwd.as_deref())
+                                .ok_or("Source Voyage is unavailable")?;
+                            let original = std::fs::canonicalize(&source_directory)
+                                .map_err(|error| error.to_string())?;
+                            let current =
+                                std::fs::canonicalize(source).map_err(|error| error.to_string())?;
+                            if original != current {
+                                return Err(
+                                    "Source Voyage directory changed; no worktree was removed"
+                                        .into(),
+                                );
+                            }
+                            let mut live = Vec::new();
+                            for terminal in core.terminal_list().map_err(|error| {
+                                format!("Cannot check live process directories: {error:?}")
+                            })? {
+                                if terminal.state == "live" {
+                                    if terminal.cwd.is_empty() {
+                                        return Err("A live terminal directory is unavailable; no worktree was removed".into());
+                                    }
+                                    live.push(terminal.cwd);
+                                    let foreground = terminal.foreground.ok_or("A live foreground process directory is unavailable; no worktree was removed")?;
+                                    if foreground.cwd.is_empty() {
+                                        return Err("A live foreground process directory is unavailable; no worktree was removed".into());
+                                    }
+                                    live.push(foreground.cwd);
+                                }
+                            }
+                            crate::worktrees::check_live_directories(&checkout.path, &live)
+                                .map_err(|error| format!("{error:?}"))?;
+                            Ok(())
+                        })();
+                        let _ = reply.send(preflight);
+                        continue;
+                    }
+                    Message::WorktreeDone {
+                        request_id,
+                        source_directory,
+                        mut response,
+                        reply,
+                    } => {
+                        use voyager_contract::worktree::{
+                            Action as WorktreeAction, Status as WorktreeStatus,
+                        };
+                        if let Some((scope, request, result)) = worktree_requests
+                            .iter_mut()
+                            .find(|(_, request, _)| request.request_id == request_id)
+                        {
+                            if response.status == WorktreeStatus::Applied
+                                && matches!(
+                                    request.action,
+                                    WorktreeAction::Create { .. } | WorktreeAction::Open { .. }
+                                )
+                            {
+                                let completion = (|| -> Result<(), String> {
+                                    if quit_result.is_some() {
+                                        return Err("Voyager is quitting".into());
+                                    }
+                                    let checkout = response
+                                        .checkouts
+                                        .first()
+                                        .ok_or("Git did not return the selected checkout")?;
+                                    let core = core
+                                        .as_mut()
+                                        .map_err(|error| format!("Core unavailable: {error:?}"))?;
+                                    let (current, revision, missing) =
+                                        load(core, &cwd).map_err(|error| {
+                                            format!("Workspace unavailable: {error:?}")
+                                        })?;
+                                    layout = Arc::new(current);
+                                    version = revision;
+                                    fresh = !missing;
+                                    if missing {
+                                        return Err("Workspace is unavailable".into());
+                                    }
+                                    if version != request.expected_version {
+                                        return Err("Workspace changed after Git dispatch".into());
+                                    }
+                                    let current_source = layout
+                                        .voyages
+                                        .iter()
+                                        .find(|voyage| voyage.id == request.voyage)
+                                        .and_then(|voyage| voyage.cwd.as_deref())
+                                        .ok_or("Source Voyage is unavailable")?;
+                                    let original = std::fs::canonicalize(&source_directory)
+                                        .map_err(|error| {
+                                            format!("Source directory unavailable: {error}")
+                                        })?;
+                                    let current =
+                                        std::fs::canonicalize(current_source).map_err(|error| {
+                                            format!("Current Voyage directory unavailable: {error}")
+                                        })?;
+                                    if original != current {
+                                        return Err("Source Voyage directory changed".into());
+                                    }
+                                    let mut candidate = Model {
+                                        layout: (*layout).clone(),
+                                    };
+                                    let action =
+                                        worktree_voyage_action(&candidate.layout, &checkout.path)?;
+                                    crate::scope::check(&layout, scope.as_ref(), &action)?;
+                                    candidate.apply(action)?;
+                                    let saved = save(core, &candidate.layout, version).map_err(
+                                        |error| format!("Workspace save not confirmed: {error:?}"),
+                                    )?;
+                                    record_created_terminals(
+                                        &mut created_contents,
+                                        &layout,
+                                        &candidate.layout,
+                                    );
+                                    layout = Arc::new(candidate.layout);
+                                    version = saved;
+                                    if let Some(owner) = content.as_mut() {
+                                        owner.refresh_views();
+                                    }
+                                    if let Some(listener) = &workspace_listener {
+                                        let _ = listener.try_send(WorkspaceNotice {
+                                            revision: version,
+                                            package_revision: published_packages
+                                                .load(Ordering::Relaxed),
+                                            activity_revision: core.activity_revision(),
+                                        });
+                                    }
+                                    Ok(())
+                                })();
+                                if let Err(error) = completion {
+                                    response.status = WorktreeStatus::Uncertain;
+                                    response.message = Some(format!(
+                                        "Git checkout was resolved, but opening its Voyage was not confirmed: {error}. Inspect the checkout and workspace; do not repeat creation."
+                                    ));
+                                }
+                            }
+                            let answer = Arc::new(response);
+                            *result = Some(Arc::clone(&answer));
+                            let _ = reply.send(answer);
+                        }
+                        continue;
+                    }
+                    Message::Worktree {
+                        scope,
+                        request,
+                        reply,
+                    } => {
+                        use voyager_contract::worktree::{
+                            Action as WorktreeAction, Response as WorktreeResponse,
+                            Status as WorktreeStatus,
+                        };
+                        let rejected = |message: String| {
+                            Arc::new(WorktreeResponse {
+                                request_id: request.request_id.clone(),
+                                status: WorktreeStatus::Rejected,
+                                message: Some(message),
+                                checkouts: Vec::new(),
+                            })
+                        };
+                        if let Some((previous_scope, previous, result)) = worktree_requests
+                            .iter()
+                            .find(|(_, prior, _)| prior.request_id == request.request_id)
+                        {
+                            let answer = if previous != &request || previous_scope != &scope {
+                                rejected("Worktree request identity was reused with different arguments or scope".into())
+                            } else {
+                                result.clone().unwrap_or_else(|| {
+                                    Arc::new(WorktreeResponse {
+                                        request_id: request.request_id.clone(),
+                                        status: WorktreeStatus::Uncertain,
+                                        message: Some(
+                                            "Worktree request is still pending; do not repeat"
+                                                .into(),
+                                        ),
+                                        checkouts: Vec::new(),
+                                    })
+                                })
+                            };
+                            let _ = reply.send(answer);
+                            continue;
+                        }
+                        let prepared = (|| -> Result<(String, Vec<String>), String> {
+                            if request.request_id.is_empty() || request.request_id.len() > 128 {
+                                return Err("Invalid worktree request identity".into());
+                            }
+                            if quit_result.is_some() {
+                                return Err(
+                                    "Voyager is quitting; no worktree operation was dispatched"
+                                        .into(),
+                                );
+                            }
+                            if worktree_requests
+                                .iter()
+                                .any(|(_, _, result)| result.is_none())
+                            {
+                                return Err("A worktree operation is already pending".into());
+                            }
+                            if !fresh || version != request.expected_version {
+                                return Err(
+                                    "Inspect the current workspace before using worktrees".into()
+                                );
+                            }
+                            if receipts
+                                .iter()
+                                .any(|(prior, _, _)| prior.request_id == request.request_id)
+                                || content_requests
+                                    .iter()
+                                    .any(|prior| prior.request_id == request.request_id)
+                                || process_requests
+                                    .iter()
+                                    .any(|(_, prior, _)| prior.request_id == request.request_id)
+                                || terminal_requests
+                                    .iter()
+                                    .any(|(prior, _)| prior.request_id == request.request_id)
+                            {
+                                return Err(
+                                    "This request identity belongs to another operation".into()
+                                );
+                            }
+                            if !matches!(&scope, None | Some(Context::Workspace))
+                                && !matches!(&scope, Some(Context::Voyage { id }) if id == &request.voyage)
+                            {
+                                return Err(
+                                    "The request's captured focus does not authorize this Voyage"
+                                        .into(),
+                                );
+                            }
+                            let core = core
+                                .as_mut()
+                                .map_err(|error| format!("Core unavailable: {error:?}"))?;
+                            let (current, revision, missing) = load(core, &cwd)
+                                .map_err(|error| format!("Workspace unavailable: {error:?}"))?;
+                            layout = Arc::new(current);
+                            version = revision;
+                            if missing || version != request.expected_version {
+                                return Err(
+                                    "Workspace changed; inspect before using worktrees".into()
+                                );
+                            }
+                            let voyage = layout
+                                .containers()
+                                .find(|voyage| voyage.id == request.voyage)
+                                .ok_or("Voyage not found")?;
+                            let directory = voyage
+                                .cwd
+                                .clone()
+                                .filter(|value| !value.is_empty())
+                                .ok_or("Voyage working directory is unavailable")?;
+                            if matches!(request.action, WorktreeAction::Create { .. }) {
+                                crate::scope::check(
+                                    &layout,
+                                    scope.as_ref(),
+                                    &Action::CreateVoyage {
+                                        name: "worktree".into(),
+                                        cwd: directory.clone(),
+                                    },
+                                )?;
+                            }
+                            Ok((directory, Vec::new()))
+                        })();
+                        match prepared {
+                            Err(message) => {
+                                let _ = reply.send(rejected(message));
+                            }
+                            Ok((directory, live)) => {
+                                let task_request = request.clone();
+                                let task_sender = worktree_sender.clone();
+                                worktree_requests.push_back((scope, request, None));
+                                if worktree_requests.len() > 32
+                                    && worktree_requests
+                                        .front()
+                                        .is_some_and(|(_, _, result)| result.is_some())
+                                {
+                                    worktree_requests.pop_front();
+                                }
+                                thread::spawn(move || {
+                                    let result = if let WorktreeAction::Remove { path } =
+                                        &task_request.action
+                                    {
+                                        (|| {
+                                            let checkout = crate::worktrees::open(
+                                                std::path::Path::new(&directory),
+                                                path,
+                                            )?;
+                                            if checkout.main {
+                                                return Err(crate::worktrees::Error::Rejected(
+                                                    "Cannot remove the main checkout".into(),
+                                                ));
+                                            }
+                                            let (approval, receive) = mpsc::sync_channel(1);
+                                            task_sender.send_blocking(Message::WorktreeRemoveReady { request_id: task_request.request_id.clone(), source_directory: directory.clone(), checkout: checkout.clone(), reply: approval }).map_err(|_| crate::worktrees::Error::Rejected("Owner unavailable; no worktree was removed".into()))?;
+                                            receive.recv().map_err(|_| crate::worktrees::Error::Rejected("Owner check unavailable; no worktree was removed".into()))?.map_err(crate::worktrees::Error::Rejected)?;
+                                            crate::worktrees::remove(
+                                                std::path::Path::new(&directory),
+                                                &checkout.path,
+                                            )?;
+                                            crate::worktrees::list(std::path::Path::new(&directory)).map_err(|error| crate::worktrees::Error::Uncertain(format!("Removal completed but checkout inspection failed: {error:?}")))
+                                        })()
+                                    } else {
+                                        crate::worktrees::execute(
+                                            std::path::Path::new(&directory),
+                                            &task_request.action,
+                                            &live,
+                                        )
+                                    };
+                                    let (status, message, checkouts) = match result {
+                                        Ok(checkouts) => (WorktreeStatus::Applied, None, checkouts),
+                                        Err(crate::worktrees::Error::Rejected(message)) => {
+                                            (WorktreeStatus::Rejected, Some(message), Vec::new())
+                                        }
+                                        Err(crate::worktrees::Error::Uncertain(message)) => {
+                                            (WorktreeStatus::Uncertain, Some(message), Vec::new())
+                                        }
+                                    };
+                                    let response = WorktreeResponse {
+                                        request_id: task_request.request_id.clone(),
+                                        status,
+                                        message,
+                                        checkouts,
+                                    };
+                                    let _ = task_sender.send_blocking(Message::WorktreeDone {
+                                        request_id: task_request.request_id,
+                                        source_directory: directory,
+                                        response,
+                                        reply,
+                                    });
+                                });
+                            }
+                        }
                         continue;
                     }
                     Message::Process {
@@ -535,6 +984,13 @@ impl Client {
                             ))
                         } else if request.request_id.is_empty() || request.request_id.len() > 128 {
                             Err(rejected("Invalid process request identity".into()))
+                        } else if worktree_requests
+                            .iter()
+                            .any(|(_, prior, _)| prior.request_id == request.request_id)
+                        {
+                            Err(rejected(
+                                "This request identity belongs to a worktree operation".into(),
+                            ))
                         } else if content_requests
                             .iter()
                             .any(|prior| prior.request_id == request.request_id)
@@ -633,6 +1089,13 @@ impl Client {
                             Err(rejected(
                                 "Voyager is quitting; no terminal was opened".into(),
                             ))
+                        } else if worktree_requests
+                            .iter()
+                            .any(|(_, prior, _)| prior.request_id == request_id)
+                        {
+                            Err(rejected(
+                                "This request identity belongs to a worktree operation".into(),
+                            ))
                         } else if content_requests
                             .iter()
                             .any(|prior| prior.request_id == request_id)
@@ -705,6 +1168,15 @@ impl Client {
                     created_contents: eligible_contents(&layout, scope.as_ref(), &created_contents),
                     message: None,
                 };
+                if worktree_requests
+                    .iter()
+                    .any(|(_, prior, _)| prior.request_id == request.request_id)
+                {
+                    response.message =
+                        Some("This request identity belongs to a worktree operation".into());
+                    let _ = reply.send(response);
+                    continue;
+                }
                 if content_requests
                     .iter()
                     .any(|prior| prior.request_id == request.request_id)
@@ -823,10 +1295,35 @@ impl Client {
                                     package_changed = true;
                                     return Ok(());
                                 }
-                                if let Action::CreateContent { type_id, .. } = &request.action
+                                if let Action::CreateContent { type_id, .. }
+                                | Action::CreateFleetWithContent { type_id, .. } =
+                                    &request.action
                                     && let Some(owner) = &content
                                 {
                                     owner.require_available(type_id).map_err(rejected)?;
+                                }
+                                if let Action::CreateVoyageFromSource { source }
+                                | Action::CreateFleetWithContent { source, .. } = &request.action
+                                {
+                                    let terminals = if matches!(
+                                        source,
+                                        voyager_contract::DirectorySource::Live { .. }
+                                    ) {
+                                        Some(core.terminal_list().map_err(|error| {
+                                            rejected(format!(
+                                                "Live directory observation unavailable: {error:?}"
+                                            ))
+                                        })?)
+                                    } else {
+                                        None
+                                    };
+                                    crate::observation::validate_source(
+                                        &layout,
+                                        version,
+                                        source,
+                                        terminals.as_deref(),
+                                    )
+                                    .map_err(rejected)?;
                                 }
                                 if matches!(
                                     request.action,
@@ -862,16 +1359,25 @@ impl Client {
                                                     .map_err(|error| rejected(format!("Terminal liveness unavailable; no viewer was reopened: {error:?}")))?;
                                                 require_live(&observed, backend)?;
                                             }
-                                        let revision = save(core, &candidate.layout, version)?;
+                                        let created_notes = if let Some(owner) = content.as_mut() {
+                                            crate::content::initialize_created(owner, &layout, &mut candidate.layout).map_err(Error::Uncertain)?
+                                        } else if candidate.layout.contents.iter().any(|item| item.type_id == "notes" && !layout.contents.iter().any(|old| old.id == item.id)) {
+                                            return Err(rejected("Content owner unavailable; Notes was not created".into()));
+                                        } else { false };
+                                        let revision = save(core, &candidate.layout, version).map_err(|error| {
+                                            if created_notes { Error::Uncertain(format!("A Notes file was created but workspace binding is unconfirmed; inspect before retry: {error:?}")) } else { error }
+                                        })?;
                                         if let Action::StartNewShell { content_id, expected_backend } = &request.action {
                                             grant_new_shell(&mut created_contents, content_id, expected_backend, &request.request_id);
                                             unconfirmed.remove(&content_id.0);
                                         }
-                                        if (scope.is_some() || matches!(request.action, Action::CreateContent { .. }))
+                                        if (scope.is_some() || matches!(request.action, Action::CreateContent { .. } | Action::CreateVoyageFromSource { .. } | Action::CreateFleetWithContent { .. }))
                                             && matches!(
                                                 request.action,
                                                 Action::CreateVoyage { .. }
+                                                    | Action::CreateVoyageFromSource { .. }
                                                     | Action::CreateFleet { .. }
+                                                    | Action::CreateFleetWithContent { .. }
                                                     | Action::CreateContent { .. }
                                             )
                                         {
@@ -881,14 +1387,8 @@ impl Client {
                                                 &candidate.layout,
                                             );
                                         }
-                                        let previous = Arc::clone(&layout);
                                         layout = Arc::new(candidate.layout);
                                         version = revision;
-                                        if let Some(owner) = content.as_mut() {
-                                            crate::content::initialize_created(owner, &previous, &layout).map_err(Error::Uncertain)?;
-                                        } else if layout.contents.iter().any(|item| item.type_id == "notes" && !previous.contents.iter().any(|old| old.id == item.id)) {
-                                            return Err(Error::Uncertain("Workspace created Notes, but no content owner is installed".into()));
-                                        }
                                         Ok(())
                                     })
                             }
@@ -914,6 +1414,11 @@ impl Client {
                 response.created_contents =
                     eligible_contents(&layout, scope.as_ref(), &created_contents);
                 response.fresh = fresh;
+                if version != previous_version
+                    && let Some(owner) = content.as_mut()
+                {
+                    owner.refresh_views();
+                }
                 if version != previous_version || package_changed {
                     if package_changed {
                         let next = published_packages.load(Ordering::Relaxed).saturating_add(1);
@@ -1160,6 +1665,9 @@ impl Client {
             &request,
             voyager_contract::content::Request::Update { .. }
                 | voyager_contract::content::Request::Configure { .. }
+                | voyager_contract::content::Request::MigrateNote { .. }
+                | voyager_contract::content::Request::NewNote { .. }
+                | voyager_contract::content::Request::OpenNote { .. }
         ) {
             return Err(CallError::Rejected(
                 "Content effects cannot use read-only admission".into(),
@@ -1257,6 +1765,27 @@ impl Client {
             .map_err(|_| "Workspace context read was not confirmed".to_owned())?
     }
 
+    pub async fn workspace_observation(
+        &self,
+        scope: Context,
+        version: u64,
+        active: Option<voyager_contract::PlacementId>,
+    ) -> Result<voyager_contract::observation::WorkspaceObservation, String> {
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .try_send(Message::WorkspaceObservation {
+                scope,
+                version,
+                active,
+                reply,
+            })
+            .map_err(|_| "Workspace observation is unavailable".to_owned())?;
+        receive
+            .recv()
+            .await
+            .map_err(|_| "Workspace observation was not confirmed".to_owned())?
+    }
+
     pub fn call(&self, request: Request) -> Result<Response, String> {
         self.bound_call(None, request).map_err(|error| match error {
             CallError::Rejected(message) | CallError::Unconfirmed(message) => message,
@@ -1265,6 +1794,28 @@ impl Client {
 
     pub fn scoped_call(&self, scope: Context, request: Request) -> Result<Response, CallError> {
         self.bound_call(Some(scope), request)
+    }
+
+    pub fn worktree(
+        &self,
+        scope: Option<Context>,
+        request: voyager_contract::worktree::Request,
+    ) -> Result<Arc<voyager_contract::worktree::Response>, CallError> {
+        let (reply, receive) = mpsc::sync_channel(1);
+        self.sender
+            .try_send(Message::Worktree {
+                scope,
+                request,
+                reply,
+            })
+            .map_err(|_| {
+                CallError::Rejected(
+                    "Workspace busy or unavailable; no worktree request was queued".into(),
+                )
+            })?;
+        receive.recv_timeout(Duration::from_secs(25)).map_err(|_| {
+            CallError::Unconfirmed("Worktree result unconfirmed; do not repeat the request".into())
+        })
     }
 
     pub fn process(
@@ -1534,6 +2085,39 @@ fn grant_new_shell(
     });
 }
 
+fn worktree_voyage_action(layout: &Layout, checkout: &str) -> Result<Action, String> {
+    let target = std::fs::canonicalize(checkout)
+        .map_err(|error| format!("Checkout unavailable: {error}"))?;
+    if let Some(voyage) = layout.voyages.iter().find(|voyage| {
+        voyage
+            .cwd
+            .as_ref()
+            .and_then(|cwd| std::fs::canonicalize(cwd).ok())
+            .as_ref()
+            == Some(&target)
+    }) {
+        return Ok(if voyage.closed {
+            Action::ReopenVoyage {
+                id: voyage.id.clone(),
+            }
+        } else {
+            Action::SelectVoyage {
+                id: voyage.id.clone(),
+            }
+        });
+    }
+    let name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("/")
+        .to_owned();
+    let cwd = target
+        .to_str()
+        .ok_or("Checkout path is not UTF-8")?
+        .to_owned();
+    Ok(Action::CreateVoyage { name, cwd })
+}
+
 fn record_created_terminals(
     pending: &mut Vec<CreatedTerminal>,
     previous: &Layout,
@@ -1785,6 +2369,157 @@ fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
         .version)
 }
 
+fn select_note(
+    core: &mut Core,
+    layout: &mut Arc<Layout>,
+    version: &mut u64,
+    fresh: &mut bool,
+    owner: &mut crate::content::Owner,
+    access: &crate::content::Access,
+    request: &voyager_contract::content::Request,
+) -> voyager_contract::content::Response {
+    use voyager_contract::content::{NotesConfiguration, NotesFile, Request, Response, Version};
+    let (request_id, content_id, expected_version) = match request {
+        Request::MigrateNote {
+            request_id,
+            content_id,
+            expected_version,
+            ..
+        }
+        | Request::NewNote {
+            request_id,
+            content_id,
+            expected_version,
+            ..
+        }
+        | Request::OpenNote {
+            request_id,
+            content_id,
+            expected_version,
+            ..
+        } => (request_id, content_id, expected_version),
+        _ => return crate::content::reject(request, "Expected a note selection".into()),
+    };
+    let mut created = None;
+    let selected = (|| {
+        crate::content::admit(owner, layout, *version, access, request)?;
+        if expected_version != version {
+            return Err("Workspace changed; inspect before selecting a note".to_owned());
+        }
+        let directory = crate::content::notes_directory(layout, content_id)?;
+        if matches!(request, Request::MigrateNote { .. }) {
+            let current = crate::content::configuration(owner, layout, content_id, *version)?
+                .ok_or("Notes configuration is unavailable")?;
+            if current.configuration.notes_file.is_some() {
+                return Err("This note already has a Markdown file".into());
+            }
+            let file = owner.migrate_file(content_id, &directory)?;
+            created = Some(directory.join(&file.filename));
+            let snapshot = owner.select_file(content_id, file.clone())?;
+            let mut candidate = (**layout).clone();
+            let content = candidate
+                .contents
+                .iter_mut()
+                .find(|item| item.id == *content_id)
+                .ok_or("Content is unavailable")?;
+            let mut configuration = current.configuration;
+            configuration.notes_file = Some(file);
+            content.configuration = Some(
+                serde_json::to_value(&configuration)
+                    .map_err(|error| error.to_string())?
+                    .as_object()
+                    .ok_or("Invalid Notes configuration")?
+                    .clone(),
+            );
+            return Ok((candidate, configuration, snapshot));
+        }
+        let filename = match request {
+            Request::NewNote { title, .. } => {
+                let filename = owner.create_file(&directory, title)?;
+                created = Some(directory.join(&filename));
+                filename
+            }
+            Request::OpenNote { filename, .. } => filename.clone(),
+            _ => unreachable!(),
+        };
+        let file = NotesFile {
+            directory: directory.to_string_lossy().into_owned(),
+            filename,
+        };
+        let snapshot = owner.select_file(content_id, file.clone())?;
+        let mut candidate = (**layout).clone();
+        let content = candidate
+            .contents
+            .iter_mut()
+            .find(|item| item.id == *content_id)
+            .ok_or("Content is unavailable")?;
+        let mut configuration = content
+            .configuration
+            .as_ref()
+            .map(|value| {
+                serde_json::from_value::<NotesConfiguration>(serde_json::Value::Object(
+                    value.clone(),
+                ))
+            })
+            .transpose()
+            .map_err(|error| error.to_string())?
+            .unwrap_or_default();
+        configuration.notes_file = Some(file);
+        content.configuration = Some(
+            serde_json::to_value(&configuration)
+                .map_err(|error| error.to_string())?
+                .as_object()
+                .ok_or("Invalid Notes configuration")?
+                .clone(),
+        );
+        Ok((candidate, configuration, snapshot))
+    })();
+    let (candidate, configuration, snapshot) = match selected {
+        Ok(value) => value,
+        Err(error) => {
+            if created.is_some() || error.contains("creation is unconfirmed") {
+                *fresh = false;
+                return Response::Uncertain {
+                    version: Version::V1,
+                    request_id: request_id.clone(),
+                    content_id: content_id.clone(),
+                    expected_revision: expected_version.to_string(),
+                    message: format!(
+                        "Note creation or selection is unconfirmed at {created:?}: {error}; inspect before retry"
+                    ),
+                };
+            }
+            return crate::content::reject(request, error);
+        }
+    };
+    match save(core, &candidate, *version) {
+        Ok(revision) => {
+            *layout = Arc::new(candidate);
+            *version = revision;
+            Response::NoteOpened {
+                version: Version::V1,
+                request_id: request_id.clone(),
+                content_id: content_id.clone(),
+                snapshot,
+                configuration,
+                workspace_version: revision,
+            }
+        }
+        Err(error) => {
+            *fresh = false;
+            Response::Uncertain {
+                version: Version::V1,
+                request_id: request_id.clone(),
+                content_id: content_id.clone(),
+                expected_revision: expected_version.to_string(),
+                message: format!(
+                    "Note selection or creation was not confirmed; inspect the selected file and workspace before another attempt: {error:?}"
+                ),
+            }
+        }
+    }
+}
+
 fn configure(
     core: &mut Core,
     layout: &mut Arc<Layout>,
@@ -1813,6 +2548,11 @@ fn configure(
         if crate::content::configuration(owner, layout, content_id, *version)?.is_none() {
             return Err("Installed Notes and Header do not support configuration".into());
         }
+        let current = crate::content::configuration(owner, layout, content_id, *version)?
+            .ok_or("Notes configuration is unavailable")?;
+        if configuration.notes_file != current.configuration.notes_file {
+            return Err("Use a note selection action to change the selected file".into());
+        }
         let mut candidate = (**layout).clone();
         candidate
             .contents
@@ -1840,7 +2580,7 @@ fn configure(
                 version: Version::V1,
                 request_id: request_id.clone(),
                 content_id: content_id.clone(),
-                configuration: *configuration,
+                configuration: configuration.clone(),
                 workspace_version: revision,
             }
         }
@@ -1864,6 +2604,149 @@ fn configure(
 #[cfg(test)]
 mod terminal_outcome_tests {
     use super::*;
+
+    #[test]
+    fn worktree_creation_opens_one_voyage_and_reopens_its_identity() {
+        use voyager_contract::worktree::{
+            Action as GitAction, Request as GitRequest, Status as GitStatus,
+        };
+        let root = std::env::temp_dir().join(format!(
+            "voyager-worktree-owner-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &["config", "user.name", "Voyager test"],
+            &["config", "user.email", "test@example.invalid"],
+            &["commit", "--allow-empty", "-qm", "initial"],
+        ] {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        let session = format!("voyager-git-{}", std::process::id());
+        let client = Client::open(session.clone(), root.to_string_lossy().into_owned());
+        let checked = std::panic::catch_unwind(|| {
+            let inspect = || {
+                client
+                    .call(Request {
+                        request_id: client.request_id(),
+                        expected_version: 0,
+                        action: Action::Inspect,
+                    })
+                    .unwrap()
+            };
+            let initial = inspect();
+            assert_eq!(initial.status, Status::Applied);
+            let source = initial.layout.voyages[0].id.clone();
+            let refused = client
+                .worktree(
+                    Some(Context::Voyage { id: source.clone() }),
+                    GitRequest {
+                        request_id: client.request_id(),
+                        expected_version: initial.version,
+                        voyage: source.clone(),
+                        action: GitAction::Create {
+                            name: "forbidden".into(),
+                            branch: "forbidden".into(),
+                            base: "HEAD".into(),
+                        },
+                    },
+                )
+                .unwrap();
+            assert_eq!(refused.status, GitStatus::Rejected);
+            assert!(!root.join(".worktree/forbidden").exists());
+            let created = client
+                .worktree(
+                    None,
+                    GitRequest {
+                        request_id: client.request_id(),
+                        expected_version: initial.version,
+                        voyage: source.clone(),
+                        action: GitAction::Create {
+                            name: "branch".into(),
+                            branch: "test-branch".into(),
+                            base: "HEAD".into(),
+                        },
+                    },
+                )
+                .unwrap();
+            assert_eq!(created.status, GitStatus::Applied, "{:?}", created.message);
+            let checkout = created.checkouts[0].path.clone();
+            let after = inspect();
+            let selected = after.layout.selected_voyage.clone().unwrap();
+            assert_eq!(
+                after
+                    .layout
+                    .voyages
+                    .iter()
+                    .find(|voyage| voyage.id == selected)
+                    .unwrap()
+                    .cwd
+                    .as_deref(),
+                Some(checkout.as_str())
+            );
+            let closed = client
+                .call(Request {
+                    request_id: client.request_id(),
+                    expected_version: after.version,
+                    action: Action::CloseVoyage {
+                        id: selected.clone(),
+                    },
+                })
+                .unwrap();
+            let reopened = client
+                .worktree(
+                    None,
+                    GitRequest {
+                        request_id: client.request_id(),
+                        expected_version: closed.version,
+                        voyage: source,
+                        action: GitAction::Open {
+                            path: checkout.clone(),
+                        },
+                    },
+                )
+                .unwrap();
+            assert_eq!(
+                reopened.status,
+                GitStatus::Applied,
+                "{:?}",
+                reopened.message
+            );
+            let after = inspect();
+            assert_eq!(after.layout.selected_voyage, Some(selected));
+            assert_eq!(
+                after
+                    .layout
+                    .voyages
+                    .iter()
+                    .filter(|voyage| voyage.cwd.as_deref() == Some(checkout.as_str()))
+                    .count(),
+                1
+            );
+        });
+        let mut cleanup = Core::connect(&session).unwrap();
+        cleanup.server_stop().unwrap();
+        cleanup.close().unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+        if let Err(error) = checked {
+            std::panic::resume_unwind(error);
+        }
+    }
 
     #[test]
     fn reopen_uses_live_core_identity_and_refuses_stale_or_ended_programs() {

@@ -84,6 +84,8 @@ impl<'de> Deserialize<'de> for Vessel {
             content: ContentId,
             #[serde(default)]
             name: Option<String>,
+            #[serde(default, rename = "nameOrigin")]
+            name_origin: crate::NameOrigin,
             #[serde(default)]
             hidden: bool,
         }
@@ -92,6 +94,7 @@ impl<'de> Deserialize<'de> for Vessel {
             id: stored.id,
             content: stored.content,
             name: stored.name.unwrap_or_default(),
+            name_origin: stored.name_origin,
             hidden: stored.hidden,
         })
     }

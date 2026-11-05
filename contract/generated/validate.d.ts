@@ -18,4 +18,8 @@ export function response(data: unknown): data is import("./response").Response;
 export function terminalRequest(data: unknown): data is import("./terminalRequest").TerminalRequest;
 export function terminalResponse(data: unknown): data is import("./terminalResponse").TerminalResponse;
 export function voiceState(data: unknown): data is import("./voiceState").State;
+export function workspaceObservation(data: unknown): data is import("./workspaceObservation").WorkspaceObservation;
 export function workspaceTool(data: unknown): data is import("./workspaceTool").WorkspaceInput;
+export function worktreeRequest(data: unknown): data is import("./worktreeRequest").Request;
+export function worktreeResponse(data: unknown): data is import("./worktreeResponse").Response;
+export function worktreeTool(data: unknown): data is import("./worktreeTool").Input;

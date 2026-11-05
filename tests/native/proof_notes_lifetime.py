@@ -15,7 +15,9 @@ from proof_workspace import core_rpc, named_button
 
 
 def source_variant(source, case, marker):
-    source = notes.once(source, '.child("NOTES")', f".child({json.dumps(marker)})")
+    source = notes.once(
+        source, '.child(this.preview ? "Edit" : "Preview")', f".child({json.dumps(marker)})"
+    )
     if case == "parse":
         return source + "\nexport const broken = ;\n"
     if case == "render":
@@ -441,7 +443,7 @@ def prove(
         dirty = expected[0]["text"] + "_DIRTY"
         type_text("_DIRTY")
         copied("Note text", 0, dirty, False)
-        last_good = "NOTES"
+        last_good = "Preview"
         for index, case in enumerate(
             ("valid", "parse", "valid", "render", "valid", "component", "valid")
         ):

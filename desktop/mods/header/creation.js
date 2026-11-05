@@ -7,6 +7,23 @@ import {
   launchCatalog as validateCatalog,
   contentCatalog as validateContentCatalog,
 } from "./validate.js";
+function chosen(destination, typeId, launch) {
+  return destination.kind === "new-fleet"
+    ? {
+        operation: "create-fleet-with-content",
+        voyage: destination.voyage,
+        name: destination.name,
+        source: destination.source,
+        typeId,
+        ...(launch ? { launch } : {}),
+      }
+    : {
+        operation: "create-content",
+        destination,
+        typeId,
+        ...(launch ? { launch } : {}),
+      };
+}
 export class CreationPicker {
   constructor() {
     this.current = null;
@@ -80,7 +97,10 @@ export class CreationPicker {
     triggerOpens = true,
   ) {
     const opening = this.current?.id === id ? this.current : null;
-    const entity = destination.owner.kind === "portals" ? "Portal" : "Vessel";
+    const entity =
+      destination.kind === "panel" && destination.owner.kind === "portals"
+        ? "Portal"
+        : "Vessel";
     const content = menuSurface(`worker-choices-${id}`, "Content choices")
       .max_h(320)
       .overflow_y_scroll();
@@ -104,12 +124,7 @@ export class CreationPicker {
                 if (this.current !== opening) return;
                 this.current = null;
                 create(
-                  {
-                    operation: "create-content",
-                    typeId: "terminal",
-                    destination: opening.destination,
-                    launch,
-                  },
+                  chosen(opening.destination, "terminal", launch),
                   opening.version,
                   cx,
                 );
@@ -131,15 +146,7 @@ export class CreationPicker {
             .on_click((_event, cx) => {
               if (this.current !== opening) return;
               this.current = null;
-              create(
-                {
-                  operation: "create-content",
-                  typeId: "notes",
-                  destination: opening.destination,
-                },
-                opening.version,
-                cx,
-              );
+              create(chosen(opening.destination, "notes"), opening.version, cx);
             }),
         );
       if (this.agents)
@@ -150,17 +157,13 @@ export class CreationPicker {
               if (this.current !== opening) return;
               this.current = null;
               create(
-                {
-                  operation: "create-content",
-                  typeId: "agents",
-                  destination: opening.destination,
-                },
+                chosen(opening.destination, "agents"),
                 opening.version,
                 cx,
               );
             }),
         );
-      if (this.hidden.length)
+      if (opening.destination.kind === "panel" && this.hidden.length)
         content.child(
           menuButton("hidden-vessels", "Hidden vessels")
             .child(
@@ -171,7 +174,7 @@ export class CreationPicker {
               cx.notify();
             }),
         );
-      if (this.expanded)
+      if (opening.destination.kind === "panel" && this.expanded)
         for (const panel of this.hidden)
           content.child(
             menuButton(
@@ -188,7 +191,11 @@ export class CreationPicker {
                   .child(div().text_size(9).child(panel.path)),
               )
               .on_click((_event, cx) => {
-                if (this.current !== opening) return;
+                if (
+                  this.current !== opening ||
+                  opening.destination.kind !== "panel"
+                )
+                  return;
                 this.current = null;
                 create(
                   {

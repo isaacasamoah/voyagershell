@@ -357,13 +357,17 @@ def prove(
         )
         click(*control_point(action))
 
-    def restore(floating, expected):
+    def floating_point(floating):
         floating_bounds = geometry(floating)
         bounds = geometry()
-        source = (
+        return (
             (int(floating_bounds["X"]) - int(bounds["X"])) / 2 + 60,
             (int(floating_bounds["Y"]) - int(bounds["Y"])) / 2 + 60,
         )
+
+    def restore(floating, expected, original=None):
+        bounds = original or geometry()
+        source = floating_point(floating)
         move(*source)
         expected_point = commanded_pointer()
         _, delivered = delivered_pointer(expected_point, "restore")
@@ -371,12 +375,229 @@ def prove(
         capture(f"avatar-before-restore-{len(moves)}", floating)
         native("button", True)
         native("button", False)
-        time.sleep(0.5)
-        assert floating_window() == floating, (
-            "Restore replaced or removed the still-undocked avatar"
+        wait(
+            floating_windows,
+            lambda items: not items,
+            "restore returned avatar to its dock",
         )
+        restored = geometry()
+        assert all(
+            restored[key] == bounds[key] for key in ("X", "Y", "WIDTH", "HEIGHT")
+        ), ("Restore changed original workspace bounds", bounds, restored)
         assert state() == expected, "Restore changed the explicit context"
-        return source
+        return control_point("Voyager avatar")
+
+    def hide_avatar(keyboard=False):
+        bounds = geometry()
+        anchor = control_point("Voyager avatar")
+        if keyboard:
+            focus_target("Voyager avatar", "Avatar did not receive keyboard focus")
+            key(32)
+        else:
+            click(*anchor)
+        floating = floating_window()
+        popup = geometry(floating)
+        assert all(
+            abs(
+                int(popup[axis])
+                + int(popup[extent]) / 2
+                - int(bounds[axis])
+                - point * 2
+            )
+            <= 2
+            for axis, extent, point in zip(("X", "Y"), ("WIDTH", "HEIGHT"), anchor)
+        ), ("Hide moved the avatar screen anchor", bounds, anchor, popup)
+        return floating, bounds
+
+    def float_over_workspace():
+        floating, _ = hide_avatar()
+        subprocess.run(
+            ["xdotool", "windowactivate", "--sync", launch["window"]],
+            env=env,
+            check=True,
+            timeout=5,
+        )
+        assert floating_windows() == [floating], "OS restore lost the deliberate float"
+        return floating, floating_point(floating)
+
+    def voice_isolation(expected):
+        def controls():
+            return native(
+                "fields", launch["pid"], ["Start voice", "Stop voice"], "window"
+            )["fields"]
+
+        voice_path = Path(env.get("VOYAGER_VOICE_EVIDENCE", evidence / "voice.json"))
+
+        def voice():
+            return json.loads(voice_path.read_text()) if voice_path.exists() else None
+
+        before_voice = wait(
+            voice,
+            lambda item: item and item["capability"]["kind"] != "checking",
+            "actual voice capability evidence",
+        )
+        assert before_voice["phase"] in ("off", "failed"), before_voice
+        before = controls()
+        assert len(before) == 1 and before[0]["name"] == "Start voice", before
+        generation = int(before_voice["generation"])
+        disabled = before_voice["capability"]["kind"] == "unavailable"
+        voice_result = {
+            "surface": "full-size-docked",
+            "input": "mouse",
+            "before": before,
+            "voiceBefore": before_voice,
+            "isolationProved": False,
+            "activationProved": False,
+            "audibleSpeechProved": False,
+            "unprovedCases": [
+                "full-size-docked keyboard enabled and disabled",
+                "compact mouse and keyboard enabled and disabled",
+                "floating mouse and keyboard enabled and disabled",
+                "full-size-docked mouse " + ("enabled" if disabled else "disabled"),
+            ],
+        }
+        voice_file = evidence / "avatar-voice-isolation.json"
+        failure = None
+        try:
+            click(*control_point("Start voice", button=True))
+            if disabled:
+                deadline = time.monotonic() + 1
+                while time.monotonic() < deadline:
+                    current = voice()
+                    assert current["capability"]["kind"] == "unavailable", current
+                    assert int(current["generation"]) == generation, current
+                    assert current["phase"] == before_voice["phase"], current
+                    assert not floating_windows() and state() == expected
+                    time.sleep(0.1)
+                result = "verified-disabled-click"
+            else:
+                wait(
+                    voice,
+                    lambda item: int(item["generation"]) > generation,
+                    "observed voice start generation after click",
+                    seconds=30,
+                )
+                current = wait(
+                    voice,
+                    lambda item: (
+                        item["phase"] in ("active", "off", "failed", "unconfirmed")
+                    ),
+                    "trial voice start settled or reported provider failure",
+                    seconds=30,
+                )
+                assert int(current["generation"]) == generation + 1, current
+                result = "observed-transition-" + current["phase"]
+                voice_result["activationProved"] = current["phase"] == "active"
+            voice_result.update(result=result, after=controls(), voiceAfter=voice())
+            assert not floating_windows() and state() == expected
+            assert "Normal" in subprocess.check_output(
+                ["xprop", "-id", launch["window"], "WM_STATE"],
+                env=env,
+                text=True,
+                timeout=5,
+            )
+            capture("avatar-voice-click-isolated")
+            voice_result["isolationProved"] = True
+        except BaseException as error:
+            failure = error
+            raise
+        finally:
+            try:
+                current = voice()
+                if current and int(current["generation"]) == generation + 1:
+                    if current["phase"] in ("preparing", "negotiating"):
+                        current = wait(
+                            voice,
+                            lambda item: (
+                                item["phase"] not in ("preparing", "negotiating")
+                            ),
+                            "settle only the trial voice generation before cleanup",
+                            seconds=30,
+                        )
+                    assert int(current["generation"]) == generation + 1, current
+                    if current["phase"] == "active":
+                        click(*control_point("Stop voice", button=True))
+                        current = wait(
+                            voice,
+                            lambda item: (
+                                item["phase"] in ("off", "failed", "unconfirmed")
+                            ),
+                            "stop only the trial's activated voice lease",
+                        )
+                    assert int(current["generation"]) == generation + 1, current
+                    assert current["phase"] in ("off", "failed"), current
+                assert not floating_windows() and state() == expected
+                voice_result["final"] = controls()
+            except BaseException as error:
+                voice_result["cleanupError"] = str(error)
+                if failure is not None:
+                    failure.add_note("Trial voice cleanup: " + str(error))
+                else:
+                    raise
+            finally:
+                voice_result["voiceFinal"] = voice()
+                voice_file.write_text(json.dumps(voice_result, indent=2))
+        stages.append("full-size-mouse-soundwave-isolation-" + result)
+
+    def desktop_switch(expected):
+        def desktop(*arguments):
+            return subprocess.check_output(
+                ["xdotool", *arguments],
+                env=env,
+                text=True,
+                timeout=5,
+            ).strip()
+
+        original = desktop("get_desktop")
+        count = int(desktop("get_num_desktops"))
+        if count < 2:
+            (evidence / "avatar-desktop-switch.json").write_text(
+                json.dumps({"original": original, "available": count, "proved": False})
+            )
+            raise AssertionError(
+                "Actual desktop roundtrip requires two existing desktops"
+            )
+        destination = "1" if original == "0" else "0"
+        bounds = geometry()
+        try:
+            desktop("set_desktop", destination)
+            wait(
+                lambda: desktop("get_desktop"),
+                lambda value: value == destination,
+                "desktop switch",
+            )
+            time.sleep(0.5)
+            assert not floating_windows() and state() == expected, (
+                "Desktop switching floated or changed context"
+            )
+        finally:
+            desktop("set_desktop", original)
+            wait(
+                lambda: desktop("get_desktop"),
+                lambda value: value == original,
+                "original desktop restored",
+            )
+        assert not floating_windows() and state() == expected
+        assert geometry() == bounds, "Desktop switching moved the workspace"
+        assert "Normal" in subprocess.check_output(
+            ["xprop", "-id", launch["window"], "WM_STATE"],
+            env=env,
+            text=True,
+            timeout=5,
+        ), "Desktop switching minimized the workspace"
+        (evidence / "avatar-desktop-switch.json").write_text(
+            json.dumps(
+                {
+                    "original": original,
+                    "destination": destination,
+                    "bounds": bounds,
+                    "proved": True,
+                },
+                indent=2,
+            )
+        )
+        capture("avatar-after-desktop-switch")
+        stages.append("actual-desktop-roundtrip-kept-dock-window-and-context")
 
     def occlusion(expected):
         bounds = geometry()
@@ -610,7 +831,6 @@ def prove(
 
     def portal_journey():
         press("Show Portals")
-        press("Choose Portal content")
         press("Create Terminal Portal")
         created = wait(
             state,
@@ -689,8 +909,15 @@ def prove(
             json.dumps(fields, indent=2)
         )
         chord(native, "t")
-        time.sleep(0.4)
-        another_fleet = state()
+        press("Create Terminal Vessel")
+        another_fleet = wait(
+            state,
+            lambda doc: (
+                doc["value"]["selectedFleet"]
+                != focused_portal["value"]["selectedFleet"]
+            ),
+            "chosen first Vessel in new Fleet",
+        )
         assert (
             another_fleet["value"]["selectedFleet"]
             != focused_portal["value"]["selectedFleet"]
@@ -766,6 +993,8 @@ def prove(
         dock_key("Overwatch dock", "workspace")
         capture("avatar-keyboard-dock")
         stages.append("native-accessibility-and-focused-keyboard-docking")
+        voice_isolation(state())
+        desktop_switch(state())
         if journey == "portal-avatar":
             portal_journey()
             return stages
@@ -789,14 +1018,20 @@ def prove(
         assert state() == vessel, "Escape cancellation changed the layout"
         capture("avatar-escape-cancel")
         stages.append("escape-kept-exact-layout")
-        key(32)
-        floating = floating_window()
+        floating, before_hide = hide_avatar(keyboard=True)
         capture("avatar-floating", floating)
         assert state() == vessel, "Floating changed the explicit owner context"
         stages.append("keyboard-activation-floated-same-context")
-        source = restore(floating, vessel)
+        source = restore(floating, vessel, before_hide)
         capture("avatar-workspace-restored")
-        stages.append("restore-retained-floating-window-and-context")
+        stages.append("restore-original-workspace-bounds-and-context")
+        floating, before_hide = hide_avatar()
+        assert state() == vessel, "Mouse hide changed the explicit owner context"
+        capture("avatar-mouse-hidden-at-same-anchor", floating)
+        source = restore(floating, vessel, before_hide)
+        capture("avatar-mouse-restored-original-bounds")
+        stages.append("mouse-hide-kept-anchor-and-restore-kept-original-bounds")
+        floating, source = float_over_workspace()
         drag(source, control_point("Overwatch dock"))
         capture("avatar-cross-window-release")
         workspace = scope("workspace")
@@ -861,8 +1096,12 @@ def prove(
             raise AssertionError(
                 "Graceful workspace close did not minimize its native window"
             )
+        floating = floating_window()
+        subprocess.run(
+            ["xdotool", "windowquit", launch["window"]], env=env, check=True, timeout=5
+        )
         assert floating_window() == floating, (
-            "Workspace close replaced the floating avatar"
+            "Repeated workspace close replaced its float"
         )
         assert state() == workspace, "Workspace close changed context"
         (evidence / "avatar-close-protocol.json").write_text(
@@ -873,6 +1112,7 @@ def prove(
         source = restore(floating, workspace)
         stages.append("native-graceful-workspace-close-kept-popup-and-context")
         stages.append("actual-os-minimize-and-same-controller-restore")
+        floating, source = float_over_workspace()
         capture("avatar-desktop-source", floating)
         monitor = json.loads(
             (evidence / "avatar-desktop-source-compositor.json").read_text()
@@ -928,6 +1168,7 @@ def prove(
         assert state() == workspace, "Desktop move changed context"
         capture("avatar-desktop-moved", moved)
         source = restore(moved, workspace)
+        floating, source = float_over_workspace()
         drag(source, control_point("Overwatch dock"))
         scope("workspace")
         assert not floating_windows(), "Dock retained a floating view"
@@ -957,6 +1198,12 @@ def prove(
             )
         )
         return stages
+    except BaseException as error:
+        try:
+            capture("avatar-failure")
+        except Exception as diagnostic:
+            error.add_note(f"Failure capture: {diagnostic}")
+        raise
     finally:
         failure = sys.exc_info()[1]
         errors = []

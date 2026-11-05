@@ -68,15 +68,21 @@ impl Render for Pane {
         )
         .absolute()
         .size_full();
+        let color = |value: libghostty_vt::style::RgbColor| {
+            gpui::rgb((u32::from(value.r) << 16) | (u32::from(value.g) << 8) | u32::from(value.b))
+        };
         let mut rows = Vec::new();
         if let Some(grid) = &self.grid {
             for (y, cells) in grid.rows.iter().enumerate() {
                 let mut row = div()
                     .flex()
                     .flex_row()
+                    .w(width * cells.len() as f32)
                     .h(height)
+                    .bg(color(grid.colors.background))
                     .flex_none()
                     .whitespace_nowrap();
+                let mut preceding_text = false;
                 for (x, cell) in cells.iter().enumerate() {
                     use libghostty_vt::screen::CellWide;
                     if cell.wide == CellWide::SpacerTail {
@@ -111,19 +117,15 @@ impl Render for Pane {
                         foreground = background;
                         background = cursor_color;
                     }
-                    let color = |value: libghostty_vt::style::RgbColor| {
-                        gpui::rgb(
-                            (u32::from(value.r) << 16)
-                                | (u32::from(value.g) << 8)
-                                | u32::from(value.b),
-                        )
-                    };
                     let mut item = div()
                         .relative()
                         .w(width * span)
                         .h(height)
                         .flex_none()
-                        .bg(color(background))
+                        .when(
+                            preceding_text || background != grid.colors.background,
+                            |item| item.bg(color(background)),
+                        )
                         .text_color(color(foreground));
                     if cell.style.bold {
                         item = item.font_weight(gpui::FontWeight::BOLD);
@@ -139,6 +141,7 @@ impl Render for Pane {
                     }
                     if !cell.style.invisible && !cell.text.is_empty() {
                         item = item.child(cell.text.clone());
+                        preceding_text = true;
                     }
                     if let Some((cursor, offset)) = cursor {
                         use libghostty_vt::render::CursorVisualStyle;

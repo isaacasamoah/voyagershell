@@ -19,7 +19,13 @@ module.exports = function workspaceSource(
     );
   const helpers =
     filename === "main.js"
-      ? ["panels.js", "panel-view.js", "navigation-view.js"]
+      ? [
+          "worktrees.js",
+          "process-icons.js",
+          "panels.js",
+          "panel-view.js",
+          "navigation-view.js",
+        ]
           .map((name) =>
             fs
               .readFileSync(`${__dirname}/mods/header/${name}`, "utf8")

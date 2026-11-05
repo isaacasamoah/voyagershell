@@ -216,14 +216,18 @@ test("fresh Notes opts into its native session before requesting retained editor
   assert.ok(note.session && note.title && note.text);
 });
 
-test("Notes changes its heading and Markdown preview without replacing retained editors", () => {
+test("Notes omits its redundant heading and previews Markdown without replacing retained editors", () => {
   const source = fs.readFileSync(
     process.env.VOYAGER_NOTES_SOURCE || `${root}/content/notes/main.js`,
     "utf8",
   );
   let showHeading = true;
   let reads = 0;
-  const session = { status: () => "Draft", show_heading: () => showHeading };
+  const session = {
+    status: () => "Draft",
+    show_heading: () => showHeading,
+    filename: () => "Title.md",
+  };
   const title = {};
   const text = {
     value() {
@@ -281,7 +285,7 @@ test("Notes changes its heading and Markdown preview without replacing retained 
     const view = note.render();
     assert.equal(
       view.nodes.some((child) => child.nodes.includes("NOTES")),
-      visible,
+      false,
     );
     assert.equal(
       view.nodes.find((child) => child.kind === "title").state,

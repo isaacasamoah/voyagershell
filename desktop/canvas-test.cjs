@@ -354,7 +354,7 @@ test("context metadata rejects a late different dock and notifies only changed f
   const pending = [];
   result = JSON.stringify(facts);
   view.acceptSnapshot({ version: "2", layout: view.layout }, cx);
-  assert.equal(pending.length, 2);
+  assert.equal(pending.length, 3);
   await Promise.all(pending);
   assert.equal(view.contextFacts.path[0], "Workspace");
   view.contextFacts = null;
@@ -738,9 +738,10 @@ test("hidden choices retain process-free data and require matching live backends
   assert.deepEqual(choices([]), ["notes", "other"]);
 });
 
-test("Agents joins live identities, excludes Bash and navigates the renamed placement", async () => {
+test("Vessels groups actual programs and preserves original navigation", async () => {
   const { activityBadge } = await import("./mods/header/activity.js");
   const buttons = new Map();
+  const icons = [];
   const exports = {};
   const source = ts.transpileModule(
     fs.readFileSync(`${__dirname}/mods/header/agents.ts`, "utf8"),
@@ -764,81 +765,468 @@ test("Agents joins live identities, excludes Bash and navigates the renamed plac
         },
       };
     if (name === "voyager_header") return { projection: () => ({}) };
+    if (name === "./process-icons.js")
+      return {
+        processIcon: (program) => {
+          icons.push(program);
+          return element();
+        },
+      };
     return { activityBadge };
   });
   const contents = [
+    { id: "agent", typeId: "terminal", backend: "agent-terminal" },
     {
-      id: "agent",
+      id: "shell",
       typeId: "terminal",
-      backend: "agent-terminal",
+      backend: "shell-terminal",
       launch: { kind: "codex" },
     },
-    { id: "shell", typeId: "terminal", backend: "shell-terminal" },
+    { id: "notes", typeId: "notes" },
+    {
+      id: "unknown",
+      typeId: "terminal",
+      backend: "unknown-terminal",
+      launch: { kind: "codex" },
+    },
   ];
   const layout = {
     contents,
+    home: {
+      name: "Home",
+      fleets: [
+        {
+          name: "Home",
+          vessels: [{ id: "home-agent", content: "agent", name: "Renamed" }],
+        },
+      ],
+      portals: [],
+    },
+    voyages: [
+      {
+        name: "Voyage",
+        fleets: [
+          {
+            name: "Fleet",
+            vessels: [
+              { id: "bash", content: "shell", name: "Shell" },
+              { id: "unknown", content: "unknown", name: "Unknown" },
+            ],
+          },
+        ],
+        portals: [{ id: "notes", content: "notes", name: "Notes" }],
+      },
+    ],
+  };
+  const processes = [
+    {
+      contentId: "agent",
+      terminalId: "agent-terminal",
+      state: "live",
+      foreground: "codex",
+      agentName: "folder",
+    },
+    {
+      contentId: "shell",
+      terminalId: "shell-terminal",
+      state: "live",
+      foreground: "bash",
+    },
+    {
+      contentId: "unknown",
+      terminalId: "unknown-terminal",
+      state: "live",
+      foreground: "python",
+    },
+  ];
+  const navigated = [];
+  const collapsed = new Set();
+  const toggles = [];
+  const render = (reported = {}, unavailable) =>
+    exports.agentsView(
+      layout,
+      processes,
+      reported,
+      (...args) => navigated.push(args),
+      unavailable,
+      { collapsed, toggle: (id) => toggles.push(id) },
+    );
+  render();
+  assert.ok(buttons.has("vessels-group-status-Other agents"));
+  assert.ok(buttons.has("vessels-group-type-Bash"));
+  assert.ok(buttons.has("vessels-group-type-Notes"));
+  assert.ok(buttons.has("vessels-group-type-python"));
+  assert.deepEqual(icons, ["Codex", "Bash", "Notes", "python"]);
+  const row = buttons.get("vessel-home-agent");
+  assert.match(
+    row.calls.find(([name]) => name === "accessibility_label")[1],
+    /folder, Codex/,
+  );
+  const cx = {};
+  row.calls.find(([name]) => name === "on_click")[1]({}, cx);
+  buttons
+    .get("vessel-notes")
+    .calls.find(([name]) => name === "on_click")[1]({}, cx);
+  assert.deepEqual(navigated, [
+    ["home-agent", cx],
+    ["notes", cx],
+  ]);
+  buttons.clear();
+  render({
+    "agent-terminal": { state: "idle", reported: true, limited: false },
+  });
+  assert.ok(buttons.has("vessels-group-status-Idle"));
+  assert.ok(!buttons.has("vessels-group-status-Other agents"));
+  layout.voyages[0].fleets[0].vessels[0].name = "Terminal 42";
+  processes[1].cwd = "/project/my-work";
+  buttons.clear();
+  render();
+  assert.match(
+    buttons
+      .get("vessel-bash")
+      .calls.find(([name]) => name === "accessibility_label")[1],
+    /^Bash · my-work,/,
+  );
+  assert.ok(
+    !buttons
+      .get("vessel-bash")
+      .calls.some(
+        ([name, value]) =>
+          name === "accessibility_label" && /Terminal 42/.test(value),
+      ),
+  );
+  buttons.clear();
+  render({}, "Core observation failed");
+  assert.ok(buttons.has("vessels-group-status-Status unavailable"));
+  buttons.clear();
+  collapsed.add("agents");
+  render();
+  assert.ok(!buttons.has("vessel-home-agent"));
+  buttons
+    .get("vessels-group-agents")
+    .calls.find(([name]) => name === "on_click")[1]({}, cx);
+  assert.deepEqual(toggles, ["agents"]);
+});
+
+test("chat fits measured messages before scrolling at its cap", () => {
+  const source = workspaceSource(
+    "VOYAGER_CHAT_SOURCE",
+    "return class",
+    "chat.js",
+  );
+  const Chat = new Function(
+    "div",
+    "Button",
+    "Composer",
+    "MeasureHeight",
+    "svg",
+    source,
+  )(element, { new: element }, { new: element }, { new: element }, element);
+  const chat = Object.assign(Object.create(Chat.prototype), {
+    open: true,
+    present: true,
+    heights: { sidebar: 900, heading: 200, navigation: 100, messages: 0 },
+    state: null,
+    error: "",
+    input: {},
+  });
+  const height = () =>
+    chat
+      .render({ muted: "muted", foreground: "fg" }, { kind: "workspace" })
+      .calls.find(([name]) => name === "h")[1];
+  const empty = height();
+  assert.ok(empty >= 32 && empty <= 80, "Empty chat should fit its composer");
+  chat.heights.messages = 120;
+  const short = height();
+  assert.ok(short > empty, "Chat should grow with measured content");
+  chat.heights.messages = 1000;
+  const capped = height();
+  assert.ok(capped >= short && capped <= 320, "Long chat must stop growing");
+  chat.heights.messages = 2000;
+  assert.equal(height(), capped);
+  chat.open = false;
+  assert.equal(height(), 0);
+});
+
+test("dock snapshots retain only identity-matched display labels", async () => {
+  const Workspace = new Function(
+    "View",
+    "workspace_observation",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(class {}, async () => {
+    throw Error("Unavailable");
+  });
+  const placement = {
+    id: "panel",
+    content: "content",
+    name: "Original",
+    nameOrigin: "automatic",
+  };
+  const layout = {
+    view: "fleet",
+    selectedVoyage: "voyage",
+    selectedFleet: "fleet",
+    contents: [
+      { id: "content", typeId: "terminal", backend: "t1", cwd: "/work" },
+    ],
     voyages: [
       {
         id: "voyage",
-        name: "Voyage",
         portals: [],
         fleets: [
           {
-            name: "Fleet 1",
-            vessels: [
-              { id: "same-placement", content: "agent", name: "Renamed agent" },
-              { id: "bash", content: "shell", name: "Bash" },
-            ],
+            id: "fleet",
+            vessels: [placement],
+            root: { kind: "leaf", placement: "panel" },
           },
         ],
       },
     ],
+    context: { kind: "workspace" },
   };
-  const agent = {
-    contentId: "agent",
-    terminalId: "agent-terminal",
-    state: "live",
-    foreground: "codex",
-    pid: 42,
+  const panel = {
+    placementId: "panel",
+    contentId: "content",
+    backend: "t1",
+    program: "bash",
+    directory: { kind: "live", path: "/work" },
+    effectiveName: "work",
   };
-  const shell = {
-    contentId: "shell",
-    terminalId: "shell-terminal",
-    state: "live",
-    foreground: "bash",
-    pid: 43,
+  const view = Object.assign(new Workspace(), {
+    version: "1",
+    layout,
+    names: new Map(),
+    observedPanels: [panel],
+    observation: { panels: [panel] },
+    observationRead: 0,
+    focused: "panel",
+  });
+  const cx = {
+    spawn() {},
+    notify() {},
+    focus_handle() {
+      return {};
+    },
   };
-  const navigated = [];
-  const render = (processes, error) =>
-    exports.agentsView(
-      layout,
-      processes,
-      {},
-      (...args) => navigated.push(args),
-      error,
-    );
-  render([agent, shell]);
-  assert.deepEqual([...buttons.keys()], ["agent-same-placement"]);
-  const row = buttons.get("agent-same-placement");
-  assert.match(
-    row.calls.find(([name]) => name === "accessibility_label")[1],
-    /Renamed agent, Codex, No reported status/,
+  view.acceptSnapshot(
+    { version: "2", layout, fresh: true, status: "applied" },
+    cx,
   );
-  const cx = {};
-  row.calls.find(([name]) => name === "on_click")[1]({}, cx);
-  assert.deepEqual(navigated, [["same-placement", cx]]);
-  for (const observed of [
-    { ...agent, terminalId: "wrong" },
-    { ...agent, state: "finished" },
-  ]) {
-    buttons.clear();
-    render([observed, shell]);
-    assert.equal(buttons.size, 0);
-  }
-  const unavailable = render([], "Core observation failed");
-  const children = unavailable.calls.find(([name]) => name === "children")[1];
+  assert.equal(view.observation, null, "Effects require a fresh observation");
+  assert.equal(view.panelLabel(placement), "bash · work");
+  placement.nameOrigin = "deliberate";
+  placement.name = "My shell";
+  assert.equal(view.contentName(placement), "My shell");
+  await view.readObservation(cx);
+  assert.deepEqual(
+    view.observedPanels,
+    [],
+    "Failed reads clear retained display facts",
+  );
+  view.observedPanels = [panel];
+  layout.contents[0].backend = "replacement";
+  view.acceptSnapshot(
+    { version: "3", layout, fresh: true, status: "applied" },
+    cx,
+  );
+  assert.deepEqual(
+    view.observedPanels,
+    [],
+    "Rebound programs cannot reuse display facts",
+  );
+  view.layout.voyages = Array.from({ length: 12 }, (_, index) => ({
+    id: `closed-${index}`,
+    name: `Voyage ${index}`,
+    closed: true,
+    closedOrder: String(index + 1),
+  }));
+  assert.equal(view.closedVoyageItems().length, 10);
+  assert.equal(view.closedVoyageItems()[0].label, "Reopen Voyage 11");
   assert.equal(
-    children[0].calls.find(([name]) => name === "accessibility_label")[1],
-    "Agent status unavailable",
+    view.layout.voyages.length,
+    12,
+    "The display cap must not delete retained Voyages",
   );
+});
+
+test("late active-directory observations cannot replace newer facts", async () => {
+  const { workspaceObservation: validateObservation } =
+    await import("../contract/generated/validate.js");
+  const responses = [];
+  const Workspace = new Function(
+    "View",
+    "workspace_observation",
+    "validateObservation",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(
+    class {},
+    () => new Promise((resolve) => responses.push(resolve)),
+    validateObservation,
+  );
+  const view = Object.assign(new Workspace(), {
+    version: "1",
+    focused: "panel",
+    observationRead: 0,
+    observation: null,
+    layout: {
+      view: "fleet",
+      selectedVoyage: "voyage",
+      selectedFleet: "fleet",
+      contents: [{ id: "content", backend: "t1" }],
+      voyages: [
+        {
+          id: "voyage",
+          fleets: [
+            {
+              id: "fleet",
+              vessels: [{ id: "panel", content: "content" }],
+              root: { kind: "leaf", placement: "panel" },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const snapshot = (path, branch) => ({
+    version: "1",
+    active: "panel",
+    directory: { kind: "live", path },
+    panels: [
+      {
+        placementId: "panel",
+        contentId: "content",
+        backend: "t1",
+        directory: { kind: "live", path },
+        program: "bash",
+        conversationName: null,
+        effectiveName: "work",
+      },
+    ],
+    branch: { kind: "named", name: branch },
+  });
+  let notifications = 0;
+  const pending = [];
+  const actions = [];
+  view.run = (action) => actions.push(action);
+  const cx = {
+    notify() {
+      notifications += 1;
+    },
+    spawn(callback) {
+      pending.push(callback(cx));
+    },
+  };
+  view.createVoyage(cx);
+  const first = pending[0];
+  const second = view.readObservation(cx);
+  responses[1](JSON.stringify(snapshot("/work", "new")));
+  await second;
+  responses[0](JSON.stringify(snapshot("/work", "old")));
+  await first;
+  assert.equal(
+    actions.length,
+    1,
+    "A later poll must not cancel valid creation",
+  );
+  assert.equal(actions[0].operation, "create-voyage-from-source");
+  assert.equal(actions[0].source.cwd, "/work");
+  assert.equal(view.observation.directory.path, "/work");
+  assert.equal(view.observation.branch.name, "new");
+  assert.equal(notifications, 1);
+});
+
+test("worktree controller groups identified checkouts and preserves request identity", async () => {
+  const validators = await import("../contract/generated/validate.js");
+  const buttons = new Map(),
+    pending = [],
+    requests = [],
+    exports = {};
+  let sequence = 0,
+    mismatched = false,
+    changed = 0;
+  const checkouts = [
+    ["/repo", "/repo/.git", true],
+    ["/repo/.worktree/topic", "/repo/.git", false],
+    ["/other", "/other/.git", false],
+  ].map(([path, commonDir, main]) => ({
+    path,
+    commonDir,
+    main,
+    locked: false,
+    prunable: false,
+  }));
+  const button = (id) => {
+    const node = element();
+    buttons.set(id, node);
+    return node;
+  };
+  const source = ts.transpileModule(
+    fs.readFileSync(`${__dirname}/mods/header/worktrees.ts`, "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    },
+  ).outputText;
+  new Function("exports", "require", source)(exports, (name) => {
+    if (name === "gpui-kit") return { div: element };
+    if (name === "gpui-base")
+      return { Button: { new: button }, Popover: { new: element } };
+    if (name === "./menu.js")
+      return { menuSurface: element, menuButton: button };
+    if (name === "./validate.js") return validators;
+    if (name === "voyager_workspace")
+      return {
+        request_id: () => `worktree-${++sequence}`,
+        worktree: async (raw) => {
+          const request = JSON.parse(raw);
+          requests.push(request);
+          const response = {
+            status: "applied",
+            requestId: mismatched ? "wrong-request" : request.requestId,
+            checkouts,
+          };
+          return JSON.stringify(response);
+        },
+      };
+    return {};
+  });
+  const cx = {
+    spawn: (callback) => pending.push(callback(cx)),
+    notify() {},
+  };
+  const settle = () => Promise.all(pending.splice(0));
+  const controls = new exports.WorktreeControls();
+  controls.inspect("main", "/repo/src", "7", cx);
+  await settle();
+  assert.deepEqual(
+    controls.groups([
+      { id: "main", cwd: "/repo/src" },
+      { id: "topic", cwd: "/repo/.worktree/topic/lib/" },
+      { id: "lookalike", cwd: "/repo/.worktree/topic-other" },
+      { id: "other", cwd: "/other/docs" },
+    ]),
+    { roots: ["main", "lookalike", "other"], children: { main: ["topic"] } },
+  );
+  let workspaceVersion = "7";
+  controls.open("main", workspaceVersion, cx);
+  await settle();
+  workspaceVersion = "9";
+  mismatched = true;
+  const click = () =>
+    buttons
+      .get("worktree-open-/repo/.worktree/topic")
+      .calls.find(([name]) => name === "on_click")[1]({}, cx);
+  controls.render(() => changed++, cx);
+  click();
+  await settle();
+  assert.equal(requests.at(-1).expectedVersion, "7");
+  assert.notEqual(requests.at(-1).expectedVersion, workspaceVersion);
+  assert.deepEqual(requests.at(-1).action, {
+    operation: "open",
+    path: "/repo/.worktree/topic",
+  });
+  assert.equal(changed, 0, "A mismatched receipt cannot complete the action");
+  assert.match(controls.status, /unconfirmed/);
 });

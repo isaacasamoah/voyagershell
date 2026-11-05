@@ -19,6 +19,10 @@ pub struct Session {
     pub text: Entity<TextareaState>,
     pub draft: Draft,
     pub configuration: NotesConfiguration,
+    pub filenames: Vec<String>,
+    pub workspace_version: u64,
+    draft_file: Option<voyager_contract::content::NotesFile>,
+    selection: Option<Task<()>>,
     id: ContentId,
     client: Client,
     observed: [SharedString; 2],
@@ -56,6 +60,10 @@ impl Session {
             text,
             draft: Draft::default(),
             configuration: NotesConfiguration::default(),
+            filenames: Vec::new(),
+            workspace_version: 0,
+            draft_file: None,
+            selection: None,
             id,
             client,
             observed: ["".into(), "".into()],
@@ -138,15 +146,22 @@ impl Session {
                                     configuration,
                                     ..
                                 } => {
+                                    if let Some(metadata) = configuration {
+                                        session.workspace_version = metadata.workspace_version;
+                                    }
                                     session.configuration = configuration
                                         .as_ref()
-                                        .map(|metadata| metadata.configuration)
+                                        .map(|metadata| metadata.configuration.clone())
                                         .unwrap_or_default();
                                     let hydrate = session.draft.load(
                                         snapshot,
                                         generation,
                                         revision.as_deref(),
                                     );
+                                    if hydrate[0] && hydrate[1] {
+                                        session.draft_file =
+                                            session.configuration.notes_file.clone();
+                                    }
                                     if hydrate[0]
                                         && session.title.read(cx).value().as_ref()
                                             != snapshot.data.title
@@ -191,7 +206,115 @@ impl Session {
         }));
     }
 
+    pub fn list_notes(&mut self, cx: &mut Context<Self>) {
+        if self.selection.is_some() {
+            return;
+        }
+        let Some(view) = self.view.clone().filter(ViewBinding::is_active) else {
+            return;
+        };
+        let request = Request::ListNotes {
+            version: Version::V1,
+            request_id: self.client.request_id(),
+            content_id: self.id.clone(),
+        };
+        let client = self.client.clone();
+        self.selection = Some(cx.spawn(async move |session, cx| {
+            let result = client.read_content_view(&view, request).await;
+            let _ = session.update(cx, |session, cx| {
+                session.selection = None;
+                match result {
+                    Ok(response) => match &*response {
+                        Response::NotesList { filenames, .. } => {
+                            session.filenames = filenames.clone()
+                        }
+                        Response::Rejected { message, .. } | Response::Limited { message, .. } => {
+                            session.draft.status = message.clone()
+                        }
+                        _ => session.draft.status = "Notes list was not confirmed".into(),
+                    },
+                    Err(error) => session.draft.status = format!("{error:?}"),
+                }
+                cx.notify();
+            });
+        }));
+    }
+
+    pub fn select_note(&mut self, filename: Option<String>, migrate: bool, cx: &mut Context<Self>) {
+        if self.selection.is_some() {
+            return;
+        }
+        if self.draft.dirty {
+            self.draft.status = "Save this draft before opening another note".into();
+            cx.notify();
+            return;
+        }
+        let Some(view) = self.view.clone().filter(ViewBinding::is_active) else {
+            return;
+        };
+        let request_id = self.client.request_id();
+        let request = match (migrate, filename) {
+            (true, _) => Request::MigrateNote {
+                version: Version::V1,
+                request_id,
+                content_id: self.id.clone(),
+                expected_version: self.workspace_version,
+            },
+            (false, Some(filename)) => Request::OpenNote {
+                version: Version::V1,
+                request_id,
+                content_id: self.id.clone(),
+                expected_version: self.workspace_version,
+                filename,
+            },
+            (false, None) => Request::NewNote {
+                version: Version::V1,
+                request_id,
+                content_id: self.id.clone(),
+                expected_version: self.workspace_version,
+                title: "Title".into(),
+            },
+        };
+        let client = self.client.clone();
+        self.selection = Some(cx.spawn(async move |session, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { client.content_view(&view, request) })
+                .await;
+            let _ = session.update(cx, |session, cx| {
+                session.selection = None;
+                match result {
+                    Ok(response) => match &*response {
+                        Response::NoteOpened {
+                            configuration,
+                            workspace_version,
+                            ..
+                        } => {
+                            session.configuration = configuration.clone();
+                            session.workspace_version = *workspace_version;
+                            session.filenames.clear();
+                        }
+                        Response::Rejected { message, .. }
+                        | Response::Uncertain { message, .. }
+                        | Response::Limited { message, .. } => {
+                            session.draft.status = message.clone()
+                        }
+                        _ => session.draft.status = "Note selection was not confirmed".into(),
+                    },
+                    Err(error) => session.draft.status = format!("{error:?}"),
+                }
+                cx.notify();
+            });
+        }));
+    }
+
     pub fn save(&mut self, intent: Intent, cx: &mut Context<Self>) {
+        if self.draft.dirty && self.draft_file != self.configuration.notes_file {
+            self.draft.status =
+                "The selected file changed while this draft was open; the draft is retained".into();
+            cx.notify();
+            return;
+        }
         let view = match &intent {
             Intent::Native => self.view.clone(),
             Intent::Script(view) => Some(view.clone()),

@@ -109,12 +109,18 @@ test("ordinary blur commits once", async () => {
   assert.equal(view.editing, null);
 });
 
-test("default terminal chrome stays quiet while custom names and rename remain", async () => {
+test("terminal headings show their description while rename keeps the actual name", async () => {
   const { view, cx, reply } = fixture();
   await reply();
   const target = { kind: "vessel", id: "vessel-1" };
-  const terminal = view.action("Terminal", null, false, target);
-  assert.equal(terminal.child, "");
+  const terminal = view.action(
+    "Terminal",
+    null,
+    false,
+    target,
+    "bash · project",
+  );
+  assert.equal(terminal.child, "bash · project");
   assert.equal(terminal.accessibility_label, "Terminal");
   assert.equal(view.action("Build", null, false, target).child, "Build");
   terminal.on_click({ click_count: 2 }, cx);

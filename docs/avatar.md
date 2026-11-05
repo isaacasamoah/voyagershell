@@ -1,7 +1,7 @@
 # Native avatar ownership
 
 The workspace chrome places the original Voyager avatar through the bound
-`voyager_avatar` module. `Layer` contains the retained native view. `Target`
+`voyager_avatar` module. `Layer` supplies placement/context and `Target`
 describes a visible scope and measures its real layout bounds. The original
 astronaut frames and brand live in `desktop/assets/`. The tagline image is the
 retained native experiment's export of the original interface text.
@@ -22,8 +22,11 @@ Navigation does not synthesize a dock. No avatar action grants authority.
 Native pointer events supply the source window and real pointer coordinates.
 The controller converts them to screen coordinates and compares them with the
 workspace's currently presented targets. Composition changes retire omitted
-target records and cancel the previous gesture. The avatar view is a direct
-sibling of the JavaScript-composed workspace inside `Layer`. Targets retain
+target records and cancel the previous gesture. The same native avatar view
+mounts in the outer ShellRoot's native-overlay slot, outside cached workspace
+content and beneath sheets, dialogs and tooltips. The pinned SDK preparation in
+CONTRIBUTING.md supplies that slot without avatar policy or another controller.
+Targets retain
 their last measured clipped bounds across cached frames. A changed measurement
 schedules a weak, deferred avatar and script refresh; unchanged bounds do not
 schedule one. Retiring a target also invalidates the view. Its mouse capture
@@ -56,20 +59,52 @@ drags clamp their preview to the viewport as the reference does. Context changes
 still require the typed Dock response; OS window movement does not establish a
 dock. No window is created for each motion or release.
 
-On Linux/X11, one connection subscribes to the owned window's `WM_STATE` changes
+On Linux/X11, one connection subscribes to the owned window's `_NET_WM_STATE` changes
 and destruction before its first read. The already-nonblocking connection's
 duplicated descriptor supplies readiness only; x11rb remains the only protocol
 reader. Buffered events are drained before waits and after replies. Connection
 and reply work run off the UI thread. Dropping an awaited readiness task cancels
 that wait, but cannot interrupt a synchronous reply already executing on a worker.
 
-Only a confirmed Iconic state triggers floating. GPUI's coarse visibility also
-includes complete occlusion, so it is neither the trigger nor a prerequisite.
+The atom list must contain `_NET_WM_STATE_HIDDEN` before floating is considered.
+Mutter also publishes ICCCM Iconic state for windows on another desktop, so
+Iconic alone does not establish minimize. Mutter's hidden atom excludes that
+ordinary desktop switch, but also covers Show Desktop and minimized ancestors.
+It is not proof that a human explicitly requested minimize. GPUI's coarse visibility
+also includes complete occlusion, so it is neither the trigger nor a prerequisite.
 This covers minimisation after the window was already occluded. The reply must
 match the actual native window and current window intention. A changed visibility
 epoch schedules a fresh actual-state read before acting. Destruction or disconnect
 ends the watcher. There is no frame-driven window-manager polling. Other window
 systems have an explicit unavailable result rather than an inferred equivalent.
+
+The workspace view retains its last painted avatar center and native window
+bounds. Avatar activation, native minimize and workspace close use that measured
+center, rather than a fixed offset from the workspace origin. A compact dock grows
+to the existing full-size floating presentation about the same screen center.
+The popup uses the source display and the existing guarded positioning path to
+apply its requested origin after creation. The same Avatar entity retains pose,
+artwork, animation and the existing undock sound.
+
+Hide records the native workspace identity, windowed/maximized/fullscreen bounds
+and scale. A floating click starts one guarded restore in the current controller.
+A windowed workspace receives one bounded native bounds request off the UI thread
+before activation. Maximized and fullscreen workspaces retain their native mode
+without an ordinary resize request. The popup remains until the same window's
+hidden atom is absent. Only then does presentation return to the existing dock,
+without a Dock operation or a new docking sound. A later explicit Dock still uses
+the existing application request, epoch guards and original sound.
+Identity validation happens before a restore becomes pending. A same-intent,
+confirmed refusal clears the pending request and retains its error for another
+human click. Connection failure after a bounds request remains uncertain and is
+not automatically submitted again. A stale state read requests a fresh read through
+the same observer, even if the old read consumed the last change notification.
+
+The existing Popup kind remains override-redirect on X11. Mutter presents that
+kind across virtual desktops. The narrowed minimize observer stops an ordinary
+desktop switch from creating it, but deliberately floating behavior across desktop
+switches still needs the native journey and owner assessment. Linux/X11 source and
+checks do not establish macOS restoration or placement support.
 
 The native avatar is a named button with Enter, Space and an accessibility click
 action. Each visible target has a named group and a focused Shift+Enter action.
@@ -134,3 +169,20 @@ Listening uses the existing status green. Routine Listening/Speaking captions ar
 absent; connection and capability failures remain in the control's accessible
 description and bounded hover hint. This placement does not establish working
 provider audio or another platform's microphone behavior.
+
+Only the 38-pixel Voyage/Fleet avatar omits its fixed green dot. Header places that
+same decorative indicator beside its existing primary voice/chat controls. The
+full-size dot and other fallback presentations retain their existing behavior;
+the dot does not establish service readiness.
+
+The Speech Button blocks underlying mouse hit targets over its own measured
+rectangle, including while disabled. Its ordinary Button focus, keyboard and
+accessibility activation remain in use. Stopping only mouse-up would be too late
+because the avatar handles release during the window capture phase.
+
+Name and Composer retain the native single-line editor. They project the theme's
+selection token and foreground caret onto that editor, without painting a selected
+background over the entire input. Name focus still selects the actual full value.
+The Composer has a 32-pixel frame with an 18-pixel line and horizontal padding.
+Source formatting and inspection do not establish visible selection, caret geometry
+or native speech isolation; the integrated release journey remains required.

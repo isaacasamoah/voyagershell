@@ -7,10 +7,12 @@ pub mod context;
 pub mod core;
 mod core_endpoint;
 pub mod launch;
+pub mod observation;
 mod panels;
 mod process;
 mod scope;
 pub mod workspace;
+pub mod worktrees;
 
 #[cfg(test)]
 mod tests;

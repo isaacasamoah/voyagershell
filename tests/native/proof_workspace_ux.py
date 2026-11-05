@@ -297,7 +297,6 @@ def prove(
         assert rpc("terminal.get", {"terminal": backend})["pid"] == terminal["pid"]
         button("Show Portals")
         capture("ux-empty-portal-before-choice")
-        button("Choose Portal content")
         capture("ux-empty-portal-after-choice")
         button("Create Notes Portal")
         created = ready(lambda value: len(value["voyages"][0]["portals"]) == 1)

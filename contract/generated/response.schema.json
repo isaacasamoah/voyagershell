@@ -187,6 +187,9 @@
     "Fleet": {
       "additionalProperties": false,
       "properties": {
+        "closed": {
+          "type": "boolean"
+        },
         "id": {
           "type": "string"
         },
@@ -432,6 +435,13 @@
         "nextId"
       ],
       "type": "object"
+    },
+    "NameOrigin": {
+      "enum": [
+        "automatic",
+        "deliberate"
+      ],
+      "type": "string"
     },
     "Node": {
       "oneOf": [
@@ -781,6 +791,9 @@
         },
         "name": {
           "type": "string"
+        },
+        "nameOrigin": {
+          "$ref": "#/definitions/NameOrigin"
         }
       },
       "required": [
@@ -793,6 +806,13 @@
     "Voyage": {
       "additionalProperties": false,
       "properties": {
+        "closed": {
+          "type": "boolean"
+        },
+        "closedOrder": {
+          "default": "0",
+          "type": "string"
+        },
         "cwd": {
           "type": [
             "string",

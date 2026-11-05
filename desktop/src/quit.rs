@@ -1,7 +1,7 @@
 use crate::{Quit, host::Header};
 use gpui::{App, WeakEntity};
 use std::{cell::RefCell, rc::Rc};
-use voyager_app::{client::Client, conversation_client, core::Error};
+use voyager_app::conversation_client;
 
 enum State {
     Ready,
@@ -11,7 +11,6 @@ enum State {
 
 pub fn register(
     header: WeakEntity<Header>,
-    workspace: Client,
     conversation: conversation_client::Client,
     cx: &mut App,
 ) {
@@ -31,9 +30,8 @@ pub fn register(
         }
         *state.borrow_mut() = State::Pending;
         let _ = header.update(cx, |header, cx| {
-            header.quit_status("Quitting the owned session".into(), cx);
+            header.quit_status("Closing Voyager. Programs keep running.".into(), cx);
         });
-        let workspace = workspace.clone();
         let conversation = conversation.clone();
         let state = state.clone();
         let header = header.clone();
@@ -41,19 +39,10 @@ pub fn register(
             let private = cx
                 .background_executor()
                 .spawn(async move { conversation.quit().await });
-            let session = cx.background_executor().spawn(async move {
-                workspace.quit().await.map_err(|error| match error {
-                    Error::Rejected { message, .. } | Error::Uncertain(message) => message,
-                })
-            });
             let private = private.await;
-            let session = session.await;
             let mut errors = Vec::new();
             if let Err(error) = private {
                 errors.push(format!("Private conversation shutdown: {error}"));
-            }
-            if let Err(error) = session {
-                errors.push(format!("Owned session shutdown: {error}"));
             }
             let result = if errors.is_empty() {
                 Ok(())

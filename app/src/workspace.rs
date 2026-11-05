@@ -17,6 +17,7 @@ impl Model {
             let fleet = Fleet {
                 id: FleetId(self.id("home-fleet")?),
                 name: "Home".into(),
+                closed: false,
                 root: Some(Split::Leaf {
                     placement: panel.id.clone(),
                 }),
@@ -26,6 +27,8 @@ impl Model {
             self.layout.home = Some(Voyage {
                 id,
                 name: "Home".into(),
+                closed: false,
+                closed_order: 0,
                 fleets: vec![fleet],
                 portals: Vec::new(),
                 portal_layout: Some(PortalLayout::default()),
@@ -82,6 +85,7 @@ impl Model {
             id: placement,
             content,
             name,
+            name_origin: voyager_contract::NameOrigin::Automatic,
             hidden: false,
         })
     }
@@ -91,6 +95,7 @@ impl Model {
         Ok(Fleet {
             id: FleetId(self.id("fleet")?),
             name,
+            closed: false,
             root: Some(Split::Leaf {
                 placement: placement.id.clone(),
             }),
@@ -163,12 +168,27 @@ impl Model {
                 self.layout.voyages.push(Voyage {
                     id,
                     name,
+                    closed: false,
+                    closed_order: 0,
                     fleets: vec![fleet],
                     portals: vec![],
                     portal_layout: Some(PortalLayout::default()),
                     cwd: Some(cwd.clone()),
                 });
                 self.ensure_home(&cwd)?;
+            }
+            Action::CreateVoyageFromSource { source } => {
+                let cwd = match source {
+                    voyager_contract::DirectorySource::Live { cwd, .. }
+                    | voyager_contract::DirectorySource::Voyage { cwd, .. }
+                    | voyager_contract::DirectorySource::Starting { cwd, .. } => cwd,
+                };
+                let name = std::path::Path::new(&cwd)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("/")
+                    .to_owned();
+                self.apply(Action::CreateVoyage { name, cwd })?;
             }
             Action::CreateFleet { voyage, name } => {
                 let index = self
@@ -193,6 +213,56 @@ impl Model {
                 self.layout.view = WorkspaceView::Fleet;
                 self.layout.voyages[index].fleets.push(fleet);
             }
+            Action::CreateFleetWithContent {
+                voyage,
+                name,
+                source,
+                type_id,
+                launch,
+            } => {
+                if self.layout.view != WorkspaceView::Fleet
+                    || self.layout.selected_voyage.as_ref() != Some(&voyage)
+                {
+                    return Err("Selected Voyage changed; reopen the choice".into());
+                }
+                if name.trim().is_empty() || !crate::content::supports_type(&type_id) {
+                    return Err("Fleet name or content type is invalid".into());
+                }
+                if let Some(launch) = &launch {
+                    if type_id != "terminal" {
+                        return Err("Only terminal content accepts a program launch".into());
+                    }
+                    crate::launch::argv(launch)?;
+                }
+                let cwd = match source {
+                    voyager_contract::DirectorySource::Live { cwd, .. }
+                    | voyager_contract::DirectorySource::Voyage { cwd, .. }
+                    | voyager_contract::DirectorySource::Starting { cwd, .. } => cwd,
+                };
+                if !std::path::Path::new(&cwd).is_absolute() {
+                    return Err("Fleet working directory must be absolute".into());
+                }
+                let panel_name = panels::default_name(&[], &type_id);
+                let panel = self.placement(cwd, type_id, panel_name, launch)?;
+                let fleet = Fleet {
+                    id: FleetId(self.id("fleet")?),
+                    name,
+                    closed: false,
+                    root: Some(Split::Leaf {
+                        placement: panel.id.clone(),
+                    }),
+                    vessels: vec![panel],
+                    maximized_placement: None,
+                };
+                self.layout.selected_fleet = Some(fleet.id.clone());
+                self.layout
+                    .voyages
+                    .iter_mut()
+                    .find(|item| item.id == voyage)
+                    .ok_or("Voyage not found")?
+                    .fleets
+                    .push(fleet);
+            }
             Action::SelectVoyage { id } => {
                 let voyage = self
                     .layout
@@ -200,8 +270,114 @@ impl Model {
                     .iter()
                     .find(|v| v.id == id)
                     .ok_or("Voyage not found")?;
-                self.layout.selected_fleet = voyage.fleets.first().map(|f| f.id.clone());
+                if voyage.closed {
+                    return Err("Voyage is closed".into());
+                }
+                self.layout.selected_fleet = voyage
+                    .fleets
+                    .iter()
+                    .find(|fleet| !fleet.closed)
+                    .map(|f| f.id.clone());
                 self.layout.selected_voyage = Some(id);
+                self.layout.view = WorkspaceView::Fleet;
+            }
+            Action::CloseVoyage { id } => {
+                let index = self
+                    .layout
+                    .voyages
+                    .iter()
+                    .position(|voyage| voyage.id == id)
+                    .ok_or("Voyage not found")?;
+                if self.layout.voyages[index].closed {
+                    return Err("Voyage is already closed".into());
+                }
+                let order = self
+                    .layout
+                    .voyages
+                    .iter()
+                    .map(|voyage| voyage.closed_order)
+                    .max()
+                    .unwrap_or(0)
+                    .checked_add(1)
+                    .ok_or("Recent Voyage order exhausted")?;
+                self.layout.voyages[index].closed_order = order;
+                self.layout.voyages[index].closed = true;
+                if self.layout.view == WorkspaceView::Fleet
+                    && self.layout.selected_voyage.as_ref() == Some(&id)
+                {
+                    let next = self
+                        .layout
+                        .voyages
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, voyage)| !voyage.closed)
+                        .min_by_key(|(other, _)| other.abs_diff(index))
+                        .map(|(_, voyage)| {
+                            (
+                                voyage.id.clone(),
+                                voyage
+                                    .fleets
+                                    .iter()
+                                    .find(|fleet| !fleet.closed)
+                                    .map(|fleet| fleet.id.clone()),
+                            )
+                        });
+                    if let Some((voyage, fleet)) = next {
+                        self.layout.selected_voyage = Some(voyage);
+                        self.layout.selected_fleet = fleet;
+                    } else {
+                        self.layout.selected_voyage = None;
+                        self.layout.selected_fleet = None;
+                        self.layout.view = WorkspaceView::Home;
+                    }
+                }
+            }
+            Action::ReopenVoyage { id } => {
+                let voyage = self
+                    .layout
+                    .voyages
+                    .iter_mut()
+                    .find(|voyage| voyage.id == id)
+                    .ok_or("Voyage not found")?;
+                if !voyage.closed {
+                    return Err("Voyage is already open".into());
+                }
+                voyage.closed = false;
+                self.layout.selected_fleet = voyage
+                    .fleets
+                    .iter()
+                    .find(|fleet| !fleet.closed)
+                    .map(|fleet| fleet.id.clone());
+                self.layout.selected_voyage = Some(id);
+                self.layout.view = WorkspaceView::Fleet;
+            }
+            Action::CloseFleet { id } => {
+                let (v, f) = self.fleet_index(&id).ok_or("Fleet not found")?;
+                if self.layout.voyages[v].fleets[f].closed {
+                    return Err("Fleet is already closed".into());
+                }
+                self.layout.voyages[v].fleets[f].closed = true;
+                if self.layout.view == WorkspaceView::Fleet
+                    && self.layout.selected_fleet.as_ref() == Some(&id)
+                {
+                    self.layout.selected_fleet = self.layout.voyages[v]
+                        .fleets
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, fleet)| !fleet.closed)
+                        .min_by_key(|(other, _)| other.abs_diff(f))
+                        .map(|(_, fleet)| fleet.id.clone());
+                }
+            }
+            Action::ReopenFleet { id } => {
+                let (v, f) = self.fleet_index(&id).ok_or("Fleet not found")?;
+                if !self.layout.voyages[v].fleets[f].closed {
+                    return Err("Fleet is already open".into());
+                }
+                self.layout.voyages[v].closed = false;
+                self.layout.voyages[v].fleets[f].closed = false;
+                self.layout.selected_voyage = Some(self.layout.voyages[v].id.clone());
+                self.layout.selected_fleet = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
             }
             Action::CreateContent {
@@ -255,26 +431,33 @@ impl Model {
                         self.layout.voyages[v].fleets[f].name = name;
                     }
                     RenameTarget::Vessel { id } => {
-                        self.layout
+                        let vessel = self
+                            .layout
                             .containers_mut()
                             .flat_map(|voyage| &mut voyage.fleets)
                             .flat_map(|fleet| &mut fleet.vessels)
                             .find(|item| item.id == id)
-                            .ok_or("Vessel not found")?
-                            .name = name
+                            .ok_or("Vessel not found")?;
+                        vessel.name = name;
+                        vessel.name_origin = voyager_contract::NameOrigin::Deliberate;
                     }
                     RenameTarget::Portal { id } => {
-                        self.layout
+                        let portal = self
+                            .layout
                             .containers_mut()
                             .flat_map(|voyage| &mut voyage.portals)
                             .find(|item| item.id == id)
-                            .ok_or("Portal not found")?
-                            .name = name
+                            .ok_or("Portal not found")?;
+                        portal.name = name;
+                        portal.name_origin = voyager_contract::NameOrigin::Deliberate;
                     }
                 }
             }
             Action::SelectFleet { id } => {
-                let (v, _) = self.fleet_index(&id).ok_or("Fleet not found")?;
+                let (v, f) = self.fleet_index(&id).ok_or("Fleet not found")?;
+                if self.layout.voyages[v].closed || self.layout.voyages[v].fleets[f].closed {
+                    return Err("Fleet is closed".into());
+                }
                 self.layout.selected_voyage = Some(self.layout.voyages[v].id.clone());
                 self.layout.selected_fleet = Some(id);
                 self.layout.view = WorkspaceView::Fleet;

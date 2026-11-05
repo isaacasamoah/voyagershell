@@ -13,9 +13,11 @@ export function projection(): {
 pub const WORKSPACE: &str = r#"
 export function request_id(): string;
 export function call(request: string): Promise<string>;
+export function worktree(request: string): Promise<string>;
 export function terminal_open(request: string): Promise<string>;
 export function revision(): string;
 export function context_facts(): Promise<string>;
+export function workspace_observation(version: string, active: string | null): Promise<string>;
 export function launches(): Promise<string>;
 export function processes(version: string): Promise<string>;
 export function notice(): { revision: string; packageRevision: string; activityRevision: string };

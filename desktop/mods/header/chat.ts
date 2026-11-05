@@ -1,6 +1,6 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { Composer, ComposerState } from "voyager_native";
+import { Composer, ComposerState, MeasureHeight } from "voyager_native";
 import { observe, send } from "./conversation.js";
 import type { AsyncContext, Context, NativeElement } from "gpui-kit";
 import type { Context as Scope } from "../../../contract/generated/response";
@@ -90,23 +90,6 @@ export class Chat {
     cx.notify();
   }
 
-  button(
-    label: string,
-    callback: (cx: Context) => void,
-    colors: ReturnType<typeof projection>,
-  ): NativeElement {
-    return Button.new(`chat-${label.toLowerCase().replaceAll(" ", "-")}`)
-      .accessibility_label(label)
-      .h(26)
-      .px(8)
-      .py(0)
-      .rounded(5)
-      .text_size(11)
-      .text_color(colors.muted)
-      .on_click((_event, cx) => callback(cx))
-      .child(label);
-  }
-
   toggleView(colors: ReturnType<typeof projection>): NativeElement {
     return Button.new("chat-toggle")
       .accessibility_label(this.open ? "Close chat" : "Chat")
@@ -120,7 +103,7 @@ export class Chat {
   }
 
   measure(
-    region: "sidebar" | "heading" | "navigation",
+    region: "sidebar" | "heading" | "navigation" | "messages",
     height: number,
     cx: Context,
   ) {
@@ -154,7 +137,14 @@ export class Chat {
       .flex_col()
       .w_full()
       .flex_shrink_0()
-      .h(this.open ? (compact ? 380 : this.availableHeight()) : 0)
+      .h(
+        this.open
+          ? Math.min(
+              Math.max(48, Math.min(320, this.availableHeight())),
+              48 + (this.heights.messages || 0),
+            )
+          : 0,
+      )
       .min_h(0)
       .opacity(this.open ? 1 : 0)
       .transition("height", 180)
@@ -163,14 +153,13 @@ export class Chat {
       .bg(compact ? "#16181c" : "#00000000");
     if (!this.present) return panel;
     const messages = div()
-      .id("voyager-chat-messages")
       .flex()
       .flex_col()
-      .flex_1()
-      .min_h(0)
-      .overflow_y_scroll()
-      .px(16)
-      .gap(16);
+      .w_full()
+      .min_h(1)
+      .px(12)
+      .py(4)
+      .gap(10);
     for (const message of this.state?.messages || []) {
       messages.child(
         div()
@@ -201,9 +190,8 @@ export class Chat {
     const phase = this.state?.phase || "idle";
     const active = phase === "starting" || phase === "working";
     const error = this.error || this.state?.error;
-    panel.child(messages);
     if (this.state?.limited)
-      panel.child(
+      messages.child(
         div()
           .px(12)
           .py(4)
@@ -212,35 +200,56 @@ export class Chat {
           .child("Display limit reached"),
       );
     if (error)
-      panel.child(
+      messages.child(
         div().text_size(11).text_color(colors.foreground).child(error),
       );
     if (this.state && this.state.omitted !== "0")
-      panel.child(
+      messages.child(
         div()
           .text_size(10)
           .text_color(colors.muted)
           .child("Showing recent messages"),
       );
+    panel.child(
+      div()
+        .id("voyager-chat-messages")
+        .flex_1()
+        .min_h(0)
+        .overflow_y_scroll()
+        .child(
+          MeasureHeight.new("chat-message-content", (height, cx) =>
+            this.measure("messages", height, cx),
+          )
+            .flex_shrink_0()
+            .child(messages),
+        ),
+    );
     return panel.child(
       div()
+        .flex()
+        .items_center()
+        .h(32)
+        .flex_shrink_0()
         .mx(12)
-        .mb(12)
+        .mt(4)
+        .mb(8)
+        .px(5)
         .border_1()
         .border_color("#ffffff14")
-        .rounded(12)
-        .child(Composer.new(this.input))
+        .rounded(8)
+        .child(Composer.new(this.input).flex_1().min_w(0))
         .child(
-          div()
-            .flex()
-            .justify_end()
-            .child(
-              this.button(
-                active ? "Interrupt" : "Send",
-                (cx) => this.submit(cx, active),
-                colors,
-              ),
-            ),
+          Button.new("chat-send")
+            .accessibility_label(active ? "Interrupt" : "Send")
+            .tooltip(active ? "Interrupt" : "Send")
+            .w(24)
+            .h(24)
+            .p(0)
+            .justify_center()
+            .text_size(15)
+            .text_color(colors.muted)
+            .on_click((_event, cx) => this.submit(cx, active))
+            .child(active ? "■" : "↑"),
         ),
     );
   }

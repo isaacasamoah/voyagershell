@@ -183,7 +183,7 @@ class Routes(unittest.TestCase):
                 stop_existing_core("owned", environment)
 
     def test_session_quit_requires_recorded_exits_and_socket_absence(self):
-        from proof_session_quit import exit_observation
+        from proof_process import exit_observation
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -582,6 +582,7 @@ class Routes(unittest.TestCase):
                 self.assertIn("RetainedTitleState", variant)
                 self.assertIn("RetainedBodyState", variant)
                 self.assertIn("SessionState.new()", variant)
+                self.assertIn('.child("LIFETIME_MARKER")', variant)
                 path = Path(directory) / "variant.mjs"
                 path.write_text(variant)
                 result = subprocess.run(

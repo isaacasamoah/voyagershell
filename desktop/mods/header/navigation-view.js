@@ -4,6 +4,20 @@ import { Name, MeasureHeight } from "voyager_native";
 import { Brand, dock_target_visible, speech_in_primary } from "voyager_avatar";
 import { Speech } from "voyager_conversation";
 import { projection } from "voyager_header";
+export function voyageColour(index) {
+  const palette = [
+    "#ff5f56",
+    "#f7a34b",
+    "#f4e04d",
+    "#5ec98f",
+    "#59a5ff",
+    "#b07af5",
+  ];
+  const base = palette[index % palette.length];
+  const cycle = Math.floor(index / palette.length);
+  if (!cycle) return base;
+  return `#${((parseInt(base.slice(1), 16) + cycle * 0x091307) & 0xffffff).toString(16).padStart(6, "0")}`;
+}
 export function renderSidebar(workspace, layout, voyage) {
   const colors = projection();
   const sidebar = div()
@@ -63,15 +77,22 @@ export function renderSidebar(workspace, layout, voyage) {
           ),
         ),
     );
+  const primaryControls = div();
+  if (!workspace.sidebar) primaryControls.flex_col();
   heading.child(
-    div()
+    primaryControls
       .id("primary-conversation-controls")
       .flex()
       .items_center()
       .justify_center()
       .min_h(30)
       .flex_shrink_0()
-      .gap(workspace.sidebar ? 6 : 2)
+      .gap(workspace.sidebar ? 6 : 5)
+      .children(
+        speech_in_primary() && ["voyage", "fleet"].includes(layout.context.kind)
+          ? [div().size(5).rounded_full().bg("#94bda0")]
+          : [],
+      )
       .children(speech_in_primary() ? [Speech.new("voyager-speech", {})] : [])
       .child(workspace.chat.toggleView(colors)),
   );
@@ -123,7 +144,6 @@ export function renderSidebar(workspace, layout, voyage) {
             .px(10)
             .text_size(13)
             .text_color(colors.muted)
-            .child(svg("voyager.svg").size(15))
             .child("Voyages"),
         )
         .child(
@@ -133,19 +153,22 @@ export function renderSidebar(workspace, layout, voyage) {
             .h(24)
             .p(2)
             .child("+")
-            .on_click((_event, cx) =>
-              workspace.run(
-                {
-                  operation: "create-voyage",
-                  name: `Voyage ${layout.voyages.length + 1}`,
-                  cwd: layout.contents[0].cwd,
-                },
-                cx,
-              ),
-            ),
+            .on_click((_event, cx) => workspace.createVoyage(cx)),
         ),
     );
-  for (const [index, item] of layout.voyages.entries()) {
+  const voyages = layout.voyages.filter((item) => !item.closed);
+  const grouped = workspace.worktrees?.groups(voyages) || {
+    roots: voyages.map((item) => item.id),
+    children: {},
+  };
+  const nested = new Set(Object.values(grouped.children).flat());
+  const shown = grouped.roots.flatMap((id) => [
+    id,
+    ...(workspace.expandedVoyages?.has(id) ? grouped.children[id] || [] : []),
+  ]);
+  for (const id of shown) {
+    const item = voyages.find((entry) => entry.id === id);
+    const index = layout.voyages.findIndex((entry) => entry.id === id);
     const scope = { kind: "voyage", id: item.id };
     const docked =
       layout.context.kind === "voyage" && layout.context.id === item.id;
@@ -175,17 +198,42 @@ export function renderSidebar(workspace, layout, voyage) {
       row.child(
         div()
           .flex_1()
-          .pl(docked ? 48 : 8)
+          .min_w(0)
+          .pl(docked ? 48 : nested.has(item.id) ? 22 : 10)
+          .pr(10)
           .flex()
           .items_center()
+          .gap(9)
+          .children(
+            grouped.children[item.id]?.length
+              ? [
+                  Button.new(`worktree-group-${item.id}`)
+                    .accessibility_label(
+                      `${workspace.expandedVoyages?.has(item.id) ? "Collapse" : "Expand"} worktrees for ${item.name}`,
+                    )
+                    .w(12)
+                    .h(24)
+                    .p(0)
+                    .child(workspace.expandedVoyages?.has(item.id) ? "▾" : "▸")
+                    .on_mouse_down("left", (_event, cx) =>
+                      cx.stop_propagation(),
+                    )
+                    .on_click((_event, cx) => {
+                      if (!workspace.expandedVoyages.delete(item.id))
+                        workspace.expandedVoyages.add(item.id);
+                      cx.notify();
+                    }),
+                ]
+              : [],
+          )
           .children(
             !docked
               ? [
-                  svg("orbit.svg")
-                    .size(14)
-                    .text_color(
-                      ["#b3d2e5", "#bcb3e5", "#e5c9ad", "#b8d3bd"][index % 4],
-                    ),
+                  div()
+                    .size(10)
+                    .flex_shrink_0()
+                    .rounded_full()
+                    .bg(voyageColour(index)),
                 ]
               : [],
           )
@@ -208,7 +256,8 @@ export function renderSidebar(workspace, layout, voyage) {
           .justify_center()
           .text_size(12)
           .opacity(docked ? 0 : 1)
-          .child(String(index + 1))
+          .tooltip(item.name)
+          .child(div().size(10).rounded_full().bg(voyageColour(index)))
           .on_click((_event, cx) =>
             workspace.run({ operation: "select-voyage", id: item.id }, cx),
           ),
@@ -244,20 +293,68 @@ export function renderSidebar(workspace, layout, voyage) {
               },
               {
                 label: "New Fleet",
-                choose: (_version, cx) =>
+                choose: (_version, cx) => workspace.openFleetChoices(item, cx),
+              },
+              {
+                label: "Worktrees",
+                choose: (version, cx) =>
+                  workspace.worktrees.open(item.id, version, cx),
+              },
+              {
+                label: "Close",
+                choose: (version, cx) =>
                   workspace.run(
-                    {
-                      operation: "create-fleet",
-                      voyage: item.id,
-                      name: `Fleet ${item.fleets.length + 1}`,
-                    },
+                    { operation: "close-voyage", id: item.id },
                     cx,
+                    undefined,
+                    version,
                   ),
               },
             ],
           ),
         ),
     );
+  }
+  const recent = workspace.closedVoyageItems();
+  if (workspace.sidebar && recent.length) {
+    navigation.child(
+      Button.new("recent-voyages")
+        .accessibility_label(
+          `${workspace.recentOpen ? "Collapse" : "Expand"} Recent voyages`,
+        )
+        .w_full()
+        .justify_start()
+        .px(10)
+        .h(30)
+        .text_size(11)
+        .text_color(colors.muted)
+        .child(`${workspace.recentOpen ? "▾" : "▸"} Recent voyages`)
+        .on_click((_event, cx) => {
+          workspace.recentOpen = !workspace.recentOpen;
+          cx.notify();
+        }),
+    );
+    if (workspace.recentOpen)
+      navigation.children(
+        recent.map((item, index) =>
+          Button.new(`recent-voyage-${index}`)
+            .accessibility_label(item.label)
+            .tooltip(item.label)
+            .w_full()
+            .justify_start()
+            .px(10)
+            .h(28)
+            .text_size(11)
+            .child(
+              div()
+                .flex_1()
+                .min_w(0)
+                .truncate()
+                .child(item.label.replace(/^Reopen /, "")),
+            )
+            .on_click((_event, cx) => item.choose(workspace.version, cx)),
+        ),
+      );
   }
   if (!workspace.sidebar)
     navigation.child(
@@ -268,16 +365,7 @@ export function renderSidebar(workspace, layout, voyage) {
         .h(28)
         .p(2)
         .child("+")
-        .on_click((_event, cx) =>
-          workspace.run(
-            {
-              operation: "create-voyage",
-              name: `Voyage ${layout.voyages.length + 1}`,
-              cwd: layout.contents[0].cwd,
-            },
-            cx,
-          ),
-        ),
+        .on_click((_event, cx) => workspace.createVoyage(cx)),
     );
   const measure = (name, child) =>
     MeasureHeight.new(
@@ -330,7 +418,7 @@ export function renderFleets(workspace, layout, voyage, fleet) {
     .h_full()
     .gap(7)
     .overflow_x_scroll();
-  for (const item of voyage.fleets) {
+  for (const item of voyage.fleets.filter((item) => !item.closed)) {
     const selected = item.id === fleet?.id;
     const docked =
       layout.context.kind === "fleet" && layout.context.id === item.id;
@@ -354,6 +442,10 @@ export function renderFleets(workspace, layout, voyage, fleet) {
       .bg(selected ? "#c4b5fd0c" : "#00000000")
       .pl(docked ? 48 : 6)
       .pr(6)
+      .on_hover((hovered, cx) => {
+        workspace.hoveredFleet = hovered ? item.id : null;
+        cx.notify();
+      })
       .on_mouse_down("left", (event, cx) =>
         workspace.startDrag("fleet", item.id, event, cx),
       )
@@ -376,6 +468,27 @@ export function renderFleets(workspace, layout, voyage, fleet) {
               .h(docked ? 40 : 29)
               .justify_center(),
       );
+    row.child(
+      Button.new(`close-fleet-${item.id}`)
+        .accessibility_label(`Close Fleet ${item.name}`)
+        .tooltip("Close Fleet")
+        .w(18)
+        .h(20)
+        .p(3)
+        .opacity(
+          workspace.hoveredFleet === item.id ||
+            workspace.names
+              .get(JSON.stringify({ kind: "fleet", id: item.id }))
+              ?.focus.is_focused()
+            ? 1
+            : 0,
+        )
+        .child(svg("close.svg").size(9))
+        .on_mouse_down("left", (_event, cx) => cx.stop_propagation())
+        .on_click((_event, cx) =>
+          workspace.run({ operation: "close-fleet", id: item.id }, cx),
+        ),
+    );
     if (
       workspace.drag?.kind === "fleet" &&
       workspace.drag.target === item.id &&
@@ -403,25 +516,22 @@ export function renderFleets(workspace, layout, voyage, fleet) {
     );
   }
   tabs.child(
-    Button.new("create-fleet-tab")
-      .accessibility_label("Create Fleet")
-      .tooltip("New Fleet")
-      .w(24)
-      .h(26)
-      .p(2)
-      .flex_shrink_0()
-      .child("+")
-      .on_mouse_down("left", (_event, cx) => cx.stop_propagation())
-      .on_click((_event, cx) =>
-        workspace.run(
-          {
-            operation: "create-fleet",
-            voyage: voyage.id,
-            name: `Fleet ${voyage.fleets.length + 1}`,
-          },
-          cx,
-        ),
+    workspace.contextMenu(
+      "fleet-collection",
+      workspace.fleetCreationControl(
+        voyage,
+        Button.new("create-fleet-tab")
+          .accessibility_label("Create Fleet")
+          .tooltip("New Fleet")
+          .w(24)
+          .h(26)
+          .p(2)
+          .flex_shrink_0()
+          .child("+")
+          .on_mouse_down("left", (_event, cx) => cx.stop_propagation()),
       ),
+      workspace.closedFleetItems(voyage),
+    ),
   );
   return strip.child(tabs).child(workspace.portalControls(voyage));
 }
@@ -442,16 +552,10 @@ export function renderContext(workspace, layout, voyage, fleet) {
   else if (context.kind === "portal")
     goThere = { operation: "reveal-panel", id: context.id };
   const facts = workspace.contextFacts;
-  const directory =
-    facts?.directory.kind === "known"
-      ? facts.directory.path
-      : facts?.directory.kind === "multiple"
-        ? "Multiple folders"
-        : "Folder unavailable";
   const branch =
-    facts?.branch.kind === "named"
-      ? facts.branch.name
-      : facts?.branch.kind === "detached"
+    workspace.observation?.branch.kind === "named"
+      ? workspace.observation.branch.name
+      : workspace.observation?.branch.kind === "detached"
         ? "Detached HEAD"
         : "Branch unavailable";
   const row = div()
@@ -483,10 +587,6 @@ export function renderContext(workspace, layout, voyage, fleet) {
           .flex()
           .items_center()
           .gap(6)
-          .child(svg("folder.svg").size(13))
-          .child(
-            div().accessibility_label(`Folder: ${directory}`).child(directory),
-          )
           .child(svg("branch.svg").size(13).ml(6))
           .child(div().accessibility_label(`Branch: ${branch}`).child(branch)),
       ),
@@ -494,6 +594,7 @@ export function renderContext(workspace, layout, voyage, fleet) {
   if (facts) row.child(div().child(facts.path.join(" / ")));
   if (!visible && goThere) row.child(workspace.action("Go there", goThere));
   const region = div().flex().flex_col().child(row);
-  if (workspace.status) region.child(workspace.statusView());
+  if (workspace.status || workspace.worktrees?.status)
+    region.child(workspace.statusView());
   return region;
 }

@@ -47,12 +47,38 @@
     "NotesConfiguration": {
       "additionalProperties": false,
       "properties": {
+        "notesFile": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NotesFile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "showHeading": {
           "type": "boolean"
         }
       },
       "required": [
         "showHeading"
+      ],
+      "type": "object"
+    },
+    "NotesFile": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory",
+        "filename"
       ],
       "type": "object"
     },
@@ -205,6 +231,75 @@
         "requestId",
         "contentId",
         "snapshot"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "filenames": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "const": "notes-list",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "filenames"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "$ref": "#/definitions/NotesConfiguration"
+        },
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/Snapshot"
+        },
+        "status": {
+          "const": "note-opened",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        },
+        "workspaceVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "snapshot",
+        "configuration",
+        "workspaceVersion"
       ],
       "type": "object"
     },

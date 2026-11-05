@@ -15,7 +15,13 @@ def chord(native, character):
     native("key", 65507, False)
 
 
-def named_button(native, evidence, name, edge=None):
+def named_button(
+    native,
+    evidence,
+    name,
+    edge=None,
+    roles=("push button", "button", "menu item", "menu_item"),
+):
     owner = json.loads((evidence / "launch.json").read_text())["pid"]
     path = evidence / "named-buttons.json"
     targets = json.loads(path.read_text()) if path.exists() else []
@@ -29,7 +35,7 @@ def named_button(native, evidence, name, edge=None):
             len(fields) == 1
             and fields[0]["width"] > 0
             and fields[0]["height"] > 0
-            and fields[0]["role"] in ("push button", "button")
+            and fields[0]["role"] in roles
         ):
             break
         assert time.monotonic() < deadline, f"No unique native button {name}: {fields}"

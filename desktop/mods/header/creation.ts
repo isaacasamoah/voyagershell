@@ -15,10 +15,46 @@ import type { Request } from "../../../contract/generated/request";
 type Create = Extract<Request["action"], { operation: "create-content" }>;
 export type HiddenChoices = { panels: HiddenPanel[]; error?: string };
 type Reopen = Extract<Request["action"], { operation: "reopen-panel" }>;
+type NewFleet = Extract<
+  Request["action"],
+  { operation: "create-fleet-with-content" }
+>;
+export type CreationDestination =
+  | Create["destination"]
+  | {
+      kind: "new-fleet";
+      voyage: NewFleet["voyage"];
+      name: string;
+      source: NewFleet["source"];
+    };
+type CreationAction = Create | Reopen | NewFleet;
+
+function chosen(
+  destination: CreationDestination,
+  typeId: string,
+  launch?: Create["launch"],
+): Create | NewFleet {
+  return destination.kind === "new-fleet"
+    ? {
+        operation: "create-fleet-with-content",
+        voyage: destination.voyage,
+        name: destination.name,
+        source: destination.source,
+        typeId,
+        ...(launch ? { launch } : {}),
+      }
+    : {
+        operation: "create-content",
+        destination,
+        typeId,
+        ...(launch ? { launch } : {}),
+      };
+}
+
 type Opening = {
   id: string;
   version: string;
-  destination: Create["destination"];
+  destination: CreationDestination;
 };
 
 export class CreationPicker {
@@ -32,7 +68,7 @@ export class CreationPicker {
 
   open(
     id: string,
-    destination: Create["destination"],
+    destination: CreationDestination,
     version: string,
     cx: Context,
     hidden: () => Promise<HiddenChoices> = async () => ({ panels: [] }),
@@ -92,15 +128,18 @@ export class CreationPicker {
 
   render(
     id: string,
-    destination: Create["destination"],
+    destination: CreationDestination,
     version: string,
-    create: (action: Create | Reopen, version: string, cx: Context) => void,
+    create: (action: CreationAction, version: string, cx: Context) => void,
     trigger: NativeElement,
     hidden: () => Promise<HiddenChoices> = async () => ({ panels: [] }),
     triggerOpens = true,
   ): NativeElement {
     const opening = this.current?.id === id ? this.current : null;
-    const entity = destination.owner.kind === "portals" ? "Portal" : "Vessel";
+    const entity =
+      destination.kind === "panel" && destination.owner.kind === "portals"
+        ? "Portal"
+        : "Vessel";
     const content = menuSurface(`worker-choices-${id}`, "Content choices")
       .max_h(320)
       .overflow_y_scroll();
@@ -124,12 +163,7 @@ export class CreationPicker {
                 if (this.current !== opening) return;
                 this.current = null;
                 create(
-                  {
-                    operation: "create-content",
-                    typeId: "terminal",
-                    destination: opening.destination,
-                    launch,
-                  },
+                  chosen(opening.destination, "terminal", launch),
                   opening.version,
                   cx,
                 );
@@ -151,15 +185,7 @@ export class CreationPicker {
             .on_click((_event, cx) => {
               if (this.current !== opening) return;
               this.current = null;
-              create(
-                {
-                  operation: "create-content",
-                  typeId: "notes",
-                  destination: opening.destination,
-                },
-                opening.version,
-                cx,
-              );
+              create(chosen(opening.destination, "notes"), opening.version, cx);
             }),
         );
       if (this.agents)
@@ -170,17 +196,13 @@ export class CreationPicker {
               if (this.current !== opening) return;
               this.current = null;
               create(
-                {
-                  operation: "create-content",
-                  typeId: "agents",
-                  destination: opening.destination,
-                },
+                chosen(opening.destination, "agents"),
                 opening.version,
                 cx,
               );
             }),
         );
-      if (this.hidden.length)
+      if (opening.destination.kind === "panel" && this.hidden.length)
         content.child(
           menuButton("hidden-vessels", "Hidden vessels")
             .child(
@@ -191,7 +213,7 @@ export class CreationPicker {
               cx.notify();
             }),
         );
-      if (this.expanded)
+      if (opening.destination.kind === "panel" && this.expanded)
         for (const panel of this.hidden)
           content.child(
             menuButton(
@@ -208,7 +230,11 @@ export class CreationPicker {
                   .child(div().text_size(9).child(panel.path)),
               )
               .on_click((_event, cx) => {
-                if (this.current !== opening) return;
+                if (
+                  this.current !== opening ||
+                  opening.destination.kind !== "panel"
+                )
+                  return;
                 this.current = null;
                 create(
                   {

@@ -2,7 +2,9 @@
 
 VoyagerShell is a configurable workspace for people and agents, built on Herdr Core. The native foundation is being developed in Rust and GPUI, with TypeScript-authored composition running as JavaScript. Herdr Core owns terminals and programs. Voyager owns the workspace, content placement and explicit avatar context.
 
-The working Electron prototype is preserved in [experiments/electron-reference](experiments/electron-reference/README.md). The native avatar, content-host and earlier typed-content work are organised under [experiments](experiments/README.md), with their acceptance limits recorded. This source reorganisation does not complete the native application or establish a performance improvement.
+The selected native development baseline includes the retained avatar layer and conservative terminal drawing changes. Prepare its pinned SDK with `python3 desktop/prepare-sdk.py` before the native checks in [CONTRIBUTING.md](CONTRIBUTING.md). Complete foundation and whole-app performance acceptance remain open.
+
+The working Electron prototype is preserved in [experiments/electron-reference](experiments/electron-reference/README.md). Earlier native avatar, content-host and typed-content work remains organised under [experiments](experiments/README.md), with its scoped findings and limits.
 
 The reported-activity source candidate uses Core's OSC 7501 events in existing
 Vessel/Portal headers and scoped process inspection. Its native protocol proof is

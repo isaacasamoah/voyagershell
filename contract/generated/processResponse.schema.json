@@ -13,9 +13,31 @@
       ],
       "type": "string"
     },
+    "PlacementName": {
+      "additionalProperties": false,
+      "properties": {
+        "effectiveName": {
+          "type": "string"
+        },
+        "placementId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "placementId",
+        "effectiveName"
+      ],
+      "type": "object"
+    },
     "ProcessInfo": {
       "additionalProperties": false,
       "properties": {
+        "agentName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "contentId": {
           "type": "string"
         },
@@ -35,6 +57,12 @@
             "integer",
             "null"
           ]
+        },
+        "placementNames": {
+          "items": {
+            "$ref": "#/definitions/PlacementName"
+          },
+          "type": "array"
         },
         "reportedActivity": {
           "anyOf": [

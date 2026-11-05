@@ -29,8 +29,20 @@ export type Action =
       operation: "create-voyage";
     }
   | {
+      operation: "create-voyage-from-source";
+      source: DirectorySource;
+    }
+  | {
       name: string;
       operation: "create-fleet";
+      voyage: string;
+    }
+  | {
+      launch?: Launch | null;
+      name: string;
+      operation: "create-fleet-with-content";
+      source: DirectorySource;
+      typeId: string;
       voyage: string;
     }
   | {
@@ -90,7 +102,23 @@ export type Action =
     }
   | {
       id: string;
+      operation: "close-voyage";
+    }
+  | {
+      id: string;
+      operation: "reopen-voyage";
+    }
+  | {
+      id: string;
       operation: "select-fleet";
+    }
+  | {
+      id: string;
+      operation: "close-fleet";
+    }
+  | {
+      id: string;
+      operation: "reopen-fleet";
     }
   | {
       id: string;
@@ -169,21 +197,25 @@ export type PanelOwner =
       kind: "portals";
       voyage: string;
     };
-export type ContentDestination = {
-  insertion: PanelInsertion;
-  kind: "panel";
-  owner: PanelOwner;
-};
-export type PanelInsertion =
+export type DirectorySource =
   | {
-      kind: "empty";
+      backend: string;
+      contentId: string;
+      cwd: string;
+      kind: "live";
+      placementId: string;
     }
   | {
-      id: string;
-      kind: "beside";
-      side: Side;
+      cwd: string;
+      kind: "voyage";
+      voyageId: string;
+    }
+  | {
+      contentId: string;
+      cwd: string;
+      kind: "starting";
+      placementId: string;
     };
-export type Side = "left" | "right" | "top" | "bottom";
 export type Launch =
   | {
       kind: "terminal";
@@ -200,6 +232,21 @@ export type Launch =
     };
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 export type Permissions = "yolo" | "workspace-write" | "read-only";
+export type ContentDestination = {
+  insertion: PanelInsertion;
+  kind: "panel";
+  owner: PanelOwner;
+};
+export type PanelInsertion =
+  | {
+      kind: "empty";
+    }
+  | {
+      id: string;
+      kind: "beside";
+      side: Side;
+    };
+export type Side = "left" | "right" | "top" | "bottom";
 export type RenameTarget =
   | {
       id: string;

@@ -1,6 +1,8 @@
 mod arrangement;
 mod avatar;
 mod avatar_motion;
+#[cfg(all(test, target_os = "linux"))]
+mod canvas_test;
 mod content_budget;
 mod conversation;
 mod host;
@@ -129,6 +131,14 @@ fn run() -> Result<()> {
         include_str!("../mods/header/processes.js"),
     )?;
     seed(
+        &package.join("process-icons.js"),
+        include_str!("../mods/header/process-icons.js"),
+    )?;
+    seed(
+        &package.join("worktrees.js"),
+        include_str!("../mods/header/worktrees.js"),
+    )?;
+    seed(
         &package.join("home.js"),
         include_str!("../mods/header/home.js"),
     )?;
@@ -156,6 +166,23 @@ fn run() -> Result<()> {
     for (name, source) in [
         ("home.svg", include_str!("../mods/header/home.svg")),
         ("sidebar.svg", include_str!("../mods/header/sidebar.svg")),
+        (
+            "sidebar-collapse.svg",
+            include_str!("../mods/header/sidebar-collapse.svg"),
+        ),
+        ("bash.svg", include_str!("../mods/header/bash.svg")),
+        ("note.svg", include_str!("../mods/header/note.svg")),
+        ("codex.svg", include_str!("../mods/header/codex.svg")),
+        ("claude.svg", include_str!("../mods/header/claude.svg")),
+        (
+            "icons-LICENSE.txt",
+            include_str!("../mods/header/icons-LICENSE.txt"),
+        ),
+        (
+            "icons-NOTICE.txt",
+            include_str!("../mods/header/icons-NOTICE.txt"),
+        ),
+        ("helmet.svg", include_str!("../mods/header/helmet.svg")),
         ("orbit.svg", include_str!("../mods/header/orbit.svg")),
         ("voyager.svg", include_str!("../mods/header/voyager.svg")),
         (
@@ -304,10 +331,10 @@ fn run() -> Result<()> {
                 ..Default::default()
             };
             if let Err(error) = cx.open_window(options, |window, cx| {
-                let quit_workspace = client.clone();
                 let quit_conversation = conversation.clone();
                 speech::initialize(conversation.clone(), cx);
                 let avatar = avatar::Binding::new(client.clone(), window, cx);
+                let avatar_view = avatar.view();
                 let header = cx.new(|cx| {
                     host::Header::new(
                         runtime,
@@ -326,8 +353,10 @@ fn run() -> Result<()> {
                         cx,
                     )
                 });
-                quit::register(header.downgrade(), quit_workspace, quit_conversation, cx);
-                cx.new(|cx| ShellRoot::new(header.into(), window, cx))
+                quit::register(header.downgrade(), quit_conversation, cx);
+                cx.new(|cx| {
+                    ShellRoot::new(header.into(), window, cx).with_native_overlay(avatar_view)
+                })
             }) {
                 eprintln!("Native window failed: {error}");
                 cx.quit();

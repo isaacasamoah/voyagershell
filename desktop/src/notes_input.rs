@@ -160,6 +160,92 @@ pub fn registry() -> Result<FrozenComponentRegistry, RegistryError> {
             )
             .with_readonly(true),
             StateMethodDescriptor::new::<crate::notes_scope::SessionHandle>(
+                "filenames",
+                "(): string[]",
+                |handle, args, _, cx| {
+                    ensure!(args.is_empty(), "filenames takes no arguments");
+                    Ok(ComponentDataValue::Array(
+                        handle
+                            .session
+                            .read(cx)
+                            .filenames
+                            .iter()
+                            .cloned()
+                            .map(ComponentDataValue::String)
+                            .collect(),
+                    ))
+                },
+            )
+            .with_readonly(true),
+            StateMethodDescriptor::new::<crate::notes_scope::SessionHandle>(
+                "filename",
+                "(): string",
+                |handle, args, _, cx| {
+                    ensure!(args.is_empty(), "filename takes no arguments");
+                    Ok(ComponentDataValue::String(
+                        handle
+                            .session
+                            .read(cx)
+                            .configuration
+                            .notes_file
+                            .as_ref()
+                            .map(|file| file.filename.clone())
+                            .unwrap_or_default(),
+                    ))
+                },
+            )
+            .with_readonly(true),
+            StateMethodDescriptor::new::<crate::notes_scope::SessionHandle>(
+                "list_notes",
+                "(): void",
+                |handle, args, _, cx| {
+                    ensure!(args.is_empty(), "list_notes takes no arguments");
+                    ensure!(handle.view.is_active(), "Notes view is not active");
+                    handle
+                        .session
+                        .update(cx, |session, cx| session.list_notes(cx));
+                    Ok(ComponentDataValue::Null)
+                },
+            ),
+            StateMethodDescriptor::new::<crate::notes_scope::SessionHandle>(
+                "new_note",
+                "(): void",
+                |handle, args, _, cx| {
+                    ensure!(args.is_empty(), "new_note takes no arguments");
+                    ensure!(handle.view.is_active(), "Notes view is not active");
+                    handle
+                        .session
+                        .update(cx, |session, cx| session.select_note(None, false, cx));
+                    Ok(ComponentDataValue::Null)
+                },
+            ),
+            StateMethodDescriptor::new::<crate::notes_scope::SessionHandle>(
+                "migrate_note",
+                "(): void",
+                |handle, args, _, cx| {
+                    ensure!(args.is_empty(), "migrate_note takes no arguments");
+                    ensure!(handle.view.is_active(), "Notes view is not active");
+                    handle
+                        .session
+                        .update(cx, |session, cx| session.select_note(None, true, cx));
+                    Ok(ComponentDataValue::Null)
+                },
+            ),
+            StateMethodDescriptor::new::<crate::notes_scope::SessionHandle>(
+                "open_note",
+                "(filename: string): void",
+                |handle, args, _, cx| {
+                    let [ComponentDataValue::String(filename)] = args else {
+                        anyhow::bail!("open_note requires a filename");
+                    };
+                    ensure!(handle.view.is_active(), "Notes view is not active");
+                    handle.session.update(cx, |session, cx| {
+                        session.select_note(Some(filename.clone()), false, cx)
+                    });
+                    Ok(ComponentDataValue::Null)
+                },
+            ),
+            StateMethodDescriptor::new::<crate::notes_scope::SessionHandle>(
                 "save",
                 "(): void",
                 |handle, args, _, cx| {

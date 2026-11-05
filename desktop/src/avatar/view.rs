@@ -35,6 +35,10 @@ fn landing_preview(scope: &Scope, bounds: Bounds<Pixels>) -> (Bounds<Pixels>, bo
     }
 }
 
+fn status_on_avatar(scope: &Scope, diameter: f32) -> bool {
+    diameter > 38. || !matches!(scope, Scope::Voyage { .. } | Scope::Fleet { .. })
+}
+
 pub(super) struct AvatarView {
     avatar: Entity<Avatar>,
     surface: Surface,
@@ -165,14 +169,13 @@ impl AvatarView {
                                 return None;
                             }
                             if view.avatar.read(cx).window_epoch.get() != intent {
-                                return Some(false);
+                                return Some(true);
                             }
                             if view.visibility_epoch != visibility_epoch {
                                 return Some(true);
                             }
                             match result {
                                 Ok(Some(true)) => {
-                                    let origin = window.bounds().origin + point(px(80.), px(60.));
                                     view.avatar.update(cx, |avatar, cx| {
                                         if avatar.floating.is_none() && avatar.opening.is_none() {
                                             if std::env::var_os("VOYAGER_AVATAR_DIAGNOSTICS")
@@ -180,9 +183,13 @@ impl AvatarView {
                                             {
                                                 eprintln!("Avatar float trigger: native-minimize");
                                             }
-                                            avatar.float(origin, cx);
+                                            avatar.float(window, cx);
                                         }
                                     });
+                                }
+                                Ok(Some(false)) => {
+                                    view.avatar
+                                        .update(cx, |avatar, cx| avatar.restored(window, cx));
                                 }
                                 Ok(_) => (),
                                 Err(message) => {
@@ -385,6 +392,8 @@ impl Render for AvatarView {
             !dragging && self.surface == Surface::Workspace && avatar.scope == Scope::Workspace;
 
         let painted = self.painted.clone();
+        let geometry = Rc::clone(&self.targets);
+        let workspace = self.surface == Surface::Workspace && !dragging;
         let diagnostics = self.diagnostics_enabled;
         let image = div()
             .id("voyager-avatar")
@@ -404,8 +413,7 @@ impl Render for AvatarView {
             .on_a11y_action(gpui::AccessibleAction::Click, {
                 let avatar = self.avatar.downgrade();
                 move |_, window, cx| {
-                    let origin = window.bounds().origin + position - point(px(13.), px(13.));
-                    let _ = avatar.update(cx, |avatar, cx| avatar.activate(window, origin, cx));
+                    let _ = avatar.update(cx, |avatar, cx| avatar.activate(window, cx));
                 }
             })
             .child(
@@ -483,19 +491,29 @@ impl Render for AvatarView {
                                     .object_fit(gpui::ObjectFit::Contain),
                             ),
                     )
-                    .child(
-                        div()
-                            .absolute()
-                            .right(px(s * 0.06))
-                            .bottom(px(s * 0.17))
-                            .size(px(5.))
-                            .rounded_full()
-                            .bg(rgb(0x94bda0)),
-                    )
+                    .when(status_on_avatar(&avatar.scope, s), |element| {
+                        element.child(
+                            div()
+                                .absolute()
+                                .right(px(s * 0.06))
+                                .bottom(px(s * 0.17))
+                                .size(px(5.))
+                                .rounded_full()
+                                .bg(rgb(0x94bda0)),
+                        )
+                    })
                     .child(
                         canvas(
                             |_, _, _| (),
-                            move |bounds, _, _, _| {
+                            move |bounds, _, window, _| {
+                                if workspace && window.is_visible() {
+                                    let mut geometry = geometry.borrow_mut();
+                                    geometry.avatar = Some(Bounds::new(
+                                        window.bounds().origin + bounds.origin,
+                                        bounds.size,
+                                    ));
+                                    geometry.window_bounds = Some(window.window_bounds());
+                                }
                                 if diagnostics && !painted.replace(true) {
                                     eprintln!("Avatar painted: bounds={bounds:?}");
                                 }
@@ -510,13 +528,8 @@ impl Render for AvatarView {
                     if event.keystroke.key == "escape" {
                         this.avatar.update(cx, |avatar, cx| avatar.cancel_drag(cx));
                     } else if event.keystroke.key == "enter" || event.keystroke.key == "space" {
-                        this.avatar.update(cx, |avatar, cx| {
-                            avatar.activate(
-                                window,
-                                window.bounds().origin + position - point(px(13.), px(13.)),
-                                cx,
-                            )
-                        });
+                        this.avatar
+                            .update(cx, |avatar, cx| avatar.activate(window, cx));
                         cx.stop_propagation();
                     }
                 }),
@@ -567,6 +580,28 @@ impl Render for AvatarView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compact_container_docks_move_the_dot_without_changing_full_size_or_fallback() {
+        for scope in [
+            Scope::Voyage {
+                id: voyager_contract::VoyageId("v".into()),
+            },
+            Scope::Fleet {
+                id: voyager_contract::FleetId("f".into()),
+            },
+        ] {
+            assert!(!status_on_avatar(&scope, 38.));
+            assert!(status_on_avatar(&scope, 94.));
+        }
+        assert!(status_on_avatar(&Scope::Workspace, 38.));
+        assert!(status_on_avatar(
+            &Scope::Vessel {
+                id: voyager_contract::PlacementId("p".into())
+            },
+            38.
+        ));
+    }
 
     #[test]
     fn workspace_preview_matches_avatar_landing_and_other_targets_keep_bounds() {

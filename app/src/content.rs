@@ -1,4 +1,5 @@
 mod description;
+mod markdown;
 mod package;
 mod view;
 pub(crate) use description::supports_type;
@@ -23,7 +24,7 @@ use voyager_contract::{
 
 pub const LIMIT: usize = 1024 * 1024;
 pub const ENVELOPE_LIMIT: usize = LIMIT + 16 * 1024;
-const INITIAL_NOTES: &[u8] = br#"{"title":"Working notes","text":"A little space to think."}"#;
+const INITIAL_NOTES: &[u8] = br#"{"title":"Title","text":""}"#;
 
 fn manifest(package: &Path) -> Result<serde_json::Value, String> {
     let mut bytes = Vec::new();
@@ -134,6 +135,26 @@ pub fn identity(request: &Request) -> (&ContentId, &str, Option<&str>) {
             content_id,
             request_id,
             ..
+        }
+        | Request::MigrateNote {
+            content_id,
+            request_id,
+            ..
+        }
+        | Request::ListNotes {
+            content_id,
+            request_id,
+            ..
+        }
+        | Request::NewNote {
+            content_id,
+            request_id,
+            ..
+        }
+        | Request::OpenNote {
+            content_id,
+            request_id,
+            ..
         } => (content_id, request_id, None),
         Request::Update {
             content_id,
@@ -171,6 +192,34 @@ pub fn request(
             request_id,
             content_id,
         },
+        Action::MigrateNote { content_id } => Request::MigrateNote {
+            version: Version::V1,
+            request_id,
+            content_id,
+            expected_version,
+        },
+        Action::ListNotes { content_id } => Request::ListNotes {
+            version: Version::V1,
+            request_id,
+            content_id,
+        },
+        Action::NewNote { content_id, title } => Request::NewNote {
+            version: Version::V1,
+            request_id,
+            content_id,
+            expected_version,
+            title,
+        },
+        Action::OpenNote {
+            content_id,
+            filename,
+        } => Request::OpenNote {
+            version: Version::V1,
+            request_id,
+            content_id,
+            expected_version,
+            filename,
+        },
         Action::Update {
             content_id,
             expected_revision,
@@ -206,7 +255,10 @@ pub(crate) fn bounded_response(request: &Request, response: Response) -> Respons
     }
     if matches!(
         response,
-        Response::Applied { .. } | Response::Configured { .. } | Response::Uncertain { .. }
+        Response::Applied { .. }
+            | Response::Configured { .. }
+            | Response::NoteOpened { .. }
+            | Response::Uncertain { .. }
     ) {
         let (id, request_id, expected) = identity(request);
         Response::Uncertain {
@@ -249,6 +301,73 @@ pub(crate) fn member(
     Ok(())
 }
 
+pub(crate) fn notes_directory(
+    layout: &voyager_contract::Layout,
+    id: &ContentId,
+) -> Result<PathBuf, String> {
+    let content = layout
+        .contents
+        .iter()
+        .find(|content| content.id == *id)
+        .ok_or("Content is unavailable")?;
+    let owners: Vec<_> = layout
+        .containers()
+        .filter(|voyage| {
+            voyage
+                .portals
+                .iter()
+                .chain(voyage.fleets.iter().flat_map(|fleet| &fleet.vessels))
+                .any(|placement| placement.content == *id)
+        })
+        .collect();
+    let [owner] = owners.as_slice() else {
+        return Err("Notes requires one identified owning Voyage".into());
+    };
+    let home = layout.home.as_ref().is_some_and(|home| home.id == owner.id);
+    let cwd = if home {
+        Some(content.cwd.as_str())
+    } else {
+        owner.cwd.as_deref()
+    }
+    .filter(|cwd| !cwd.is_empty())
+    .ok_or("The owning Voyage has no directory")?;
+    let directory = Path::new(cwd);
+    if !directory.is_absolute() {
+        return Err("The owning directory must be absolute".into());
+    }
+    Ok(directory.join("notes"))
+}
+
+pub(crate) fn register_content(
+    owner: &mut Owner,
+    layout: &voyager_contract::Layout,
+    id: &ContentId,
+) -> Result<Binding, String> {
+    let content = layout
+        .contents
+        .iter()
+        .find(|content| content.id == *id)
+        .ok_or("Content is unavailable")?;
+    let configuration = content
+        .configuration
+        .as_ref()
+        .map(|configuration| {
+            serde_json::from_value::<NotesConfiguration>(serde_json::Value::Object(
+                configuration.clone(),
+            ))
+        })
+        .transpose()
+        .map_err(|error| error.to_string())?
+        .unwrap_or_default();
+    if let Some(file) = configuration.notes_file {
+        owner.register_file(id, file)
+    } else {
+        owner
+            .register_existing(id)
+            .map_err(|error| error.to_string())
+    }
+}
+
 pub(crate) fn run(
     owner: &mut Owner,
     layout: &std::sync::Arc<voyager_contract::Layout>,
@@ -264,6 +383,18 @@ pub(crate) fn run(
         Ok(metadata) => metadata,
         Err(error) => return reject(&request, error),
     };
+    if matches!(&request, Request::ListNotes { .. }) {
+        let (id, request_id, _) = identity(&request);
+        return match notes_directory(layout, id).and_then(|directory| markdown::list(&directory)) {
+            Ok(filenames) => Response::NotesList {
+                version: Version::V1,
+                request_id: request_id.into(),
+                content_id: id.clone(),
+                filenames,
+            },
+            Err(error) => reject(&request, error),
+        };
+    }
     let mut response = owner.call(&binding, request);
     if let Response::Snapshot { configuration, .. } = &mut response {
         *configuration = metadata;
@@ -297,9 +428,7 @@ pub(crate) fn admit(
         }
     };
     member(layout, scope, id)?;
-    owner
-        .register_existing(id)
-        .map_err(|error| error.to_string())
+    register_content(owner, layout, id)
 }
 
 pub(crate) fn configuration(
@@ -337,14 +466,66 @@ pub(crate) fn configuration(
 pub(crate) fn initialize_created(
     owner: &mut Owner,
     previous: &voyager_contract::Layout,
-    current: &voyager_contract::Layout,
-) -> Result<(), String> {
-    for content in &current.contents {
-        if content.type_id == "notes" && !previous.contents.iter().any(|old| old.id == content.id) {
-            owner.initialize(&content.id).map_err(|error| format!("Workspace creation applied, but Notes initialization is unconfirmed: {error}. Inspect; do not repeat creation."))?;
+    current: &mut voyager_contract::Layout,
+) -> Result<bool, String> {
+    let ids: Vec<_> = current
+        .contents
+        .iter()
+        .filter(|content| {
+            content.type_id == "notes" && !previous.contents.iter().any(|old| old.id == content.id)
+        })
+        .map(|content| content.id.clone())
+        .collect();
+    for id in &ids {
+        let directory = notes_directory(current, id)?;
+        let filename = owner.create_file(&directory, "Title")?;
+        let file = voyager_contract::content::NotesFile {
+            directory: directory.to_string_lossy().into_owned(),
+            filename,
+        };
+        let content = current
+            .contents
+            .iter_mut()
+            .find(|content| content.id == *id)
+            .ok_or("Content is unavailable")?;
+        let mut configuration = content
+            .configuration
+            .as_ref()
+            .map(|value| {
+                serde_json::from_value::<NotesConfiguration>(serde_json::Value::Object(
+                    value.clone(),
+                ))
+            })
+            .transpose()
+            .map_err(|error| error.to_string())?
+            .unwrap_or_default();
+        configuration.notes_file = Some(file.clone());
+        content.configuration = Some(
+            serde_json::to_value(configuration)
+                .map_err(|error| error.to_string())?
+                .as_object()
+                .ok_or("Invalid Notes configuration")?
+                .clone(),
+        );
+        let snapshot = owner.select_file(id, file.clone()).map_err(|error| {
+            format!(
+                "Note creation is unconfirmed at {}: {error}",
+                Path::new(&file.directory).join(&file.filename).display()
+            )
+        })?;
+        if snapshot.data
+            != (Notes {
+                title: "Title".into(),
+                text: String::new(),
+            })
+        {
+            return Err(format!(
+                "Note creation is unconfirmed at {}: readback differs",
+                Path::new(&file.directory).join(&file.filename).display()
+            ));
         }
     }
-    Ok(())
+    Ok(!ids.is_empty())
 }
 
 pub struct Owner {
@@ -353,6 +534,7 @@ pub struct Owner {
     instances: HashSet<String>,
     changes: HashMap<String, (u64, Option<async_channel::Sender<u64>>)>,
     views: Vec<std::sync::Weak<view::Gate>>,
+    files: HashMap<String, voyager_contract::content::NotesFile>,
 }
 
 impl Owner {
@@ -365,6 +547,7 @@ impl Owner {
             instances: HashSet::new(),
             changes: HashMap::new(),
             views: Vec::new(),
+            files: HashMap::new(),
         })
     }
 
@@ -450,6 +633,64 @@ impl Owner {
 
     pub fn register_existing(&mut self, id: &ContentId) -> std::io::Result<Binding> {
         fs::File::open(self.path(id)?)?;
+        self.files.remove(&id.0);
+        self.instances.insert(id.0.clone());
+        Ok(Binding(id.clone()))
+    }
+
+    pub(crate) fn select_file(
+        &mut self,
+        id: &ContentId,
+        file: voyager_contract::content::NotesFile,
+    ) -> Result<Snapshot, String> {
+        self.register_file(id, file)?;
+        self.read(id).map(DataRead::snapshot)
+    }
+
+    pub(crate) fn migrate_file(
+        &mut self,
+        id: &ContentId,
+        directory: &Path,
+    ) -> Result<voyager_contract::content::NotesFile, String> {
+        let snapshot = self.read(id)?.snapshot();
+        let filename = markdown::create(directory, &snapshot.data)?;
+        let file = voyager_contract::content::NotesFile {
+            directory: directory.to_string_lossy().into_owned(),
+            filename,
+        };
+        let migrated = self.select_file(id, file.clone()).map_err(|error| {
+            format!(
+                "Note creation is unconfirmed at {}: {error}",
+                directory.join(&file.filename).display()
+            )
+        })?;
+        if migrated.data != snapshot.data {
+            return Err(format!(
+                "Note creation is unconfirmed at {}; converted note differs from legacy source",
+                directory.join(&file.filename).display()
+            ));
+        }
+        Ok(file)
+    }
+
+    pub(crate) fn create_file(&self, directory: &Path, title: &str) -> Result<String, String> {
+        markdown::create(
+            directory,
+            &Notes {
+                title: title.into(),
+                text: String::new(),
+            },
+        )
+    }
+
+    pub(crate) fn register_file(
+        &mut self,
+        id: &ContentId,
+        file: voyager_contract::content::NotesFile,
+    ) -> Result<Binding, String> {
+        markdown::file(Path::new(&file.directory), &file.filename)?;
+        self.path(id).map_err(|error| error.to_string())?;
+        self.files.insert(id.0.clone(), file);
         self.instances.insert(id.0.clone());
         Ok(Binding(id.clone()))
     }
@@ -491,7 +732,33 @@ impl Owner {
         schema(&package)
     }
 
+    fn warning(&self, data: &Notes) -> Option<String> {
+        match self.schema() {
+            Ok(Some(schema)) => validate(
+                &schema,
+                &serde_json::to_value(data).expect("Notes serializes"),
+            )
+            .err(),
+            Ok(None) => Some("No state schema declared".into()),
+            Err(error) => Some(format!("State schema unavailable: {error}")),
+        }
+    }
+
     fn read(&mut self, id: &ContentId) -> Result<DataRead, String> {
+        if let Some(binding) = self.files.get(&id.0) {
+            let path = markdown::file(Path::new(&binding.directory), &binding.filename)?;
+            let bytes = markdown::read(&path)?;
+            let data = markdown::parse(&binding.filename, &bytes)?;
+            let warning = self.warning(&data);
+            let snapshot = Snapshot {
+                content_id: id.clone(),
+                revision: format!("{:x}", Sha256::digest(&bytes)),
+                data,
+                warning,
+            };
+            self.last.insert(id.0.clone(), snapshot.clone());
+            return Ok(DataRead::Fresh(snapshot));
+        }
         let mut bytes = Vec::new();
         fs::File::open(self.root.join(format!("{}.json", id.0)))
             .and_then(|file| file.take(LIMIT as u64 + 1).read_to_end(&mut bytes))
@@ -513,15 +780,7 @@ impl Owner {
                     .ok_or_else(|| error.to_string());
             }
         };
-        let warning = match self.schema() {
-            Ok(Some(schema)) => validate(
-                &schema,
-                &serde_json::to_value(&data).expect("Notes serializes"),
-            )
-            .err(),
-            Ok(None) => Some("No state schema declared".into()),
-            Err(error) => Some(format!("State schema unavailable: {error}")),
-        };
+        let warning = self.warning(&data);
         let snapshot = Snapshot {
             content_id: id.clone(),
             revision: format!("{:x}", Sha256::digest(&bytes)),
@@ -541,6 +800,7 @@ impl Owner {
     pub(crate) fn notify(&mut self, response: &Response) {
         if let Response::Applied { content_id, .. }
         | Response::Configured { content_id, .. }
+        | Response::NoteOpened { content_id, .. }
         | Response::Uncertain { content_id, .. } = response
             && let Some((version, listener)) = self.changes.get_mut(&content_id.0)
         {
@@ -569,8 +829,12 @@ impl Owner {
             return rejected("That content is outside this view".into());
         }
         match request {
-            Request::Configure { .. } => {
-                rejected("Configuration requires the workspace owner".into())
+            Request::Configure { .. }
+            | Request::ListNotes { .. }
+            | Request::MigrateNote { .. }
+            | Request::NewNote { .. }
+            | Request::OpenNote { .. } => {
+                rejected("This operation requires the workspace owner".into())
             }
             Request::Describe { .. } => match describe(
                 &self.root.parent().expect("profile root").join("mods"),
@@ -619,6 +883,73 @@ impl Owner {
                 }
                 if current.revision != expected_revision {
                     return rejected("Portal data changed. Read it again before saving.".into());
+                }
+                if let Some(binding) = self.files.get(&id.0).cloned() {
+                    let path =
+                        match markdown::file(Path::new(&binding.directory), &binding.filename) {
+                            Ok(path) => path,
+                            Err(error) => return rejected(error),
+                        };
+                    let path = match fs::canonicalize(&path) {
+                        Ok(path) => path,
+                        Err(error) => return rejected(error.to_string()),
+                    };
+                    let permissions = match OpenOptions::new()
+                        .write(true)
+                        .open(&path)
+                        .and_then(|file| file.metadata())
+                    {
+                        Ok(metadata) => metadata.permissions(),
+                        Err(error) => return rejected(error.to_string()),
+                    };
+                    let bytes = match markdown::encode(&data) {
+                        Ok(bytes) => bytes,
+                        Err(error) => return rejected(error),
+                    };
+                    let Some(name) = path.file_name() else {
+                        return rejected("The selected file has no filename".into());
+                    };
+                    let mut temp_name = std::ffi::OsString::from(".");
+                    temp_name.push(name);
+                    temp_name.push(".tmp");
+                    let temp = path.with_file_name(temp_name);
+                    let mut file = match OpenOptions::new().write(true).create_new(true).open(&temp)
+                    {
+                        Ok(file) => file,
+                        Err(error) => return rejected(error.to_string()),
+                    };
+                    if let Err(error) = file
+                        .set_permissions(permissions)
+                        .and_then(|_| file.write_all(&bytes))
+                        .and_then(|_| file.sync_all())
+                    {
+                        drop(file);
+                        return rejected(match fs::remove_file(&temp) {
+                            Ok(()) => error.to_string(),
+                            Err(cleanup) => {
+                                format!("{error}; removing temporary file failed: {cleanup}")
+                            }
+                        });
+                    }
+                    drop(file);
+                    if let Err(error) = fs::rename(&temp, path) {
+                        return Response::Uncertain {
+                            version: Version::V1,
+                            request_id,
+                            content_id: id,
+                            expected_revision,
+                            message: error.to_string(),
+                        };
+                    }
+                    let written_revision = format!("{:x}", Sha256::digest(&bytes));
+                    let result = self.read(&id);
+                    return finish_write(
+                        id,
+                        request_id,
+                        expected_revision,
+                        written_revision,
+                        result,
+                    );
                 }
                 let schema = match self.schema() {
                     Ok(schema) => schema,
@@ -805,7 +1136,7 @@ mod tests {
         model
             .apply(Action::CreateVoyage {
                 name: "Test".into(),
-                cwd: "/tmp".into(),
+                cwd: directory.to_string_lossy().into_owned(),
             })
             .unwrap();
         let old = model.layout.clone();
@@ -842,7 +1173,14 @@ mod tests {
             })
             .unwrap();
         let b = model.layout.contents.last().unwrap().id.clone();
-        initialize_created(&mut owner, &old, &model.layout).unwrap();
+        let blocked = directory.join("notes");
+        fs::write(&blocked, b"not a directory").unwrap();
+        let before = model.layout.clone();
+        assert!(initialize_created(&mut owner, &old, &mut model.layout).is_err());
+        assert_eq!(model.layout, before);
+        assert_eq!(fs::read(&blocked).unwrap(), b"not a directory");
+        fs::remove_file(blocked).unwrap();
+        initialize_created(&mut owner, &old, &mut model.layout).unwrap();
         let layout = Arc::new(model.layout.clone());
         let access = Access::Agent {
             scope: Context::Vessel {
@@ -850,7 +1188,7 @@ mod tests {
             },
             expected_version: 7,
         };
-        let binding = owner.register_existing(&a).unwrap();
+        let binding = register_content(&mut owner, &layout, &a).unwrap();
         let retired = owner.subscribe(&binding, Some(0));
         let changes = owner.subscribe(&binding, Some(0));
         assert!(retired.is_closed());
@@ -918,12 +1256,74 @@ mod tests {
             run(&mut owner, &Arc::new(model.layout), 7, &access, update),
             Response::Rejected { .. }
         ));
-        fs::remove_file(directory.join(format!("data/{}.json", a.0))).unwrap();
+        let selected = owner.files.get(&a.0).unwrap();
+        let selected = Path::new(&selected.directory).join(&selected.filename);
+        fs::remove_file(&selected).unwrap();
         assert!(matches!(
             run(&mut owner, &layout, 7, &access, inspect(&a)),
             Response::Rejected { .. }
         ));
-        assert!(!directory.join(format!("data/{}.json", a.0)).exists());
+        assert!(!selected.exists());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn markdown_save_preserves_existing_private_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory =
+            std::env::temp_dir().join(format!("voyager-notes-mode-{}", std::process::id()));
+        fs::create_dir(&directory).unwrap();
+        fs::create_dir_all(directory.join("mods/notes")).unwrap();
+        fs::write(
+            directory.join("mods/notes/mod.json"),
+            include_str!("../../content/notes/mod.json"),
+        )
+        .unwrap();
+        let file = directory.join("Private.md");
+        fs::write(&file, b"# Private\n\nBefore").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+        let mut owner = Owner::open(&directory).unwrap();
+        let id = ContentId("private".into());
+        let binding = owner
+            .register_file(
+                &id,
+                voyager_contract::content::NotesFile {
+                    directory: directory.to_string_lossy().into_owned(),
+                    filename: "Private.md".into(),
+                },
+            )
+            .unwrap();
+        let snapshot = match owner.call(
+            &binding,
+            Request::Inspect {
+                version: Version::V1,
+                request_id: "read".into(),
+                content_id: id.clone(),
+            },
+        ) {
+            Response::Snapshot { snapshot, .. } => snapshot,
+            other => panic!("{other:?}"),
+        };
+        let result = owner.call(
+            &binding,
+            Request::Update {
+                version: Version::V1,
+                request_id: "save".into(),
+                content_id: id,
+                expected_revision: snapshot.revision,
+                data: Notes {
+                    title: "Private".into(),
+                    text: "After".into(),
+                },
+            },
+        );
+        assert!(matches!(result, Response::Applied { .. }));
+        assert_eq!(
+            fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(fs::read(&file).unwrap(), b"# Private\n\nAfter");
         fs::remove_dir_all(directory).unwrap();
     }
 

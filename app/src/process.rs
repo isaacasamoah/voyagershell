@@ -16,8 +16,40 @@ fn refused(message: &str) -> Error {
     }
 }
 
-fn info(content: &ContentId, terminal: Terminal) -> ProcessInfo {
+fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo {
     let reported_activity = Some(Arc::new(Core::reported_activity(&terminal)));
+    let agent_name = layout
+        .contents
+        .iter()
+        .find(|item| &item.id == content)
+        .and_then(|binding| {
+            crate::observation::agent_name(&crate::observation::directory(binding, Some(&terminal)))
+        });
+    let placement_names = layout
+        .contents
+        .iter()
+        .find(|item| &item.id == content)
+        .map(|binding| {
+            let directory = crate::observation::directory(binding, Some(&terminal));
+            layout
+                .containers()
+                .flat_map(|voyage| {
+                    voyage
+                        .fleets
+                        .iter()
+                        .flat_map(|fleet| &fleet.vessels)
+                        .chain(&voyage.portals)
+                })
+                .filter(|placement| &placement.content == content)
+                .map(|placement| voyager_contract::administrator::PlacementName {
+                    placement_id: placement.id.clone(),
+                    effective_name: crate::observation::effective_name(
+                        placement, binding, &directory,
+                    ),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     ProcessInfo {
         content_id: content.clone(),
         terminal_id: CoreTerminalId(terminal.address),
@@ -25,6 +57,8 @@ fn info(content: &ContentId, terminal: Terminal) -> ProcessInfo {
         cwd: terminal.cwd,
         state: terminal.state,
         foreground: terminal.foreground.map(|process| process.name),
+        agent_name,
+        placement_names,
         reported_activity,
     }
 }
@@ -108,7 +142,7 @@ pub(crate) fn run(
                 "Core returned a different terminal identity; nothing was submitted",
             ));
         }
-        let target = info(content, terminal);
+        let target = info(content, terminal, &visible);
         match action {
             ProcessAction::Read { lines, .. } => {
                 let read = core.terminal_read(&address.0, *lines)?;
@@ -162,7 +196,7 @@ pub(crate) fn run(
                     ));
                 }
                 let observed = core.terminal_kill(&address.0)?;
-                stop_result(target, info(content, observed))
+                stop_result(target, info(content, observed, &visible))
             }
             ProcessAction::List => Err(refused("This operation does not target one terminal")),
         }
@@ -178,7 +212,7 @@ pub(crate) fn run(
             if let Some(address) = &binding.backend {
                 if let Some(terminal) = listed.iter().find(|terminal| terminal.address == address.0)
                 {
-                    processes.push(info(&binding.id, terminal.clone()));
+                    processes.push(info(&binding.id, terminal.clone(), &visible));
                 } else {
                     unavailable.push(binding.id.clone());
                 }
@@ -204,6 +238,8 @@ mod tests {
             cwd: "/tmp".into(),
             state: "live".into(),
             foreground: None,
+            agent_name: None,
+            placement_names: Vec::new(),
             reported_activity: None,
         };
         assert!(matches!(
