@@ -47,7 +47,7 @@
 @@ -125,6 +125,20 @@
          self.content_dirty = true;
      }
- 
+
 +    pub(super) fn visible_change(&mut self, drawn: Option<&Grid>) -> Result<bool> {
 +        let Some(drawn) = drawn else { return Ok(true) };
 +        let snapshot = self.render.update(&self.terminal)?;
@@ -67,7 +67,7 @@
          self.gesture.reset(&self.terminal);
 @@ -352,6 +366,35 @@
      use super::Screen;
- 
+
      #[test]
 +    fn output_preflight_preserves_dirty_rows_and_visible_cursor_and_colors() {
 +        let mut screen = Screen::new(20, 3).unwrap();
