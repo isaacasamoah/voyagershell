@@ -1,0 +1,210 @@
+--- a/src/linux/x11/client.rs
++++ b/src/linux/x11/client.rs
+@@ -186,6 +186,7 @@
+     /// Long-lived sources this client registered on the loop, removed when its
+     /// [`X11Connection`] drops.
+     registrations: Vec<RegistrationToken>,
++    refresh_modes: HashMap<xproto::Window, Vec<RefreshMode>>,
+     /// The environment this connection was made in, without its activation token.
+     graphical_environment: GraphicalEnvironment,
+
+@@ -498,10 +499,24 @@
+         };
+
+         let background_executor = common.borrow().background_executor.clone();
++        for screen in &xcb_connection.setup().roots {
++            check_reply(
++                || "Failed to subscribe to display mode changes",
++                xcb_connection.randr_select_input(
++                    screen.root,
++                    randr::NotifyMask::SCREEN_CHANGE
++                        | randr::NotifyMask::CRTC_CHANGE
++                        | randr::NotifyMask::OUTPUT_CHANGE,
++                ),
++            )
++            .log_err();
++        }
++        let refresh_modes = query_refresh_modes(&xcb_connection);
+         let connection = X11Connection(X11Client(Rc::new_cyclic(|this| {
+             RefCell::new(X11ClientState {
+                 this: X11ClientStatePtr(this.clone()),
+                 registrations: Vec::new(),
++                refresh_modes,
+                 graphical_environment: GraphicalEnvironment {
+                     activation_token: None,
+                     ..environment.clone()
+@@ -1033,6 +1048,10 @@
+                     self.0.borrow_mut().xdnd_state.retrieved = true;
+                 }
+             }
++            Event::RandrScreenChangeNotify(_) | Event::RandrNotify(_) => {
++                let mut state = self.0.borrow_mut();
++                state.refresh_modes = query_refresh_modes(&state.xcb_connection);
++            }
+             Event::ConfigureNotify(event) => {
+                 let bounds = Bounds {
+                     origin: Point {
+@@ -1998,41 +2017,11 @@
+                 });
+             }
+             (true, None) => {
+-                let Some(screen_resources) = get_reply(
+-                    || "Failed to get screen resources",
+-                    self.xcb_connection
+-                        .randr_get_screen_resources_current(x_window),
+-                )
+-                .log_err() else {
+-                    return;
+-                };
+-
+-                // Ideally this would be re-queried when the window changes screens, but there
+-                // doesn't seem to be an efficient / straightforward way to do this. Should also be
+-                // updated when screen configurations change.
+-                let mode_info = screen_resources.crtcs.iter().find_map(|crtc| {
+-                    let crtc_info = self
+-                        .xcb_connection
+-                        .randr_get_crtc_info(*crtc, x11rb::CURRENT_TIME)
+-                        .ok()?
+-                        .reply()
+-                        .ok()?;
+-
+-                    screen_resources
+-                        .modes
+-                        .iter()
+-                        .find(|m| m.id == crtc_info.mode)
++                let fallback = Duration::from_micros(1_000_000 / 60);
++                let (root, bounds) = window_ref.window.refresh_bounds();
++                let refresh_rate = self.refresh_modes.get(&root).map_or(fallback, |modes| {
++                    select_refresh_interval(bounds, modes, fallback)
+                 });
+-                let refresh_rate = match mode_info {
+-                    Some(mode_info) => mode_refresh_rate(mode_info),
+-                    None => {
+-                        log::error!(
+-                            "Failed to get screen mode info from xrandr, \
+-                            defaulting to 60hz refresh rate."
+-                        );
+-                        Duration::from_micros(1_000_000 / 60)
+-                    }
+-                };
+
+                 let event_loop_token = self.start_refresh_loop(x_window, refresh_rate);
+                 let Some(window_ref) = self.windows.get_mut(&x_window) else {
+@@ -2050,7 +2039,7 @@
+     fn start_refresh_loop(
+         &self,
+         x_window: xproto::Window,
+-        refresh_rate: Duration,
++        mut refresh_rate: Duration,
+     ) -> RegistrationToken {
+         self.loop_handle
+             .insert_source(calloop::timer::Timer::immediate(), {
+@@ -2064,6 +2053,10 @@
+                         let xcb_connection = state.xcb_connection.clone();
+                         if let Some(window) = state.windows.get_mut(&x_window) {
+                             let window = window.window.clone();
++                            let (root, bounds) = window.refresh_bounds();
++                            if let Some(modes) = state.refresh_modes.get(&root) {
++                                refresh_rate = select_refresh_interval(bounds, modes, refresh_rate);
++                            }
+                             drop(state);
+                             window.refresh(RequestFrameOptions {
+                                 require_presentation: false,
+@@ -2217,6 +2210,74 @@
+         .log_err();
+         self.xcb_connection.flush().log_err();
+     }
++}
++
++struct RefreshMode {
++    bounds: [i32; 4],
++    interval: Duration,
++}
++
++fn select_refresh_interval(
++    bounds: [i32; 4],
++    modes: &[RefreshMode],
++    previous: Duration,
++) -> Duration {
++    modes
++        .iter()
++        .filter_map(|mode| {
++            let [x, y, width, height] = bounds.map(i64::from);
++            let [mx, my, mw, mh] = mode.bounds.map(i64::from);
++            let overlap = ((x + width).min(mx + mw) - x.max(mx)).max(0)
++                * ((y + height).min(my + mh) - y.max(my)).max(0);
++            (overlap > 0 && !mode.interval.is_zero()).then_some((
++                overlap,
++                mode.interval == previous,
++                mode.interval,
++            ))
++        })
++        .max_by_key(|(area, retained, _)| (*area, *retained))
++        .map_or(previous, |(_, _, interval)| interval)
++}
++
++fn query_refresh_modes(connection: &XCBConnection) -> HashMap<xproto::Window, Vec<RefreshMode>> {
++    connection
++        .setup()
++        .roots
++        .iter()
++        .filter_map(|screen| {
++            let resources = get_reply(
++                || "Failed to read display modes",
++                connection.randr_get_screen_resources_current(screen.root),
++            )
++            .log_err()?;
++            let modes = resources
++                .crtcs
++                .iter()
++                .filter_map(|crtc| {
++                    let crtc = connection
++                        .randr_get_crtc_info(*crtc, x11rb::CURRENT_TIME)
++                        .ok()?
++                        .reply()
++                        .ok()?;
++                    if crtc.width == 0 || crtc.height == 0 {
++                        return None;
++                    }
++                    let mode = resources.modes.iter().find(|mode| mode.id == crtc.mode)?;
++                    let interval = mode_refresh_rate(mode);
++                    (!interval.is_zero()).then_some(RefreshMode {
++                        bounds: [
++                            i32::from(crtc.x),
++                            i32::from(crtc.y),
++                            i32::from(crtc.width),
++                            i32::from(crtc.height),
++                        ],
++                        interval,
++                    })
++                })
++                .collect();
++            Some((screen.root, modes))
++        })
++        .collect()
+ }
+
+ // Adapted from:
+--- a/src/linux/x11/window.rs
++++ b/src/linux/x11/window.rs
+@@ -1290,6 +1290,20 @@
+         bounds.map(|b| b.scale(scale_factor))
+     }
+
++    pub fn refresh_bounds(&self) -> (xproto::Window, [i32; 4]) {
++        let state = self.state.borrow();
++        let scaled = |value: Pixels| (f32::from(value) * state.scale_factor).round() as i32;
++        (
++            state.x_root_window,
++            [
++                scaled(state.bounds.origin.x),
++                scaled(state.bounds.origin.y),
++                scaled(state.bounds.size.width),
++                scaled(state.bounds.size.height),
++            ],
++        )
++    }
++
+     pub fn set_bounds(&self, bounds: Bounds<i32>) -> anyhow::Result<()> {
+         let (is_resize, content_size, scale_factor) = {
+             let mut state = self.state.borrow_mut();

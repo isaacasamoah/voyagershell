@@ -31,6 +31,7 @@ LINUX_VERSION = "0.3.10"
 LINUX_SHA256 = "7c6ffd2dce7b75cce0bb3382994912f84c2a05389a4a236bb8bd72cb098fc083"
 LINUX_PATCHES = (
     ROOT / "desktop" / "patches" / "gpui-linux-mailbox.patch",
+    ROOT / "desktop" / "patches" / "gpui-linux-monitor-clock.patch",
 )
 LINUX_SOURCE = CHECKOUT.parent / (
     f"gpui-pre-linux-{LINUX_VERSION}-"
@@ -86,8 +87,18 @@ def prepare(check):
         '\n[patch.crates-io]\n'
         f'gpui-pre-linux = {{ path = {json.dumps(str(LINUX_SOURCE))} }}\n'
     )
+    mailbox_source = CHECKOUT.parent / (
+        f"gpui-pre-linux-{LINUX_VERSION}-"
+        f"{hashlib.sha256(LINUX_PATCHES[0].read_bytes()).hexdigest()[:12]}"
+    )
+    mailbox_config = previous + (
+        '\n[patch.crates-io]\n'
+        f'gpui-pre-linux = {{ path = {json.dumps(str(mailbox_source))} }}\n'
+    )
     existing = CONFIG.read_text() if CONFIG.exists() else None
-    if existing is not None and existing != config and (check or existing != previous):
+    if existing is not None and existing != config and (
+        check or existing not in (previous, mailbox_config)
+    ):
         raise RuntimeError(f"Preserving existing Cargo configuration: {CONFIG}")
     if not CHECKOUT.exists():
         if check:

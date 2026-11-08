@@ -28,9 +28,23 @@ state, terminal cells or avatar animation.
 The preparer verifies the source archive and applies the patch in a separate
 digest-named cache. It preserves installed registry sources, modified prepared
 source and unrelated Cargo configuration. Only the exact earlier generated
-configuration can migrate. An edit detected when rechecking the configuration
+SDK-only or Mailbox-only configuration can migrate; `--check` requires the
+current configuration. An edit detected when rechecking the configuration
 before writing is refused.
 
 This preference alone did not meet the loaded Herdr response goal. It is a
 reviewable part of the ongoing native performance investigation, not an
 accepted performance result or a release. Other platforms need separate proof.
+
+`gpui-linux-monitor-clock.patch` selects the existing X11 refresh timer interval
+from cached monitor rectangles in the window's X root. RandR screen, CRTC and
+output events update the cache. Each timer uses the largest window intersection,
+preferring the previous interval among equally overlapping modes and retaining
+it when no monitor overlaps. Window moves take
+effect by the next tick without display queries in the frame/input path.
+
+This corrects selecting the first active monitor's rate for every window on a
+mixed-refresh desktop. It preserves the existing hidden-window behavior and
+adds no animation cap, process owner or application contract. Native mixed-rate
+evidence belongs to its recorded integrated build; this publication branch and
+the complete response goal keep their separate verification requirements.
