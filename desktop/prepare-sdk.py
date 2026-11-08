@@ -1,9 +1,14 @@
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
+import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
 REVISION = "944803984cf0ba3111861d6e1aa9d6265c109ff9"
@@ -22,6 +27,50 @@ PACKAGES = {
     "gpui-kit": "kit",
     "gpui-shell": "shell",
 }
+LINUX_VERSION = "0.3.10"
+LINUX_SHA256 = "7c6ffd2dce7b75cce0bb3382994912f84c2a05389a4a236bb8bd72cb098fc083"
+LINUX_PATCHES = (
+    ROOT / "desktop" / "patches" / "gpui-linux-mailbox.patch",
+)
+LINUX_SOURCE = CHECKOUT.parent / (
+    f"gpui-pre-linux-{LINUX_VERSION}-"
+    f"{hashlib.sha256(b''.join(p.read_bytes() for p in LINUX_PATCHES)).hexdigest()[:12]}"
+)
+
+
+def prepare_linux(check):
+    name = f"gpui-pre-linux-{LINUX_VERSION}"
+    cargo = Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo")
+    cached = list((cargo / "registry" / "cache").glob(f"*/{name}.crate"))
+    if cached:
+        archive = cached[0].read_bytes()
+    else:
+        with urllib.request.urlopen(
+            f"https://static.crates.io/crates/gpui-pre-linux/{name}.crate", timeout=30
+        ) as response:
+            archive = response.read()
+    if hashlib.sha256(archive).hexdigest() != LINUX_SHA256:
+        raise RuntimeError("Native Linux source differs from the pinned archive")
+    with tempfile.TemporaryDirectory(prefix="voyager-platform-") as directory:
+        with tarfile.open(fileobj=io.BytesIO(archive)) as package:
+            package.extractall(directory, filter="data")
+        source = Path(directory) / name
+        subprocess.run(
+            ["git", "apply", *(str(p) for p in LINUX_PATCHES)], cwd=source, check=True
+        )
+        expected = {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()}
+        if LINUX_SOURCE.exists():
+            actual = {
+                p.relative_to(LINUX_SOURCE): p.read_bytes()
+                for p in LINUX_SOURCE.rglob("*") if p.is_file()
+            }
+            if actual != expected:
+                raise RuntimeError("Preserving modified native Linux source")
+        elif check:
+            raise RuntimeError("Native Linux source is not prepared")
+        else:
+            LINUX_SOURCE.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(source, LINUX_SOURCE)
 
 
 def git(*args):
@@ -29,11 +78,16 @@ def git(*args):
 
 
 def prepare(check):
-    config = f'[patch."{URL}"]\n' + "".join(
+    previous = f'[patch."{URL}"]\n' + "".join(
         f"{package} = {{ path = {json.dumps(str(CHECKOUT / 'crates' / folder))} }}\n"
         for package, folder in PACKAGES.items()
     )
-    if CONFIG.exists() and CONFIG.read_text() != config:
+    config = previous + (
+        '\n[patch.crates-io]\n'
+        f'gpui-pre-linux = {{ path = {json.dumps(str(LINUX_SOURCE))} }}\n'
+    )
+    existing = CONFIG.read_text() if CONFIG.exists() else None
+    if existing is not None and existing != config and (check or existing != previous):
         raise RuntimeError(f"Preserving existing Cargo configuration: {CONFIG}")
     if not CHECKOUT.exists():
         if check:
@@ -61,11 +115,14 @@ def prepare(check):
         difference = git("diff", "--binary", "HEAD")
     if difference != patch:
         raise RuntimeError("Native SDK differs from the reviewed overlay patch")
-    if not CONFIG.exists():
+    prepare_linux(check)
+    if existing != config:
         if check:
             raise RuntimeError("Native SDK Cargo configuration is missing")
+        if (CONFIG.read_text() if CONFIG.exists() else None) != existing:
+            raise RuntimeError(f"Preserving changed Cargo configuration: {CONFIG}")
         CONFIG.parent.mkdir(parents=True, exist_ok=True)
-        with CONFIG.open("x") as file:
+        with CONFIG.open("x" if existing is None else "w") as file:
             file.write(config)
     print(
         f"Native SDK ready: {REVISION}, reviewed overlay patch, coherent shared crates"
