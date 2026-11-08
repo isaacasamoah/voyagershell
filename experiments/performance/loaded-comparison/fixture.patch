@@ -1,0 +1,207 @@
+--- a/experiments/performance/frame-work/compare.py
++++ b/experiments/performance/frame-work/compare.py
+@@ -20,10 +20,14 @@
+ driver.save(out / 'protocol.json', protocol)
+ for name, digest in protocol['helpers'].items():
+     assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest, name
++for key, value in protocol.get('experimentEnvironment', {}).items():
++    assert key in ('PATH', 'VOYAGER_HC')
++    driver.env[key] = value
+ for key in ['MESA_VK_WSI_PRESENT_MODE', 'VOYAGER_FRAME_PROFILE', 'VOYAGER_FRAME_PROFILE_STOP']:
+     driver.env.pop(key, None)
+ if protocol.get('pairedBlocks'):
+-    assert protocol['cases'] == [[variant, 'quiet'] for block in protocol['pairedBlocks'] for variant in block['measure']]
++    assert protocol['cases'] == [[variant, block.get('condition', 'quiet')] for block in protocol['pairedBlocks'] for variant in block['measure']]
++    assert all(block.get('condition', 'quiet') in ('quiet', 'cpu') for block in protocol['pairedBlocks'])
+     assert len(protocol['pairedBlocks']) == 4
+     assert all(len(block['launch']) == len(block['measure']) == 2 for block in protocol['pairedBlocks'])
+ typing_trace = protocol.get('typingTrace', False)
+@@ -68,6 +72,7 @@
+         _, pids = driver.process_scope(item)
+         item['pairedIdentities'] = {str(pid): driver.process_identity(pid, metadata_only=True) for pid in pids}
+         driver.save(folder / 'paired-processes.json', item['pairedIdentities'])
++        item['pairedForeground'] = driver.rpc(item['record']['session'], 'terminal.get', {'terminal': 't1'})['foreground']
+     return item
+ 
+ 
+@@ -86,8 +91,9 @@
+         core = driver.rpc(record['session'], 'server.status')
+         assert core['pid'] == item['core']['pid'] and core['core']['id'] == item['core']['core']['id']
+         terminal = driver.rpc(record['session'], 'terminal.get', {'terminal': 't1'})
+-        assert terminal['state'] == 'live' and terminal['foreground']['pid'] == item['workload']['pid']
+-        assert terminal['foreground']['argv'][1:] == item['workload']['argv'][1:], 'A peer workload changed'
++        foreground = item['workload'] if 'workload' in item else item['pairedForeground']
++        assert terminal['state'] == 'live' and terminal['foreground']['pid'] == foreground['pid']
++        assert terminal['foreground']['argv'][1:] == foreground['argv'][1:], 'A peer workload changed'
+         assert all(record['identity'][key] == value for key, value in driver.process_identity(record['pid'], metadata_only=True).items())
+         visible = subprocess.check_output(['xdotool', 'search', '--onlyvisible', '--pid', str(record['pid'])], env=driver.env, text=True).split()
+         assert visible == [record['window']], 'A peer view disappeared'
+@@ -134,7 +140,7 @@
+                                     stdout=(folder / 'load.stdout').open('x'), stderr=(folder / 'load.stderr').open('x'), start_new_session=True)
+             driver.save(folder / 'load-owner.json', {'pid': load.pid, 'identity': driver.process_identity(load.pid, metadata_only=True)})
+             driver.wait(lambda: (folder / 'load.jsonl').exists(), bool, 'CPU workers started')
+-        if not protocol.get('pairedBlocks'):
++        if not protocol.get('pairedBlocks') or condition == 'cpu':
+             time.sleep(protocol['warmSeconds'])
+         driver.save(out / 'progress.json', {'case': index, 'variant': variant, 'condition': condition, 'state': 'typing'})
+         driver.measure(item, config, condition)
+--- a/experiments/performance/typing-latency/compare-cpu.py
++++ b/experiments/performance/typing-latency/compare-cpu.py
+@@ -93,8 +93,13 @@
+                                         'telemetry': False, 'font_ligatures': False, 'minimum_contrast': 1})
+         save(profile / 'shared.json', {'frame.welcomed': 'skipped'})
+         run_env = env | {'HERDR_APP_HOME': str(profile), 'XDG_STATE_HOME': str(folder / 'state'), 'HC_SESSION': session}
++        if artifact.get('coreBinary'):
++            settings = json.loads((profile / 'settings.json').read_text()) | {'core': artifact['coreBinary']}
++            save(profile / 'settings.json', settings)
++        if artifact.get('releasesUrl'):
++            run_env['HERDR_RELEASES_URL'] = artifact['releasesUrl']
+         with (folder / 'native.log').open('x') as log:
+-            process = subprocess.Popen(['herdr-app'], env=run_env, cwd=work, stdout=log, stderr=log, start_new_session=True)
++            process = subprocess.Popen([artifact['binary']], env=run_env, cwd=work, stdout=log, stderr=log, start_new_session=True)
+         pending = {'pid': process.pid, 'identity': process_identity(process.pid, metadata_only=True)}
+         save(folder / 'launch-pending.json', pending)
+         window = wait(lambda: subprocess.run(['xdotool', 'search', '--onlyvisible', '--pid', str(process.pid)],
+@@ -108,7 +113,7 @@
+     save(folder / 'ownership.json', {'launch': record, 'core': core})
+     if app == 'herdr':
+         for attempt in range(40):
+-            result = subprocess.run(['herdr-app', 'do', 'space.new', json.dumps({'name': 'Typing', 'folder': str(work), 'tab': 'Codex', 'argv': initial_argv})],
++            result = subprocess.run([artifact['binary'], 'do', 'space.new', json.dumps({'name': 'Typing', 'folder': str(work), 'tab': 'Codex', 'argv': initial_argv})],
+                                     env=run_env, text=True, capture_output=True, timeout=15)
+             save(folder / f'create-{attempt}.json', {'returncode': result.returncode, 'stdout': result.stdout, 'stderr': result.stderr})
+             if result.returncode == 0:
+--- a/tests/native/proof_process.py
++++ b/tests/native/proof_process.py
+@@ -44,13 +44,20 @@
+ def process_identity(pid, *, metadata_only=False):
+     process = Path(f"/proc/{pid}")
+     if metadata_only:
++        executable = process.joinpath("exe")
++        target = executable.readlink()
++        if str(target).endswith(" (deleted)"):
++            executable.stat()
++            target = Path(str(target).removesuffix(" (deleted)"))
++        else:
++            target = executable.resolve(strict=True)
+         return {
+             "uid": process.stat().st_uid,
+             "start": process.joinpath("stat")
+             .read_text()
+             .rsplit(") ", 1)[1]
+             .split()[19],
+-            "executable": str(process.joinpath("exe").resolve(strict=True)),
++            "executable": str(target),
+         }
+     key = b"VOYAGER_WORKSPACE_SESSION="
+     session = next(
+--- a/experiments/performance/frame-work/owner.py
++++ b/experiments/performance/frame-work/owner.py
+@@ -2,6 +2,18 @@
+ import json
+ import subprocess
+ import time
++
++
++def amd_graphics_counters(graphics):
++    values = {}
++    for client, fields in graphics.items():
++        if fields.get('drm-driver') == 'amdgpu' and 'drm-engine-gfx' in fields:
++            assert fields.get('drm-pdev') and fields.get('drm-client-id')
++            value, unit = fields['drm-engine-gfx'].split()
++            assert unit == 'ns' and int(value) >= 0
++            values[client] = int(value)
++    assert values, 'Owner AMD graphics activity is unavailable'
++    return values
+ 
+ 
+ def verify_quiet(owner, driver, folder):
+@@ -18,15 +30,7 @@
+     for row in selected:
+         record = row['processes'][pid]
+         assert all(owner['identity'][key] == value for key, value in record['identity'].items())
+-        values = {}
+-        for client, fields in record['graphics'].items():
+-            if fields.get('drm-driver') == 'amdgpu' and 'drm-engine-gfx' in fields:
+-                assert fields.get('drm-pdev') and fields.get('drm-client-id')
+-                value, unit = fields['drm-engine-gfx'].split()
+-                assert unit == 'ns' and int(value) >= 0
+-                values[client] = int(value)
+-        assert values, 'Owner AMD graphics activity is unavailable'
+-        counters.append(values)
++        counters.append(amd_graphics_counters(record['graphics']))
+     assert len(counters) >= 3 and all(values == counters[0] for values in counters), 'Owner graphics advanced or changed identity while hidden'
+     driver.save(folder / 'hidden-owner-gpu.json', {'samples': len(counters), 'beforeNs': selected[0]['beforeNs'], 'afterNs': selected[-1]['afterNs'], 'counters': counters[0], 'noObservedAdvance': True})
+ 
+@@ -42,6 +46,11 @@
+ 
+     def geometry():
+         return dict(line.split('=', 1) for line in command('xdotool', 'getwindowgeometry', '--shell', window).splitlines())
++
++    def window_state():
++        value = command('xprop', '-id', window, '_NET_WM_STATE')
++        return sorted(state for state in ('MAXIMIZED_VERT', 'MAXIMIZED_HORZ', 'FULLSCREEN')
++                      if '_NET_WM_STATE_' + state in value)
+ 
+     def windows():
+         result = subprocess.run(['xdotool', 'search', '--onlyvisible', '--pid', str(pid)], env=driver.env, text=True, capture_output=True, timeout=5)
+@@ -61,7 +70,7 @@
+         assert windows() == [], 'An owner view became visible during the comparison'
+ 
+     command('xdotool', 'windowactivate', '--sync', window)
+-    before = {'identity': identity, 'geometry': geometry(), 'windows': windows(), 'retained': retained()}
++    before = {'identity': identity, 'geometry': geometry(), 'windowState': window_state(), 'windows': windows(), 'retained': retained()}
+     assert before['windows'] == [window]
+     assert command('xdotool', 'getwindowpid', window) == str(pid)
+     driver.save(out / 'owner-before.json', before)
+@@ -84,15 +93,19 @@
+             driver.save(intent, {'pid': pid, 'window': window, 'identity': identity})
+             command('xdotool', 'windowmap', '--sync', window)
+             command('xdotool', 'windowactivate', '--sync', window)
+-            time.sleep(.6)
+             expected = before['geometry']
+-            if geometry() != expected:
++            extents = command('xprop', '-id', window, '_NET_FRAME_EXTENTS').split('=', 1)[1].split(',')
++            left, _, top, _ = map(int, extents)
++            command('xdotool', 'windowmove', '--sync', window, str(int(expected['X'])-left), str(int(expected['Y'])-top))
++            if before['windowState']:
++                for state in ('MAXIMIZED_VERT', 'MAXIMIZED_HORZ', 'FULLSCREEN'):
++                    if state in before['windowState']:
++                        command('xdotool', 'windowstate', '--add', state, window)
++                        driver.wait(window_state, lambda actual: state in actual, 'Saved window state restored', 5)
++            else:
+                 command('xdotool', 'windowsize', '--sync', window, expected['WIDTH'], expected['HEIGHT'])
+-                extents = command('xprop', '-id', window, '_NET_FRAME_EXTENTS').split('=', 1)[1].split(',')
+-                left, _, top, _ = map(int, extents)
+-                command('xdotool', 'windowmove', '--sync', window, str(int(expected['X'])-left), str(int(expected['Y'])-top))
+-            driver.wait(geometry, lambda actual: actual == expected, 'Exact owner geometry restored', 5)
+-            after = {'identity': driver.process_identity(pid, metadata_only=True), 'geometry': geometry(), 'windows': windows(), 'retained': retained()}
++            driver.wait(geometry, lambda actual: actual == expected, 'Exact owner geometry restored', 10)
++            after = {'identity': driver.process_identity(pid, metadata_only=True), 'geometry': geometry(), 'windowState': window_state(), 'windows': windows(), 'retained': retained()}
+             assert after == before
+             assert command('xdotool', 'getactivewindow') == window
+             driver.save(out / 'owner-restored.json', after)
+--- a/experiments/performance/typing-latency/codex-keys.py
++++ b/experiments/performance/typing-latency/codex-keys.py
+@@ -107,7 +107,11 @@
+         began = time.monotonic()
+         actual = process_identity(launch["pid"], metadata_only=True)
+         assert actual == identity
+-        assert subprocess.check_output(["xdotool", "getactivewindow"], env=env, text=True).strip() == window, "Focus changed; stop input"
++        active = subprocess.check_output(["xdotool", "getactivewindow"], env=env, text=True).strip()
++        if active != window:
++            details = subprocess.run(["xprop", "-id", active, "_NET_WM_PID", "WM_CLASS"], env=env, capture_output=True, text=True, timeout=5)
++            (out / "focus-changed.json").write_text(json.dumps({"expectedWindow": window, "actualWindow": active, "atNs": time.monotonic_ns(), "properties": details.stdout, "error": details.stderr}, indent=2) + "\n")
++            raise AssertionError("Focus changed; stop input")
+         clock_before = time.monotonic_ns()
+         wall = time.time_ns()
+         clock_after = time.monotonic_ns()
+@@ -127,7 +131,7 @@
+     finally:
+         native.close()
+         if observer is not None:
+-            assert observer.wait(timeout=10) == 0, "Resource observation failed; retain its log"
++            assert observer.wait(timeout=30) == 0, "Resource observation failed; retain its log"
+ 
+ screen = core_rpc(launch["session"], env, "terminal.read", {"terminal": config["terminal"], "lines": 0})
+ (out / "screen-after.json").write_text(json.dumps(screen, indent=2) + "\n")
