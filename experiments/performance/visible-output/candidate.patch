@@ -1,0 +1,113 @@
+--- a/desktop/src/terminal.rs
++++ b/desktop/src/terminal.rs
+@@ -127,6 +127,7 @@
+     focus: FocusHandle,
+     grid: Option<Grid>,
+     row_paints: Vec<row_paint::Cache>,
++    visible_output: bool,
+     font_family: gpui::SharedString,
+     cell_width: gpui::Pixels,
+     cell_height: gpui::Pixels,
+@@ -199,6 +200,8 @@
+             focus,
+             grid: None,
+             row_paints: Vec::new(),
++            visible_output: std::env::var("VOYAGER_EXPERIMENT_VISIBLE_OUTPUT").as_deref()
++                == Ok("1"),
+             font_family,
+             cell_width,
+             cell_height: px(18.),
+@@ -259,8 +262,22 @@
+         }
+         if consumed != 0 {
+             crate::typing_trace::record("output_parsed", consumed);
+-            self.dirty = true;
+-            cx.notify();
++            let changed = if self.visible_output && !self.dirty {
++                match self.screen.visible_change(self.grid.as_ref()) {
++                    Ok(changed) => changed,
++                    Err(error) => {
++                        self.status = format!("Terminal display: {error:#}");
++                        true
++                    }
++                }
++            } else {
++                true
++            };
++            crate::typing_trace::record("output_redraw", usize::from(changed));
++            if changed {
++                self.dirty = true;
++                cx.notify();
++            }
+         }
+         if !self.viewer.connected() && self.status.is_empty() {
+             self.status = "Core disconnected".into();
+--- a/desktop/src/terminal_screen.rs
++++ b/desktop/src/terminal_screen.rs
+@@ -125,6 +125,20 @@
+         self.content_dirty = true;
+     }
+ 
++    pub(super) fn visible_change(&mut self, drawn: Option<&Grid>) -> Result<bool> {
++        let Some(drawn) = drawn else { return Ok(true) };
++        let snapshot = self.render.update(&self.terminal)?;
++        let cursor = snapshot.cursor()?;
++        let visible = |cursor: Option<libghostty_vt::render::Cursor>| {
++            cursor
++                .filter(|cursor| cursor.visible)
++                .and_then(|cursor| cursor.viewport.map(|point| (point, cursor.visual_style)))
++        };
++        Ok(snapshot.dirty()? != libghostty_vt::render::Dirty::Clean
++            || visible(cursor.visible.then_some(cursor)) != visible(drawn.cursor)
++            || snapshot.colors()? != drawn.colors)
++    }
++
+     pub(super) fn clear_selection(&mut self) -> Result<()> {
+         self.terminal.set_selection(None)?;
+         self.gesture.reset(&self.terminal);
+@@ -352,6 +366,35 @@
+     use super::Screen;
+ 
+     #[test]
++    fn output_preflight_preserves_dirty_rows_and_visible_cursor_and_colors() {
++        let mut screen = Screen::new(20, 3).unwrap();
++        assert!(screen.visible_change(None).unwrap());
++        screen.write(b"\x1b[31mA\x1b[0m");
++        let drawn = screen.snapshot().unwrap();
++        for bytes in [b"\x1b]2;title\x07".as_slice(), b"\x1b[?2004h", b"\x1b[1;2H"] {
++            screen.write(bytes);
++            assert!(!screen.visible_change(Some(&drawn)).unwrap());
++        }
++        for bytes in [
++            b"B".as_slice(),
++            b"\x1b[2;4H",
++            b"\x1b[?25l",
++            b"\x1b]11;#123456\x07",
++        ] {
++            let drawn = screen.snapshot().unwrap();
++            screen.write(bytes);
++            assert!(screen.visible_change(Some(&drawn)).unwrap());
++            assert!(screen.visible_change(Some(&drawn)).unwrap());
++        }
++        let drawn = screen.snapshot().unwrap();
++        screen.write(b"\x1b]4;1;#123456\x07");
++        assert!(screen.visible_change(Some(&drawn)).unwrap());
++        let updated = screen.snapshot().unwrap();
++        assert_ne!(updated.rows[0][0].foreground, drawn.rows[0][0].foreground);
++        assert!(!screen.visible_change(Some(&updated)).unwrap());
++    }
++
++    #[test]
+     fn input_preparation_only_repaints_selection_or_scrollback() {
+         let mut screen = Screen::new(20, 3).unwrap();
+         for index in 0..40 {
+--- a/docs/terminal.md
++++ b/docs/terminal.md
+@@ -419,3 +419,7 @@
+ result remains rejected. The current candidate combines independently measured
+ presentation and input repairs, and requires a fresh repeated comparison plus
+ native fidelity checks before selection. Source location is not acceptance.
++
++## Experimental visible-output preflight
++
++The opt-in visible-output comparison checks the existing RenderState after output parsing and normal reply/credit handling. A clean pane compares its retained visible cursor and Colors and checks global dirty state. The preflight never cleans global or row dirty flags or constructs a new application Grid. Missing prior drawing and errors require another render; errors remain visible. Pending invalidation is retained. This follows the intent of Herdr App1581a58 shows_change using the safe pinned API, without copying its implementation. The flag is experimental and off by default.
