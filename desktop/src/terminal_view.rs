@@ -306,8 +306,10 @@ impl Render for Pane {
                     };
                     if let Err(error) = result {
                         pane.status = format!("Input: {error:#}");
+                        cx.notify();
+                    } else if pane.dirty {
+                        cx.notify();
                     }
-                    cx.notify();
                 });
                 cx.stop_propagation();
             })

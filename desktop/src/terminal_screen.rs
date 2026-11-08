@@ -131,6 +131,16 @@ impl Screen {
         Ok(())
     }
 
+    pub(super) fn prepare_input(&mut self) -> Result<bool> {
+        let selected = self.terminal.selection()?.is_some();
+        let scrolled = !self.terminal.viewport_active()?;
+        self.clear_selection()?;
+        if scrolled {
+            self.scroll_bottom();
+        }
+        Ok(selected || scrolled)
+    }
+
     pub(super) fn scroll(&mut self, lines: isize) {
         self.terminal
             .scroll_viewport(libghostty_vt::terminal::ScrollViewport::Delta(lines));
@@ -340,6 +350,31 @@ impl Drop for Screen {
 #[cfg(test)]
 mod tests {
     use super::Screen;
+
+    #[test]
+    fn input_preparation_only_repaints_selection_or_scrollback() {
+        let mut screen = Screen::new(20, 3).unwrap();
+        for index in 0..40 {
+            screen.write(format!("line-{index}\r\n").as_bytes());
+        }
+        screen.snapshot().unwrap();
+        assert!(!screen.prepare_input().unwrap());
+        assert!(!screen.content_dirty);
+        screen
+            .terminal
+            .set_selection(screen.terminal.select_all().unwrap().as_ref())
+            .unwrap();
+        assert!(screen.terminal.selection().unwrap().is_some());
+        assert!(screen.prepare_input().unwrap());
+        assert!(screen.terminal.selection().unwrap().is_none());
+        assert!(!screen.prepare_input().unwrap());
+        screen.scroll(-4);
+        assert!(!screen.terminal.viewport_active().unwrap());
+        assert!(screen.prepare_input().unwrap());
+        assert!(screen.terminal.viewport_active().unwrap());
+        assert!(screen.lines().unwrap()[1].starts_with("line-39"));
+        assert!(!screen.prepare_input().unwrap());
+    }
 
     #[test]
     fn oversized_bracketed_paste_never_calls_the_input_owner() {

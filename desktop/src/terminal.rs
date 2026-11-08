@@ -361,9 +361,7 @@ impl Pane {
     }
 
     fn input_sent(&mut self) -> Result<()> {
-        self.screen.clear_selection()?;
-        self.screen.scroll_bottom();
-        self.dirty = true;
+        self.dirty |= self.screen.prepare_input()?;
         Ok(())
     }
 

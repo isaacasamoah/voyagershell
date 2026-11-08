@@ -299,3 +299,7 @@ These are source and pure-control claims. Native same-placement shell input in
 both Vessel and Portal after Quit/reopen still requires the maintained session
 Quit journey on the matched release. Already-attached terminal end presentation
 and its original correction history are unchanged by this cold-attachment path.
+
+## Input redraws
+
+After successful input admission, the terminal clears selection and returns to the live viewport. It marks the pane dirty only when either action changes the visible state, preserving any pending output invalidation. A clean live-edge key waits for terminal output before requesting another pane render. Admission failures keep selection and history unchanged and display the input error. Clipboard and composition retain their existing paths.
