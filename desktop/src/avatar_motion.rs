@@ -1,7 +1,7 @@
 use std::f32::consts::TAU;
 use std::{
     collections::VecDeque,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 pub const IDLE: &str = "idle.png";
@@ -22,12 +22,6 @@ pub fn bezier(progress: f32, x1: f32, x2: f32) -> f32 {
     }
     let t = (low + high) * 0.5;
     3. * (1. - t) * t * t + t.powi(3)
-}
-
-pub fn float_offset(seconds: f32) -> f32 {
-    let cycle = seconds.rem_euclid(8.) / 4.;
-    let progress = if cycle <= 1. { cycle } else { 2. - cycle };
-    -3. * bezier(progress, 0.42, 0.58)
 }
 
 pub fn samples(docking: bool) -> Vec<f32> {
@@ -74,10 +68,6 @@ pub struct Motion {
     pub fade: f32,
     due: Instant,
     steps: VecDeque<(&'static str, u64, u64)>,
-    settle: Option<bool>,
-    reading: bool,
-    busy: bool,
-    page: usize,
     pub reduced_motion: bool,
 }
 
@@ -89,71 +79,34 @@ impl Motion {
             frame: IDLE,
             since: now,
             fade: 0.,
-            due: now + Self::idle_wait(),
+            due: now,
             steps: VecDeque::new(),
-            settle: None,
-            reading: false,
-            busy: false,
-            page: 0,
             reduced_motion,
         }
     }
-    fn idle_wait() -> Duration {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |value| value.subsec_nanos());
-        Duration::from_millis(20000 + u64::from(nanos) % 20000)
-    }
-    fn start(&mut self, steps: &[(&'static str, u64, u64)], settle: Option<bool>) {
-        self.steps = steps.iter().copied().collect();
-        self.settle = settle;
+
+    pub fn stretch(&mut self) {
+        if self.reduced_motion || self.animating() {
+            return;
+        }
+        self.steps = [
+            ("stretch-frames/frame-1-uncrossing.png", 50, 120),
+            ("stretch-frames/frame-2-stretched.png", 80, 120),
+            ("stretch-frames/frame-3-peak-stretch.png", 1200, 200),
+            (IDLE, 0, 500),
+        ]
+        .into_iter()
+        .collect();
         self.due = Instant::now();
         self.tick();
     }
-    fn transition(&mut self) {
-        if self.busy == self.reading {
-            return;
-        }
-        if self.busy {
-            self.page = 0;
-            self.start(
-                &[("book-frames/book-out.png", 560, 260), (READING[0], 0, 500)],
-                Some(true),
-            );
-        } else {
-            self.start(
-                &[
-                    ("book-frames/book-away.png", 520, 180),
-                    ("stretch-frames/frame-1-uncrossing.png", 90, 120),
-                    ("stretch-frames/frame-2-stretched.png", 120, 120),
-                    ("stretch-frames/frame-3-peak-stretch.png", 950, 200),
-                    (IDLE, 0, 500),
-                ],
-                Some(false),
-            );
-        }
+
+    pub fn animating(&self) -> bool {
+        !self.reduced_motion
+            && (!self.steps.is_empty() || self.since.elapsed().as_secs_f32() < self.fade)
     }
-    pub fn stretch(&mut self) {
-        if self.reduced_motion || self.settle.is_some() || self.busy {
-            return;
-        }
-        self.start(
-            &[
-                ("stretch-frames/frame-1-uncrossing.png", 50, 120),
-                ("stretch-frames/frame-2-stretched.png", 80, 120),
-                ("stretch-frames/frame-3-peak-stretch.png", 1200, 200),
-                (IDLE, 0, 500),
-            ],
-            Some(false),
-        );
-    }
+
     pub fn tick(&mut self) {
-        if self.reduced_motion {
-            self.frame = if self.busy { READING[0] } else { IDLE };
-            self.previous = self.frame;
-            self.fade = 0.;
-            return;
-        }
         let now = Instant::now();
         if now < self.due {
             return;
@@ -164,20 +117,9 @@ impl Motion {
             self.since = now;
             self.fade = fade as f32 * 1.6 / 1000.;
             self.due = now + Duration::from_micros((hold + fade) * 1600);
-        } else if let Some(reading) = self.settle.take() {
-            self.reading = reading;
-            self.due = now
-                + if self.busy {
-                    Duration::from_millis(4800)
-                } else {
-                    Self::idle_wait()
-                };
-            self.transition();
-        } else if self.reading {
-            self.page = 1 - self.page;
-            self.start(&[(READING[self.page], 0, 240)], Some(true));
         } else {
-            self.stretch();
+            self.previous = self.frame;
+            self.fade = 0.;
         }
     }
 }
@@ -187,20 +129,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn idle_does_not_start_an_animation_after_a_deadline() {
+        let mut motion = Motion::new(false);
+        motion.due = Instant::now();
+        motion.tick();
+        assert_eq!(motion.frame, IDLE);
+        assert!(motion.steps.is_empty());
+        assert!(!motion.animating());
+    }
+
+    #[test]
+    fn commanded_stretch_returns_to_idle_without_repeating() {
+        let mut motion = Motion::new(false);
+        motion.stretch();
+        assert_ne!(motion.frame, IDLE);
+        assert!(motion.animating());
+        for _ in 0..3 {
+            motion.due = Instant::now();
+            motion.tick();
+        }
+        assert_eq!(motion.frame, IDLE);
+        assert!(motion.steps.is_empty());
+        assert!(motion.animating());
+        motion.due = Instant::now();
+        motion.since = Instant::now() - Duration::from_secs(2);
+        motion.tick();
+        assert!(!motion.animating());
+        motion.tick();
+        assert_eq!(motion.frame, IDLE);
+        assert!(motion.steps.is_empty());
+        let mut reduced = Motion::new(true);
+        reduced.stretch();
+        assert_eq!(reduced.frame, IDLE);
+        assert!(reduced.steps.is_empty());
+        assert!(!reduced.animating());
+    }
+
+    #[test]
     fn settled_frames_retire_previous_pose_and_front_layer() {
         assert_eq!(frame_layers("stretch", "idle", 1., 0.8), ("idle", 0.));
         assert_eq!(frame_layers("stretch", "idle", 0., 0.), ("idle", 0.));
         let (base, opacity) = frame_layers("stretch", "idle", 0.4, 0.8);
         assert_eq!(base, "stretch");
         assert!(opacity > 0. && opacity < 1.);
-    }
-
-    #[test]
-    fn float_matches_css_eight_second_cycle() {
-        assert!(float_offset(0.).abs() < 0.001);
-        assert!((float_offset(4.) + 3.).abs() < 0.001);
-        assert!(float_offset(8.).abs() < 0.001);
-        assert!((float_offset(2.) - float_offset(6.)).abs() < 0.001);
     }
 
     #[test]

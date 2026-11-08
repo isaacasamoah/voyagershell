@@ -35,7 +35,6 @@ pub struct Avatar {
     drag: Option<Drag>,
     geometry: Rc<RefCell<Geometry>>,
     motion: Motion,
-    epoch: Instant,
     workspace: AnyWindowHandle,
     floating: Option<AnyWindowHandle>,
     opening: Option<u64>,
@@ -788,7 +787,6 @@ impl Binding {
             motion: Motion::new(
                 cx.reduce_motion() || std::env::var_os("VOYAGER_REDUCED_MOTION").is_some(),
             ),
-            epoch: Instant::now(),
             workspace,
             floating: None,
             opening: None,

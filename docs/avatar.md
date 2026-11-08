@@ -8,7 +8,7 @@ retained native experiment's export of the original interface text.
 
 `desktop/src/avatar.rs` owns one GPUI avatar entity. Workspace and floating
 presentation views hold handles to that entity, rather than copies of its motion
-state. Its clock, pose transition, float epoch, assets and active pointer gesture
+state. Its finite pose sequence, assets and active pointer gesture
 survive window changes. Each presentation view owns its own focus handle and
 observation subscriptions. Deferred window construction starts after the
 controller's entity borrow ends, because GPUI may render a new window immediately.
@@ -111,11 +111,20 @@ action. Each visible target has a named group and a focused Shift+Enter action.
 Target keyboard handlers do not intercept a child editor's focus. The brand and
 tagline have one combined image name.
 
-Normal animation invalidates the native avatar presentation. It does not rebuild
-the JavaScript description on every frame. Application responses request a script
-refresh once so its context indicator and layout can update. Reduced motion uses
-the platform preference or `VOYAGER_REDUCED_MOTION`. The corrected settled-pose
-rule retires the previous image after the crossfade.
+The avatar is still at rest. There is no floating offset, periodic stretch,
+background pose sequence or recurring idle frame request. Pointer movement and
+docking retain their existing placement and sounds. Shift-clicking the avatar,
+or pressing S while the avatar itself has keyboard focus, explicitly starts one
+stretch. Its original pose sequence and crossfades run to the idle image, then
+stop requesting frames. Repeated commands during that sequence do not queue
+another animation. The platform reduced-motion preference or
+`VOYAGER_REDUCED_MOTION` prevents the explicit sequence.
+
+Application responses still refresh the context indicator and layout through
+the existing owner path. Changes to terminal output and other controls can draw
+the window without starting avatar motion. The settled-pose rule retires the
+previous image after the crossfade. This deliberate-motion policy supersedes
+the earlier continuous idle UX requirement by Isaac's 9 November decision.
 
 The Linux sound adapter plays the original 48 kHz sine sweeps through `paplay`.
 One worker and a four-item mailbox bound playback work. Failure is reported;
@@ -186,3 +195,10 @@ background over the entire input. Name focus still selects the actual full value
 The Composer has a 32-pixel frame with an 18-pixel line and horizontal padding.
 Source formatting and inspection do not establish visible selection, caret geometry
 or native speech isolation; the integrated release journey remains required.
+
+
+## Archived pixel-identical idle redraw experiment
+
+`VOYAGER_EXPERIMENT_PIXEL_MOTION` was an unselected performance control. Its active view hook is removed under the deliberate-motion policy. The original source remains in the performance experiment archive and immutable measured source. The following describes that earlier experiment. The original wall-clock float, motion transitions and external state notifications remain unchanged. One pending next-frame callback checks settled idle without advancing its state. Due poses, unfinished transitions, dragging, missing measurements or changed position, diameter or scale invalidate normally.
+
+A prepaint canvas measures the existing square image wrapper. Pinned Taffy rounds its authored absolute top before painting, so predicted movement uses the difference between snapped new and recorded authored top. Both measured vertical image edges must remain identical after the painter's own device-pixel snapping before notification can be skipped. Raw float-delta translation is incorrect near fractional-layout thresholds. The callback still follows the original display cadence; this does not cap animation or defer input. Exact native pixels and measured response remain acceptance requirements.
