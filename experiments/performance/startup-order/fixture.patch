@@ -1,0 +1,230 @@
+--- a/experiments/performance/frame-work/compare.py
++++ b/experiments/performance/frame-work/compare.py
+@@ -24,0 +25,4 @@
++if protocol.get('pairedBlocks'):
++    assert protocol['cases'] == [[variant, 'quiet'] for block in protocol['pairedBlocks'] for variant in block['measure']]
++    assert len(protocol['pairedBlocks']) == 4
++    assert all(len(block['launch']) == len(block['measure']) == 2 for block in protocol['pairedBlocks'])
+@@ -29,0 +34,72 @@
++def prepare(index, variant, condition):
++    artifact = dict(protocol['artifacts'][variant])
++    if artifact.get('inputProgram') == 'stream-echo':
++        assert condition in ('quiet', 'burst')
++        artifact['outputLoad'] = condition == 'burst'
++    assert hashlib.sha256(Path(artifact['binary']).read_bytes()).hexdigest() == artifact['sha256']
++    folder = out / f'{index:02d}-{variant}-{condition}'
++    before = time.monotonic_ns()
++    trace = typing_trace and variant != 'herdr' and artifact.get('traceEnabled', True)
++    item = driver.launch('herdr' if variant == 'herdr' else 'voyager', folder, artifact, trace=trace)
++    assert hashlib.sha256(Path(f"/proc/{item['record']['pid']}/exe").resolve().read_bytes()).hexdigest() == artifact['sha256']
++    environment = Path(f"/proc/{item['record']['pid']}/environ").read_bytes().split(b'\0')
++    assert not any(e.startswith(b'MESA_VK_WSI_PRESENT_MODE=') for e in environment)
++    if variant != 'herdr':
++        assert (b'VOYAGER_TYPING_TRACE=1' if trace else b'VOYAGER_TYPING_TRACE=0') in environment
++        assert (b'VOYAGER_TYPING_TRACE_INPUT_ONLY=1' in environment) == artifact.get('inputOnlyTrace', False)
++        assert (b'VOYAGER_REDUCED_MOTION=1' in environment) == artifact.get('reducedMotion', False)
++        assert not any(e.startswith(b'VOYAGER_REDUCED_MOTION=') and e != b'VOYAGER_REDUCED_MOTION=1' for e in environment)
++        assert (b'VOYAGER_EXPERIMENT_VISIBLE_OUTPUT=1' in environment) == artifact.get('visibleOutput', False)
++        assert not any(e.startswith(b'VOYAGER_EXPERIMENT_VISIBLE_OUTPUT=') and e != b'VOYAGER_EXPERIMENT_VISIBLE_OUTPUT=1' for e in environment)
++        assert (b'VOYAGER_EXPERIMENT_PIXEL_MOTION=1' in environment) == artifact.get('pixelMotion', False)
++        assert not any(e.startswith(b'VOYAGER_EXPERIMENT_PIXEL_MOTION=') and e != b'VOYAGER_EXPERIMENT_PIXEL_MOTION=1' for e in environment)
++        assert (b'VOYAGER_EXPERIMENT_DIRTY_WAKE=1' in environment) == artifact.get('dirtyWake', False)
++        assert not any(e.startswith(b'VOYAGER_EXPERIMENT_DIRTY_WAKE=') and e != b'VOYAGER_EXPERIMENT_DIRTY_WAKE=1' for e in environment)
++    driver.save(folder / 'experiment-environment.json', {
++        'presentationOverride': False, 'typingTrace': trace,
++        'inputOnlyTrace': artifact.get('inputOnlyTrace', False),
++        'reducedMotion': artifact.get('reducedMotion', False),
++        'visibleOutput': artifact.get('visibleOutput', False),
++        'pixelMotion': artifact.get('pixelMotion', False),
++        'dirtyWake': artifact.get('dirtyWake', False),
++    })
++    driver.save(folder / 'startup.json', {'beforeNs': before, 'readyNs': time.monotonic_ns(), 'variant': variant})
++    if protocol.get('pairedBlocks'):
++        _, pids = driver.process_scope(item)
++        item['pairedIdentities'] = {str(pid): driver.process_identity(pid, metadata_only=True) for pid in pids}
++        driver.save(folder / 'paired-processes.json', item['pairedIdentities'])
++    return item
++
++
++def verify_pair(items):
++    if 'displayState' in protocol:
++        actual = subprocess.check_output(
++            ['gdbus', 'call', '--session', '--dest', 'org.gnome.Mutter.DisplayConfig',
++             '--object-path', '/org/gnome/Mutter/DisplayConfig', '--method',
++             'org.gnome.Mutter.DisplayConfig.GetCurrentState'], env=driver.env, text=True).strip()
++        assert actual == protocol['displayState'], 'Display configuration changed'
++    geometries = {}
++    for variant, item in items.items():
++        record = item['record']
++        for pid, expected in item['pairedIdentities'].items():
++            assert driver.process_identity(int(pid), metadata_only=True) == expected, 'A peer process changed'
++        core = driver.rpc(record['session'], 'server.status')
++        assert core['pid'] == item['core']['pid'] and core['core']['id'] == item['core']['core']['id']
++        terminal = driver.rpc(record['session'], 'terminal.get', {'terminal': 't1'})
++        assert terminal['state'] == 'live' and terminal['foreground']['pid'] == item['workload']['pid']
++        assert terminal['foreground']['argv'][1:] == item['workload']['argv'][1:], 'A peer workload changed'
++        assert all(record['identity'][key] == value for key, value in driver.process_identity(record['pid'], metadata_only=True).items())
++        visible = subprocess.check_output(['xdotool', 'search', '--onlyvisible', '--pid', str(record['pid'])], env=driver.env, text=True).split()
++        assert visible == [record['window']], 'A peer view disappeared'
++        raw = subprocess.check_output(['xdotool', 'getwindowgeometry', '--shell', record['window']], env=driver.env, text=True)
++        value = dict(line.split('=', 1) for line in raw.splitlines())
++        rectangle = [int(value[key]) for key in ('X', 'Y', 'WIDTH', 'HEIGHT')]
++        assert rectangle == protocol['pairedGeometry'][variant], 'Peer placement changed'
++        x, y, width, height = rectangle
++        assert 0 <= x < x + width <= 6880 and 0 <= y < y + height <= 2880
++        geometries[variant] = rectangle
++    a, b = geometries.values()
++    assert a[0] + a[2] <= b[0] or b[0] + b[2] <= a[0], 'Peer windows overlap'
++    return geometries
++
++
+@@ -42,30 +118,14 @@
+-        folder = out / f'{index:02d}-{variant}-{condition}'
+-        artifact = dict(protocol['artifacts'][variant])
+-        if artifact.get('inputProgram') == 'stream-echo':
+-            assert condition in ('quiet', 'burst')
+-            artifact['outputLoad'] = condition == 'burst'
+-        config = protocol['configs'][variant]
+-        driver.save(out / 'progress.json', {'case': index, 'variant': variant, 'condition': condition, 'state': 'preparing'})
+-        trace = typing_trace and variant != 'herdr' and artifact.get('traceEnabled', True)
+-        item = driver.launch('herdr' if variant == 'herdr' else 'voyager', folder, artifact, trace=trace)
+-        environment = Path(f"/proc/{item['record']['pid']}/environ").read_bytes().split(b'\0')
+-        assert not any(e.startswith(b'MESA_VK_WSI_PRESENT_MODE=') for e in environment)
+-        if variant != 'herdr':
+-            assert (b'VOYAGER_TYPING_TRACE=1' if trace else b'VOYAGER_TYPING_TRACE=0') in environment
+-            assert (b'VOYAGER_TYPING_TRACE_INPUT_ONLY=1' in environment) == artifact.get('inputOnlyTrace', False)
+-            assert (b'VOYAGER_REDUCED_MOTION=1' in environment) == artifact.get('reducedMotion', False)
+-            assert not any(e.startswith(b'VOYAGER_REDUCED_MOTION=') and e != b'VOYAGER_REDUCED_MOTION=1' for e in environment)
+-            assert (b'VOYAGER_EXPERIMENT_VISIBLE_OUTPUT=1' in environment) == artifact.get('visibleOutput', False)
+-            assert not any(e.startswith(b'VOYAGER_EXPERIMENT_VISIBLE_OUTPUT=') and e != b'VOYAGER_EXPERIMENT_VISIBLE_OUTPUT=1' for e in environment)
+-            assert (b'VOYAGER_EXPERIMENT_PIXEL_MOTION=1' in environment) == artifact.get('pixelMotion', False)
+-            assert not any(e.startswith(b'VOYAGER_EXPERIMENT_PIXEL_MOTION=') and e != b'VOYAGER_EXPERIMENT_PIXEL_MOTION=1' for e in environment)
+-            assert (b'VOYAGER_EXPERIMENT_DIRTY_WAKE=1' in environment) == artifact.get('dirtyWake', False)
+-            assert not any(e.startswith(b'VOYAGER_EXPERIMENT_DIRTY_WAKE=') and e != b'VOYAGER_EXPERIMENT_DIRTY_WAKE=1' for e in environment)
+-        driver.save(folder / 'experiment-environment.json', {
+-            'presentationOverride': False, 'typingTrace': trace,
+-            'inputOnlyTrace': artifact.get('inputOnlyTrace', False),
+-            'reducedMotion': artifact.get('reducedMotion', False),
+-            'visibleOutput': artifact.get('visibleOutput', False),
+-            'pixelMotion': artifact.get('pixelMotion', False),
+-            'dirtyWake': artifact.get('dirtyWake', False),
+-        })
++        config = dict(protocol['configs'][variant])
++        if protocol.get('pairedBlocks'):
++            if index % 2 == 1:
++                block = protocol['pairedBlocks'][(index - 1) // 2]
++                assert set(block['launch']) == set(block['measure']) == {'candidate', 'herdr'}
++                peers = {name: prepare(index + block['measure'].index(name), name, condition) for name in block['launch']}
++                time.sleep(protocol['warmSeconds'])
++            item = peers[variant]
++            _, peer_pids = driver.process_scope(peers[next(name for name in peers if name != variant)])
++            config['backgroundObservers'] = config.get('backgroundObservers', {}) | {str(pid): driver.process_identity(pid, metadata_only=True) for pid in peer_pids}
++            driver.save(item['folder'] / 'peers-before.json', verify_pair(peers))
++        else:
++            item = prepare(index, variant, condition)
++        folder = item['folder']
+@@ -77 +137,2 @@
+-        time.sleep(protocol['warmSeconds'])
++        if not protocol.get('pairedBlocks'):
++            time.sleep(protocol['warmSeconds'])
+@@ -83 +144,7 @@
+-        driver.cleanup(item)
++        if protocol.get('pairedBlocks'):
++            driver.save(folder / 'peers-after.json', verify_pair(peers))
++            if index % 2 == 0:
++                for peer in reversed(list(peers.values())):
++                    driver.cleanup(peer)
++        else:
++            driver.cleanup(item)
+--- a/experiments/performance/typing-latency/compare-cpu.py
++++ b/experiments/performance/typing-latency/compare-cpu.py
+@@ -16,0 +17 @@
++from proof_native_control import stable_geometry
+@@ -51,0 +53,2 @@
++    origin = artifact.get('windowOrigin', [2980, 200])
++    assert len(origin) == 2 and all(type(value) is int for value in origin)
+@@ -56 +59 @@
+-                   '--desktop-env', str(desktop_file), '--working-directory', str(work), '--window-origin', '2980', '200']
++                   '--desktop-env', str(desktop_file), '--working-directory', str(work), '--window-origin', *map(str, origin)]
+@@ -120 +123,4 @@
+-    for args in [['windowactivate', '--sync', window], ['windowsize', '--sync', window, str(width), str(height)]]:
++    actions = [['windowactivate', '--sync', window], ['windowsize', '--sync', window, str(width), str(height)]]
++    if 'windowOrigin' in artifact:
++        actions.insert(0, ['windowmove', '--sync', window, *map(str, origin)])
++    for args in actions:
+@@ -121,0 +128,9 @@
++    if 'windowOrigin' in artifact:
++        execute = lambda *args: subprocess.check_output(args, env=env, text=True).strip()
++        placed = stable_geometry(window, execute)
++        correction = [2 * target - int(placed[key]) for target, key in zip(origin, ['X', 'Y'])]
++        if correction != origin:
++            subprocess.check_call(['xdotool', 'windowmove', '--sync', window, *map(str, correction)], env=env)
++        settled = stable_geometry(window, execute)
++        save(folder / 'placement.json', {'target': origin, 'firstObserved': placed, 'correction': correction, 'settled': settled})
++        assert [int(settled[key]) for key in ['X', 'Y', 'WIDTH', 'HEIGHT']] == [*origin, width, height]
+@@ -185,2 +200,2 @@
+-def measure(item, config, label):
+-    folder, record = item['folder'], item['record']
++def process_scope(item):
++    record = item['record']
+@@ -197,0 +213 @@
++    core_executable = process_identity(item['core']['pid'], metadata_only=True)['executable']
+@@ -203 +219,6 @@
+-        if b'connect' in command and Path(discovered[str(pid)]['executable']).name == 'hc':
++        arguments = command[1:]
++        if arguments and arguments[-1] == b'':
++            arguments = arguments[:-1]
++        if (arguments in ([b'connect'], [b'connect', b'--session', record['session'].encode()])
++                and discovered[str(pid)]['executable'] == core_executable
++                and b'HC_SESSION=' + record['session'].encode() in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0')):
+@@ -204,0 +226,6 @@
++    return discovered, stable
++
++
++def measure(item, config, label):
++    folder, record = item['folder'], item['record']
++    discovered, stable = process_scope(item)
+--- a/tests/native/proof_native_control.py
++++ b/tests/native/proof_native_control.py
+@@ -4,0 +5,17 @@
++import time
++
++
++def stable_geometry(window, execute):
++    previous = None
++    unchanged = 0
++    for _ in range(40):
++        geometry = dict(
++            line.split("=", 1)
++            for line in execute("xdotool", "getwindowgeometry", "--shell", window).splitlines()
++        )
++        unchanged = unchanged + 1 if geometry == previous else 0
++        if unchanged == 5:
++            return geometry
++        previous = geometry
++        time.sleep(0.1)
++    raise RuntimeError("Window placement did not settle before compensation")
+--- a/experiments/performance/avatar-redraw/compare.py
++++ b/experiments/performance/avatar-redraw/compare.py
+@@ -18,0 +19 @@
++from proof_native_control import stable_geometry
+@@ -207 +208 @@
+-        placed = stable_geometry(windows[0])
++        placed = stable_geometry(windows[0], execute)
+@@ -244,16 +244,0 @@
+-
+-
+-def stable_geometry(window):
+-    previous = None
+-    unchanged = 0
+-    for _ in range(40):
+-        geometry = dict(
+-            line.split("=", 1)
+-            for line in execute("xdotool", "getwindowgeometry", "--shell", window).splitlines()
+-        )
+-        unchanged = unchanged + 1 if geometry == previous else 0
+-        if unchanged == 5:
+-            return geometry
+-        previous = geometry
+-        time.sleep(0.1)
+-    raise RuntimeError("Window placement did not settle before compensation")
