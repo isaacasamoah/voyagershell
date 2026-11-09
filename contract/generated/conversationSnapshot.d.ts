@@ -144,6 +144,16 @@ export type Action =
     }
   | {
       id: string;
+      operation: "confirm-voyage-close";
+      plan: string;
+    }
+  | {
+      id: string;
+      operation: "cancel-voyage-close";
+      plan: string;
+    }
+  | {
+      id: string;
       operation: "reopen-voyage";
     }
   | {
@@ -207,6 +217,12 @@ export type Node =
   | {
       children: Node[];
       kind: "column";
+      size?: Size;
+    }
+  | {
+      children: Node[];
+      kind: "stack";
+      selected: number;
       size?: Size;
     }
   | {
@@ -421,6 +437,7 @@ export interface Message {
 export interface Focus {
   cwd?: string | null;
   path: string[];
+  preview?: string | null;
   revision: string;
   scope: Context;
 }

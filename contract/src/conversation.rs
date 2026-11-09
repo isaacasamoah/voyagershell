@@ -98,6 +98,9 @@ pub struct Focus {
     #[serde(with = "crate::decimal")]
     #[schemars(with = "String")]
     pub revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(length(max = 8192))]
+    pub preview: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

@@ -50,6 +50,8 @@ pub struct Checkout {
     pub branch: Option<String>,
     pub locked: bool,
     pub prunable: bool,
+    #[serde(default)]
+    pub dirty: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

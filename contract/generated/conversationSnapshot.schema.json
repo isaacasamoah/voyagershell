@@ -456,6 +456,48 @@
               "type": "string"
             },
             "operation": {
+              "const": "confirm-voyage-close",
+              "type": "string"
+            },
+            "plan": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "plan"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "cancel-voyage-close",
+              "type": "string"
+            },
+            "plan": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "plan"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
               "const": "reopen-voyage",
               "type": "string"
             }
@@ -1049,6 +1091,13 @@
           },
           "type": "array"
         },
+        "preview": {
+          "maxLength": 8192,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "revision": {
           "type": "string"
         },
@@ -1255,6 +1304,42 @@
           },
           "required": [
             "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "stack",
+              "type": "string"
+            },
+            "selected": {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "selected",
             "children"
           ],
           "type": "object"

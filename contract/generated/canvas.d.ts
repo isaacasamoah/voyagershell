@@ -11,6 +11,12 @@ export type Node =
       size?: Size;
     }
   | {
+      children: Node[];
+      kind: "stack";
+      selected: number;
+      size?: Size;
+    }
+  | {
       kind: "block";
       region: Region;
       size?: Size;
