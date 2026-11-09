@@ -14,6 +14,7 @@ gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10", features =
 gpui-base = { git = "https://github.com/longbridge/gpui-kit", rev = "944803984cf0ba3111861d6e1aa9d6265c109ff9" }
 gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "944803984cf0ba3111861d6e1aa9d6265c109ff9", default-features = false, features = ["quickjs"] }
 anyhow = "=1.0.103"
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 voyager-app = { path = "../app" }

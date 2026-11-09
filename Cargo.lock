@@ -8036,6 +8036,7 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "gpui-shell",
+ "image",
  "libghostty-vt",
  "raw-window-handle",
  "serde",
