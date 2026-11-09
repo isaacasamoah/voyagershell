@@ -10,6 +10,7 @@ const directory = path.join(root, "target/script-types");
 const entries = [
   "content/ui.ts",
   "desktop/mods/header/main.ts",
+  "desktop/mods/header/inbox.ts",
   "desktop/mods/header/canvas.ts",
   "desktop/mods/header/layout-panel.ts",
   "desktop/mods/header/creation.ts",

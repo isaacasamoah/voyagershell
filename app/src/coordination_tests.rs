@@ -149,3 +149,30 @@ fn escalation_uses_supervisor_or_human_and_answers_only_the_original_live_run() 
             .resolved
     );
 }
+
+#[test]
+fn a_missing_receipt_keeps_the_original_effect_uncertain() {
+    let mut owner = Owner::default();
+    let missing = owner.inspect_receipt(Participant::User, "lookup".into(), "original");
+    assert_eq!(missing.outcome, Outcome::Uncertain);
+    owner.receipts.push_back(Receipt {
+        caller: Participant::User,
+        request: Request {
+            request_id: "original".into(),
+            action: Operation::Inspect,
+        },
+        outcome: Outcome::Refused,
+        message: Some("Nothing was queued".into()),
+        created: None,
+    });
+    let known = owner.inspect_receipt(Participant::User, "lookup-2".into(), "original");
+    assert_eq!(known.outcome, Outcome::Refused);
+    assert_eq!(known.message.as_deref(), Some("Nothing was queued"));
+    assert!(known.snapshot.is_some());
+    assert_eq!(
+        owner
+            .inspect_receipt(participant("other"), "private".into(), "original")
+            .outcome,
+        Outcome::Uncertain
+    );
+}

@@ -27,6 +27,7 @@ module.exports = function workspaceSource(
           "process-icons.js",
           "panels.js",
           "rank-hat.js",
+          "inbox.js",
           "panel-view.js",
           "navigation-view.js",
         ]

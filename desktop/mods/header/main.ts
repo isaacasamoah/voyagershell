@@ -32,6 +32,7 @@ import type { ProcessInfo } from "../../../contract/generated/processResponse";
 import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
 import { renderPanel } from "./panel-view.js";
+import { Inbox } from "./inbox.js";
 import {
   renderSidebar,
   renderFleets,
@@ -120,6 +121,7 @@ function errorMessage(error: unknown): string {
 }
 
 export default class Workspace extends View {
+  inboxes = new Map<string, Inbox>();
   declare creation: CreationPicker | undefined;
   declare menus: WorkspaceMenu;
   worktrees = new WorktreeControls();
@@ -1696,6 +1698,7 @@ export default class Workspace extends View {
     group: PanelGroup,
     path: Extract<Action, { operation: "resize-panel-split" }>["path"] = [],
     members = new Map(group.members.map((panel) => [panel.id, panel])),
+    cx?: UIContext,
   ): NativeElement | null {
     if (!tree) return null;
     if (tree.kind === "leaf") {
@@ -1709,10 +1712,17 @@ export default class Workspace extends View {
           id: panel.id,
         },
         group,
+        cx,
       );
     }
-    const first = this.pane(tree.first, group, [...path, "first"], members);
-    const second = this.pane(tree.second, group, [...path, "second"], members);
+    const first = this.pane(tree.first, group, [...path, "first"], members, cx);
+    const second = this.pane(
+      tree.second,
+      group,
+      [...path, "second"],
+      members,
+      cx,
+    );
     if (!first || !second) return first || second;
     return NativeSplit.new(
       JSON.stringify([this.splitSession, group.owner, path]),
@@ -1806,8 +1816,9 @@ export default class Workspace extends View {
     placement: Vessel,
     scope: ContentScope,
     group: PanelGroup,
+    cx?: UIContext,
   ): NativeElement {
-    return renderPanel(this, placement, scope, group);
+    return renderPanel(this, placement, scope, group, cx);
   }
 
   sidebarRegion(layout: Layout, voyage: Voyage | undefined): NativeElement {
@@ -1822,11 +1833,11 @@ export default class Workspace extends View {
     return renderFleets(this, layout, voyage, fleet);
   }
 
-  groupRegion(group: PanelGroup): NativeElement {
+  groupRegion(group: PanelGroup, cx?: UIContext): NativeElement {
     const root = group.maximizedPlacement
       ? { kind: "leaf" as const, placement: group.maximizedPlacement }
       : group.root;
-    const panel = this.pane(root, group);
+    const panel = this.pane(root, group, undefined, undefined, cx);
     const body = div()
       .relative()
       .flex()
@@ -1863,11 +1874,15 @@ export default class Workspace extends View {
     return empty;
   }
 
-  activeRegion(layout: Layout, fleet: Fleet | undefined): NativeElement {
+  activeRegion(
+    layout: Layout,
+    fleet: Fleet | undefined,
+    cx?: UIContext,
+  ): NativeElement {
     const group = activeGroups(layout).find(
       (group) => group.owner.kind === "fleet" && group.owner.id === fleet?.id,
     );
-    return group ? this.groupRegion(group) : div().flex_1();
+    return group ? this.groupRegion(group, cx) : div().flex_1();
   }
 
   compactPortalContext(): boolean {
@@ -2049,6 +2064,7 @@ export default class Workspace extends View {
   }
 
   render(cx: UIContext): NativeElement {
+    for (const inbox of this.inboxes.values()) inbox.visible = false;
     const animationNotice = take_animation_notice();
     if (animationNotice !== null) {
       if (animationNotice || this.status === this.animationNotice)
@@ -2142,7 +2158,7 @@ export default class Workspace extends View {
             case "fleet-strip":
               return this.fleetRegion(layout, voyage, fleet);
             case "active-fleet":
-              return this.activeRegion(layout, fleet);
+              return this.activeRegion(layout, fleet, cx);
             case "context-bar":
               return this.contextRegion(layout, voyage, fleet);
             case "portals": {
@@ -2160,7 +2176,7 @@ export default class Workspace extends View {
                 .bg(colors.background)
                 .child(
                   PortalArea.new(`portal-area-${voyage.id}`, {}).child(
-                    this.groupRegion(group),
+                    this.groupRegion(group, cx),
                   ),
                 );
             }

@@ -83,6 +83,10 @@ pub fn run(profile: PathBuf, session: String) -> Result<()> {
         include_str!("../mods/header/rank-hat.js"),
     )?;
     seed(
+        &package.join("inbox.js"),
+        include_str!("../mods/header/inbox.js"),
+    )?;
+    seed(
         &package.join("panel-view.js"),
         include_str!("../mods/header/panel-view.js"),
     )?;
@@ -247,6 +251,20 @@ pub fn run(profile: PathBuf, session: String) -> Result<()> {
         content_owner,
         launches_path,
     );
+    #[cfg(target_os = "linux")]
+    let _coordination = if env::var("VOYAGER_AUTHORITY_EXPERIMENT").is_ok_and(|value| value == "1")
+    {
+        Some(
+            client
+                .serve_agents(
+                    &profile.join("coordination"),
+                    &env::current_exe()?.with_file_name("voyager-agent"),
+                )
+                .map_err(anyhow::Error::msg)?,
+        )
+    } else {
+        None
+    };
     let animations = avatar_pack::prepare(&profile.join("avatar"))?;
     let viewers = terminal::Viewers::default();
     let conversation = voyager_app::conversation_client::Client::with_audio(

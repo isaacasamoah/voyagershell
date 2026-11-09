@@ -9,7 +9,8 @@ import { vesselFrame } from "./canvas.js";
 import { visiblePanels } from "./panels.js";
 import { processIcon } from "./process-icons.js";
 import { rankHat } from "./rank-hat.js";
-export function renderPanel(workspace, placement, scope, group) {
+import { Inbox } from "./inbox.js";
+export function renderPanel(workspace, placement, scope, group, cx) {
   const colors = projection();
   const content = workspace.layout?.contents.find(
     (item) => item.id === placement.content,
@@ -275,28 +276,41 @@ export function renderPanel(workspace, placement, scope, group) {
                     },
                     group.owner,
                   )
-                : content.typeId === "notes"
-                  ? Notes.new(content.id, { contentId: content.id })
-                  : terminal
-                    ? Terminal.new(terminal).size_full()
-                    : div()
-                        .p(20)
-                        .text_size(12)
-                        .text_color(colors.muted)
-                        .child(workspace.terminalStatus(content))
-                        .children(
-                          startShell
-                            ? [
-                                Button.new(`start-shell-${placement.id}`)
-                                  .accessibility_label("Start new shell")
-                                  .disabled(workspace.busy || !workspace.fresh)
-                                  .child("Start new shell")
-                                  .on_click((_event, cx) =>
-                                    workspace.run(startShell, cx),
-                                  ),
-                              ]
-                            : [],
-                        ),
+                : content.typeId === "inbox"
+                  ? (() => {
+                      let inbox = workspace.inboxes.get(placement.id);
+                      if (!inbox) {
+                        inbox = new Inbox(placement.id);
+                        workspace.inboxes.set(placement.id, inbox);
+                      }
+                      if (!cx)
+                        throw Error("Inbox rendering needs its native context");
+                      return inbox.render(cx);
+                    })()
+                  : content.typeId === "notes"
+                    ? Notes.new(content.id, { contentId: content.id })
+                    : terminal
+                      ? Terminal.new(terminal).size_full()
+                      : div()
+                          .p(20)
+                          .text_size(12)
+                          .text_color(colors.muted)
+                          .child(workspace.terminalStatus(content))
+                          .children(
+                            startShell
+                              ? [
+                                  Button.new(`start-shell-${placement.id}`)
+                                    .accessibility_label("Start new shell")
+                                    .disabled(
+                                      workspace.busy || !workspace.fresh,
+                                    )
+                                    .child("Start new shell")
+                                    .on_click((_event, cx) =>
+                                      workspace.run(startShell, cx),
+                                    ),
+                                ]
+                              : [],
+                          ),
             ),
         )
         .children(workspace.splitPreview(placement))

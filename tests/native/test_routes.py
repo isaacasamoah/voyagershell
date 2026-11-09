@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from types import SimpleNamespace
 from pathlib import Path
@@ -14,6 +15,38 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Routes(unittest.TestCase):
+    def test_authority_retries_only_a_timed_out_observation(self):
+        source = ast.parse((Path(__file__).parent / "proof_agent_authority.py").read_text())
+        journey = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "prove")
+        rpc = next(node for node in journey.body if isinstance(node, ast.FunctionDef) and node.name == "rpc")
+        calls = []
+        def observe(*args):
+            calls.append(args)
+            if len(calls) == 1:
+                raise subprocess.TimeoutExpired(["hc", "connect"], 5)
+            return {"text": "ready"}
+        with tempfile.TemporaryDirectory() as temporary:
+            scope = {"core_socket": SimpleNamespace(is_socket=lambda: True), "core_rpc": observe,
+                     "session": "voyager-authority-test", "env": {"VOYAGER_AUTHORITY_TRIAL_DEADLINE": str(time.time() + 60)},
+                     "time": time, "subprocess": subprocess, "json": json, "evidence": Path(temporary)}
+            exec(compile(ast.Module(body=[rpc], type_ignores=[]), "authority-observation", "exec"), scope)
+            self.assertEqual(scope["rpc"]("terminal.read", {"terminal": "t2"}), {"text": "ready"})
+            self.assertEqual(len(calls), 2)
+            record = json.loads((Path(temporary) / "observation-timeouts.jsonl").read_text())
+            self.assertEqual(record["method"], "terminal.read")
+            self.assertEqual(record["attempt"], 1)
+            with self.assertRaises(AssertionError):
+                scope["rpc"]("terminal.run", {"argv": ["bash"]})
+            self.assertEqual(len(calls), 2)
+            def late_observation(*args):
+                calls.append(args)
+                raise subprocess.TimeoutExpired(["hc", "connect"], 5)
+            scope["core_rpc"] = late_observation
+            scope["env"]["VOYAGER_AUTHORITY_TRIAL_DEADLINE"] = str(time.time() + 4)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                scope["rpc"]("terminal.read", {"terminal": "t2"})
+            self.assertEqual(len(calls), 3)
+
     def test_accessibility_requeries_only_a_known_stale_read(self):
         tree = ast.parse(
             (Path(__file__).parent / "proof_native_accessibility.py").read_text()

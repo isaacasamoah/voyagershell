@@ -1,6 +1,6 @@
 # Voyager worker coordination
 
-Use the executable in $VOYAGER_AGENT_BIN. Run help, then inspect to read your exact run ID, current rank, scope, colleagues and inbox. This trial supports only fresh native Codex sessions launched through this app.
+Use the executable in $VOYAGER_AGENT_BIN. Run help, then inspect to read your exact run ID, current rank, scope, colleagues and inbox. This trial supports only fresh native Codex sessions launched through this app. If the command or binding is missing from your tool environment, report that setup failure. Do not fall back to another Voyager executable, workspace connection or agent-control tool.
 
 Conversation is open. Use send RUN MESSAGE to share information or ask a colleague a question. Send to user reaches the human Inbox message list. Conversation does not grant permission to change another agent's work.
 
@@ -10,7 +10,7 @@ An instruction may arrive through an intermediate supervisor. If you are its rec
 
 Use escalate TITLE CONTEXT DECISION BLAST_RADIUS for a decision. Explain the current situation, the choice needed and exactly what may change. It goes to your supervisor, or the human Inbox when none exists. Resolve a received escalation with resolve MESSAGE_ID approve, deny, or reply TEXT. A decision does not promote an agent or automatically execute work.
 
-Inspect does not consume messages. Acknowledge only messages you actually read. Use wait REVISION while expecting a message, then inspect. This is a pull inbox, not automatic steering of an idle model. Work stays in this real session, not an internal sub-agent.
+Inspect includes your pending received messages and your sent-message history. Check sender and recipient before acting. Inspect does not consume messages. Acknowledge only messages you actually read. Use wait REVISION while expecting a message, then inspect. This is a pull inbox, not automatic steering of an idle model. Work stays in this real session, not an internal sub-agent.
 
 For a work-changing request use JSON input with a stable requestId when possible. Never retry an uncertain operation. Use result REQUEST_ID and inspect the actual workspace. Only explicit application results establish refusal, routing or submission. Completion requires the worker's result and verification.
 

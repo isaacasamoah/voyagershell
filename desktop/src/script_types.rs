@@ -13,6 +13,9 @@ export function projection(): {
 pub const WORKSPACE: &str = r#"
 export function request_id(): string;
 export function call(request: string): Promise<string>;
+export function coordination(request: string): Promise<string>;
+export function coordination_watch(after: string): Promise<void>;
+export function coordination_enabled(): boolean;
 export function worktree(request: string): Promise<string>;
 export function terminal_open(request: string): Promise<string>;
 export function revision(): string;

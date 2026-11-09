@@ -1,4 +1,5 @@
 import { div, svg } from "gpui-kit";
+import { coordination_enabled } from "voyager_workspace";
 import { Button } from "gpui-base";
 import type Workspace from "./main.js";
 import type {
@@ -32,7 +33,9 @@ export function rankHat(
     .child(
       Button.new(`rank-${placement.id}`)
         .accessibility_label(`${action} for ${placement.name}`)
-        .tooltip(`${label}. ${action}. Trial rank only; no command powers.`)
+        .tooltip(
+          `${label}. ${action}. ${coordination_enabled() ? "Work-changing commands require a registered agent and the appropriate scope." : "Trial rank only; no command powers."}`,
+        )
         .disabled(workspace.busy || !workspace.fresh || next === null)
         .opacity(workspace.hoveredPanel === placement.id ? 1 : 0)
         .hover((element) => element.opacity(1))

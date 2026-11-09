@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { Popover } from "gpui-base";
 import { menuButton, menuSurface } from "./menu.js";
-import { launches } from "voyager_workspace";
+import { launches, coordination_enabled } from "voyager_workspace";
 import { descriptions } from "voyager_content_view";
 import {
   launchCatalog as validateCatalog,
@@ -31,6 +31,7 @@ export class CreationPicker {
     this.ready = false;
     this.notes = false;
     this.agents = false;
+    this.inbox = false;
     this.hidden = [];
     this.expanded = false;
     this.error = "";
@@ -42,6 +43,7 @@ export class CreationPicker {
     this.ready = false;
     this.notes = false;
     this.agents = false;
+    this.inbox = false;
     this.hidden = [];
     this.expanded = false;
     this.error = "";
@@ -85,6 +87,9 @@ export class CreationPicker {
               this.notes = value.types.some(
                 (kind) => kind.typeId === "notes" && Boolean(kind.state),
               );
+              this.inbox =
+                coordination_enabled() &&
+                value.types.some((kind) => kind.typeId === "inbox");
             }
           } catch (error) {
             failed(error);
@@ -172,6 +177,16 @@ export class CreationPicker {
                 opening.version,
                 cx,
               );
+            }),
+        );
+      if (this.inbox)
+        content.child(
+          menuButton("create-inbox-vessel", `Create Inbox ${entity}`)
+            .child("Inbox")
+            .on_click((_event, cx) => {
+              if (this.current !== opening) return;
+              this.current = null;
+              create(chosen(opening.destination, "inbox"), opening.version, cx);
             }),
         );
       if (opening.destination.kind === "panel" && this.hidden.length)
