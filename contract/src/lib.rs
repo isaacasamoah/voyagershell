@@ -13,6 +13,7 @@ pub mod context;
 pub mod conversation;
 pub mod launch;
 pub mod observation;
+pub mod rank;
 pub mod voice;
 pub mod voyage_close;
 pub mod worktree;
@@ -141,6 +142,8 @@ pub struct Content {
     pub launch: Option<launch::Launch>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell_intent: Option<String>,
+    #[serde(default, skip_serializing_if = "rank::Rank::is_crew")]
+    pub rank: rank::Rank,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, JsonSchema)]
@@ -437,6 +440,10 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[schemars(range(min = 1, max = 4096), transform = panels::width_schema)]
         width: Option<u16>,
+    },
+    SetAgentRank {
+        id: PlacementId,
+        rank: rank::Rank,
     },
 }
 

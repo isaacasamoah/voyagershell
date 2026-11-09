@@ -145,6 +145,9 @@ pub(crate) fn check(
     scope: Option<&Context>,
     action: &Action,
 ) -> Result<(), String> {
+    if scope.is_some() && matches!(action, Action::SetAgentRank { .. }) {
+        return Err("Only an explicit native user action can change a trial rank".into());
+    }
     let Some(scope) = scope.filter(|scope| **scope != Context::Workspace) else {
         return Ok(());
     };
@@ -159,6 +162,7 @@ pub(crate) fn check(
             .find(|fleet| &fleet.id == id)
     };
     let allowed = match action {
+        Action::SetAgentRank { .. } => false,
         Action::Inspect | Action::Dock { .. } | Action::Home => true,
         Action::SavePanelLayout { owner, .. }
         | Action::LoadPanelLayout { owner, .. }
