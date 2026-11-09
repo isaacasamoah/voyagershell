@@ -2,10 +2,14 @@ use crate::terminal_screen::{Cell, Grid, Screen, Select};
 use anyhow::Result;
 use std::rc::Rc;
 
+#[path = "terminal_background.rs"]
+mod background;
 #[path = "terminal_font.rs"]
 mod font;
 #[path = "terminal_input.rs"]
 mod input;
+#[path = "terminal_rows.rs"]
+mod row_paint;
 #[path = "terminal_view.rs"]
 mod view;
 
@@ -33,6 +37,34 @@ fn cell_colors(
         cell.foreground
     };
     (foreground, cell.background)
+}
+
+fn paint_colors(
+    cell: &Cell,
+    selected: bool,
+    cursor: Option<(libghostty_vt::render::Cursor, usize)>,
+    cursor_color: libghostty_vt::style::RgbColor,
+) -> (
+    libghostty_vt::style::RgbColor,
+    libghostty_vt::style::RgbColor,
+) {
+    let (mut foreground, mut background) = cell_colors(cell);
+    if selected {
+        let blend =
+            |selected: u16, current: u8| ((selected * 136 + u16::from(current) * 119) / 255) as u8;
+        background = libghostty_vt::style::RgbColor {
+            r: blend(0x53, background.r),
+            g: blend(0x50, background.g),
+            b: blend(0x6a, background.b),
+        };
+    }
+    if cursor.is_some_and(|(cursor, offset)| {
+        offset == 0 && cursor.visual_style == libghostty_vt::render::CursorVisualStyle::Block
+    }) {
+        foreground = background;
+        background = cursor_color;
+    }
+    (foreground, background)
 }
 
 fn cursor_offset(
@@ -94,6 +126,7 @@ struct Pane {
     viewer: Viewer,
     focus: FocusHandle,
     grid: Option<Grid>,
+    row_paints: Vec<row_paint::Cache>,
     font_family: gpui::SharedString,
     cell_width: gpui::Pixels,
     cell_height: gpui::Pixels,
@@ -165,6 +198,7 @@ impl Pane {
             viewer,
             focus,
             grid: None,
+            row_paints: Vec::new(),
             font_family,
             cell_width,
             cell_height: px(18.),
@@ -186,6 +220,7 @@ impl Pane {
     }
 
     fn pump(&mut self, cx: &mut Context<Self>) -> bool {
+        crate::typing_trace::record("pump_start", 0);
         let start = Instant::now();
         let previous_status = self.status.clone();
         let mut consumed = 0;
@@ -223,6 +258,9 @@ impl Pane {
             self.pending_credit = 0;
         }
         if consumed != 0 {
+            crate::typing_trace::record("output_parsed", consumed);
+            #[cfg(feature = "frame-profiler")]
+            crate::glyph_probe::observe_parsed(&self.screen.terminal);
             self.dirty = true;
             cx.notify();
         }
@@ -354,9 +392,11 @@ impl Pane {
     }
 
     fn send(&mut self, bytes: Vec<u8>) -> Result<()> {
+        let count = bytes.len();
         self.viewer
             .input(bytes)
             .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+        crate::typing_trace::record("input_admitted", count);
         self.input_sent()
     }
 
@@ -520,7 +560,8 @@ pub fn register(registry: &mut ComponentRegistry, viewers: Viewers) -> Result<()
                     .get(id)
                     .cloned()
                     .ok_or_else(|| "Terminal is not attached".to_string())?;
-                let screen = Screen::new(80, 24).map_err(|e| e.to_string())?;
+                let (cols, rows) = viewer.initial_size();
+                let screen = Screen::new(cols, rows).map_err(|e| e.to_string())?;
                 let names = cx.text_system().all_font_names();
                 let font_family: gpui::SharedString = font::family(&names).to_owned().into();
                 let font = cx
