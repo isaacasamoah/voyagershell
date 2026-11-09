@@ -87,18 +87,8 @@ def prepare(check):
         '\n[patch.crates-io]\n'
         f'gpui-pre-linux = {{ path = {json.dumps(str(LINUX_SOURCE))} }}\n'
     )
-    mailbox_source = CHECKOUT.parent / (
-        f"gpui-pre-linux-{LINUX_VERSION}-"
-        f"{hashlib.sha256(LINUX_PATCHES[0].read_bytes()).hexdigest()[:12]}"
-    )
-    mailbox_config = previous + (
-        '\n[patch.crates-io]\n'
-        f'gpui-pre-linux = {{ path = {json.dumps(str(mailbox_source))} }}\n'
-    )
     existing = CONFIG.read_text() if CONFIG.exists() else None
-    if existing is not None and existing != config and (
-        check or existing not in (previous, mailbox_config)
-    ):
+    if existing is not None and existing != config and (check or existing != previous):
         raise RuntimeError(f"Preserving existing Cargo configuration: {CONFIG}")
     if not CHECKOUT.exists():
         if check:

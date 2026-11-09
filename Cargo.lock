@@ -8009,6 +8009,7 @@ dependencies = [
  "async-channel",
  "jsonschema",
  "libc",
+ "rustix",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -8031,6 +8032,7 @@ name = "voyager-desktop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-channel",
  "async-io",
  "gpui-base",
  "gpui-pre",
