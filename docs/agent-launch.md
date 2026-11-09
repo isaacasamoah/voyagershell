@@ -93,3 +93,8 @@ separate evidence. This source port grants no new allowance and does not replay
 that request. A new integrated native creation/answer, matched appearance,
 cleanup, remaining status requirements and complete proof accounting are still
 required before acceptance. Linux source checks establish no other platform.
+
+
+## Returning from an agent
+
+The feedback candidate launches recognized agents inside an ordinary interactive Bash session. Recognition uses the selected command name before resolving installed symlinks, so a Claude launcher that points to `claude.exe` or another entry script still returns to Bash after exit. Resolved executable and model/effort/permission arguments are passed literally as separate positional arguments. Generic non-agent programs retain their direct launch path. This does not resume any previous agent conversation.

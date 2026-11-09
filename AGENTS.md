@@ -56,6 +56,10 @@ Detaching or hiding a view must not stop its backend. Explicit stop must target 
 
 Use feature/<name> or experiment/<name> branches with matching .worktrees/feature-<name> or .worktrees/experiment-<name> paths. Existing imported branch names remain valid. Use a native GitHub PR stack for dependent increments. Never use an admin bypass or merge without the owner's applicable approval.
 
+Keep the selected development source committed, pushed and covered by a cohesive PR path to main. A dependent branch must target main or the head of a published prerequisite PR. Report any uncommitted, unpushed or PR-uncovered implementation at handoff; do not label a build from that state canonical. Merge verified increments under the owner's applicable approval as they finish, rather than accumulating a whole initiative outside main. At each integration checkpoint, reconcile the running artifact, source commit, PR stack and main before starting another independent feature. Merging is not final foundation or release acceptance.
+
+Retire completed work deliberately. Link superseded PRs to their replacement, preserve experiment branches and archive their completed records, and delete feature branches only after verifying their changes are merged. Preserve active sessions, unfinished records and runtime/build paths before removing worktrees.
+
 Each task worktree owns local SPEC.md, module specs, tasks/plan.md and tasks/todo.md. Exclude their exact paths through the common Git info/exclude. Do not commit or overwrite unfinished task records. Preserve them under the established Obsidian spec-history convention only after accepted completion and merge.
 
 Keep exploratory source under `experiments/<name>/`. The selected product structure is `contract/`, `app/`, `desktop/` and `content/`; promote only selected implementation into those groups through the shared Git workflow. Preserve active work and runnable demos during cleanup.
