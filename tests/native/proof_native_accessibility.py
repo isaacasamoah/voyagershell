@@ -29,6 +29,21 @@ def enabled(value=None):
 
 
 def fields(pid, names=("Note title", "Note text"), coordinate_space="screen"):
+    for attempt in range(2):
+        try:
+            return _fields_once(pid, names, coordinate_space)
+        except GLib.Error as error:
+            if (
+                attempt
+                or error.domain != "atspi_error"
+                or error.code != 1
+                or not error.message.startswith("Unknown object '/org/a11y/atspi/accessible/")
+            ):
+                raise
+            time.sleep(0.05)
+
+
+def _fields_once(pid, names, coordinate_space):
     Atspi.init()
     desktop = Atspi.get_desktop(0)
     for _ in range(30):
@@ -48,6 +63,8 @@ def fields(pid, names=("Note title", "Note text"), coordinate_space="screen"):
     visited = 0
     while pending:
         node = pending.pop()
+        if node is None:
+            continue
         visited += 1
         assert visited <= 512, "Unexpectedly large candidate accessibility tree"
         name = node.get_name()

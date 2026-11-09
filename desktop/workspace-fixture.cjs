@@ -11,6 +11,7 @@ module.exports = function workspaceSource(
       "utf8",
     )
     .replace(/^import [\s\S]*?;\n/gm, "")
+    .replace(/^export \{[^}]+\} from [^;]+;\n/gm, "")
     .replace("export default class", declaration)
     .replace("export class", declaration)
     .replaceAll(
@@ -21,6 +22,8 @@ module.exports = function workspaceSource(
     filename === "main.js"
       ? [
           "worktrees.js",
+          "voyage-close.js",
+          "voyage-colours.js",
           "process-icons.js",
           "panels.js",
           "panel-view.js",
@@ -34,5 +37,12 @@ module.exports = function workspaceSource(
           )
           .join("\n")
       : "";
-  return helpers + "\n" + source;
+  const ui =
+    filename === "main.js"
+      ? fs
+          .readFileSync(`${__dirname}/../content/ui.js`, "utf8")
+          .replace(/^import [\s\S]*?;\n/gm, "")
+          .replace(/^export /gm, "")
+      : "";
+  return ui + "\n" + helpers + "\n" + source;
 };

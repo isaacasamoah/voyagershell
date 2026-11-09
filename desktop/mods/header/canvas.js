@@ -19,6 +19,12 @@ export function composeCanvas(canvas, region, column) {
     } else if (!node.size || node.size.kind === "fill") element.flex_1();
     else element.flex_shrink_0();
     if (!block) {
+      if (node.kind === "stack") {
+        const selected = node.children[node.selected];
+        if (!selected) throw Error("The canvas stack selection is invalid.");
+        const child = visit(selected, axis);
+        return child ? element.child(child) : element;
+      }
       if (node.kind === "column") element.flex_col();
       const children = [];
       let portals = null;

@@ -203,8 +203,10 @@ callbacks receive explicit errors without dispatching an application effect.
 
 ## Native speech integration
 
-The native speech candidate reuses the installed Codex 0.166.0 helper beside the
-exact executable retained by the private provider. It compares the initialized
+The native speech candidate reuses the helper beside the exact installed Codex
+executable retained by the private provider. Package discovery accepts manifest
+schema 1 and a bounded version identity rather than a fixed application release.
+Compatible CLI updates therefore do not require a release-number allowlist. It compares the initialized
 provider version with that package's manifest before starting the helper. The
 helper must then acknowledge protocol 1 and the manifest's exact build commit.
 Provider initialization exposes a version, so these checks do not establish the
@@ -271,3 +273,37 @@ has compile and pure source checks only. Real account readiness, audible
 full-duplex speech, interruption, scoped tools and lease loss still require the
 serialized native journey in the approved
 [conversation plan](/home/isaac/voyagershell/.worktrees/feature-foundation-design/tasks/plan-native-conversation.md#complete-real-native-voice).
+
+## Messaging and dock-context investigation
+
+The private administrator currently has workspace, process, content and worktree
+tools. Process Send calls Core terminal.send with wait disabled and returns its
+observed turn, started and status fields. Core still performs its quiet-input,
+paste, submit and status checks. The call can therefore occupy the application
+actor while Core waits. A submitted input is not a completed agent task.
+
+Voyager supplies no Core caller address for that private Send and exposes no
+native Wait tool or addressed private reply inbox. Working Vessels may use
+Core's own Send and Wait facilities, but a verified two-agent exchange remains
+separate work. The audit does not establish that private Voyager receives those
+replies. Fleet membership grants no messaging authority.
+
+Text requests capture avatar context at Send. Native voice binds its actual
+backing turn through the queued workspace inspection. After a successful Dock
+reply, the application queues one replaceable preparation read. A later scope
+or workspace revision makes that read ineligible. It retains one observation,
+limited to three visible panels and 4 KiB of text, with no polling or model turn.
+Matching text and voice captures may include that observation in the generated
+Focus.preview field. Its age and untrusted status are explicit. Terminal reads
+use Core's screen without scrollback; Notes contributes saved Markdown and
+explicitly excludes unsaved editor drafts. Tools remain available for fresh or
+more detailed inspection. Accepted requests retain their original focus and
+preview after later docking. This is bounded context preparation, not transcript
+discovery or positional navigation.
+
+VOYAGER_TRACE_TOOLS enables method/operation duration logs without request
+contents, audio or credentials. It is off by default. Core timings separate its
+RPC duration from the application observations. Preparing a dock observation
+does not open Chat. Source inspection found only deliberate message-toggle clicks
+opening it; the reported voice-disclosure behavior has not yet been reproduced
+on the current candidate.

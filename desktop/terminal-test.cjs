@@ -114,6 +114,9 @@ function fixture(
     splitReset: 0,
     layout,
     busy: false,
+    pendingPresentation: null,
+    processes: [],
+    processError: "",
     terminals: new Map(),
     attempted: new Set(),
     refused: new Set(),
@@ -147,6 +150,92 @@ function fixture(
     choices,
   };
 }
+
+test("a Portal reveal waits for successful preparation and keeps its completion callback", async () => {
+  const { view, cx, pending, actions, layout, versions } = fixture("applied");
+  layout.voyages[0].portalLayout = {
+    visible: false,
+    root: null,
+    width: 340,
+    mode: "overlay",
+  };
+  let completed = 0;
+  view.run({ operation: "inspect" }, cx);
+  view.run(
+    { operation: "set-portal-presentation", voyage: "voyage", visible: true },
+    cx,
+    () => completed++,
+  );
+  assert.deepEqual(actions, ["inspect"]);
+  await pending[0];
+  await Promise.all(pending);
+  assert.equal(
+    actions.filter((action) => action === "set-portal-presentation").length,
+    1,
+  );
+  assert.equal(versions.at(-1), view.version);
+  assert.equal(completed, 1);
+});
+
+test("an unsent Close waits once and refuses changed placement identity", async () => {
+  for (const changed of [false, true]) {
+    const { view, cx, pending, actions, layout } = fixture("applied");
+    view.run({ operation: "inspect" }, cx);
+    view.run({ operation: "remove-panel", id: "vessel" }, cx);
+    if (changed) layout.voyages[0].fleets[0].vessels[0].content = "different";
+    await pending[0];
+    await Promise.all(pending);
+    assert.equal(
+      actions.filter((action) => action === "remove-panel").length,
+      changed ? 0 : 1,
+    );
+    if (changed) assert.match(view.status, /changed/);
+  }
+});
+
+test("refused uncertain and failed preparation never submit a waiting presentation action", async () => {
+  for (const [open, outcome] of [
+    ["applied", "rejected"],
+    ["applied", "uncertain"],
+    [{ status: "uncertain" }, "applied"],
+  ]) {
+    const { view, cx, pending, actions } = fixture(open, outcome, true);
+    view.run({ operation: "inspect" }, cx);
+    view.run({ operation: "remove-panel", id: "vessel" }, cx);
+    await pending[0];
+    assert.equal(actions.includes("remove-panel"), false);
+    assert.equal(view.pendingPresentation, null);
+    assert.match(view.status, /not sent/);
+  }
+});
+
+test("waiting presentation admission refuses stale competing and width-drag requests", async () => {
+  const { view, cx, pending, actions, layout } = fixture("applied");
+  layout.voyages[0].portalLayout = {
+    visible: false,
+    root: null,
+    width: 340,
+    mode: "overlay",
+  };
+  view.run({ operation: "inspect" }, cx);
+  view.run({ operation: "remove-panel", id: "vessel" }, cx, undefined, "0");
+  assert.match(view.status, /changed/);
+  view.run(
+    { operation: "set-portal-presentation", voyage: "voyage", width: 480 },
+    cx,
+  );
+  assert.equal(view.pendingPresentation, null);
+  view.run({ operation: "remove-panel", id: "vessel" }, cx);
+  view.run(
+    { operation: "set-portal-presentation", voyage: "voyage", visible: true },
+    cx,
+  );
+  assert.match(view.status, /already waiting/);
+  await pending[0];
+  await Promise.all(pending);
+  assert.equal(actions.filter((action) => action === "remove-panel").length, 1);
+  assert.equal(actions.includes("set-portal-presentation"), false);
+});
 
 test("Notes placements never open a terminal, including owner-created content", async () => {
   const { view, task, layout, count } = fixture("applied");
@@ -183,6 +272,30 @@ test("Refresh does not start an unbound shell merely because its prior viewer en
   view.run({ operation: "inspect" }, cx);
   await pending[0];
   assert.equal(count(), 0);
+});
+
+test("an owner-granted reopened shell replaces its retained viewer once", async () => {
+  for (const status of [
+    "applied",
+    "unbound",
+    "rejected",
+    "uncertain",
+    "pending",
+  ]) {
+    const { view, task, layout, count } = fixture(() => {
+      layout.contents[0].backend = "fresh-shell";
+      return "applied";
+    });
+    const prior = { status };
+    view.openings.set("content", prior);
+    view.terminals.set("content", {});
+    await view.prepare(task, true, new Set(), new Set(["content"]));
+    const known = ["applied", "unbound", "rejected"].includes(status);
+    assert.equal(count(), known ? 1 : 0, status);
+    if (!known) assert.equal(view.openings.get("content"), prior);
+    await view.prepare(task, true);
+    assert.equal(count(), known ? 1 : 0, "No repeated start");
+  }
 });
 
 test("one fresh shell intent replaces its old opening without retrying a refusal", async () => {
@@ -943,6 +1056,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   };
   let occluders = 0;
   const layers = [];
+  let animationNotice = null;
   const layer = {
     new(id, props) {
       layers.push({ id, ...props });
@@ -959,6 +1073,8 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "Layer",
     "Target",
     "take_result",
+    "take_animation_notice",
+    "Status",
     "homeOverview",
     "workspace_notice",
     "composeCanvas",
@@ -982,6 +1098,12 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     layer,
     target,
     () => null,
+    () => {
+      const notice = animationNotice;
+      animationNotice = null;
+      return notice;
+    },
+    { new: (_id, text) => div().child(text) },
     () => div(),
     () => ({ revision: ownerRevision, packageRevision, activityRevision }),
     new Function(
@@ -1197,6 +1319,18 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   );
   view.layout = unchanged;
   assert.equal(view.version, "7");
+  animationNotice = "Avatar animations: missing asset";
+  view.render({});
+  assert.equal(view.status, animationNotice ?? view.animationNotice);
+  animationNotice = "";
+  view.render({});
+  assert.equal(view.status, "");
+  animationNotice = "Avatar animations: broken PNG";
+  view.render({});
+  view.status = "Workspace changed";
+  animationNotice = "";
+  view.render({});
+  assert.equal(view.status, "Workspace changed");
   view.sidebar = false;
   view.chat.render = () => div();
   view.chat.present = false;

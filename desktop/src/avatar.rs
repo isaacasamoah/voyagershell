@@ -1,6 +1,8 @@
+mod paint;
 mod view;
 
-use crate::avatar_motion::{self as motion, Motion};
+use crate::avatar_motion::Motion;
+use crate::avatar_pack::{self, Prepared, asset};
 use gpui::{
     AnyWindowHandle, App, AppContext, Bounds, Context, Entity, EventEmitter, FocusHandle,
     IntoElement, ParentElement, Pixels, Point, Styled, Subscription, Task, Window,
@@ -10,6 +12,7 @@ use gpui::{
 use gpui_shell::{HostError, HostModule, HostValue, ScriptView, ShellRoot};
 use std::{
     cell::{Cell, RefCell},
+    collections::HashSet,
     path::PathBuf,
     rc::Rc,
     sync::{
@@ -20,6 +23,7 @@ use std::{
 };
 use view::AvatarView;
 use voyager_app::client::Client;
+use voyager_contract::avatar_animation::Trigger;
 use voyager_contract::{Action, Context as Scope, Request, Response, Status};
 
 struct Changed;
@@ -35,7 +39,6 @@ pub struct Avatar {
     drag: Option<Drag>,
     geometry: Rc<RefCell<Geometry>>,
     motion: Motion,
-    epoch: Instant,
     workspace: AnyWindowHandle,
     floating: Option<AnyWindowHandle>,
     opening: Option<u64>,
@@ -46,7 +49,9 @@ pub struct Avatar {
     position_task: Option<Task<()>>,
     position_io: Arc<Mutex<Option<crate::platform::WindowPosition>>>,
     result: Rc<RefCell<Option<Result<Response, String>>>>,
-    images: Vec<(&'static str, PathBuf)>,
+    animation_directory: PathBuf,
+    animation_reload: Option<Task<()>>,
+    animation_notice: Rc<RefCell<Option<String>>>,
 }
 
 impl EventEmitter<Changed> for Avatar {}
@@ -56,6 +61,7 @@ pub struct Binding {
     avatar: Entity<Avatar>,
     view: Entity<AvatarView>,
     targets: Rc<RefCell<Geometry>>,
+    animation_notice: Rc<RefCell<Option<String>>>,
     result: Rc<RefCell<Option<Result<Response, String>>>>,
     window_epoch: Rc<Cell<u64>>,
     primary_speech: Rc<Cell<bool>>,
@@ -253,13 +259,48 @@ fn speech_in_primary(scope: &Scope, visible: bool, floating: bool) -> bool {
     !floating && (!visible || matches!(scope, Scope::Voyage { .. } | Scope::Fleet { .. }))
 }
 
-fn asset(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("assets")
-        .join(name)
-}
-
 impl Avatar {
+    fn animate(&mut self, trigger: Trigger, cx: &mut Context<Self>) {
+        if self.motion.trigger(trigger) {
+            cx.notify();
+        }
+    }
+
+    fn reload_animations(&mut self, cx: &mut Context<Self>) {
+        if self.animation_reload.is_some() {
+            return;
+        }
+        let directory = self.animation_directory.clone();
+        self.animation_reload = Some(cx.spawn(async move |avatar, cx| {
+            let loaded = cx
+                .background_executor()
+                .spawn(async move { avatar_pack::load(&directory) })
+                .await;
+            let _ = avatar.update(cx, |avatar, cx| {
+                avatar.animation_reload = None;
+                match loaded {
+                    Ok(pack) => {
+                        let retired = avatar.motion.replace(pack);
+                        let mut images = HashSet::new();
+                        for pose in &retired.poses {
+                            if images.insert(pose.image.id) {
+                                cx.drop_image(Arc::clone(&pose.image), None);
+                            }
+                        }
+                        cx.refresh_windows();
+                        *avatar.animation_notice.borrow_mut() = Some(String::new());
+                    }
+                    Err(error) => {
+                        *avatar.animation_notice.borrow_mut() =
+                            Some(format!("Avatar animations: {error:#}"))
+                    }
+                }
+                cx.emit(Changed);
+                cx.notify();
+            });
+        }));
+    }
+
     fn speech_in_primary(&self) -> bool {
         speech_in_primary(
             &self.scope,
@@ -307,6 +348,7 @@ impl Avatar {
             self.update_dock_visibility(cx);
         }
         crate::platform::tone(true);
+        self.motion.trigger(Trigger::Dock);
         cx.notify();
     }
 
@@ -324,6 +366,7 @@ impl Avatar {
     }
 
     fn activate(&mut self, window: &Window, cx: &mut Context<Self>) {
+        self.animate(Trigger::Click, cx);
         if self.floating == Some(window.window_handle()) {
             self.restore_workspace(cx);
         } else {
@@ -450,6 +493,7 @@ impl Avatar {
         let delta = desktop - drag.start;
         if !drag.moved && f32::from(delta.x).hypot(f32::from(delta.y)) > 7. {
             drag.moved = true;
+            self.motion.trigger(Trigger::Undock);
             if drag.source == self.workspace {
                 crate::platform::tone(false);
             }
@@ -769,9 +813,10 @@ impl Binding {
         self.view.clone().into()
     }
 
-    pub fn new(client: Client, window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(client: Client, prepared: Prepared, window: &mut Window, cx: &mut App) -> Self {
         let workspace = window.window_handle();
-        let result = Rc::default();
+        let result = Rc::new(RefCell::new(None));
+        let animation_notice = Rc::new(RefCell::new(prepared.error));
         let window_epoch = Rc::new(Cell::new(0));
         let targets = Rc::default();
         let primary_speech = Rc::new(Cell::new(true));
@@ -786,9 +831,9 @@ impl Binding {
             drag: None,
             geometry: Rc::clone(&targets),
             motion: Motion::new(
+                prepared.pack,
                 cx.reduce_motion() || std::env::var_os("VOYAGER_REDUCED_MOTION").is_some(),
             ),
-            epoch: Instant::now(),
             workspace,
             floating: None,
             opening: None,
@@ -799,20 +844,9 @@ impl Binding {
             position_task: None,
             position_io: Arc::new(Mutex::new(None)),
             result: Rc::clone(&result),
-            images: [
-                motion::IDLE,
-                motion::READING[0],
-                motion::READING[1],
-                "book-frames/book-out.png",
-                "book-frames/book-away.png",
-                "stretch-frames/frame-1-uncrossing.png",
-                "stretch-frames/frame-2-stretched.png",
-                "stretch-frames/frame-3-peak-stretch.png",
-                "avatar-tint.svg",
-            ]
-            .into_iter()
-            .map(|name| (name, asset(name)))
-            .collect(),
+            animation_directory: prepared.directory,
+            animation_reload: None,
+            animation_notice: Rc::clone(&animation_notice),
         });
         let view = cx.new(|cx| {
             AvatarView::new(
@@ -837,6 +871,7 @@ impl Binding {
             avatar,
             view,
             targets,
+            animation_notice,
             result,
             window_epoch,
             primary_speech,
@@ -851,6 +886,7 @@ impl Binding {
         let target_avatar = self.avatar.clone();
         let target_view = self.view.downgrade();
         let result = Rc::clone(&self.result);
+        let animation_notice = Rc::clone(&self.animation_notice);
         let epoch = Rc::clone(&self.window_epoch);
         let visibility = Rc::clone(&self.targets);
         let primary_speech = Rc::clone(&self.primary_speech);
@@ -1090,6 +1126,9 @@ impl Binding {
             })
             .function("window_epoch", move |_| {
                 Ok(HostValue::from(epoch.get().to_string()))
+            })
+            .function("take_animation_notice", move |_| {
+                Ok(animation_notice.borrow_mut().take().map_or(HostValue::Null, HostValue::from))
             })
             .function("take_result", move |_| match result.borrow_mut().take() {
                 None => Ok(HostValue::Null),

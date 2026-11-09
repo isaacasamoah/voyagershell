@@ -7,11 +7,25 @@ const standalone = require("ajv/dist/standalone").default;
 const repository = path.resolve(__dirname, "..");
 const ts = require("typescript");
 const prettier = require("prettier");
+const unicodeLength = require("ajv/dist/runtime/ucs2length").default;
+unicodeLength.code = ts
+  .transpileModule(`(${unicodeLength.toString()})`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, removeComments: true },
+  })
+  .outputText.trim()
+  .replace(/;$/, "");
 
-async function main() {
-  const mode = process.argv[2];
-  if (!["--write", "--check"].includes(mode))
-    throw Error("Expected --write or --check");
+function writeFiles(mode, directory, files) {
+  if (mode === "--write") fs.mkdirSync(directory, { recursive: true });
+  for (const [name, data] of Object.entries(files)) {
+    const file = path.join(directory, name);
+    if (mode === "--write") fs.writeFileSync(file, data);
+    else if (fs.readFileSync(file, "utf8") !== data)
+      throw Error(`Contract drift: ${name}`);
+  }
+}
+
+async function generate(mode, avatar) {
   const schemas = JSON.parse(
     execFileSync(
       "cargo",
@@ -24,6 +38,7 @@ async function main() {
         "voyager-contract",
         "--bin",
         "export",
+        ...(avatar ? ["--", "--avatar"] : []),
       ],
       {
         cwd: path.join(__dirname, ".."),
@@ -39,6 +54,10 @@ async function main() {
       bannerComment: "",
       unknownAny: true,
     });
+  }
+  if (avatar) {
+    writeFiles(mode, path.join(__dirname, "generated", "avatar"), files);
+    return;
   }
   const ajv = new Ajv({
     strict: true,
@@ -123,15 +142,17 @@ export async function observe(after: string | null): Promise<Snapshot | null> {
     }).outputText,
     { parser: "babel" },
   );
-  const directory = path.join(__dirname, "generated");
-  if (mode === "--write") fs.mkdirSync(directory, { recursive: true });
-  for (const [name, data] of Object.entries(files)) {
-    const file = path.join(directory, name);
-    if (mode === "--write") fs.writeFileSync(file, data);
-    else if (fs.readFileSync(file, "utf8") !== data)
-      throw Error(`Contract drift: ${name}`);
-  }
+  writeFiles(mode, path.join(__dirname, "generated"), files);
 }
+
+async function main() {
+  const mode = process.argv[2];
+  if (!["--write", "--check"].includes(mode))
+    throw Error("Expected --write or --check");
+  await generate(mode, false);
+  await generate(mode, true);
+}
+
 main().catch((error) => {
   console.error(error.message);
   process.exitCode = 1;

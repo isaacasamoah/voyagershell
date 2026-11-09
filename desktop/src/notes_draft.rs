@@ -107,6 +107,14 @@ impl Draft {
         applied && self.pending() && self.dirty
     }
 
+    pub fn saving(&self) -> bool {
+        self.saving
+    }
+
+    pub fn unconfirmed(&self) -> bool {
+        self.unconfirmed == Some(self.generation)
+    }
+
     pub fn pending(&self) -> bool {
         self.pending_blur == Some(self.generation)
     }
@@ -169,6 +177,7 @@ mod tests {
             Err(&CallError::Unconfirmed("Lost confirmation".into()))
         ));
         assert!(draft.blur().is_none());
+        assert!(draft.unconfirmed());
         draft.changed(Field::Text);
         let new_save = draft.blur().unwrap();
         draft.retire();
@@ -180,6 +189,7 @@ mod tests {
         };
         assert!(!draft.finish(new_save.generation, Ok(&applied)));
         assert!(!draft.dirty);
+        assert!(!draft.unconfirmed());
         assert_eq!(draft.status, "Saved");
     }
 }

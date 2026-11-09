@@ -145,4 +145,28 @@ mod tests {
         assert_eq!(list(&root).unwrap().len(), 2);
         std::fs::remove_dir_all(root).unwrap();
     }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn rename_preserves_markdown_and_refuses_collision_or_stale_bytes() {
+        let root = std::env::temp_dir().join(format!("voyager-note-rename-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("Before.md"), b"# Heading\n\nBody").unwrap();
+        fs::write(root.join("Taken.md"), b"Keep").unwrap();
+        let selected = voyager_contract::content::NotesFile {
+            directory: root.to_str().unwrap().into(),
+            filename: "Before.md".into(),
+        };
+        let revision = super::super::rename::revision(&selected).unwrap();
+        assert!(super::super::rename::move_file(&selected, "Taken.md", &revision).is_err());
+        assert!(super::super::rename::move_file(&selected, "After.md", "stale").is_err());
+        super::super::rename::move_file(&selected, "After.md", &revision).unwrap();
+        assert!(!root.join("Before.md").exists());
+        assert_eq!(
+            fs::read(root.join("After.md")).unwrap(),
+            b"# Heading\n\nBody"
+        );
+        assert_eq!(fs::read(root.join("Taken.md")).unwrap(), b"Keep");
+        fs::remove_dir_all(root).unwrap();
+    }
 }

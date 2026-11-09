@@ -1,9 +1,35 @@
+import hashlib
 import json
 import subprocess
 import time
 from pathlib import Path
 
 from proof_process import observe_core_exit
+
+
+def wait(get, predicate, label, seconds=20):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        value = get()
+        if value is not None and predicate(value):
+            return value
+        time.sleep(0.1)
+    raise AssertionError(f"Timed out waiting for {label}: {value}")
+
+
+def review_frame(capture, evidence, name, frame):
+    capture(frame)
+    image = evidence / (frame + "-compositor.png")
+    digest = hashlib.sha256(image.read_bytes()).hexdigest()
+    request = {"name": name, "image": image.name, "sha256": digest}
+    (evidence / "visual-request.json").write_text(json.dumps(request, indent=2))
+    reviewed = evidence / "visual-observations.json"
+    return wait(
+        lambda: json.loads(reviewed.read_text()) if reviewed.exists() else None,
+        lambda value: value.get("sha256") == digest and value.get("observed") is True,
+        "native visual review: " + name,
+        180,
+    )
 
 
 def chord(native, character):
@@ -46,6 +72,33 @@ def named_button(
     x = item["x"] + (2 if edge == "left" else item["width"] / 2)
     y = item["y"] + (2 if edge == "top" else item["height"] / 2)
     return x / 2, y / 2
+
+
+def click_control(native, capture, geometry, evidence, owner, name, targets, code=272):
+    fields = native("fields", owner, [name], "window")["fields"]
+    roles = ("button", "push button", "menu item", "menu_item", "switch", "terminal")
+    items = [item for item in fields if item["role"] in roles and item["width"] > 0 and item["height"] > 0]
+    if len(items) == 1:
+        item = items[0]
+    else:
+        index = len(targets)
+        bounds = geometry()
+        native("move", int(bounds["X"]) + 4, int(bounds["Y"]) + int(bounds["HEIGHT"]) - 4, 2)
+        time.sleep(0.15)
+        image = capture(f"target-{index}")
+        assert image.size == (1450, 940)
+        request = {"index": index, "name": name, "image": f"target-{index}-compositor.png", "size": list(image.size)}
+        (evidence / "target-request.json").write_text(json.dumps(request, indent=2))
+        points = evidence / "measured-points.json"
+        point = wait(lambda: json.loads(points.read_text()).get(str(index)) if points.exists() else None, lambda value: value["name"] == name, "measured visible target " + name, 180)
+        x, y = point["point"]
+        assert 0 <= x < image.width and 0 <= y < image.height
+        item = {"name": name, "source": request["image"], "reference": point.get("reference"), "x": x * 2, "y": y * 2, "width": 0, "height": 0}
+    bounds = geometry()
+    native("move", int(bounds["X"]) + round(item["x"] + item["width"] / 2), int(bounds["Y"]) + round(item["y"] + item["height"] / 2), 2)
+    native("button", True, code)
+    native("button", False, code)
+    targets.append(item)
 
 
 def create_voyage(capture, click, evidence):

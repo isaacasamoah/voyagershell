@@ -1,3 +1,4 @@
+export type Phase = "ready" | "saving" | "incomplete" | "closed";
 export type PortalMode = "overlay" | "make-room";
 export type Node =
   | {
@@ -8,6 +9,12 @@ export type Node =
   | {
       children: Node[];
       kind: "column";
+      size?: Size;
+    }
+  | {
+      children: Node[];
+      kind: "stack";
+      selected: number;
       size?: Size;
     }
   | {
@@ -91,6 +98,7 @@ export type WorkspaceView = "home" | "fleet";
 export type Status = "applied" | "rejected" | "uncertain";
 
 export interface Response {
+  closePlan?: Plan | null;
   createdContents: string[];
   createdWorkspace: boolean;
   fresh: boolean;
@@ -99,6 +107,23 @@ export interface Response {
   requestId: string;
   status: Status;
   version: string;
+}
+export interface Plan {
+  entries: Entry[];
+  id: string;
+  message?: string | null;
+  name: string;
+  phase: Phase;
+  uncommittedChanges?: number | null;
+  version: string;
+  voyage: string;
+}
+export interface Entry {
+  content: string;
+  name: string;
+  pid?: number | null;
+  terminal?: string | null;
+  typeId: string;
 }
 export interface Layout {
   canvas?: Canvas;
@@ -136,8 +161,10 @@ export interface Voyage {
   fleets: Fleet[];
   id: string;
   name: string;
+  nameOrigin?: NameOrigin & string;
   portalLayout?: PortalLayout | null;
   portals: Vessel[];
+  primaryVessel?: string | null;
 }
 export interface Fleet {
   closed?: boolean;

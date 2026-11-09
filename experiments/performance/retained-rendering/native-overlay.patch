@@ -11,7 +11,7 @@ index cc9d54b8..f83b2f36 100644
      /// Retains a script application's policy and cancels its work when this
      /// window root is dropped. Ordinary Rust content leaves it empty.
 @@ -223,6 +224,7 @@ impl ShellRoot {
- 
+
          Self {
              content,
 +            native_overlay: None,
@@ -21,7 +21,7 @@ index cc9d54b8..f83b2f36 100644
 @@ -300,6 +302,11 @@ impl ShellRoot {
          &self.content
      }
- 
+
 +    pub fn with_native_overlay(mut self, overlay: AnyView) -> Self {
 +        self.native_overlay = Some(overlay);
 +        self

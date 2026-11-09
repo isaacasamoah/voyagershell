@@ -336,3 +336,64 @@ and Herdr App at
 [the pinned Herdr App source](https://github.com/herdrdev/herdr-app/tree/1581a587919dddd6f1efd5f78eb542c4b2b02cb5).
 The integration uses supported isolated runtimes, host components and retained
 views. It adds no browser engine or second Core connection.
+
+
+## Notes controls in the feedback candidate
+
+The Notes toolbar has one down arrow containing New and Open, with a preview switch beside it. Open shows the current directory's Markdown file list beside those menu actions. The switch is off for the retained native editors and on for Markdown preview; it never replaces the draft owner. The current filename and status remain available. Existing content configuration retains the selected file when the same Notes instance reopens. A new instance starts with a blank note if no file was selected.
+
+New, Open and save continue through the one Rust file owner. Opening the menu does not rebuild Markdown for each typed character. Preview is constructed only when selected. Existing external-change/revision checks and dirty-editor retention remain unchanged. Native interactions, including menu dismissal and real file selection, must pass before accepting this presentation.
+
+## Exiting a retained Note
+
+Exit in the Notes file menu captures one visible placement and the workspace
+revision before saving. Native inputs become read-only while the existing
+revision-checked save completes. A refusal or unconfirmed save retains the view
+and draft. The captured binding, placement and saved file revision are checked
+again at the application owner. The request then enters the existing typed
+RemovePanel dispatch, including receipts, workspace revision checks and owner
+notifications. Exit never stops a Core program. Notes has no separate process.
+
+A confirmed Exit retires the view and releases its cached native instance. The
+factory also rejects an exited cache entry synchronously, so an immediate reopen
+cannot reuse a retired view before periodic cleanup. The Markdown file remains
+available through Open. Activity includes visible document placements, rather
+than all retained document memberships. Hidden live terminals remain running
+work and are independent of this document rule.
+
+## Markdown filenames and placement names
+
+New, Open and legacy conversion set placement names to the selected Markdown
+filename. Rename normalizes the .md suffix and moves the file through the same
+application owner. The Markdown heading and body do not change. All bindings
+of that path are collected by resolved directory and filename, while each
+binding keeps its original directory spelling. A scoped caller must have access
+to every affected content instance.
+
+The existing native save bridge freezes those instances and checks their exact
+selected and draft file bindings before saving. More than one dirty view of the
+same file refuses rename so competing drafts are not merged implicitly. The
+actor keeps serving saves while the native bridge returns the final saved
+revision. Completion revalidates the workspace, target, aliases and file bytes.
+The existing rustix filesystem primitive performs an atomic no-replace rename
+relative to an opened directory. Reads refuse source symlinks. No hard-link or
+later unlink is used. The primitive is enabled for Linux and macOS; Windows
+rename is unsupported by this implementation, and macOS runtime remains unproved.
+
+A post-move revision mismatch or uncertain Core document save reports the moved
+path and an uncertain result without replay or automatic undo. A confirmed
+document save updates every affected binding and label. The native bridge
+hydrates frozen clean editors from that saved snapshot before restoring their
+editability. A scoped release guard retains the exact ticket and receiver and
+releases editors on admission, stale-state and shutdown exits as well as success.
+The captured revision is a stale-read check, not a lock on external OS editors.
+The file remains subject to ordinary subsequent filesystem changes.
+
+A cached native Note can exist before its first retained snapshot is loaded.
+Only a clean, unselected cache with no revision, native view, configured file
+or retained draft file has no file identity to protect.
+Rename preparation permits it without treating it as an open retained draft.
+A selected, loaded or dirty Session still requires all original file and active
+view checks. Confirmed-exited Sessions are removed before preparation. The
+ordinary reply rebinds clean caches through the same saved snapshot; it does
+not activate a view or recreate a placement.

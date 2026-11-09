@@ -154,3 +154,104 @@ fn selected_stop_retains_its_receipt_and_leaves_other_programs_running() {
     assert!(other_stopped.is_ok(), "{other_stopped:?}");
     checked.unwrap();
 }
+
+#[test]
+fn delayed_process_send_does_not_hold_workspace_inspection() {
+    use std::time::{Duration, Instant};
+    let session = format!("voyager-responsive-{}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let checked = std::panic::catch_unwind(|| {
+        let inspect = || {
+            client
+                .call(Request {
+                    request_id: client.request_id(),
+                    expected_version: 0,
+                    action: Action::Inspect,
+                })
+                .unwrap()
+        };
+        let initial = inspect();
+        let content = initial.layout.contents[0].id.clone();
+        let viewer = client
+            .terminal(content.clone(), client.request_id(), initial.version)
+            .unwrap();
+        let bound = inspect();
+        let address = bound.layout.contents[0].backend.clone().unwrap();
+        let mut observer = Core::connect(&session).unwrap();
+        viewer.input(b"printf '\\033]7501;state=idle:app=voyager-proof\\033\\\\'; read -r proposal; sleep 10\n".to_vec()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(8);
+        let target = loop {
+            let terminal = observer.terminal_get(&address.0).unwrap();
+            let value = serde_json::to_value(&terminal).unwrap();
+            if value.pointer("/status/state") == Some(&json!("idle")) {
+                break terminal;
+            }
+            assert!(Instant::now() < deadline, "Controlled idle report missing");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        let current = inspect();
+        let request = ProcessRequest {
+            request_id: client.request_id(),
+            input: ProcessInput {
+                expected_version: current.version,
+                action: ProcessAction::Send {
+                    content_id: content,
+                    terminal_id: address.clone(),
+                    pid: target.pid.unwrap(),
+                    text: "RESPONSIVENESS_PROBE".into(),
+                },
+            },
+        };
+        let worker = client.clone();
+        let dispatched = request.clone();
+        let sending =
+            std::thread::spawn(move || worker.process(Context::Workspace, dispatched).unwrap());
+        while !observer
+            .terminal_read(&address.0, 0)
+            .unwrap()
+            .text
+            .contains("RESPONSIVENESS_PROBE")
+        {
+            assert!(Instant::now() < deadline, "Send was not observed");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let started = Instant::now();
+        let inspected = inspect();
+        let elapsed = started.elapsed();
+        let duplicate = client.process(Context::Workspace, request.clone()).unwrap();
+        assert_eq!(duplicate.status, Status::Rejected);
+        assert!(
+            duplicate
+                .message
+                .as_deref()
+                .unwrap()
+                .contains("still pending")
+        );
+        let dock = client
+            .call(Request {
+                request_id: client.request_id(),
+                expected_version: inspected.version,
+                action: Action::Dock {
+                    context: Context::Voyage {
+                        id: inspected.layout.voyages[0].id.clone(),
+                    },
+                },
+            })
+            .unwrap();
+        assert_eq!(dock.status, Status::Applied);
+        let sent = sending.join().unwrap();
+        assert_eq!(*client.process(Context::Workspace, request).unwrap(), *sent);
+        assert!(
+            matches!(&sent.output, Some(ProcessOutput::Send { target, .. }) if target.terminal_id == address)
+        );
+        assert_eq!(sent.status, Status::Applied, "{sent:?}");
+        assert!(inspected.fresh);
+        eprintln!("Workspace inspection during delayed send: {elapsed:?}");
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "Workspace inspection was blocked for {elapsed:?}"
+        );
+    });
+    Core::connect(&session).unwrap().server_stop().unwrap();
+    checked.unwrap();
+}

@@ -1,4 +1,4 @@
-# Native SDK patch
+# Native SDK and platform patches
 
 `gpui-shell-native-overlay.patch` applies to GPUI Kit revision
 `944803984cf0ba3111861d6e1aa9d6265c109ff9` from
@@ -18,3 +18,18 @@ Keep this patch small. When upstream provides an equivalent interface, review
 that version and replace the patch through the normal dependency update. This
 local build integration does not publish an SDK fork or establish support on
 untested platforms.
+
+`gpui-linux-mailbox.patch` and `gpui-linux-monitor-clock.patch` apply to the
+checksum-pinned gpui-pre-linux 0.3.10 crate. The first requests the same Mailbox
+presentation mode used by its Wayland implementation, with the renderer's
+existing capability check and FIFO fallback. The second selects the existing
+X11 timer's interval from the window's monitor, using cached RandR geometry
+within the window's X root. It follows monitor changes without an animation
+cap or display queries during frames.
+
+The preparer verifies the registry archive, applies these patches in a separate
+digest-named source cache and checks the complete prepared tree. It preserves
+installed registry sources and unrelated build configuration. See
+[terminal rendering](../../docs/terminal.md#native-presentation-preference) for
+ownership and invariants. Measured performance, native UX and supported
+platforms require their own recorded evidence.

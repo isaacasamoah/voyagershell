@@ -1,4 +1,4 @@
-use super::{Pane, Select, cell_colors, cursor_offset};
+use super::{Pane, Select, cursor_offset, paint_colors};
 use gpui::prelude::FluentBuilder;
 use gpui::{
     Context, InteractiveElement as _, MouseButton, ParentElement as _, Render, Role,
@@ -6,12 +6,15 @@ use gpui::{
 };
 
 impl Render for Pane {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+        crate::typing_trace::record("render_start", usize::from(self.dirty));
+        crate::redraw_probe::record("terminal_renders", 1);
         if self.dirty {
             match self.screen.snapshot() {
                 Ok(grid) => {
                     self.grid = Some(grid);
                     self.dirty = false;
+                    crate::typing_trace::record("snapshot_done", 0);
                 }
                 Err(error) => self.status = format!("Terminal display: {error:#}"),
             }
@@ -24,6 +27,8 @@ impl Render for Pane {
         let geometry = self.geometry.clone();
         let terminal_bounds = self.bounds.clone();
         let weak = entity.downgrade();
+        #[cfg(feature = "frame-profiler")]
+        let glyph = crate::glyph_probe::observe(self.grid.as_ref());
         let measure = canvas(
             move |bounds, window, cx| {
                 if bounds.size.width <= px(16.) || bounds.size.height <= px(16.) {
@@ -59,6 +64,11 @@ impl Render for Pane {
                 }
             },
             move |bounds, _, window, cx| {
+                crate::typing_trace::record("native_paint_callback", 0);
+                #[cfg(feature = "frame-profiler")]
+                if let Some(count) = glyph {
+                    crate::typing_trace::record("glyph_paint_callback", count);
+                }
                 window.handle_input(
                     &input_focus,
                     gpui::ElementInputHandler::new(bounds, input_entity),
@@ -72,8 +82,46 @@ impl Render for Pane {
             gpui::rgb((u32::from(value.r) << 16) | (u32::from(value.g) << 8) | u32::from(value.b))
         };
         let mut rows = Vec::new();
+        let row_paint = !window.is_a11y_active()
+            && window.text_style().text_overflow.is_none()
+            && window.text_style().line_clamp.is_none();
+        crate::typing_trace::record(
+            "terminal_renderer_mode",
+            usize::from(row_paint) | (usize::from(window.is_a11y_active()) << 1),
+        );
+        if !row_paint {
+            self.row_paints.clear();
+        }
         if let Some(grid) = &self.grid {
+            if row_paint {
+                self.row_paints
+                    .resize_with(grid.rows.len(), Default::default);
+                crate::redraw_probe::record("terminal_canvas_rows", grid.rows.len() as u64);
+                crate::typing_trace::record("row_paint_used", grid.rows.len());
+            }
             for (y, cells) in grid.rows.iter().enumerate() {
+                if row_paint {
+                    rows.push(super::row_paint::row(
+                        super::row_paint::Input {
+                            cells: cells.clone(),
+                            selection: grid.selections.get(y).cloned().flatten(),
+                            cursor: grid.cursor.filter(|cursor| {
+                                cursor
+                                    .viewport
+                                    .is_some_and(|point| usize::from(point.y) == y)
+                            }),
+                            y,
+                            background: grid.colors.background,
+                            foreground: grid.colors.foreground,
+                            cursor_color: grid.colors.cursor,
+                            width,
+                            height,
+                            compact: true,
+                        },
+                        self.row_paints[y].clone(),
+                    ));
+                    continue;
+                }
                 let mut row = div()
                     .flex()
                     .flex_row()
@@ -83,43 +131,49 @@ impl Render for Pane {
                     .flex_none()
                     .whitespace_nowrap();
                 let mut preceding_text = false;
-                for (x, cell) in cells.iter().enumerate() {
+                let compact = true;
+                let selected = grid.selections.get(y).and_then(Option::as_ref);
+                let cursor = grid
+                    .cursor
+                    .and_then(|cursor| cursor.viewport)
+                    .filter(|point| usize::from(point.y) == y)
+                    .map(|point| usize::from(point.x));
+                for span in super::background::spans(cells, selected, cursor, compact) {
+                    let x = span.start;
+                    let cell = &cells[x];
                     use libghostty_vt::screen::CellWide;
                     if cell.wide == CellWide::SpacerTail {
                         continue;
                     }
-                    let span = if cell.wide == CellWide::Wide { 2. } else { 1. };
-                    let (mut foreground, mut background) = cell_colors(cell);
-                    if grid
-                        .selections
-                        .get(y)
-                        .and_then(Option::as_ref)
-                        .is_some_and(|range| range.contains(&(x as u16)))
-                    {
-                        let blend = |selected: u16, current: u8| {
-                            ((selected * 136 + u16::from(current) * 119) / 255) as u8
-                        };
-                        background = libghostty_vt::style::RgbColor {
-                            r: blend(0x53, background.r),
-                            g: blend(0x50, background.g),
-                            b: blend(0x6a, background.b),
-                        };
-                    }
+                    let count = span.len();
+                    let merged = cell.wide == CellWide::Narrow && count > 1;
+                    let span = if cell.wide == CellWide::Wide {
+                        2.
+                    } else {
+                        count as f32
+                    };
                     let cursor = grid.cursor.and_then(|cursor| {
                         cursor_offset(cursor, x, y, cell.wide).map(|offset| (cursor, offset))
                     });
                     let cursor_color = grid.colors.cursor.unwrap_or(grid.colors.foreground);
-                    if cursor.is_some_and(|(cursor, offset)| {
-                        offset == 0
-                            && cursor.visual_style
-                                == libghostty_vt::render::CursorVisualStyle::Block
-                    }) {
-                        foreground = background;
-                        background = cursor_color;
-                    }
+                    let (foreground, background) = paint_colors(
+                        cell,
+                        selected.is_some_and(|range| range.contains(&(x as u16))),
+                        cursor,
+                        cursor_color,
+                    );
+                    let item_width = if merged {
+                        px(super::background::span_width(
+                            f32::from(width),
+                            window.scale_factor(),
+                            count,
+                        ))
+                    } else {
+                        width * span
+                    };
                     let mut item = div()
                         .relative()
-                        .w(width * span)
+                        .w(item_width)
                         .h(height)
                         .flex_none()
                         .when(
@@ -272,6 +326,7 @@ impl Render for Pane {
                 cx.stop_propagation();
             }))
             .on_key_down(move |event, _, cx| {
+                crate::typing_trace::record("key_received", 0);
                 if event.keystroke.modifiers.control && event.keystroke.key == "q" {
                     return;
                 }
@@ -306,8 +361,10 @@ impl Render for Pane {
                     };
                     if let Err(error) = result {
                         pane.status = format!("Input: {error:#}");
+                        cx.notify();
+                    } else if pane.dirty {
+                        cx.notify();
                     }
-                    cx.notify();
                 });
                 cx.stop_propagation();
             })

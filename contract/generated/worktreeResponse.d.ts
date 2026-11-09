@@ -9,6 +9,7 @@ export interface Response {
 export interface Checkout {
   branch?: string | null;
   commonDir: string;
+  dirty?: boolean | null;
   locked: boolean;
   main: boolean;
   path: string;

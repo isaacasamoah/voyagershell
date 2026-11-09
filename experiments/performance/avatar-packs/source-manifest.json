@@ -1,0 +1,18 @@
+{
+  "tests/native/proof_deliberate_motion.py": {
+    "beforeSha256": "b3e735f02f37251852fce39186831eb99e8c192cd32afce62bc5b3ffc389be8b",
+    "afterSha256": "d15c9ee2be970f1d6d1316de3f5c2997290d22dbfc8b898839ff338d7876d047"
+  },
+  "tests/native/proof_animation_pack.py": {
+    "beforeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "afterSha256": "41c3e3bee02863e7cf407dc8feb58dc5fd977d6518179be1fdf485a9153a50e0"
+  },
+  "experiments/performance/frame-work/scene-cost.py": {
+    "beforeSha256": "dffb7bfc9c4040cb1eb1591297f0f9b1bbaa2a9635e21a5030e737cd9642790e",
+    "afterSha256": "52566280e6c6870b4be4ebfe7e527b543ba29848598d913d073881b4575ef276"
+  },
+  "experiments/performance/frame-work/owner.py": {
+    "beforeSha256": "ecad3c6483d723ecd9b4587316a638584ffdf25ab2867592fdc798dd571179c4",
+    "afterSha256": "b2d189d05e4c2256ed718dcb5addcbd1b8118386ee99a247748e3c95f8f4510f"
+  }
+}

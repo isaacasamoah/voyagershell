@@ -1,0 +1,183 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Canvas": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "items": {
+            "format": "float",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "size": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "size",
+        "anchor"
+      ],
+      "type": "object"
+    },
+    "Clip": {
+      "additionalProperties": false,
+      "properties": {
+        "easing": {
+          "items": {
+            "format": "float",
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "effects": {
+          "items": {
+            "type": "null"
+          },
+          "maxItems": 0,
+          "type": "array"
+        },
+        "from": {
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/definitions/Step"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "from",
+        "steps",
+        "easing",
+        "effects"
+      ],
+      "type": "object"
+    },
+    "Pose": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "items": {
+            "format": "float",
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "image": {
+          "type": "string"
+        },
+        "rect": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "scale": {
+          "format": "float",
+          "type": "number"
+        }
+      },
+      "required": [
+        "image",
+        "rect",
+        "anchor",
+        "scale"
+      ],
+      "type": "object"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "properties": {
+        "fadeMs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "holdMs": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pose": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pose",
+        "fadeMs",
+        "holdMs"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "canvas": {
+      "$ref": "#/definitions/Canvas"
+    },
+    "clips": {
+      "additionalProperties": {
+        "$ref": "#/definitions/Clip"
+      },
+      "type": "object"
+    },
+    "effects": {
+      "additionalProperties": {
+        "type": "null"
+      },
+      "type": "object"
+    },
+    "id": {
+      "type": "string"
+    },
+    "images": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "poses": {
+      "additionalProperties": {
+        "$ref": "#/definitions/Pose"
+      },
+      "type": "object"
+    },
+    "version": {
+      "format": "uint8",
+      "maximum": 1,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "id",
+    "canvas",
+    "images",
+    "poses",
+    "clips",
+    "effects"
+  ],
+  "title": "Pack",
+  "type": "object"
+}

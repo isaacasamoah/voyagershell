@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub mod activity;
+pub mod avatar_animation;
 mod panels;
 pub use panels::{PanelInsertion, PanelOwner, PortalLayout, SavedLayout};
 pub mod administrator;
@@ -13,6 +14,7 @@ pub mod conversation;
 pub mod launch;
 pub mod observation;
 pub mod voice;
+pub mod voyage_close;
 pub mod worktree;
 
 macro_rules! id {
@@ -202,6 +204,14 @@ pub struct Fleet {
 pub struct Voyage {
     pub id: VoyageId,
     pub name: String,
+    #[serde(default, rename = "nameOrigin")]
+    pub name_origin: NameOrigin,
+    #[serde(
+        default,
+        rename = "primaryVessel",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub primary_vessel: Option<PlacementId>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub closed: bool,
     #[serde(default, rename = "closedOrder", with = "decimal")]
@@ -373,6 +383,14 @@ pub enum Action {
     CloseVoyage {
         id: VoyageId,
     },
+    ConfirmVoyageClose {
+        id: VoyageId,
+        plan: String,
+    },
+    CancelVoyageClose {
+        id: VoyageId,
+        plan: String,
+    },
     ReopenVoyage {
         id: VoyageId,
     },
@@ -490,6 +508,8 @@ pub struct Response {
     pub created_workspace: bool,
     pub created_contents: Vec<ContentId>,
     pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_plan: Option<voyage_close::Plan>,
 }
 
 mod decimal {

@@ -1,0 +1,20 @@
+--- a/src/linux/x11/window.rs
++++ b/src/linux/x11/window.rs
+@@ -10,7 +10,7 @@
+     WindowDecorations, WindowKind, WindowParams, WindowVisibility, popup::PopupNotSupportedError,
+     px,
+ };
+-use gpui_wgpu::{CompositorGpuHint, WgpuRenderer, WgpuSurfaceConfig};
++use gpui_wgpu::{CompositorGpuHint, WgpuRenderer, WgpuSurfaceConfig, wgpu};
+
+ use collections::FxHashSet;
+ use gpui_util::{ResultExt, maybe};
+@@ -774,7 +774,7 @@
+                     // If the window appearance changes, then the renderer will get updated
+                     // too
+                     transparent: false,
+-                    preferred_present_mode: None,
++                    preferred_present_mode: Some(wgpu::PresentMode::Mailbox),
+                 };
+                 WgpuRenderer::new(gpu_context, &raw_window, config, compositor_gpu)?
+             };

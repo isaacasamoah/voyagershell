@@ -234,6 +234,7 @@ impl Owner {
                 | crate::client::CallError::Unconfirmed(message) => message,
             })?;
         let scopes = self.scopes.clone();
+        let workspace = self.workspace.clone();
         thread::Builder::new()
             .name("voice-turn-focus".into())
             .spawn(move || {
@@ -250,7 +251,7 @@ impl Owner {
                                     .into(),
                             );
                         }
-                        focus(&snapshot.layout, snapshot.version)
+                        workspace.conversation_focus(&snapshot.layout, snapshot.version)
                     });
                 let scope = match turn {
                     Some(turn) => CapturedScope::Turn {

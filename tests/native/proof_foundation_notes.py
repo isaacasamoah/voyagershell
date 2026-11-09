@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from secrets import token_hex
 
-from proof_workspace import chord, core_rpc, named_button
+from proof_workspace import chord, core_rpc, named_button, wait
 from proof_process import process_identity, observe_core_exit
 
 spec = importlib.util.spec_from_file_location(
@@ -35,16 +35,6 @@ def setup_source(source):
     });
     this.startContext(cx);"""
     return notes.once(source, anchor, setup)
-
-
-def wait(get, predicate, label, seconds=20):
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        value = get()
-        if value is not None and predicate(value):
-            return value
-        time.sleep(0.1)
-    raise AssertionError(f"Timed out waiting for {label}: {value}")
 
 
 def observe_owned_exit(owned, session, env, wait, errors):

@@ -267,6 +267,7 @@ mod tests {
             path: vec!["Workspace".into()],
             cwd: None,
             revision: 42,
+            preview: None,
         };
         let (method, params) = encode(Command::StartAudio {
             thread: "thread".into(),
@@ -306,6 +307,7 @@ mod tests {
             path: vec!["Workspace".into()],
             cwd: None,
             revision: 42,
+            preview: None,
         };
         let (method, params) = encode(Command::StartTurn {
             thread: "thread".into(),

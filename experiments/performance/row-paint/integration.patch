@@ -1,0 +1,167 @@
+--- a/desktop/src/terminal.rs
++++ b/desktop/src/terminal.rs
+@@ -8,6 +8,8 @@
+ mod font;
+ #[path = "terminal_input.rs"]
+ mod input;
++#[path = "terminal_rows.rs"]
++mod row_paint;
+ #[path = "terminal_view.rs"]
+ mod view;
+
+@@ -35,6 +37,34 @@
+         cell.foreground
+     };
+     (foreground, cell.background)
++}
++
++fn paint_colors(
++    cell: &Cell,
++    selected: bool,
++    cursor: Option<(libghostty_vt::render::Cursor, usize)>,
++    cursor_color: libghostty_vt::style::RgbColor,
++) -> (
++    libghostty_vt::style::RgbColor,
++    libghostty_vt::style::RgbColor,
++) {
++    let (mut foreground, mut background) = cell_colors(cell);
++    if selected {
++        let blend =
++            |selected: u16, current: u8| ((selected * 136 + u16::from(current) * 119) / 255) as u8;
++        background = libghostty_vt::style::RgbColor {
++            r: blend(0x53, background.r),
++            g: blend(0x50, background.g),
++            b: blend(0x6a, background.b),
++        };
++    }
++    if cursor.is_some_and(|(cursor, offset)| {
++        offset == 0 && cursor.visual_style == libghostty_vt::render::CursorVisualStyle::Block
++    }) {
++        foreground = background;
++        background = cursor_color;
++    }
++    (foreground, background)
+ }
+
+ fn cursor_offset(
+@@ -96,6 +126,7 @@
+     viewer: Viewer,
+     focus: FocusHandle,
+     grid: Option<Grid>,
++    row_paints: Vec<row_paint::Cache>,
+     font_family: gpui::SharedString,
+     cell_width: gpui::Pixels,
+     cell_height: gpui::Pixels,
+@@ -167,6 +198,7 @@
+             viewer,
+             focus,
+             grid: None,
++            row_paints: Vec::new(),
+             font_family,
+             cell_width,
+             cell_height: px(18.),
+--- a/desktop/src/terminal_view.rs
++++ b/desktop/src/terminal_view.rs
+@@ -1,4 +1,4 @@
+-use super::{Pane, Select, cell_colors, cursor_offset};
++use super::{Pane, Select, cursor_offset, paint_colors};
+ use gpui::prelude::FluentBuilder;
+ use gpui::{
+     Context, InteractiveElement as _, MouseButton, ParentElement as _, Render, Role,
+@@ -73,8 +73,44 @@
+             gpui::rgb((u32::from(value.r) << 16) | (u32::from(value.g) << 8) | u32::from(value.b))
+         };
+         let mut rows = Vec::new();
++        let row_paint = std::env::var_os("VOYAGER_EXPERIMENT_ROW_PAINT")
++            .is_some_and(|value| value == "1")
++            && !window.is_a11y_active()
++            && window.text_style().text_overflow.is_none()
++            && window.text_style().line_clamp.is_none();
++        if !row_paint {
++            self.row_paints.clear();
++        }
+         if let Some(grid) = &self.grid {
++            if row_paint {
++                self.row_paints
++                    .resize_with(grid.rows.len(), Default::default);
++                crate::redraw_probe::record("terminal_canvas_rows", grid.rows.len() as u64);
++            }
+             for (y, cells) in grid.rows.iter().enumerate() {
++                if row_paint {
++                    rows.push(super::row_paint::row(
++                        super::row_paint::Input {
++                            cells: cells.clone(),
++                            selection: grid.selections.get(y).cloned().flatten(),
++                            cursor: grid.cursor.filter(|cursor| {
++                                cursor
++                                    .viewport
++                                    .is_some_and(|point| usize::from(point.y) == y)
++                            }),
++                            y,
++                            background: grid.colors.background,
++                            foreground: grid.colors.foreground,
++                            cursor_color: grid.colors.cursor,
++                            width,
++                            height,
++                            compact: std::env::var_os("VOYAGER_EXPERIMENT_COMPACT_BACKGROUNDS")
++                                .is_some_and(|value| value == "1"),
++                        },
++                        self.row_paints[y].clone(),
++                    ));
++                    continue;
++                }
+                 let mut row = div()
+                     .flex()
+                     .flex_row()
+@@ -106,34 +142,16 @@
+                     } else {
+                         count as f32
+                     };
+-                    let (mut foreground, mut background) = cell_colors(cell);
+-                    if grid
+-                        .selections
+-                        .get(y)
+-                        .and_then(Option::as_ref)
+-                        .is_some_and(|range| range.contains(&(x as u16)))
+-                    {
+-                        let blend = |selected: u16, current: u8| {
+-                            ((selected * 136 + u16::from(current) * 119) / 255) as u8
+-                        };
+-                        background = libghostty_vt::style::RgbColor {
+-                            r: blend(0x53, background.r),
+-                            g: blend(0x50, background.g),
+-                            b: blend(0x6a, background.b),
+-                        };
+-                    }
+                     let cursor = grid.cursor.and_then(|cursor| {
+                         cursor_offset(cursor, x, y, cell.wide).map(|offset| (cursor, offset))
+                     });
+                     let cursor_color = grid.colors.cursor.unwrap_or(grid.colors.foreground);
+-                    if cursor.is_some_and(|(cursor, offset)| {
+-                        offset == 0
+-                            && cursor.visual_style
+-                                == libghostty_vt::render::CursorVisualStyle::Block
+-                    }) {
+-                        foreground = background;
+-                        background = cursor_color;
+-                    }
++                    let (foreground, background) = paint_colors(
++                        cell,
++                        selected.is_some_and(|range| range.contains(&(x as u16))),
++                        cursor,
++                        cursor_color,
++                    );
+                     let item_width = if merged {
+                         px(super::background::span_width(
+                             f32::from(width),
+--- a/desktop/src/terminal_screen.rs
++++ b/desktop/src/terminal_screen.rs
+@@ -19,7 +19,7 @@
+     Release,
+ }
+
+-#[derive(Clone)]
++#[derive(Clone, PartialEq, Eq)]
+ pub(super) struct Cell {
+     pub(super) text: gpui::SharedString,
+     pub(super) foreground: libghostty_vt::style::RgbColor,

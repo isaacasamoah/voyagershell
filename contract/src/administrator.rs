@@ -2,7 +2,7 @@ use crate::{Action, ContentId, CoreTerminalId, Status};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-fn standard_integer(schema: &mut schemars::Schema) {
+pub(crate) fn standard_integer(schema: &mut schemars::Schema) {
     schema.remove("format");
     if schema.get("maximum").is_none() {
         schema.insert("maximum".into(), serde_json::json!(u32::MAX));

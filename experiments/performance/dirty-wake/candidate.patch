@@ -1,0 +1,410 @@
+--- a/desktop/prepare-sdk.py
++++ b/desktop/prepare-sdk.py
+@@ -29,49 +29,60 @@
+ }
+ LINUX_VERSION = "0.3.10"
+ LINUX_SHA256 = "7c6ffd2dce7b75cce0bb3382994912f84c2a05389a4a236bb8bd72cb098fc083"
+-LINUX_PATCHES = (
++BASE_LINUX_PATCHES = (
+     ROOT / "desktop" / "patches" / "gpui-linux-mailbox.patch",
+     ROOT / "desktop" / "patches" / "gpui-linux-monitor-clock.patch",
+ )
++LINUX_PATCHES = (*BASE_LINUX_PATCHES, ROOT / "desktop" / "patches" / "gpui-linux-dirty-wake.patch")
+ LINUX_SOURCE = CHECKOUT.parent / (
+     f"gpui-pre-linux-{LINUX_VERSION}-"
+     f"{hashlib.sha256(b''.join(p.read_bytes() for p in LINUX_PATCHES)).hexdigest()[:12]}"
+ )
++PREVIOUS_LINUX_SOURCE = CHECKOUT.parent / (
++    f"gpui-pre-linux-{LINUX_VERSION}-"
++    f"{hashlib.sha256(b''.join(p.read_bytes() for p in BASE_LINUX_PATCHES)).hexdigest()[:12]}"
++)
++CORE_SHA256 = "df4b5f8d0c278308df2f11e0bfe0212dd77d7848ce1bdc4b9d513334414396f6"
++CORE_PATCHES = (ROOT / "desktop" / "patches" / "gpui-dirty-wake.patch",)
++CORE_SOURCE = CHECKOUT.parent / (
++    f"gpui-pre-{LINUX_VERSION}-"
++    f"{hashlib.sha256(CORE_PATCHES[0].read_bytes()).hexdigest()[:12]}"
++)
+
+
+-def prepare_linux(check):
+-    name = f"gpui-pre-linux-{LINUX_VERSION}"
++def prepare_source(package_name, digest, patches, destination, check):
++    name = f"{package_name}-{LINUX_VERSION}"
+     cargo = Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo")
+     cached = list((cargo / "registry" / "cache").glob(f"*/{name}.crate"))
+     if cached:
+         archive = cached[0].read_bytes()
+     else:
+         with urllib.request.urlopen(
+-            f"https://static.crates.io/crates/gpui-pre-linux/{name}.crate", timeout=30
++            f"https://static.crates.io/crates/{package_name}/{name}.crate", timeout=30
+         ) as response:
+             archive = response.read()
+-    if hashlib.sha256(archive).hexdigest() != LINUX_SHA256:
+-        raise RuntimeError("Native Linux source differs from the pinned archive")
++    if hashlib.sha256(archive).hexdigest() != digest:
++        raise RuntimeError(f"Native {package_name} source differs from the pinned archive")
+     with tempfile.TemporaryDirectory(prefix="voyager-platform-") as directory:
+         with tarfile.open(fileobj=io.BytesIO(archive)) as package:
+             package.extractall(directory, filter="data")
+         source = Path(directory) / name
+         subprocess.run(
+-            ["git", "apply", *(str(p) for p in LINUX_PATCHES)], cwd=source, check=True
++            ["git", "apply", *(str(p) for p in patches)], cwd=source, check=True
+         )
+         expected = {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()}
+-        if LINUX_SOURCE.exists():
++        if destination.exists():
+             actual = {
+-                p.relative_to(LINUX_SOURCE): p.read_bytes()
+-                for p in LINUX_SOURCE.rglob("*") if p.is_file()
++                p.relative_to(destination): p.read_bytes()
++                for p in destination.rglob("*") if p.is_file()
+             }
+             if actual != expected:
+-                raise RuntimeError("Preserving modified native Linux source")
++                raise RuntimeError(f"Preserving modified native {package_name} source")
+         elif check:
+-            raise RuntimeError("Native Linux source is not prepared")
++            raise RuntimeError(f"Native {package_name} source is not prepared")
+         else:
+-            LINUX_SOURCE.parent.mkdir(parents=True, exist_ok=True)
+-            shutil.copytree(source, LINUX_SOURCE)
++            destination.parent.mkdir(parents=True, exist_ok=True)
++            shutil.copytree(source, destination)
+
+
+ def git(*args):
+@@ -86,9 +97,14 @@
+     config = previous + (
+         '\n[patch.crates-io]\n'
+         f'gpui-pre-linux = {{ path = {json.dumps(str(LINUX_SOURCE))} }}\n'
++        f'gpui-pre = {{ path = {json.dumps(str(CORE_SOURCE))} }}\n'
++    )
++    previous_linux = previous + (
++        '\n[patch.crates-io]\n'
++        f'gpui-pre-linux = {{ path = {json.dumps(str(PREVIOUS_LINUX_SOURCE))} }}\n'
+     )
+     existing = CONFIG.read_text() if CONFIG.exists() else None
+-    if existing is not None and existing != config and (check or existing != previous):
++    if existing is not None and existing != config and (check or existing not in (previous, previous_linux)):
+         raise RuntimeError(f"Preserving existing Cargo configuration: {CONFIG}")
+     if not CHECKOUT.exists():
+         if check:
+@@ -116,7 +132,8 @@
+         difference = git("diff", "--binary", "HEAD")
+     if difference != patch:
+         raise RuntimeError("Native SDK differs from the reviewed overlay patch")
+-    prepare_linux(check)
++    prepare_source("gpui-pre-linux", LINUX_SHA256, LINUX_PATCHES, LINUX_SOURCE, check)
++    prepare_source("gpui-pre", CORE_SHA256, CORE_PATCHES, CORE_SOURCE, check)
+     if existing != config:
+         if check:
+             raise RuntimeError("Native SDK Cargo configuration is missing")
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -2694,8 +2694,6 @@
+ [[package]]
+ name = "gpui-pre"
+ version = "0.3.10"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "df4b5f8d0c278308df2f11e0bfe0212dd77d7848ce1bdc4b9d513334414396f6"
+ dependencies = [
+  "accesskit",
+  "anyhow",
+--- a/desktop/patches/README.md
++++ b/desktop/patches/README.md
+@@ -33,3 +33,12 @@
+ [terminal rendering](../../docs/terminal.md#native-presentation-preference) for
+ ownership and invariants. Measured performance, native UX and supported
+ platforms require their own recorded evidence.
++
++
++## Dirty-frame wake experiment
++
++The unselected `VOYAGER_EXPERIMENT_DIRTY_WAKE=1` control separates changed content from the normal animation clock on X11. The pinned GPUI core exposes optional dirty-frame registration and invalidation wake callbacks, with defaults that preserve other backends. The existing request structure remains unchanged. One closure factory supplies both requests with shared frame timing and deferred recovery state. A dirty-only request leaves the animation callback queue untouched. Reentrancy, inactive/thermal limits, forced recovery and pending presentation use the existing handler.
++
++The X11 callback queues one foreground task through weak state, callback and connection references. It clears its pending bit before delivery, rejects a dropped renderer and uses the same callback take/restore and recovery path as a normal refresh. Coalescing limits outstanding tasks, not frame rate. Native request frequency, response and resource measurements are required. Neither source preparation nor default-source compatibility establishes another platform's runtime behavior.
++
++The preparer now shares archive verification, patch application and source protection between checksum-pinned core and Linux packages. Cache paths include patch digests. Installed packages and older cache copies remain unchanged. Only exact previously generated Cargo configurations migrate automatically; personal or intervening edits are refused. The ordinary feature-disabled application excludes the diagnostic glyph module. The owner preview remains separate until the response and affected UX checks pass.
+--- /dev/null
++++ b/desktop/patches/gpui-dirty-wake.patch
+@@ -0,0 +1,151 @@
++--- a/src/window.rs
+++++ b/src/window.rs
++@@ -130,6 +130,7 @@
++     #[cfg(feature = "profiler")]
++     pub frame_dirty: FrameDirtyAccumulator,
++     pub platform_waker: Option<Rc<dyn Fn()>>,
+++    pub invalidation_waker: Option<Rc<dyn Fn()>>,
++ }
++
++ /// Per-frame invalidation bookkeeping, drained at draw time and emitted to the
++@@ -171,6 +172,7 @@
++                 #[cfg(feature = "profiler")]
++                 frame_dirty: FrameDirtyAccumulator::default(),
++                 platform_waker: None,
+++                invalidation_waker: None,
++             })),
++         }
++     }
++@@ -184,7 +186,9 @@
++             let dirty_at = Self::record_frame_dirty(&mut inner);
++             let became_dirty = !inner.dirty;
++             inner.dirty = true;
++-            let waker = became_dirty.then(|| inner.platform_waker.clone()).flatten();
+++            let waker = became_dirty
+++                .then(|| inner.invalidation_waker.clone())
+++                .flatten();
++             #[cfg(feature = "profiler")]
++             let window_id = inner.window_id;
++             drop(inner);
++@@ -215,7 +219,9 @@
++         }
++         #[cfg(feature = "profiler")]
++         let dirty_at = dirty.then(|| Self::record_frame_dirty(&mut inner));
++-        let waker = became_dirty.then(|| inner.platform_waker.clone()).flatten();
+++        let waker = became_dirty
+++            .then(|| inner.invalidation_waker.clone())
+++            .flatten();
++         #[cfg(feature = "profiler")]
++         let window_id = inner.window_id;
++         drop(inner);
++@@ -230,12 +236,17 @@
++
++     pub fn set_platform_waker(&self, waker: Option<Rc<dyn Fn()>>) {
++         let mut inner = self.inner.borrow_mut();
+++        inner.invalidation_waker = waker.clone();
++         inner.platform_waker = waker;
++         let waker = inner.dirty.then(|| inner.platform_waker.clone()).flatten();
++         drop(inner);
++         if let Some(waker) = waker {
++             waker();
++         }
+++    }
+++
+++    pub fn set_invalidation_waker(&self, waker: Option<Rc<dyn Fn()>>) {
+++        self.inner.borrow_mut().invalidation_waker = waker;
++     }
++
++     /// Wakes the platform's frame-request source so a frame request is
++@@ -1769,15 +1780,17 @@
++                 });
++             }
++         }));
++-        platform_window.on_request_frame(Box::new({
+++        let deferred_force_render = Rc::new(Cell::new(false));
+++        let frame_handler = |dirty_only: bool| -> Box<dyn FnMut(crate::RequestFrameOptions)> {
++             let mut cx = cx.to_async();
++             let invalidator = invalidator.clone();
++             let active = active.clone();
++             let needs_present = needs_present.clone();
++             let next_frame_callbacks = next_frame_callbacks.clone();
++             let input_rate_tracker = input_rate_tracker.clone();
++-            let mut deferred_force_render = false;
++-            move |request_frame_options| {
+++            let deferred_force_render = deferred_force_render.clone();
+++            let last_frame_time = last_frame_time.clone();
+++            Box::new(move |request_frame_options: crate::RequestFrameOptions| {
++                 #[cfg(feature = "profiler")]
++                 let (_foreground_turn, window_id) = {
++                     let foreground_turn = profiler::journal::foreground_turn();
++@@ -1807,7 +1820,8 @@
++                 // platform events (and thus requests frames) mid-draw.
++                 if draw_in_progress() {
++                     log::debug!("deferring re-entrant window draw request");
++-                    deferred_force_render |= request_frame_options.force_render;
+++                    deferred_force_render
+++                        .set(deferred_force_render.get() || request_frame_options.force_render);
++                     #[cfg(feature = "profiler")]
++                     profiler::journal::record_reentrant_frame_skipped(window_id, Instant::now());
++                     return;
++@@ -1816,7 +1830,10 @@
++                 // the flag set when this request already forces a render would
++                 // force a second, redundant render on the next frame.
++                 let force_render =
++-                    mem::take(&mut deferred_force_render) || request_frame_options.force_render;
+++                    deferred_force_render.replace(false) || request_frame_options.force_render;
+++                if dirty_only && !force_render && !invalidator.is_dirty() && !needs_present.get() {
+++                    return;
+++                }
++
++                 let thermal_state = handle
++                     .update(&mut cx, |_, _, cx| cx.thermal_state())
++@@ -1845,7 +1862,7 @@
++                         && now.duration_since(last_frame) < min_interval
++                     {
++                         // Don't lose a pending forced render to throttling.
++-                        deferred_force_render |= force_render;
+++                        deferred_force_render.set(deferred_force_render.get() || force_render);
++                         // Deferred by throttling: ask demand-driven platforms to retry.
++                         handle
++                             .update(&mut cx, |_, window, _| {
++@@ -1875,7 +1892,11 @@
++                 }
++                 last_frame_time.set(Some(now));
++
++-                let pending_next_frame_callbacks = next_frame_callbacks.take();
+++                let pending_next_frame_callbacks = if dirty_only {
+++                    Vec::new()
+++                } else {
+++                    next_frame_callbacks.take()
+++                };
++                 if !pending_next_frame_callbacks.is_empty() {
++                     handle
++                         .update(&mut cx, |_, window, cx| {
++@@ -1945,9 +1966,12 @@
++                         profiler::journal::FrameSkipReason::NoRenderNeeded,
++                     );
++                 }
++-            }
++-        }));
+++            })
+++        };
+++        platform_window.on_request_frame(frame_handler(false));
+++        platform_window.on_request_dirty_frame(frame_handler(true));
++         invalidator.set_platform_waker(platform_window.frame_waker());
+++        invalidator.set_invalidation_waker(platform_window.invalidation_waker());
++         platform_window.on_visual_viewport_changed(Box::new({
++             let mut cx = cx.to_async();
++             move || {
++--- a/src/platform.rs
+++++ b/src/platform.rs
++@@ -1285,6 +1285,10 @@
++     fn frame_waker(&self) -> Option<Rc<dyn Fn()>> {
++         None
++     }
+++    fn invalidation_waker(&self) -> Option<Rc<dyn Fn()>> {
+++        self.frame_waker()
+++    }
+++    fn on_request_dirty_frame(&self, _callback: Box<dyn FnMut(RequestFrameOptions)>) {}
++     fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>);
++     fn on_input(&self, callback: Box<dyn FnMut(PlatformInput) -> DispatchEventResult>);
++     fn on_active_status_change(&self, callback: Box<dyn FnMut(bool)>);
+--- /dev/null
++++ b/desktop/patches/gpui-linux-dirty-wake.patch
+@@ -0,0 +1,124 @@
++--- a/src/linux/x11/window.rs
+++++ b/src/linux/x11/window.rs
++@@ -30,7 +30,13 @@
++ };
++
++ use std::{
++-    cell::RefCell, ffi::c_void, fmt::Display, num::NonZeroU32, ptr::NonNull, rc::Rc, sync::Arc,
+++    cell::{Cell, RefCell},
+++    ffi::c_void,
+++    fmt::Display,
+++    num::NonZeroU32,
+++    ptr::NonNull,
+++    rc::Rc,
+++    sync::Arc,
++ };
++
++ use super::{X11Display, XINPUT_ALL_DEVICE_GROUPS, XINPUT_ALL_DEVICES};
++@@ -244,6 +250,7 @@
++ #[derive(Default)]
++ pub struct Callbacks {
++     request_frame: Option<Box<dyn FnMut(RequestFrameOptions)>>,
+++    request_dirty_frame: Option<Box<dyn FnMut(RequestFrameOptions)>>,
++     input: Option<Box<dyn FnMut(PlatformInput) -> gpui::DispatchEventResult>>,
++     active_status_change: Option<Box<dyn FnMut(bool)>>,
++     visibility_change: Option<Box<dyn FnMut(WindowVisibility)>>,
++@@ -1181,15 +1188,31 @@
++         }
++     }
++
++-    pub fn refresh(&self, mut request_frame_options: RequestFrameOptions) {
++-        let callback = self.callbacks.borrow_mut().request_frame.take();
+++    pub fn refresh(&self, request_frame_options: RequestFrameOptions) {
+++        self.refresh_inner(request_frame_options, false);
+++    }
+++
+++    fn refresh_inner(&self, mut request_frame_options: RequestFrameOptions, dirty_only: bool) {
+++        let callback = {
+++            let mut callbacks = self.callbacks.borrow_mut();
+++            if dirty_only {
+++                callbacks.request_dirty_frame.take()
+++            } else {
+++                callbacks.request_frame.take()
+++            }
+++        };
++         if let Some(mut fun) = callback {
++             // Expose events can present a frame before the refresh timer runs,
++             // so every frame request must rebuild stale atlas references after recovery.
++             request_frame_options.force_render |=
++                 std::mem::take(&mut self.state.borrow_mut().force_render_after_recovery);
++             fun(request_frame_options);
++-            self.callbacks.borrow_mut().request_frame = Some(fun);
+++            let mut callbacks = self.callbacks.borrow_mut();
+++            if dirty_only {
+++                callbacks.request_dirty_frame = Some(fun);
+++            } else {
+++                callbacks.request_frame = Some(fun);
+++            }
++         }
++     }
++
++@@ -1709,6 +1732,63 @@
++
++     fn is_fullscreen(&self) -> bool {
++         self.0.state.borrow().fullscreen
+++    }
+++
+++    fn invalidation_waker(&self) -> Option<Rc<dyn Fn()>> {
+++        if std::env::var("VOYAGER_EXPERIMENT_DIRTY_WAKE").as_deref() != Ok("1") {
+++            return None;
+++        }
+++        let state = Rc::downgrade(&self.0.state);
+++        let callbacks = Rc::downgrade(&self.0.callbacks);
+++        let xcb = Rc::downgrade(&self.0.xcb);
+++        let x_window = self.0.x_window;
+++        let executor = self.0.state.borrow().executor.clone();
+++        let pending = Rc::new(Cell::new(false));
+++        Some(Rc::new(move || {
+++            if pending.replace(true) {
+++                return;
+++            }
+++            let pending = pending.clone();
+++            let state = state.clone();
+++            let callbacks = callbacks.clone();
+++            let xcb = xcb.clone();
+++            let requested_at = gpui::PlatformFrameSignal::capture(std::time::Instant::now);
+++            executor
+++                .spawn(async move {
+++                    pending.set(false);
+++                    let (Some(state), Some(callbacks), Some(xcb)) =
+++                        (state.upgrade(), callbacks.upgrade(), xcb.upgrade())
+++                    else {
+++                        return;
+++                    };
+++                    let can_refresh = {
+++                        let state = state.borrow();
+++                        state.renderer.is_some() && state.visibility.is_visible()
+++                    };
+++                    if !can_refresh {
+++                        return;
+++                    }
+++                    X11WindowStatePtr {
+++                        state,
+++                        callbacks,
+++                        xcb,
+++                        x_window,
+++                    }
+++                    .refresh_inner(
+++                        RequestFrameOptions {
+++                            signal_at: requested_at,
+++                            signal_source: gpui::FrameRequestSource::LocalSchedule,
+++                            ..Default::default()
+++                        },
+++                        true,
+++                    );
+++                })
+++                .detach();
+++        }))
+++    }
+++
+++    fn on_request_dirty_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>) {
+++        self.0.callbacks.borrow_mut().request_dirty_frame = Some(callback);
++     }
++
++     fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>) {

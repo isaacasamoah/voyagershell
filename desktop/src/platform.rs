@@ -152,21 +152,77 @@ impl WindowPosition {
         #[cfg(target_os = "linux")]
         {
             use x11rb::errors::ReplyError;
-            use x11rb::protocol::xproto::{ConfigureWindowAux, ConnectionExt};
+            use x11rb::protocol::xproto::{
+                AtomEnum, ClientMessageEvent, ConnectionExt, EventMask, Gravity,
+            };
+            let refused = |error: String| RestoreError::Refused(error);
+            let root = self
+                .connection
+                .get_geometry(window)
+                .map_err(|error| refused(error.to_string()))?
+                .reply()
+                .map_err(|error| refused(error.to_string()))?
+                .root;
+            let atom = self
+                .connection
+                .intern_atom(true, b"_NET_MOVERESIZE_WINDOW")
+                .map_err(|error| refused(error.to_string()))?
+                .reply()
+                .map_err(|error| refused(error.to_string()))?
+                .atom;
+            let supported = self
+                .connection
+                .intern_atom(true, b"_NET_SUPPORTED")
+                .map_err(|error| refused(error.to_string()))?
+                .reply()
+                .map_err(|error| refused(error.to_string()))?
+                .atom;
+            if atom == 0 || supported == 0 {
+                return Err(refused(
+                    "The desktop does not advertise precise window restoration".into(),
+                ));
+            }
+            let capabilities = self
+                .connection
+                .get_property(false, root, supported, AtomEnum::ATOM, 0, 1024)
+                .map_err(|error| refused(error.to_string()))?
+                .reply()
+                .map_err(|error| refused(error.to_string()))?;
+            if !capabilities
+                .value32()
+                .is_some_and(|mut atoms| atoms.any(|value| value == atom))
+            {
+                return Err(refused(
+                    "The desktop does not support precise window restoration".into(),
+                ));
+            }
+            let x = i32::from(gpui::DevicePixels::from(bounds.origin.x));
+            let y = i32::from(gpui::DevicePixels::from(bounds.origin.y));
+            let width = u32::try_from(i32::from(gpui::DevicePixels::from(bounds.size.width)))
+                .map_err(|error| refused(error.to_string()))?;
+            let height = u32::try_from(i32::from(gpui::DevicePixels::from(bounds.size.height)))
+                .map_err(|error| refused(error.to_string()))?;
+            let event = ClientMessageEvent::new(
+                32,
+                window,
+                atom,
+                [
+                    u32::from(Gravity::STATIC) | (0b1111 << 8) | (1 << 12),
+                    x as u32,
+                    y as u32,
+                    width,
+                    height,
+                ],
+            );
+            if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+                return Ok(false);
+            }
             self.connection
-                .configure_window(
-                    window,
-                    &ConfigureWindowAux::new()
-                        .x(i32::from(gpui::DevicePixels::from(bounds.origin.x)))
-                        .y(i32::from(gpui::DevicePixels::from(bounds.origin.y)))
-                        .width(
-                            u32::try_from(i32::from(gpui::DevicePixels::from(bounds.size.width)))
-                                .map_err(|error| RestoreError::Refused(error.to_string()))?,
-                        )
-                        .height(
-                            u32::try_from(i32::from(gpui::DevicePixels::from(bounds.size.height)))
-                                .map_err(|error| RestoreError::Refused(error.to_string()))?,
-                        ),
+                .send_event(
+                    false,
+                    root,
+                    EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+                    event,
                 )
                 .map_err(|error| RestoreError::Uncertain(error.to_string()))?
                 .check()

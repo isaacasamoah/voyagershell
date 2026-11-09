@@ -1,6 +1,6 @@
 use crate::{
-    core::{Core, Error, MAX_INPUT_BYTES},
-    core_shapes::Terminal,
+    core::{Core, Error, MAX_INPUT_BYTES, Pending},
+    core_shapes::{InterruptResult, SendResult, Terminal},
     scope,
 };
 use std::sync::Arc;
@@ -18,13 +18,18 @@ fn refused(message: &str) -> Error {
 
 fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo {
     let reported_activity = Some(Arc::new(Core::reported_activity(&terminal)));
-    let agent_name = layout
-        .contents
-        .iter()
-        .find(|item| &item.id == content)
-        .and_then(|binding| {
-            crate::observation::agent_name(&crate::observation::directory(binding, Some(&terminal)))
-        });
+    let agent_name = crate::observation::conversation_name(&terminal).or_else(|| {
+        layout
+            .contents
+            .iter()
+            .find(|item| &item.id == content)
+            .and_then(|binding| {
+                crate::observation::agent_name(&crate::observation::directory(
+                    binding,
+                    Some(&terminal),
+                ))
+            })
+    });
     let placement_names = layout
         .contents
         .iter()
@@ -55,8 +60,12 @@ fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo
         terminal_id: CoreTerminalId(terminal.address),
         pid: terminal.pid,
         cwd: terminal.cwd,
-        state: terminal.state,
-        foreground: terminal.foreground.map(|process| process.name),
+        state: terminal.state.clone(),
+        foreground: terminal.foreground.map(|process| process.name).or_else(|| {
+            (terminal.state == "live")
+                .then(|| terminal.argv.first().cloned())
+                .flatten()
+        }),
         agent_name,
         placement_names,
         reported_activity,
@@ -77,12 +86,52 @@ fn stop_result(target: ProcessInfo, observed: ProcessInfo) -> Result<ProcessOutp
     Ok(ProcessOutput::Stop { target, observed })
 }
 
-pub(crate) fn run(
+pub(crate) enum Started {
+    Ready(ProcessOutput),
+    Waiting(Effect),
+}
+
+pub(crate) enum Effect {
+    Send(ProcessInfo, Pending<SendResult>),
+    Interrupt(ProcessInfo, Pending<InterruptResult>),
+    Stop(ProcessInfo, Pending<Terminal>, Arc<Layout>),
+}
+
+impl Effect {
+    pub(crate) fn wait(self) -> Result<ProcessOutput, Error> {
+        match self {
+            Self::Send(target, pending) => {
+                let sent = pending.wait()?;
+                Ok(ProcessOutput::Send {
+                    target,
+                    turn: sent.turn,
+                    started: sent.started,
+                    status: sent.status,
+                })
+            }
+            Self::Interrupt(target, pending) => {
+                let interrupted = pending.wait()?;
+                Ok(ProcessOutput::Interrupt {
+                    target,
+                    key: interrupted.key,
+                    outcome: interrupted.outcome,
+                })
+            }
+            Self::Stop(target, pending, visible) => {
+                let observed = pending.wait()?;
+                let observed = info(&target.content_id, observed, &visible);
+                stop_result(target, observed)
+            }
+        }
+    }
+}
+
+pub(crate) fn start(
     core: &mut Core,
     layout: &Arc<Layout>,
     context: &Context,
     action: &ProcessAction,
-) -> Result<ProcessOutput, Error> {
+) -> Result<Started, Error> {
     let visible = scope::project(layout, Some(context));
     if visible.containers().next().is_none() {
         return Err(refused("The request's captured focus no longer exists"));
@@ -153,14 +202,14 @@ pub(crate) fn run(
                 } else {
                     read.text
                 };
-                Ok(ProcessOutput::Read {
+                Ok(Started::Ready(ProcessOutput::Read {
                     target,
                     text,
                     complete: read.complete && !limited,
                     how: read.how,
                     why: read.why,
                     limited,
-                })
+                }))
             }
             ProcessAction::Send { pid, text, .. } => {
                 if target.state != "live" || *pid == 0 || target.pid != Some(*pid) {
@@ -168,13 +217,10 @@ pub(crate) fn run(
                         "The inspected running process identity has changed or ended; nothing was submitted",
                     ));
                 }
-                let sent = core.terminal_send(&address.0, text)?;
-                Ok(ProcessOutput::Send {
+                Ok(Started::Waiting(Effect::Send(
                     target,
-                    turn: sent.turn,
-                    started: sent.started,
-                    status: sent.status,
-                })
+                    core.begin_terminal_send(&address.0, text)?,
+                )))
             }
             ProcessAction::Interrupt { pid, .. } => {
                 if target.state != "live" || *pid == 0 || target.pid != Some(*pid) {
@@ -182,12 +228,10 @@ pub(crate) fn run(
                         "The inspected running process identity has changed or ended; no interrupt was sent",
                     ));
                 }
-                let interrupted = core.terminal_interrupt(&address.0)?;
-                Ok(ProcessOutput::Interrupt {
+                Ok(Started::Waiting(Effect::Interrupt(
                     target,
-                    key: interrupted.key,
-                    outcome: interrupted.outcome,
-                })
+                    core.begin_terminal_interrupt(&address.0)?,
+                )))
             }
             ProcessAction::Stop { pid, .. } => {
                 if target.state != "live" || *pid == 0 || target.pid != Some(*pid) {
@@ -195,8 +239,11 @@ pub(crate) fn run(
                         "The inspected running process identity has changed or ended; no stop was sent",
                     ));
                 }
-                let observed = core.terminal_kill(&address.0)?;
-                stop_result(target, info(content, observed, &visible))
+                Ok(Started::Waiting(Effect::Stop(
+                    target,
+                    core.begin_terminal_kill(&address.0)?,
+                    visible,
+                )))
             }
             ProcessAction::List => Err(refused("This operation does not target one terminal")),
         }
@@ -218,16 +265,66 @@ pub(crate) fn run(
                 }
             }
         }
-        Ok(ProcessOutput::List {
+        Ok(Started::Ready(ProcessOutput::List {
             processes,
             unavailable,
-        })
+        }))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn named_agent_sessions_in_one_directory_remain_distinct() {
+        let terminal: Terminal = serde_json::from_value(serde_json::json!({
+            "address":"t1", "labels":{}, "argv":["codex"], "cwd":"/tmp/project",
+            "state":"live", "created_ms":0, "screen":"exact", "cols":80, "rows":24,
+            "title":"Review the canvas", "foreground":{"name":"codex", "cwd":"/tmp/project", "pid":17, "argv":["codex"]}
+        })).unwrap();
+        let mut model = crate::workspace::Model::default();
+        model
+            .apply(voyager_contract::Action::CreateVoyage {
+                name: "Project".into(),
+                cwd: "/tmp/project".into(),
+            })
+            .unwrap();
+        let binding = model
+            .layout
+            .contents
+            .iter_mut()
+            .find(|item| item.type_id == "terminal")
+            .unwrap();
+        binding.backend = Some(CoreTerminalId("t1".into()));
+        let content = &binding.id.clone();
+        let mut second = terminal.clone();
+        second.title = "Refine Activity".into();
+        assert_eq!(
+            info(content, terminal.clone(), &model.layout)
+                .agent_name
+                .as_deref(),
+            Some("Review the canvas")
+        );
+        assert_eq!(
+            info(content, second.clone(), &model.layout)
+                .agent_name
+                .as_deref(),
+            Some("Refine Activity")
+        );
+        second.title = "Codex".into();
+        assert_eq!(
+            info(content, second.clone(), &model.layout)
+                .agent_name
+                .as_deref(),
+            Some("project")
+        );
+        second.title = "/tmp/project".into();
+        assert_eq!(
+            info(content, second, &model.layout).agent_name.as_deref(),
+            Some("project")
+        );
+    }
 
     #[test]
     fn stop_result_distinguishes_observed_states_from_unconfirmed_results() {

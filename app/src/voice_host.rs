@@ -53,15 +53,22 @@ impl Package {
         }
         let manifest: Manifest =
             serde_json::from_slice(&bytes).map_err(|_| "Invalid native voice package metadata")?;
-        if manifest.schema_version != 1
-            || manifest.app_version != "0.166.0"
+        if manifest.schema_version != 1 {
+            return Err("This Codex voice package uses an unsupported manifest schema. Voyager supports schema 1.".into());
+        }
+        if manifest.app_version.is_empty()
+            || manifest.app_version.len() > 64
+            || !manifest
+                .app_version
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+'))
             || manifest.build_commit.len() != 40
             || !manifest
                 .build_commit
                 .bytes()
                 .all(|byte| byte.is_ascii_hexdigit())
         {
-            return Err("This native voice package version is not supported".into());
+            return Err("Native voice package identity is invalid".into());
         }
         let helper = root
             .join("codex-resources/voice/bin")
@@ -277,6 +284,45 @@ mod tests {
                 "Provider reply {reply}"
             );
         }
+    }
+
+    #[test]
+    fn discovery_uses_package_schema_instead_of_an_application_release_pin() {
+        let root =
+            std::env::temp_dir().join(format!("voyager-voice-discovery-{}", std::process::id()));
+        let executable = root.join("bin/codex");
+        let voice = root.join("codex-resources/voice");
+        let helper = voice
+            .join("bin")
+            .join(format!("codex-voice-host{}", std::env::consts::EXE_SUFFIX));
+        std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(helper.parent().unwrap()).unwrap();
+        std::fs::write(&executable, b"").unwrap();
+        std::fs::write(&helper, b"").unwrap();
+        let cases = [
+            ("0.166.0", 1, true),
+            ("0.167.0", 1, true),
+            ("0.168.0-preview.1", 1, true),
+            ("0.167.0", 2, false),
+            ("", 1, false),
+            ("0.167.0 invalid", 1, false),
+        ];
+        let outcomes: Vec<_> = cases.iter().map(|(version, schema, expected)| {
+            std::fs::write(voice.join("manifest.json"), serde_json::to_vec(&serde_json::json!({"schemaVersion":schema,"appVersion":version,"buildCommit":"a".repeat(40)})).unwrap()).unwrap();
+            let package = Package::discover(&executable);
+            if let Ok(package) = &package {
+                assert!(package.check_provider(Some(version)).is_ok());
+                assert!(package.check_provider(Some("0.165.0")).is_err());
+            }
+            (version.to_string(), package.is_ok(), *expected)
+        }).collect();
+        std::fs::remove_dir_all(root).unwrap();
+        assert!(
+            outcomes
+                .iter()
+                .all(|(_, actual, expected)| actual == expected),
+            "{outcomes:?}"
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@ retained native experiment's export of the original interface text.
 
 `desktop/src/avatar.rs` owns one GPUI avatar entity. Workspace and floating
 presentation views hold handles to that entity, rather than copies of its motion
-state. Its clock, pose transition, float epoch, assets and active pointer gesture
+state. Its finite pose sequence, assets and active pointer gesture
 survive window changes. Each presentation view owns its own focus handle and
 observation subscriptions. Deferred window construction starts after the
 controller's entity borrow ends, because GPUI may render a new window immediately.
@@ -111,11 +111,58 @@ action. Each visible target has a named group and a focused Shift+Enter action.
 Target keyboard handlers do not intercept a child editor's focus. The brand and
 tagline have one combined image name.
 
-Normal animation invalidates the native avatar presentation. It does not rebuild
-the JavaScript description on every frame. Application responses request a script
-refresh once so its context indicator and layout can update. Reduced motion uses
-the platform preference or `VOYAGER_REDUCED_MOTION`. The corrected settled-pose
-rule retires the previous image after the crossfade.
+The avatar is still at rest and runs finite animations on deliberate triggers.
+Hover starts one stretch on entry. Staying over the hit area does not repeat it.
+An applied dock replaces any active clip with a pronounced two-second float.
+Hover is ignored while a clip runs and is never queued. Click keeps its original
+minimize/restore action. Dragging keeps its placement behavior and sound.
+Shift-click and focused S also play the hover binding. Focused F5 reloads the
+profile's animation files. S and F5 use local press/release latches because the
+pinned X11 backend does not mark repeated keys as held. Blur clears those latches.
+Reduced-motion preference or `VOYAGER_REDUCED_MOTION` suppresses clips, preserving
+all application actions.
+
+`desktop/src/avatar_pack.rs` compiles typed profile data and decoded PNGs into one
+immutable candidate. `avatar_motion.rs` owns monotonic finite playback. The native
+painter in `avatar/paint.rs` applies the compiled image, crop, anchor and scale.
+It retains the prior native base-image/front-opacity crossfade; equivalence with
+the authoring proposal's weighted blends is not established. GPUI's public image
+painter rounds visible bounds to device pixels. The default float uses 120
+translated aliases of the same decoded idle image, zero fade and 16/17 ms holds,
+for exactly 2,000 ms. It has no alternate docking renderer. Changing frames request
+animation frames; long holds use one cancellable view wake, invalidated by the
+motion generation on replacement. Settled or hidden views request neither.
+
+The profile's `avatar/` folder contains `configuration.json`, its named pack JSON,
+PNG assets and generated schemas. Configuration selects `restPose` and nullable
+`hover`, `click`, `dock` and `undock` clip bindings. Defaults enable hover stretch
+and dock float, leaving click and undock animation disabled. Files seed once;
+existing personal files are preserved. A user or agent can edit these files and
+focus the avatar, then press F5. Reload compiles away from the UI thread and swaps
+bindings, poses and images together after validation. The previous pack returns
+from the swap so its unique image IDs can be retired through GPUI App::drop_image
+for all windows. One window refresh invalidates retained sprite replay after
+retirement. Failed candidates never reach the atlas. Failure retains the usable
+pack. A successful reload clears only its own preceding visible error. The native
+Status component renders that same message with its accessibility label; the
+script SDK does not expose labels on its plain text containers.
+
+Documents are limited to 1 MiB each, PNG dimensions to 4096 per axis, and decoded
+RGBA storage to 64 MiB across distinct images. The loader checks RGBA size before
+decoding/conversion. Derived full-image geometry must remain finite with a 256-fold
+transform margin covering the current native avatar size. Asset names are flat
+basenames. Missing references, invalid rectangles, unsupported versions and
+nonempty effects are refused. Version 1 currently supports PNG poses and finite
+steps with easing/crossfades; native plasma effects and automatic authoring-guide
+injection from PR #42 remain outside this implementation.
+
+Application responses still refresh context through the existing owner path.
+Navigation and terminal output do not themselves start avatar animation. Only a
+validated applied dock receipt starts its dock clip. Animation files cannot run
+code or invoke application operations. This trigger policy supersedes continuous
+idle motion by Isaac's 9 November decision. Actual native motion, alpha, input and
+resource evidence must accompany the release; source checks alone prove none of
+those outcomes.
 
 The Linux sound adapter plays the original 48 kHz sine sweeps through `paplay`.
 One worker and a four-item mailbox bound playback work. Failure is reported;
@@ -186,3 +233,10 @@ background over the entire input. Name focus still selects the actual full value
 The Composer has a 32-pixel frame with an 18-pixel line and horizontal padding.
 Source formatting and inspection do not establish visible selection, caret geometry
 or native speech isolation; the integrated release journey remains required.
+
+
+## Archived pixel-identical idle redraw experiment
+
+`VOYAGER_EXPERIMENT_PIXEL_MOTION` was an unselected performance control. Its active view hook is removed under the deliberate-motion policy. The original source remains in the performance experiment archive and immutable measured source. The following describes that earlier experiment. The original wall-clock float, motion transitions and external state notifications remain unchanged. One pending next-frame callback checks settled idle without advancing its state. Due poses, unfinished transitions, dragging, missing measurements or changed position, diameter or scale invalidate normally.
+
+A prepaint canvas measures the existing square image wrapper. Pinned Taffy rounds its authored absolute top before painting, so predicted movement uses the difference between snapped new and recorded authored top. Both measured vertical image edges must remain identical after the painter's own device-pixel snapping before notification can be skipped. Raw float-delta translation is incorrect near fractional-layout thresholds. The callback still follows the original display cadence; this does not cap animation or defer input. Exact native pixels and measured response remain acceptance requirements.

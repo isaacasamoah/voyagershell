@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+import sys
 import subprocess
 import time
 from pathlib import Path
@@ -15,6 +16,7 @@ evidence = root / "evidence"
 evidence.mkdir(exist_ok=True)
 parser = argparse.ArgumentParser()
 parser.add_argument("--launch", action="store_true")
+parser.add_argument("--review", action="store_true")
 parser.add_argument("--desktop-env")
 parser.add_argument("--session", default="voyager-workspace-proof-final")
 parser.add_argument("--journey", action="store_true")
@@ -103,6 +105,10 @@ with sync_playwright() as playwright:
             "() => typeof state !== 'undefined' && state?.realms?.length > 0"
         )
         page.wait_for_selector(".xterm-screen")
+    if args.review:
+        page.screenshot(path=str(evidence / "review-initial.png"))
+        print(json.dumps({"reviewOpened": True, "completed": False}))
+        sys.exit(0)
     if args.quit or args.startup_failure:
         from proof_ux import native_quit
 

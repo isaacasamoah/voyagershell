@@ -57,6 +57,96 @@ pub struct Host {
 }
 
 impl Host {
+    pub fn watch_close_saves<T: 'static>(&self, window: &Window, cx: &mut Context<T>) -> Task<()> {
+        let requests = self.client.close_save_requests();
+        let host = self.clone();
+        let handle = window.window_handle();
+        cx.spawn(async move |_, cx| {
+            let Ok(requests) = requests else { return; };
+            while let Ok(request) = requests.recv().await {
+                match request {
+                    request @ (voyager_app::voyage_close::SaveRequest::Prepare { .. } | voyager_app::voyage_close::SaveRequest::PrepareRename { .. }) => {
+                        let (ticket, contents, reply, rename_reply, files) = match request {
+                            voyager_app::voyage_close::SaveRequest::Prepare { ticket, contents, reply } => (ticket, contents, Some(reply), None, Vec::new()),
+                            voyager_app::voyage_close::SaveRequest::PrepareRename { ticket, contents, files, reply } => (ticket, contents, None, Some(reply), files),
+                            _ => unreachable!(),
+                        };
+                        let pending = handle.update(cx, |_, _, cx| {
+                            host.views.borrow_mut().retain(|_, view| !view.read(cx).session.read(cx).exited);
+                            let sessions: Vec<_> = contents.iter().filter_map(|id| host.views.borrow().get(&id.0).cloned()).map(|view| view.read(cx).session.clone()).collect();
+                            for (id, file) in &files {
+                                if let Some(view) = host.views.borrow().get(&id.0)
+                                    && let Err(reason) = view.read(cx).session.read(cx).check_selected_file(file) {
+                                    return Err(format!("Cannot rename {}: {reason}. Inspect the Note before retrying.", file.filename));
+                                }
+                            }
+                            if rename_reply.is_some() && sessions.iter().filter(|session| session.read(cx).draft.dirty).count() > 1 {
+                                return Err("More than one open view has an unsaved draft for this file. Save those drafts before renaming.".to_owned());
+                            }
+                            let revision = sessions.iter().find(|session| session.read(cx).draft.dirty).or(sessions.first()).cloned();
+                            let mut pending = Vec::new();
+                            for id in &contents {
+                                let view = host.views.borrow().get(&id.0).cloned();
+                                let Some(view) = view else { continue; };
+                                if view.read(cx).current.as_ref().is_some_and(|current| !current.retained) {
+                                    return Err("A legacy Notes view must be saved before closing this Voyage".to_owned());
+                                }
+                                let session = view.read(cx).session.clone();
+                                pending.push(session.update(cx, |session, cx| session.flush_for_close(ticket.clone(), cx)));
+                            }
+                            Ok((pending, revision))
+                        });
+                        let result = match pending {
+                            Ok(Ok((pending, revision))) => {
+                                let mut result = Ok(());
+                                for receipt in pending {
+                                    match receipt.recv().await {
+                                        Ok(Ok(())) => (),
+                                        Ok(Err(error)) => { result = Err(error); break; },
+                                        Err(_) => { result = Err(voyager_app::client::CallError::Unconfirmed("A native Note save was not acknowledged".into())); break; },
+                                    }
+                                }
+                                result.and_then(|()| handle.update(cx, |_, _, cx| revision.and_then(|session| session.read(cx).draft.revision.clone())).map_err(|error| voyager_app::client::CallError::Unconfirmed(format!("Saved Notes revision is unavailable: {error:?}"))))
+                            }
+                            Ok(Err(message)) => Err(voyager_app::client::CallError::Rejected(message)),
+                            Err(error) => Err(voyager_app::client::CallError::Unconfirmed(format!("Notes window is unavailable: {error:?}"))),
+                        };
+                        if let Some(reply) = reply { let _ = reply.send(result.map(|_| ())).await; }
+                        else if let Some(reply) = rename_reply { let _ = reply.send(result).await; }
+                    }
+                    voyager_app::voyage_close::SaveRequest::Release { ticket, contents } => {
+                        let _ = handle.update(cx, |_, _, cx| {
+                            for id in &contents {
+                                let view = host.views.borrow().get(&id.0).cloned();
+                                if let Some(view) = view {
+                                    let session = view.read(cx).session.clone();
+                                    session.update(cx, |session, cx| session.release_close(&ticket, cx));
+                                }
+                            }
+                        });
+                    }
+                    voyager_app::voyage_close::SaveRequest::ReleaseRename { ticket, contents, rebind } => {
+                        let _ = handle.update(cx, |_, window, cx| {
+                            for id in &contents {
+                                let view = host.views.borrow().get(&id.0).cloned();
+                                if let Some(view) = view {
+                                    let session = view.read(cx).session.clone();
+                                    session.update(cx, |session, cx| {
+                                        if let Some(rebind) = &rebind
+                                            && let Some((_, file)) = rebind.files.iter().find(|(content, _)| content == id) {
+                                            session.rebind_file(&ticket, file, rebind.workspace_version, &rebind.snapshot, window, cx);
+                                        }
+                                        session.release_close(&ticket, cx);
+                                    });
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        })
+    }
+
     pub fn refresh(&self, cx: &mut App) -> Result<()> {
         for view in self.views.borrow().values() {
             view.update(cx, |note, cx| {
@@ -152,8 +242,12 @@ impl Host {
                         .child("Notes requires a content identity")
                         .into_any_element();
                 };
-                if let Some(view) = host.views.borrow().get(&id) {
-                    return view.clone().into_any_element();
+                let cached = host.views.borrow().get(&id).cloned();
+                if let Some(view) = cached {
+                    if !view.read(cx).session.read(cx).exited {
+                        return view.into_any_element();
+                    }
+                    host.views.borrow_mut().remove(&id);
                 }
                 let view = cx.new(|cx| {
                     Note::new(
@@ -205,6 +299,16 @@ impl Host {
                 let Some(views) = views.upgrade() else {
                     break;
                 };
+                if handle
+                    .update(cx, |_, _, cx| {
+                        views
+                            .borrow_mut()
+                            .retain(|_, view| !view.read(cx).session.read(cx).exited);
+                    })
+                    .is_err()
+                {
+                    break;
+                }
                 let targets: Vec<_> = views
                     .borrow()
                     .iter()

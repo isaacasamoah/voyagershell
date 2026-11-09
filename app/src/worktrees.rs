@@ -62,6 +62,9 @@ pub fn list(cwd: &Path) -> Result<Vec<Checkout>, Error> {
     )?;
     let common_dir = canonical(Path::new(common.strip_suffix('\n').unwrap_or(&common)))?;
     let raw = read_git(cwd, &["worktree", "list", "--porcelain", "-z"])?;
+    let top = read_git(cwd, &["rev-parse", "--show-toplevel"])?;
+    let top = canonical(Path::new(top.trim_end_matches('\n')))?;
+    let dirty = !read_git(cwd, &["--no-optional-locks", "status", "--porcelain"])?.is_empty();
     let mut checkouts = Vec::new();
     let mut path = None;
     let mut branch = None;
@@ -87,6 +90,7 @@ pub fn list(cwd: &Path) -> Result<Vec<Checkout>, Error> {
                     .ok_or_else(|| Error::Rejected("Path is not UTF-8".into()))?
                     .to_owned()
             };
+            let dirty = (path == top).then_some(dirty);
             checkouts.push(Checkout {
                 path,
                 common_dir: common_dir.clone(),
@@ -94,6 +98,7 @@ pub fn list(cwd: &Path) -> Result<Vec<Checkout>, Error> {
                 branch: branch.take(),
                 locked,
                 prunable,
+                dirty,
             });
             locked = false;
             prunable = false;
@@ -105,6 +110,27 @@ pub fn list(cwd: &Path) -> Result<Vec<Checkout>, Error> {
         ));
     }
     Ok(checkouts)
+}
+
+pub fn uncommitted_changes(cwd: &Path) -> Result<u32, Error> {
+    let raw = read_git(
+        cwd,
+        &["--no-optional-locks", "status", "--porcelain=v1", "-z"],
+    )?;
+    let mut entries = raw.split('\0').filter(|entry| !entry.is_empty());
+    let mut count = 0;
+    while let Some(entry) = entries.next() {
+        count += 1;
+        if entry
+            .as_bytes()
+            .iter()
+            .take(2)
+            .any(|value| matches!(value, b'R' | b'C'))
+        {
+            entries.next();
+        }
+    }
+    Ok(count)
 }
 
 pub fn open(cwd: &Path, path: &str) -> Result<Checkout, Error> {
@@ -140,7 +166,7 @@ pub fn create(cwd: &Path, name: &str, branch: &str, base: &str) -> Result<Checko
         .into_iter()
         .next()
         .ok_or_else(|| Error::Rejected("Main checkout unavailable".into()))?;
-    let root = Path::new(&main.path).join(".worktree");
+    let root = Path::new(&main.path).join(".worktrees");
     let destination = root.join(name);
     if destination.symlink_metadata().is_ok() {
         return Err(Error::Rejected(
@@ -150,6 +176,25 @@ pub fn create(cwd: &Path, name: &str, branch: &str, base: &str) -> Result<Checko
     let path = destination
         .to_str()
         .ok_or_else(|| Error::Rejected("Path is not UTF-8".into()))?;
+    let exclude = Path::new(&main.common_dir).join("info/exclude");
+    let existing = match std::fs::read_to_string(&exclude) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(Error::Rejected(error.to_string())),
+    };
+    if !existing.lines().any(|line| line == "/.worktrees/") {
+        use std::io::Write;
+        if let Some(parent) = exclude.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| Error::Rejected(error.to_string()))?;
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(exclude)
+            .map_err(|error| Error::Rejected(error.to_string()))?;
+        file.write_all(b"\n/.worktrees/\n")
+            .map_err(|error| Error::Rejected(error.to_string()))?;
+    }
     effect(
         cwd,
         &["worktree", "add", "-b", branch, "--", path, commit.trim()],
@@ -166,12 +211,21 @@ pub fn create(cwd: &Path, name: &str, branch: &str, base: &str) -> Result<Checko
     })
 }
 
-pub fn remove(cwd: &Path, path: &str) -> Result<(), Error> {
+pub fn remove(cwd: &Path, path: &str) -> Result<Vec<Checkout>, Error> {
     let checkout = open(cwd, path)?;
     if checkout.main {
         return Err(Error::Rejected("Cannot remove the main checkout".into()));
     }
-    effect(cwd, &["worktree", "remove", "--", &checkout.path])
+    let main = list(cwd)?
+        .into_iter()
+        .find(|item| item.main)
+        .ok_or_else(|| Error::Rejected("Main checkout unavailable".into()))?;
+    effect(cwd, &["worktree", "remove", "--", &checkout.path])?;
+    list(Path::new(&main.path)).map_err(|error| {
+        Error::Uncertain(format!(
+            "Removal completed but checkout inspection failed: {error:?}"
+        ))
+    })
 }
 
 pub(crate) fn check_live_directories(
@@ -208,12 +262,7 @@ pub(crate) fn execute(
         Action::Remove { path } => {
             let target = open(cwd, path)?;
             check_live_directories(&target.path, live_directories)?;
-            remove(cwd, &target.path)?;
-            list(cwd).map_err(|error| {
-                Error::Uncertain(format!(
-                    "Removal completed but checkout inspection failed: {error:?}"
-                ))
-            })
+            remove(cwd, &target.path)
         }
     }
 }
@@ -262,9 +311,18 @@ mod tests {
         let checkout = create(&repo, "feature-one", "feature/one", "HEAD").unwrap();
         assert_eq!(
             Path::new(&checkout.path),
-            repo.join(".worktree/feature-one")
+            repo.join(".worktrees/feature-one")
         );
         assert!(!checkout.main);
+        assert!(
+            read_git(&repo, &["status", "--porcelain"])
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            list(Path::new(&checkout.path)).unwrap()[1].dirty,
+            Some(false)
+        );
         assert_eq!(checkout.branch.as_deref(), Some("feature/one"));
         assert_eq!(open(&repo, &checkout.path).unwrap(), checkout);
         assert!(create(&repo, "feature-one", "feature/two", "HEAD").is_err());
@@ -282,10 +340,21 @@ mod tests {
         assert!(Path::new(&checkout.path).exists());
         fs::remove_dir(nested).unwrap();
         fs::write(Path::new(&checkout.path).join("tracked"), "dirty").unwrap();
+        assert_eq!(
+            list(Path::new(&checkout.path)).unwrap()[1].dirty,
+            Some(true)
+        );
+        let work = Path::new(&checkout.path);
+        fs::write(work.join("untracked\nnote"), "draft").unwrap();
+        git(work, &["mv", "tracked", "renamed"]);
+        assert_eq!(uncommitted_changes(work).unwrap(), 2);
+        git(work, &["mv", "renamed", "tracked"]);
+        fs::remove_file(work.join("untracked\nnote")).unwrap();
+        assert_eq!(uncommitted_changes(work).unwrap(), 1);
         assert!(remove(&repo, &checkout.path).is_err());
         assert!(Path::new(&checkout.path).exists());
         fs::write(Path::new(&checkout.path).join("tracked"), "initial").unwrap();
-        remove(&repo, &checkout.path).unwrap();
+        remove(Path::new(&checkout.path), &checkout.path).unwrap();
         assert!(!Path::new(&checkout.path).exists());
         assert_eq!(list(&repo).unwrap().len(), 1);
         git(
@@ -314,7 +383,7 @@ mod tests {
         git(&repo, &["config", "user.name", "Voyager test"]);
         git(&repo, &["config", "user.email", "test@example.invalid"]);
         git(&repo, &["commit", "--allow-empty", "-qm", "initial"]);
-        symlink(&storage, repo.join(".worktree")).unwrap();
+        symlink(&storage, repo.join(".worktrees")).unwrap();
         let checkout = create(&repo, "espace café", "test-branch", "HEAD").unwrap();
         assert_eq!(Path::new(&checkout.path), storage.join("espace café"));
         assert!(create(&repo, "espace café", "other-branch", "HEAD").is_err());

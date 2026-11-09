@@ -1,16 +1,17 @@
-use super::{Avatar, Drag, Geometry, Surface, asset};
+use super::{Avatar, Drag, Geometry, Surface, paint};
 use crate::{avatar_motion as motion, platform};
 use gpui::{
     Bounds, Context, Entity, FocusHandle, IntoElement, MouseButton, ParentElement, Pixels, Point,
-    Render, Styled, Subscription, Task, Window, canvas, div, img, point, prelude::*, px, rgb, rgba,
+    Render, Styled, Subscription, Task, Window, canvas, div, point, prelude::*, px, rgb, rgba,
     size,
 };
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
+    sync::Arc,
     time::Instant,
 };
-use voyager_contract::Context as Scope;
+use voyager_contract::{Context as Scope, avatar_animation::Trigger};
 
 fn workspace_landing(bounds: Bounds<Pixels>) -> (Point<Pixels>, f32) {
     (
@@ -45,6 +46,7 @@ pub(super) struct AvatarView {
     targets: Rc<RefCell<Geometry>>,
     focus: FocusHandle,
     _observe: Subscription,
+    _blur: Subscription,
     _visibility: Option<Subscription>,
     visibility_epoch: u64,
     _minimize_watch: Option<Task<()>>,
@@ -52,6 +54,9 @@ pub(super) struct AvatarView {
     diagnostic_count: u8,
     diagnostics_enabled: bool,
     painted: Rc<Cell<bool>>,
+    command_down: [bool; 2],
+    wake: Option<Task<()>>,
+    wake_at: Option<(u64, Instant)>,
 }
 
 impl AvatarView {
@@ -72,12 +77,15 @@ impl AvatarView {
                 this.visibility_epoch = this.visibility_epoch.wrapping_add(1);
             })
         });
+        let focus = cx.focus_handle();
+        let blur = cx.on_blur(&focus, window, |view, _, _| view.command_down = [false; 2]);
         let mut view = Self {
             avatar,
             surface,
             targets,
-            focus: cx.focus_handle(),
+            focus,
             _observe: observe,
+            _blur: blur,
             _visibility: visibility,
             visibility_epoch: 0,
             _minimize_watch: None,
@@ -85,11 +93,51 @@ impl AvatarView {
             diagnostic_count: 0,
             diagnostics_enabled: std::env::var_os("VOYAGER_AVATAR_DIAGNOSTICS").is_some(),
             painted: Rc::new(Cell::new(false)),
+            command_down: [false; 2],
+            wake: None,
+            wake_at: None,
         };
         if surface == Surface::Workspace {
             view.watch_minimize(window, cx);
         }
         view
+    }
+
+    fn refresh(
+        &mut self,
+        refresh: motion::Refresh,
+        generation: u64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match refresh {
+            motion::Refresh::Frame => {
+                self.wake = None;
+                self.wake_at = None;
+                window.request_animation_frame();
+            }
+            motion::Refresh::At(deadline) => {
+                if self.wake_at == Some((generation, deadline)) {
+                    return;
+                }
+                self.wake_at = Some((generation, deadline));
+                self.wake = Some(cx.spawn(async move |view, cx| {
+                    cx.background_executor()
+                        .timer(deadline.saturating_duration_since(Instant::now()))
+                        .await;
+                    let _ = view.update(cx, |view, cx| {
+                        if view.avatar.read(cx).motion.generation == generation {
+                            view.wake_at = None;
+                            cx.notify();
+                        }
+                    });
+                }));
+            }
+            motion::Refresh::Still => {
+                self.wake = None;
+                self.wake_at = None;
+            }
+        }
     }
 
     fn watch_minimize(&mut self, window: &Window, cx: &mut Context<Self>) {
@@ -328,9 +376,20 @@ impl Render for AvatarView {
             geometry.workspace = Bounds::new(window.bounds().origin, window.viewport_size());
             geometry.visible = window.is_visible();
         }
-        self.avatar.update(cx, |avatar, _| avatar.motion.tick());
+        let refresh = self.avatar.update(cx, |avatar, _| avatar.motion.tick());
+        let generation = self.avatar.read(cx).motion.generation;
+        let position = self.position(self.avatar.read(cx));
+        self.refresh(
+            if position.is_some() && window.is_visible() {
+                refresh
+            } else {
+                motion::Refresh::Still
+            },
+            generation,
+            window,
+            cx,
+        );
         let avatar = self.avatar.read(cx);
-        let position = self.position(avatar);
         if self.diagnostics_enabled && self.diagnostic_count < 24 {
             let signature = (
                 avatar.scope.clone(),
@@ -361,28 +420,6 @@ impl Render for AvatarView {
                 .child(self.events())
                 .into_any_element();
         };
-        if !avatar.motion.reduced_motion {
-            window.request_animation_frame();
-        }
-        let (base, fade) = motion::frame_layers(
-            avatar.motion.previous,
-            avatar.motion.frame,
-            avatar.motion.since.elapsed().as_secs_f32(),
-            avatar.motion.fade,
-        );
-        let frame_path = |name| {
-            avatar
-                .images
-                .iter()
-                .find(|(key, _)| *key == name)
-                .map(|(_, path)| path.clone())
-                .unwrap_or_else(|| asset(motion::IDLE))
-        };
-        let float = if avatar.motion.reduced_motion {
-            0.
-        } else {
-            motion::float_offset(avatar.epoch.elapsed().as_secs_f32())
-        };
         let dragging = avatar.drag.as_ref().is_some_and(|drag| drag.moved);
         let quiet = !dragging
             && self.surface == Surface::Workspace
@@ -405,17 +442,18 @@ impl Render for AvatarView {
             .tab_stop(true)
             .role(gpui::Role::Button)
             .aria_label("Voyager avatar")
-            .aria_description(if self.surface == Surface::Floating {
-                "Enter or Space to show the workspace. Drag to move or dock."
-            } else {
-                "Enter or Space to minimize the workspace. Drag to change context."
-            })
+            .aria_description(format!("{} Drag to move or dock. Hover, Shift-click or S plays the hover animation. F5 reloads animation pack {}.", if self.surface == Surface::Floating { "Enter or Space to show the workspace." } else { "Enter or Space to minimize the workspace." }, avatar.motion.pack.id))
             .on_a11y_action(gpui::AccessibleAction::Click, {
                 let avatar = self.avatar.downgrade();
                 move |_, window, cx| {
                     let _ = avatar.update(cx, |avatar, cx| avatar.activate(window, cx));
                 }
             })
+            .on_hover(cx.listener(|this, hovered, _, cx| {
+                if *hovered && this.avatar.read(cx).drag.is_none() {
+                    this.avatar.update(cx, |avatar, cx| avatar.animate(Trigger::Hover, cx));
+                }
+            }))
             .child(
                 div()
                     .id("avatar")
@@ -456,6 +494,13 @@ impl Render for AvatarView {
                             let desktop = window.bounds().origin + event.position;
                             window.activate_window();
                             window.focus(&this.focus, cx);
+                            if event.modifiers.shift {
+                                this.avatar.update(cx, |avatar, cx| {
+                                    avatar.animate(Trigger::Hover, cx);
+                                });
+                                cx.stop_propagation();
+                                return;
+                            }
                             this.avatar.update(cx, |avatar, _| {
                                 avatar.drag = Some(Drag {
                                     source: window.window_handle(),
@@ -470,27 +515,7 @@ impl Render for AvatarView {
                             cx.stop_propagation();
                         }),
                     )
-                    .child(
-                        img(frame_path(base))
-                            .absolute()
-                            .left(px(s * 0.14))
-                            .top(px(s * 0.14 + float))
-                            .size(px((s - 2.) * 0.72))
-                            .object_fit(gpui::ObjectFit::Contain),
-                    )
-                    .child(
-                        div()
-                            .absolute()
-                            .left(px(s * 0.14))
-                            .top(px(s * 0.14 + float))
-                            .size(px((s - 2.) * 0.72))
-                            .opacity(fade)
-                            .child(
-                                img(frame_path(avatar.motion.frame))
-                                    .size_full()
-                                    .object_fit(gpui::ObjectFit::Contain),
-                            ),
-                    )
+                    .child(paint::layers(Arc::clone(&avatar.motion.pack), avatar.motion.frame, s))
                     .when(status_on_avatar(&avatar.scope, s), |element| {
                         element.child(
                             div()
@@ -527,6 +552,19 @@ impl Render for AvatarView {
                 cx.listener(move |this, event: &gpui::KeyDownEvent, window, cx| {
                     if event.keystroke.key == "escape" {
                         this.avatar.update(cx, |avatar, cx| avatar.cancel_drag(cx));
+                    } else if matches!(event.keystroke.key.as_str(), "s" | "f5")
+                        && event.keystroke.modifiers == gpui::Modifiers::default()
+                        && this.focus.is_focused(window)
+                        && !event.is_held
+                    {
+                        let reload = event.keystroke.key == "f5";
+                        if !std::mem::replace(&mut this.command_down[usize::from(reload)], true) {
+                            this.avatar.update(cx, |avatar, cx| {
+                                if reload { avatar.reload_animations(cx); }
+                                else { avatar.animate(Trigger::Hover, cx); }
+                            });
+                        }
+                        cx.stop_propagation();
                     } else if event.keystroke.key == "enter" || event.keystroke.key == "space" {
                         this.avatar
                             .update(cx, |avatar, cx| avatar.activate(window, cx));
@@ -534,6 +572,13 @@ impl Render for AvatarView {
                     }
                 }),
             )
+            .on_key_up(cx.listener(|this, event: &gpui::KeyUpEvent, _, _| {
+                if event.keystroke.key.eq_ignore_ascii_case("s") {
+                    this.command_down[0] = false;
+                } else if event.keystroke.key.eq_ignore_ascii_case("f5") {
+                    this.command_down[1] = false;
+                }
+            }))
             .into_any_element();
         let mut layer = div()
             .absolute()

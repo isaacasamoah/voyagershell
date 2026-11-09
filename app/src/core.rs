@@ -3,9 +3,8 @@ use crate::{
     core_shapes::{
         AttachParams, AttachResult, DocGetParams, DocGetResult, DocSetParams, DocSetResult,
         GetParams, HelloParams, HelloResult, InterruptParams, InterruptResult, KillParams,
-        ListParams, ReadParams, ReadResult, RunParams, RunResult, SendParams, SendResult,
-        StatusParams, StatusResult, StopParams, StopResult, SubscribeParams, SubscribeResult,
-        Terminal,
+        ListParams, ReadParams, ReadResult, RunParams, SendParams, SendResult, StatusParams,
+        StatusResult, StopParams, StopResult, SubscribeParams, SubscribeResult, Terminal,
     },
     wire::Frame,
 };
@@ -19,11 +18,16 @@ use std::{
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc::{self, Receiver, SyncSender},
+        mpsc::{self, SyncSender},
     },
     thread,
     time::{Duration, Instant},
 };
+
+#[path = "core_pending.rs"]
+mod pending;
+pub(crate) use pending::Pending;
+use pending::Replies;
 
 #[derive(Deserialize)]
 struct TerminalList {
@@ -74,6 +78,7 @@ struct Streams {
 #[derive(Clone)]
 pub struct Viewer {
     channel: u32,
+    initial_size: (u16, u16),
     streams: Arc<Mutex<Streams>>,
     input: SyncSender<Frame>,
     control: SyncSender<Frame>,
@@ -82,6 +87,10 @@ pub struct Viewer {
 }
 
 impl Viewer {
+    pub fn initial_size(&self) -> (u16, u16) {
+        self.initial_size
+    }
+
     pub fn ensure_open(&self) -> Result<(), Error> {
         if !self.connected() {
             return Err(Error::Uncertain(
@@ -251,9 +260,8 @@ pub struct Core {
     identity: String,
     control: SyncSender<Frame>,
     input: SyncSender<Frame>,
-    replies: Receiver<Value>,
+    replies: Replies,
     streams: Arc<Mutex<Streams>>,
-    expected: Arc<AtomicU64>,
     attaching: Arc<AtomicU64>,
     connected: Arc<AtomicBool>,
     input_open: Arc<Mutex<bool>>,
@@ -263,6 +271,30 @@ pub struct Core {
 }
 
 impl Core {
+    fn write_frame(frame: &Frame, input: &mut impl Write) -> std::io::Result<()> {
+        let terminal = frame.channel != 0 && frame.kind == 0;
+        if terminal {
+            crate::typing_trace::transport(
+                "input_write_started",
+                frame.channel,
+                frame.payload.len(),
+            );
+        }
+        let result = frame.write_to(input).and_then(|()| input.flush());
+        if terminal {
+            crate::typing_trace::transport(
+                if result.is_ok() {
+                    "input_write_finished"
+                } else {
+                    "input_write_failed"
+                },
+                frame.channel,
+                frame.payload.len(),
+            );
+        }
+        result
+    }
+
     pub fn connect(session: &str) -> Result<Self, Error> {
         Self::connect_activity(session, Arc::default())
     }
@@ -348,14 +380,14 @@ impl Core {
         };
         let (control, controls) = mpsc::sync_channel::<Frame>(64);
         let (data, inputs) = mpsc::sync_channel::<Frame>(64);
-        let (reply, replies) = mpsc::sync_channel(1);
+        let replies = Replies::default();
         let streams = Arc::new(Mutex::new(Streams::default()));
-        let expected = Arc::new(AtomicU64::new(0));
         let attaching = Arc::new(AtomicU64::new(0));
         let connected = Arc::new(AtomicBool::new(true));
         let writer_alive = connected.clone();
         let writer_streams = streams.clone();
         let writer_activity = activity.clone();
+        let writer_replies = replies.clone();
         thread::spawn(move || {
             while writer_alive.load(Ordering::Acquire) {
                 let frame = match controls.try_recv() {
@@ -366,23 +398,19 @@ impl Core {
                         Err(_) => break,
                     },
                 };
-                if frame
-                    .write_to(&mut input)
-                    .and_then(|()| input.flush())
-                    .is_err()
-                {
+                if Self::write_frame(&frame, &mut input).is_err() {
                     break;
                 }
                 if let Ok(frame) = inputs.try_recv()
-                    && frame
-                        .write_to(&mut input)
-                        .and_then(|()| input.flush())
-                        .is_err()
+                    && Self::write_frame(&frame, &mut input).is_err()
                 {
                     break;
                 }
             }
             writer_alive.store(false, Ordering::Release);
+            if let Ok(mut replies) = writer_replies.lock() {
+                replies.clear();
+            }
             if let Ok(mut activity) = writer_activity.lock() {
                 activity.fail("Core is disconnected");
             }
@@ -393,7 +421,7 @@ impl Core {
             }
         });
         let reader_streams = streams.clone();
-        let reader_expected = expected.clone();
+        let reader_replies = replies.clone();
         let reader_attaching = attaching.clone();
         let reader_alive = connected.clone();
         let reader_activity = activity.clone();
@@ -418,9 +446,12 @@ impl Core {
                     let Some(id) = message.get("id").and_then(Value::as_u64) else {
                         continue;
                     };
-                    if id != reader_expected.load(Ordering::Acquire) {
+                    let Ok(mut replies) = reader_replies.lock() else {
+                        break;
+                    };
+                    let Some(reply) = replies.remove(&id) else {
                         continue;
-                    }
+                    };
                     if id == reader_attaching.load(Ordering::Acquire)
                         && Self::response(message.clone(), id).is_ok()
                         && let Some(channel) = message
@@ -438,10 +469,15 @@ impl Core {
                             break;
                         }
                     }
-                    if reply.try_send(message).is_err() {
-                        break;
-                    }
+                    let _ = reply.try_send(message);
                 } else if frame.channel != 0 && frame.kind == 0 {
+                    if terminal_channel {
+                        crate::typing_trace::transport(
+                            "output_frame_received",
+                            frame.channel,
+                            frame.payload.len(),
+                        );
+                    }
                     let Ok(mut streams) = reader_streams.lock() else {
                         break;
                     };
@@ -468,6 +504,9 @@ impl Core {
                 }
             }
             reader_alive.store(false, Ordering::Release);
+            if let Ok(mut replies) = reader_replies.lock() {
+                replies.clear();
+            }
             if let Ok(mut activity) = reader_activity.lock() {
                 activity.fail("Core is disconnected");
             }
@@ -484,7 +523,6 @@ impl Core {
             input: data,
             replies,
             streams,
-            expected,
             attaching,
             connected,
             input_open: Arc::new(Mutex::new(true)),
@@ -622,7 +660,7 @@ impl Core {
 
     fn call<P: Serialize, R: DeserializeOwned>(
         &mut self,
-        method: &str,
+        method: &'static str,
         params: P,
     ) -> Result<R, Error> {
         let params = serde_json::to_value(params).map_err(|error| Error::Rejected {
@@ -668,7 +706,7 @@ impl Core {
         )
     }
 
-    pub fn terminal_run(&mut self, cwd: &str, operation: &str) -> Result<RunResult, Error> {
+    pub fn terminal_run(&mut self, cwd: &str, operation: &str) -> Result<Terminal, Error> {
         self.terminal_run_with(RunParams {
             cwd: Some(cwd.into()),
             no_parent: true,
@@ -677,7 +715,7 @@ impl Core {
         })
     }
 
-    pub fn terminal_run_with(&mut self, params: RunParams) -> Result<RunResult, Error> {
+    pub fn terminal_run_with(&mut self, params: RunParams) -> Result<Terminal, Error> {
         self.call("terminal.run", params)
     }
 
@@ -708,21 +746,35 @@ impl Core {
         }
     }
 
-    pub fn terminal_attach(&mut self, terminal: &str) -> Result<AttachResult, Error> {
-        let before = self.activity_seed_start(terminal);
+    pub fn terminal_attach(&mut self, terminal: &Terminal) -> Result<AttachResult, Error> {
+        if terminal.cols == 0 || terminal.rows == 0 {
+            return Err(Error::Rejected {
+                kind: "invalid_terminal_geometry".into(),
+                message: "Terminal dimensions are unavailable; no attachment was sent".into(),
+            });
+        }
+        let before = self.activity_seed_start(&terminal.address);
         let result: AttachResult = self.call(
             "terminal.attach",
             AttachParams {
                 caller: None,
-                cols: 80,
+                cols: terminal.cols,
                 display: Default::default(),
                 history: 0,
                 observe: false,
                 resumed: false,
-                rows: 24,
-                terminal: terminal.into(),
+                rows: terminal.rows,
+                terminal: terminal.address.clone(),
             },
         )?;
+        if result.terminal.address != terminal.address
+            || result.terminal.cols == 0
+            || result.terminal.rows == 0
+        {
+            return Err(Error::Uncertain(
+                "Core attachment returned invalid terminal identity or dimensions; nothing was repeated".into(),
+            ));
+        }
         self.activity_seed_finish(&result.terminal, before);
         Ok(result)
     }
@@ -736,6 +788,12 @@ impl Core {
                 terminal: terminal.into(),
             },
         )?;
+        if result.address != terminal {
+            return Err(Error::Uncertain(
+                "Core observation returned a different terminal identity; no action was sent"
+                    .into(),
+            ));
+        }
         self.activity_seed_finish(&result, before);
         Ok(result)
     }
@@ -763,7 +821,15 @@ impl Core {
     }
 
     pub fn terminal_send(&mut self, terminal: &str, text: &str) -> Result<SendResult, Error> {
-        self.call(
+        self.begin_terminal_send(terminal, text)?.wait()
+    }
+
+    pub(crate) fn begin_terminal_send(
+        &mut self,
+        terminal: &str,
+        text: &str,
+    ) -> Result<Pending<SendResult>, Error> {
+        self.begin(
             "terminal.send",
             SendParams {
                 caller: None,
@@ -778,7 +844,14 @@ impl Core {
     }
 
     pub fn terminal_interrupt(&mut self, terminal: &str) -> Result<InterruptResult, Error> {
-        self.call(
+        self.begin_terminal_interrupt(terminal)?.wait()
+    }
+
+    pub(crate) fn begin_terminal_interrupt(
+        &mut self,
+        terminal: &str,
+    ) -> Result<Pending<InterruptResult>, Error> {
+        self.begin(
             "terminal.interrupt",
             InterruptParams {
                 terminal: terminal.into(),
@@ -788,7 +861,14 @@ impl Core {
     }
 
     pub fn terminal_kill(&mut self, terminal: &str) -> Result<Terminal, Error> {
-        self.call(
+        self.begin_terminal_kill(terminal)?.wait()
+    }
+
+    pub(crate) fn begin_terminal_kill(
+        &mut self,
+        terminal: &str,
+    ) -> Result<Pending<Terminal>, Error> {
+        self.begin(
             "terminal.kill",
             KillParams {
                 caller: None,
@@ -840,7 +920,15 @@ impl Core {
         }
     }
 
-    fn rpc(&mut self, method: &str, params: Value) -> Result<Value, Error> {
+    fn rpc(&mut self, method: &'static str, params: Value) -> Result<Value, Error> {
+        self.begin(method, params)?.wait()
+    }
+
+    fn begin<P: Serialize, R: DeserializeOwned>(
+        &mut self,
+        method: &'static str,
+        params: P,
+    ) -> Result<Pending<R>, Error> {
         self.sequence = self
             .sequence
             .checked_add(1)
@@ -851,9 +939,9 @@ impl Core {
         let id = self.sequence;
         let bytes =
             serde_json::to_vec(&json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}))
-                .map_err(|e| Error::Rejected {
+                .map_err(|error| Error::Rejected {
                 kind: "invalid".into(),
-                message: e.to_string(),
+                message: error.to_string(),
             })?;
         if bytes.len() > 1024 * 1024 {
             return Err(Error::Rejected {
@@ -861,37 +949,22 @@ impl Core {
                 message: "Core request exceeds 1 MiB".into(),
             });
         }
-        while self.replies.try_recv().is_ok() {}
-        self.expected.store(id, Ordering::Release);
+        let pending =
+            Pending::register(id, method, &self.replies, &self.attaching, &self.connected)?;
         if method == "terminal.attach" {
             self.attaching.store(id, Ordering::Release);
         }
-        if self
-            .control
+        self.control
             .try_send(Frame {
                 channel: 0,
                 kind: 0,
                 payload: bytes,
             })
-            .is_err()
-        {
-            self.expected.store(0, Ordering::Release);
-            self.attaching.store(0, Ordering::Release);
-            return Err(Error::Rejected {
+            .map_err(|_| Error::Rejected {
                 kind: "busy".into(),
                 message: "Core control queue unavailable; request was not queued".into(),
-            });
-        }
-        let response = self
-            .replies
-            .recv_timeout(Duration::from_secs(20))
-            .map_err(|_| {
-                Error::Uncertain("Core result unconfirmed; no request was repeated".into())
-            });
-        self.expected.store(0, Ordering::Release);
-        self.attaching.store(0, Ordering::Release);
-        let response = response?;
-        Self::response(response, id)
+            })?;
+        Ok(pending)
     }
 
     fn response(response: Value, id: u64) -> Result<Value, Error> {
@@ -995,7 +1068,14 @@ impl Core {
         Ok(hello.core.id)
     }
 
-    pub fn viewer(&self, channel: u32) -> Result<Viewer, Error> {
+    pub fn viewer(&self, attached: &AttachResult) -> Result<Viewer, Error> {
+        let channel = attached.channel;
+        let initial_size = (attached.terminal.cols, attached.terminal.rows);
+        if initial_size.0 == 0 || initial_size.1 == 0 {
+            return Err(Error::Uncertain(
+                "Attached terminal dimensions are invalid".into(),
+            ));
+        }
         if !self
             .streams
             .lock()
@@ -1007,6 +1087,7 @@ impl Core {
         }
         Ok(Viewer {
             channel,
+            initial_size,
             streams: self.streams.clone(),
             input: self.input.clone(),
             control: self.control.clone(),
@@ -1028,6 +1109,9 @@ impl Core {
 impl Drop for Core {
     fn drop(&mut self) {
         self.connected.store(false, Ordering::Release);
+        if let Ok(mut replies) = self.replies.lock() {
+            replies.clear();
+        }
         match self.child.try_wait() {
             Ok(Some(_)) => return,
             Ok(None) => {
@@ -1113,12 +1197,49 @@ mod adapter_tests {
     fn quit_fences_cloned_viewer_input_without_closing_output_or_control() {
         let (control, requests) = mpsc::sync_channel::<Frame>(2);
         let (input, queued) = mpsc::sync_channel(2);
-        let (reply, replies) = mpsc::sync_channel(1);
+        let replies = Replies::default();
+        let responses = replies.clone();
+        let attached: AttachResult = serde_json::from_value(json!({
+            "channel": 7,
+            "terminal": {
+                "address": "t1",
+                "argv": [],
+                "cwd": "/tmp",
+                "cols": 80,
+                "rows": 24,
+                "state": "live",
+                "created_ms": 0,
+                "labels": {},
+                "screen": "exact"
+            }
+        }))
+        .unwrap();
+        let mut wrong_terminal = serde_json::to_value(&attached.terminal).unwrap();
+        wrong_terminal["address"] = "wrong".into();
+        let mut invalid_attachment = serde_json::to_value(&attached).unwrap();
+        invalid_attachment["terminal"]["rows"] = 0.into();
         let worker = thread::spawn(move || {
+            for (method, result) in [
+                ("terminal.get", wrong_terminal),
+                ("terminal.attach", invalid_attachment),
+            ] {
+                let request = requests.recv().unwrap();
+                let value: Value = serde_json::from_slice(&request.payload).unwrap();
+                assert_eq!(value["method"], method);
+                let id = value["id"].as_u64().unwrap();
+                responses
+                    .lock()
+                    .unwrap()
+                    .remove(&id)
+                    .unwrap()
+                    .send(json!({"jsonrpc":"2.0","id":id,"result":result}))
+                    .unwrap();
+            }
             let request = requests.recv().unwrap();
             let value: Value = serde_json::from_slice(&request.payload).unwrap();
             assert_eq!(value["method"], "server.status");
-            reply.send(json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"fixture refusal","data":{"kind":"blocked"}}})).unwrap();
+            let id = value["id"].as_u64().unwrap();
+            responses.lock().unwrap().remove(&id).unwrap().send(json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":"fixture refusal","data":{"kind":"blocked"}}})).unwrap();
             requests.recv().unwrap()
         });
         let child = Command::new(env::current_exe().unwrap())
@@ -1142,7 +1263,6 @@ mod adapter_tests {
             input,
             replies,
             streams: Arc::new(Mutex::new(streams)),
-            expected: Arc::default(),
             attaching: Arc::default(),
             connected: Arc::new(AtomicBool::new(true)),
             input_open: Arc::new(Mutex::new(true)),
@@ -1150,7 +1270,15 @@ mod adapter_tests {
             activity: Arc::default(),
             activity_supported: false,
         };
-        let viewer = core.viewer(7).unwrap();
+        assert!(matches!(
+            core.terminal_get("expected"),
+            Err(Error::Uncertain(_))
+        ));
+        assert!(matches!(
+            core.terminal_attach(&attached.terminal),
+            Err(Error::Uncertain(_))
+        ));
+        let viewer = core.viewer(&attached).unwrap();
         let cloned = viewer.clone();
         viewer.input(b"before".to_vec()).unwrap();
         let activity = core.activity.clone();
@@ -1230,12 +1358,14 @@ mod adapter_tests {
                 .is_some_and(|value| value.pointer("/error/data/kind") == Some(&json!("conflict")));
             let (control, requests) = mpsc::sync_channel::<Frame>(1);
             let (input, _) = mpsc::sync_channel(1);
-            let (send, replies) = mpsc::sync_channel(1);
+            let replies = Replies::default();
+            let responses = replies.clone();
             let worker = thread::spawn(move || {
                 let frame = requests.recv().unwrap();
                 assert_eq!((frame.channel, frame.kind), (0, 0));
                 let message: Value = serde_json::from_slice(&frame.payload).unwrap();
                 assert_eq!(message["method"], "doc.set");
+                let send = responses.lock().unwrap().remove(&2).unwrap();
                 if let Some(reply) = reply {
                     send.send(reply).unwrap();
                 }
@@ -1252,7 +1382,6 @@ mod adapter_tests {
                 input,
                 replies,
                 streams: Arc::default(),
-                expected: Arc::default(),
                 attaching: Arc::default(),
                 connected: Arc::new(AtomicBool::new(true)),
                 input_open: Arc::new(Mutex::new(true)),
@@ -1339,6 +1468,7 @@ mod resize_tests {
         let (input, _) = mpsc::sync_channel(1);
         let viewer = Viewer {
             channel: 7,
+            initial_size: (80, 24),
             streams: Arc::new(Mutex::new(Streams::default())),
             input,
             control,
@@ -1359,5 +1489,32 @@ mod resize_tests {
         let data: serde_json::Value = serde_json::from_slice(&facts.payload).unwrap();
         assert_eq!(data["cell"], serde_json::json!([9, 18]));
         assert_eq!(data["fg"], "#eeeeee");
+    }
+
+    #[test]
+    fn diagnostic_write_preserves_frame_and_flush_failure() {
+        struct FailingFlush(Vec<u8>);
+        impl std::io::Write for FailingFlush {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Err(std::io::Error::other("flush failed"))
+            }
+        }
+        let frame = crate::wire::Frame {
+            channel: 7,
+            kind: 0,
+            payload: vec![120],
+        };
+        let mut expected = Vec::new();
+        frame.write_to(&mut expected).unwrap();
+        let mut actual = Vec::new();
+        super::Core::write_frame(&frame, &mut actual).unwrap();
+        assert_eq!(actual, expected);
+        let mut failure = FailingFlush(Vec::new());
+        assert!(super::Core::write_frame(&frame, &mut failure).is_err());
+        assert_eq!(failure.0, expected);
     }
 }

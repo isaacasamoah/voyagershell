@@ -78,7 +78,63 @@ impl ComponentMaterializer for Measure {
     }
 }
 
+struct FollowScroll;
+
+impl ComponentMaterializer for FollowScroll {
+    fn materialize(&self, mut request: MaterializeRequest<'_>) -> anyhow::Result<gpui::AnyElement> {
+        ensure!(
+            request.children_len() == 1,
+            "FollowScroll requires one child"
+        );
+        let (id, revision) = request
+            .payload()
+            .downcast_ref::<(String, String)>()
+            .context("FollowScroll requires identity and revision")?
+            .clone();
+        let handle = request.with_window_app(|window, cx| {
+            let state = window.use_keyed_state(format!("follow-scroll:{id}"), cx, |_, _| {
+                (gpui::ScrollHandle::new(), String::new())
+            });
+            Ok(state.update(cx, |state, _| {
+                if state.1 != revision {
+                    state.0.scroll_to_bottom();
+                    state.1 = revision;
+                }
+                state.0.clone()
+            }))
+        })?;
+        let frame = div()
+            .id(id)
+            .size_full()
+            .flex()
+            .flex_col()
+            .min_h(px(0.))
+            .overflow_y_scroll()
+            .track_scroll(&handle)
+            .children(request.take_children()?);
+        request.finish(frame)
+    }
+}
+
 pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
+    registry.register(
+        ComponentDescriptor::new("FollowScroll", Arc::new(FollowScroll)).with_constructors(vec![
+            ConstructorDescriptor::new(
+                "FollowScroll",
+                vec![
+                    ArgumentDescriptor::new("id", ArgumentSchema::String),
+                    ArgumentDescriptor::new("revision", ArgumentSchema::String),
+                ],
+                |args| match args {
+                    [
+                        ComponentArgument::String(id),
+                        ComponentArgument::String(revision),
+                    ] => Ok(ComponentPayload::new((id.clone(), revision.clone()))),
+                    _ => Err("FollowScroll requires identity and revision".into()),
+                },
+            ),
+        ]),
+    )?;
     registry.register(
         ComponentDescriptor::new("MeasureHeight", Arc::new(Measure)).with_constructors(vec![
             ConstructorDescriptor::new(

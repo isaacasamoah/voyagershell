@@ -13,12 +13,47 @@ pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {
             return Err("Canvas exceeds its 12-level or 64-node limit".into());
         }
         let size = match node {
-            Node::Row { size, .. } | Node::Column { size, .. } | Node::Block { size, .. } => size,
+            Node::Row { size, .. }
+            | Node::Column { size, .. }
+            | Node::Stack { size, .. }
+            | Node::Block { size, .. } => size,
         };
         if matches!(size, Size::Fixed { pixels } if !(1..=4096).contains(pixels)) {
             return Err("Canvas fixed sizes must contain 1 to 4096 logical pixels".into());
         }
         match node {
+            Node::Stack {
+                selected, children, ..
+            } => {
+                if usize::from(*selected) >= children.len() {
+                    return Err("Canvas stack selection must name an existing child".into());
+                }
+                let start = regions.len();
+                let mut expected: Option<Vec<Region>> = None;
+                let mut owners = (false, false);
+                for child in children {
+                    regions.truncate(start);
+                    owners = visit(child, depth + 1, count, regions, overlay)?;
+                    if owners.1 && !owners.0 {
+                        return Err(
+                            "Canvas stacks must keep Portals beside their active Fleet".into()
+                        );
+                    }
+                    let contributed = &regions[start..];
+                    if let Some(expected) = &expected {
+                        if contributed.len() != expected.len()
+                            || !contributed.iter().all(|region| expected.contains(region))
+                        {
+                            return Err(
+                                "Canvas stack alternatives must retain the same regions".into()
+                            );
+                        }
+                    } else {
+                        expected = Some(contributed.to_vec());
+                    }
+                }
+                Ok(owners)
+            }
             Node::Row { children, .. } | Node::Column { children, .. } => {
                 if children.is_empty() {
                     return Err("Canvas containers need at least one child".into());
@@ -97,6 +132,83 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use voyager_contract::{Action, Context};
+
+    #[test]
+    fn stack_retains_selection_and_rejects_invalid_alternatives_atomically() {
+        let original = Canvas::default();
+        let tree = serde_json::to_value(&original.root).unwrap();
+        let mut second = tree.clone();
+        second["children"][0]["size"]["pixels"] = 260.into();
+        second["children"][1]["children"][1]["children"][1]["size"]["pixels"] = 480.into();
+        let mut value = serde_json::to_value(&original).unwrap();
+        value["root"] = serde_json::json!({
+            "kind": "stack", "selected": 1, "children": [tree, second]
+        });
+        let selected: Canvas = serde_json::from_value(value.clone()).unwrap();
+        let mut model = crate::workspace::Model::default();
+        model
+            .apply(Action::UpdateCanvas {
+                canvas: selected.clone(),
+            })
+            .unwrap();
+        assert_eq!(model.layout.canvas, selected);
+        let restored: Canvas =
+            serde_json::from_slice(&serde_json::to_vec(&selected).unwrap()).unwrap();
+        assert_eq!(restored, selected);
+        model
+            .apply(Action::CreateVoyage {
+                name: "Work".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        model.layout.voyages[0].portal_layout = None;
+        crate::panels::normalize(&mut model.layout).unwrap();
+        assert_eq!(
+            model.layout.voyages[0]
+                .portal_layout
+                .as_ref()
+                .unwrap()
+                .width,
+            480
+        );
+        for invalid in [
+            {
+                let mut v = value.clone();
+                v["root"]["selected"] = 2.into();
+                v
+            },
+            {
+                let mut v = value.clone();
+                v["root"]["children"][0]["children"]
+                    .as_array_mut()
+                    .unwrap()
+                    .pop();
+                v
+            },
+            {
+                let mut v = value.clone();
+                v["root"]["children"][0]["children"]
+                    .as_array_mut()
+                    .unwrap()
+                    .swap(0, 1);
+                v
+            },
+            {
+                let mut v = value.clone();
+                v["root"]["children"] = vec![value["root"]["children"][0].clone(); 8].into();
+                v
+            },
+        ] {
+            let before = model.layout.clone();
+            let invalid = serde_json::from_value(invalid).unwrap();
+            assert!(
+                model
+                    .apply(Action::UpdateCanvas { canvas: invalid })
+                    .is_err()
+            );
+            assert_eq!(model.layout, before);
+        }
+    }
 
     #[test]
     fn canvas_admission_keeps_global_authority_and_bounded_structure() {

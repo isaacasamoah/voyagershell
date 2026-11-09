@@ -7,7 +7,7 @@ from secrets import token_hex
 from proof_avatar_window import warm_restore
 from proof_process import observe_core_exit
 from proof_terminal_agent import process_record
-from proof_workspace import core_rpc, stop_existing_core
+from proof_workspace import click_control, core_rpc, stop_existing_core
 
 
 def pane_candidates(items, bounds, excluded=None):
@@ -73,34 +73,7 @@ def prove(
             key(65293 if character == "\n" else ord(character))
 
     def focus_terminal():
-        fields = lambda name: native("fields", launch()["pid"], [name], "window")[
-            "fields"
-        ]
-        bounds = wait(
-            lambda: fields("Vessel dock"),
-            lambda items: (
-                len(items) == 1 and items[0]["width"] > 0 and items[0]["height"] > 0
-            ),
-            "the Vessel region",
-        )[0]
-        item = wait(
-            lambda: pane_candidates(
-                [entry for entry in fields("Terminal") if entry["role"] == "terminal"],
-                bounds,
-            ),
-            lambda items: len(items) == 1,
-            "the original terminal view",
-        )[0]
-        window = geometry()
-        native(
-            "move",
-            int(window["X"]) + round(item["x"] + item["width"] / 2),
-            int(window["Y"]) + round(item["y"] + item["height"] / 2),
-            2,
-        )
-        native("button", True)
-        native("button", False)
-        observed.setdefault("terminalTargets", []).append(item)
+        click_control(native, capture, geometry, evidence, launch()["pid"], "Terminal input", observed.setdefault("terminalTargets", []))
         save()
 
     def marker(address, prefix):
@@ -129,7 +102,7 @@ def prove(
         wait(socket.is_socket, bool, "the dedicated Core socket")
         initial = wait(
             document,
-            lambda item: bool(item["value"]["contents"][0].get("backend")),
+            lambda item: bool(item.get("value") and item["value"].get("contents") and item["value"]["contents"][0].get("backend")),
             "the original terminal binding",
         )
         address = initial["value"]["contents"][0]["backend"]

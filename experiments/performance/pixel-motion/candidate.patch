@@ -1,0 +1,201 @@
+--- a/desktop/src/avatar/view.rs
++++ b/desktop/src/avatar/view.rs
+@@ -39,6 +39,24 @@
+     diameter > 38. || !matches!(scope, Scope::Voyage { .. } | Scope::Fleet { .. })
+ }
+
++#[derive(Clone, Copy)]
++struct ImageStamp {
++    bounds: Bounds<Pixels>,
++    authored_top: Pixels,
++    position: Point<Pixels>,
++    diameter: f32,
++    scale: f32,
++}
++
++impl ImageStamp {
++    fn unchanged(&self, top: Pixels, window: &Window) -> bool {
++        let delta = window.pixel_snap(top) - window.pixel_snap(self.authored_top);
++        [self.bounds.top(), self.bounds.bottom()]
++            .into_iter()
++            .all(|edge| window.pixel_snap(edge + delta) == window.pixel_snap(edge))
++    }
++}
++
+ pub(super) struct AvatarView {
+     avatar: Entity<Avatar>,
+     surface: Surface,
+@@ -52,6 +70,9 @@
+     diagnostic_count: u8,
+     diagnostics_enabled: bool,
+     painted: Rc<Cell<bool>>,
++    pixel_motion: bool,
++    animation_scheduled: bool,
++    image_stamp: Rc<Cell<Option<ImageStamp>>>,
+ }
+
+ impl AvatarView {
+@@ -85,11 +106,44 @@
+             diagnostic_count: 0,
+             diagnostics_enabled: std::env::var_os("VOYAGER_AVATAR_DIAGNOSTICS").is_some(),
+             painted: Rc::new(Cell::new(false)),
++            pixel_motion: std::env::var_os("VOYAGER_EXPERIMENT_PIXEL_MOTION").is_some(),
++            animation_scheduled: false,
++            image_stamp: Rc::new(Cell::new(None)),
+         };
+         if surface == Surface::Workspace {
+             view.watch_minimize(window, cx);
+         }
+         view
++    }
++
++    fn schedule_animation(&mut self, window: &Window, cx: &mut Context<Self>) {
++        if self.animation_scheduled {
++            return;
++        }
++        self.animation_scheduled = true;
++        let view = cx.entity().downgrade();
++        window.on_next_frame(move |window, cx| {
++            let _ = view.update(cx, |view, cx| {
++                view.animation_scheduled = false;
++                let avatar = view.avatar.read(cx);
++                let unchanged = avatar.motion.settled_idle()
++                    && avatar.drag.is_none()
++                    && view.image_stamp.get().is_some_and(|stamp| {
++                        view.position(avatar) == Some((stamp.position, stamp.diameter))
++                            && window.scale_factor() == stamp.scale
++                            && stamp.unchanged(
++                                px(stamp.diameter * 0.14
++                                    + motion::float_offset(avatar.epoch.elapsed().as_secs_f32())),
++                                window,
++                            )
++                    });
++                if unchanged {
++                    view.schedule_animation(window, cx);
++                } else {
++                    cx.notify();
++                }
++            });
++        });
+     }
+
+     fn watch_minimize(&mut self, window: &Window, cx: &mut Context<Self>) {
+@@ -330,8 +384,11 @@
+             geometry.visible = window.is_visible();
+         }
+         self.avatar.update(cx, |avatar, _| avatar.motion.tick());
++        let position = self.position(self.avatar.read(cx));
++        if position.is_some() && self.pixel_motion && !self.avatar.read(cx).motion.reduced_motion {
++            self.schedule_animation(window, cx);
++        }
+         let avatar = self.avatar.read(cx);
+-        let position = self.position(avatar);
+         if self.diagnostics_enabled && self.diagnostic_count < 24 {
+             let signature = (
+                 avatar.scope.clone(),
+@@ -362,7 +419,7 @@
+                 .child(self.events())
+                 .into_any_element();
+         };
+-        if !avatar.motion.reduced_motion {
++        if !self.pixel_motion && !avatar.motion.reduced_motion {
+             window.request_animation_frame();
+         }
+         let (base, fade) = motion::frame_layers(
+@@ -396,6 +453,8 @@
+         let geometry = Rc::clone(&self.targets);
+         let workspace = self.surface == Surface::Workspace && !dragging;
+         let diagnostics = self.diagnostics_enabled;
++        let stamp = self.image_stamp.clone();
++        let pixel_motion = self.pixel_motion;
+         let image = div()
+             .id("voyager-avatar")
+             .absolute()
+@@ -486,6 +545,24 @@
+                             .top(px(s * 0.14 + float))
+                             .size(px((s - 2.) * 0.72))
+                             .opacity(fade)
++                            .when(pixel_motion, |element| {
++                                element.child(
++                                    canvas(
++                                        move |bounds, window, _| {
++                                            stamp.set(Some(ImageStamp {
++                                                bounds,
++                                                authored_top: px(s * 0.14 + float),
++                                                position,
++                                                diameter: s,
++                                                scale: window.scale_factor(),
++                                            }));
++                                        },
++                                        |_, _, _, _| (),
++                                    )
++                                    .absolute()
++                                    .size_full(),
++                                )
++                            })
+                             .child(
+                                 img(frame_path(avatar.motion.frame))
+                                     .size_full()
+--- a/desktop/src/avatar_motion.rs
++++ b/desktop/src/avatar_motion.rs
+@@ -147,6 +147,16 @@
+             Some(false),
+         );
+     }
++    pub fn settled_idle(&self) -> bool {
++        !self.reduced_motion
++            && self.frame == IDLE
++            && !self.busy
++            && !self.reading
++            && self.steps.is_empty()
++            && self.settle.is_none()
++            && self.since.elapsed().as_secs_f32() >= self.fade
++            && Instant::now() < self.due
++    }
+     pub fn tick(&mut self) {
+         if self.reduced_motion {
+             self.frame = if self.busy { READING[0] } else { IDLE };
+@@ -187,6 +197,30 @@
+     use super::*;
+
+     #[test]
++    fn idle_coalescing_never_skips_due_poses_or_active_transitions() {
++        let motion = || Motion::new(false);
++        assert!(motion().settled_idle());
++        let mut cases = [
++            motion(),
++            motion(),
++            motion(),
++            motion(),
++            motion(),
++            motion(),
++            motion(),
++        ];
++        cases[0].due = Instant::now();
++        cases[1].busy = true;
++        cases[2].reading = true;
++        cases[3].steps.push_back((IDLE, 0, 0));
++        cases[4].settle = Some(false);
++        cases[5].fade = 100.;
++        cases[6].frame = READING[0];
++        assert!(cases.iter().all(|motion| !motion.settled_idle()));
++        assert!(!Motion::new(true).settled_idle());
++    }
++
++    #[test]
+     fn settled_frames_retire_previous_pose_and_front_layer() {
+         assert_eq!(frame_layers("stretch", "idle", 1., 0.8), ("idle", 0.));
+         assert_eq!(frame_layers("stretch", "idle", 0., 0.), ("idle", 0.));
+--- a/docs/avatar.md
++++ b/docs/avatar.md
+@@ -186,3 +186,10 @@
+ The Composer has a 32-pixel frame with an 18-pixel line and horizontal padding.
+ Source formatting and inspection do not establish visible selection, caret geometry
+ or native speech isolation; the integrated release journey remains required.
++
++
++## Pixel-identical idle redraw experiment
++
++`VOYAGER_EXPERIMENT_PIXEL_MOTION` is an unselected performance control. The original wall-clock float, motion transitions and external state notifications remain unchanged. One pending next-frame callback checks settled idle without advancing its state. Due poses, unfinished transitions, dragging, missing measurements or changed position, diameter or scale invalidate normally.
++
++A prepaint canvas measures the existing square image wrapper. Pinned Taffy rounds its authored absolute top before painting, so predicted movement uses the difference between snapped new and recorded authored top. Both measured vertical image edges must remain identical after the painter's own device-pixel snapping before notification can be skipped. Raw float-delta translation is incorrect near fractional-layout thresholds. The callback still follows the original display cadence; this does not cap animation or defer input. Exact native pixels and measured response remain acceptance requirements.

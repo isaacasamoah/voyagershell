@@ -184,6 +184,40 @@
       ],
       "type": "string"
     },
+    "Entry": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "pid": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "terminal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "typeId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "name",
+        "typeId"
+      ],
+      "type": "object"
+    },
     "Fleet": {
       "additionalProperties": false,
       "properties": {
@@ -508,6 +542,42 @@
         {
           "additionalProperties": false,
           "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "stack",
+              "type": "string"
+            },
+            "selected": {
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "selected",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "kind": {
               "const": "block",
               "type": "string"
@@ -579,6 +649,65 @@
         "read-only"
       ],
       "type": "string"
+    },
+    "Phase": {
+      "enum": [
+        "ready",
+        "saving",
+        "incomplete",
+        "closed"
+      ],
+      "type": "string"
+    },
+    "Plan": {
+      "additionalProperties": false,
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/definitions/Entry"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "phase": {
+          "$ref": "#/definitions/Phase"
+        },
+        "uncommittedChanges": {
+          "default": null,
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "string"
+        },
+        "voyage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "voyage",
+        "name",
+        "version",
+        "phase",
+        "entries"
+      ],
+      "type": "object"
     },
     "PortalLayout": {
       "additionalProperties": false,
@@ -831,6 +960,14 @@
         "name": {
           "type": "string"
         },
+        "nameOrigin": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/NameOrigin"
+            }
+          ],
+          "default": "deliberate"
+        },
         "portalLayout": {
           "anyOf": [
             {
@@ -846,6 +983,12 @@
             "$ref": "#/definitions/Vessel"
           },
           "type": "array"
+        },
+        "primaryVessel": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -865,6 +1008,16 @@
     }
   },
   "properties": {
+    "closePlan": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Plan"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "createdContents": {
       "items": {
         "type": "string"

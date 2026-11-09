@@ -31,6 +31,8 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
         let mut selected = Voyage {
             id: voyage.id.clone(),
             name: voyage.name.clone(),
+            name_origin: voyage.name_origin,
+            primary_vessel: None,
             closed: voyage.closed,
             closed_order: voyage.closed_order,
             fleets: Vec::new(),
@@ -61,6 +63,17 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
                 });
             }
         }
+        selected.primary_vessel = voyage
+            .primary_vessel
+            .as_ref()
+            .filter(|id| {
+                selected
+                    .fleets
+                    .iter()
+                    .flat_map(|fleet| &fleet.vessels)
+                    .any(|panel| &panel.id == *id)
+            })
+            .cloned();
         if let Context::Portal { id } = scope
             && let Some(portal) = voyage.portals.iter().find(|portal| &portal.id == id)
         {
@@ -169,7 +182,10 @@ pub(crate) fn check(
             scoped.contents.iter().any(|item| &item.id == content_id)
         }
         Action::MoveVoyage { .. } => false,
-        Action::CloseVoyage { id } | Action::ReopenVoyage { id } => {
+        Action::CloseVoyage { id }
+        | Action::ReopenVoyage { id }
+        | Action::ConfirmVoyageClose { id, .. }
+        | Action::CancelVoyageClose { id, .. } => {
             matches!(scope, Context::Voyage { id: selected } if selected == id)
         }
         Action::CloseFleet { id } | Action::ReopenFleet { id } => {
