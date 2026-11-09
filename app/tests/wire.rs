@@ -355,7 +355,8 @@ fn finished_terminal_attachment_is_a_known_core_refusal() {
         }
         thread::sleep(Duration::from_millis(10));
     };
-    let attached = core.terminal_attach(address);
+    let observed = core.terminal_get(address).unwrap();
+    let attached = core.terminal_attach(&observed);
     let stopped = core.server_stop();
     core.close().unwrap();
     assert!(stopped.is_ok());
@@ -386,8 +387,8 @@ fn framed_core_attaches_and_detaches_without_stopping_terminal() {
             .terminal_run_with(serde_json::from_value(serde_json::json!({"cwd":"/tmp"})).unwrap())
             .unwrap();
         let address = terminal.address.as_str();
-        let attach = core.terminal_attach(address).unwrap();
-        let viewer = core.viewer(attach.channel).unwrap();
+        let attach = core.terminal_attach(&terminal).unwrap();
+        let viewer = core.viewer(&attach).unwrap();
         viewer
             .input(b"printf 'voyager_wire_%s\\n' 'result'\n".to_vec())
             .unwrap();
@@ -405,9 +406,34 @@ fn framed_core_attaches_and_detaches_without_stopping_terminal() {
             }
             thread::sleep(Duration::from_millis(10));
         }
+        viewer.resize(123, 37).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let observed = loop {
+            let observed = core.terminal_get(address).unwrap();
+            if (observed.cols, observed.rows) == (123, 37) || Instant::now() >= deadline {
+                break observed;
+            }
+            thread::sleep(Duration::from_millis(10));
+        };
+        let mut invalid = observed.clone();
+        invalid.cols = 0;
+        let invalid_refused = matches!(core.terminal_attach(&invalid), Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "invalid_terminal_geometry");
+        let reattached = core.terminal_attach(&observed).unwrap();
+        let restored = core.viewer(&reattached).unwrap();
+        let restored_size = restored.initial_size();
+        let attached_state = core.terminal_get(address).unwrap();
+        restored.close().unwrap();
         viewer.close().unwrap();
         let terminal = core.terminal_get(address).unwrap();
-        (output, terminal)
+        (
+            output,
+            terminal,
+            (observed.cols, observed.rows),
+            (reattached.terminal.cols, reattached.terminal.rows),
+            restored_size,
+            invalid_refused,
+            (attached_state.cols, attached_state.rows),
+        )
     };
     let stopped = core.server_stop();
     core.close().unwrap();
@@ -421,6 +447,12 @@ fn framed_core_attaches_and_detaches_without_stopping_terminal() {
             .any(|part| part == b"voyager_wire_result")
     );
     assert!(result.1.pid.is_some());
+    assert_eq!(result.1.state, "live");
+    assert_eq!(result.2, (123, 37));
+    assert_eq!(result.3, result.2);
+    assert_eq!(result.4, result.2);
+    assert!(result.5);
+    assert_eq!(result.6, result.2);
 }
 
 #[test]

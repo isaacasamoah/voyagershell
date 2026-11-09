@@ -40,6 +40,68 @@ pub(crate) fn agent_name(directory: &Directory) -> Option<String> {
     )
 }
 
+pub(crate) fn conversation_name(terminal: &Terminal) -> Option<String> {
+    let title = terminal.title.trim();
+    let program = terminal
+        .foreground
+        .as_ref()?
+        .name
+        .rsplit(['/', '\\'])
+        .next()?;
+    if !matches!(
+        program.to_ascii_lowercase().as_str(),
+        "codex"
+            | "claude"
+            | "claude-code"
+            | "pi"
+            | "opencode"
+            | "cursor"
+            | "cursor-agent"
+            | "copilot"
+            | "amp"
+            | "gemini"
+            | "grok"
+    ) || title.is_empty()
+        || title.len() > 192
+        || title.chars().any(char::is_control)
+        || title.eq_ignore_ascii_case(program)
+        || title.starts_with(['/', '~'])
+        || title.contains(['@', '\\'])
+    {
+        return None;
+    }
+    Some(title.to_owned())
+}
+
+pub(crate) fn voyage_names(
+    layout: &Layout,
+    terminals: &[Terminal],
+) -> Vec<(voyager_contract::VoyageId, String)> {
+    layout
+        .voyages
+        .iter()
+        .filter(|voyage| !voyage.closed && voyage.name_origin == NameOrigin::Automatic)
+        .filter_map(|voyage| {
+            let primary = voyage.primary_vessel.as_ref()?;
+            let panel = voyage
+                .fleets
+                .iter()
+                .flat_map(|fleet| &fleet.vessels)
+                .find(|panel| &panel.id == primary)?;
+            let content = layout
+                .contents
+                .iter()
+                .find(|content| content.id == panel.content)?;
+            let backend = content.backend.as_ref()?;
+            let terminal = terminals
+                .iter()
+                .find(|terminal| terminal.address == backend.0 && terminal.state == "live")?;
+            let name = agent_name(&directory(content, Some(terminal)))?;
+            (name != voyage.name && name.len() <= 128).then(|| (voyage.id.clone(), name))
+        })
+        .collect()
+}
+
 pub(crate) fn directory(content: &Content, terminal: Option<&Terminal>) -> Directory {
     if content.type_id == "terminal" && content.backend.is_some() {
         terminal
@@ -149,7 +211,7 @@ pub(crate) fn capture(
                 backend: content.backend.clone(),
                 directory,
                 program: foreground.map(|process| process.name.clone()),
-                conversation_name: None,
+                conversation_name: terminal.and_then(conversation_name),
                 effective_name: name,
             })
         })
@@ -254,6 +316,64 @@ mod tests {
     use super::*;
     use crate::workspace::Model;
     use voyager_contract::{Action, CoreTerminalId};
+
+    #[test]
+    fn automatic_voyage_name_follows_only_its_original_vessel() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyageFromSource {
+                source: DirectorySource::Voyage {
+                    voyage_id: voyager_contract::VoyageId("source".into()),
+                    cwd: "/tmp/original".into(),
+                },
+            })
+            .unwrap();
+        let first = model.layout.voyages[0].fleets[0].vessels[0].clone();
+        model
+            .layout
+            .contents
+            .iter_mut()
+            .find(|item| item.id == first.content)
+            .unwrap()
+            .backend = Some(CoreTerminalId("t1".into()));
+        model
+            .apply(Action::CreateContent {
+                type_id: "terminal".into(),
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Fleet {
+                        id: model.layout.voyages[0].fleets[0].id.clone(),
+                    },
+                    insertion: voyager_contract::PanelInsertion::Beside {
+                        id: first.id.clone(),
+                        side: voyager_contract::Side::Left,
+                    },
+                },
+                launch: None,
+            })
+            .unwrap();
+        model.layout.voyages[0].fleets[0].vessels.reverse();
+        let mut terminal: Terminal = serde_json::from_value(serde_json::json!({ "address":"t1", "labels":{}, "argv":["bash"], "cwd":"/tmp/original", "state":"live", "created_ms":1, "screen":"exact", "cols":80, "rows":24, "foreground":{"pid":1,"name":"bash","argv":["bash"],"cwd":"/tmp/changed"} })).unwrap();
+        assert_eq!(
+            voyage_names(&model.layout, &[terminal.clone()]),
+            vec![(model.layout.voyages[0].id.clone(), "changed".into())]
+        );
+        assert_eq!(
+            model.layout.voyages[0].cwd.as_deref(),
+            Some("/tmp/original")
+        );
+        terminal.address = "t2".into();
+        assert!(voyage_names(&model.layout, &[terminal.clone()]).is_empty());
+        terminal.address = "t1".into();
+        model
+            .apply(Action::Rename {
+                target: voyager_contract::RenameTarget::Voyage {
+                    id: model.layout.voyages[0].id.clone(),
+                },
+                name: "My Voyage".into(),
+            })
+            .unwrap();
+        assert!(voyage_names(&model.layout, &[terminal]).is_empty());
+    }
 
     #[test]
     fn bound_terminal_without_live_observation_never_reports_starting_cwd_as_live() {
