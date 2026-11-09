@@ -475,7 +475,7 @@ mod tests {
         ]);
         let settings = codex_settings(&binding).unwrap();
         assert_eq!(settings.len(), 8);
-        for pair in settings.chunks_exact(2) {
+        for pair in settings.as_chunks::<2>().0 {
             assert_eq!(pair[0], "-c");
         }
         for (key, value) in binding {
