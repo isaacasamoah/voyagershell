@@ -67,7 +67,6 @@ impl Plan {
             .and_then(|cursor| cursor.viewport)
             .map(|point| usize::from(point.x));
         let mut draws = Vec::new();
-        let mut left = px(0.);
         let mut preceding_text = false;
         let height = snapped(input.height, key.scale);
         for span in super::background::spans(
@@ -81,8 +80,9 @@ impl Plan {
             if cell.wide == CellWide::SpacerTail {
                 continue;
             }
+            let left = input.width * x as f32;
             let width = if cell.wide == CellWide::Wide {
-                snapped(input.width * 2., key.scale)
+                input.width * 2.
             } else {
                 px(super::background::span_width(
                     f32::from(input.width),
@@ -175,7 +175,6 @@ impl Plan {
                     _ => draws.push(Draw::Outline(bounds, cursor_color)),
                 }
             }
-            left += width;
         }
         Self { key, draws }
     }

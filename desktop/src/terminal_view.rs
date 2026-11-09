@@ -22,6 +22,10 @@ impl Render for Pane {
         let entity = cx.entity();
         let input_entity = entity.clone();
         let input_focus = self.focus.clone();
+        self.cell_width = px(super::font::cell_width(
+            f32::from(self.font_advance),
+            window.scale_factor(),
+        ));
         let width = self.cell_width;
         let height = self.cell_height;
         let geometry = self.geometry.clone();
@@ -39,9 +43,10 @@ impl Render for Pane {
                     bounds.origin + gpui::point(px(8.), px(8.)),
                     gpui::size(bounds.size.width - px(16.), bounds.size.height - px(16.)),
                 )));
-                let cols = ((f32::from(bounds.size.width - px(16.)) / f32::from(width)).floor()
-                    as u16)
-                    .max(1);
+                let cols = super::font::fitted_columns(
+                    f32::from(bounds.size.width - px(16.)),
+                    f32::from(width),
+                );
                 let rows = ((f32::from(bounds.size.height - px(16.)) / f32::from(height)).floor()
                     as u16)
                     .max(1);
