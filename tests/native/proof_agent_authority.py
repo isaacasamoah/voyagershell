@@ -20,7 +20,7 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
         assert core_socket.is_socket(), "Owned Core socket is absent; do not recreate it"
         return core_rpc(session, env, method, params or {})
     document = lambda: rpc("doc.get", {"name": "voyager-layout-v1"})["value"]
-    deadline = time.monotonic() + 900
+    deadline = time.monotonic() + 840
     def wait(get, predicate, label, seconds=20):
         remaining = deadline - time.monotonic()
         assert remaining > 0, "The 15-minute authority trial bound was reached"
