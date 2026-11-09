@@ -206,6 +206,11 @@ export type Action =
       visible?: boolean | null;
       voyage: string;
       width?: number | null;
+    }
+  | {
+      id: string;
+      operation: "set-agent-rank";
+      rank: "crew" | "captain" | "commodore" | "admiral";
     };
 export type PortalMode = "overlay" | "make-room";
 export type Node =

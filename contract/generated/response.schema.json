@@ -65,6 +65,15 @@
             }
           ]
         },
+        "rank": {
+          "enum": [
+            "crew",
+            "captain",
+            "commodore",
+            "admiral"
+          ],
+          "type": "string"
+        },
         "shellIntent": {
           "type": [
             "string",

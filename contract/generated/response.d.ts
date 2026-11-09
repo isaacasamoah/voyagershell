@@ -150,6 +150,7 @@ export interface Content {
   cwd: string;
   id: string;
   launch?: Launch | null;
+  rank?: "crew" | "captain" | "commodore" | "admiral";
   shellIntent?: string | null;
   startPending?: string | null;
   typeId: string;

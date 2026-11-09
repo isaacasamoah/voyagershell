@@ -10,6 +10,7 @@ pub mod launch;
 pub mod observation;
 mod panels;
 mod process;
+mod rank;
 mod scope;
 mod terminal_lifecycle;
 pub mod voyage_close;

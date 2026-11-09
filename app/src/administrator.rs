@@ -711,6 +711,7 @@ fn process_text(status: &Status, output: Option<&ProcessOutput>, message: Option
 fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> String {
     match status {
         Status::Applied => match action {
+            Action::SetAgentRank { .. } => "Trial rank updated; command authority is unchanged",
             Action::Inspect => "Workspace inspected",
             Action::SetPanelMaximized {
                 maximized: true, ..
