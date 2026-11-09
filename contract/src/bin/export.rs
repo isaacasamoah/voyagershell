@@ -46,7 +46,9 @@ fn main() {
             "notes":schema::<voyager_contract::content::Notes>(),
             "notesConfiguration":schema::<voyager_contract::content::NotesConfiguration>(),
             "voiceState":schema::<voyager_contract::voice::State>(),
-            "launchCatalog":schema::<voyager_contract::launch::Catalog>()}),
+            "launchCatalog":schema::<voyager_contract::launch::Catalog>(),
+            "coordinationRequest":schema::<voyager_contract::coordination::Request>(),
+            "coordinationResponse":schema::<voyager_contract::coordination::Response>()}),
     ) {
         Ok(value) => println!("{value}"),
         Err(error) => {

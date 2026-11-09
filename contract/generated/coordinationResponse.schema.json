@@ -1,0 +1,388 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Agent": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "fleet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "live": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "placement": {
+          "type": "string"
+        },
+        "rank": {
+          "enum": [
+            "crew",
+            "captain",
+            "commodore",
+            "admiral"
+          ],
+          "type": "string"
+        },
+        "supervisor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voyage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "content",
+        "placement",
+        "name",
+        "rank",
+        "voyage",
+        "live"
+      ],
+      "type": "object"
+    },
+    "Decision": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "approve",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "deny",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "reply",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Message": {
+      "additionalProperties": false,
+      "properties": {
+        "acknowledged": {
+          "type": "boolean"
+        },
+        "from": {
+          "$ref": "#/definitions/Participant"
+        },
+        "id": {
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/definitions/Payload"
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "senderName": {
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/definitions/Participant"
+        },
+        "via": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "senderName",
+        "to",
+        "payload",
+        "acknowledged",
+        "resolved",
+        "via"
+      ],
+      "type": "object"
+    },
+    "Outcome": {
+      "enum": [
+        "applied",
+        "refused",
+        "partial",
+        "uncertain"
+      ],
+      "type": "string"
+    },
+    "Participant": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "user",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "agent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Payload": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conversation",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "instruction",
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            },
+            "task": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fleet": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "start",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "rank": {
+              "enum": [
+                "crew",
+                "captain",
+                "commodore",
+                "admiral"
+              ],
+              "type": "string"
+            },
+            "task": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "fleet",
+            "rank",
+            "name",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "blastRadius": {
+              "type": "string"
+            },
+            "context": {
+              "type": "string"
+            },
+            "decision": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "escalation",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "title",
+            "context",
+            "decision",
+            "blastRadius"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "decision": {
+              "$ref": "#/definitions/Decision"
+            },
+            "inReplyTo": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "decision",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "inReplyTo",
+            "decision"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Snapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "agents": {
+          "items": {
+            "$ref": "#/definitions/Agent"
+          },
+          "type": "array"
+        },
+        "current": {
+          "$ref": "#/definitions/Participant"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/definitions/Message"
+          },
+          "type": "array"
+        },
+        "revision": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "revision",
+        "current",
+        "agents",
+        "messages"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "created": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outcome": {
+      "$ref": "#/definitions/Outcome"
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "snapshot": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Snapshot"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "requestId",
+    "outcome"
+  ],
+  "title": "Response",
+  "type": "object"
+}

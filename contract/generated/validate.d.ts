@@ -7,6 +7,8 @@ export function contextFacts(data: unknown): data is import("./contextFacts").Fa
 export function conversationReply(data: unknown): data is import("./conversationReply").Reply;
 export function conversationRequest(data: unknown): data is import("./conversationRequest").Request;
 export function conversationSnapshot(data: unknown): data is import("./conversationSnapshot").Snapshot;
+export function coordinationRequest(data: unknown): data is import("./coordinationRequest").Request;
+export function coordinationResponse(data: unknown): data is import("./coordinationResponse").Response;
 export function launchCatalog(data: unknown): data is import("./launchCatalog").Catalog;
 export function notes(data: unknown): data is import("./notes").Notes;
 export function notesConfiguration(data: unknown): data is import("./notesConfiguration").NotesConfiguration;
