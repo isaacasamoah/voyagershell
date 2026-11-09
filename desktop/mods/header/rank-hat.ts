@@ -42,9 +42,7 @@ export function rankHat(
         .p(2)
         .on_mouse_down("left", (_event, cx) => cx.stop_propagation())
         .child(
-          svg(rank === "crew" ? "hat-captain.svg" : `hat-${rank}.svg`).size(
-            rank === "crew" ? 13 : rank === "captain" ? 15 : 19,
-          ),
+          svg(rank === "crew" ? "hat-captain.svg" : `hat-${rank}.svg`).size(12),
         )
         .on_click((_event, cx) => {
           if (next)
