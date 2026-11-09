@@ -60,6 +60,9 @@ browser prototype. Its player and artifacts remain outside this PR. Before
 native adoption, select one typed manifest owner and generate external validators
 and definitions from it. Do not maintain independent native and script schemas.
 An animation's visual movement must not change authority or dock context.
+Native trigger bindings should map permitted events to a pack and entry clip,
+honor the declared starting pose, and share exact boundary drawings between
+composable actions. Browser preview hooks do not establish native event delivery.
 
 ## Learn from the inspected sources
 

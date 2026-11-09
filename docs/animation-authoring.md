@@ -35,6 +35,21 @@ A plasma definition has `kind: "plasma"`, four gradient `colors`, `coreColor`, `
 
 Unknown fields, unknown poses/images/effects, invalid timing, bad rectangles and missing assets produce errors. They are not silently ignored. A failed import retains the previous working pack. Do not place JavaScript, prompts or executable snippets inside the manifest.
 
+## Packs for separate triggers
+
+Deliver a separate pack and entry clip for each independently triggered action.
+Declare its starting pose through the clip's `from` field and its ending pose
+through the last step. Reuse the exact same standing drawing and registration
+when joining a standing action to a standing backflip.
+
+Generate a full-sequence pack from those components rather than editing three
+independent copies of the timings. Check matching canvas, easing, image/pose
+definitions and end-to-start pose; shift bounded effect cues by each component's
+offset. Each cue must fit inside its own component before shifting; a longer
+combined clip must not conceal an invalid component window. Keep trigger-to-pack mappings in the host's catalogue, outside the
+animation manifest. A browser preview trigger does not establish native event
+wiring or permit changing workspace focus.
+
 ## Make the drawings
 
 Start from the canonical `idle.png` and original stretch images. Use actual references on every generation. Keep the visor, suit fittings, backpack, pen linework and proportions consistent. New art is a candidate until visually accepted. Preserve generation prompts and references separately from the playback manifest. A saved prompt makes the process repeatable; it does not guarantee identical generated pixels.
