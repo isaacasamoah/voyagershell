@@ -168,7 +168,19 @@ export function renderPanel(workspace, placement, scope, group) {
                           )?.program || content.typeId,
                         ),
                       )
-                      .child(div().flex_1().min_w(0).child(title)),
+                      .child(div().flex_1().min_w(0).child(title))
+                      .children(
+                        content.typeId === "terminal" && badge.label
+                          ? [
+                              div()
+                                .text_size(9)
+                                .text_color(colors.muted)
+                                .accessibility_label(badge.hint)
+                                .tooltip(badge.hint)
+                                .child(badge.label),
+                            ]
+                          : [],
+                      ),
                     menu,
                   ),
                 ),
@@ -177,25 +189,13 @@ export function renderPanel(workspace, placement, scope, group) {
               div()
                 .flex()
                 .flex_shrink_0()
-                .child(workspace.splitControl(placement, group, "right"))
-                .child(workspace.splitControl(placement, group, "bottom"))
                 .children(
                   content.typeId === "terminal"
                     ? [rankHat(workspace, placement, content, scope)]
                     : [],
                 )
-                .children(
-                  content.typeId === "terminal" && badge.label
-                    ? [
-                        div()
-                          .text_size(9)
-                          .text_color(colors.muted)
-                          .accessibility_label(badge.hint)
-                          .tooltip(badge.hint)
-                          .child(badge.label),
-                      ]
-                    : [],
-                )
+                .child(workspace.splitControl(placement, group, "right"))
+                .child(workspace.splitControl(placement, group, "bottom"))
                 .child(
                   Button.new(`maximize-${placement.id}`)
                     .accessibility_label(

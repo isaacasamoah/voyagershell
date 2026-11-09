@@ -20,14 +20,21 @@ def prove(
 
     def press(name, roles=("button", "push button", "menu item", "menu_item")):
         point = named_button(native, evidence, name, roles=roles)
-        bounds = geometry()
-        native(
-            "move",
-            int(bounds["X"]) + round(point[0] * 2),
-            int(bounds["Y"]) + round(point[1] * 2),
-            2,
-        )
-        time.sleep(0.15)
+        for _ in range(4):
+            bounds = geometry()
+            native(
+                "move",
+                int(bounds["X"]) + round(point[0] * 2),
+                int(bounds["Y"]) + round(point[1] * 2),
+                2,
+            )
+            time.sleep(0.15)
+            latest = named_button(native, evidence, name, roles=roles)
+            if latest == point:
+                break
+            point = latest
+        else:
+            raise AssertionError("Control did not settle before click: " + name)
         native("button", True)
         native("button", False)
 
@@ -130,7 +137,7 @@ def prove(
         bounds = geometry()
         native(
             "move",
-            int(bounds["X"]) + round((x - 18) * 2),
+            int(bounds["X"]) + round((x - 42) * 2),
             int(bounds["Y"]) + round(y * 2),
             2,
         )
