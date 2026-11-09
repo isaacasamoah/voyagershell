@@ -18,6 +18,13 @@ use voyager_contract::{
     Action, ContentId, Context, CoreTerminalId, Layout, Request, Response, Status, TerminalRequest,
 };
 
+#[path = "coordination.rs"]
+pub mod coordination;
+
+#[cfg(target_os = "linux")]
+#[path = "coordination_linux.rs"]
+pub(crate) mod coordination_linux;
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WorkspaceNotice {
     pub package_revision: u64,
@@ -27,6 +34,21 @@ pub struct WorkspaceNotice {
 }
 
 enum Message {
+    #[cfg(target_os = "linux")]
+    EnrollAgent {
+        content: ContentId,
+        peer: coordination_linux::Identity,
+        reply: SyncSender<Result<(), String>>,
+    },
+    EnableCoordination {
+        configuration: coordination::Configuration,
+        reply: SyncSender<Result<(), String>>,
+    },
+    Coordination {
+        caller: coordination::Caller,
+        request: voyager_contract::coordination::Request,
+        reply: SyncSender<voyager_contract::coordination::Response>,
+    },
     PrepareContext {
         scope: Context,
         version: u64,
@@ -224,6 +246,7 @@ pub struct Client {
     identity: String,
     activity: Arc<Mutex<Activity>>,
     prepared_context: Arc<Mutex<Option<crate::context::Prepared>>>,
+    coordination_signal: Arc<coordination::Signal>,
 }
 
 fn next_message(
@@ -323,12 +346,15 @@ impl Client {
         let process_sender = sender.clone();
         let prepared_context = Arc::new(Mutex::new(None));
         let published_context = prepared_context.clone();
+        let coordination_signal = Arc::new(coordination::Signal::default());
+        let published_coordination = coordination_signal.clone();
         let client = Self {
             sender: sender.clone(),
             sequence: Arc::new(AtomicU64::new(0)),
             package_revision,
             activity,
             prepared_context,
+            coordination_signal,
             identity: format!(
                 "{}-{}",
                 std::process::id(),
@@ -349,6 +375,7 @@ impl Client {
             }
             let mut layout = Arc::new(Layout::default());
             let mut version = 0;
+            let mut coordination = coordination::Owner::default();
             let mut fresh = false;
             let mut receipts: VecDeque<(Request, Option<Context>, Outcome)> = VecDeque::new();
             let mut unconfirmed = HashMap::<String, String>::new();
@@ -393,6 +420,110 @@ impl Client {
                 let mut rename_rebind = None;
                 let mut rename_release = None;
                 let (request, scope, reply) = match message {
+                    #[cfg(target_os = "linux")]
+                    Message::EnrollAgent {
+                        content,
+                        peer,
+                        reply,
+                    } => {
+                        let result = match core.as_mut() {
+                            Ok(core) if quit_result.is_none() => match load(core, &cwd) {
+                                Ok((current, revision, _)) => {
+                                    layout = Arc::new(current);
+                                    version = revision;
+                                    fresh = true;
+                                    coordination.enroll(&content, peer, &layout, core)
+                                }
+                                Err(error) => {
+                                    Err(format!("Workspace binding is unavailable: {error:?}"))
+                                }
+                            },
+                            Ok(_) => Err("Voyager is quitting; enrollment was refused".into()),
+                            Err(error) => Err(format!("Core binding is unavailable: {error:?}")),
+                        };
+                        published_coordination.publish(coordination.revision());
+                        let _ = reply.send(result);
+                        continue;
+                    }
+                    Message::EnableCoordination {
+                        configuration,
+                        reply,
+                    } => {
+                        let result = if coordination.configuration.is_none() {
+                            coordination.configuration = Some(configuration);
+                            published_coordination
+                                .enabled
+                                .store(true, Ordering::Release);
+                            Ok(())
+                        } else {
+                            Err("Coordination is already bound to this application".into())
+                        };
+                        let _ = reply.send(result);
+                        continue;
+                    }
+                    Message::Coordination {
+                        caller,
+                        request,
+                        reply,
+                    } => {
+                        let prior_version = version;
+                        let coordination_request_id = request.request_id.clone();
+                        let response = match core.as_mut() {
+                            Ok(core) => match load(core, &cwd) {
+                                Ok((current, revision, _)) if quit_result.is_none() => {
+                                    layout = Arc::new(current);
+                                    version = revision;
+                                    fresh = true;
+                                    coordination.handle(
+                                        caller,
+                                        request,
+                                        coordination::Workspace {
+                                            core,
+                                            layout: &mut layout,
+                                            version: &mut version,
+                                            fresh: &mut fresh,
+                                            unconfirmed: &mut unconfirmed,
+                                            created_contents: &mut created_contents,
+                                            launches: launches.as_deref(),
+                                        },
+                                    )
+                                }
+                                result => voyager_contract::coordination::Response {
+                                    request_id: coordination_request_id,
+                                    outcome: voyager_contract::coordination::Outcome::Refused,
+                                    message: Some(match result {
+                                        Ok(_) => "Voyager is quitting; no coordination operation was accepted".into(),
+                                        Err(error) => format!("The current workspace is unavailable: {error:?}"),
+                                    }),
+                                    snapshot: None,
+                                    created: None,
+                                },
+                            },
+                            Err(error) => voyager_contract::coordination::Response {
+                                request_id: request.request_id,
+                                outcome: voyager_contract::coordination::Outcome::Refused,
+                                message: Some(format!("Core is unavailable: {error:?}")),
+                                snapshot: None,
+                                created: None,
+                            },
+                        };
+                        published_coordination.publish(coordination.revision());
+                        if version != prior_version
+                            && let Some(listener) = &workspace_listener
+                        {
+                            let _ = listener.try_send(WorkspaceNotice {
+                                revision: version,
+                                package_revision: published_packages.load(Ordering::Relaxed),
+                                activity_revision: core
+                                    .as_ref()
+                                    .map(Core::activity_revision)
+                                    .unwrap_or(0),
+                                close_revision: closing.revision,
+                            });
+                        }
+                        let _ = reply.send(response);
+                        continue;
+                    }
                     Message::PrepareContext {
                         scope,
                         version: expected,
@@ -1526,11 +1657,14 @@ impl Client {
                             match core.as_mut() {
                                 Ok(core) => open_terminal(
                                     core,
-                                    &mut layout,
-                                    &mut version,
-                                    &mut fresh,
-                                    &mut unconfirmed,
-                                    &mut created_contents,
+                                    TerminalOwner {
+                                        layout: &mut layout,
+                                        version: &mut version,
+                                        fresh: &mut fresh,
+                                        unconfirmed: &mut unconfirmed,
+                                        created_contents: &mut created_contents,
+                                        coordination: &mut coordination,
+                                    },
                                     &request,
                                 ),
                                 Err(error) => Err(error.clone()),
@@ -2052,6 +2186,10 @@ impl Client {
                 if deferred_reply {
                     response.status = Status::Uncertain;
                     response.message = Some("The workspace operation is in progress; inspect its result instead of repeating it".into());
+                }
+                if version != previous_version && coordination.configuration.is_some() {
+                    coordination.changed();
+                    published_coordination.publish(coordination.revision());
                 }
                 if version != previous_version
                     && let Some(owner) = content.as_mut()
@@ -2747,6 +2885,7 @@ mod voice_scope_tests {
             identity: "voice-scope-test".into(),
             activity: Arc::default(),
             prepared_context: Arc::default(),
+            coordination_signal: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
         };
         let _inspection = client.queue_inspection().unwrap();
@@ -2983,15 +3122,28 @@ fn eligible_contents(
         .collect()
 }
 
-fn open_terminal(
+struct TerminalOwner<'a> {
+    layout: &'a mut Arc<Layout>,
+    version: &'a mut u64,
+    fresh: &'a mut bool,
+    unconfirmed: &'a mut HashMap<String, String>,
+    created_contents: &'a mut Vec<CreatedTerminal>,
+    coordination: &'a mut coordination::Owner,
+}
+
+fn start_terminal(
     core: &mut Core,
-    layout: &mut Arc<Layout>,
-    version: &mut u64,
-    fresh: &mut bool,
-    unconfirmed: &mut HashMap<String, String>,
-    created_contents: &mut Vec<CreatedTerminal>,
+    owner: TerminalOwner<'_>,
     request: &TerminalRequest,
-) -> Result<Viewer, Error> {
+) -> Result<(crate::core_shapes::Terminal, bool), Error> {
+    let TerminalOwner {
+        layout,
+        version,
+        fresh,
+        unconfirmed,
+        created_contents,
+        coordination,
+    } = owner;
     let content = &request.content_id;
     let request_id = &request.request_id;
     let target = layout
@@ -3068,11 +3220,13 @@ fn open_terminal(
                 });
             }
         }
-        let run = crate::launch::terminal_command(&launch, &cwd)
+        let run = coordination
+            .prepare_launch(content, &launch, &cwd, &operation)
             .map_err(rejected)
-            .and_then(|argv| {
+            .and_then(|(argv, env)| {
                 core.terminal_run_with(crate::core_shapes::RunParams {
                     argv,
+                    env,
                     cwd: Some(cwd.clone()),
                     no_parent: true,
                     labels: HashMap::from([("voyager-operation".into(), operation.clone())]),
@@ -3092,6 +3246,7 @@ fn open_terminal(
                 return Err(Error::Uncertain(message));
             }
             Err(error) => {
+                coordination.refused_launch(content, &operation);
                 let mut cleared = (**layout).clone();
                 if let Some(item) = cleared.contents.iter_mut().find(|item| &item.id == content) {
                     item.start_pending = None;
@@ -3147,6 +3302,18 @@ fn open_terminal(
         }
         started
     };
+    if created {
+        coordination.confirm_launch(content, &terminal).map_err(|message| Error::Uncertain(format!("The program started, but coordination binding is unconfirmed: {message}. Do not start it again")))?;
+    }
+    Ok((terminal, created))
+}
+
+fn open_terminal(
+    core: &mut Core,
+    owner: TerminalOwner<'_>,
+    request: &TerminalRequest,
+) -> Result<Viewer, Error> {
+    let (terminal, created) = start_terminal(core, owner, request)?;
     let address = &terminal.address;
     let attached = core
         .terminal_attach(&terminal)
@@ -4091,6 +4258,7 @@ mod content_admission_tests {
             identity: "mailbox-test".into(),
             activity: Arc::default(),
             prepared_context: Arc::default(),
+            coordination_signal: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
         };
         let mut cx = TaskContext::from_waker(Waker::noop());

@@ -101,7 +101,7 @@ pub(crate) fn terminal_command(launch: &Launch, cwd: &str) -> Result<Vec<String>
     shell_command(launch, command(launch, cwd)?)
 }
 
-fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, String> {
+pub(crate) fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, String> {
     let agent = match launch {
         Launch::Codex { .. } => true,
         Launch::Program { argv } => argv.first().is_some_and(|program| {

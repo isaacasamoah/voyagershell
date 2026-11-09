@@ -1094,7 +1094,11 @@ mod tests {
         .unwrap();
         fs::write(package.join("main.js"), "personal source").unwrap();
         let catalog = discover(&packages).unwrap();
-        assert_eq!(catalog.types.len(), 3);
+        assert_eq!(catalog.types.len(), 4);
+        let inbox = describe(&packages, "inbox").unwrap();
+        assert_eq!(inbox.view.component, "Inbox");
+        assert!(inbox.backend.is_none());
+        assert_eq!(inbox.actions.as_ref().unwrap().tool, "voyager_coordination");
         let terminal = describe(&packages, "terminal").unwrap();
         let notes = describe(&packages, "notes").unwrap();
         let agents = describe(&packages, "agents").unwrap();

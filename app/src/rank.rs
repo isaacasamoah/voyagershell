@@ -1,6 +1,6 @@
 use voyager_contract::{Layout, PanelOwner, PlacementId, rank::Rank};
 
-fn eligible(owner: &PanelOwner, rank: Rank) -> Result<(), String> {
+pub(crate) fn eligible(owner: &PanelOwner, rank: Rank) -> Result<(), String> {
     match (owner, rank) {
         (_, Rank::Crew)
         | (PanelOwner::Fleet { .. }, Rank::Captain | Rank::Commodore)
