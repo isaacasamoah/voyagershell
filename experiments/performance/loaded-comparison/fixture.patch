@@ -22,7 +22,7 @@
          driver.save(folder / 'paired-processes.json', item['pairedIdentities'])
 +        item['pairedForeground'] = driver.rpc(item['record']['session'], 'terminal.get', {'terminal': 't1'})['foreground']
      return item
- 
+
  
 @@ -86,8 +91,9 @@
          core = driver.rpc(record['session'], 'server.status')
@@ -126,7 +126,7 @@
 +            values[client] = int(value)
 +    assert values, 'Owner AMD graphics activity is unavailable'
 +    return values
- 
+
  
  def verify_quiet(owner, driver, folder):
 @@ -18,15 +30,7 @@
@@ -145,9 +145,9 @@
 +        counters.append(amd_graphics_counters(record['graphics']))
      assert len(counters) >= 3 and all(values == counters[0] for values in counters), 'Owner graphics advanced or changed identity while hidden'
      driver.save(folder / 'hidden-owner-gpu.json', {'samples': len(counters), 'beforeNs': selected[0]['beforeNs'], 'afterNs': selected[-1]['afterNs'], 'counters': counters[0], 'noObservedAdvance': True})
- 
+
 @@ -42,6 +46,11 @@
- 
+
      def geometry():
          return dict(line.split('=', 1) for line in command('xdotool', 'getwindowgeometry', '--shell', window).splitlines())
 +
@@ -155,12 +155,12 @@
 +        value = command('xprop', '-id', window, '_NET_WM_STATE')
 +        return sorted(state for state in ('MAXIMIZED_VERT', 'MAXIMIZED_HORZ', 'FULLSCREEN')
 +                      if '_NET_WM_STATE_' + state in value)
- 
+
      def windows():
          result = subprocess.run(['xdotool', 'search', '--onlyvisible', '--pid', str(pid)], env=driver.env, text=True, capture_output=True, timeout=5)
 @@ -61,7 +70,7 @@
          assert windows() == [], 'An owner view became visible during the comparison'
- 
+
      command('xdotool', 'windowactivate', '--sync', window)
 -    before = {'identity': identity, 'geometry': geometry(), 'windows': windows(), 'retained': retained()}
 +    before = {'identity': identity, 'geometry': geometry(), 'windowState': window_state(), 'windows': windows(), 'retained': retained()}
@@ -215,6 +215,6 @@
          if observer is not None:
 -            assert observer.wait(timeout=10) == 0, "Resource observation failed; retain its log"
 +            assert observer.wait(timeout=30) == 0, "Resource observation failed; retain its log"
- 
+
  screen = core_rpc(launch["session"], env, "terminal.read", {"terminal": config["terminal"], "lines": 0})
  (out / "screen-after.json").write_text(json.dumps(screen, indent=2) + "\n")
