@@ -1,30 +1,6 @@
-import { div } from "gpui-kit";
-import { Button, Popover } from "gpui-base";
-export function menuSurface(id, label) {
-  return div()
-    .id(id)
-    .role("menu")
-    .accessibility_label(label)
-    .flex()
-    .flex_col()
-    .w(200)
-    .p(4)
-    .rounded(7)
-    .border_1()
-    .border_color("#ffffff18")
-    .bg("#17191d")
-    .text_color("#ded8ef");
-}
-export function menuButton(id, label) {
-  return Button.new(id)
-    .role("menu_item")
-    .accessibility_label(label)
-    .h(31)
-    .px(10)
-    .justify_start()
-    .rounded(4)
-    .text_size(12);
-}
+import { Popover } from "gpui-base";
+import { menuSurface, menuButton } from "./ui.js";
+export { menuSurface, menuButton } from "./ui.js";
 export class WorkspaceMenu {
   constructor() {
     this.current = null;

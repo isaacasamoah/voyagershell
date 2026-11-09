@@ -38,6 +38,7 @@ import {
   renderContext,
 } from "./navigation-view.js";
 import { WorkspaceMenu } from "./menu.js";
+import { VoyageClose } from "./voyage-close.js";
 import { WorktreeControls } from "./worktrees.js";
 import {
   activeGroups,
@@ -109,6 +110,10 @@ type Drag = {
   bounds?: { x: number; y: number; width: number; height: number };
 };
 type LayoutName = { state: NameState; owner: PanelOwner; submitted: boolean };
+type PresentationAction = Extract<
+  Action,
+  { operation: "remove-panel" | "set-portal-presentation" }
+>;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -117,7 +122,7 @@ function errorMessage(error: unknown): string {
 export default class Workspace extends View {
   declare creation: CreationPicker | undefined;
   declare menus: WorkspaceMenu;
-  declare worktrees: WorktreeControls;
+  worktrees = new WorktreeControls();
   declare expandedVoyages: Set<string>;
   declare version: Response["version"];
   declare contextFacts: Facts | null;
@@ -134,6 +139,11 @@ export default class Workspace extends View {
   declare dockEpoch: string;
   declare layout: Layout | null;
   declare busy: boolean;
+  declare pendingPresentation: {
+    action: PresentationAction;
+    target: string;
+    done?: (result: Response | null, cx: AsyncContext) => void;
+  } | null;
   declare fresh: boolean;
   declare focus: FocusHandle;
   declare names: Map<string, { focus: FocusHandle; name: string }>;
@@ -148,14 +158,19 @@ export default class Workspace extends View {
   declare afterRename: Action | null | undefined;
   declare chat: Chat;
   declare refreshRequested: boolean;
+  closeVoyage = new VoyageClose();
   declare workspaceNotice: ReturnType<typeof workspace_notice>;
   declare automaticRefresh: boolean;
   declare focused: string | null;
   declare hoveredPanel: string | null;
   declare hoveredFleet: string | null;
-  declare processes: ProcessInfo[];
+  processes: ProcessInfo[] = [];
   declare processPending: boolean;
-  declare processError: string;
+  private processRead: {
+    version: string;
+    pending: Promise<ProcessInfo[]>;
+  } | null = null;
+  processError = "";
   declare collapsedGroups: Set<string>;
   declare recentOpen: boolean;
   declare splitReset: number;
@@ -168,7 +183,6 @@ export default class Workspace extends View {
     Extract<Action, { operation: "save-panel-layout" }> | null | undefined;
   init(_props: unknown, cx: AsyncContext) {
     this.menus = new WorkspaceMenu();
-    this.worktrees = new WorktreeControls();
     this.expandedVoyages = new Set();
     this.chat = new Chat(cx);
     this.version = "0";
@@ -184,12 +198,14 @@ export default class Workspace extends View {
     this.dockEpoch = "";
     this.layout = null;
     this.busy = false;
+    this.pendingPresentation = null;
     this.fresh = false;
     this.focus = cx.focus_handle();
     this.names = new Map();
     this.refreshRequested = false;
     this.workspaceNotice = {
       revision: "0",
+      closeRevision: "0",
       packageRevision: "0",
       activityRevision: "0",
     };
@@ -203,7 +219,6 @@ export default class Workspace extends View {
     this.focused = null;
     this.hoveredPanel = null;
     this.hoveredFleet = null;
-    this.processes = [];
     this.processPending = false;
     this.processError = "Loading agent status";
     this.splitReset = 0;
@@ -424,19 +439,38 @@ export default class Workspace extends View {
     const version = this.version;
     this.processPending = true;
     try {
-      const observed = await inspectProcesses(version);
-      if (this.version === version) {
+      const observed = await this.processSnapshot(version);
+      if (
+        this.version === version &&
+        (this.processError ||
+          JSON.stringify(this.processes) !== JSON.stringify(observed))
+      ) {
         this.processes = observed;
         this.processError = "";
+        cx.notify();
       }
     } catch (error) {
       if (this.version === version) {
-        this.processes = [];
-        this.processError = errorMessage(error);
+        const message = errorMessage(error);
+        if (this.processes.length || this.processError !== message) {
+          this.processes = [];
+          this.processError = message;
+          cx.notify();
+        }
       }
     } finally {
       this.processPending = false;
-      cx.notify();
+    }
+  }
+
+  private async processSnapshot(version: string): Promise<ProcessInfo[]> {
+    if (this.processRead?.version === version) return this.processRead.pending;
+    const read = { version, pending: inspectProcesses(version) };
+    this.processRead = read;
+    try {
+      return await read.pending;
+    } finally {
+      if (this.processRead === read) this.processRead = null;
     }
   }
 
@@ -450,13 +484,55 @@ export default class Workspace extends View {
     let observed: ProcessInfo[] = [];
     let error: string | undefined;
     try {
-      observed = await inspectProcesses(version);
+      observed = await this.processSnapshot(version);
     } catch (failure) {
       error = `Running viewers unavailable: ${errorMessage(failure)}`;
     }
     if (!this.layout || this.version !== version)
       throw Error("Workspace changed; reopen the content chooser.");
     return { panels: hiddenPanels(this.layout, destination, observed), error };
+  }
+
+  presentationTarget(action: PresentationAction): string | null {
+    if (!this.layout) return null;
+    const groups = panelGroups(this.layout).filter(
+      (group) => !group.voyage.closed,
+    );
+    if (action.operation === "set-portal-presentation") {
+      const group = groups.find(
+        (item) =>
+          item.owner.kind === "portals" && item.owner.voyage === action.voyage,
+      );
+      return group
+        ? JSON.stringify([group.owner, group.voyage.portalLayout])
+        : null;
+    }
+    const group = groups.find((item) =>
+      visiblePanels(item).some((panel) => panel.id === action.id),
+    );
+    const panel = group?.members.find((item) => item.id === action.id);
+    return group && panel
+      ? JSON.stringify([
+          group.owner,
+          group.root,
+          group.maximizedPlacement,
+          panel.content,
+        ])
+      : null;
+  }
+
+  finishPresentation(cx: UIContext, ready: boolean) {
+    const pending = this.pendingPresentation;
+    if (!pending || (ready && this.busy)) return;
+    this.pendingPresentation = null;
+    if (!ready) {
+      this.status =
+        "The waiting panel action was not sent because workspace preparation failed.";
+    } else if (this.presentationTarget(pending.action) !== pending.target) {
+      this.status = "The panel changed. Its waiting action was not sent.";
+    } else {
+      this.run(pending.action, cx, pending.done, this.version);
+    }
   }
 
   run(
@@ -468,10 +544,32 @@ export default class Workspace extends View {
   ) {
     this.drag = null;
     if (this.busy) {
-      if (action.operation === "resize-panel-split") {
+      if (
+        action.operation === "resize-panel-split" ||
+        (action.operation === "set-portal-presentation" &&
+          action.width !== undefined)
+      ) {
         this.splitReset += 1;
         this.status =
           "Resize was not saved while another workspace request was pending.";
+        cx.notify();
+        return;
+      }
+      if (
+        action.operation === "remove-panel" ||
+        action.operation === "set-portal-presentation"
+      ) {
+        const target = this.presentationTarget(action);
+        if (expectedVersion !== this.version || target === null) {
+          this.status = "The panel changed. Reopen its controls.";
+        } else if (this.pendingPresentation) {
+          this.status =
+            "A panel action is already waiting for workspace preparation.";
+        } else {
+          this.pendingPresentation = { action: { ...action }, target, done };
+          this.status =
+            "Finishing workspace preparation before the panel action.";
+        }
         cx.notify();
         return;
       }
@@ -483,6 +581,10 @@ export default class Workspace extends View {
         )
           this.afterRename = action;
         else this.status = "Wait for the name change to finish.";
+        cx.notify();
+      } else if (action.operation !== "inspect") {
+        this.status =
+          "Workspace preparation is pending. This action was not sent.";
         cx.notify();
       }
       return;
@@ -533,10 +635,11 @@ export default class Workspace extends View {
     );
     cx.spawn(async (task) => {
       let result: Response | null = null;
+      let accepted = false;
       let prepared = false;
       try {
         result = await invoke(action, expectedVersion);
-        const accepted = this.acceptSnapshot(result, task);
+        accepted = this.acceptSnapshot(result, task);
         if (
           accepted &&
           action.operation === "dock" &&
@@ -641,6 +744,13 @@ export default class Workspace extends View {
         }
         this.afterRename = null;
       }
+      this.finishPresentation(
+        task,
+        accepted &&
+          result?.status === "applied" &&
+          this.fresh &&
+          (prepared || !prepareContents),
+      );
       task.notify();
       if (!prepared) this.pendingShortcuts = [];
       if (!this.busy && this.refreshRequested) this.inspectNotice(task);
@@ -653,9 +763,15 @@ export default class Workspace extends View {
     const notice = workspace_notice();
     const packageChanged =
       notice.packageRevision !== this.workspaceNotice.packageRevision;
+    const closeChanged =
+      notice.closeRevision !== this.workspaceNotice.closeRevision;
     this.workspaceNotice = notice;
     this.refreshRequested = false;
-    if (!packageChanged && BigInt(notice.revision) <= BigInt(this.version))
+    if (
+      !packageChanged &&
+      !closeChanged &&
+      BigInt(notice.revision) <= BigInt(this.version)
+    )
       return;
     this.automaticRefresh = true;
     try {
@@ -677,14 +793,25 @@ export default class Workspace extends View {
     this.version = result.version;
     this.splitReset += 1;
     this.layout = result.layout;
-    const activeVoyage = currentVoyage(result.layout);
-    if (activeVoyage?.cwd)
-      this.worktrees?.inspect(
-        activeVoyage.id,
-        activeVoyage.cwd,
-        result.version,
-        task,
+    if (this.focused) {
+      const shown = activeGroups(result.layout).flatMap((group) =>
+        visiblePanels(group, true),
       );
+      if (
+        !shown.some((panel) => panel.id === this.focused) &&
+        !this.chat?.open &&
+        !this.editing &&
+        !this.layoutName &&
+        !window.has_active_dialog()
+      ) {
+        this.focused = shown[0]?.id || null;
+        this.focus.focus();
+      }
+    }
+    this.closeVoyage.observe(result.closePlan);
+    for (const voyage of result.layout.voyages.filter((item) => !item.closed))
+      if (voyage.cwd)
+        this.worktrees?.inspect(voyage.id, voyage.cwd, result.version, task);
     this.observedPanels = (this.observedPanels || []).filter((panel) =>
       panelGroups(result.layout).some((group) =>
         group.members.some(
@@ -838,10 +965,14 @@ export default class Workspace extends View {
         (item) => item.id === vessel.content,
       );
       if (content?.typeId !== "terminal") continue;
+      const opening = this.openings.get(vessel.content);
       if (
         allowed.has(vessel.content) &&
-        content.shellIntent &&
-        this.openings.get(vessel.content)?.intent !== content.shellIntent
+        ((content.shellIntent && opening?.intent !== content.shellIntent) ||
+          (!content.backend &&
+            !content.startPending &&
+            opening &&
+            ["applied", "unbound", "rejected"].includes(opening.status)))
       ) {
         this.openings.delete(vessel.content);
         this.terminals.delete(vessel.content);
@@ -1360,7 +1491,7 @@ export default class Workspace extends View {
 
   closedVoyageItems(): MenuItem[] {
     return (this.layout?.voyages || [])
-      .filter((item) => item.closed)
+      .filter((item) => item.closed && this.worktrees.available(item.cwd))
       .sort((a, b) => {
         const first = BigInt(a.closedOrder || "0");
         const second = BigInt(b.closedOrder || "0");
@@ -1492,6 +1623,30 @@ export default class Workspace extends View {
       trigger,
       () => this.hiddenChoices(destination, this.version),
       triggerOpens,
+      (destination, cx) => {
+        if (
+          destination.kind !== "panel" ||
+          destination.owner.kind !== "portals"
+        )
+          return;
+        const owner = destination.owner;
+        const group =
+          this.layout &&
+          panelGroups(this.layout).find(
+            (item) =>
+              item.owner.kind === "portals" &&
+              item.owner.voyage === owner.voyage,
+          );
+        if (group?.voyage.portalLayout?.visible && !visiblePanels(group).length)
+          this.run(
+            {
+              operation: "set-portal-presentation",
+              voyage: owner.voyage,
+              visible: false,
+            },
+            cx,
+          );
+      },
     );
   }
 
@@ -1923,6 +2078,7 @@ export default class Workspace extends View {
     }
     if (
       ownerNotice.revision !== this.workspaceNotice.revision ||
+      ownerNotice.closeRevision !== this.workspaceNotice.closeRevision ||
       ownerNotice.packageRevision !== this.workspaceNotice.packageRevision
     ) {
       this.refreshRequested = true;
@@ -2035,17 +2191,6 @@ export default class Workspace extends View {
           if (kind === "move") this.moveDrag(x, y, task);
           else this.finishDrag(x, y, task);
         }),
-      );
-    const worktrees = this.worktrees?.render((task) =>
-      this.run({ operation: "inspect" }, task),
-    );
-    if (worktrees)
-      shell.child(
-        div()
-          .absolute()
-          .left(this.sidebar ? 230 : 50)
-          .top(80)
-          .child(worktrees),
       );
     return this.layer(shell, layout);
   }

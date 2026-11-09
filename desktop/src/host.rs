@@ -455,6 +455,10 @@ fn load(
             let notice = notice.get();
             Ok(HostValue::Object(vec![
                 (
+                    "closeRevision".into(),
+                    HostValue::from(notice.close_revision.to_string()),
+                ),
+                (
                     "activityRevision".into(),
                     HostValue::from(notice.activity_revision.to_string()),
                 ),
@@ -491,6 +495,7 @@ pub struct Header {
     _avatar: Option<gpui::Subscription>,
     _task: Task<()>,
     _workspace_task: Task<()>,
+    _close_saves: Task<()>,
     load_error: Option<String>,
     theme_error: Option<String>,
     watch_error: Option<String>,
@@ -539,6 +544,7 @@ impl Header {
                 voyager_contract::activity::Projection::default(),
             )),
         };
+        let close_saves = workspace_binding.notes.watch_close_saves(window, cx);
         let current = Rc::new(RefCell::new(theme(&initial_theme)));
         let base = gpui_base::Theme::global_mut(cx);
         base.appearance = ThemeAppearance::Dark;
@@ -652,6 +658,7 @@ impl Header {
                 let result = handle.update(cx, |_, window, cx| {
                     this.update(cx, |header, cx| {
                         let active = window.is_a11y_active();
+                        crate::redraw_probe::record("a11y_poll_active", u64::from(active));
                         let changed_accessibility = header.accessibility != active;
                         header.accessibility = active;
                         if !changed_theme && !changed_source && !changed_accessibility {
@@ -764,6 +771,7 @@ impl Header {
             _avatar: avatar_observe,
             _task: task,
             _workspace_task: workspace_task,
+            _close_saves: close_saves,
             load_error,
             theme_error,
             watch_error,
@@ -781,6 +789,7 @@ impl Header {
 
 impl Render for Header {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::redraw_probe::record("header_renders", 1);
         let content = self.root.as_ref().map(|root| {
             let view = root.read(cx).content().clone();
             if window.is_a11y_active() {

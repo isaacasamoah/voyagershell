@@ -1,6 +1,11 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { Composer, ComposerState, MeasureHeight } from "voyager_native";
+import {
+  Composer,
+  ComposerState,
+  MeasureHeight,
+  FollowScroll,
+} from "voyager_native";
 import { observe, send } from "./conversation.js";
 import type { AsyncContext, Context, NativeElement } from "gpui-kit";
 import type { Context as Scope } from "../../../contract/generated/response";
@@ -189,6 +194,10 @@ export class Chat {
     }
     const phase = this.state?.phase || "idle";
     const active = phase === "starting" || phase === "working";
+    if (active)
+      messages.child(
+        div().text_size(10).text_color(colors.muted).child("Thinking…"),
+      );
     const error = this.error || this.state?.error;
     if (this.state?.limited)
       messages.child(
@@ -211,11 +220,12 @@ export class Chat {
           .child("Showing recent messages"),
       );
     panel.child(
-      div()
-        .id("voyager-chat-messages")
+      FollowScroll.new(
+        "voyager-chat-messages",
+        `${this.state?.version || "0"}:${this.heights.messages || 0}:${this.heights.sidebar || 0}`,
+      )
         .flex_1()
         .min_h(0)
-        .overflow_y_scroll()
         .child(
           MeasureHeight.new("chat-message-content", (height, cx) =>
             this.measure("messages", height, cx),

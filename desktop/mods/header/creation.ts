@@ -60,6 +60,7 @@ type Opening = {
 export class CreationPicker {
   current: Opening | null = null;
   catalog: Catalog | null = null;
+  ready = false;
   notes = false;
   agents = false;
   hidden: HiddenPanel[] = [];
@@ -76,52 +77,61 @@ export class CreationPicker {
     const requested = { id, version, destination };
     this.current = requested;
     this.catalog = null;
+    this.ready = false;
     this.notes = false;
     this.agents = false;
     this.hidden = [];
     this.expanded = false;
     this.error = "";
     cx.spawn(async (task) => {
-      const results = await Promise.allSettled([
-        launches(),
-        descriptions(),
-        hidden(),
-      ]);
-      if (this.current !== requested) return;
-      for (const [index, result] of results.entries()) {
-        try {
-          if (result.status === "rejected") throw result.reason;
-          if (index === 2) {
-            const hidden = result.value as HiddenChoices;
-            this.hidden = hidden.panels;
-            if (hidden.error)
-              this.error += (this.error ? "\n" : "") + hidden.error;
-            continue;
-          }
-          const value: unknown = JSON.parse(result.value as string);
-          if (index === 0) {
-            if (!validateCatalog(value))
-              throw Error("Invalid worker choices from the application");
-            this.catalog = value;
-          } else {
-            if (!validateContentCatalog(value))
-              throw Error("Invalid content choices from the application");
-            this.agents = value.types.some(
-              (kind) =>
-                kind.typeId === "agents" &&
-                kind.availability.status === "ready",
-            );
-            this.notes = value.types.some(
-              (kind) => kind.typeId === "notes" && Boolean(kind.state),
-            );
-          }
-        } catch (error) {
+      const failed = (error: unknown) => {
+        if (this.current === requested)
           this.error +=
             (this.error ? "\n" : "") +
             (error instanceof Error ? error.message : String(error));
+      };
+      const retained = (async () => {
+        try {
+          const result = await hidden();
+          if (this.current !== requested) return;
+          this.hidden = result.panels;
+          if (result.error) failed(result.error);
+        } catch (error) {
+          failed(error);
+        } finally {
+          if (this.current === requested) task.notify();
         }
+      })();
+      const metadata = await Promise.allSettled([launches(), descriptions()]);
+      if (this.current === requested) {
+        for (const [index, result] of metadata.entries()) {
+          try {
+            if (result.status === "rejected") throw result.reason;
+            const value: unknown = JSON.parse(result.value);
+            if (index === 0) {
+              if (!validateCatalog(value))
+                throw Error("Invalid worker choices from the application");
+              this.catalog = value;
+            } else {
+              if (!validateContentCatalog(value))
+                throw Error("Invalid content choices from the application");
+              this.agents = value.types.some(
+                (kind) =>
+                  kind.typeId === "agents" &&
+                  kind.availability.status === "ready",
+              );
+              this.notes = value.types.some(
+                (kind) => kind.typeId === "notes" && Boolean(kind.state),
+              );
+            }
+          } catch (error) {
+            failed(error);
+          }
+        }
+        this.ready = true;
+        task.notify();
       }
-      task.notify();
+      await retained;
     });
     cx.notify();
   }
@@ -134,6 +144,7 @@ export class CreationPicker {
     trigger: NativeElement,
     hidden: () => Promise<HiddenChoices> = async () => ({ panels: [] }),
     triggerOpens = true,
+    dismissed?: (destination: CreationDestination, cx: Context) => void,
   ): NativeElement {
     const opening = this.current?.id === id ? this.current : null;
     const entity =
@@ -143,7 +154,7 @@ export class CreationPicker {
     const content = menuSurface(`worker-choices-${id}`, "Content choices")
       .max_h(320)
       .overflow_y_scroll();
-    if (opening) {
+    if (opening && this.ready) {
       if (this.catalog) {
         const entries = [...this.catalog.settings.entries].sort(
           (a, b) =>
@@ -204,9 +215,12 @@ export class CreationPicker {
         );
       if (opening.destination.kind === "panel" && this.hidden.length)
         content.child(
-          menuButton("hidden-vessels", "Hidden vessels")
+          menuButton(
+            "hidden-vessels",
+            entity === "Portal" ? "Hidden Portals" : "Hidden Vessels",
+          )
             .child(
-              `${this.expanded ? "⌄" : "›"} Hidden vessels (${this.hidden.length})`,
+              `${this.expanded ? "⌄" : "›"} Hidden ${entity === "Portal" ? "Portals" : "Vessels"} (${this.hidden.length})`,
             )
             .on_click((_event, cx) => {
               this.expanded = !this.expanded;
@@ -252,11 +266,17 @@ export class CreationPicker {
           div().text_size(10).text_color("#ffcad3").child(this.error),
         );
     }
+    if (opening && !this.ready)
+      content.child(div().text_size(11).child("Loading choices"));
     return Popover.new(`worker-picker-${id}`)
       .open(Boolean(opening))
       .on_open_change((open, cx) => {
         if (!open) {
-          if (this.current?.id === id) this.current = null;
+          if (this.current?.id === id) {
+            const destination = this.current.destination;
+            this.current = null;
+            dismissed?.(destination, cx);
+          }
           cx.notify();
           return;
         }
