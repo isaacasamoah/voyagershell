@@ -47,7 +47,7 @@ finally:
 def prove(*, native, capture, geometry, close, start_frame, evidence, session, env, journey):
     assert journey == "terminal-scrolling"
     socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
-    observed = {"cases": [], "limits": "Probe is a deterministic full-screen program, not an actual agent or physical gesture."}
+    observed = {"cases": [], "limits": "Probe cases are deterministic; actual Codex is separately named when enabled. Physical touchpad and IME are not established."}
     probe = evidence / "scroll-probe.py"
     probe.write_text(PROBE)
     core = None
@@ -184,10 +184,12 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
             assert ImageChops.difference(before, upper).getbbox(), "Actual Codex content did not visibly scroll up"
             assert ImageChops.difference(upper, lower).getbbox(), "Actual Codex content did not visibly scroll down"
             assert process_identity(agent["pid"], metadata_only=True) == agent_identity
-            observed["cases"].append({"mode": "actual-Codex", "program": agent, "identity": agent_identity, "passed": True})
+            key(65307)
             type_text("scroll-typing-marker")
+            wait(lambda: rpc("terminal.read", {"terminal": address})["text"], lambda text: "scroll-typing-marker" in text, "visible Codex input text")
             time.sleep(0.3)
             capture("scroll-agent-typing")
+            observed["cases"].append({"mode": "actual-Codex", "program": agent, "identity": agent_identity, "passed": True})
         else:
             type_text("echo SCROLL-LIVE-OUTPUT\n")
             capture("scroll-final-live-output")
