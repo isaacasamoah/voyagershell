@@ -1,6 +1,7 @@
 mod description;
 mod markdown;
 mod package;
+pub(crate) mod rename;
 mod view;
 pub(crate) use description::supports_type;
 pub use description::{describe, discover, require_action};
@@ -513,6 +514,7 @@ pub(crate) fn initialize_created(
                 Path::new(&file.directory).join(&file.filename).display()
             )
         })?;
+        rename::label(current, id, &file.filename);
         if snapshot.data
             != (Notes {
                 title: "Title".into(),
