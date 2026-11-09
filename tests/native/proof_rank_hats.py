@@ -160,7 +160,15 @@ def prove(
         state(portal_content, "admiral")
         state(vessel["content"], "commodore")
         press(first["value"]["voyages"][0]["fleets"][0]["name"])
-        before = document()
+        before = wait(
+            document,
+            lambda d: (
+                d["value"]["selectedFleet"]
+                == first["value"]["voyages"][0]["fleets"][0]["id"]
+            ),
+            "original Fleet selection completed before saving reopen baseline",
+        )
+        observed["beforeReopen"] = before
         close()
         start_frame("rank-reopened")
         restored = wait(
