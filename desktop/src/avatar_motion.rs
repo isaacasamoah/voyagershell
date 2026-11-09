@@ -1,19 +1,18 @@
-use std::f32::consts::TAU;
+use crate::avatar_pack::Compiled;
 use std::{
-    collections::VecDeque,
+    f32::consts::TAU,
+    sync::Arc,
     time::{Duration, Instant},
 };
+use voyager_contract::avatar_animation::Trigger;
 
-pub const IDLE: &str = "idle.png";
-pub const READING: [&str; 2] = ["book-frames/reading-1.png", "book-frames/reading-2.png"];
-
-pub fn bezier(progress: f32, x1: f32, x2: f32) -> f32 {
+fn easing(progress: f32, curve: [f32; 4]) -> f32 {
     let progress = progress.clamp(0., 1.);
     let mut low: f32 = 0.;
     let mut high: f32 = 1.;
     for _ in 0..20 {
         let t = (low + high) * 0.5;
-        let x = 3. * (1. - t).powi(2) * t * x1 + 3. * (1. - t) * t * t * x2 + t.powi(3);
+        let x = 3. * (1. - t).powi(2) * t * curve[0] + 3. * (1. - t) * t * t * curve[2] + t.powi(3);
         if x < progress {
             low = t;
         } else {
@@ -21,7 +20,7 @@ pub fn bezier(progress: f32, x1: f32, x2: f32) -> f32 {
         }
     }
     let t = (low + high) * 0.5;
-    3. * (1. - t) * t * t + t.powi(3)
+    3. * (1. - t).powi(2) * t * curve[1] + 3. * (1. - t) * t * t * curve[3] + t.powi(3)
 }
 
 pub fn samples(docking: bool) -> Vec<f32> {
@@ -48,79 +47,145 @@ pub fn samples(docking: bool) -> Vec<f32> {
         .collect()
 }
 
-pub fn frame_layers<'a>(
-    previous: &'a str,
-    current: &'a str,
-    elapsed: f32,
-    duration: f32,
-) -> (&'a str, f32) {
-    if duration <= 0. || elapsed >= duration {
-        (current, 0.)
-    } else {
-        (previous, bezier(elapsed / duration, 0.45, 0.25))
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Frame {
+    pub back: usize,
+    pub front: Option<(usize, f32)>,
+}
+
+impl Frame {
+    fn still(pose: usize) -> Self {
+        Self {
+            back: pose,
+            front: None,
+        }
     }
+}
+
+#[derive(Clone, Copy)]
+pub enum Refresh {
+    Still,
+    Frame,
+    At(Instant),
+}
+
+struct Playback {
+    clip: usize,
+    started: Instant,
 }
 
 pub struct Motion {
-    pub previous: &'static str,
-    pub frame: &'static str,
-    pub since: Instant,
-    pub fade: f32,
-    due: Instant,
-    steps: VecDeque<(&'static str, u64, u64)>,
+    pub pack: Arc<Compiled>,
+    pub frame: Frame,
     pub reduced_motion: bool,
+    active: Option<Playback>,
+    pub generation: u64,
 }
 
 impl Motion {
-    pub fn new(reduced_motion: bool) -> Self {
-        let now = Instant::now();
+    pub fn new(pack: Arc<Compiled>, reduced_motion: bool) -> Self {
         Self {
-            previous: IDLE,
-            frame: IDLE,
-            since: now,
-            fade: 0.,
-            due: now,
-            steps: VecDeque::new(),
+            frame: Frame::still(pack.rest),
+            pack,
             reduced_motion,
+            active: None,
+            generation: 0,
         }
     }
 
-    pub fn stretch(&mut self) {
-        if self.reduced_motion || self.animating() {
-            return;
-        }
-        self.steps = [
-            ("stretch-frames/frame-1-uncrossing.png", 50, 120),
-            ("stretch-frames/frame-2-stretched.png", 80, 120),
-            ("stretch-frames/frame-3-peak-stretch.png", 1200, 200),
-            (IDLE, 0, 500),
-        ]
-        .into_iter()
-        .collect();
-        self.due = Instant::now();
+    pub fn replace(&mut self, pack: Arc<Compiled>) -> Arc<Compiled> {
+        let retired = std::mem::replace(&mut self.pack, pack);
+        self.active = None;
+        self.frame = Frame::still(self.pack.rest);
+        self.generation = self.generation.wrapping_add(1);
+        retired
+    }
+
+    pub fn trigger(&mut self, trigger: Trigger) -> bool {
         self.tick();
+        if self.reduced_motion || matches!(trigger, Trigger::Hover) && self.active.is_some() {
+            return false;
+        }
+        if matches!(trigger, Trigger::Undock) {
+            self.active = None;
+            self.frame = Frame::still(self.pack.rest);
+            self.generation = self.generation.wrapping_add(1);
+        }
+        let index = match trigger {
+            Trigger::Hover => 0,
+            Trigger::Click => 1,
+            Trigger::Dock => 2,
+            Trigger::Undock => 3,
+        };
+        let Some(clip) = self.pack.bindings[index] else {
+            return false;
+        };
+        let Some(timeline) = self.pack.clips.get(clip) else {
+            return false;
+        };
+        self.frame = Frame::still(timeline.from);
+        self.active = Some(Playback {
+            clip,
+            started: Instant::now(),
+        });
+        self.generation = self.generation.wrapping_add(1);
+        self.tick();
+        true
     }
 
-    pub fn animating(&self) -> bool {
-        !self.reduced_motion
-            && (!self.steps.is_empty() || self.since.elapsed().as_secs_f32() < self.fade)
+    pub fn tick(&mut self) -> Refresh {
+        self.tick_at(Instant::now())
     }
 
-    pub fn tick(&mut self) {
-        let now = Instant::now();
-        if now < self.due {
-            return;
+    fn tick_at(&mut self, now: Instant) -> Refresh {
+        let Some(active) = &self.active else {
+            return Refresh::Still;
+        };
+        let Some(clip) = self.pack.clips.get(active.clip) else {
+            return Refresh::Still;
+        };
+        let elapsed = now.saturating_duration_since(active.started);
+        let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
+        if elapsed_ms >= clip.duration_ms {
+            self.frame = Frame::still(clip.steps.last().map_or(self.pack.rest, |step| step.pose));
+            self.active = None;
+            return Refresh::Still;
         }
-        if let Some((frame, hold, fade)) = self.steps.pop_front() {
-            self.previous = self.frame;
-            self.frame = frame;
-            self.since = now;
-            self.fade = fade as f32 * 1.6 / 1000.;
-            self.due = now + Duration::from_micros((hold + fade) * 1600);
-        } else {
-            self.previous = self.frame;
-            self.fade = 0.;
+        let index = clip.steps.partition_point(|step| step.end_ms <= elapsed_ms);
+        let Some(step) = clip.steps.get(index) else {
+            return Refresh::Still;
+        };
+        let deadline = active
+            .started
+            .checked_add(Duration::from_millis(step.end_ms));
+        let same = self
+            .pack
+            .poses
+            .get(step.from)
+            .zip(self.pack.poses.get(step.pose))
+            .is_some_and(|(a, b)| {
+                Arc::ptr_eq(&a.image, &b.image)
+                    && a.pose.rect == b.pose.rect
+                    && a.pose.anchor == b.pose.anchor
+                    && a.pose.scale == b.pose.scale
+            });
+        let faded = elapsed.saturating_sub(Duration::from_millis(step.start_ms));
+        if step.fade_ms > 0 && faded < Duration::from_millis(u64::from(step.fade_ms)) && !same {
+            let alpha = easing(
+                faded.as_secs_f32() * 1000. / step.fade_ms as f32,
+                clip.easing,
+            );
+            self.frame = Frame {
+                back: step.from,
+                front: Some((step.pose, alpha)),
+            };
+            return Refresh::Frame;
         }
+        self.frame = Frame::still(step.pose);
+        if !same && step.end_ms.saturating_sub(elapsed_ms) <= 34 {
+            return Refresh::Frame;
+        }
+        deadline.map_or(Refresh::Still, Refresh::At)
     }
 }
 
@@ -129,62 +194,131 @@ mod tests {
     use super::*;
 
     #[test]
-    fn idle_does_not_start_an_animation_after_a_deadline() {
-        let mut motion = Motion::new(false);
-        motion.due = Instant::now();
-        motion.tick();
-        assert_eq!(motion.frame, IDLE);
-        assert!(motion.steps.is_empty());
-        assert!(!motion.animating());
-    }
-
-    #[test]
-    fn commanded_stretch_returns_to_idle_without_repeating() {
-        let mut motion = Motion::new(false);
-        motion.stretch();
-        assert_ne!(motion.frame, IDLE);
-        assert!(motion.animating());
-        for _ in 0..3 {
-            motion.due = Instant::now();
-            motion.tick();
-        }
-        assert_eq!(motion.frame, IDLE);
-        assert!(motion.steps.is_empty());
-        assert!(motion.animating());
-        motion.due = Instant::now();
-        motion.since = Instant::now() - Duration::from_secs(2);
-        motion.tick();
-        assert!(!motion.animating());
-        motion.tick();
-        assert_eq!(motion.frame, IDLE);
-        assert!(motion.steps.is_empty());
-        let mut reduced = Motion::new(true);
-        reduced.stretch();
-        assert_eq!(reduced.frame, IDLE);
-        assert!(reduced.steps.is_empty());
-        assert!(!reduced.animating());
-    }
-
-    #[test]
-    fn settled_frames_retire_previous_pose_and_front_layer() {
-        assert_eq!(frame_layers("stretch", "idle", 1., 0.8), ("idle", 0.));
-        assert_eq!(frame_layers("stretch", "idle", 0., 0.), ("idle", 0.));
-        let (base, opacity) = frame_layers("stretch", "idle", 0.4, 0.8);
-        assert_eq!(base, "stretch");
-        assert!(opacity > 0. && opacity < 1.);
-    }
-
-    #[test]
     fn dock_and_undock_use_distinct_bounded_waveforms() {
         let dock = samples(true);
         let undock = samples(false);
         assert_eq!(dock.len(), 9600);
         assert_eq!(undock.len(), 9600);
-        assert_ne!(dock, undock);
         assert_eq!(dock[0], 0.);
         assert!(dock.iter().all(|x| x.is_finite() && x.abs() <= 0.06));
         let crossings = |wave: &[f32]| wave.windows(2).filter(|p| p[0] < 0. && p[1] >= 0.).count();
         assert!(crossings(&dock[4800..7680]) > crossings(&dock[..2880]));
         assert!(crossings(&undock[4800..7680]) < crossings(&undock[..2880]));
+    }
+
+    fn motion() -> Motion {
+        use crate::avatar_pack::{Compiled, Drawing, TimedPose, Timeline};
+        use voyager_contract::avatar_animation::{Canvas, Pose};
+        let image = Arc::new(gpui::RenderImage::new(vec![image::Frame::new(
+            image::RgbaImage::new(2, 2),
+        )]));
+        let drawing = Drawing {
+            image,
+            image_size: [2, 2],
+            pose: Pose {
+                image: "a".into(),
+                rect: [0, 0, 2, 2],
+                anchor: [1., 1.],
+                scale: 1.,
+            },
+        };
+        let mut shifted = drawing.clone();
+        shifted.pose.anchor[1] = 2.;
+        Motion::new(
+            Arc::new(Compiled {
+                id: "test".into(),
+                canvas: Canvas {
+                    size: [2, 2],
+                    anchor: [1., 1.],
+                },
+                poses: vec![drawing, shifted],
+                clips: vec![Timeline {
+                    from: 0,
+                    steps: vec![
+                        TimedPose {
+                            from: 0,
+                            pose: 1,
+                            start_ms: 0,
+                            fade_ms: 200,
+                            end_ms: 500,
+                        },
+                        TimedPose {
+                            from: 1,
+                            pose: 0,
+                            start_ms: 500,
+                            fade_ms: 200,
+                            end_ms: 2000,
+                        },
+                    ],
+                    easing: [0., 0., 1., 1.],
+                    duration_ms: 2000,
+                }],
+                bindings: [Some(0), None, Some(0), None],
+                rest: 0,
+            }),
+            false,
+        )
+    }
+
+    #[test]
+    fn finite_playback_settles_holds_and_never_restarts() {
+        let mut motion = motion();
+        assert!(matches!(motion.tick(), Refresh::Still));
+        assert!(!motion.trigger(Trigger::Click));
+        assert!(motion.trigger(Trigger::Hover));
+        let started = motion.active.as_ref().unwrap().started;
+        assert!(matches!(
+            motion.tick_at(started + Duration::from_millis(100)),
+            Refresh::Frame
+        ));
+        assert!((motion.frame.front.unwrap().1 - 0.5).abs() < 0.001);
+        assert!(
+            matches!(motion.tick_at(started + Duration::from_millis(300)), Refresh::At(t) if t == started + Duration::from_millis(500))
+        );
+        assert_eq!(motion.frame, Frame::still(1));
+        assert!(matches!(
+            motion.tick_at(started + Duration::from_secs(9)),
+            Refresh::Still
+        ));
+        assert_eq!(motion.frame, Frame::still(0));
+        assert!(matches!(
+            motion.tick_at(started + Duration::from_secs(60)),
+            Refresh::Still
+        ));
+        assert!(motion.active.is_none());
+    }
+
+    #[test]
+    fn dock_preempts_hover_and_undock_cancels_without_changing_reduced_preference() {
+        let mut motion = motion();
+        assert!(motion.trigger(Trigger::Hover));
+        let generation = motion.generation;
+        assert!(!motion.trigger(Trigger::Hover));
+        assert_eq!(motion.generation, generation);
+        assert!(motion.trigger(Trigger::Dock));
+        assert_ne!(motion.generation, generation);
+        assert!(!motion.trigger(Trigger::Hover));
+        assert!(!motion.trigger(Trigger::Undock));
+        assert!(motion.active.is_none());
+        assert_eq!(motion.frame, Frame::still(0));
+        motion.reduced_motion = true;
+        assert!(!motion.trigger(Trigger::Dock));
+        motion.replace(Arc::clone(&motion.pack));
+        assert!(motion.reduced_motion);
+        assert!(motion.active.is_none());
+    }
+
+    #[test]
+    fn identical_pose_does_not_double_alpha() {
+        let mut motion = motion();
+        let pack = Arc::get_mut(&mut motion.pack).unwrap();
+        pack.poses[1] = pack.poses[0].clone();
+        assert!(motion.trigger(Trigger::Hover));
+        let started = motion.active.as_ref().unwrap().started;
+        assert!(matches!(
+            motion.tick_at(started + Duration::from_millis(100)),
+            Refresh::At(_)
+        ));
+        assert!(motion.frame.front.is_none());
     }
 }

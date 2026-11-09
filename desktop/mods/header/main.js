@@ -2,7 +2,11 @@ import { View, div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
 import { projection } from "voyager_header";
 import { Layer, Target, PortalArea } from "voyager_avatar";
-import { take_result, window_epoch } from "voyager_avatar";
+import {
+  take_result,
+  take_animation_notice,
+  window_epoch,
+} from "voyager_avatar";
 import {
   response as validateResponse,
   workspaceObservation as validateObservation,
@@ -18,7 +22,7 @@ import {
   reported_activity,
   refresh_activity,
 } from "voyager_workspace";
-import { NameState, Name, ArrangementCapture } from "voyager_native";
+import { NameState, Name, ArrangementCapture, Status } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding } from "voyager_native";
 import { Chat } from "./chat.js";
@@ -1293,10 +1297,12 @@ export default class Workspace extends View {
       .px(12)
       .py(6)
       .child(
-        div()
+        Status.new(
+          "workspace-status",
+          this.status || this.worktrees?.status || "",
+        )
           .text_size(11)
-          .text_color("#ffcad3")
-          .child(this.status || this.worktrees?.status || ""),
+          .text_color("#ffcad3"),
       )
       .child(this.action("Refresh", { operation: "inspect" }));
   }
@@ -1641,6 +1647,12 @@ export default class Workspace extends View {
     return renderContext(this, layout, voyage, fleet);
   }
   render(cx) {
+    const animationNotice = take_animation_notice();
+    if (animationNotice !== null) {
+      if (animationNotice || this.status === this.animationNotice)
+        this.status = animationNotice;
+      this.animationNotice = animationNotice;
+    }
     try {
       const raw = take_result();
       if (raw !== null) {

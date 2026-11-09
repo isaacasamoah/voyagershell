@@ -65,4 +65,5 @@ export function window_epoch(): string;
 export function dock_target_visible(scope: string): boolean;
 export function speech_in_primary(): boolean;
 export function take_result(): string | null;
+export function take_animation_notice(): string | null;
 "#;

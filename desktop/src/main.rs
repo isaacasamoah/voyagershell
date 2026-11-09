@@ -1,6 +1,7 @@
 mod arrangement;
 mod avatar;
 mod avatar_motion;
+mod avatar_pack;
 #[cfg(all(test, target_os = "linux"))]
 mod canvas_test;
 mod content_budget;
@@ -18,6 +19,7 @@ mod quit;
 mod script_types;
 mod speech;
 mod split;
+mod status;
 mod terminal;
 mod terminal_screen;
 mod text;
@@ -249,6 +251,7 @@ fn run() -> Result<()> {
         content_owner,
         launches_path,
     );
+    let animations = avatar_pack::prepare(&profile.join("avatar"))?;
     let viewers = terminal::Viewers::default();
     let conversation = voyager_app::conversation_client::Client::with_audio(
         profile.clone(),
@@ -271,6 +274,11 @@ fn run() -> Result<()> {
             };
             if let Err(error) = measure::register(&mut registry) {
                 eprintln!("Native measurement registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = status::register(&mut registry) {
+                eprintln!("Native status registration: {error}");
                 cx.quit();
                 return;
             }
@@ -333,7 +341,7 @@ fn run() -> Result<()> {
             if let Err(error) = cx.open_window(options, |window, cx| {
                 let quit_conversation = conversation.clone();
                 speech::initialize(conversation.clone(), cx);
-                let avatar = avatar::Binding::new(client.clone(), window, cx);
+                let avatar = avatar::Binding::new(client.clone(), animations, window, cx);
                 let avatar_view = avatar.view();
                 let header = cx.new(|cx| {
                     host::Header::new(

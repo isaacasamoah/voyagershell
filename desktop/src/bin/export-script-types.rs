@@ -16,6 +16,8 @@ mod occluding;
 mod script_types;
 #[path = "../split.rs"]
 mod split;
+#[path = "../status.rs"]
+mod status;
 #[path = "../terminal.rs"]
 mod terminal;
 #[path = "../terminal_screen.rs"]
@@ -40,6 +42,7 @@ fn main() -> Result<()> {
     let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, "voyager_native")?;
     text::register(&mut registry)?;
     measure::register(&mut registry)?;
+    status::register(&mut registry)?;
     arrangement::register(&mut registry)?;
     split::register(&mut registry)?;
     occluding::register(&mut registry)?;

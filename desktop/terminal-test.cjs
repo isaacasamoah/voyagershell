@@ -943,6 +943,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   };
   let occluders = 0;
   const layers = [];
+  let animationNotice = null;
   const layer = {
     new(id, props) {
       layers.push({ id, ...props });
@@ -959,6 +960,8 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "Layer",
     "Target",
     "take_result",
+    "take_animation_notice",
+    "Status",
     "homeOverview",
     "workspace_notice",
     "composeCanvas",
@@ -982,6 +985,12 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     layer,
     target,
     () => null,
+    () => {
+      const notice = animationNotice;
+      animationNotice = null;
+      return notice;
+    },
+    { new: (_id, text) => div().child(text) },
     () => div(),
     () => ({ revision: ownerRevision, packageRevision, activityRevision }),
     new Function(
@@ -1197,6 +1206,18 @@ test("Home presents the retained out-of-view avatar without docking or starting 
   );
   view.layout = unchanged;
   assert.equal(view.version, "7");
+  animationNotice = "Avatar animations: missing asset";
+  view.render({});
+  assert.equal(view.status, animationNotice ?? view.animationNotice);
+  animationNotice = "";
+  view.render({});
+  assert.equal(view.status, "");
+  animationNotice = "Avatar animations: broken PNG";
+  view.render({});
+  view.status = "Workspace changed";
+  animationNotice = "";
+  view.render({});
+  assert.equal(view.status, "Workspace changed");
   view.sidebar = false;
   view.chat.render = () => div();
   view.chat.present = false;
