@@ -1,6 +1,6 @@
 # Voyager worker coordination
 
-Use the executable in $VOYAGER_AGENT_BIN. Run help, then inspect to read your exact run ID, current rank, scope, colleagues and inbox. This trial supports only fresh native Codex sessions launched through this app.
+Use the executable in $VOYAGER_AGENT_BIN. Run help, then inspect to read your exact run ID, current rank, scope, colleagues and inbox. This trial supports only fresh native Codex sessions launched through this app. If the command or binding is missing from your tool environment, report that setup failure. Do not fall back to another Voyager executable, workspace connection or agent-control tool.
 
 Conversation is open. Use send RUN MESSAGE to share information or ask a colleague a question. Send to user reaches the human Inbox message list. Conversation does not grant permission to change another agent's work.
 

@@ -75,17 +75,20 @@ impl Owner {
             );
         }
         let image = platform::image(std::path::Path::new(&argv[0]))?;
-        let guide = include_str!("../../experiments/agent-authority/AGENTS.md");
-        let setting = format!(
-            "developer_instructions={}",
-            serde_json::to_string(guide).map_err(|e| e.to_string())?
-        );
-        argv.splice(1..1, ["-c".into(), setting]);
         let command = configuration
             .command
             .to_str()
             .ok_or("Agent command path is not UTF-8")?
             .to_owned();
+        let env = HashMap::from([
+            (
+                "VOYAGER_AGENT_SOCKET".into(),
+                configuration.socket.to_string_lossy().into_owned(),
+            ),
+            ("VOYAGER_AGENT_CONTENT".into(), content.0.clone()),
+            ("VOYAGER_AGENT_BIN".into(), command.clone()),
+        ]);
+        argv.splice(1..1, codex_settings(&env)?);
         let mut wrapped = vec![command.clone(), "launch".into()];
         wrapped.extend(argv);
         let shell = crate::launch::shell_command(launch, wrapped.clone())?;
@@ -103,17 +106,7 @@ impl Owner {
                 supervisor: None,
             },
         );
-        Ok((
-            shell,
-            HashMap::from([
-                (
-                    "VOYAGER_AGENT_SOCKET".into(),
-                    configuration.socket.to_string_lossy().into_owned(),
-                ),
-                ("VOYAGER_AGENT_CONTENT".into(), content.0.clone()),
-                ("VOYAGER_AGENT_BIN".into(), command),
-            ]),
-        ))
+        Ok((shell, env))
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -441,5 +434,60 @@ impl Owner {
             ticket.supervisor = Some(id.clone());
         }
         Ok(Some("The child program started in its new Vessel. Enrollment, task receipt and completed work are separate observations".into()))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn codex_settings(env: &HashMap<String, String>) -> Result<Vec<String>, String> {
+    let guide = include_str!("../../experiments/agent-authority/AGENTS.md");
+    let mut settings = vec![
+        "-c".into(),
+        format!(
+            "developer_instructions={}",
+            serde_json::to_string(guide).map_err(|error| error.to_string())?
+        ),
+    ];
+    for (key, value) in env {
+        settings.extend([
+            "-c".into(),
+            format!(
+                "shell_environment_policy.set.{key}={}",
+                serde_json::to_string(value).map_err(|error| error.to_string())?
+            ),
+        ]);
+    }
+    Ok(settings)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codex_commands_receive_only_the_explicit_binding_without_broad_inheritance() {
+        let binding = HashMap::from([
+            (
+                "VOYAGER_AGENT_BIN".into(),
+                "/tmp/space and \"quote/voyager-agent".into(),
+            ),
+            ("VOYAGER_AGENT_CONTENT".into(), "content-11".into()),
+            ("VOYAGER_AGENT_SOCKET".into(), "/tmp/agent.sock".into()),
+        ]);
+        let settings = codex_settings(&binding).unwrap();
+        assert_eq!(settings.len(), 8);
+        for pair in settings.chunks_exact(2) {
+            assert_eq!(pair[0], "-c");
+        }
+        for (key, value) in binding {
+            let prefix = format!("shell_environment_policy.set.{key}=");
+            let setting = settings
+                .iter()
+                .find(|item| item.starts_with(prefix.as_str()))
+                .unwrap();
+            let decoded: String =
+                serde_json::from_str(setting.strip_prefix(prefix.as_str()).unwrap()).unwrap();
+            assert_eq!(decoded, value);
+        }
+        assert!(!settings.iter().any(|item| item.contains("inherit=")));
     }
 }

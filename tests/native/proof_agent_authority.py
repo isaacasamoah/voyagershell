@@ -20,7 +20,7 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
         assert core_socket.is_socket(), "Owned Core socket is absent; do not recreate it"
         return core_rpc(session, env, method, params or {})
     document = lambda: rpc("doc.get", {"name": "voyager-layout-v1"})["value"]
-    deadline = time.monotonic() + 840
+    deadline = time.monotonic() + min(840, float(env.get("VOYAGER_AUTHORITY_TRIAL_DEADLINE", str(time.time() + 840))) - time.time())
     def wait(get, predicate, label, seconds=20):
         remaining = deadline - time.monotonic()
         assert remaining > 0, "The 15-minute authority trial bound was reached"
@@ -47,10 +47,20 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
     for name, text in (("crew", crew_task), ("captain", captain_task), ("admiral", admiral_task)):
         (prompts / f"{name}.md").write_text(text + "\n")
 
+    (prompts / "initial.md").write_text(f"Use $VOYAGER_AGENT_BIN inspect. Find your own Agent using snapshot.current.id. If its fleet is null, read {prompts / 'admiral.md'} and execute that task. Otherwise read {prompts / 'captain.md'} and execute that task. Do not start any internal sub-agent.\n")
+    launches = json.loads((profile / "launches.json").read_text())
+    launches["entries"].append({"id": "trial-root", "name": "Trial Root", "launch": {"kind": "program", "argv": ["codex", "--no-daemon", "--model", "gpt-6.1-sol", "-c", 'model_reasoning_effort="high"', "--dangerously-bypass-approvals-and-sandbox", "--", f"Read {prompts / 'initial.md'} and execute this bounded trial."]}})
+    (profile / "launches.json").write_text(json.dumps(launches, indent=2) + "\n")
+
     def press(name, index=None):
         if index is None:
             point = named_button(native, evidence, name)
         else:
+            terminals = wait(lambda: native("fields", app["pid"], ["Terminal"], "window")["fields"], lambda items: any(item["width"] > 0 and item["height"] > 0 for item in items), "visible terminal before hover")
+            terminal = min((item for item in terminals if item["width"] > 0 and item["height"] > 0), key=lambda item: item["x"])
+            bounds = geometry()
+            native("move", int(bounds["X"]) + terminal["x"] + 12, int(bounds["Y"]) + terminal["y"] + 12, 2)
+            time.sleep(0.2)
             fields = native("fields", app["pid"], [name], "window")["fields"]
             fields = sorted((item for item in fields if item["width"] > 0 and item["height"] > 0), key=lambda item: (item["x"], item["y"]))
             assert fields and index < len(fields), (name, fields)
@@ -94,16 +104,22 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
         bound = wait(document, lambda value: any(item["id"] == panel["content"] and item.get("backend") for item in value["contents"]), "saved backend for " + task)
         content = next(item for item in bound["contents"] if item["id"] == panel["content"])
         wait(lambda: rpc("terminal.get", {"terminal": content["backend"]}), lambda value: (value.get("foreground") or {}).get("name") == "codex", "real Codex foreground")
-        terminals = native("fields", app["pid"], ["Terminal"], "window")["fields"]
-        terminals = sorted((item for item in terminals if item["role"] == "terminal" and item["width"] > 0 and item["height"] > 0), key=lambda item: item["x"])
-        assert len(terminals) >= 2, terminals
-        target = terminals[-1] if task == "admiral" else terminals[1]
-        observed.setdefault("promptFocus", []).append({"placement": panel["id"], "task": task, "measuredTerminal": target})
-        bounds = geometry()
-        native("move", int(bounds["X"]) + target["x"] + target["width"] // 2, int(bounds["Y"]) + target["y"] + target["height"] // 2, 2)
-        native("button", True)
-        native("button", False)
-        text(f"Read {prompts / (task + '.md')} and carry out this bounded trial.\n")
+        screen = lambda: rpc("terminal.read", {"terminal": content["backend"], "lines": 50})["text"]
+        startup = wait(screen, lambda value: "Trust this folder?" in value or ("OpenAI Codex" in value and "gpt-6.1-sol" in value.lower()), "Codex startup interface", 45)
+        if "Trust this folder?" in startup:
+            assert app["identity"]["cwd"] in startup and "1. Trust and continue" in startup
+            fields = native("fields", app["pid"], ["Terminal"], "window")["fields"]
+            fields = sorted((item for item in fields if item["role"] == "terminal" and item["width"] > 0), key=lambda item: item["x"])
+            assert len(fields) >= 2, fields
+            target = fields[-1] if task == "admiral" else fields[1]
+            bounds = geometry()
+            native("move", int(bounds["X"]) + target["x"] + target["width"] // 2, int(bounds["Y"]) + target["y"] + target["height"] // 2, 2)
+            native("button", True)
+            native("button", False)
+            native("key", 65293, True)
+            native("key", 65293, False)
+            wait(screen, lambda value: "Trust this folder?" not in value, "accepted owned fixture folder", 30)
+        observed.setdefault("startupPrompts", []).append({"placement": panel["id"], "task": task, "backend": content["backend"], "method": "Actual Codex positional startup prompt from isolated launch configuration", "startupScreen": startup})
 
     owned = []
     try:
@@ -114,9 +130,9 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
         press("Create Inbox Vessel")
         wait(document, lambda value: any(item["typeId"] == "inbox" for item in value["contents"]), "Inbox creation")
         press("Split Vessel right", 0)
-        press("Create Codex Vessel")
+        press("Create Trial Root Vessel")
         fleet = wait(document, lambda value: len(value["voyages"][0]["fleets"][0]["vessels"]) == 3, "Fleet Codex creation")["voyages"][0]["fleets"][0]
-        root = next(panel for panel in fleet["vessels"] if next(item for item in document()["contents"] if item["id"] == panel["content"]).get("launch", {}).get("kind") == "codex")
+        root = next(panel for panel in fleet["vessels"] if next(item for item in document()["contents"] if item["id"] == panel["content"]).get("launch", {}).get("kind") == "program")
         prompt(root, "captain")
         promote(root, "captain")
         captain = file("captain-ready.json", 240)
@@ -144,7 +160,7 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
         assert any(message["payload"]["decision"]["kind"] == "approve" for message in received(crew_decision, captain_id, crew_id, "decision"))
         capture("authority-captain-and-crew")
         press("Show Portals")
-        press("Create Codex Portal")
+        press("Create Trial Root Portal")
         portal = wait(document, lambda value: len(value["voyages"][0]["portals"]) == 1, "Portal Codex creation")["voyages"][0]["portals"][0]
         prompt(portal, "admiral")
         outscope = file("captain-outscope.json")
