@@ -77,3 +77,12 @@ the native linker libraries. After contract changes run `npm run contract:genera
 after composition or registration changes run `npm run scripts:generate`.
 The profile's seeded JavaScript remains independently editable. See
 [script authoring](docs/workspace.md#script-authoring-and-checking).
+
+## Integration and release sequence
+
+1. Commit and push each complete increment, then open its PR against main or its published prerequisite. Keep one clear dependency path. Record experiment-only and unfinished work separately.
+2. Review the increment against the master outcome, architecture and exact UX references. Run the required ordinary checks, actual interaction and relevant failure. Preserve failed evidence and report open acceptance gates.
+3. Build review candidates from committed source. Record the source revision, dependency preparation and immutable release executable. A canonical build must not depend on unpublished edits or an untracked implementation.
+4. Merge verified increments with the owner's applicable approval while work continues. Verify main contains the selected source and reconcile the PR stack before beginning another independent feature. Do not defer all integration until release day.
+5. Archive completed task records and finished experiments, retaining experiment branches. Delete merged feature branches only after preservation and ancestry checks. Keep any checkout still needed by a running session or build until its replacement is verified.
+6. Run the complete foundation and release checks on the integrated main revision. Resolve or explicitly report remaining gates before release. A merged PR or a working preview does not itself establish release acceptance.
