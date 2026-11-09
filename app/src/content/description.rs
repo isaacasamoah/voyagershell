@@ -63,6 +63,18 @@ const IMPLEMENTATIONS: &[Implementation] = &[
             defaults: INITIAL_NOTES,
         }),
     },
+    Implementation {
+        type_id: "inbox",
+        name: "Inbox",
+        module: "./inbox.js",
+        component: "Inbox",
+        backend: None,
+        tool: "voyager_coordination",
+        input: include_str!("../../../contract/generated/coordinationRequest.schema.json"),
+        output: include_str!("../../../contract/generated/coordinationResponse.schema.json"),
+        action_definition: "Operation",
+        state: None,
+    },
 ];
 
 fn implementation(type_id: &str) -> Result<&'static Implementation, String> {

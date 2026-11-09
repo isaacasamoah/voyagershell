@@ -4,6 +4,7 @@ mod canvas;
 pub mod client;
 pub mod content;
 pub mod context;
+pub use client::coordination;
 pub mod core;
 mod core_endpoint;
 pub mod launch;
