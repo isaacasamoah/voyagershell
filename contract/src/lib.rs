@@ -11,6 +11,7 @@ pub mod canvas;
 pub mod content;
 pub mod context;
 pub mod conversation;
+pub mod coordination;
 pub mod launch;
 pub mod observation;
 pub mod rank;
@@ -20,7 +21,7 @@ pub mod worktree;
 
 macro_rules! id {
     ($name:ident) => {
-        #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+        #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, JsonSchema)]
         #[serde(transparent)]
         pub struct $name(pub String);
     };
