@@ -203,8 +203,10 @@ callbacks receive explicit errors without dispatching an application effect.
 
 ## Native speech integration
 
-The native speech candidate reuses the installed Codex 0.166.0 helper beside the
-exact executable retained by the private provider. It compares the initialized
+The native speech candidate reuses the helper beside the exact installed Codex
+executable retained by the private provider. Package discovery accepts manifest
+schema 1 and a bounded version identity rather than a fixed application release.
+Compatible CLI updates therefore do not require a release-number allowlist. It compares the initialized
 provider version with that package's manifest before starting the helper. The
 helper must then acknowledge protocol 1 and the manifest's exact build commit.
 Provider initialization exposes a version, so these checks do not establish the
