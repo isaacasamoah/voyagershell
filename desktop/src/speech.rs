@@ -228,7 +228,7 @@ impl Render for Speech {
                 })
         };
         let label = if active { "Stop voice" } else { "Start voice" };
-        Button::new("voyager-speech")
+        let control = Button::new("voyager-speech")
             .block_mouse_except_scroll()
             .accessibility_label(label)
             .aria_description(status.clone())
@@ -243,6 +243,29 @@ impl Render for Speech {
             .child(wave)
             .when(!status.is_empty(), |control| {
                 control.tooltip(move |_, cx| cx.new(|_| VoiceHint(status.clone())).into())
+            })
+            .into_any_element();
+        let connecting = self.pending
+            || state
+                .is_some_and(|state| matches!(state.phase, Phase::Preparing | Phase::Negotiating));
+        div()
+            .relative()
+            .w(px(20.))
+            .h(px(20.))
+            .child(control)
+            .when(connecting, |frame| {
+                frame.child(
+                    div()
+                        .absolute()
+                        .top(px(22.))
+                        .left(px(-50.))
+                        .w(px(120.))
+                        .flex()
+                        .justify_center()
+                        .text_size(px(9.))
+                        .text_color(rgb(0x989ba9))
+                        .child("Connecting voice…"),
+                )
             })
             .into_any_element()
     }

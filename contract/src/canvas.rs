@@ -19,12 +19,12 @@ pub enum Size {
     Content,
     Fixed {
         #[schemars(range(min = 1, max = 4096))]
-        #[schemars(transform = pixels_schema)]
+        #[schemars(transform = integer_schema)]
         pixels: u16,
     },
 }
 
-fn pixels_schema(schema: &mut schemars::Schema) {
+fn integer_schema(schema: &mut schemars::Schema) {
     schema.remove("format");
 }
 
@@ -39,6 +39,13 @@ pub enum Node {
     Column {
         #[serde(default)]
         size: Size,
+        children: Vec<Node>,
+    },
+    Stack {
+        #[serde(default)]
+        size: Size,
+        #[schemars(transform = integer_schema)]
+        selected: u16,
         children: Vec<Node>,
     },
     Block {

@@ -109,7 +109,17 @@ pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Re
             }
             let root = current.root.take().ok_or("Panel layout is empty")?;
             *current.root = remove_leaf(root, &id).0;
+            let empty = visible(current.root, current.members).is_none();
             repair_maximized(current);
+            if let PanelOwner::Portals { voyage } = owner
+                && empty
+                && let Some(column) = layout
+                    .containers_mut()
+                    .find(|item| item.id == voyage)
+                    .and_then(|item| item.portal_layout.as_mut())
+            {
+                column.visible = false;
+            }
         }
         Action::MovePanel { id, target, side } => {
             let owner = owner_of(layout, &id)?;
@@ -581,6 +591,9 @@ pub(crate) fn normalize(layout: &mut Layout) -> Result<(), String> {
             Node::Row { children, .. } | Node::Column { children, .. } => {
                 children.iter().find_map(width)
             }
+            Node::Stack {
+                selected, children, ..
+            } => children.get(usize::from(*selected)).and_then(width),
             _ => None,
         }
     }

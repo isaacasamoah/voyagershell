@@ -1,5 +1,25 @@
 # Native workspace boundary
 
+## Libraries and entry points
+
+`contract/` defines shared identities, commands and results. `app/src/lib.rs`
+exposes the Rust application independently of GPUI. The application owns
+workspace changes, content state, captured context and effect policy. Its Core
+adapter owns protocol translation, while Herdr Core owns terminals and programs.
+
+`desktop/src/lib.rs` owns native composition, asset seeding and view modules.
+`desktop/src/main.rs` parses command-line arguments and invokes that library.
+The declaration exporter calls the same library and component registry as the
+running app. A component registration therefore has one owner for both runtime
+presentation and generated script definitions. The Notes registry remains its
+own supported component set.
+
+`desktop/mods/` and `content/` provide configurable presentation through those
+native components and the generated application contract. Moving a placement
+does not change its content identity or backend. These layers implement the
+architecture's ownership rules; they do not require a file for every diagram box.
+Browser embedding and additional provider implementations remain separate work.
+
 ## Shared panel arrangements
 
 The current owner contract uses `PanelOwner`: a Fleet ID or a Voyage's Portal
@@ -95,7 +115,7 @@ application journey; no macOS runtime result is claimed.
 ## Outer canvas
 
 The workspace document owns an outer canvas separately from each Fleet's Vessel
-split tree. `contract/src/canvas.rs` defines rows, columns, named blocks and
+split tree. `contract/src/canvas.rs` defines rows, columns, stacks, named blocks and
 fixed/content/fill sizing. Older documents receive the supported default through
 Serde. Existing Fleet names are retained; a new Voyage starts with Fleet 1.
 
@@ -105,8 +125,8 @@ application/Workspace caller can change global composition. Collapsing the rail
 does not dock Voyager. Invalid definitions are refused before mutation. A bad
 stored definition preserves the Client's last usable layout with its error.
 
-The definition retains exactly one Sidebar, Fleet strip, active Fleet, Portals
-and context region. The initial sidebar is 224 logical pixels, from the pinned
+Each displayed arrangement retains exactly one Sidebar, Fleet strip, active
+Fleet, Portals and context region. The initial sidebar is 224 logical pixels, from the pinned
 Electron composition source; its unchanged 200-pixel Brand is centred. A retained
 capture appears wider, but its equal-scale provenance has not been established.
 Matched native/reference screenshots must resolve that discrepancy rather than
@@ -120,8 +140,23 @@ Intrinsic/content overlay size is also refused. Legacy canvas mode and fixed
 width supply defaults when older data has no Portal presentation. The current
 owner projects `portalLayout` per Voyage, with visibility, overlay/make-room mode
 and pixel width. Home has its own settings. The Header uses that projection and
-the native `Column` control for the full-height right column. Stack selection
-remains outside this canvas contract.
+the native `Column` control for the full-height right column.
+
+A Stack stores a selected child index and alternative arrangements of the same
+regions. Rust validates every alternative, including inactive Portal geometry,
+against one global depth and node budget. Alternatives may reference the same
+regions, but each arrangement and its surrounding siblings may show each region
+only once. An invalid index or a different region set refuses unchanged. A Stack
+that includes Portals must also include their active Fleet, preserving the
+native column's shared geometry. The default canvas has no Stack.
+
+The script visits only the selected alternative and keeps the parent sizing
+axis. Terminal and Notes view owners remain keyed by content identity, rather
+than by an alternative's position. Selection changes neither content, process
+identity nor avatar context. The existing versioned `update-canvas` operation
+persists selection and arrangement together. Legacy Portal width migration
+traverses only the selected alternative. No human JSON editor or additional
+selector style is introduced by this contract.
 
 `desktop/mods/header/main.ts` controls retained preparation and versioned actions.
 `panel-view.ts` renders shared panel controls and content; `navigation-view.ts`
@@ -147,6 +182,16 @@ human layout workflow. The original avatar trial's Home pose and rectangular
 preview are also historical; current source has a circular primary landing
 preview. These source changes do not complete the full native UX checkpoint or
 establish matched appearance, input behavior or performance.
+
+The pinned ShellRoot and Header bypass their content cache while native
+accessibility is active. GPUI's current cached prepaint/paint path does not
+replay accessibility nodes after each frame clears them. An avatar-only frame
+would otherwise publish the overlay controls without the workspace controls.
+Ordinary rendering keeps both caches, and avatar animation remains enabled in
+both modes. This preserves the existing renderer ownership; it does not add a
+second accessibility tree. The 7 November correction is built for normal-motion
+native verification. Composition cost with accessibility active needs its own
+measurement and is not covered by ordinary cached-rendering results.
 
 ## Native overlay input
 
@@ -296,6 +341,19 @@ do not retry known-refused terminal starts. Explicit Refresh retains that retry;
 uncertain starts are never replayed. The package filesystem/availability source
 and its remaining native-lifetime requirements are described in [content.md](content.md).
 
+Header keeps application requests and terminal preparation serialized. While
+preparing, it can retain one unsent Close or discrete Portal visibility/mode
+intent. The slot stores the original callback and an immutable signature of
+the displayed panel/content/owner and arrangement, or the Voyage's Portal
+layout. Admission refuses a stale menu version or a second intent. Width drags
+use the existing reset/refusal path. The slot is removed before dispatch and
+drains only after an accepted, fresh applied result and successful required
+preparation. Its target must still match before a new request uses the current
+version. Failed or uncertain preparation cancels it visibly. This is an unsent
+UI intent, not replay of an application request. The additional corrective build
+was approved on 7 November. Native acceptance remains open, and the correction
+is not yet in the owner preview.
+
 The channel holds at most eight pending calls. A client timeout reports an
 unconfirmed result and never retries it. The actor keeps the accepted request
 even when its caller disappears. It retains 32 request/outcome pairs without
@@ -431,3 +489,154 @@ nothing. Revealing an existing column retains its content. The native Column
 starts its trailing panel at the saved width and keeps its resize handle on the
 visible seam. These feedback changes require the combined native journey before
 UX acceptance.
+
+
+## Worktree and Home feedback candidate
+
+The 5 November candidate uses the Voyage context menu for Rename, Close, New worktree, Open worktree and, for a linked checkout, Remove worktree. Fleet creation remains at its own plus control. A native centered dialog owns filtering and keyboard selection. Its list uses the SDK's retained virtual-list scroll handle so keyboard selection stays visible. Worktree Voyages appear beneath an open parent with an indent and branch icon. They remain independent open Voyages, without indentation, when that parent closes.
+
+New worktrees use the main checkout's `.worktrees/` folder, with a local Git exclude entry. Git creates and checks out the chosen branch. The removal dialog reports uncommitted changes and retains the branch. The Rust owner rechecks live program directories and uses ordinary Git removal without force. After deletion, it reads the remaining checkouts from the primary directory and closes matching target Voyages, not the request's source Voyage. Successful checkout observations suppress removed project-local worktrees from Recent voyages without deleting retained application data.
+
+The layout and Git operation owners remain distinct. The script cannot grant deletion or launch authority. Dialog observations keep their captured request identity/version. Async list and text changes explicitly refresh the separate native dialog. The dialog handles Escape and Cancel itself, and waits for a dispatched operation before dismissal.
+
+Worktree completion publishes the existing Rust workspace notice. Its native watcher invalidates Header, which inspects through its own view context. The dialog only updates its checkout cache and closes. It must not start workspace inspection from its own task: closing a dialog cancels that view's continuations and can strand the workspace busy flag.
+
+Home groups existing content by Voyage using the same colour function as the sidebar. Agent status groups start collapsed. Closed Voyages are absent from Home. Voyage headings start expanded and collapse their contents when clicked, without a separate arrow. A successful complete Core process snapshot excludes ended or absent bindings from the running-work list; failed retrieval remains unavailable. Notes and other content without processes remain present. The current reported-activity contract has task progress, not reliable context-window usage, so this candidate does not display a context percentage.
+
+This UX follows the [Herdr worktree mod](https://github.com/herdrdev/herdr-app/blob/f896da489de594fdb18a92a31dd953da3cf58da2/defaults/mods/worktree/main.js), with Voyager's project-local storage, styling and typed application owner. Source checks do not establish the complete native journey.
+
+
+## Confirmed Voyage shutdown
+
+Close Voyage prepares a typed inventory and asks the native user to confirm. It
+is distinct from hiding a panel, closing a Fleet or quitting the application.
+Those operations detach views and retain programs. Existing closed Voyages are
+not stopped by migration or inspection. An administrator can request the same
+confirmation but cannot confirm or cancel it through a scoped tool call.
+
+The application owns one close plan. Its separate close revision wakes Header
+even when no layout changed. Header displays the plan and uses compact shared
+controls from content/ui.ts. Confirm and Cancel bind the exact plan identity;
+Cancel remains available after unrelated revisions or an uncertain observation.
+A lost invocation offers Inspect, which reads state and never repeats shutdown.
+Dialog tasks do not call Workspace.run or own the application continuation.
+
+After confirmation, the native Notes host resolves the target content IDs to
+retained Sessions. It makes their inputs read-only, joins ordinary revision-based
+saves and releases them after completion or refusal. A dirty inactive draft,
+file change or unconfirmed current save blocks all program stops. The private
+native-save path does not grant Update access to scripts or agents. Draft body
+text never enters the public close plan. Client keeps processing messages while
+the host acknowledges saves.
+
+Core owns shutdown signals. Voyager submits its existing Stop action for each
+captured terminal address/PID and requires an observed finished state. A request
+receipt does not establish exit. Notes failure stops nothing; a later partial
+failure reports the actual result and never restarts work or repeats an uncertain
+stop. The application saves closed state only after successful acknowledgements.
+Uncertain storage marks the projection non-fresh until inspection.
+
+A private snapshot checks the target Voyage and its content identities. Target
+mutations and terminal opening are refused during shutdown. Unrelated Voyages
+and navigation remain available. Membership comes from the selected Voyage's
+Fleets and Portals, including retained placements, rather than directories or
+worktree parentage. Recent reopening prepares only that Voyage's confirmed-ended
+retained terminals as ordinary shells. It preserves Notes file selection and
+never resumes an agent command or its instructions.
+
+Source and dedicated Core tests cover this policy. The native shutdown journey
+and complete foundation acceptance remain separately recorded in the walkthrough.
+
+## Activity scope and Portal closure
+
+Activity derives scope from its placement. The Home Fleet sees the workspace,
+a Portal sees its Voyage, and an ordinary Vessel sees its Fleet. Avatar context
+and keyboard focus do not change that scope. Agents are listed directly with a
+status symbol, ordered by Needs attention, Working, Done and Idle. Idle is the
+presentation fallback for other or absent reports. Raw reports and diagnostic
+reasons remain distinct. Confirmed-ended programs and closed Voyages are absent.
+Voyage headings remain expandable, and Home uses its Home icon.
+
+RemovePanel retains the placement, content and backend. Removing the last
+visible Portal panel also collapses that Voyage's column. Opening an empty
+column shows new types and hidden Portals. Dismissing that empty chooser
+collapses it; restoring a hidden Portal keeps its existing identity and backend.
+
+New directory-derived Voyages record their original primary Vessel and an
+automatic name origin. Observed directory changes from that Vessel may update
+the Voyage's displayed name. Reordering does not choose another primary Vessel.
+Deliberate names, including legacy records without automatic-name metadata,
+remain fixed. Display-name changes do not move Notes or change the stored Voyage
+directory. Worktree close confirmations include the current uncommitted-change
+count when its registered checkout can be identified. Closing preserves the
+worktree directory and branch.
+
+Background worktree discovery is serialized through its existing controller.
+Queued observations retain the latest requested revision. Activity refresh and
+hidden-content choices share an in-flight process observation for the same
+revision. The chooser publishes the local worker and content catalogues together,
+so selectable rows do not move when those reads finish in a different order.
+Hidden-view observations arrive separately below those choices. These changes
+do not raise the actor queue capacity or bypass Core's input safeguards.
+
+## Delayed process effects
+
+The application owner validates a process request's captured scope, workspace
+revision, content binding and observed terminal/PID before dispatch. Send,
+Interrupt and Stop then wait outside that owner. Completion returns to the same
+owner to record the original result. A later dock change does not retarget an
+already dispatched request. A duplicate pending request reports that it remains
+pending and does not dispatch again. An identical completed request returns its
+retained result.
+
+The single framed Core connection routes replies by request ID. It admits at
+most nine pending RPCs, including capacity for ordinary owner reads alongside
+at most eight admitted process effects. Process admissions remain counted until
+the owner reconciles completion. The thirty-two-entry process receipt history
+evicts completed entries only. Replies received after a caller has gone away
+are ignored without disconnecting unrelated viewers. Disconnects release all
+waiting callers with uncertain outcomes. Each request's twenty-second deadline
+starts when dispatched, rather than when a completion worker starts waiting.
+No timeout or disconnect repeats an effect.
+
+This isolates delayed process effects. Initial revision/target checks, List,
+Read and context preparation still use synchronous Core reads. A stalled Core
+can delay those paths; this change does not claim that every application
+operation is asynchronous. The real-Core regression verifies workspace
+inspection, pending-duplicate refusal, a dock change and original-target
+completion during a deliberately delayed Send. Native UX and broader load
+acceptance require their separate journeys.
+
+## Restoring a decorated Linux window
+
+GPUI reports the client window's root-relative origin. An X11 ConfigureRequest
+without explicit gravity instead uses the window frame's reference point. In
+the observed desktop the top frame is 74 device pixels, so reusing the client
+origin in that request moved the restored window down by 74 pixels each time.
+
+The Linux platform adapter restores windowed bounds through the advertised
+`_NET_MOVERESIZE_WINDOW` operation with Static gravity, all four coordinate/size
+flags and the application source flag. Static gravity addresses the client
+origin directly. The adapter checks the window and supported operation before
+dispatch and checks cancellation again immediately before sending. It does not
+modify global size hints, subtract a fixed decoration height, retry an uncertain
+request or add another window controller. Unsupported desktops report refusal.
+The existing controller still owns minimization, activation, window identity,
+restoration epochs and removal of the temporary floating avatar.
+
+The governing protocol is the [EWMH move/resize message](https://specifications.freedesktop.org/wm/latest/ar01s04.html)
+and its [window geometry rules](https://specifications.freedesktop.org/wm/latest/ar01s09.html).
+Pinned Herdr App's X11 backend uses the same root-window client-message mechanism
+for its native window-manager operations. The actual native journey compares
+both window position and size before/after, requires no stray floating window,
+and verifies the retained layout, Core and shell identities across reopening.
+This is a Linux/X11 repair, not evidence for macOS, Windows or Wayland.
+
+## Tested Core upgrade
+
+The 7 November release uses generated Core types from the pinned 0.1.16 input.
+Its real native restore/reattach and Notes/Voyage-shutdown journeys ran against
+Core 0.1.18. The owner handoff also retained an existing 0.1.18 Core. This
+establishes that these consumed operations work across that additive upgrade.
+It does not establish a general compatibility matrix. Generation/capability
+checks remain the admission rule; a newer version string alone is not refusal.

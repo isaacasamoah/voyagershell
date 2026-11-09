@@ -19,7 +19,7 @@ pub(super) enum Select {
     Release,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub(super) struct Cell {
     pub(super) text: gpui::SharedString,
     pub(super) foreground: libghostty_vt::style::RgbColor,

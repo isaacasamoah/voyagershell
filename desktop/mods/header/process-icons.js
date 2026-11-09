@@ -10,5 +10,6 @@ export function processIcon(program) {
       .size(14)
       .flex_shrink_0();
   if (name === "bash") return svg("bash.svg").size(14).flex_shrink_0();
+  if (name === "activity") return svg("activity.svg").size(14).flex_shrink_0();
   return svg("note.svg").size(14).flex_shrink_0();
 }

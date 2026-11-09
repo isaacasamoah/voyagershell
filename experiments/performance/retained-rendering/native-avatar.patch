@@ -23,7 +23,7 @@
 +++ b/desktop/src/avatar.rs
 @@ -765,6 +765,10 @@
  }
- 
+
  impl Binding {
 +    pub fn view(&self) -> gpui::AnyView {
 +        self.view.clone().into()
@@ -34,7 +34,7 @@
          let result = Rc::default();
 @@ -840,7 +844,7 @@
      }
- 
+
      pub fn module(&self) -> HostModule {
 -        let view = self.view.clone();
 +        let layer_view = self.view.downgrade();

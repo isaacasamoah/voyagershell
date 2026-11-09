@@ -1,5 +1,12 @@
 import { View, div } from "gpui-kit";
-import { Button, TextView } from "gpui-base";
+import { Popover, TextView } from "gpui-base";
+import {
+  actionButton,
+  disclosureButton,
+  menuButton,
+  menuSurface,
+  toggle,
+} from "./ui.js";
 import {
   SessionState,
   RetainedTitleState as TitleState,
@@ -16,6 +23,7 @@ export default class Notes extends View {
   declare text: ReturnType<typeof BodyState.new>;
   declare preview: boolean;
   declare showFiles: boolean;
+  declare menu: boolean;
 
   init(): void {
     this.session = SessionState.new();
@@ -23,6 +31,7 @@ export default class Notes extends View {
     this.text = BodyState.new();
     this.preview = false;
     this.showFiles = false;
+    this.menu = false;
   }
 
   render(): NativeElement {
@@ -38,45 +47,121 @@ export default class Notes extends View {
       .child(
         div()
           .flex()
-          .children([
-            Button.new("notes-new")
-              .accessibility_label("New note")
-              .child("New")
-              .on_click((_event, cx) => {
-                this.session.new_note();
-                this.showFiles = false;
+          .items_center()
+          .gap(8)
+          .flex_shrink_0()
+          .child(
+            Popover.new("notes-file-menu")
+              .open(this.menu)
+              .on_open_change((open, cx) => {
+                this.menu = open;
+                if (!open) this.showFiles = false;
                 cx.notify();
-              }),
-            Button.new("notes-open")
-              .accessibility_label("Open note")
-              .child("Open")
-              .on_click((_event, cx) => {
-                this.showFiles = !this.showFiles;
-                if (this.showFiles) this.session.list_notes();
+              })
+              .trigger(
+                disclosureButton("notes-menu", "Note files").tooltip(
+                  "New, open or exit a note",
+                ),
+              )
+              .content(
+                div()
+                  .flex()
+                  .gap(6)
+                  .child(
+                    menuSurface("note-actions", "Note files", 112)
+                      .child(
+                        menuButton("notes-new", "New note")
+                          .w_full()
+                          .child("New")
+                          .on_click((_event, cx) => {
+                            this.session.new_note();
+                            this.menu = false;
+                            this.showFiles = false;
+                            this.preview = false;
+                            cx.notify();
+                          }),
+                      )
+                      .child(
+                        menuButton("notes-open", "Open note")
+                          .w_full()
+                          .child("Open")
+                          .on_click((_event, cx) => {
+                            this.showFiles = true;
+                            this.session.list_notes();
+                            cx.notify();
+                          }),
+                      )
+                      .child(
+                        menuButton("notes-exit", "Exit note")
+                          .w_full()
+                          .child("Exit")
+                          .on_click((_event, cx) => {
+                            this.session.exit_note();
+                            this.menu = false;
+                            this.showFiles = false;
+                            cx.notify();
+                          }),
+                      ),
+                  )
+                  .children(
+                    this.showFiles
+                      ? [
+                          menuSurface("note-open-files", "Saved notes", 220)
+                            .max_h(240)
+                            .overflow_y_scroll()
+                            .children(
+                              this.session.filenames().map((filename) =>
+                                menuButton(
+                                  "notes-file-" + filename,
+                                  "Open " + filename,
+                                )
+                                  .w_full()
+                                  .tooltip(filename)
+                                  .child(div().truncate().child(filename))
+                                  .on_click((_event, cx) => {
+                                    this.session.open_note(filename);
+                                    this.menu = false;
+                                    this.showFiles = false;
+                                    cx.notify();
+                                  }),
+                              ),
+                            )
+                            .children(
+                              this.session.filenames().length
+                                ? []
+                                : [
+                                    div()
+                                      .p(8)
+                                      .text_size(11)
+                                      .child("No Markdown files"),
+                                  ],
+                            ),
+                        ]
+                      : [],
+                  ),
+              ),
+          )
+          .child(
+            toggle(
+              "notes-preview",
+              this.preview ? "Edit note" : "Preview note",
+              this.preview,
+              (checked, cx) => {
+                this.preview = checked;
                 cx.notify();
-              }),
-          ]),
-      )
-      .children(
-        this.showFiles
-          ? this.session.filenames().map((filename) =>
-              Button.new("notes-file-" + filename)
-                .accessibility_label("Open " + filename)
-                .child(filename)
-                .on_click((_event, cx) => {
-                  this.session.open_note(filename);
-                  this.showFiles = false;
-                  cx.notify();
-                }),
-            )
-          : [],
+              },
+            ).tooltip(
+              this.preview
+                ? "Preview on. Turn off to edit."
+                : "Preview off. Turn on to preview.",
+            ),
+          ),
       )
       .children(
         this.session.filename()
           ? []
           : [
-              Button.new("notes-migrate")
-                .accessibility_label("Convert legacy note to Markdown")
+              actionButton("notes-migrate", "Convert legacy note to Markdown")
                 .child("Convert to Markdown")
                 .on_click((_event, cx) => {
                   this.session.migrate_note();
@@ -89,21 +174,6 @@ export default class Notes extends View {
           .text_size(10)
           .text_color(colors.muted)
           .child(this.session.filename()),
-      )
-      .child(
-        Button.new("notes-preview")
-          .accessibility_label(this.preview ? "Edit note" : "Preview note")
-          .px(8)
-          .py(4)
-          .rounded(4)
-          .flex_shrink_0()
-          .text_size(11)
-          .text_color(colors.muted)
-          .on_click((_event, cx) => {
-            this.preview = !this.preview;
-            cx.notify();
-          })
-          .child(this.preview ? "Edit" : "Preview"),
       )
       .child(Title.new(this.title).w_full().flex_shrink_0().py(8).text_size(20))
       .child(
@@ -119,6 +189,7 @@ export default class Notes extends View {
       )
       .child(
         div()
+          .role("label")
           .flex_shrink_0()
           .text_size(11)
           .text_color(colors.muted)

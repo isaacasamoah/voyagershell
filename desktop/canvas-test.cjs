@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const { test } = require("node:test");
 const ts = require("typescript");
 const workspaceSource = require("./workspace-fixture.cjs");
+const uiModule = require("./ui-fixture.cjs");
 
 function element() {
   const calls = [];
@@ -38,11 +39,12 @@ function menuModule(Button) {
         },
       },
     ).outputText,
-  )(exports, (name) =>
-    name === "gpui-kit"
+  )(exports, (name) => {
+    if (name === "./ui.js") return uiModule(element, Button);
+    return name === "gpui-kit"
       ? { div: element }
-      : { Button, Popover: { new: element } },
-  );
+      : { Button, Popover: { new: element } };
+  });
   return exports;
 }
 
@@ -114,7 +116,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
       return node;
     },
   };
-  let resolve;
+  let resolve, rejectDescription;
   const exports = {};
   new Function("exports", "require", source)(exports, (name) => {
     if (name === "gpui-kit") return { div: element };
@@ -133,7 +135,10 @@ test("worker creation keeps its opening target and revision across a delayed cat
       };
     if (name === "voyager_content_view")
       return {
-        descriptions: () => Promise.reject(Error("Notes metadata unavailable")),
+        descriptions: () =>
+          new Promise((_done, reject) => {
+            rejectDescription = reject;
+          }),
       };
     return { launchCatalog, contentCatalog };
   });
@@ -164,7 +169,18 @@ test("worker creation keeps its opening target and revision across a delayed cat
   controlled.calls.find(([name]) => name === "on_open_change")[1](true, cx);
   assert.equal(picker.current, null);
   assert.equal(pending.length, 0);
-  const root = picker.render("original", destination, "7", create);
+  let hiddenReady;
+  const root = picker.render(
+    "original",
+    destination,
+    "7",
+    create,
+    element(),
+    () =>
+      new Promise((done) => {
+        hiddenReady = done;
+      }),
+  );
   root.calls.find(([name]) => name === "on_open_change")[1](true, cx);
   const launch = {
     kind: "codex",
@@ -190,7 +206,29 @@ test("worker creation keeps its opening target and revision across a delayed cat
       path: "/profile/launches.json",
     }),
   );
+  await new Promise(setImmediate);
+  buttons.clear();
+  picker.render("original", destination, "7", create);
+  assert.ok(
+    !buttons.has("create-worker-codex"),
+    "New-content choices wait for the complete local metadata set so rows cannot move under the pointer",
+  );
+  rejectDescription(Error("Notes metadata unavailable"));
+  await new Promise(setImmediate);
+  const choicesReady = Boolean(picker.catalog);
+  buttons.clear();
+  picker.render("original", destination, "7", create);
+  assert.equal(picker.ready, true);
+  assert.ok(
+    buttons.has("create-worker-codex"),
+    "Ready choices are usable before hidden reads finish",
+  );
+  hiddenReady({ panels: [] });
   await pending[0];
+  assert.ok(
+    choicesReady,
+    "Ready choices appear without waiting for hidden programs",
+  );
   assert.equal(picker.error, "Notes metadata unavailable");
   picker.render(
     "original",
@@ -221,6 +259,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
   ]);
   assert.equal(picker.current, null);
   picker.current = { id: "portal", version: "99", destination };
+  const dismissed = [];
   const cancel = picker.render(
     "portal",
     destination,
@@ -229,10 +268,12 @@ test("worker creation keeps its opening target and revision across a delayed cat
     element(),
     undefined,
     false,
+    (...args) => dismissed.push(args),
   );
   cancel.calls.find(([name]) => name === "on_open_change")[1](false, cx);
   assert.equal(picker.current, null);
   assert.equal(actions.length, 1);
+  assert.deepEqual(dismissed, [[destination, cx]]);
 });
 
 test("the actual canvas composes a retained right column through native presentation", () => {
@@ -270,15 +311,32 @@ test("the actual canvas composes a retained right column through native presenta
   const canvas = JSON.parse(
     fs.readFileSync(`${__dirname}/../contract/generated/response.schema.json`),
   ).definitions.Layout.properties.canvas.default;
-  for (const mode of ["overlay", "make-room"]) {
+  const alternate = structuredClone(canvas.root);
+  alternate.children[1].children[0].size.pixels = 32;
+  for (const [mode, selected] of ["overlay", "make-room"].flatMap((mode) =>
+    [null, 0, 1].map((selected) => [mode, selected]),
+  )) {
     const regions = new Map();
+    const visits = [];
     const voyage = {
       id: "voyage",
       portalLayout: { mode, width: 340, visible: true },
     };
     const rendered = exports.composeCanvas(
-      { ...canvas, sidebarCollapsed: true },
+      {
+        ...canvas,
+        sidebarCollapsed: true,
+        root:
+          selected === null
+            ? canvas.root
+            : {
+                kind: "stack",
+                selected,
+                children: [canvas.root, alternate],
+              },
+      },
       (name) => {
+        visits.push(name);
         const node = element();
         regions.set(name, node);
         return node;
@@ -286,6 +344,7 @@ test("the actual canvas composes a retained right column through native presenta
       (underlay, panels) => view.portalColumn(underlay, panels, voyage),
     );
     assert.equal(regions.size, 5);
+    assert.equal(visits.length, 5);
     assert.ok(
       regions
         .get("sidebar")
@@ -294,7 +353,10 @@ test("the actual canvas composes a retained right column through native presenta
     assert.ok(
       regions
         .get("fleet-strip")
-        .calls.some(([name, value]) => name === "h" && value === 40),
+        .calls.some(
+          ([name, value]) =>
+            name === "h" && value === (selected === 1 ? 32 : 40),
+        ),
     );
     const column = columnCalls.at(-1);
     assert.equal(column.args[1], 340);
@@ -314,7 +376,11 @@ test("the actual canvas composes a retained right column through native presenta
       width: 420,
     });
     assert.equal(actions.at(-1)[3], "7");
-    assert.ok(rendered.calls.some(([name]) => name === "children"));
+    assert.ok(
+      rendered.calls.some(
+        ([name]) => name === (selected === null ? "children" : "child"),
+      ),
+    );
   }
 });
 
@@ -738,7 +804,7 @@ test("hidden choices retain process-free data and require matching live backends
   assert.deepEqual(choices([]), ["notes", "other"]);
 });
 
-test("Vessels groups actual programs and preserves original navigation", async () => {
+test("Activity scopes live work, orders status rows and preserves navigation", async () => {
   const { activityBadge } = await import("./mods/header/activity.js");
   const buttons = new Map();
   const icons = [];
@@ -753,7 +819,7 @@ test("Vessels groups actual programs and preserves original navigation", async (
     },
   ).outputText;
   new Function("exports", "require", source)(exports, (name) => {
-    if (name === "gpui-kit") return { div: element };
+    if (name === "gpui-kit") return { div: element, svg: element };
     if (name === "gpui-base")
       return {
         Button: {
@@ -772,6 +838,19 @@ test("Vessels groups actual programs and preserves original navigation", async (
           return element();
         },
       };
+    if (name === "./voyage-colours.js")
+      return { voyageColour: () => "#59a5ff" };
+    if (name === "./panels.js") {
+      const panels = {};
+      new Function(
+        "exports",
+        ts.transpileModule(
+          fs.readFileSync(`${__dirname}/mods/header/panels.ts`, "utf8"),
+          { compilerOptions: { module: ts.ModuleKind.CommonJS } },
+        ).outputText,
+      )(panels);
+      return panels;
+    }
     return { activityBadge };
   });
   const contents = [
@@ -793,9 +872,11 @@ test("Vessels groups actual programs and preserves original navigation", async (
   const layout = {
     contents,
     home: {
+      id: "home",
       name: "Home",
       fleets: [
         {
+          id: "home-fleet",
           name: "Home",
           vessels: [{ id: "home-agent", content: "agent", name: "Renamed" }],
         },
@@ -804,9 +885,11 @@ test("Vessels groups actual programs and preserves original navigation", async (
     },
     voyages: [
       {
+        id: "voyage",
         name: "Voyage",
         fleets: [
           {
+            id: "fleet",
             name: "Fleet",
             vessels: [
               { id: "bash", content: "shell", name: "Shell" },
@@ -815,6 +898,7 @@ test("Vessels groups actual programs and preserves original navigation", async (
           },
         ],
         portals: [{ id: "notes", content: "notes", name: "Notes" }],
+        portalLayout: { root: { kind: "leaf", placement: "notes" } },
       },
     ],
   };
@@ -840,9 +924,9 @@ test("Vessels groups actual programs and preserves original navigation", async (
     },
   ];
   const navigated = [];
-  const collapsed = new Set();
+  const collapsed = new Set(["expanded-agents-home"]);
   const toggles = [];
-  const render = (reported = {}, unavailable) =>
+  const render = (reported = {}, unavailable, owner) =>
     exports.agentsView(
       layout,
       processes,
@@ -850,17 +934,18 @@ test("Vessels groups actual programs and preserves original navigation", async (
       (...args) => navigated.push(args),
       unavailable,
       { collapsed, toggle: (id) => toggles.push(id) },
+      owner,
     );
   render();
-  assert.ok(buttons.has("vessels-group-status-Other agents"));
-  assert.ok(buttons.has("vessels-group-type-Bash"));
-  assert.ok(buttons.has("vessels-group-type-Notes"));
-  assert.ok(buttons.has("vessels-group-type-python"));
+  assert.ok(![...buttons.keys()].some((key) => key.includes("group-status")));
+  assert.ok(buttons.has("vessels-group-type-voyage-Bash"));
+  assert.ok(buttons.has("vessels-group-type-voyage-Notes"));
+  assert.ok(buttons.has("vessels-group-type-voyage-python"));
   assert.deepEqual(icons, ["Codex", "Bash", "Notes", "python"]);
   const row = buttons.get("vessel-home-agent");
   assert.match(
     row.calls.find(([name]) => name === "accessibility_label")[1],
-    /folder, Codex/,
+    /folder, Codex, Idle/,
   );
   const cx = {};
   row.calls.find(([name]) => name === "on_click")[1]({}, cx);
@@ -875,8 +960,12 @@ test("Vessels groups actual programs and preserves original navigation", async (
   render({
     "agent-terminal": { state: "idle", reported: true, limited: false },
   });
-  assert.ok(buttons.has("vessels-group-status-Idle"));
-  assert.ok(!buttons.has("vessels-group-status-Other agents"));
+  assert.match(
+    buttons
+      .get("vessel-home-agent")
+      .calls.find(([name]) => name === "accessibility_label")[1],
+    /Idle/,
+  );
   layout.voyages[0].fleets[0].vessels[0].name = "Terminal 42";
   processes[1].cwd = "/project/my-work";
   buttons.clear();
@@ -897,15 +986,162 @@ test("Vessels groups actual programs and preserves original navigation", async (
   );
   buttons.clear();
   render({}, "Core observation failed");
-  assert.ok(buttons.has("vessels-group-status-Status unavailable"));
+  assert.match(
+    buttons
+      .get("vessel-home-agent")
+      .calls.find(([name]) => name === "accessibility_label")[1],
+    /Idle/,
+  );
+  assert.ok(
+    ![...buttons.keys()].some((key) => key.includes("Status unavailable")),
+  );
   buttons.clear();
-  collapsed.add("agents");
+  collapsed.delete("expanded-agents-home");
   render();
   assert.ok(!buttons.has("vessel-home-agent"));
   buttons
-    .get("vessels-group-agents")
+    .get("vessels-group-agents-home")
     .calls.find(([name]) => name === "on_click")[1]({}, cx);
-  assert.deepEqual(toggles, ["agents"]);
+  assert.deepEqual(toggles, ["expanded-agents-home"]);
+  buttons.clear();
+  collapsed.add("voyage-voyage");
+  render();
+  assert.ok(buttons.has("vessels-voyage-voyage"));
+  assert.ok(
+    !buttons.has("vessel-notes"),
+    "A collapsed Voyage hides its contents",
+  );
+  buttons
+    .get("vessels-voyage-voyage")
+    .calls.find(([name]) => name === "on_click")[1]({}, cx);
+  assert.equal(toggles.at(-1), "voyage-voyage");
+  collapsed.delete("voyage-voyage");
+  buttons.clear();
+  render();
+  assert.ok(
+    buttons.has("vessel-notes"),
+    "Reopening the Voyage restores its contents",
+  );
+  buttons.clear();
+  render({}, undefined, { kind: "portals", voyage: "voyage" });
+  assert.ok(buttons.has("vessel-bash") && buttons.has("vessel-notes"));
+  assert.ok(!buttons.has("vessel-home-agent"));
+  assert.ok(!buttons.has("vessels-voyage-home"));
+  buttons.clear();
+  render({}, undefined, { kind: "fleet", id: "fleet" });
+  assert.ok(buttons.has("vessel-bash"));
+  assert.ok(!buttons.has("vessel-notes") && !buttons.has("vessel-home-agent"));
+  buttons.clear();
+  collapsed.add("expanded-agents-home");
+  render({}, undefined, { kind: "fleet", id: "home-fleet" });
+  assert.ok(buttons.has("vessel-home-agent") && buttons.has("vessel-notes"));
+  layout.voyages[0].portalLayout.root = null;
+  buttons.clear();
+  render();
+  assert.ok(
+    !buttons.has("vessel-notes"),
+    "Closed documents are not active work",
+  );
+  layout.voyages[0].portalLayout.root = { kind: "leaf", placement: "notes" };
+  processes[1].state = "finished";
+  buttons.clear();
+  render();
+  assert.ok(!buttons.has("vessel-bash"), "Ended shells are not running work");
+  assert.ok(
+    buttons.has("vessel-notes"),
+    "Documents are independent of processes",
+  );
+  layout.voyages[0].closed = true;
+  buttons.clear();
+  render();
+  assert.ok(
+    !buttons.has("vessels-voyage-voyage"),
+    "Closed Voyages are not open work",
+  );
+  assert.ok(!buttons.has("vessel-notes"));
+  processes.splice(2, 1);
+  buttons.clear();
+  render();
+  assert.ok(
+    !buttons.has("vessel-unknown"),
+    "A successful Core snapshot omits a vanished program",
+  );
+  const states = ["idle", "done", "working", "blocked"];
+  const reports = {};
+  for (const state of states) {
+    const id = `agent-${state}`;
+    contents.push({ id, typeId: "terminal", backend: id });
+    layout.home.fleets[0].vessels.push({ id, content: id, name: id });
+    processes.push({
+      contentId: id,
+      terminalId: id,
+      state: "live",
+      foreground: "codex",
+      agentName: `Session ${state}`,
+    });
+    reports[id] = { state, reported: true, limited: false };
+  }
+  buttons.clear();
+  render(reports);
+  assert.deepEqual(
+    [...buttons.keys()].filter((id) => id.startsWith("vessel-agent-")),
+    [
+      "vessel-agent-blocked",
+      "vessel-agent-working",
+      "vessel-agent-done",
+      "vessel-agent-idle",
+    ],
+  );
+  contents.push({ id: "overview", typeId: "agents" });
+  layout.home.fleets[0].vessels.push({
+    id: "overview",
+    content: "overview",
+    name: "Activity",
+  });
+  layout.home.fleets[0].root = { kind: "leaf", placement: "overview" };
+  buttons.clear();
+  render();
+  assert.ok(
+    buttons.has("vessel-overview"),
+    "Home keeps its own Activity placement listed",
+  );
+});
+
+test("Activity refresh and hidden choices share an in-flight process snapshot", async () => {
+  let reads = 0,
+    finish;
+  const Workspace = new Function(
+    "View",
+    "inspectProcesses",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(class {}, () => {
+    reads++;
+    return new Promise((done) => {
+      finish = done;
+    });
+  });
+  const view = Object.assign(new Workspace(), {
+    version: "7",
+    layout: { voyages: [], contents: [] },
+  });
+  const pending = view.readProcesses({ notify() {} });
+  const choices = view.hiddenChoices(
+    {
+      kind: "panel",
+      owner: { kind: "fleet", id: "f" },
+      insertion: { kind: "empty" },
+    },
+    "7",
+  );
+  const observed = reads;
+  finish([]);
+  assert.equal(
+    observed,
+    1,
+    "The picker reuses the active Activity observation",
+  );
+  await pending;
+  assert.deepEqual(await choices, { panels: [], error: undefined });
 });
 
 test("chat fits measured messages before scrolling at its cap", () => {
@@ -920,8 +1156,11 @@ test("chat fits measured messages before scrolling at its cap", () => {
     "Composer",
     "MeasureHeight",
     "svg",
+    "FollowScroll",
     source,
-  )(element, { new: element }, { new: element }, { new: element }, element);
+  )(element, { new: element }, { new: element }, { new: element }, element, {
+    new: element,
+  });
   const chat = Object.assign(Object.create(Chat.prototype), {
     open: true,
     present: true,
@@ -949,13 +1188,19 @@ test("chat fits measured messages before scrolling at its cap", () => {
 });
 
 test("dock snapshots retain only identity-matched display labels", async () => {
+  let dialog = false;
   const Workspace = new Function(
     "View",
     "workspace_observation",
+    "window",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
-  )(class {}, async () => {
-    throw Error("Unavailable");
-  });
+  )(
+    class {},
+    async () => {
+      throw Error("Unavailable");
+    },
+    { has_active_dialog: () => dialog },
+  );
   const placement = {
     id: "panel",
     content: "content",
@@ -992,10 +1237,19 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     directory: { kind: "live", path: "/work" },
     effectiveName: "work",
   };
+  layout.voyages[0].cwd = "/work";
+  layout.voyages.push({
+    id: "other-repo",
+    cwd: "/other",
+    fleets: [],
+    portals: [],
+  });
+  const inspected = [];
   const view = Object.assign(new Workspace(), {
     version: "1",
     layout,
     names: new Map(),
+    worktrees: { available: () => true, inspect: (id) => inspected.push(id) },
     observedPanels: [panel],
     observation: { panels: [panel] },
     observationRead: 0,
@@ -1011,6 +1265,11 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   view.acceptSnapshot(
     { version: "2", layout, fresh: true, status: "applied" },
     cx,
+  );
+  assert.deepEqual(
+    inspected,
+    ["voyage", "other-repo"],
+    "Grouping observes every open Voyage without visiting it",
   );
   assert.equal(view.observation, null, "Effects require a fresh observation");
   assert.equal(view.panelLabel(placement), "bash · work");
@@ -1034,6 +1293,36 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     [],
     "Rebound programs cannot reuse display facts",
   );
+  let restored = 0;
+  view.focus = {
+    focus() {
+      restored += 1;
+    },
+  };
+  layout.voyages[0].fleets[0].root = null;
+  view.chat = { open: true };
+  view.acceptSnapshot({ version: "4", layout, fresh: true }, cx);
+  assert.equal(
+    restored,
+    0,
+    "Removing a panel must not take the keyboard from Chat",
+  );
+  view.chat.open = false;
+  dialog = true;
+  view.acceptSnapshot({ version: "4", layout, fresh: true }, cx);
+  assert.equal(
+    restored,
+    0,
+    "Removing a panel must not take the keyboard from a dialog",
+  );
+  dialog = false;
+  view.acceptSnapshot({ version: "4", layout, fresh: true }, cx);
+  assert.equal(
+    restored,
+    1,
+    "Removing the focused panel restores workspace shortcuts",
+  );
+  assert.equal(view.focused, null);
   view.layout.voyages = Array.from({ length: 12 }, (_, index) => ({
     id: `closed-${index}`,
     name: `Voyage ${index}`,
@@ -1136,14 +1425,15 @@ test("late active-directory observations cannot replace newer facts", async () =
 });
 
 test("worktree controller groups identified checkouts and preserves request identity", async () => {
+  let inFlight = 0;
+  let peak = 0;
   const validators = await import("../contract/generated/validate.js");
   const buttons = new Map(),
     pending = [],
     requests = [],
     exports = {};
   let sequence = 0,
-    mismatched = false,
-    changed = 0;
+    mismatched = false;
   const checkouts = [
     ["/repo", "/repo/.git", true],
     ["/repo/.worktree/topic", "/repo/.git", false],
@@ -1169,29 +1459,60 @@ test("worktree controller groups identified checkouts and preserves request iden
       },
     },
   ).outputText;
-  new Function("exports", "require", source)(exports, (name) => {
-    if (name === "gpui-kit") return { div: element };
-    if (name === "gpui-base")
-      return { Button: { new: button }, Popover: { new: element } };
-    if (name === "./menu.js")
-      return { menuSurface: element, menuButton: button };
-    if (name === "./validate.js") return validators;
-    if (name === "voyager_workspace")
-      return {
-        request_id: () => `worktree-${++sequence}`,
-        worktree: async (raw) => {
-          const request = JSON.parse(raw);
-          requests.push(request);
-          const response = {
-            status: "applied",
-            requestId: mismatched ? "wrong-request" : request.requestId,
-            checkouts,
-          };
-          return JSON.stringify(response);
-        },
-      };
-    return {};
-  });
+  new Function("exports", "require", "window", source)(
+    exports,
+    (name) => {
+      if (name === "gpui-kit") return { div: element };
+      if (name === "gpui-base")
+        return {
+          Button: { new: button },
+          VirtualListScrollHandle: {
+            new: () => ({ release() {}, scroll_to_item() {} }),
+          },
+          v_virtual_list: (_id, count, _size, _key, render) =>
+            element().children(render({ start: 0, end: count })),
+        };
+      if (name === "./menu.js")
+        return { menuSurface: element, menuButton: button };
+      if (name === "./ui.js") return uiModule(element, { new: button });
+      if (name === "./validate.js") return validators;
+      if (name === "voyager_workspace")
+        return {
+          request_id: () => `worktree-${++sequence}`,
+          worktree: async (raw) => {
+            peak = Math.max(peak, ++inFlight);
+            await Promise.resolve();
+            inFlight--;
+            const request = JSON.parse(raw);
+            requests.push(request);
+            const response = {
+              status: "applied",
+              requestId: mismatched ? "wrong-request" : request.requestId,
+              checkouts:
+                request.action.operation === "create"
+                  ? [
+                      {
+                        ...checkouts[1],
+                        path: "/repo/.worktree/new",
+                        branch: "new",
+                      },
+                    ]
+                  : checkouts,
+            };
+            return JSON.stringify(response);
+          },
+        };
+      if (name === "voyager_native")
+        return {
+          Name: { new: element },
+          NameState: {
+            new: () => ({ value: () => "", on() {}, focus() {}, release() {} }),
+          },
+        };
+      return {};
+    },
+    { open_dialog() {}, close_dialog() {}, refresh() {} },
+  );
   const cx = {
     spawn: (callback) => pending.push(callback(cx)),
     notify() {},
@@ -1218,7 +1539,7 @@ test("worktree controller groups identified checkouts and preserves request iden
     buttons
       .get("worktree-open-/repo/.worktree/topic")
       .calls.find(([name]) => name === "on_click")[1]({}, cx);
-  controls.render(() => changed++, cx);
+  controls.render();
   click();
   await settle();
   assert.equal(requests.at(-1).expectedVersion, "7");
@@ -1227,6 +1548,241 @@ test("worktree controller groups identified checkouts and preserves request iden
     operation: "open",
     path: "/repo/.worktree/topic",
   });
-  assert.equal(changed, 0, "A mismatched receipt cannot complete the action");
+  assert.notEqual(
+    controls.current,
+    null,
+    "A mismatched receipt cannot complete the action",
+  );
   assert.match(controls.status, /unconfirmed/);
+  mismatched = false;
+  controls.inspect("sibling", "/repo/.worktree/topic", "7", cx);
+  await settle();
+  assert.equal(controls.available("/repo/.worktree/new"), false);
+  controls.open("main", "7", cx, "new", "/repo");
+  await settle();
+  controls.current.input.value = () => "new";
+  controls.render();
+  buttons
+    .get("worktree-create-submit")
+    .calls.find(([name]) => name === "on_click")[1]({}, cx);
+  await settle();
+  assert.equal(
+    controls.current,
+    null,
+    "An applied action closes its dialog without starting workspace work there",
+  );
+  assert.equal(
+    controls.available("/repo/.worktree/new"),
+    true,
+    "Creation updates sibling repository observations before Recent uses them",
+  );
+  peak = 0;
+  for (let index = 0; index < 16; index++)
+    controls.inspect(`burst-${index}`, "/repo", "7", cx);
+  controls.inspect("burst-15", "/repo", "9", cx);
+  await settle();
+  assert.equal(
+    requests.findLast((item) => item.voyage === "burst-15").expectedVersion,
+    "9",
+  );
+  assert.equal(
+    peak,
+    1,
+    "Background discovery does not fill the owner queue with a Voyage burst",
+  );
+});
+
+test("Notes keeps file actions together and preview leaves its draft unchanged", () => {
+  const buttons = new Map();
+  const calls = [];
+  const session = {
+    filename: () => "Existing.md",
+    filenames: () => ["Existing.md"],
+    status: () => "",
+    new_note: () => calls.push("new"),
+    list_notes: () => calls.push("list"),
+    open_note: (name) => calls.push(name),
+  };
+  const exports = {};
+  const source = ts.transpileModule(
+    fs.readFileSync(`${__dirname}/../content/notes/main.ts`, "utf8"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    },
+  ).outputText;
+  new Function("exports", "require", source)(exports, (name) => {
+    if (name === "./ui.js")
+      return uiModule(element, {
+        new: (id) => {
+          const node = element();
+          buttons.set(id, node);
+          return node;
+        },
+      });
+    if (name === "gpui-kit") return { View: class {}, div: element };
+    if (name === "gpui-base")
+      return {
+        Button: {
+          new: (id) => {
+            const node = element();
+            buttons.set(id, node);
+            return node;
+          },
+        },
+        Popover: { new: element },
+        Switch: {
+          new: (id) => {
+            const node = element();
+            buttons.set(id, node);
+            return node;
+          },
+        },
+        TextView: { markdown: element },
+      };
+    if (name === "voyager_content")
+      return {
+        theme: () => ({
+          foreground: "#ffffff",
+          muted: "#999999",
+          background: "#000000",
+        }),
+      };
+    return {
+      SessionState: { new: () => session },
+      RetainedTitleState: { new: () => ({}) },
+      RetainedBodyState: { new: () => ({ value: () => "Unchanged draft" }) },
+      RetainedTitle: { new: element },
+      RetainedBody: { new: element },
+    };
+  });
+  const note = new exports.default();
+  note.init();
+  note.render();
+  const preview = buttons.get("notes-preview");
+  assert.ok(
+    ["w", "h"].every((method) =>
+      preview.calls.some(([name, value]) => name === method && value > 0),
+    ) && preview.calls.some(([name]) => name === "child"),
+    "The unstyled native switch needs a visible track and thumb",
+  );
+  const click = (id) =>
+    buttons
+      .get(id)
+      .calls.find(([name]) => name === "on_click")[1]({}, { notify() {} });
+  click("notes-open");
+  note.render();
+  click("notes-file-Existing.md");
+  assert.deepEqual(calls, ["list", "Existing.md"]);
+  buttons
+    .get("notes-preview")
+    .calls.find(([name]) => name === "on_change")[1](true, { notify() {} });
+  assert.equal(note.preview, true);
+  assert.equal(note.text.value(), "Unchanged draft");
+  click("notes-new");
+  assert.equal(note.preview, false);
+  assert.equal(calls.at(-1), "new");
+});
+
+test("Voyage confirmation inspects an invocation error without repeating shutdown", async () => {
+  const buttons = new Map();
+  const Button = {
+    new(id) {
+      const node = element();
+      buttons.set(id, node);
+      return node;
+    },
+  };
+  const exports = {};
+  let closed = 0;
+  const calls = [];
+  const plan = {
+    id: "plan",
+    voyage: "voyage",
+    name: "Demo",
+    version: "7",
+    phase: "ready",
+    entries: [],
+    message: "Confirm",
+    uncommittedChanges: 2,
+  };
+  new Function(
+    "exports",
+    "require",
+    "window",
+    ts.transpileModule(
+      fs.readFileSync(`${__dirname}/mods/header/voyage-close.ts`, "utf8"),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          target: ts.ScriptTarget.ES2022,
+        },
+      },
+    ).outputText,
+  )(
+    exports,
+    (name) => {
+      if (name === "gpui-kit") return { div: element };
+      if (name === "./ui.js") return uiModule(element, Button);
+      if (name === "./workspace.js")
+        return {
+          invoke: async (action, version) => {
+            calls.push({ action, version });
+            if (action.operation === "confirm-voyage-close")
+              throw Error("Queue unavailable");
+            return {
+              status: "applied",
+              fresh: true,
+              closePlan: action.operation === "inspect" ? plan : null,
+            };
+          },
+        };
+      throw Error(name);
+    },
+    {
+      open_dialog() {},
+      refresh() {},
+      close_dialog() {
+        closed++;
+      },
+    },
+  );
+  const controls = new exports.VoyageClose();
+  const tasks = [];
+  const cx = {
+    spawn(callback) {
+      tasks.push(callback(cx));
+    },
+    notify() {},
+  };
+  const click = (id) => {
+    controls.render();
+    buttons
+      .get(id)
+      .calls.find(([name]) => name === "on_click")[1](null, cx);
+  };
+  controls.observe(plan);
+  assert.match(
+    JSON.stringify(controls.render().calls),
+    /2 uncommitted changes/,
+  );
+  click("voyage-close-confirm");
+  click("voyage-close-confirm");
+  await Promise.all(tasks.splice(0));
+  assert.equal(calls.length, 1);
+  click("voyage-close-inspect");
+  await Promise.all(tasks.splice(0));
+  assert.equal(calls.at(-1).action.operation, "inspect");
+  assert.equal(calls.at(-1).version, "0");
+  click("voyage-close-cancel");
+  await Promise.all(tasks.splice(0));
+  assert.equal(calls.at(-1).action.operation, "cancel-voyage-close");
+  assert.equal(
+    calls.filter(({ action }) => action.operation === "confirm-voyage-close")
+      .length,
+    1,
+  );
+  assert.equal(closed, 1);
 });

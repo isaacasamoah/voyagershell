@@ -29,7 +29,7 @@ def warm_restore(*, original, native, capture, geometry, env, wait, name):
     def execute(*arguments):
         return subprocess.check_output(arguments, env=env, text=True, timeout=5)
 
-    geometry()
+    before = geometry()
     execute("xdotool", "windowquit", original["window"])
     state = wait(
         lambda: execute("xprop", "-id", original["window"], "WM_STATE"),
@@ -61,5 +61,11 @@ def warm_restore(*, original, native, capture, geometry, env, wait, name):
         lambda value: "Normal" in value,
         "same workspace Restore",
     )
-    assert floating_windows(original, geometry, env) == [floating]
-    return {"warmWindowState": state, "restorePointer": location}
+    remaining = wait(
+        lambda: floating_windows(original, geometry, env),
+        lambda items: not items,
+        "floating avatar removed after workspace restore",
+    )
+    after = geometry()
+    assert all(after[key] == before[key] for key in ("X", "Y", "WIDTH", "HEIGHT")), (before, after)
+    return {"warmWindowState": state, "restorePointer": location, "floatingAfterRestore": remaining, "boundsBefore": before, "boundsAfter": after}

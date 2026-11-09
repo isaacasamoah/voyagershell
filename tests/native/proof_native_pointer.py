@@ -22,6 +22,7 @@ class Pointer:
         self.streams = []
         self.nodes = {}
         self.recording = None
+        self.frame_observer = None
         session_id = invoke(
             session,
             properties,
@@ -123,6 +124,7 @@ class Pointer:
         )
 
     def capture(self, path, rect, device_scale):
+        assert self.frame_observer is None, "Frame collection already owns the stream"
         started = time.time()
         device_scale = float(device_scale)
         x, y, width, height = [float(value) / device_scale for value in rect]
@@ -203,6 +205,7 @@ class Pointer:
         }
 
     def record_start(self, path, capture):
+        assert self.frame_observer is None, "Frame collection already owns the stream"
         assert self.recording is None, "A native video is already recording"
         assert self.nodes.get(capture["stream"]) == capture["node"], (
             "Stale capture stream"
@@ -341,10 +344,32 @@ class Pointer:
         assert not receipt["expired"] and receipt["returncode"] == 0, receipt
         return receipt
 
+    def frames_start(self, path, capture, roi, frame_limit, seconds_limit):
+        from proof_native_frames import Frames
+
+        assert self.frame_observer is None and self.recording is None
+        assert capture["stream"] in self.nodes
+        assert type(capture["node"]) is int
+        assert self.nodes[capture["stream"]] == capture["node"], "Stale capture stream"
+        assert roi[2] * roi[3] <= 16384, "Frame ROI exceeds 64 KiB of packed RGB"
+        assert frame_limit <= 4096 and seconds_limit <= 30
+        self.frame_observer = Frames(path, capture, roi, frame_limit, seconds_limit)
+        return self.frame_observer.start()
+
+    def frames_stop(self):
+        if self.frame_observer is None:
+            return None
+        result = self.frame_observer.stop()
+        self.frame_observer = None
+        return result
+
     def close(self):
         try:
-            self.record_stop()
+            self.frames_stop()
         finally:
-            if self.subscription is not None:
-                self.bus.signal_unsubscribe(self.subscription)
-                self.subscription = None
+            try:
+                self.record_stop()
+            finally:
+                if self.subscription is not None:
+                    self.bus.signal_unsubscribe(self.subscription)
+                    self.subscription = None

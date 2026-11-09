@@ -2,7 +2,7 @@
 
 This repository is the standalone successor to the core-workspace prototype in voyagershellapp. The native candidate uses Rust application code and GPUI views. The Electron workspace and its local content packages remain under experiments/electron-reference/. Herdr Core is an external dependency, not copied implementation code.
 
-Use Node 24 and the hc command on PATH. The latest migration proof uses Herdr Core 0.1.16. Codex is needed only for real companion chat or voice. Ordinary tests do not call a model.
+Use Node 24 and the hc command on PATH. The generated Core input is pinned to 0.1.16. The 7 November native restore and Notes/shutdown journeys passed against installed Core 0.1.18. This is evidence for that tested additive upgrade, not every future release. Codex is needed only for real companion chat or voice. Ordinary tests do not call a model.
 
 From the repository root, for the retained Electron reference:
 
@@ -47,6 +47,14 @@ the revision and patch digest and is shared by matching worktrees. Keep the
 machine-local `.cargo/config.toml` out of commits. The SDK patch adds one native
 view slot below sheets/dialogs; application code still owns Voyager's avatar.
 
+The preparer also verifies the checksum-pinned Linux platform archive and applies
+the presentation patches described in [desktop/patches/README.md](desktop/patches/README.md).
+Their separate cache path includes both patch digests. X11 presentation and the
+window's monitor clock stay in that platform boundary. Application contracts,
+terminal ownership and avatar timing remain in their existing owners. Installed
+registry sources are preserved. Record the selected patches with the measured
+release artifact; preparing a dependency does not establish a performance gain.
+
 The current workspace checkpoint is described in [docs/workspace.md](docs/workspace.md). Its Core-backed shell works in a Fleet Vessel or persistent Voyage Portal. The terminal-grid candidate demonstrated native colored Unicode, alternate screen and dynamic sizing, as described in [docs/terminal.md](docs/terminal.md). Its continuation adds selection, clipboard and native composition source, with the actual native journeys and proof-size gate still open. Full terminal behavior and integrated avatar/chat remain unfinished. The combined checkpoint is under review. Performance measurements use the resulting `target/release/voyager-shell` and record the exact artifact and workload. Debug build timings do not establish release runtime performance.
 
 The focused native terminal journey uses the same maintained fixture:
@@ -77,3 +85,12 @@ the native linker libraries. After contract changes run `npm run contract:genera
 after composition or registration changes run `npm run scripts:generate`.
 The profile's seeded JavaScript remains independently editable. See
 [script authoring](docs/workspace.md#script-authoring-and-checking).
+
+## Integration and release sequence
+
+1. Commit and push each complete increment, then open its PR against main or its published prerequisite. Keep one clear dependency path. Record experiment-only and unfinished work separately.
+2. Review the increment against the master outcome, architecture and exact UX references. Run the required ordinary checks, actual interaction and relevant failure. Preserve failed evidence and report open acceptance gates.
+3. Build review candidates from committed source. Record the source revision, dependency preparation and immutable release executable. A canonical build must not depend on unpublished edits or an untracked implementation.
+4. Merge verified increments with the owner's applicable approval while work continues. Verify main contains the selected source and reconcile the PR stack before beginning another independent feature. Do not defer all integration until release day.
+5. Archive completed task records and finished experiments, retaining experiment branches. Delete merged feature branches only after preservation and ancestry checks. Keep any checkout still needed by a running session or build until its replacement is verified.
+6. Run the complete foundation and release checks on the integrated main revision. Resolve or explicitly report remaining gates before release. A merged PR or a working preview does not itself establish release acceptance.

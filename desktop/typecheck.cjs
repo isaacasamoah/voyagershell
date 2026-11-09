@@ -8,14 +8,17 @@ const prettier = require("prettier");
 const root = path.join(__dirname, "..");
 const directory = path.join(root, "target/script-types");
 const entries = [
+  "content/ui.ts",
   "desktop/mods/header/main.ts",
   "desktop/mods/header/canvas.ts",
   "desktop/mods/header/layout-panel.ts",
   "desktop/mods/header/creation.ts",
   "desktop/mods/header/activity.ts",
   "desktop/mods/header/agents.ts",
+  "desktop/mods/header/voyage-colours.ts",
   "desktop/mods/header/process-icons.ts",
   "desktop/mods/header/worktrees.ts",
+  "desktop/mods/header/voyage-close.ts",
   "desktop/mods/header/processes.ts",
   "desktop/mods/header/menu.ts",
   "desktop/mods/header/panels.ts",
@@ -27,7 +30,7 @@ const entries = [
   "desktop/mods/header/chat.ts",
 ];
 
-const notesEntries = ["content/notes/main.ts"];
+const notesEntries = ["content/notes/main.ts", "content/ui.ts"];
 
 function imports(source) {
   const names = new Set();
@@ -96,10 +99,24 @@ function selectDeclarations(raw, sources) {
     pending.push(...imports(declaration));
   }
   return {
-    source: [...modules]
-      .filter(([name]) => included.has(name))
-      .map(([, source]) => source)
-      .join("\n"),
+    source: [
+      ...[...modules]
+        .filter(([name]) => included.has(name))
+        .map(([, source]) => source),
+      ...parsed.statements
+        .filter(
+          (node) =>
+            ((ts.isTypeAliasDeclaration(node) ||
+              ts.isInterfaceDeclaration(node)) &&
+              ["GpuiShellWindow", "Window"].includes(node.name.text)) ||
+            (ts.isVariableStatement(node) &&
+              node.declarationList.declarations.some(
+                (item) =>
+                  ts.isIdentifier(item.name) && item.name.text === "window",
+              )),
+        )
+        .map((node) => node.getFullText(parsed)),
+    ].join("\n"),
     modules: [...included].sort(),
   };
 }
@@ -183,7 +200,7 @@ async function check(mode) {
       await prettier.format(JSON.stringify(metadata), { parser: "json" }),
     ],
   ];
-  for (const name of [...entries, ...notesEntries]) {
+  for (const name of new Set([...entries, ...notesEntries])) {
     const filename = name.replace(/\.ts$/, ".js");
     const emitted = fs.readFileSync(
       path.join(directory, "emitted", filename),

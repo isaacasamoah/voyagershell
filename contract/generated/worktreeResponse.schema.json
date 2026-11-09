@@ -14,6 +14,13 @@
         "commonDir": {
           "type": "string"
         },
+        "dirty": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "locked": {
           "type": "boolean"
         },

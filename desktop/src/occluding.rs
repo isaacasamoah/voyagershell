@@ -106,6 +106,7 @@ picker.render('pane', destination, '7', () => {}, div());"#,
             let package = root.join(name);
             std::fs::create_dir(&package).unwrap();
             std::fs::write(package.join("menu.js"), include_str!("../mods/header/menu.js")).unwrap();
+            std::fs::write(package.join("ui.js"), include_str!("../../content/ui.js")).unwrap();
             std::fs::write(
                 package.join("main.js"),
                 format!(

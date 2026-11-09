@@ -3,9 +3,40 @@
 Herdr Core owns the shell process and canonical terminal state. Voyager stores a
 Core terminal address on a content instance, separate from its placement. Its
 single framed Core connection carries RPC, viewer data, input, focus and credit.
-Closing a viewer sends CLOSE; it does not stop the terminal. Connection teardown
-by itself does not stop the Core server. Explicit Quit has a separate Rust-owned
-shutdown path described below, with native acceptance still pending.
+Closing a viewer sends CLOSE; it does not stop the terminal. Current application
+Quit closes viewers and private assistant resources while Core programs remain
+running. Confirmed Close Voyage is the separate operation that saves Notes and
+stops that Voyage's verified programs. Earlier shutdown checkpoints below do not
+override this owner decision.
+
+## Attachment geometry
+
+The adapter attaches using a current generated Terminal record. A newly started
+program reuses the common terminal metadata from its run response. An existing
+binding gets a fresh typed observation. Run-only output/wait fields are unused
+by these narrow helpers; output inspection remains an explicit operation.
+Zero dimensions refuse before attachment. A mismatched terminal identity or
+invalid dimensions after dispatch produce an uncertain result without replay.
+
+The retained Viewer carries the dimensions from that exact AttachResult into
+the native Screen. It does not reset Core or its local screen to 80 by 24 before
+measured view sizing. Actual subsequent geometry changes use the existing
+resize path. The real-Core canary sets 123 by 37 and verifies reattachment
+preserves it. This does not by itself prove that every legitimate window resize
+produces a clean Bash prompt. Native comparison owns that remaining observation.
+
+## Explicit session Quit
+
+Ctrl+Q closes the application viewers and waits for its private conversation and
+audio resources to finish. It leaves Core programs running. Reopening attaches
+the retained placements to those same live programs. After a computer restart,
+confirmed-ended retained terminal placements open ordinary shells without
+automatically resuming agents.
+
+Close Voyage is a different application operation. It presents the current work
+for confirmation, saves Notes, verifies the selected programs and stops only
+that Voyage's programs. Hiding or closing a Vessel or Portal view preserves its
+backend. See [confirmed Voyage shutdown](workspace.md#confirmed-voyage-shutdown).
 
 ## Program-reported activity
 
@@ -49,7 +80,7 @@ an event without that time clears it, even when its word is unchanged. Local
 observed-at time is not substituted for Core's source timestamp. See the pinned protocol in
 [Core's event documentation](https://github.com/herdrdev/herdr-core/blob/e07c2a1bedd62cf4787ee026ee23ee79c7d95491/schema/README.md#events).
 
-## Explicit session Quit
+## Earlier session-Quit checkpoint
 
 The source candidate routes Ctrl+Q through the existing application owners before
 calling GPUI quit. One request remains pending, and its final result is retained.
@@ -257,7 +288,7 @@ version and identity and exactly one valid result or structured error. A known
 refusal retains its Core kind. Malformed, ambiguous, internal and unknown errors
 remain uncertain without an automatic replay.
 
-## Explicit new shell after an ended program
+## Earlier explicit new-shell mechanism
 
 The current source adds a deliberate `start-new-shell` workspace action for an
 existing terminal content ID and expected old backend. It uses the ordinary
@@ -300,6 +331,91 @@ both Vessel and Portal after Quit/reopen still requires the maintained session
 Quit journey on the matched release. Already-attached terminal end presentation
 and its original correction history are unchanged by this cold-attachment path.
 
-## Input redraws
 
-After successful input admission, the terminal clears selection and returns to the live viewport. It marks the pane dirty only when either action changes the visible state, preserving any pending output invalidation. A clean live-edge key waits for terminal output before requesting another pane render. Admission failures keep selection and history unchanged and display the input error. Clipboard and composition retain their existing paths.
+## Exit and reopen feedback candidate
+
+The 5 November feedback changes the earlier manual-restart presentation. Recognized agent launches run as children of an interactive Bash process. The executable and its arguments remain separate positional arguments; the command does not interpolate user text. Agent exit returns to an ordinary Bash prompt. Normal shell exit is confirmed by Core's `finished` state and `exited` reason before the application removes its placement from the panel tree. Losing a viewer or Core connection does not establish shell exit. The application owner publishes the resulting layout change.
+
+At application startup, a successful Core terminal roster can prepare retained placements whose old program is confirmed finished or absent. Only ordinary shells are eligible, and their original content IDs/directories are retained. Closed Voyage/Fleet layouts can be prepared without starting programs; the existing visible-content path starts a shell when the user opens the view. A placement removed from its tree is not prepared. Live backends, pending starts and unresolved shell intents stay unchanged. The existing pending-start marker and binding save still fence uncertain effects; no agent launch or instruction is replayed.
+
+`app/src/terminal_lifecycle.rs` holds these small layout decisions. `app/src/client.rs` owns their Core observations, versioned saves and creation grants. The desktop remains a viewer rather than another supervisor. Existing explicit new-shell operations remain available for deliberate repair; they are no longer the intended default after a confirmed cold restart. The real-Core owner test verifies new plain-shell preparation and a new binding after shutdown, alongside an unchanged unrelated session. The complete native UI journey remains a separate check.
+
+## Agent display names
+
+Process inspection exposes an informative program-published terminal title for
+recognized agents as their display name, with the working folder as fallback.
+Two named sessions in one directory can therefore have different names. Generic
+program titles and path-like titles are excluded. This is observed display
+metadata, not an automatic mapping to provider transcripts or a native
+conversation identity. OSC activity titles describe current activity and are
+not used as session names. Explicit placement names remain separate.
+
+## Conservative background-span experiment
+
+The performance candidate preserves the existing native text, selection, cursor and input paths. It joins only equal-background, equally selected empty narrow cells after the last printed, decorated, wide or cursor cell in a row. Printed cells and their following coverage remain ordered as before. The private `terminal_background` module produces ranges without allocating a second vector.
+
+GPUI rounds each original cell width to device pixels. A merged range must sum those individually rounded widths; rounding the total logical width changes the edge of a coloured tail. Single and wide cells retain their original layout path. The experiment uses `VOYAGER_EXPERIMENT_COMPACT_BACKGROUNDS=1`; `0` retains the baseline. It introduces no application contract, process owner, content cache or global activity filter. It remains a performance candidate until the recorded native comparisons and review support adoption.
+
+## Rejected row drawing experiment
+
+The isolated row-paint experiment retained one draw plan per current viewport row under the existing Pane. A plan holds the existing immutable cells, resolved per-cell text shaping and ordered background, glyph and cursor draws. Its key includes cell content, selection, that row's cursor, font, text decorations, cell size, device scale and used default colours. Unchanged rows reuse their plan. Shrinking the viewport drops retired entries; dropping Pane drops every plan. Screen and Core remain the terminal data and process owners.
+
+The Canvas path preserves the original left-to-right paint order, including backgrounds that cover glyph overhang. Cell widths and line height follow the original device-pixel snapping. It shapes each existing cell separately and retains the same wide-cell and cursor-tail rules. Active accessibility and inherited overflow/clamp use the existing element path. The archived candidate used `VOYAGER_EXPERIMENT_ROW_PAINT` to select its path. That path is not part of the selected product build. A bounded diagnostic counter records actual Canvas row construction when proving is enabled. This is retained CPU-side preparation, not a claim that GPUI skips scene replay or GPU painting. It passed eight exact native pixel states and cut busy CPU substantially, but one matched input pair regressed beyond the frozen allowance. It was rejected for adoption. Source and its integration patch remain under `experiments/performance/row-paint/`; the selected app keeps the checked compact-background renderer. Any future attempt needs a new explanation and comparison, rather than a favorable rerun.
+
+## Isolated typing trace
+
+The typing investigation adds disabled diagnostic hooks at terminal key receipt, input admission, output-pump entry/completion, snapshot completion, render construction entry and the native input Canvas paint callback. The paint callback does not establish completion of all drawing, GPU submission, compositor presentation or physical scanout. Core/Codex transport remains one combined interval until separately instrumented. Values are byte counts or flags, never keyboard text or terminal contents.
+
+`VOYAGER_TYPING_TRACE=1` activates recording only when `VOYAGER_WORKSPACE_SESSION` starts with `voyager-typing-`. The helper lives in `experiments/performance/typing-latency/trace.rs` and is private to the application crate, with one narrow desktop record function. No application operation, authority or provider/Core protocol changes. The owner preview does not enable it.
+
+Callers take monotonic elapsed-time brackets around a wall-clock sample and try to enqueue a small record. They do no file I/O and never wait for the diagnostic writer. One scratch-only writer serializes records outside the render thread. Its queue holds at most 4,096 records, emits a limit marker after 20,000 event records, publishes attempted/dropped counters, and stops after 120 seconds. A dropped record, limit/expiry marker, null clock or missing required event makes attribution incomplete. These are diagnostic failures, not application refusals.
+
+Internal event intervals use the common process monotonic clock. Alignment with external dispatch/capture requires recorded wall-to-monotonic brackets and checks for clock changes. Unresolved clock alignment stays unresolved. An adjacent output batch or render callback is not automatically the response to the preceding key. Validate actual glyph correlation in the isolated Codex scene before attaching those events to a key. Compare tracing off/on with the same release before using its timings to explain normal operation. The logger is experimental support and counts in authored proving inventory; it is not an accepted runtime optimization.
+
+
+### CPU-contention transport observations
+
+The private experimental trace is compiled once in the application crate. The desktop uses its narrow record function. Both existing writer paths record terminal-data frame write/flush start and completion or failure. The reader records a complete data frame after channel classification and before stream buffering; that point includes the membership-check lock interval. Metadata contains only channel, byte count, stage and clock brackets. Protocol replies can also use data frames, so timing does not prove a human-input or glyph association. Flush establishes pipe submission only.
+
+UI, writer and reader are concurrent producers. Attempt sequences identify records and loss; log arrival order is not monotonic event order. Analysis checks unique complete sequence sets and orders by monotonic brackets, preserving overlaps as uncertain. It adds no UI lock or transport scheduling change. The scratch guard and finite queue/event/time bounds remain. These diagnostic hooks establish neither a product latency fix nor observer equivalence.
+
+
+### Foreground frame-work profile
+
+The nondefault desktop feature frame-profiler enables the pinned GPUI foreground journal. The experiment collector requires VOYAGER_FRAME_PROFILE=1, a voyager-typing- scratch session and an absolute, absent VOYAGER_FRAME_PROFILE_STOP path. A background thread creates a new JSONL file at that stop path with a jsonl extension. Creating the stop file ends collection; 120 seconds and 20,000 records remain independent limits. The end record states the requested stop, truncation, expiry, journal loss and observed-prefix boundary. It does not establish complete process-lifetime coverage.
+
+Draw phase durations separate request/layout, prepaint and scene paint. View self-durations attribute that work without adding nested spans twice. Task polls can include drawing; their totals are another view, not an additive category. GPUI folds polls below 100 microseconds and retains view self-time only above 500 microseconds. SmallPolls records total/count, not just elapsed span. The normal completed-platform-submission record comes from the journal's Presented boundary and retains its associated draw identity and WindowId. Platform submission is not GPU completion or physical display.
+
+All event ages are sampled within explicit wall-clock brackets before JSON formatting or file output. Original durations remain independent of collector delay. Analysis must retain scheduling overlaps, loss and unavailable intervals. The feature itself instruments GPUI even when the collector flag is absent. It is a diagnostic artifact; ordinary candidate comparisons exclude the feature. The collector does not enable unused legacy timing buffers or change application work, authority or Core behavior.
+
+### Native presentation preference
+
+The Linux X11 platform patch prefers Mailbox presentation, matching the pinned GPUI Wayland implementation. The renderer selects it only when the surface supports it and otherwise retains FIFO. This changes frame queueing at the platform boundary, without changing terminal cells, application state, avatar motion or input. Mailbox replaces an obsolete pending frame with the newer frame at a display refresh; it does not request unsynchronized tearing. Native Linux evidence does not establish macOS or Windows behavior.
+
+`desktop/prepare-sdk.py` prepares the pinned gpui-pre-linux 0.3.10 crate from its checksum-verified crates.io archive, applies the small platform patch in a temporary directory, and checks every prepared source file against that result. The source cache includes the patch digest. Existing registry files and other SDK caches are not edited. Only the exact earlier generated Cargo configuration can migrate automatically; unrelated configuration or modified prepared source is refused. The lockfile records the local patch. The performance investigation owns measured effects and any resource tradeoff; the preference alone does not establish responsiveness acceptance.
+
+The monitor-clock patch caches active CRTC rectangles and intervals per X root after subscribing to RandR screen, CRTC and output changes. Those events refresh the cache. Each existing timer selects the largest overlapping cached rectangle from the window's current bounds, converted back to its own X root units using its stored scale. Wide intersection arithmetic avoids overflow. Equal overlaps prefer the previous interval; no overlap retains it. A move or mode change takes effect by the next timer tick. No display query, new timer or extra thread enters the frame/input path. The existing resize-origin rule and hidden-window lifecycle remain unchanged. The cache supports explicitly selected X screens instead of mixing their coordinate systems.
+
+### Terminal input invalidation
+
+Admitting a key does not change the echoed terminal contents. After successful Core viewer admission, input preparation clears selection, resets the selection gesture and returns a historical viewport to the live edge. It reports whether selection or viewport changed. The pane combines that result with its existing dirty state, preserving pending output. A normal key at a clean live edge waits for output to invalidate the view; selection/history changes and input errors notify immediately, including when the program does not echo. Rejected admission leaves selection and viewport unchanged. Clipboard copy and IME composition retain their existing paths; composition still updates when its visible preview changes. The output pump remains responsible for drawing received terminal changes.
+
+### Retained terminal rows
+
+The provisional ordinary performance candidate keeps native row drawing in
+`desktop/src/terminal_rows.rs`. The row module owns only drawing plans. Rust
+application state, Core streams, terminal parsing and placement keep their
+existing owners. No browser renderer or additional process is introduced.
+
+Each visible row retains one plan keyed by immutable cells, selection, cursor,
+font, colours, dimensions, text style and device scale. Unchanged rows reuse
+their shaped text and draw operations. Changing a key replaces that plan.
+Shrinking the viewport drops retired row caches. Accessibility, text overflow
+or line clamping use the existing per-cell elements and clear the row caches.
+Both paths retain compact empty backgrounds with the same device-pixel rounding.
+Input methods and selection continue through the existing native handlers.
+
+The original row experiment failed its earlier input regression rule. That
+result remains rejected. The current candidate combines independently measured
+presentation and input repairs, and requires a fresh repeated comparison plus
+native fidelity checks before selection. Source location is not acceptance.

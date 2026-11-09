@@ -23,9 +23,23 @@ pub struct WorkspaceNotice {
     pub package_revision: u64,
     pub revision: u64,
     pub activity_revision: u64,
+    pub close_revision: u64,
 }
 
 enum Message {
+    PrepareContext {
+        scope: Context,
+        version: u64,
+    },
+    CloseSaves {
+        sender: async_channel::Sender<crate::voyage_close::SaveRequest>,
+    },
+    CloseDone {
+        request: Request,
+        scope: Option<Context>,
+        reply: SyncSender<Response>,
+        result: Result<(), Error>,
+    },
     ActivityChanged,
     RefreshActivity {
         reply: async_channel::Sender<()>,
@@ -69,6 +83,8 @@ enum Message {
         access: crate::content::Access,
         request: voyager_contract::content::Request,
         reply: ContentReply,
+        close_ticket: Option<crate::voyage_close::SaveTicket>,
+        native_save: bool,
     },
     Worktree {
         scope: Option<Context>,
@@ -91,11 +107,30 @@ enum Message {
         scope: Context,
         request: ProcessRequest,
         reply: SyncSender<Arc<ProcessResponse>>,
+        queued_at: std::time::Instant,
+    },
+    ProcessDone {
+        request_id: String,
+        result: Result<voyager_contract::administrator::ProcessOutput, Error>,
+        reply: SyncSender<Arc<ProcessResponse>>,
     },
     Workspace {
         request: Request,
         scope: Option<Context>,
         reply: SyncSender<Response>,
+        queued_at: std::time::Instant,
+    },
+    NoteExit {
+        view: crate::content::ViewBinding,
+        revision: String,
+        request: Request,
+        reply: SyncSender<Response>,
+    },
+    NoteRenameReady {
+        request: Request,
+        scope: Option<Context>,
+        reply: SyncSender<Response>,
+        result: Result<Option<String>, CallError>,
     },
     Terminal {
         content: ContentId,
@@ -127,6 +162,7 @@ struct Outcome {
     status: Status,
     message: Option<String>,
     created_workspace: bool,
+    close_plan: Option<voyager_contract::voyage_close::Plan>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -164,17 +200,17 @@ struct ContentReceipt {
     result: Arc<voyager_contract::content::Response>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum CallError {
     Rejected(String),
     Unconfirmed(String),
 }
 
-pub(crate) struct PendingCall(mpsc::Receiver<Response>);
+pub(crate) struct PendingCall(mpsc::Receiver<Response>, Duration);
 
 impl PendingCall {
     pub(crate) fn wait(self) -> Result<Response, CallError> {
-        self.0.recv_timeout(Duration::from_secs(20)).map_err(|_| {
+        self.0.recv_timeout(self.1).map_err(|_| {
             CallError::Unconfirmed("Workspace result unconfirmed; do not repeat the request".into())
         })
     }
@@ -187,6 +223,7 @@ pub struct Client {
     package_revision: Arc<AtomicU64>,
     identity: String,
     activity: Arc<Mutex<Activity>>,
+    prepared_context: Arc<Mutex<Option<crate::context::Prepared>>>,
 }
 
 fn next_message(
@@ -215,6 +252,19 @@ fn next_message(
 }
 
 impl Client {
+    pub(crate) fn conversation_focus(
+        &self,
+        layout: &Layout,
+        version: u64,
+    ) -> Result<voyager_contract::conversation::Focus, String> {
+        let mut focus = crate::conversation::focus(layout, version)?;
+        focus.preview = self.prepared_context.lock().ok().and_then(|prepared| {
+            prepared
+                .as_ref()
+                .and_then(|prepared| prepared.preview(&focus))
+        });
+        Ok(focus)
+    }
     pub fn reported_activity(&self) -> voyager_contract::activity::Projection {
         self.activity
             .lock()
@@ -270,6 +320,26 @@ impl Client {
         let observed_activity = activity.clone();
         let activity_sender = sender.clone();
         let worktree_sender = sender.clone();
+        let process_sender = sender.clone();
+        let prepared_context = Arc::new(Mutex::new(None));
+        let published_context = prepared_context.clone();
+        let client = Self {
+            sender: sender.clone(),
+            sequence: Arc::new(AtomicU64::new(0)),
+            package_revision,
+            activity,
+            prepared_context,
+            identity: format!(
+                "{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            ),
+        };
+        let close_client = client.clone();
+        let close_sender = sender.clone();
         thread::spawn(move || {
             let mut core = Core::connect_activity(&session, observed_activity.clone());
             if let Ok(core) = &mut core {
@@ -283,10 +353,15 @@ impl Client {
             let mut receipts: VecDeque<(Request, Option<Context>, Outcome)> = VecDeque::new();
             let mut unconfirmed = HashMap::<String, String>::new();
             let mut created_contents = Vec::<CreatedTerminal>::new();
+            let mut reopened = false;
+            let mut live_bindings = Vec::<CoreTerminalId>::new();
             let mut terminal_requests: VecDeque<(TerminalRequest, Result<Viewer, Error>)> =
                 VecDeque::new();
-            let mut process_requests: VecDeque<(Context, ProcessRequest, Arc<ProcessResponse>)> =
-                VecDeque::new();
+            let mut process_requests: VecDeque<(
+                Context,
+                ProcessRequest,
+                Option<Arc<ProcessResponse>>,
+            )> = VecDeque::new();
             let mut content_requests: VecDeque<ContentReceipt> = VecDeque::new();
             let mut worktree_requests: VecDeque<(
                 Option<Context>,
@@ -295,6 +370,12 @@ impl Client {
             )> = VecDeque::new();
             let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
             let mut quit_result: Option<Result<(), Error>> = None;
+            let mut closing = crate::voyage_close::Closing::default();
+            let mut renaming: Option<(
+                crate::voyage_close::SaveTicket,
+                crate::content::rename::Plan,
+                crate::voyage_close::RenameRelease,
+            )> = None;
             while let Ok(message) = next_message(
                 &receiver,
                 &observed_activity,
@@ -303,10 +384,148 @@ impl Client {
                     revision: version,
                     package_revision: published_packages.load(Ordering::Relaxed),
                     activity_revision: 0,
+                    close_revision: closing.revision,
                 },
                 workspace_listener.as_ref(),
             ) {
+                let mut note_exit = None;
+                let mut rename_ready = None;
+                let mut rename_rebind = None;
+                let mut rename_release = None;
                 let (request, scope, reply) = match message {
+                    Message::PrepareContext {
+                        scope,
+                        version: expected,
+                    } => {
+                        if fresh
+                            && version == expected
+                            && layout.context == scope
+                            && let Ok(core) = core.as_mut()
+                        {
+                            let started = std::time::Instant::now();
+                            let result =
+                                crate::context::prepare(&layout, version, core, content.as_mut());
+                            if let Ok(mut prepared) = published_context.lock() {
+                                *prepared = result.ok();
+                            }
+                            if std::env::var_os("VOYAGER_TRACE_TOOLS").is_some() {
+                                eprintln!(
+                                    "voyager_timing operation=dock-preview elapsed_us={}",
+                                    started.elapsed().as_micros()
+                                );
+                            }
+                        }
+                        continue;
+                    }
+                    Message::NoteRenameReady {
+                        request,
+                        scope,
+                        reply,
+                        result,
+                    } => {
+                        if renaming.as_ref().is_some_and(|(ticket, _, _)| {
+                            *ticket == crate::voyage_close::SaveTicket::new(&request.request_id)
+                        }) {
+                            rename_ready = renaming.take().map(|(ticket, plan, release)| {
+                                rename_release = Some(release);
+                                (ticket, plan, result)
+                            });
+                            receipts.retain(|(prior, _, _)| prior.request_id != request.request_id);
+                        }
+                        (request, scope, reply)
+                    }
+                    Message::CloseSaves { sender } => {
+                        closing.saves = Some(sender);
+                        continue;
+                    }
+                    Message::CloseDone {
+                        request,
+                        scope,
+                        reply,
+                        result,
+                    } => {
+                        let result = result.and_then(|()| {
+                            closing.check_layout(&layout)?;
+                            let plan = closing
+                                .plan
+                                .as_ref()
+                                .ok_or_else(|| rejected("Close plan is unavailable".into()))?;
+                            crate::scope::check(
+                                &layout,
+                                scope.as_ref(),
+                                &Action::CloseVoyage {
+                                    id: plan.voyage.clone(),
+                                },
+                            )
+                            .map_err(rejected)?;
+                            let mut candidate = Model {
+                                layout: (*layout).clone(),
+                            };
+                            candidate
+                                .apply(Action::CloseVoyage {
+                                    id: plan.voyage.clone(),
+                                })
+                                .map_err(rejected)?;
+                            let connected = core.as_mut().map_err(|error| error.clone())?;
+                            let saved = save(connected, &candidate.layout, version)?;
+                            live_bindings.retain(|address| !closing.owns_terminal(address));
+                            layout = Arc::new(candidate.layout);
+                            version = saved;
+                            if let Some(owner) = content.as_mut() {
+                                owner.refresh_views();
+                            }
+                            Ok(())
+                        });
+                        if matches!(result, Err(Error::Uncertain(_))) {
+                            fresh = false;
+                        }
+                        let status = match &result {
+                            Ok(()) => Status::Applied,
+                            Err(Error::Rejected { .. }) => Status::Rejected,
+                            Err(Error::Uncertain(_)) => Status::Uncertain,
+                        };
+                        closing.finish(result);
+                        let plan = closing.projected(&layout, scope.as_ref());
+                        let response = Response {
+                            request_id: request.request_id.clone(),
+                            status: status.clone(),
+                            version,
+                            layout: crate::scope::project(&layout, scope.as_ref()),
+                            fresh,
+                            created_workspace: false,
+                            created_contents: eligible_contents(
+                                &layout,
+                                scope.as_ref(),
+                                &created_contents,
+                            ),
+                            message: plan.as_ref().and_then(|plan| plan.message.clone()),
+                            close_plan: plan.clone(),
+                        };
+                        if let Some((_, _, receipt)) = receipts
+                            .iter_mut()
+                            .find(|(prior, _, _)| prior.request_id == request.request_id)
+                        {
+                            *receipt = Outcome {
+                                status,
+                                message: response.message.clone(),
+                                created_workspace: false,
+                                close_plan: plan,
+                            };
+                        }
+                        if let Some(listener) = &workspace_listener {
+                            let _ = listener.try_send(WorkspaceNotice {
+                                revision: version,
+                                close_revision: closing.revision,
+                                package_revision: published_packages.load(Ordering::Relaxed),
+                                activity_revision: core
+                                    .as_ref()
+                                    .map(Core::activity_revision)
+                                    .unwrap_or(0),
+                            });
+                        }
+                        let _ = reply.send(response);
+                        continue;
+                    }
                     Message::ActivityChanged => continue,
                     Message::RefreshActivity { reply } => {
                         if quit_result.is_none()
@@ -354,27 +573,47 @@ impl Client {
                         active,
                         reply,
                     } => {
-                        let result = if !fresh || expected != version {
-                            Err("Workspace changed; observe it again".into())
-                        } else {
-                            let terminals = core
-                                .as_mut()
-                                .ok()
-                                .and_then(|core| core.terminal_list().ok());
-                            crate::observation::capture(
-                                &layout,
-                                version,
-                                &scope,
-                                active,
-                                terminals.as_deref(),
-                            )
-                        };
+                        let result = (|| -> Result<voyager_contract::observation::WorkspaceObservation, String> {
+                            if !fresh || expected != version { return Err("Workspace changed; observe it again".into()); }
+                            let terminals = core.as_mut().ok().and_then(|core| core.terminal_list().ok());
+                            if let Some(terminals) = &terminals {
+                                let names = crate::observation::voyage_names(&layout, terminals);
+                                if !names.is_empty() || terminals.iter().any(|terminal| terminal.state == "finished"
+                                    && terminal.reason.as_deref() == Some("exited")
+                                    && live_bindings.iter().any(|id| id.0 == terminal.address)) {
+                                let mut candidate = Model { layout: (*layout).clone() };
+                                let renamed = !names.is_empty();
+                                for (id, name) in names {
+                                    if let Some(voyage) = candidate.layout.voyages.iter_mut().find(|voyage| voyage.id == id) {
+                                        voyage.name = name;
+                                    }
+                                }
+                                let live: Vec<_> = live_bindings.iter().filter(|address| !closing.owns_terminal(address)).cloned().collect();
+                                if crate::terminal_lifecycle::close_exited(&mut candidate, terminals, &live)? || renamed {
+                                    let current_core = core.as_mut().map_err(|error| format!("{error:?}"))?;
+                                    match save(current_core, &candidate.layout, version) {
+                                        Ok(saved) => { version = saved; layout = Arc::new(candidate.layout); }
+                                        Err(error) => { fresh = false; return Err(format!("Exited panel closure unconfirmed: {error:?}")); }
+                                    }
+                                    if let Some(listener) = &workspace_listener {
+                                        let _ = listener.try_send(WorkspaceNotice { revision: version, close_revision: closing.revision,
+                                            package_revision: published_packages.load(Ordering::Relaxed),
+                                            activity_revision: current_core.activity_revision() });
+                                    }
+                                }
+                                }
+                                live_bindings = terminals.iter().filter(|terminal| terminal.state == "live")
+                                    .map(|terminal| CoreTerminalId(terminal.address.clone())).collect();
+                            }
+                            crate::observation::capture(&layout, version, &scope, active, terminals.as_deref())
+                        })();
                         let _ = reply.try_send(result);
                         continue;
                     }
                     Message::WorkspaceChanges { after, reply } => {
                         let (send, receive) = async_channel::bounded(1);
                         let current = WorkspaceNotice {
+                            close_revision: closing.revision,
                             revision: version,
                             activity_revision: core
                                 .as_ref()
@@ -421,6 +660,8 @@ impl Client {
                         access,
                         request,
                         reply,
+                        close_ticket,
+                        native_save,
                     } => {
                         let previous_version = version;
                         let (_, request_id, expected) = crate::content::identity(&request);
@@ -443,6 +684,37 @@ impl Client {
                             continue;
                         }
                         let result = (|| {
+                            if renaming.as_ref().is_some_and(|(ticket, plan, _)| {
+                                plan.contents.contains(crate::content::identity(&request).0)
+                                    && !matches!(
+                                        request,
+                                        voyager_contract::content::Request::Inspect { .. }
+                                            | voyager_contract::content::Request::Describe { .. }
+                                            | voyager_contract::content::Request::ListNotes { .. }
+                                    )
+                                    && !(native_save && close_ticket.as_ref() == Some(ticket))
+                            }) {
+                                return Err(
+                                    "This Note is being renamed; wait for the saved result".into(),
+                                );
+                            }
+                            if matches!(
+                                request,
+                                voyager_contract::content::Request::Update { .. }
+                                    | voyager_contract::content::Request::Configure { .. }
+                                    | voyager_contract::content::Request::MigrateNote { .. }
+                                    | voyager_contract::content::Request::NewNote { .. }
+                                    | voyager_contract::content::Request::OpenNote { .. }
+                            ) && closing.blocks_content(
+                                crate::content::identity(&request).0,
+                                close_ticket.as_ref(),
+                                native_save,
+                            ) {
+                                return Err(
+                                    "This Voyage is closing; its Notes are temporarily read-only"
+                                        .into(),
+                                );
+                            }
                             if quit_result.is_some()
                                 && matches!(
                                     request,
@@ -562,6 +834,7 @@ impl Client {
                             && let Some(listener) = &workspace_listener
                         {
                             let _ = listener.try_send(WorkspaceNotice {
+                                close_revision: closing.revision,
                                 package_revision: published_packages.load(Ordering::Relaxed),
                                 revision: version,
                                 activity_revision: core
@@ -671,7 +944,9 @@ impl Client {
                             if response.status == WorktreeStatus::Applied
                                 && matches!(
                                     request.action,
-                                    WorktreeAction::Create { .. } | WorktreeAction::Open { .. }
+                                    WorktreeAction::Create { .. }
+                                        | WorktreeAction::Open { .. }
+                                        | WorktreeAction::Remove { .. }
                                 )
                             {
                                 let completion = (|| -> Result<(), String> {
@@ -704,24 +979,55 @@ impl Client {
                                         .find(|voyage| voyage.id == request.voyage)
                                         .and_then(|voyage| voyage.cwd.as_deref())
                                         .ok_or("Source Voyage is unavailable")?;
-                                    let original = std::fs::canonicalize(&source_directory)
-                                        .map_err(|error| {
-                                            format!("Source directory unavailable: {error}")
-                                        })?;
-                                    let current =
-                                        std::fs::canonicalize(current_source).map_err(|error| {
-                                            format!("Current Voyage directory unavailable: {error}")
-                                        })?;
-                                    if original != current {
-                                        return Err("Source Voyage directory changed".into());
+                                    let removing =
+                                        matches!(request.action, WorktreeAction::Remove { .. });
+                                    if removing {
+                                        if current_source != source_directory {
+                                            return Err("Source Voyage directory changed".into());
+                                        }
+                                    } else {
+                                        let original = std::fs::canonicalize(&source_directory)
+                                            .map_err(|error| {
+                                                format!("Source directory unavailable: {error}")
+                                            })?;
+                                        let current = std::fs::canonicalize(current_source)
+                                            .map_err(|error| {
+                                                format!(
+                                                    "Current Voyage directory unavailable: {error}"
+                                                )
+                                            })?;
+                                        if original != current {
+                                            return Err("Source Voyage directory changed".into());
+                                        }
                                     }
                                     let mut candidate = Model {
                                         layout: (*layout).clone(),
                                     };
-                                    let action =
-                                        worktree_voyage_action(&candidate.layout, &checkout.path)?;
-                                    crate::scope::check(&layout, scope.as_ref(), &action)?;
-                                    candidate.apply(action)?;
+                                    let actions =
+                                        if let WorktreeAction::Remove { path } = &request.action {
+                                            candidate
+                                                .layout
+                                                .voyages
+                                                .iter()
+                                                .filter(|voyage| {
+                                                    voyage.cwd.as_ref().is_some_and(|cwd| {
+                                                        std::path::Path::new(cwd).starts_with(path)
+                                                    })
+                                                })
+                                                .map(|voyage| Action::CloseVoyage {
+                                                    id: voyage.id.clone(),
+                                                })
+                                                .collect::<Vec<_>>()
+                                        } else {
+                                            vec![worktree_voyage_action(
+                                                &candidate.layout,
+                                                &checkout.path,
+                                            )?]
+                                        };
+                                    for action in actions {
+                                        crate::scope::check(&layout, scope.as_ref(), &action)?;
+                                        candidate.apply(action)?;
+                                    }
                                     let saved = save(core, &candidate.layout, version).map_err(
                                         |error| format!("Workspace save not confirmed: {error:?}"),
                                     )?;
@@ -737,6 +1043,7 @@ impl Client {
                                     }
                                     if let Some(listener) = &workspace_listener {
                                         let _ = listener.try_send(WorkspaceNotice {
+                                            close_revision: closing.revision,
                                             revision: version,
                                             package_revision: published_packages
                                                 .load(Ordering::Relaxed),
@@ -748,7 +1055,7 @@ impl Client {
                                 if let Err(error) = completion {
                                     response.status = WorktreeStatus::Uncertain;
                                     response.message = Some(format!(
-                                        "Git checkout was resolved, but opening its Voyage was not confirmed: {error}. Inspect the checkout and workspace; do not repeat creation."
+                                        "Git completed, but updating its Voyage was not confirmed: {error}. Inspect the checkout and workspace; do not repeat creation."
                                     ));
                                 }
                             }
@@ -911,8 +1218,7 @@ impl Client {
                                             crate::worktrees::remove(
                                                 std::path::Path::new(&directory),
                                                 &checkout.path,
-                                            )?;
-                                            crate::worktrees::list(std::path::Path::new(&directory)).map_err(|error| crate::worktrees::Error::Uncertain(format!("Removal completed but checkout inspection failed: {error:?}")))
+                                            )
                                         })()
                                     } else {
                                         crate::worktrees::execute(
@@ -951,7 +1257,15 @@ impl Client {
                         scope,
                         request,
                         reply,
+                        queued_at,
                     } => {
+                        if std::env::var_os("VOYAGER_TRACE_TOOLS").is_some() {
+                            eprintln!(
+                                "voyager_timing request={} family=process phase=actor-receive queued_us={}",
+                                request.request_id,
+                                queued_at.elapsed().as_micros()
+                            );
+                        }
                         let previous = process_requests
                             .iter()
                             .find(|(_, prior, _)| prior.request_id == request.request_id);
@@ -964,10 +1278,15 @@ impl Client {
                             message: None,
                         };
                         if let Some((prior_scope, prior, result)) = previous {
-                            let outcome = if prior == &request && prior_scope == &scope {
+                            let outcome = if prior != &request || prior_scope != &scope {
+                                response.message = Some("Process request identity was reused with different arguments or scope".into());
+                                Arc::new(response)
+                            } else if let Some(result) = result {
                                 Arc::clone(result)
                             } else {
-                                response.message = Some("Process request identity was reused with different arguments or scope".into());
+                                response.message = Some(
+                                    "Process request is still pending; it was not repeated".into(),
+                                );
                                 Arc::new(response)
                             };
                             let _ = reply.send(outcome);
@@ -1008,6 +1327,20 @@ impl Client {
                             Err(rejected(
                                 "This request identity belongs to another operation".into(),
                             ))
+                        } else if process_requests
+                            .iter()
+                            .filter(|(_, _, result)| result.is_none())
+                            .count()
+                            >= 8
+                            && !matches!(
+                                request.input.action,
+                                voyager_contract::administrator::ProcessAction::List
+                                    | voyager_contract::administrator::ProcessAction::Read { .. }
+                            )
+                        {
+                            Err(rejected(
+                                "Process request limit reached; no effect was queued".into(),
+                            ))
                         } else if !fresh || version != request.input.expected_version {
                             Err(rejected(
                                 "Inspect the current workspace revision before using processes"
@@ -1021,38 +1354,75 @@ impl Client {
                                         if version != request.input.expected_version {
                                             return Err(rejected("Workspace revision changed before process dispatch; inspect again".into()));
                                         }
-                                        crate::process::run(core, &layout, &scope, &request.input.action)
+                                        crate::process::start(core, &layout, &scope, &request.input.action)
                                     }),
                                     Err(error) => Err(error.clone()),
                                 }
                         };
+                        if process_requests.len() >= 32
+                            && let Some(index) = process_requests
+                                .iter()
+                                .position(|(_, _, result)| result.is_some())
+                        {
+                            process_requests.remove(index);
+                        }
                         match result {
-                            Ok(output) => {
-                                match serde_json::to_vec(&output) {
-                                    Ok(bytes) if bytes.len() <= 24 * 1024 => {
-                                        response.status = Status::Applied;
-                                        response.output = Some(output);
-                                    }
-                                    _ if matches!(output, voyager_contract::administrator::ProcessOutput::Send { .. } | voyager_contract::administrator::ProcessOutput::Interrupt { .. } | voyager_contract::administrator::ProcessOutput::Stop { .. }) => {
-                                        response.status = Status::Applied;
-                                        response.message = Some("The requested process operation was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
-                                    }
-                                    _ => response.message = Some("Process result exceeds the tool response limit. Inspect a narrower focus or read less history.".into()),
-                                }
+                            Ok(crate::process::Started::Waiting(effect)) => {
+                                process_requests.push_back((scope, request.clone(), None));
+                                let sender = process_sender.clone();
+                                thread::spawn(move || {
+                                    let result = effect.wait();
+                                    let _ = sender.send_blocking(Message::ProcessDone {
+                                        request_id: request.request_id,
+                                        result,
+                                        reply,
+                                    });
+                                });
                             }
-                            Err(Error::Rejected { message, .. }) => response.message = Some(message),
-                            Err(Error::Uncertain(message)) => {
-                                fresh = false;
-                                response.status = Status::Uncertain;
-                                response.message = Some(message);
+                            Ok(crate::process::Started::Ready(output)) => {
+                                let outcome = process_response(
+                                    request.request_id.clone(),
+                                    version,
+                                    &mut fresh,
+                                    Ok(output),
+                                );
+                                process_requests.push_back((
+                                    scope,
+                                    request,
+                                    Some(Arc::clone(&outcome)),
+                                ));
+                                let _ = reply.send(outcome);
+                            }
+                            Err(error) => {
+                                let output = Err(error);
+                                let outcome = process_response(
+                                    request.request_id.clone(),
+                                    version,
+                                    &mut fresh,
+                                    output,
+                                );
+                                process_requests.push_back((
+                                    scope,
+                                    request,
+                                    Some(Arc::clone(&outcome)),
+                                ));
+                                let _ = reply.send(outcome);
                             }
                         }
-                        response.version = version;
-                        response.fresh = fresh;
-                        let outcome = Arc::new(response);
-                        process_requests.push_back((scope, request, Arc::clone(&outcome)));
-                        if process_requests.len() > 32 {
-                            process_requests.pop_front();
+                        continue;
+                    }
+                    Message::ProcessDone {
+                        request_id,
+                        result,
+                        reply,
+                    } => {
+                        let outcome =
+                            process_response(request_id.clone(), version, &mut fresh, result);
+                        if let Some((_, _, receipt)) = process_requests
+                            .iter_mut()
+                            .find(|(_, request, _)| request.request_id == request_id)
+                        {
+                            *receipt = Some(Arc::clone(&outcome));
                         }
                         let _ = reply.send(outcome);
                         continue;
@@ -1061,7 +1431,26 @@ impl Client {
                         request,
                         scope,
                         reply,
-                    } => (request, scope, reply),
+                        queued_at,
+                    } => {
+                        if std::env::var_os("VOYAGER_TRACE_TOOLS").is_some() {
+                            eprintln!(
+                                "voyager_timing request={} family=workspace phase=actor-receive queued_us={}",
+                                request.request_id,
+                                queued_at.elapsed().as_micros()
+                            );
+                        }
+                        (request, scope, reply)
+                    }
+                    Message::NoteExit {
+                        view,
+                        revision,
+                        request,
+                        reply,
+                    } => {
+                        note_exit = Some((view, revision));
+                        (request, None, reply)
+                    }
                     Message::Terminal {
                         content,
                         request_id,
@@ -1120,6 +1509,10 @@ impl Client {
                             Err(rejected(
                                 "Layout changed; inspect before opening a terminal".into(),
                             ))
+                        } else if closing.blocks_terminal(&content) {
+                            Err(rejected(
+                                "This Voyage is closing; no terminal was opened".into(),
+                            ))
                         } else if let Some(message) = unconfirmed.get(&content.0) {
                             Err(Error::Uncertain(message.clone()))
                         } else if created_contents.iter().any(|pending| pending.id == content)
@@ -1143,6 +1536,16 @@ impl Client {
                                 Err(error) => Err(error.clone()),
                             }
                         };
+                        if result.is_ok()
+                            && let Some(backend) = layout
+                                .contents
+                                .iter()
+                                .find(|item| item.id == content)
+                                .and_then(|item| item.backend.clone())
+                            && !live_bindings.contains(&backend)
+                        {
+                            live_bindings.push(backend);
+                        }
                         if previous.is_none() {
                             settle_created_content(&mut created_contents, &content, &result);
                             terminal_requests.push_back((request, result.clone()));
@@ -1157,6 +1560,8 @@ impl Client {
                     }
                 };
                 let previous_version = version;
+                let previous_close_revision = closing.revision;
+                let mut deferred_reply = false;
                 let mut package_changed = false;
                 let mut response = Response {
                     request_id: request.request_id.clone(),
@@ -1167,6 +1572,7 @@ impl Client {
                     created_workspace: false,
                     created_contents: eligible_contents(&layout, scope.as_ref(), &created_contents),
                     message: None,
+                    close_plan: closing.projected(&layout, scope.as_ref()),
                 };
                 if worktree_requests
                     .iter()
@@ -1203,6 +1609,7 @@ impl Client {
                         response.status = result.status.clone();
                         response.message = result.message.clone();
                         response.created_workspace = result.created_workspace;
+                        response.close_plan = result.close_plan.clone();
                         let _ = reply.send(response);
                         continue;
                     }
@@ -1224,9 +1631,36 @@ impl Client {
                     let inspecting = matches!(request.action, Action::Inspect);
                     let result = match core.as_mut() {
                         Err(error) => Err(error.clone()),
-                        Ok(core) => (|| {
-                            if matches!(request.action, Action::Inspect) {
-                                load(core, &cwd).and_then(|(loaded, revision, missing)| {
+                        Ok(core) => {
+                            (|| {
+                                if let Some((view, revision)) = &note_exit {
+                                    if !view.is_active()
+                                        || !matches!(&request.action, Action::RemovePanel { id }
+                                            if note_exit_target(&layout, view.binding.id()).as_ref() == Ok(id))
+                                    {
+                                        return Err(rejected("The Notes view or placement changed; nothing was closed".into()));
+                                    }
+                                    let owner = content.as_mut().ok_or_else(|| {
+                                        rejected("Notes data is unavailable".into())
+                                    })?;
+                                    let observed = owner.call(
+                                        &view.binding,
+                                        voyager_contract::content::Request::Inspect {
+                                            version: voyager_contract::content::Version::V1,
+                                            request_id: format!("{}-read", request.request_id),
+                                            content_id: view.binding.id().clone(),
+                                        },
+                                    );
+                                    if !matches!(observed, voyager_contract::content::Response::Snapshot { snapshot, .. } if &snapshot.revision == revision)
+                                    {
+                                        return Err(rejected(
+                                            "Notes changed after saving; the view remains open"
+                                                .into(),
+                                        ));
+                                    }
+                                }
+                                if matches!(request.action, Action::Inspect) {
+                                    load(core, &cwd).and_then(|(loaded, revision, missing)| {
                                     let mut candidate = Model { layout: loaded };
                                     let mut revision = revision;
                                     if missing {
@@ -1238,6 +1672,20 @@ impl Client {
                                             .map_err(rejected)?;
                                         revision = save(core, &candidate.layout, revision)?;
                                         response.created_workspace = true;
+                                    }
+                                    if !reopened {
+                                        let terminals = core.terminal_list()?;
+                                        let ready = crate::terminal_lifecycle::prepare_reopen(&mut candidate.layout, &terminals);
+                                        if !ready.is_empty() {
+                                            revision = save(core, &candidate.layout, revision)?;
+                                            created_contents.extend(ready.into_iter().map(|id| CreatedTerminal {
+                                                id, launch: voyager_contract::launch::Launch::Terminal,
+                                                backend: None, shell_intent: None,
+                                            }));
+                                        }
+                                        live_bindings = terminals.iter().filter(|terminal| terminal.state == "live")
+                                            .map(|terminal| CoreTerminalId(terminal.address.clone())).collect();
+                                        reopened = true;
                                     }
                                     unconfirmed.retain(|id, _| {
                                         candidate.layout.contents.iter().any(|item| {
@@ -1259,89 +1707,266 @@ impl Client {
                                         .map_err(rejected)?;
                                     Ok(())
                                 })
-                            } else if !fresh {
-                                Err(rejected(
-                                    "Inspect the workspace before making a change".into(),
-                                ))
-                            } else if request.expected_version != version {
-                                Err(rejected(
-                                    "Layout changed; inspect it before making a new request".into(),
-                                ))
-                            } else {
-                                crate::scope::check(&layout, scope.as_ref(), &request.action)
-                                    .map_err(rejected)?;
-                                if let Action::RemoveContentPackage { type_id }
-                                | Action::RestoreContentPackage { type_id } = &request.action
+                                } else if !fresh
+                                    && !matches!(request.action, Action::CancelVoyageClose { .. })
                                 {
-                                    let (current, revision, missing) = load(core, &cwd).map_err(|error| rejected(format!("Workspace observation unavailable; no content package was changed: {error:?}")))?;
-                                    layout = Arc::new(current);
-                                    version = revision;
-                                    fresh = true;
-                                    if missing || request.expected_version != version {
-                                        return Err(rejected("Workspace changed; inspect before changing a content package".into()));
-                                    }
+                                    Err(rejected(
+                                        "Inspect the workspace before making a change".into(),
+                                    ))
+                                } else if request.expected_version != version
+                                    && !matches!(request.action, Action::CancelVoyageClose { .. })
+                                {
+                                    Err(rejected(
+                                        "Layout changed; inspect it before making a new request"
+                                            .into(),
+                                    ))
+                                } else {
                                     crate::scope::check(&layout, scope.as_ref(), &request.action)
                                         .map_err(rejected)?;
-                                    let owner = content.as_mut().ok_or_else(|| {
-                                        rejected("Content owner unavailable".into())
-                                    })?;
                                     match &request.action {
-                                        Action::RemoveContentPackage { .. } => {
-                                            owner.remove_package(type_id)
+                                        Action::CloseVoyage { id } => {
+                                            closing.prepare(
+                                                &layout,
+                                                version,
+                                                id,
+                                                &request.request_id,
+                                                core,
+                                            )?;
+                                            response.message = Some(
+                                                "Confirm the Voyage shutdown; no work has stopped"
+                                                    .into(),
+                                            );
+                                            return Ok(());
                                         }
-                                        _ => owner.restore_package(type_id),
+                                        Action::CancelVoyageClose { id, plan } => {
+                                            if scope.is_some() {
+                                                return Err(rejected("Only the native user can cancel a Voyage confirmation".into()));
+                                            }
+                                            closing.cancel(id, plan)?;
+                                            return Ok(());
+                                        }
+                                        Action::ConfirmVoyageClose { id, plan } => {
+                                            if scope.is_some() {
+                                                return Err(rejected("Human confirmation is required; agents cannot confirm Voyage shutdown".into()));
+                                            }
+                                            let confirmed = closing.confirm(
+                                                id,
+                                                plan,
+                                                version,
+                                                &request.request_id,
+                                            )?;
+                                            let worker = close_client.clone();
+                                            let sender = close_sender.clone();
+                                            let request = request.clone();
+                                            let scope = scope.clone();
+                                            let reply = reply.clone();
+                                            thread::spawn(move || {
+                                                let result = crate::voyage_close::execute(
+                                                    &worker, confirmed,
+                                                );
+                                                let _ = sender.send_blocking(Message::CloseDone {
+                                                    request,
+                                                    scope,
+                                                    reply,
+                                                    result,
+                                                });
+                                            });
+                                            deferred_reply = true;
+                                            return Ok(());
+                                        }
+                                        _ => (),
                                     }
-                                    .map_err(rejected)?;
-                                    package_changed = true;
-                                    return Ok(());
-                                }
-                                if let Action::CreateContent { type_id, .. }
-                                | Action::CreateFleetWithContent { type_id, .. } =
-                                    &request.action
-                                    && let Some(owner) = &content
-                                {
-                                    owner.require_available(type_id).map_err(rejected)?;
-                                }
-                                if let Action::CreateVoyageFromSource { source }
-                                | Action::CreateFleetWithContent { source, .. } = &request.action
-                                {
-                                    let terminals = if matches!(
-                                        source,
-                                        voyager_contract::DirectorySource::Live { .. }
-                                    ) {
-                                        Some(core.terminal_list().map_err(|error| {
+                                    if let Some((_, plan, prepared)) = &rename_ready {
+                                        let expected = prepared
+                                            .as_ref()
+                                            .map_err(|error| match error {
+                                                CallError::Rejected(message) => {
+                                                    rejected(message.clone())
+                                                }
+                                                CallError::Unconfirmed(message) => {
+                                                    Error::Uncertain(message.clone())
+                                                }
+                                            })?
+                                            .as_deref()
+                                            .unwrap_or(&plan.revision);
+                                        let observed = crate::content::rename::Plan::capture(
+                                            &layout,
+                                            scope.as_ref(),
+                                            &request.action,
+                                        )
+                                        .map_err(rejected)?
+                                        .ok_or_else(|| {
+                                            rejected("The Notes rename target changed".into())
+                                        })?;
+                                        if observed.file != plan.file
+                                            || observed.files != plan.files
+                                        {
+                                            return Err(rejected("The Notes file bindings changed; nothing was renamed".into()));
+                                        }
+                                        let candidate = plan.layout(&layout).map_err(rejected)?;
+                                        closing.check_layout(&candidate)?;
+                                        crate::content::rename::move_file(
+                                            &plan.file,
+                                            &plan.filename,
+                                            expected,
+                                        )
+                                        .map_err(rejected)?;
+                                        let moved = plan.moved_file();
+                                        let snapshot = plan.snapshot(plan.contents[0].clone()).map_err(|error| Error::Uncertain(format!("The file moved to {}/{} but reading it failed: {error}. Inspect before another rename.", moved.directory, moved.filename)))?;
+                                        if snapshot.revision != expected {
+                                            return Err(Error::Uncertain(format!(
+                                                "The file moved to {}/{} but its bytes changed during rename. Inspect both paths; do not repeat the rename.",
+                                                moved.directory, moved.filename
+                                            )));
+                                        }
+                                        let saved = save(core, &candidate, version).map_err(|error| Error::Uncertain(format!("The file moved to {}/{} but workspace confirmation is unknown: {error:?}. Do not repeat the rename.", moved.directory, moved.filename)))?;
+                                        layout = Arc::new(candidate);
+                                        version = saved;
+                                        if let Some(owner) = content.as_mut() {
+                                            for id in &plan.contents {
+                                                crate::content::register_content(
+                                                    owner, &layout, id,
+                                                )
+                                                .map_err(Error::Uncertain)?;
+                                            }
+                                        }
+                                        rename_rebind = Some(crate::voyage_close::RenamedNotes {
+                                            files: plan.moved_files(),
+                                            workspace_version: version,
+                                            snapshot,
+                                        });
+                                        return Ok(());
+                                    }
+                                    if let Some(plan) = crate::content::rename::Plan::capture(
+                                        &layout,
+                                        scope.as_ref(),
+                                        &request.action,
+                                    )
+                                    .map_err(rejected)?
+                                    {
+                                        if renaming.is_some() {
+                                            return Err(rejected(
+                                                "Finish the current Notes rename first".into(),
+                                            ));
+                                        }
+                                        let saves = closing.saves.as_ref().ok_or_else(|| rejected("The native Notes save service is unavailable; nothing was renamed".into()))?;
+                                        let ticket = crate::voyage_close::SaveTicket::new(
+                                            &request.request_id,
+                                        );
+                                        let (ready, waiting) = async_channel::bounded(1);
+                                        saves.try_send(crate::voyage_close::SaveRequest::PrepareRename { ticket: ticket.clone(), contents: plan.contents.clone(), files: plan.files.clone(), reply: ready }).map_err(|_| rejected("Notes save service is busy; nothing was renamed".into()))?;
+                                        let release = crate::voyage_close::RenameRelease::new(
+                                            saves.clone(),
+                                            ticket.clone(),
+                                            plan.contents.clone(),
+                                        );
+                                        renaming = Some((ticket, plan, release));
+                                        let sender = close_sender.clone();
+                                        let request = request.clone();
+                                        let scope = scope.clone();
+                                        let reply = reply.clone();
+                                        thread::spawn(move || {
+                                            let result = waiting.recv_blocking().unwrap_or_else(|_| Err(CallError::Unconfirmed("Notes save acknowledgement was lost; inspect before another rename".into())));
+                                            let _ =
+                                                sender.send_blocking(Message::NoteRenameReady {
+                                                    request,
+                                                    scope,
+                                                    reply,
+                                                    result,
+                                                });
+                                        });
+                                        deferred_reply = true;
+                                        return Ok(());
+                                    }
+                                    if let Action::RemoveContentPackage { type_id }
+                                    | Action::RestoreContentPackage { type_id } = &request.action
+                                    {
+                                        let (current, revision, missing) = load(core, &cwd).map_err(|error| rejected(format!("Workspace observation unavailable; no content package was changed: {error:?}")))?;
+                                        layout = Arc::new(current);
+                                        version = revision;
+                                        fresh = true;
+                                        if missing || request.expected_version != version {
+                                            return Err(rejected("Workspace changed; inspect before changing a content package".into()));
+                                        }
+                                        crate::scope::check(
+                                            &layout,
+                                            scope.as_ref(),
+                                            &request.action,
+                                        )
+                                        .map_err(rejected)?;
+                                        if type_id == "notes"
+                                            && layout.contents.iter().any(|item| {
+                                                item.type_id == *type_id
+                                                    && closing.blocks_terminal(&item.id)
+                                            })
+                                        {
+                                            return Err(rejected("Notes must remain available while their Voyage closes".into()));
+                                        }
+                                        let owner = content.as_mut().ok_or_else(|| {
+                                            rejected("Content owner unavailable".into())
+                                        })?;
+                                        match &request.action {
+                                            Action::RemoveContentPackage { .. } => {
+                                                owner.remove_package(type_id)
+                                            }
+                                            _ => owner.restore_package(type_id),
+                                        }
+                                        .map_err(rejected)?;
+                                        package_changed = true;
+                                        return Ok(());
+                                    }
+                                    if let Action::CreateContent { type_id, .. }
+                                    | Action::CreateFleetWithContent { type_id, .. } =
+                                        &request.action
+                                        && let Some(owner) = &content
+                                    {
+                                        owner.require_available(type_id).map_err(rejected)?;
+                                    }
+                                    if let Action::CreateVoyageFromSource { source }
+                                    | Action::CreateFleetWithContent { source, .. } =
+                                        &request.action
+                                    {
+                                        let terminals = if matches!(
+                                            source,
+                                            voyager_contract::DirectorySource::Live { .. }
+                                        ) {
+                                            Some(core.terminal_list().map_err(|error| {
                                             rejected(format!(
                                                 "Live directory observation unavailable: {error:?}"
                                             ))
                                         })?)
-                                    } else {
-                                        None
-                                    };
-                                    crate::observation::validate_source(
-                                        &layout,
-                                        version,
-                                        source,
-                                        terminals.as_deref(),
-                                    )
-                                    .map_err(rejected)?;
-                                }
-                                if matches!(
-                                    request.action,
-                                    Action::StartNewShell { .. } | Action::ReopenPanel { .. }
-                                ) {
-                                    let (current, revision, missing) = load(core, &cwd)?;
-                                    layout = Arc::new(current);
-                                    version = revision;
-                                    if missing || request.expected_version != version {
-                                        return Err(rejected("Workspace changed; inspect before changing a terminal viewer".into()));
-                                    }
-                                    crate::scope::check(&layout, scope.as_ref(), &request.action)
+                                        } else {
+                                            None
+                                        };
+                                        crate::observation::validate_source(
+                                            &layout,
+                                            version,
+                                            source,
+                                            terminals.as_deref(),
+                                        )
                                         .map_err(rejected)?;
-                                }
-                                let mut candidate = Model {
-                                    layout: (*layout).clone(),
-                                };
-                                match &request.action {
+                                    }
+                                    if matches!(
+                                        request.action,
+                                        Action::StartNewShell { .. } | Action::ReopenPanel { .. }
+                                    ) {
+                                        let (current, revision, missing) = load(core, &cwd)?;
+                                        layout = Arc::new(current);
+                                        version = revision;
+                                        if missing || request.expected_version != version {
+                                            return Err(rejected("Workspace changed; inspect before changing a terminal viewer".into()));
+                                        }
+                                        crate::scope::check(
+                                            &layout,
+                                            scope.as_ref(),
+                                            &request.action,
+                                        )
+                                        .map_err(rejected)?;
+                                    }
+                                    let mut candidate = Model {
+                                        layout: (*layout).clone(),
+                                    };
+                                    match &request.action {
                                     Action::StartNewShell { content_id, expected_backend } => {
                                         candidate.start_new_shell(content_id, expected_backend, &request.request_id)
                                     }
@@ -1349,6 +1974,10 @@ impl Client {
                                 }
                                     .map_err(rejected)
                                     .and_then(|()| {
+                                        closing.check_layout(&candidate.layout)?;
+                                        let reopening = if let Action::ReopenVoyage { id } = &request.action {
+                                            crate::terminal_lifecycle::prepare_voyage_reopen(&mut candidate.layout, &core.terminal_list()?, id)
+                                        } else { Vec::new() };
                                         if let Action::StartNewShell { expected_backend, .. } = &request.action {
                                             let observed = core.terminal_get(&expected_backend.0)?;
                                             require_finished(&observed, expected_backend)?;
@@ -1367,6 +1996,7 @@ impl Client {
                                         let revision = save(core, &candidate.layout, version).map_err(|error| {
                                             if created_notes { Error::Uncertain(format!("A Notes file was created but workspace binding is unconfirmed; inspect before retry: {error:?}")) } else { error }
                                         })?;
+                                        created_contents.extend(reopening.into_iter().map(|id| CreatedTerminal { id, launch: voyager_contract::launch::Launch::Terminal, backend: None, shell_intent: None }));
                                         if let Action::StartNewShell { content_id, expected_backend } = &request.action {
                                             grant_new_shell(&mut created_contents, content_id, expected_backend, &request.request_id);
                                             unconfirmed.remove(&content_id.0);
@@ -1391,8 +2021,9 @@ impl Client {
                                         version = revision;
                                         Ok(())
                                     })
-                            }
-                        })(),
+                                }
+                            })()
+                        }
                     };
                     match result {
                         Ok(()) => response.status = Status::Applied,
@@ -1414,12 +2045,23 @@ impl Client {
                 response.created_contents =
                     eligible_contents(&layout, scope.as_ref(), &created_contents);
                 response.fresh = fresh;
+                response.close_plan = closing.projected(&layout, scope.as_ref());
+                if let Some(mut release) = rename_release {
+                    release.rebind = rename_rebind;
+                }
+                if deferred_reply {
+                    response.status = Status::Uncertain;
+                    response.message = Some("The workspace operation is in progress; inspect its result instead of repeating it".into());
+                }
                 if version != previous_version
                     && let Some(owner) = content.as_mut()
                 {
                     owner.refresh_views();
                 }
-                if version != previous_version || package_changed {
+                if version != previous_version
+                    || package_changed
+                    || closing.revision != previous_close_revision
+                {
                     if package_changed {
                         let next = published_packages.load(Ordering::Relaxed).saturating_add(1);
                         published_packages.store(next, Ordering::Relaxed);
@@ -1432,9 +2074,13 @@ impl Client {
                                 .as_ref()
                                 .map(Core::activity_revision)
                                 .unwrap_or(0),
+                            close_revision: closing.revision,
                         });
                     }
                 }
+                let prepare_dock = matches!(request.action, Action::Dock { .. })
+                    && response.status == Status::Applied
+                    && fresh;
                 receipts.push_back((
                     request,
                     scope,
@@ -1442,12 +2088,24 @@ impl Client {
                         status: response.status.clone(),
                         message: response.message.clone(),
                         created_workspace: response.created_workspace,
+                        close_plan: response.close_plan.clone(),
                     },
                 ));
                 if receipts.len() > 32 {
                     receipts.pop_front();
                 }
-                let _ = reply.send(response);
+                if !deferred_reply {
+                    let _ = reply.send(response);
+                }
+                if prepare_dock {
+                    if let Ok(mut prepared) = published_context.lock() {
+                        *prepared = None;
+                    }
+                    let _ = close_sender.try_send(Message::PrepareContext {
+                        scope: layout.context.clone(),
+                        version,
+                    });
+                }
             }
             if let Ok(core) = core
                 && let Err(error) = core.close()
@@ -1455,20 +2113,7 @@ impl Client {
                 eprintln!("Core bridge cleanup: {error:?}");
             }
         });
-        Self {
-            sender,
-            sequence: Arc::new(AtomicU64::new(0)),
-            package_revision,
-            activity,
-            identity: format!(
-                "{}-{}",
-                std::process::id(),
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_nanos()
-            ),
-        }
+        client
     }
 
     pub async fn bind_content(&self, id: ContentId) -> Result<crate::content::Binding, String> {
@@ -1679,6 +2324,8 @@ impl Client {
             access,
             request,
             reply: ContentReply::Asynchronous(reply),
+            close_ticket: None,
+            native_save: false,
         };
         if let Some(view) = view {
             self.admit_view(view, message).await?;
@@ -1698,7 +2345,7 @@ impl Client {
         access: crate::content::Access,
         request: voyager_contract::content::Request,
     ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
-        self.content_inner(access, request, None)
+        self.content_inner(access, request, None, None, false)
     }
 
     pub fn content_view(
@@ -1710,7 +2357,39 @@ impl Client {
             crate::content::Access::View(view.binding.clone()),
             request,
             Some(view),
+            None,
+            false,
         )
+    }
+
+    pub fn content_native_save(
+        &self,
+        ticket: Option<crate::voyage_close::SaveTicket>,
+        view: &crate::content::ViewBinding,
+        request: voyager_contract::content::Request,
+    ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
+        if !matches!(request, voyager_contract::content::Request::Update { .. }) {
+            return Err(CallError::Rejected(
+                "A close lease only permits saving its native Note".into(),
+            ));
+        }
+        self.content_inner(
+            crate::content::Access::View(view.binding.clone()),
+            request,
+            Some(view),
+            ticket,
+            true,
+        )
+    }
+
+    pub fn close_save_requests(
+        &self,
+    ) -> Result<async_channel::Receiver<crate::voyage_close::SaveRequest>, String> {
+        let (sender, receiver) = async_channel::bounded(4);
+        self.sender
+            .try_send(Message::CloseSaves { sender })
+            .map_err(|_| "The Notes shutdown bridge could not be registered".to_owned())?;
+        Ok(receiver)
     }
 
     fn content_inner(
@@ -1718,6 +2397,8 @@ impl Client {
         access: crate::content::Access,
         request: voyager_contract::content::Request,
         view: Option<&crate::content::ViewBinding>,
+        close_ticket: Option<crate::voyage_close::SaveTicket>,
+        native_save: bool,
     ) -> Result<Arc<voyager_contract::content::Response>, CallError> {
         check_content_size(&request)?;
         let (reply, receive) = mpsc::sync_channel(1);
@@ -1735,6 +2416,8 @@ impl Client {
                 access,
                 request,
                 reply: ContentReply::Blocking(reply),
+                close_ticket,
+                native_save,
             })
             .map_err(|_| {
                 CallError::Rejected("Workspace busy; no content operation was queued".into())
@@ -1751,6 +2434,47 @@ impl Client {
             self.identity,
             self.sequence.fetch_add(1, Ordering::Relaxed)
         )
+    }
+
+    pub fn note_exit_request(
+        &self,
+        view: &crate::content::ViewBinding,
+    ) -> Result<Request, CallError> {
+        if !view.is_active() {
+            return Err(CallError::Rejected("Notes view is not active".into()));
+        }
+        let observed = self.queue_inspection()?.wait()?;
+        if observed.status != Status::Applied || !observed.fresh {
+            return Err(CallError::Rejected(
+                "Inspect the workspace before closing Notes".into(),
+            ));
+        }
+        Ok(Request {
+            request_id: self.request_id(),
+            expected_version: observed.version,
+            action: Action::RemovePanel {
+                id: note_exit_target(&observed.layout, view.binding.id())
+                    .map_err(CallError::Rejected)?,
+            },
+        })
+    }
+
+    pub fn exit_note(
+        &self,
+        view: crate::content::ViewBinding,
+        revision: String,
+        request: Request,
+    ) -> Result<Response, CallError> {
+        let (reply, receive) = mpsc::sync_channel(1);
+        self.sender
+            .try_send(Message::NoteExit {
+                view,
+                revision,
+                request,
+                reply,
+            })
+            .map_err(|_| CallError::Rejected("Workspace busy; Notes Exit was not queued".into()))?;
+        PendingCall(receive, Duration::from_secs(20)).wait()
     }
 
     pub async fn context_facts(&self) -> Result<voyager_contract::context::Facts, String> {
@@ -1829,6 +2553,7 @@ impl Client {
                 scope,
                 request,
                 reply,
+                queued_at: std::time::Instant::now(),
             })
             .map_err(|_| {
                 CallError::Rejected(
@@ -1861,16 +2586,22 @@ impl Client {
         request: Request,
     ) -> Result<PendingCall, CallError> {
         let (reply, receive) = mpsc::sync_channel(1);
+        let timeout = if matches!(request.action, Action::ConfirmVoyageClose { .. }) {
+            Duration::from_secs(120)
+        } else {
+            Duration::from_secs(20)
+        };
         self.sender
             .try_send(Message::Workspace {
                 request,
                 scope,
                 reply,
+                queued_at: std::time::Instant::now(),
             })
             .map_err(|_| {
                 CallError::Rejected("Workspace busy or unavailable; nothing was queued".into())
             })?;
-        Ok(PendingCall(receive))
+        Ok(PendingCall(receive, timeout))
     }
 
     pub fn terminal(
@@ -1896,6 +2627,50 @@ impl Client {
     }
 }
 
+fn note_exit_target(
+    layout: &Layout,
+    content: &ContentId,
+) -> Result<voyager_contract::PlacementId, String> {
+    if !layout
+        .contents
+        .iter()
+        .any(|item| &item.id == content && item.type_id == "notes")
+    {
+        return Err("This view is not Notes".into());
+    }
+    let mut targets = layout
+        .containers()
+        .filter(|voyage| !voyage.closed)
+        .flat_map(|voyage| {
+            voyage
+                .fleets
+                .iter()
+                .filter(|fleet| !fleet.closed)
+                .flat_map(|fleet| {
+                    fleet.vessels.iter().filter(|panel| {
+                        !panel.hidden && crate::panels::contains(&fleet.root, &panel.id)
+                    })
+                })
+                .chain(voyage.portals.iter().filter(|panel| {
+                    !panel.hidden
+                        && voyage
+                            .portal_layout
+                            .as_ref()
+                            .is_some_and(|column| crate::panels::contains(&column.root, &panel.id))
+                }))
+        })
+        .filter(|panel| &panel.content == content);
+    let id = targets
+        .next()
+        .ok_or("The Notes placement is closed")?
+        .id
+        .clone();
+    if targets.next().is_some() {
+        return Err("Notes has multiple placements; close the intended panel directly".into());
+    }
+    Ok(id)
+}
+
 fn check_content_size(request: &voyager_contract::content::Request) -> Result<(), CallError> {
     if serde_json::to_vec(request)
         .map_err(|error| CallError::Rejected(error.to_string()))?
@@ -1914,6 +2689,56 @@ mod voice_scope_tests {
     use super::*;
 
     #[test]
+    fn note_exit_requires_one_visible_notes_placement() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Work".into(),
+                cwd: "/tmp".into(),
+            })
+            .unwrap();
+        let fleet = model.layout.voyages[0].fleets[0].id.clone();
+        let shell = model.layout.voyages[0].fleets[0].vessels[0].content.clone();
+        assert!(note_exit_target(&model.layout, &shell).is_err());
+        model
+            .apply(Action::CreateContent {
+                type_id: "notes".into(),
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Fleet { id: fleet },
+                    insertion: voyager_contract::PanelInsertion::Beside {
+                        id: model.layout.voyages[0].fleets[0].vessels[0].id.clone(),
+                        side: voyager_contract::Side::Right,
+                    },
+                },
+                launch: None,
+            })
+            .unwrap();
+        let note = model.layout.voyages[0].fleets[0].vessels[1].clone();
+        assert_eq!(
+            note_exit_target(&model.layout, &note.content).unwrap(),
+            note.id
+        );
+        let mut duplicate = note.clone();
+        duplicate.id = voyager_contract::PlacementId("duplicate".into());
+        let fleet = &mut model.layout.voyages[0].fleets[0];
+        fleet.root = Some(voyager_contract::Split::Branch {
+            axis: voyager_contract::Axis::Horizontal,
+            share: Default::default(),
+            first: Box::new(fleet.root.take().unwrap()),
+            second: Box::new(voyager_contract::Split::Leaf {
+                placement: duplicate.id.clone(),
+            }),
+        });
+        fleet.vessels.push(duplicate.clone());
+        assert!(note_exit_target(&model.layout, &note.content).is_err());
+        model
+            .apply(Action::RemovePanel { id: duplicate.id })
+            .unwrap();
+        model.apply(Action::RemovePanel { id: note.id }).unwrap();
+        assert!(note_exit_target(&model.layout, &note.content).is_err());
+    }
+
+    #[test]
     fn voice_inspection_enters_the_owner_queue_before_later_navigation() {
         let (sender, receive) = async_channel::bounded(8);
         let client = Client {
@@ -1921,6 +2746,7 @@ mod voice_scope_tests {
             sequence: Arc::new(AtomicU64::new(0)),
             identity: "voice-scope-test".into(),
             activity: Arc::default(),
+            prepared_context: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
         };
         let _inspection = client.queue_inspection().unwrap();
@@ -2209,10 +3035,10 @@ fn open_terminal(
         ));
     }
     let mut created = false;
-    let address = if let Some(address) = &target.backend
+    let terminal = if let Some(address) = &target.backend
         && !new_shell
     {
-        address.0.clone()
+        core.terminal_get(&address.0)?
     } else {
         let operation = format!("voyager-start-{request_id}");
         let mut pending = (**layout).clone();
@@ -2242,7 +3068,7 @@ fn open_terminal(
                 });
             }
         }
-        let run = crate::launch::command(&launch, &cwd)
+        let run = crate::launch::terminal_command(&launch, &cwd)
             .map_err(rejected)
             .and_then(|argv| {
                 core.terminal_run_with(crate::core_shapes::RunParams {
@@ -2319,12 +3145,13 @@ fn open_terminal(
                 return Err(Error::Uncertain(message));
             }
         }
-        address
+        started
     };
+    let address = &terminal.address;
     let attached = core
-        .terminal_attach(&address)
-        .map_err(|error| attach_failure(error, created, &address))?;
-    core.viewer(attached.channel)
+        .terminal_attach(&terminal)
+        .map_err(|error| attach_failure(error, created, address))?;
+    core.viewer(&attached)
 }
 
 fn rejected(message: String) -> Error {
@@ -2359,7 +3186,8 @@ fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Error> {
     let layout: Layout = serde_json::from_value(value)
         .map_err(|e| rejected(format!("Stored workspace is invalid: {e}")))?;
     crate::canvas::validate(&layout.canvas).map_err(rejected)?;
-    let layout = Model::prepare(layout, cwd).map_err(rejected)?;
+    let mut layout = Model::prepare(layout, cwd).map_err(rejected)?;
+    crate::content::rename::synchronize_labels(&mut layout);
     Ok((layout, version, false))
 }
 
@@ -2423,7 +3251,7 @@ fn select_note(
                 .find(|item| item.id == *content_id)
                 .ok_or("Content is unavailable")?;
             let mut configuration = current.configuration;
-            configuration.notes_file = Some(file);
+            configuration.notes_file = Some(file.clone());
             content.configuration = Some(
                 serde_json::to_value(&configuration)
                     .map_err(|error| error.to_string())?
@@ -2431,6 +3259,7 @@ fn select_note(
                     .ok_or("Invalid Notes configuration")?
                     .clone(),
             );
+            crate::content::rename::label(&mut candidate, content_id, &file.filename);
             return Ok((candidate, configuration, snapshot));
         }
         let filename = match request {
@@ -2464,7 +3293,7 @@ fn select_note(
             .transpose()
             .map_err(|error| error.to_string())?
             .unwrap_or_default();
-        configuration.notes_file = Some(file);
+        configuration.notes_file = Some(file.clone());
         content.configuration = Some(
             serde_json::to_value(&configuration)
                 .map_err(|error| error.to_string())?
@@ -2472,6 +3301,7 @@ fn select_note(
                 .ok_or("Invalid Notes configuration")?
                 .clone(),
         );
+        crate::content::rename::label(&mut candidate, content_id, &file.filename);
         Ok((candidate, configuration, snapshot))
     })();
     let (candidate, configuration, snapshot) = match selected {
@@ -3226,7 +4056,8 @@ mod content_admission_tests {
                             action: Action::Inspect
                         },
                         scope: None,
-                        reply
+                        reply,
+                        queued_at: std::time::Instant::now(),
                     })
                     .is_ok()
             );
@@ -3261,6 +4092,7 @@ mod content_admission_tests {
             sequence: Arc::new(AtomicU64::new(0)),
             identity: "mailbox-test".into(),
             activity: Arc::default(),
+            prepared_context: Arc::default(),
             package_revision: Arc::new(AtomicU64::new(0)),
         };
         let mut cx = TaskContext::from_waker(Waker::noop());
@@ -3324,11 +4156,15 @@ mod content_admission_tests {
             access,
             request,
             reply,
+            close_ticket,
+            native_save,
         } = next(&receive)
         else {
             panic!("Expected read");
         };
         assert_eq!(access, crate::content::Access::View(binding.clone()));
+        assert!(close_ticket.is_none());
+        assert!(!native_save);
         reply.deliver(Arc::new(owner.call(&binding, request)));
         let Poll::Ready(Ok(snapshot)) = read.as_mut().poll(&mut cx) else {
             panic!("Read did not complete");
@@ -3490,6 +4326,7 @@ mod activity_notice_tests {
         }
         let (listener, changed) = async_channel::bounded(1);
         let notice = WorkspaceNotice {
+            close_revision: 0,
             revision: 55,
             package_revision: 7,
             activity_revision: 0,
@@ -3506,4 +4343,42 @@ mod activity_notice_tests {
             voyager_contract::activity::ActivityState::Done
         );
     }
+}
+
+fn process_response(
+    request_id: String,
+    version: u64,
+    fresh: &mut bool,
+    result: Result<voyager_contract::administrator::ProcessOutput, Error>,
+) -> Arc<ProcessResponse> {
+    use voyager_contract::administrator::ProcessOutput;
+    let mut response = ProcessResponse {
+        request_id,
+        status: Status::Rejected,
+        version,
+        fresh: *fresh,
+        output: None,
+        message: None,
+    };
+    match result {
+        Ok(output) => match serde_json::to_vec(&output) {
+            Ok(bytes) if bytes.len() <= 24 * 1024 => {
+                response.status = Status::Applied;
+                response.output = Some(output);
+            }
+            _ if matches!(output, ProcessOutput::Send { .. } | ProcessOutput::Interrupt { .. } | ProcessOutput::Stop { .. }) => {
+                response.status = Status::Applied;
+                response.message = Some("The requested process operation was submitted; its details exceed the response limit. Read the terminal to inspect the result.".into());
+            }
+            _ => response.message = Some("Process result exceeds the tool response limit. Inspect a narrower focus or read less history.".into()),
+        },
+        Err(Error::Rejected { message, .. }) => response.message = Some(message),
+        Err(Error::Uncertain(message)) => {
+            *fresh = false;
+            response.status = Status::Uncertain;
+            response.message = Some(message);
+        }
+    }
+    response.fresh = *fresh;
+    Arc::new(response)
 }

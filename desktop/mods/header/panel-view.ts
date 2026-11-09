@@ -265,6 +265,7 @@ export function renderPanel(
                         cx.notify();
                       },
                     },
+                    group.owner,
                   )
                 : content.typeId === "notes"
                   ? Notes.new(content.id, { contentId: content.id })

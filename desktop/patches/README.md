@@ -19,32 +19,17 @@ that version and replace the patch through the normal dependency update. This
 local build integration does not publish an SDK fork or establish support on
 untested platforms.
 
-`gpui-linux-mailbox.patch` applies to the checksum-pinned gpui-pre-linux
-0.3.10 crate. It requests the same Mailbox presentation preference as its
-Wayland implementation. The renderer keeps its existing capability check
-and FIFO fallback. It changes frame queueing without changing application
-state, terminal cells or avatar animation.
+`gpui-linux-mailbox.patch` and `gpui-linux-monitor-clock.patch` apply to the
+checksum-pinned gpui-pre-linux 0.3.10 crate. The first requests the same Mailbox
+presentation mode used by its Wayland implementation, with the renderer's
+existing capability check and FIFO fallback. The second selects the existing
+X11 timer's interval from the window's monitor, using cached RandR geometry
+within the window's X root. It follows monitor changes without an animation
+cap or display queries during frames.
 
-The preparer verifies the source archive and applies the patch in a separate
-digest-named cache. It preserves installed registry sources, modified prepared
-source and unrelated Cargo configuration. Only the exact earlier generated
-SDK-only or Mailbox-only configuration can migrate; `--check` requires the
-current configuration. An edit detected when rechecking the configuration
-before writing is refused.
-
-This preference alone did not meet the loaded Herdr response goal. It is a
-reviewable part of the ongoing native performance investigation, not an
-accepted performance result or a release. Other platforms need separate proof.
-
-`gpui-linux-monitor-clock.patch` selects the existing X11 refresh timer interval
-from cached monitor rectangles in the window's X root. RandR screen, CRTC and
-output events update the cache. Each timer uses the largest window intersection,
-preferring the previous interval among equally overlapping modes and retaining
-it when no monitor overlaps. Window moves take
-effect by the next tick without display queries in the frame/input path.
-
-This corrects selecting the first active monitor's rate for every window on a
-mixed-refresh desktop. It preserves the existing hidden-window behavior and
-adds no animation cap, process owner or application contract. Native mixed-rate
-evidence belongs to its recorded integrated build; this publication branch and
-the complete response goal keep their separate verification requirements.
+The preparer verifies the registry archive, applies these patches in a separate
+digest-named source cache and checks the complete prepared tree. It preserves
+installed registry sources and unrelated build configuration. See
+[terminal rendering](../../docs/terminal.md#native-presentation-preference) for
+ownership and invariants. Measured performance, native UX and supported
+platforms require their own recorded evidence.

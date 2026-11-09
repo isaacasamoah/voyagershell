@@ -36,7 +36,15 @@ try:
             args = json.loads(line)
             action = args[0]
             result = {"ok": True}
-            if action in ("move", "button", "capture", "record-start", "record-stop"):
+            if action in (
+                "move",
+                "button",
+                "capture",
+                "record-start",
+                "record-stop",
+                "frames-start",
+                "frames-stop",
+            ):
                 assert pointer is not None, "Pointer session was not prepared"
                 if action == "move":
                     result["move"] = pointer.move(*args[1:])
@@ -46,6 +54,10 @@ try:
                     result["recording"] = pointer.record_start(*args[1:])
                 elif action == "record-stop":
                     result["recording"] = pointer.record_stop()
+                elif action == "frames-start":
+                    result["frames"] = pointer.frames_start(*args[1:])
+                elif action == "frames-stop":
+                    result["frames"] = pointer.frames_stop()
                 else:
                     pointer.button(*args[1:])
             elif action == "accessibility-state":

@@ -4,20 +4,7 @@ import { Name, MeasureHeight } from "voyager_native";
 import { Brand, dock_target_visible, speech_in_primary } from "voyager_avatar";
 import { Speech } from "voyager_conversation";
 import { projection } from "voyager_header";
-export function voyageColour(index) {
-  const palette = [
-    "#ff5f56",
-    "#f7a34b",
-    "#f4e04d",
-    "#5ec98f",
-    "#59a5ff",
-    "#b07af5",
-  ];
-  const base = palette[index % palette.length];
-  const cycle = Math.floor(index / palette.length);
-  if (!cycle) return base;
-  return `#${((parseInt(base.slice(1), 16) + cycle * 0x091307) & 0xffffff).toString(16).padStart(6, "0")}`;
-}
+import { voyageColour } from "./voyage-colours.js";
 export function renderSidebar(workspace, layout, voyage) {
   const colors = projection();
   const sidebar = div()
@@ -164,7 +151,7 @@ export function renderSidebar(workspace, layout, voyage) {
   const nested = new Set(Object.values(grouped.children).flat());
   const shown = grouped.roots.flatMap((id) => [
     id,
-    ...(workspace.expandedVoyages?.has(id) ? grouped.children[id] || [] : []),
+    ...(grouped.children[id] || []),
   ]);
   for (const id of shown) {
     const item = voyages.find((entry) => entry.id === id);
@@ -172,6 +159,9 @@ export function renderSidebar(workspace, layout, voyage) {
     const scope = { kind: "voyage", id: item.id };
     const docked =
       layout.context.kind === "voyage" && layout.context.id === item.id;
+    const worktree =
+      nested.has(item.id) ||
+      Boolean(item.cwd && workspace.worktrees?.canRemove(item.id, item.cwd));
     const row = div()
       .relative()
       .flex()
@@ -199,35 +189,18 @@ export function renderSidebar(workspace, layout, voyage) {
         div()
           .flex_1()
           .min_w(0)
-          .pl(docked ? 48 : nested.has(item.id) ? 22 : 10)
+          .pl(docked ? 60 : nested.has(item.id) ? 22 : 10)
           .pr(10)
           .flex()
           .items_center()
           .gap(9)
           .children(
-            grouped.children[item.id]?.length
-              ? [
-                  Button.new(`worktree-group-${item.id}`)
-                    .accessibility_label(
-                      `${workspace.expandedVoyages?.has(item.id) ? "Collapse" : "Expand"} worktrees for ${item.name}`,
-                    )
-                    .w(12)
-                    .h(24)
-                    .p(0)
-                    .child(workspace.expandedVoyages?.has(item.id) ? "▾" : "▸")
-                    .on_mouse_down("left", (_event, cx) =>
-                      cx.stop_propagation(),
-                    )
-                    .on_click((_event, cx) => {
-                      if (!workspace.expandedVoyages.delete(item.id))
-                        workspace.expandedVoyages.add(item.id);
-                      cx.notify();
-                    }),
-                ]
+            worktree
+              ? [svg("branch.svg").size(12).text_color(voyageColour(index))]
               : [],
           )
           .children(
-            !docked
+            !docked && !worktree
               ? [
                   div()
                     .size(10)
@@ -257,7 +230,11 @@ export function renderSidebar(workspace, layout, voyage) {
           .text_size(12)
           .opacity(docked ? 0 : 1)
           .tooltip(item.name)
-          .child(div().size(10).rounded_full().bg(voyageColour(index)))
+          .child(
+            worktree
+              ? svg("branch.svg").size(14).text_color(voyageColour(index))
+              : div().size(10).rounded_full().bg(voyageColour(index)),
+          )
           .on_click((_event, cx) =>
             workspace.run({ operation: "select-voyage", id: item.id }, cx),
           ),
@@ -292,15 +269,6 @@ export function renderSidebar(workspace, layout, voyage) {
                   workspace.editName(scope, item.name, cx),
               },
               {
-                label: "New Fleet",
-                choose: (_version, cx) => workspace.openFleetChoices(item, cx),
-              },
-              {
-                label: "Worktrees",
-                choose: (version, cx) =>
-                  workspace.worktrees.open(item.id, version, cx),
-              },
-              {
                 label: "Close",
                 choose: (version, cx) =>
                   workspace.run(
@@ -310,6 +278,23 @@ export function renderSidebar(workspace, layout, voyage) {
                     version,
                   ),
               },
+              ...[
+                "new",
+                "open",
+                ...(workspace.worktrees.canRemove(item.id, item.cwd || "")
+                  ? ["remove"]
+                  : []),
+              ].map((mode) => ({
+                label: `${mode === "new" ? "New" : mode === "open" ? "Open" : "Remove"} worktree`,
+                choose: (version, cx) =>
+                  workspace.worktrees.open(
+                    item.id,
+                    version,
+                    cx,
+                    mode,
+                    item.cwd || "",
+                  ),
+              })),
             ],
           ),
         ),

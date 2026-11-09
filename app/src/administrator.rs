@@ -81,6 +81,7 @@ pub(crate) struct Work {
     request_id: String,
     action: ToolAction,
     receive: mpsc::Receiver<EffectResult>,
+    started: Option<std::time::Instant>,
 }
 
 struct EffectResult {
@@ -358,6 +359,8 @@ impl Tools {
         let effect_action = action;
         let action = receipt_action;
         let effect_id = request_id.clone();
+        let started = std::env::var_os("VOYAGER_TRACE_TOOLS").map(|_| std::time::Instant::now());
+        let timing_id = started.map(|_| request_id.clone());
         let (send, receive) = mpsc::sync_channel(1);
         thread::spawn(move || {
             let result = match effect_action {
@@ -464,6 +467,13 @@ impl Tools {
                     }
                 }
             };
+            if let Some(started) = started {
+                eprintln!(
+                    "voyager_timing request={} phase=tool-effect-complete elapsed_us={}",
+                    timing_id.as_deref().unwrap_or_default(),
+                    started.elapsed().as_micros()
+                );
+            }
             let _ = send.send(result);
         });
         self.receipts.push(Receipt {
@@ -481,6 +491,7 @@ impl Tools {
             request_id,
             action,
             receive,
+            started,
         });
         None
     }
@@ -501,6 +512,13 @@ impl Tools {
             },
         };
         let work = self.work.take()?;
+        if let Some(started) = work.started {
+            eprintln!(
+                "voyager_timing request={} phase=tool-reply-ready elapsed_us={}",
+                work.request_id,
+                started.elapsed().as_micros()
+            );
+        }
         self.uncertain |= result.status == Status::Uncertain;
         let receipt = self
             .receipts
@@ -720,7 +738,9 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::MoveVoyage { .. } => "Voyage reordered",
             Action::MoveFleet { .. } => "Fleet reordered",
             Action::SelectVoyage { .. } => "Voyage selected",
-            Action::CloseVoyage { .. } => "Voyage closed",
+            Action::CloseVoyage { .. } => "Voyage shutdown awaits human confirmation",
+            Action::ConfirmVoyageClose { .. } => "Voyage shutdown result",
+            Action::CancelVoyageClose { .. } => "Voyage shutdown cancelled",
             Action::ReopenVoyage { .. } => "Voyage reopened",
             Action::SelectFleet { .. } => "Fleet selected",
             Action::CloseFleet { .. } => "Fleet closed",
@@ -926,6 +946,7 @@ mod tests {
                 path: vec!["Notes A".into()],
                 cwd: None,
                 revision: created.version,
+                preview: None,
             };
             let mut tools = Tools::default();
             let mut callback = json!({"id":"callback","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call","tool":"voyager_content","arguments":{"expectedVersion":created.version.to_string(),"action":{"operation":"update","contentId":a,"expectedRevision":revision,"data":Notes { title: "Agent".into(), text: "x".repeat(9000) }}}}});
@@ -1117,6 +1138,7 @@ mod tests {
             path: vec!["Workspace".into()],
             cwd: None,
             revision: initial.version,
+            preview: None,
         };
         let mut tools = Tools::default();
         let mut callback = json!({"id":u64::MAX,"method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call-one","tool":"voyager_workspace","arguments":{"expectedVersion":"0","action":{"operation":"inspect"}}}});
@@ -1391,6 +1413,7 @@ mod tests {
             path: vec!["Workspace".into()],
             cwd: None,
             revision: 0,
+            preview: None,
         };
         let mut tools = Tools::default();
         let mut callback = json!({"id":"rpc-one","method":"item/tool/call","params":{"threadId":"thread","turnId":"turn","callId":"call-one","tool":"voyager_workspace","arguments":{"expectedVersion":"0","action":{"operation":"inspect"},"requestId":"forged"}}});

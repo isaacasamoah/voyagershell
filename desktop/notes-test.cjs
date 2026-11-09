@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
 const path = require("node:path");
+const uiModule = require("./ui-fixture.cjs");
 const { test } = require("node:test");
 
 const root = path.join(__dirname, "..");
@@ -223,10 +224,12 @@ test("Notes omits its redundant heading and previews Markdown without replacing 
   );
   let showHeading = true;
   let reads = 0;
+  let exits = 0;
   const session = {
     status: () => "Draft",
     show_heading: () => showHeading,
     filename: () => "Title.md",
+    exit_note: () => exits++,
   };
   const title = {};
   const text = {
@@ -241,9 +244,10 @@ test("Notes omits its redundant heading and previews Markdown without replacing 
       get(target, key) {
         if (key in target) return target[key];
         return (...args) => {
-          if (key === "child") target.nodes.push(args[0]);
+          if (key === "child" || key === "content") target.nodes.push(args[0]);
           if (key === "children") target.nodes.push(...args[0]);
           if (key === "on_click") target.onClick = args[0];
+          if (key === "on_change") target.onChange = args[0];
           return view;
         };
       },
@@ -259,11 +263,15 @@ test("Notes omits its redundant heading and previews Markdown without replacing 
     "Body",
     "Button",
     "TextView",
+    "Popover",
+    "Switch",
     "div",
     "theme",
-    source
-      .slice(source.indexOf("export default class Notes"))
-      .replace("export default", "return"),
+    "controls",
+    "const { actionButton, disclosureButton, menuButton, menuSurface, toggle } = controls;\n" +
+      source
+        .slice(source.indexOf("export default class Notes"))
+        .replace("export default", "return"),
   )(
     class {},
     { new: () => session },
@@ -275,8 +283,15 @@ test("Notes omits its redundant heading and previews Markdown without replacing 
     {
       markdown: (id, value) => Object.assign(div(), { kind: "preview", value }),
     },
+    { new: div },
+    { new: () => Object.assign(div(), { kind: "preview-toggle" }) },
     div,
     () => ({}),
+    uiModule(
+      div,
+      { new: div },
+      { new: () => Object.assign(div(), { kind: "preview-toggle" }) },
+    ),
   );
   const note = new Notes();
   note.init();
@@ -296,19 +311,24 @@ test("Notes omits its redundant heading and previews Markdown without replacing 
   }
   assert.equal(reads, 0);
   let notifications = 0;
-  const click = (view, label) => {
-    const button = view.nodes.find((child) => child.nodes.includes(label));
-    assert.ok(button?.onClick, `${label} control is available`);
-    button.onClick({}, { notify: () => notifications++ });
+  const toggle = (view, checked) => {
+    const control = view.nodes[0].nodes.find(
+      (child) => child.kind === "preview-toggle",
+    );
+    assert.ok(
+      control?.onChange,
+      "Preview toggle is available beside the file menu",
+    );
+    control.onChange(checked, { notify: () => notifications++ });
   };
-  click(note.render(), "Preview");
+  toggle(note.render(), true);
   const preview = note.render();
   assert.equal(
     preview.nodes.find((child) => child.kind === "preview").value,
     "# Unsaved draft",
   );
   assert.equal(reads, 1);
-  click(preview, "Edit");
+  toggle(preview, false);
   assert.equal(
     note.render().nodes.find((child) => child.kind === "body").state,
     text,
@@ -317,4 +337,15 @@ test("Notes omits its redundant heading and previews Markdown without replacing 
   assert.equal(note.text, text);
   assert.equal(reads, 1);
   assert.equal(notifications, 2);
+  const findExit = (node) =>
+    node &&
+    typeof node === "object" &&
+    (node.nodes?.includes("Exit")
+      ? node
+      : node.nodes?.map(findExit).find(Boolean));
+  const exit = findExit(note.render());
+  assert.ok(exit?.onClick, "The file menu exposes Notes Exit");
+  exit.onClick({}, { notify() {} });
+  assert.equal(exits, 1);
+  assert.equal(note.menu, false);
 });

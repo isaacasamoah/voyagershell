@@ -106,6 +106,18 @@ fn home_portals_hide_remove_reveal_and_presentation_retain_the_instance() {
         .unwrap();
     model.apply(Action::RemovePanel { id: id.clone() }).unwrap();
     assert!(
+        !model
+            .layout
+            .home
+            .as_ref()
+            .unwrap()
+            .portal_layout
+            .as_ref()
+            .unwrap()
+            .visible,
+        "Closing the last Portal panel collapses its column"
+    );
+    assert!(
         model
             .layout
             .home
