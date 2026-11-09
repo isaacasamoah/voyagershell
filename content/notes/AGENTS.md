@@ -33,6 +33,11 @@ content identity. List, New, Open, Convert, Inspect and Update retain request an
 target identity. New, Open and Convert also require the original workspace
 version. A selected filename is workspace configuration, not a second copy of
 its contents. A lost confirmation is uncertain and is not automatically replayed.
+The shipped version-two metadata capability exposes file selection through
+New/Open and does not advertise configure. Stored showHeading values and the
+show_heading getter remain available to retained version-one personal packages;
+the shipped renderer does not use them. Personal source is never automatically
+upgraded to this declaration.
 The host binds callers outside their payloads. Retired views cannot initiate
 new work, although previously accepted effects may still complete.
 

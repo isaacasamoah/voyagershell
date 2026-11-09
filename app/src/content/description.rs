@@ -115,11 +115,12 @@ pub(crate) fn configuration(packages: &Path) -> Result<Option<DataDescription>, 
         if installed_schema(&path).is_err() {
             return Ok(None);
         }
-        if manifest(&path)?
-            .get("contentConfiguration")
-            .and_then(serde_json::Value::as_u64)
-            != Some(1)
-        {
+        if !matches!(
+            manifest(&path)?
+                .get("contentConfiguration")
+                .and_then(serde_json::Value::as_u64),
+            Some(1 | 2)
+        ) {
             return Ok(None);
         }
     }
@@ -143,12 +144,17 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
         .then(|| configuration(packages))
         .transpose()?
         .flatten();
+    let configurable = configuration.is_some()
+        && manifest(&packages.join("notes"))?
+            .get("contentConfiguration")
+            .and_then(serde_json::Value::as_u64)
+            == Some(1);
     if let Some(actions) =
         input_schema["definitions"][kind.action_definition]["oneOf"].as_array_mut()
     {
         actions.retain(|action| {
             let operation = action["properties"]["operation"]["const"].as_str();
-            (configuration.is_some() || operation != Some("configure"))
+            (configurable || operation != Some("configure"))
                 && (kind.type_id != "agents" || operation == Some("list"))
         });
     }

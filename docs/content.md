@@ -1,12 +1,13 @@
 # Native Notes integration
 
 The native candidate uses one Notes package in Fleet Vessels and Voyage Portals.
-The integrated Linux configuration journey demonstrates independent settings,
-real assistant updates arriving with Chat closed, a retained dirty sibling and
-persistence after explicit Quit and cold reopen. The same release also demonstrates warm viewer Restore, seven source
-edit/error/repair states and real package removal/restoration across deliberate
-Quit and cold reopen. Those observations do not accept the whole content lifecycle,
-resource limits or combined-foundation proving-code cap.
+The 7 November Linux candidate passes real file editing/saving in both placements,
+warm viewer restore, Markdown Preview/Edit with retained caret and undo, seven
+source edit/error/repair phases, and package removal across application restart
+followed by restoration. Core and its terminal remain the same through that
+restart. A separate real content-tool journey verifies independent Notes updates
+and rendered results after Chat closes. These bounded results do not establish
+every agent action, resource limit or the combined-foundation proving-code cap.
 
 `contract/src/content.rs` owns the versioned Notes request, response and data types.
 The existing generator exports their validators beside the workspace and
@@ -36,13 +37,24 @@ native Notes host also reports its own VM setup failure without quitting the app
 or pretending that a Notes editor loaded. Ready metadata is not native rendering
 evidence.
 
-Notes has one typed presentation setting, `showHeading`, which defaults to true
-and controls the existing NOTES eyebrow. Configuration is advertised and accepted
-only when the installed Notes and Header manifests both declare numeric
-`contentConfiguration: 1`. Older personal packages retain their default Notes
-behavior and omit the configuration capability. The generated action schema and
-names omit configure when that capability is unavailable. Discovery grants no
-authority and dispatch retains the same bound caller and scope checks.
+Notes keeps selected-file metadata in `notesFile` on its stable Content record.
+The declared `new-note` and `open-note` actions change that selection through the
+same Rust owner used by the native menu. Direct `configure` refuses a changed
+file binding. The file must belong to the owning directory's Notes folder;
+selection does not change content identity or an independent Note's draft.
+
+The shipped Notes and Header declare numeric `contentConfiguration: 2`.
+Versions 1 and 2 support selected-file configuration metadata. Notes version 2
+omits configure from Describe and refuses direct configure writes at the owner.
+Its Markdown interface has no NOTES eyebrow or writable presentation setting.
+
+The legacy `showHeading` Boolean defaults to true and remains readable by personal
+packages through `show_heading()`. Notes version 1 retains legacy configure when
+Header supports metadata version 1 or 2. The current renderer ignores that value.
+An unsupported or missing capability version omits metadata and configure. No
+stored value or personal package is rewritten, reseeded or silently upgraded.
+Removing metadata support would also remove the file binding from Snapshot.
+Discovery grants no authority; dispatch retains bound caller and scope checks.
 
 Accepted configuration is an optional object on the stable Content record in the
 existing Core workspace document. The Client content queue checks fresh membership,
@@ -67,11 +79,11 @@ or load error; source, data and configuration remain preserved until an explicit
 compatible package update or restore. There is no migration, reseeding or response
 stripping.
 
-The configuration owner has Core-backed checks for persistence, both notices,
-independent data, stale/scope/capability refusal, duplicate identity and fresh
-configuration over last-good data. These checks do not establish native heading
-rendering, retained dirty-editor behavior or configuration-specific lost Core
-confirmation. Those remain part of the integrated native journey.
+The legacy configuration owner has Core-backed checks for persistence, both
+notices, independent data, stale/scope/capability refusal, duplicate identity and
+fresh configuration over last-good data. They do not establish current native
+file selection, dirty-editor behavior or lost Core confirmation. New/Open,
+retained draft and sibling isolation require their actual integrated journey.
 
 The Header-only `voyager_content_view.descriptions()` binding returns typed
 contract data as JSON from background host work, within the existing content

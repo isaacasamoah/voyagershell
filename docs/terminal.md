@@ -271,6 +271,15 @@ mono family is available, the earlier DejaVu request remains the last resort.
 This source correction has not established native visual parity. The existing
 18-pixel row height remains unchanged until a matched reference measurement.
 
+The pane retains the measured font advance and snaps it to a device-pixel cell
+width for the current window scale. Column fitting, Core's cell size, both paint
+paths, selection and composition use that same width. Row positions use the
+column index, including wide-cell slots. A scale change recomputes the width
+from the original font measurement. This prevents individually snapped cells
+from painting beyond the space allocated to their columns without changing the
+font, padding or row height. The clipping correction still requires native
+verification against the recorded footer and a resize.
+
 The Core child receives an explicit dedicated-session endpoint rather than an
 inherited `HC_SOCKET` or shared fixed-socket setting. On Unix this follows the
 pinned Core's runtime-directory and session-state fallback; on Windows it uses

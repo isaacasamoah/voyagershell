@@ -564,6 +564,11 @@ impl Owner {
             .join(name))
     }
 
+    pub(crate) fn require_configure(&self) -> Result<(), String> {
+        let packages = self.root.parent().expect("profile root").join("mods");
+        require_action(&describe(&packages, "notes")?, "configure")
+    }
+
     pub fn require_available(&self, type_id: &str) -> Result<(), String> {
         let packages = self.root.parent().expect("profile root").join("mods");
         if description::package_name(type_id)?.is_none() {
@@ -1003,6 +1008,77 @@ impl Owner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notes_versions_keep_file_metadata_and_only_legacy_configuration_writes() {
+        let directory =
+            std::env::temp_dir().join(format!("voyager-notes-versions-{}", std::process::id()));
+        let packages = directory.join("mods");
+        let owner = Owner::open(&directory).unwrap();
+        let mut model = crate::workspace::Model::default();
+        model
+            .apply(voyager_contract::Action::CreateVoyage {
+                name: "Notes".into(),
+                cwd: directory.to_string_lossy().into_owned(),
+            })
+            .unwrap();
+        model
+            .apply(voyager_contract::Action::CreateContent {
+                launch: None,
+                type_id: "notes".into(),
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Portals {
+                        voyage: model.layout.voyages[0].id.clone(),
+                    },
+                    insertion: voyager_contract::PanelInsertion::Empty,
+                },
+            })
+            .unwrap();
+        let content = model.layout.contents.last_mut().unwrap();
+        let id = content.id.clone();
+        let expected = NotesConfiguration {
+            show_heading: false,
+            notes_file: Some(voyager_contract::content::NotesFile {
+                directory: directory.join("notes").to_string_lossy().into_owned(),
+                filename: "Keep.md".into(),
+            }),
+        };
+        content.configuration = Some(
+            serde_json::to_value(&expected)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+        for (notes, header, metadata, writable) in [
+            (2, 2, true, false),
+            (1, 2, true, true),
+            (1, 1, true, true),
+            (2, 1, true, false),
+            (3, 2, false, false),
+            (1, 3, false, false),
+        ] {
+            for (package, version) in [("notes", notes), ("header", header)] {
+                let path = packages.join(package);
+                fs::create_dir_all(&path).unwrap();
+                fs::write(path.join("main.js"), "personal source").unwrap();
+                fs::write(path.join("mod.json"), serde_json::to_vec(&serde_json::json!({
+                    "name": package, "version": 1, "entry": "main.js", "contentConfiguration": version
+                })).unwrap()).unwrap();
+            }
+            let description = describe(&packages, "notes").unwrap();
+            assert_eq!(description.configuration.is_some(), metadata);
+            assert_eq!(require_action(&description, "configure").is_ok(), writable);
+            assert_eq!(owner.require_configure().is_ok(), writable);
+            let observed = configuration(&owner, &model.layout, &id, 7).unwrap();
+            assert_eq!(observed.is_some(), metadata);
+            if let Some(observed) = observed {
+                assert_eq!(observed.configuration, expected);
+                assert_eq!(observed.workspace_version, 7);
+            }
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn descriptions_reuse_the_bound_schema_and_refuse_unsupported_capabilities() {

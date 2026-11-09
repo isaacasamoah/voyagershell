@@ -128,6 +128,7 @@ struct Pane {
     grid: Option<Grid>,
     row_paints: Vec<row_paint::Cache>,
     font_family: gpui::SharedString,
+    font_advance: gpui::Pixels,
     cell_width: gpui::Pixels,
     cell_height: gpui::Pixels,
     geometry: Rc<std::cell::Cell<Option<GridSize>>>,
@@ -193,6 +194,11 @@ impl Pane {
                 }
             }
         });
+        let font_advance = cell_width;
+        let cell_width = px(font::cell_width(
+            f32::from(font_advance),
+            window.scale_factor(),
+        ));
         Self {
             screen,
             viewer,
@@ -200,6 +206,7 @@ impl Pane {
             grid: None,
             row_paints: Vec::new(),
             font_family,
+            font_advance,
             cell_width,
             cell_height: px(18.),
             geometry: Rc::new(std::cell::Cell::new(None)),
