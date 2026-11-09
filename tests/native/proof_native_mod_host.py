@@ -96,6 +96,8 @@ def run():
     elif not args.launch:
         env.update(json.loads((evidence / "launch.json").read_text())["desktopEnvironment"])
     if args.isolated_x11:
+        if args.journey != "terminal-scrolling" or args.review:
+            parser.error("Isolated X11 is supported only by terminal-scrolling")
         if args.compositor:
             parser.error("Isolated X11 uses its own display capture")
         from proof_isolated_x11 import Native as IsolatedNative

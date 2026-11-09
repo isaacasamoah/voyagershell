@@ -36,12 +36,6 @@ class Native:
         elif action == 'scroll':
             if args[1]:
                 command = ['click', '4' if args[1] < 0 else '5']
-        elif action == 'fields':
-            from proof_native_accessibility import fields, enabled
-
-            enabled(True)
-
-            result['fields'] = [item for _, item in fields(args[1], args[2], args[3])]
         else:
             raise ValueError(f'Unsupported isolated X11 action: {action}')
         if command:
