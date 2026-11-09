@@ -17,8 +17,17 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
     assert len(os.fsencode(socket)) < 104
     core_socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
     def rpc(method, params=None):
-        assert core_socket.is_socket(), "Owned Core socket is absent; do not recreate it"
-        return core_rpc(session, env, method, params or {})
+        assert method in {"doc.get", "terminal.get", "terminal.list", "terminal.read", "server.status"}, "Only observations may be retried"
+        for attempt in range(3):
+            assert core_socket.is_socket(), "Owned Core socket is absent; do not recreate it"
+            try:
+                return core_rpc(session, env, method, params or {})
+            except subprocess.TimeoutExpired as error:
+                record = {"method": method, "attempt": attempt + 1, "at": time.time(), "timeoutSeconds": error.timeout}
+                with (evidence / "observation-timeouts.jsonl").open("a") as log:
+                    log.write(json.dumps(record) + "\n")
+                if attempt == 2 or time.time() + 5 > float(env["VOYAGER_AUTHORITY_TRIAL_DEADLINE"]):
+                    raise
     document = lambda: rpc("doc.get", {"name": "voyager-layout-v1"})["value"]
     deadline = time.monotonic() + min(840, float(env.get("VOYAGER_AUTHORITY_TRIAL_DEADLINE", str(time.time() + 840))) - time.time())
     def wait(get, predicate, label, seconds=20):
