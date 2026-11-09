@@ -27,7 +27,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["portal-close", "activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing", "canvas", "canvas-stack", "canvas-input", "workspace", "workspace-ux", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "terminal-reported-status", "arrangement", "layouts", "split-resize", "pane-maximize", "notes", "notes-lifetime", "notes-configuration", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "session-quit", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
+    parser.add_argument("--journey", choices=["portal-close", "activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing", "canvas", "canvas-stack", "canvas-input", "workspace", "workspace-ux", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "terminal-scrolling", "terminal-reported-status", "arrangement", "layouts", "split-resize", "pane-maximize", "notes", "notes-lifetime", "notes-configuration", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "session-quit", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--review", action="store_true")
@@ -35,6 +35,7 @@ def run():
     parser.add_argument("--notes-case", choices=["standard", "delayed", "uncertain", "resilience", "refusal"], default="standard")
     parser.add_argument("--pointer-only", action="store_true")
     parser.add_argument("--compositor", action="store_true")
+    parser.add_argument("--isolated-x11", type=int, metavar="XVFB_PID")
     parser.add_argument("--binary", type=Path, default=Path("target/release/voyager-shell"))
     parser.add_argument("--session", required=True)
     parser.add_argument("--evidence", type=Path, required=True)
@@ -61,7 +62,7 @@ def run():
         parser.error("Notes journey requires compositor capture")
     if args.journey == "session-quit" and not args.compositor:
         parser.error("Session Quit requires compositor capture")
-    if args.journey == "terminal-reported-status" and not args.compositor:
+    if args.journey in ("terminal-reported-status", "terminal-scrolling") and not args.compositor and not args.isolated_x11:
         parser.error("Reported status requires compositor capture")
     if args.journey in ("split-resize", "pane-maximize") and not args.compositor:
         parser.error("Split resize requires compositor capture")
@@ -94,6 +95,12 @@ def run():
         env.update(json.loads(args.desktop_env.read_text())[1]["env"])
     elif not args.launch:
         env.update(json.loads((evidence / "launch.json").read_text())["desktopEnvironment"])
+    if args.isolated_x11:
+        if args.compositor:
+            parser.error("Isolated X11 uses its own display capture")
+        from proof_isolated_x11 import Native as IsolatedNative
+
+        isolated_native = IsolatedNative(env, args.isolated_x11)
     wayland_display = env.pop("WAYLAND_DISPLAY", None)
     env.pop("VOYAGER_PROOF_WAYLAND_DISPLAY", None)
     if args.journey in ("conversation-ux", "canvas", "notes-lifetime", "notes-configuration", "feedback-ux") and wayland_display:
@@ -108,7 +115,7 @@ def run():
                 socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
                 if socket.exists():
                     raise RuntimeError("Selected Stop requires two fresh dedicated Core sessions")
-    if args.review or args.journey in ("portal-close", "avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration", "split-resize", "pane-maximize", "canvas", "canvas-stack", "canvas-input", "workspace-ux", "activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "canvas-stack", "session-quit", "terminal-reported-status"):
+    if args.review or args.journey in ("portal-close", "avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration", "split-resize", "pane-maximize", "canvas", "canvas-stack", "canvas-input", "workspace-ux", "activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "canvas-stack", "session-quit", "terminal-reported-status", "terminal-scrolling"):
         if env.get("HC_SOCKET"):
             raise RuntimeError("This journey requires an unset HC_SOCKET before launch")
         env.pop("HC_SESSION", None)
@@ -132,6 +139,8 @@ def run():
     command = [str(binary), "--profile", str(profile), "--session", args.session]
 
     def execute(*parts):
+        if args.isolated_x11 and parts[:2] == ("xdotool", "windowactivate"):
+            parts = ("xdotool", "windowfocus", "--sync", parts[-1])
         return subprocess.check_output(
             parts, env=env, text=True, stderr=subprocess.DEVNULL
         ).strip()
@@ -286,7 +295,7 @@ def run():
         verify()
         apply_window_origin()
         execute("xdotool", "windowactivate", "--sync", record["window"])
-        pointer = subprocess.Popen(
+        pointer = None if args.isolated_x11 else subprocess.Popen(
             ["/usr/bin/python3", str(root / "proof_native_input.py")]
             + (["--pointer"] if args.notes or args.foundation else []), env=env, text=True,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -317,6 +326,8 @@ def run():
             input_file = "input-targets-quit.json" if args.quit else "input-targets.json"
             (evidence / input_file).write_text(json.dumps(input_targets, indent=2))
             assert owner == record["pid"], "Native input target is not the owned candidate"
+        if args.isolated_x11:
+            return isolated_native(*action)
         pointer.stdin.write(json.dumps(action) + "\n")
         pointer.stdin.flush()
         result = json.loads(pointer.stdout.readline())
@@ -424,7 +435,7 @@ def run():
             passed.append("native-quit")
         elif args.foundation:
             import importlib
-            module = "proof_demo_feedback" if args.journey in ("portal-close", "voyage-close", "demo-feedback", "activity-refinement") else "proof_feedback_ux" if args.journey in ("activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing") else "proof_workspace_ux" if args.journey == "workspace-ux" else "proof_session_quit" if args.journey == "session-quit" else "proof_voice" if args.journey == "conversation-voice" else "proof_canvas_stack" if args.journey == "canvas-stack" else "proof_canvas" if args.journey in ("canvas", "canvas-input") else "proof_split_resize" if args.journey in ("split-resize", "pane-maximize") else "proof_notes_lifetime" if args.journey in ("notes-lifetime", "notes-configuration") else "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey in ("terminal-agent", "terminal-agent-create") else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
+            module = "proof_terminal_scroll" if args.journey == "terminal-scrolling" else "proof_demo_feedback" if args.journey in ("portal-close", "voyage-close", "demo-feedback", "activity-refinement") else "proof_feedback_ux" if args.journey in ("activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing") else "proof_workspace_ux" if args.journey == "workspace-ux" else "proof_session_quit" if args.journey == "session-quit" else "proof_voice" if args.journey == "conversation-voice" else "proof_canvas_stack" if args.journey == "canvas-stack" else "proof_canvas" if args.journey in ("canvas", "canvas-input") else "proof_split_resize" if args.journey in ("split-resize", "pane-maximize") else "proof_notes_lifetime" if args.journey in ("notes-lifetime", "notes-configuration") else "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey in ("terminal-agent", "terminal-agent-create") else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
             proof_workspace = importlib.import_module(module)
 
             options = dict(native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame, evidence=evidence, session=args.session, env=env, journey=args.journey)
@@ -518,27 +529,28 @@ def run():
                     close()
             except Exception as error:
                 cleanup_errors.append(f"Failed journey Quit: {error}")
-        try:
-            pointer.stdin.close()
-            input_status = pointer.wait(timeout=20)
-            if input_status:
-                cleanup_errors.append(f"Native input exited {input_status}; see pointer.log")
-        except Exception as error:
-            cleanup_errors.append(f"Native input cleanup: {error}")
-            if pointer.poll() is None:
-                try:
-                    pointer.kill()
-                    pointer.wait(timeout=5)
-                except Exception as stop_error:
-                    cleanup_errors.append(f"Native input reap: {stop_error}")
-        try:
-            cleanup = "native-input-quit-cleanup.json" if args.quit else "native-input-cleanup.json"
-            if pointer.poll() is not None:
-                (evidence / cleanup).write_text(pointer.stdout.read())
-            else:
-                cleanup_errors.append("Native input still running; receipt unavailable")
-        except Exception as error:
-            cleanup_errors.append(f"Native input receipt: {error}")
+        if pointer is not None:
+            try:
+                pointer.stdin.close()
+                input_status = pointer.wait(timeout=20)
+                if input_status:
+                    cleanup_errors.append(f"Native input exited {input_status}; see pointer.log")
+            except Exception as error:
+                cleanup_errors.append(f"Native input cleanup: {error}")
+                if pointer.poll() is None:
+                    try:
+                        pointer.kill()
+                        pointer.wait(timeout=5)
+                    except Exception as stop_error:
+                        cleanup_errors.append(f"Native input reap: {stop_error}")
+            try:
+                cleanup = "native-input-quit-cleanup.json" if args.quit else "native-input-cleanup.json"
+                if pointer.poll() is not None:
+                    (evidence / cleanup).write_text(pointer.stdout.read())
+                else:
+                    cleanup_errors.append("Native input still running; receipt unavailable")
+            except Exception as error:
+                cleanup_errors.append(f"Native input receipt: {error}")
         check_file = "quit-checks.json" if args.quit else "checks.json"
         (evidence / check_file).write_text(json.dumps({
             "passed": passed, "reloadObservedUpperBoundMs": timings,

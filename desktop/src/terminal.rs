@@ -10,6 +10,8 @@ mod font;
 mod input;
 #[path = "terminal_rows.rs"]
 mod row_paint;
+#[path = "terminal_scroll.rs"]
+mod scroll;
 #[path = "terminal_view.rs"]
 mod view;
 
@@ -409,6 +411,49 @@ impl Pane {
 
     fn input_sent(&mut self) -> Result<()> {
         self.dirty |= self.screen.prepare_input()?;
+        Ok(())
+    }
+
+    fn scroll(&mut self, event: &gpui::ScrollEvent, scale: f32) -> Result<()> {
+        self.scroll_fraction -=
+            f32::from(event.delta.pixel_delta(self.cell_height).y) / f32::from(self.cell_height);
+        let lines = self.scroll_fraction.trunc() as isize;
+        self.scroll_fraction -= lines as f32;
+        if lines == 0 {
+            return Ok(());
+        }
+        let Some(bounds) = self.bounds.get() else {
+            return Ok(());
+        };
+        let pixels = |value: gpui::Pixels| (f32::from(value) * scale).round().max(1.) as u32;
+        let bytes = scroll::input(
+            &self.screen.terminal,
+            lines,
+            libghostty_vt::mouse::Position {
+                x: (f32::from(event.position.x - bounds.origin.x) * scale).max(0.),
+                y: (f32::from(event.position.y - bounds.origin.y) * scale).max(0.),
+            },
+            libghostty_vt::mouse::EncoderSize {
+                screen_width: pixels(bounds.size.width),
+                screen_height: pixels(bounds.size.height),
+                cell_width: pixels(self.cell_width),
+                cell_height: pixels(self.cell_height),
+                padding_top: 0,
+                padding_bottom: 0,
+                padding_right: 0,
+                padding_left: 0,
+            },
+        )?;
+        if let Some(bytes) = bytes {
+            if !bytes.is_empty() {
+                self.viewer
+                    .input(bytes)
+                    .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+            }
+        } else {
+            self.screen.scroll(lines);
+            self.dirty = true;
+        }
         Ok(())
     }
 
