@@ -374,7 +374,15 @@ impl Owner {
         let messages = if current == Participant::User {
             self.inbox.messages.iter().cloned().collect()
         } else {
-            self.inbox.read(&current)
+            let mut messages = self.inbox.read(&current);
+            messages.extend(
+                self.inbox
+                    .messages
+                    .iter()
+                    .filter(|message| message.from == current && message.to != current)
+                    .cloned(),
+            );
+            messages
         };
         Snapshot {
             revision: self.inbox.revision,
@@ -425,10 +433,7 @@ impl Owner {
             }
         };
         if let Operation::InspectRequest { id } = &request.action {
-            return match self.receipts.iter().find(|prior| prior.caller == current && &prior.request.request_id == id) {
-                Some(prior) => Response { request_id: request.request_id, outcome: prior.outcome.clone(), message: prior.message.clone(), created: prior.created.clone(), snapshot: Some(self.snapshot(current)) },
-                None => Response { request_id: request.request_id, outcome: Outcome::Refused, message: Some("The retained receipt is unavailable. Inspect messages and the actual workspace; do not repeat the old operation".into()), created: None, snapshot: Some(self.snapshot(current)) },
-            };
+            return self.inspect_receipt(current, request.request_id, id);
         }
         if let Some(prior) = self
             .receipts
@@ -507,6 +512,20 @@ impl Owner {
             message,
             snapshot: Some(self.snapshot(current)),
             created,
+        }
+    }
+
+    fn inspect_receipt(&self, current: Participant, request_id: String, id: &str) -> Response {
+        let prior = self
+            .receipts
+            .iter()
+            .find(|receipt| receipt.caller == current && receipt.request.request_id == id);
+        Response {
+            request_id,
+            outcome: prior.map_or(Outcome::Uncertain, |receipt| receipt.outcome.clone()),
+            message: prior.map_or_else(|| Some("The retained receipt is unavailable. Inspect messages and the actual workspace; do not repeat the old operation".into()), |receipt| receipt.message.clone()),
+            created: prior.and_then(|receipt| receipt.created.clone()),
+            snapshot: Some(self.snapshot(current)),
         }
     }
 

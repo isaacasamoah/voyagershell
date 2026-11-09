@@ -52,6 +52,7 @@ function errorMessage(error) {
 export default class Workspace extends View {
   constructor() {
     super(...arguments);
+    this.inboxes = new Map();
     this.worktrees = new WorktreeControls();
     this.closeVoyage = new VoyageClose();
     this.processes = [];
@@ -1473,6 +1474,7 @@ export default class Workspace extends View {
     group,
     path = [],
     members = new Map(group.members.map((panel) => [panel.id, panel])),
+    cx,
   ) {
     if (!tree) return null;
     if (tree.kind === "leaf") {
@@ -1486,10 +1488,17 @@ export default class Workspace extends View {
           id: panel.id,
         },
         group,
+        cx,
       );
     }
-    const first = this.pane(tree.first, group, [...path, "first"], members);
-    const second = this.pane(tree.second, group, [...path, "second"], members);
+    const first = this.pane(tree.first, group, [...path, "first"], members, cx);
+    const second = this.pane(
+      tree.second,
+      group,
+      [...path, "second"],
+      members,
+      cx,
+    );
     if (!first || !second) return first || second;
     return NativeSplit.new(
       JSON.stringify([this.splitSession, group.owner, path]),
@@ -1572,8 +1581,8 @@ export default class Workspace extends View {
     }
     return edges;
   }
-  content(placement, scope, group) {
-    return renderPanel(this, placement, scope, group);
+  content(placement, scope, group, cx) {
+    return renderPanel(this, placement, scope, group, cx);
   }
   sidebarRegion(layout, voyage) {
     return renderSidebar(this, layout, voyage);
@@ -1581,11 +1590,11 @@ export default class Workspace extends View {
   fleetRegion(layout, voyage, fleet) {
     return renderFleets(this, layout, voyage, fleet);
   }
-  groupRegion(group) {
+  groupRegion(group, cx) {
     const root = group.maximizedPlacement
       ? { kind: "leaf", placement: group.maximizedPlacement }
       : group.root;
-    const panel = this.pane(root, group);
+    const panel = this.pane(root, group, undefined, undefined, cx);
     const body = div()
       .relative()
       .flex()
@@ -1621,11 +1630,11 @@ export default class Workspace extends View {
       );
     return empty;
   }
-  activeRegion(layout, fleet) {
+  activeRegion(layout, fleet, cx) {
     const group = activeGroups(layout).find(
       (group) => group.owner.kind === "fleet" && group.owner.id === fleet?.id,
     );
-    return group ? this.groupRegion(group) : div().flex_1();
+    return group ? this.groupRegion(group, cx) : div().flex_1();
   }
   compactPortalContext() {
     const layout = this.layout;
@@ -1793,6 +1802,7 @@ export default class Workspace extends View {
     return renderContext(this, layout, voyage, fleet);
   }
   render(cx) {
+    for (const inbox of this.inboxes.values()) inbox.visible = false;
     const animationNotice = take_animation_notice();
     if (animationNotice !== null) {
       if (animationNotice || this.status === this.animationNotice)
@@ -1886,7 +1896,7 @@ export default class Workspace extends View {
             case "fleet-strip":
               return this.fleetRegion(layout, voyage, fleet);
             case "active-fleet":
-              return this.activeRegion(layout, fleet);
+              return this.activeRegion(layout, fleet, cx);
             case "context-bar":
               return this.contextRegion(layout, voyage, fleet);
             case "portals": {
@@ -1904,7 +1914,7 @@ export default class Workspace extends View {
                 .bg(colors.background)
                 .child(
                   PortalArea.new(`portal-area-${voyage.id}`, {}).child(
-                    this.groupRegion(group),
+                    this.groupRegion(group, cx),
                   ),
                 );
             }

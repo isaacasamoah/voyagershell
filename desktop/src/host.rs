@@ -226,8 +226,55 @@ fn load(
     let revision = workspace_binding.notice.clone();
     let notice = workspace_binding.notice.clone();
     let terminal_viewers = viewers.clone();
+    let coordination_calls = client.clone();
+    let coordination_watch = client.clone();
+    let coordination_enabled = client.clone();
+    let coordination_executor = cx.background_executor().clone();
+    let coordination_watch_executor = cx.background_executor().clone();
     let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)
         .declarations(crate::script_types::WORKSPACE)
+        .function("coordination_enabled", move |_| {
+            Ok(HostValue::from(coordination_enabled.coordination_enabled()))
+        })
+        .async_function("coordination", move |arguments| {
+            let raw = arguments.string(0)?;
+            if raw.len() > 8192 {
+                return Err(gpui_shell::HostError::new(
+                    "Coordination request exceeds 8 KiB",
+                ));
+            }
+            let request: voyager_contract::coordination::Request = serde_json::from_str(raw)
+                .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
+            let client = coordination_calls.clone();
+            let executor = coordination_executor.clone();
+            Ok(async move {
+                let request_id = request.request_id.clone();
+                let response = executor
+                    .spawn(async move { client.coordinate(request) })
+                    .await
+                    .unwrap_or_else(|error| {
+                        voyager_app::coordination::failed_response(request_id, error)
+                    });
+                Ok(HostValue::from(serde_json::to_string(&response).map_err(
+                    |error| gpui_shell::HostError::new(error.to_string()),
+                )?))
+            })
+        })
+        .async_function("coordination_watch", move |arguments| {
+            let after: u32 = arguments
+                .string(0)?
+                .parse()
+                .map_err(|_| gpui_shell::HostError::new("Expected a coordination revision"))?;
+            let client = coordination_watch.clone();
+            let executor = coordination_watch_executor.clone();
+            Ok(async move {
+                executor
+                    .spawn(async move { client.wait_coordination(after) })
+                    .await
+                    .map_err(gpui_shell::HostError::new)?;
+                Ok(HostValue::Null)
+            })
+        })
         .async_function("launches", move |arguments| {
             if !arguments.is_empty() {
                 return Err(gpui_shell::HostError::new("launches expects no arguments"));

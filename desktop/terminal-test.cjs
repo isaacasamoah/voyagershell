@@ -1087,6 +1087,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "speech_in_primary",
     "MeasureHeight",
     "Occluding",
+    "coordination_enabled",
     source,
   )(
     class {},
@@ -1134,6 +1135,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
         return div();
       },
     },
+    () => false,
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
