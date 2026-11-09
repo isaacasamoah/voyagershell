@@ -378,6 +378,55 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         ));
         fs::write(&header_path, header).unwrap();
         let mut external = Core::connect(&session).unwrap();
+        let manifests = [profile.join("mods/notes/mod.json"), header_path.clone()].map(|path| {
+            let bytes = fs::read(&path).unwrap();
+            (path, bytes)
+        });
+        for (path, bytes) in &manifests {
+            let mut manifest: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+            manifest["contentConfiguration"] = serde_json::json!(2);
+            fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        }
+        let before_v2 = external.document_get("voyager-layout-v1").unwrap();
+        let read_v2 = client.content(access.clone(), inspect()).unwrap();
+        assert!(
+            matches!(&*read_v2, Response::Snapshot {snapshot, configuration: Some(current), ..}
+                if snapshot.revision == original.revision
+                    && current.configuration == *configuration
+                    && current.configuration.notes_file.is_some()
+                    && current.workspace_version == before_v2.version)
+        );
+        let mut v2 = request.clone();
+        if let Request::Configure {
+            request_id,
+            expected_version,
+            configuration,
+            ..
+        } = &mut v2
+        {
+            *request_id = client.request_id();
+            *expected_version = before_v2.version;
+            configuration.show_heading = true;
+        }
+        let refused_v2 = client.content(access.clone(), v2).unwrap();
+        assert!(
+            matches!(&*refused_v2, Response::Rejected {message, ..}
+                if message == "Content type notes does not support action configure"),
+            "{refused_v2:?}"
+        );
+        let after_v2 = external.document_get("voyager-layout-v1").unwrap();
+        assert_eq!(after_v2.version, before_v2.version);
+        assert_eq!(after_v2.value, before_v2.value);
+        assert_eq!(
+            paths
+                .iter()
+                .map(|path| fs::read(path).unwrap())
+                .collect::<Vec<_>>(),
+            data
+        );
+        for (path, bytes) in manifests {
+            fs::write(path, bytes).unwrap();
+        }
         let saved = external.document_get("voyager-layout-v1").unwrap();
         assert_eq!(saved.version, *workspace_version);
         assert_eq!(

@@ -2,7 +2,7 @@
   "name": "Notes",
   "entry": "main.js",
   "version": 1,
-  "contentConfiguration": 1,
+  "contentConfiguration": 2,
   "stateSchema": {
     "$id": "voyager:notes-state:1",
     "type": "object",

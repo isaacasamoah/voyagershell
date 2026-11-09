@@ -3375,9 +3375,7 @@ fn configure(
         if expected_version != version {
             return Err("Workspace changed; inspect before configuring content".into());
         }
-        if crate::content::configuration(owner, layout, content_id, *version)?.is_none() {
-            return Err("Installed Notes and Header do not support configuration".into());
-        }
+        owner.require_configure()?;
         let current = crate::content::configuration(owner, layout, content_id, *version)?
             .ok_or("Notes configuration is unavailable")?;
         if configuration.notes_file != current.configuration.notes_file {
