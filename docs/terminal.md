@@ -1,0 +1,301 @@
+# Native terminal candidate
+
+Herdr Core owns the shell process and canonical terminal state. Voyager stores a
+Core terminal address on a content instance, separate from its placement. Its
+single framed Core connection carries RPC, viewer data, input, focus and credit.
+Closing a viewer sends CLOSE; it does not stop the terminal. Connection teardown
+by itself does not stop the Core server. Explicit Quit has a separate Rust-owned
+shutdown path described below, with native acceptance still pending.
+
+## Program-reported activity
+
+The source candidate adds optional OSC 7501 observation on the existing framed
+Core connection. Its native protocol journey is pending. Existing Vessel and
+Portal headers show the program's reported working, blocked, idle, done or error
+word. Unknown has an explicit reason. The ever-reported flag is the exact Core
+true/false when observed, and null when its source is unavailable. Reported done
+is not process exit or a verified task result. Private conversation progress remains separate.
+
+The adapter applies subscription snapshots, ordered events and Core's missed
+replacement snapshots. It does not classify output or infer activity from
+silence. Unsupported observation, malformed metadata, gaps and channel loss
+remain unknown without an automatic repair RPC. Explicit Refresh can renew the
+observation on the same connection. Input, workspace effects and Quit keep their
+existing owners and admission rules.
+
+Retained observation payload is capped at 1 MiB of partial line, 256 KiB of early
+bytes and 1 MiB of root metadata across at most 256 bound addresses. Only root
+word, optional app/kind/progress and source/observation times are retained in the
+live cache. Scoped process inspection also exposes root title up to 192 bytes and
+message up to 2,048 bytes as program-reported data, never instructions or authority.
+Oversized auxiliary text is omitted with an explicit limited flag while preserving
+the valid word and progress. Title/message and child history stay out of the live
+cache and inline chrome. Addresses are capped at 128 bytes, app
+at 32, and kinds/progress use the pinned supported values. Object overhead,
+transient parsing, script/result copies and the existing 16 MiB frame are
+separate from that 2.25 MiB retained observation budget. Oversized observation
+becomes limited/unknown and does not limit workspace creation or terminal input.
+The projection carries a cache-limit reason when bound addresses exceed the
+cache allowance. Uncovered headers show unknown with a limit label. A terminal
+absent from a snapshot remains unknown with a null reported flag; a present
+terminal's explicit false remains false.
+
+One coalesced owner wake retains the latest facts through a full mailbox.
+Activity has its own counter and does not change document CAS or packageRevision.
+Rendering reads cached data without a status polling loop or document read per
+event. Existing scoped process list/read results expose the same reported-data
+meaning after their normal caller/backend checks. Snapshots supply source time;
+an event without that time clears it, even when its word is unchanged. Local
+observed-at time is not substituted for Core's source timestamp. See the pinned protocol in
+[Core's event documentation](https://github.com/herdrdev/herdr-core/blob/e07c2a1bedd62cf4787ee026ee23ee79c7d95491/schema/README.md#events).
+
+## Explicit session Quit
+
+The source candidate routes Ctrl+Q through the existing application owners before
+calling GPUI quit. One request remains pending, and its final result is retained.
+Repeated Quit does not issue another stop. Errors remain visible in the native
+Header. This is source behavior awaiting the actual integrated native journey.
+
+The workspace queue stops accepting new workspace, process, content-update and
+terminal-open effects after its Quit message. Existing receipts retain their
+outcomes. Cached Inspect remains available. Other reads retain their existing
+identity/version checks and may refuse when Core or freshness is unavailable. Quit never
+connects to or starts another Core to diagnose or stop a failed initial startup.
+
+The Core adapter retains the permanent Core ID validated by hello. Before the
+one typed server.stop call, it reads server.status on the same dedicated physical
+connection and compares that ID. Display name, release text and compatible
+additional metadata do not identify a different Core. Core owns its programs,
+holders and descendant cleanup. The app then stops and reaps its own connector
+child, allowing five seconds for confirmed exit. A lost or malformed result
+remains uncertain, and no second stop is sent automatically.
+
+The private conversation receives shutdown on its existing bounded queue. It
+rejects later requests and discards undispatched callbacks. Already dispatched
+application work keeps its original owner result. It cancels the current native
+audio generation and closes its actual app-server child. Provider and connector
+exit checks each allow five seconds. The audio owner allows six seconds for the
+existing worker's completion flag. That worker writes completion after closing
+and waiting for its actual helper, before sending Finished to the conversation
+queue. Shutdown therefore does not wait for an event that only its blocked
+queue could process. Audio stop alone is not treated as confirmed helper exit.
+The private owner retains a provider child when exit confirmation fails.
+
+The private queue keeps its existing eight-slot bound. It uses the already
+available asynchronous channel so Quit can wait for queue admission without
+blocking GPUI or falsely treating a full queue as completed shutdown. Ordinary
+conversation calls retain their existing nonblocking admission behavior.
+
+GPUI's final on_app_quit hook is limited to 200 ms and cannot cancel shutdown,
+so it does not perform this transaction. The existing native Quit action waits
+for both owners first. Forced process termination, platform logout and other
+OS-initiated termination paths are not accepted as equivalent verified Quit.
+
+Viewer close/minimize and floating-avatar restoration remain the unchanged
+controller behavior. They do not run this stop transaction. A later cold start
+loads the same saved spaces/content/backend bindings. It does not regain the
+in-memory permission for a saved agent launch or start a replacement. Ended
+programs remain ended. This adds no implicit draft save or agent-session restore.
+
+Focused owned-child and private-Core tests are preparation. Full acceptance
+still requires real viewer restoration, actual Quit with provider/helper/Core
+and program exits, a running unrelated survivor and cold reopen with no agent
+restart. The original avatar and other corrective histories remain binding.
+
+Before requesting a new terminal, the application saves an operation identity
+in the versioned workspace document and supplies the same identity as a Core
+terminal label. A known refusal clears the marker through a confirmed document
+write. An uncertain start or a failed subsequent layout save retains the marker
+and reports the address or label for inspection. The app does not repeat the
+start automatically, including after reopening the profile.
+
+A confirmed marker-save refusal occurs before any terminal start and remains a
+known refusal. If Core has already started and saved a terminal but refuses its
+attachment, the response retains that refusal and the actual terminal address.
+An attachment transport failure remains unconfirmed. The view retries a known
+refusal only after an explicit Refresh has obtained a fresh workspace snapshot;
+it does not use Refresh to replay an uncertain start.
+
+The generated terminal request carries a request ID, content ID and expected
+workspace revision. The response returns both identities and a typed applied,
+rejected or uncertain outcome. This separate request is needed because an
+applied attachment yields a native viewer retained by Rust, not a serializable
+layout value. The application retains the latest 32 terminal requests and their
+outcomes in memory. An identical request returns its retained outcome; the same
+identity with changed fields is refused. That bounded memory is not durable
+deduplication; the saved pending-start marker is the restart guard. After each
+successful open, the UI inspects the current layout before another workspace
+effect so that both pending and binding saves are reflected in its revision.
+
+An old successful receipt can outlive the viewer it originally attached. Before
+replacing a native viewer, the host checks the returned channel while holding
+the viewer-map lock. An expired channel cannot close a newer viewer. The host
+reports that the original attachment applied but subsequently expired; it does
+not reattach or repeat that request. Repeating a receipt for the still-current
+open channel keeps the viewer in place.
+
+The viewer uses libghostty-vt on the UI thread to interpret Core's VT stream.
+It returns credit after parsing, not on receipt. The connection bounds buffered
+output to 1 MiB per viewer and 16 MiB in aggregate, separately from the Core
+frame limit. A dispatch parses at most 64 KiB in chunks of 4 KiB while checking
+the 2 ms budget between chunks. One parse call cannot be preempted. Replies to
+forwarded terminal queries are bounded and sent through the same viewer. The
+current view does not render Kitty graphics and does not acknowledge them as
+displayed. Core owns focus reports; Voyager sends the FOCUS frame once per
+focus transition.
+
+The grid candidate retains Ghostty's cell graphemes, colors, styles and cursor
+state. Its measured monospace cell size and painted pane bounds determine the
+local grid. A deferred resize queues Core RESIZE and display FACTS on the same
+viewer; queue pressure retains the latest size for a nonblocking retry. The
+existing 64 KiB and 2 ms limits govern VT parsing, not complete snapshot or
+paint time. Ghostty's dirty-row flags and row identities retain unchanged cell
+arrays and shared text across updates. A full snapshot is prepared before dirty
+flags are cleared; presentation then reads the retained data. Blink, overline
+and exact underline variants are not yet rendered.
+
+Initial terminal colors and the eight named ANSI colors follow the existing
+Electron reference. Faint text blends its foreground at the reference renderer's
+50 percent opacity while preserving the cell background. Ghostty's cell color
+queries resolve the stored foreground and background independently; Voyager
+applies the inverse attribute after those queries. The cursor uses its reported
+color, including the reference default.
+
+The initial release demonstrated a shell's colored wide Unicode glyph in the
+alternate screen, native window resize from 101 by 41 to 88 by 35, and the same
+terminal address and numeric PID. That result remains bounded: it did not prove
+all full-screen applications, a coding agent, selection, clipboard, IME, hidden
+output, compositor timing, another platform or the complete terminal module.
+Its proof-size gate remains held.
+
+The continuation separates native stream/focus/resize mechanics in terminal.rs,
+the VT screen and cache in terminal_screen.rs, presentation and pointer routing
+in terminal_view.rs, and operating-system text composition in terminal_input.rs.
+These are private native implementation modules behind the same registration
+boundary. No application contract, process owner or terminal parser was added.
+
+Selection uses Ghostty's tracked grid references and gesture operations. A
+selection change updates the selected column ranges separately from the retained
+cell arrays. The native background uses the reference selection color
+#53506a88. Copy formats the selected terminal text with wrapping removed; paste
+uses Ghostty's current bracketed-paste mode and sanitization. Linux uses
+Ctrl+Shift+C and Ctrl+Shift+V, while macOS uses its Command key. Clipboard text
+whose encoded form exceeds the existing 64 KiB terminal input limit is refused
+before invoking the input callback. Bracketed-paste markers count toward that
+limit. One accepted callback is not a claim of an atomic PTY write. Ctrl+C continues to be terminal input. Wheel input preserves fractional
+scroll movement; typing returns the viewport to the current screen.
+
+GPUI's native input handler retains a local UTF-16 composition preview and draws
+it at the actual terminal cursor. The running program receives only committed UTF-8
+text. Composition is limited to 64 KiB and one preview line, and candidate-window
+positioning uses the same font shaping as the preview. Terminal output is not
+an editable document: native replacement ranges refer to the active preview,
+and committed text goes to the existing terminal input path. Blur cancels the
+local preview. Operating-system IME activation and composition still require a
+real input-method journey; reducer tests and Unicode keysyms cannot prove it.
+
+Hidden terminal entities keep consuming the same bounded stream into their VT
+state. Output no longer constructs cell arrays in the stream callback. The next
+visible render snapshots the current screen, retaining unchanged rows. A pending
+geometry change can finish its one resize snapshot, but hidden output does not
+run a repeating snapshot or paint loop. Input and control retain their existing
+separate bounded queues. This is a source mechanism, not a measured latency or
+memory result.
+
+Each continuing pump iteration explicitly suspends its foreground future once
+before consuming another ready token. A queued token alone does not suspend an
+async task. The one-shot yield wakes its continuation and returns Pending once;
+it adds no idle polling or timer. Disconnect and completion return directly.
+This gives the event loop an opportunity to handle input and frames, but actual
+saturated-output responsiveness and latency still require native evidence.
+
+The extended maintained terminal-grid journey is prepared for native selection,
+copy/paste, continued hidden output, focused input in another Fleet, restored
+input to the same terminal, and actual split sizing. It has not run against the
+continuation source. The first corrective release remains pending independent
+source review. Performance, native agent behavior, additional terminal styles,
+complete lifecycle and platform acceptance remain open.
+
+`app/core-schema.cjs` extracts the used hello, document, terminal and server
+message types from the reviewed Core 0.1.16 schema after checking its canonical
+SHA-256. Cargo generates the Rust types from that checked schema. Named Core
+adapter methods own the wire conversions; document values remain arbitrary JSON.
+The hello request uses the generated type, while its fuller response and endpoint
+compatibility validation remain the separate K2 continuation. Terminal list
+decodes the used terminal records without requiring the reviewed schema's
+`machines` field, which the installed Core omitted in an isolated check. The VT
+binding uses [libghostty-rs at 8363442](https://github.com/Uzaaft/libghostty-rs/tree/83634421c232385f9fd7c61f454961341453d661),
+which builds Ghostty's VT library and requires the matching Zig toolchain.
+Core protocol behavior is based on
+[Core e07c2a1](https://github.com/herdrdev/herdr-core/tree/e07c2a1bedd62cf4787ee026ee23ee79c7d95491).
+
+The terminal chooses its font once when the pane is created. It prefers the
+reference's DejaVu Sans Mono, then an available monospace family, and uses the
+same family for cell width, displayed text and input-composition positioning.
+On the observed Linux host DejaVu Sans Mono is absent and the reference's
+monospace fallback is Noto Sans Mono. Without an explicit available mono family,
+GPUI's general fallback can select a proportional font; using the advance of its
+wide `M` for every cell makes narrow letters appear widely spaced. If no named
+mono family is available, the earlier DejaVu request remains the last resort.
+This source correction has not established native visual parity. The existing
+18-pixel row height remains unchanged until a matched reference measurement.
+
+The Core child receives an explicit dedicated-session endpoint rather than an
+inherited `HC_SOCKET` or shared fixed-socket setting. On Unix this follows the
+pinned Core's runtime-directory and session-state fallback; on Windows it uses
+the pinned named-pipe naming rule. The existing session and its Core state are
+not renamed. Core's own existing-session lock check still refuses a session
+that is listening elsewhere. The Unix resolver calls `libc::getuid` in one small
+unsafe expression. This C function takes no pointers and returns the calling
+process's real UID; it does not mutate memory or the process. Linux evidence
+does not establish macOS or Windows behavior.
+
+Hello validates the advertised generation, framed mode, Core identity, and the
+methods and features this adapter uses, without pinning the Core version or
+rejecting additive fields. Dispatched replies must have the expected JSON-RPC
+version and identity and exactly one valid result or structured error. A known
+refusal retains its Core kind. Malformed, ambiguous, internal and unknown errors
+remain uncertain without an automatic replay.
+
+## Explicit new shell after an ended program
+
+The current source adds a deliberate `start-new-shell` workspace action for an
+existing terminal content ID and expected old backend. It uses the ordinary
+request revision, captured caller scope, single Client queue and receipt. The
+owner refreshes the document, verifies the binding and canonical finished state,
+and retains the old backend while saving a shell intent. A historical PID on a
+finished Core record is valid metadata and is never signalled by this action.
+
+Only a confirmed intent save grants the exact shell/old-backend/intent identity
+through the existing creation-permission path. The ordinary native terminal-open
+flow checks it again and uses the existing start marker, Core run and binding
+save. Confirmation clears the intent and publishes the new backend. The old Core
+terminal record remains available. Uncertain dispatch keeps its marker and is
+not replayed. Quit still refuses new work. A later app start has no retained
+in-memory creation grant, so it attaches the old ended binding without starting
+the saved intent or old agent arguments.
+
+Inspect retains an existing immutable creation grant even when an outside edit
+makes its launch or intent ineligible. The opening owner needs that record to
+reject a changed launch instead of treating it as an ordinary unbound shell.
+Advertising eligibility still requires the exact current tuple to match.
+
+The updated Header treats the typed ended reason as a neutral condition and
+offers one Start new shell button inside that content placement. Placement ID,
+content ID, name, tree and avatar context stay unchanged. The new program always
+uses the ordinary shell launch. A fresh intent can replace the old opening;
+an automatic owner notice cannot retry a refusal for the same intent. Refresh
+does not gain start permission merely from an old ended response. Existing
+explicit repair of a known refused opening retains its separate behavior.
+
+Personal Header source and validators are not overwritten. Existing workspace
+documents omit the new optional `shellIntent` field and continue to load. The
+new button and typed ended response require the updated Header/generated API;
+an older copied strict validator can reject new fields rather than understand
+the new operation. Upgrade such a personal package deliberately. No automatic
+package migration or source merge is implemented here.
+
+These are source and pure-control claims. Native same-placement shell input in
+both Vessel and Portal after Quit/reopen still requires the maintained session
+Quit journey on the matched release. Already-attached terminal end presentation
+and its original correction history are unchanged by this cold-attachment path.

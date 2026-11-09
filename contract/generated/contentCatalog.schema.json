@@ -1,0 +1,220 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Actions": {
+      "additionalProperties": false,
+      "properties": {
+        "inputSchema": true,
+        "names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resultSchema": true,
+        "tool": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "names",
+        "inputSchema",
+        "resultSchema"
+      ],
+      "type": "object"
+    },
+    "Availability": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "ready",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "removed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "const": "unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Backend": {
+      "enum": [
+        "core-terminal"
+      ],
+      "type": "string"
+    },
+    "DataDescription": {
+      "additionalProperties": false,
+      "properties": {
+        "defaults": true,
+        "schema": true
+      },
+      "required": [
+        "defaults"
+      ],
+      "type": "object"
+    },
+    "Description": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Actions"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "availability": {
+          "$ref": "#/definitions/Availability"
+        },
+        "backend": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Backend"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DataDescription"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "host": {
+          "$ref": "#/definitions/NativeHost"
+        },
+        "name": {
+          "type": "string"
+        },
+        "placements": {
+          "items": {
+            "$ref": "#/definitions/Placement"
+          },
+          "type": "array"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DataDescription"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "typeId": {
+          "type": "string"
+        },
+        "view": {
+          "$ref": "#/definitions/NativeView"
+        }
+      },
+      "required": [
+        "typeId",
+        "name",
+        "availability",
+        "host",
+        "view",
+        "placements"
+      ],
+      "type": "object"
+    },
+    "NativeHost": {
+      "additionalProperties": false,
+      "properties": {
+        "runtime": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "runtime",
+        "version"
+      ],
+      "type": "object"
+    },
+    "NativeView": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "type": "string"
+        },
+        "module": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "module",
+        "component"
+      ],
+      "type": "object"
+    },
+    "Placement": {
+      "enum": [
+        "fleet",
+        "voyage"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "types": {
+      "items": {
+        "$ref": "#/definitions/Description"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "types"
+  ],
+  "title": "Catalog",
+  "type": "object"
+}

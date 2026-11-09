@@ -1,0 +1,304 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Notes": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "text"
+      ],
+      "type": "object"
+    },
+    "NotesConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "notesFile": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NotesFile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "showHeading": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "showHeading"
+      ],
+      "type": "object"
+    },
+    "NotesFile": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory",
+        "filename"
+      ],
+      "type": "object"
+    },
+    "Version": {
+      "enum": [
+        "1"
+      ],
+      "type": "string"
+    }
+  },
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "$ref": "#/definitions/NotesConfiguration"
+        },
+        "contentId": {
+          "type": "string"
+        },
+        "expectedVersion": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.configure",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "contentId",
+        "expectedVersion",
+        "configuration"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.describe",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "contentId"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.inspect",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "contentId"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "expectedVersion": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.migrate-note",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "contentId",
+        "expectedVersion"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.list-notes",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "contentId"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "expectedVersion": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.new-note",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "contentId",
+        "expectedVersion",
+        "title"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "expectedVersion": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.open-note",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "contentId",
+        "expectedVersion",
+        "filename"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/definitions/Notes"
+        },
+        "expectedRevision": {
+          "type": "string"
+        },
+        "operation": {
+          "const": "content.update",
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "operation",
+        "version",
+        "requestId",
+        "contentId",
+        "expectedRevision",
+        "data"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "Request"
+}

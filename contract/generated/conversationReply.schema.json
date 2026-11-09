@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Delivery": {
+      "enum": [
+        "accepted",
+        "rejected",
+        "unconfirmed"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "delivery": {
+      "$ref": "#/definitions/Delivery"
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "requestId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "requestId",
+    "delivery"
+  ],
+  "title": "Reply",
+  "type": "object"
+}

@@ -10,3 +10,4 @@ __pycache__/
 
 target/
 .ruff_cache/
+/.cargo/config.toml

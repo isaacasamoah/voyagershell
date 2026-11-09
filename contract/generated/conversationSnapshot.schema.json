@@ -1,0 +1,2010 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Action": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "inspect",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "home",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "canvas": {
+              "$ref": "#/definitions/Canvas"
+            },
+            "operation": {
+              "const": "update-canvas",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "canvas"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "collapsed": {
+              "type": "boolean"
+            },
+            "operation": {
+              "const": "set-sidebar",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "collapsed"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "save-panel-layout",
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/definitions/PanelOwner"
+            }
+          },
+          "required": [
+            "operation",
+            "owner",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "load-panel-layout",
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/definitions/PanelOwner"
+            }
+          },
+          "required": [
+            "operation",
+            "owner",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "create-voyage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "name",
+            "cwd"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "create-voyage-from-source",
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/definitions/DirectorySource"
+            }
+          },
+          "required": [
+            "operation",
+            "source"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "create-fleet",
+              "type": "string"
+            },
+            "voyage": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "voyage",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "launch": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Launch"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "create-fleet-with-content",
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/definitions/DirectorySource"
+            },
+            "typeId": {
+              "type": "string"
+            },
+            "voyage": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "voyage",
+            "name",
+            "source",
+            "typeId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "destination": {
+              "$ref": "#/definitions/ContentDestination"
+            },
+            "launch": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Launch"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "operation": {
+              "const": "create-content",
+              "type": "string"
+            },
+            "typeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "typeId",
+            "destination"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "expectedBackend": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "start-new-shell",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "expectedBackend"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "remove-content-package",
+              "type": "string"
+            },
+            "typeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "typeId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "restore-content-package",
+              "type": "string"
+            },
+            "typeId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "typeId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "rename",
+              "type": "string"
+            },
+            "target": {
+              "$ref": "#/definitions/RenameTarget"
+            }
+          },
+          "required": [
+            "operation",
+            "target",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "resize-panel-split",
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/definitions/PanelOwner"
+            },
+            "path": {
+              "items": {
+                "$ref": "#/definitions/SplitChild"
+              },
+              "maxItems": 128,
+              "type": "array"
+            },
+            "share": {
+              "$ref": "#/definitions/SplitShare"
+            }
+          },
+          "required": [
+            "operation",
+            "owner",
+            "path",
+            "share"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "move-panel",
+              "type": "string"
+            },
+            "side": {
+              "$ref": "#/definitions/Side"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "target",
+            "side"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "before": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "move-voyage",
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "target",
+            "before"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "before": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "move-fleet",
+              "type": "string"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "target",
+            "before"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "select-voyage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "close-voyage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "reopen-voyage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "select-fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "close-fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "reopen-fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "reveal-panel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "destination": {
+              "$ref": "#/definitions/ContentDestination"
+            },
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "reopen-panel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "destination"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "context": {
+              "$ref": "#/definitions/Context"
+            },
+            "operation": {
+              "const": "dock",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "context"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "maximized": {
+              "type": "boolean"
+            },
+            "operation": {
+              "const": "set-panel-maximized",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "maximized"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "hidden": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "set-panel-hidden",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "hidden"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "remove-panel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "remove-panel-layout",
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/definitions/PanelOwner"
+            }
+          },
+          "required": [
+            "operation",
+            "owner",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PortalMode"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "operation": {
+              "const": "set-portal-presentation",
+              "type": "string"
+            },
+            "visible": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "voyage": {
+              "type": "string"
+            },
+            "width": {
+              "maximum": 4096,
+              "minimum": 1,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "operation",
+            "voyage"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Action2": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "base": {
+              "type": "string"
+            },
+            "branch": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "create",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "name",
+            "branch",
+            "base"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "open",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "remove",
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "path"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CallbackId": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "string",
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "integer",
+              "type": "string"
+            },
+            "value": {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Canvas": {
+      "additionalProperties": false,
+      "properties": {
+        "portalMode": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/PortalMode"
+            }
+          ],
+          "default": "overlay"
+        },
+        "root": {
+          "$ref": "#/definitions/Node"
+        },
+        "sidebarCollapsed": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "root"
+      ],
+      "type": "object"
+    },
+    "ContentDestination": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "insertion": {
+              "$ref": "#/definitions/PanelInsertion"
+            },
+            "kind": {
+              "const": "panel",
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/definitions/PanelOwner"
+            }
+          },
+          "required": [
+            "kind",
+            "owner",
+            "insertion"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Context": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "workspace",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "voyage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "vessel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "portal",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "DirectorySource": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "backend": {
+              "type": "string"
+            },
+            "contentId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "live",
+              "type": "string"
+            },
+            "placementId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "placementId",
+            "contentId",
+            "backend",
+            "cwd"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "voyage",
+              "type": "string"
+            },
+            "voyageId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "voyageId",
+            "cwd"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "starting",
+              "type": "string"
+            },
+            "placementId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "placementId",
+            "contentId",
+            "cwd"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Effort": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "type": "string"
+    },
+    "Focus": {
+      "additionalProperties": false,
+      "properties": {
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/definitions/Context"
+        }
+      },
+      "required": [
+        "scope",
+        "path",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "Input": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/definitions/Action2"
+        },
+        "expectedVersion": {
+          "type": "string"
+        },
+        "voyage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedVersion",
+        "voyage",
+        "action"
+      ],
+      "type": "object"
+    },
+    "Launch": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "terminal",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "effort": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Effort"
+                }
+              ],
+              "default": "high"
+            },
+            "kind": {
+              "const": "codex",
+              "type": "string"
+            },
+            "model": {
+              "default": "gpt-6.1-sol",
+              "type": "string"
+            },
+            "permissions": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Permissions"
+                }
+              ],
+              "default": "yolo"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "argv": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "program",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "argv"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Message": {
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Focus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/definitions/Role"
+        },
+        "text": {
+          "type": "string"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ToolOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "requestId",
+        "role",
+        "text"
+      ],
+      "type": "object"
+    },
+    "Node": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "row",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "column",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block",
+              "type": "string"
+            },
+            "region": {
+              "$ref": "#/definitions/Region"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "region"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PanelInsertion": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "empty",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "beside",
+              "type": "string"
+            },
+            "side": {
+              "$ref": "#/definitions/Side"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "side"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PanelOwner": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "portals",
+              "type": "string"
+            },
+            "voyage": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "voyage"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Permissions": {
+      "enum": [
+        "yolo",
+        "workspace-write",
+        "read-only"
+      ],
+      "type": "string"
+    },
+    "Phase": {
+      "enum": [
+        "idle",
+        "starting",
+        "working",
+        "completed",
+        "interrupted",
+        "failed",
+        "unconfirmed"
+      ],
+      "type": "string"
+    },
+    "PortalMode": {
+      "enum": [
+        "overlay",
+        "make-room"
+      ],
+      "type": "string"
+    },
+    "ProcessAction": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "lines": {
+              "maximum": 160,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "operation": {
+              "const": "read",
+              "type": "string"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "lines"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "send",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "interrupt",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "stop",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Receipt": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "configure",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "describe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "inspect",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "migrate-note",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "list-notes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "new-note",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "filename": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "open-note",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "filename"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "expectedRevision": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "update",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "expectedRevision"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Region": {
+      "enum": [
+        "sidebar",
+        "fleet-strip",
+        "active-fleet",
+        "portals",
+        "context-bar"
+      ],
+      "type": "string"
+    },
+    "RenameTarget": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "voyage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "vessel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "portal",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Role": {
+      "enum": [
+        "user",
+        "assistant",
+        "tool"
+      ],
+      "type": "string"
+    },
+    "Side": {
+      "enum": [
+        "left",
+        "right",
+        "top",
+        "bottom"
+      ],
+      "type": "string"
+    },
+    "Size": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fill",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fixed",
+              "type": "string"
+            },
+            "pixels": {
+              "maximum": 4096,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "pixels"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SplitChild": {
+      "enum": [
+        "first",
+        "second"
+      ],
+      "type": "string"
+    },
+    "SplitShare": {
+      "maximum": 9999,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "Status": {
+      "enum": [
+        "applied",
+        "rejected",
+        "uncertain"
+      ],
+      "type": "string"
+    },
+    "ToolAction": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/Action"
+            },
+            "tool": {
+              "const": "workspace",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/ProcessAction"
+            },
+            "tool": {
+              "const": "process",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/Receipt"
+            },
+            "tool": {
+              "const": "content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "$ref": "#/definitions/Input"
+            },
+            "tool": {
+              "const": "worktree",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tool",
+            "action"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ToolOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/definitions/ToolAction"
+        },
+        "callId": {
+          "type": "string"
+        },
+        "callbackIds": {
+          "items": {
+            "$ref": "#/definitions/CallbackId"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/Status"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "callId",
+        "callbackIds",
+        "requestId",
+        "action",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limited": {
+      "type": "boolean"
+    },
+    "messages": {
+      "items": {
+        "$ref": "#/definitions/Message"
+      },
+      "type": "array"
+    },
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "omitted": {
+      "type": "string"
+    },
+    "phase": {
+      "$ref": "#/definitions/Phase"
+    },
+    "thread": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "turn": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "phase",
+    "messages",
+    "limited",
+    "omitted"
+  ],
+  "title": "Snapshot",
+  "type": "object"
+}

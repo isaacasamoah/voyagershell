@@ -1,0 +1,234 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Action": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "configuration": {
+              "$ref": "#/definitions/NotesConfiguration"
+            },
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "configure",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "configuration"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "describe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "inspect",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "migrate-note",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "list-notes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "new-note",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "title"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "filename": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "open-note",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "filename"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "data": {
+              "$ref": "#/definitions/Notes"
+            },
+            "expectedRevision": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "update",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "expectedRevision",
+            "data"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Notes": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "text"
+      ],
+      "type": "object"
+    },
+    "NotesConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "notesFile": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NotesFile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "showHeading": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "showHeading"
+      ],
+      "type": "object"
+    },
+    "NotesFile": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory",
+        "filename"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "action": {
+      "$ref": "#/definitions/Action"
+    },
+    "expectedVersion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "expectedVersion",
+    "action"
+  ],
+  "title": "Input",
+  "type": "object"
+}

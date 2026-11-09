@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Node": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "row",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "column",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block",
+              "type": "string"
+            },
+            "region": {
+              "$ref": "#/definitions/Region"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "region"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PortalMode": {
+      "enum": [
+        "overlay",
+        "make-room"
+      ],
+      "type": "string"
+    },
+    "Region": {
+      "enum": [
+        "sidebar",
+        "fleet-strip",
+        "active-fleet",
+        "portals",
+        "context-bar"
+      ],
+      "type": "string"
+    },
+    "Size": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fill",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fixed",
+              "type": "string"
+            },
+            "pixels": {
+              "maximum": 4096,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "pixels"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "portalMode": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/PortalMode"
+        }
+      ],
+      "default": "overlay"
+    },
+    "root": {
+      "$ref": "#/definitions/Node"
+    },
+    "sidebarCollapsed": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "root"
+  ],
+  "title": "Canvas",
+  "type": "object"
+}

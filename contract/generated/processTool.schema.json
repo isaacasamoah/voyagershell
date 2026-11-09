@@ -1,0 +1,149 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ProcessAction": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "lines": {
+              "maximum": 160,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "operation": {
+              "const": "read",
+              "type": "string"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "lines"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "send",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "interrupt",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "contentId": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "stop",
+              "type": "string"
+            },
+            "pid": {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "terminalId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "contentId",
+            "terminalId",
+            "pid"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "action": {
+      "$ref": "#/definitions/ProcessAction"
+    },
+    "expectedVersion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "expectedVersion",
+    "action"
+  ],
+  "title": "ProcessInput",
+  "type": "object"
+}

@@ -1,0 +1,26 @@
+{
+  "header": {
+    "rawSha256": "81c9a54e05e8a76e1c091a477b648f4aef43cf7cf860616dc1514c0526139356",
+    "modules": [
+      "gpui-base",
+      "gpui-kit",
+      "gpui-shell",
+      "voyager_avatar",
+      "voyager_content_view",
+      "voyager_conversation",
+      "voyager_header",
+      "voyager_native",
+      "voyager_workspace"
+    ]
+  },
+  "notes": {
+    "rawSha256": "e6d4051831126a4cee8d312cdc61d1399392993d18cb8056ecb4a1bb6e9749d6",
+    "modules": [
+      "gpui-base",
+      "gpui-kit",
+      "gpui-shell",
+      "voyager_content",
+      "voyager_input"
+    ]
+  }
+}

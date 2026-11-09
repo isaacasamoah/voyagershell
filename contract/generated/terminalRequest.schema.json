@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "contentId": {
+      "type": "string"
+    },
+    "expectedVersion": {
+      "type": "string"
+    },
+    "requestId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "requestId",
+    "contentId",
+    "expectedVersion"
+  ],
+  "title": "TerminalRequest",
+  "type": "object"
+}

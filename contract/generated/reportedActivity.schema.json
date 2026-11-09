@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ActivityState": {
+      "enum": [
+        "unknown",
+        "working",
+        "blocked",
+        "idle",
+        "done",
+        "error"
+      ],
+      "type": "string"
+    },
+    "ReportedActivity": {
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limited": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observedMs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "progress": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reported": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sequence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceMs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/definitions/ActivityState"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "state",
+        "limited"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "limited": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "terminals": {
+      "additionalProperties": {
+        "$ref": "#/definitions/ReportedActivity"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "terminals",
+    "limited"
+  ],
+  "title": "Projection",
+  "type": "object"
+}

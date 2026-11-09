@@ -1,0 +1,43 @@
+use schemars::{JsonSchema, Schema, generate::SchemaSettings};
+use serde_json::json;
+use voyager_contract::conversation;
+use voyager_contract::{Request, Response, TerminalRequest, TerminalResponse};
+
+fn schema<T: JsonSchema>() -> Schema {
+    SchemaSettings::draft07()
+        .into_generator()
+        .into_root_schema_for::<T>()
+}
+
+fn main() {
+    match serde_json::to_string_pretty(
+        &json!({"request":schema::<Request>(),"response":schema::<Response>(),"terminalRequest":schema::<TerminalRequest>(),"terminalResponse":schema::<TerminalResponse>(),
+            "conversationRequest":schema::<conversation::Request>(),
+            "conversationReply":schema::<conversation::Reply>(),
+            "conversationSnapshot":schema::<conversation::Snapshot>(),
+            "workspaceTool":schema::<voyager_contract::administrator::WorkspaceInput>(),
+            "processTool":schema::<voyager_contract::administrator::ProcessInput>(),
+            "processResponse":schema::<voyager_contract::administrator::ProcessResponse>(),
+            "contentTool":schema::<voyager_contract::content::Input>(),
+            "contentRequest":schema::<voyager_contract::content::Request>(),
+            "contentResponse":schema::<voyager_contract::content::Response>(),
+            "contentCatalog":schema::<voyager_contract::content::Catalog>(),
+            "canvas":schema::<voyager_contract::canvas::Canvas>(),
+            "contextFacts":schema::<voyager_contract::context::Facts>(),
+            "workspaceObservation":schema::<voyager_contract::observation::WorkspaceObservation>(),
+            "worktreeTool":schema::<voyager_contract::worktree::Input>(),
+            "worktreeRequest":schema::<voyager_contract::worktree::Request>(),
+            "worktreeResponse":schema::<voyager_contract::worktree::Response>(),
+            "reportedActivity":schema::<voyager_contract::activity::Projection>(),
+            "notes":schema::<voyager_contract::content::Notes>(),
+            "notesConfiguration":schema::<voyager_contract::content::NotesConfiguration>(),
+            "voiceState":schema::<voyager_contract::voice::State>(),
+            "launchCatalog":schema::<voyager_contract::launch::Catalog>()}),
+    ) {
+        Ok(value) => println!("{value}"),
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    }
+}

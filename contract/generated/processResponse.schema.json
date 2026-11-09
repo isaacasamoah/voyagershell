@@ -1,0 +1,366 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ActivityState": {
+      "enum": [
+        "unknown",
+        "working",
+        "blocked",
+        "idle",
+        "done",
+        "error"
+      ],
+      "type": "string"
+    },
+    "PlacementName": {
+      "additionalProperties": false,
+      "properties": {
+        "effectiveName": {
+          "type": "string"
+        },
+        "placementId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "placementId",
+        "effectiveName"
+      ],
+      "type": "object"
+    },
+    "ProcessInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "agentName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contentId": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "foreground": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pid": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "placementNames": {
+          "items": {
+            "$ref": "#/definitions/PlacementName"
+          },
+          "type": "array"
+        },
+        "reportedActivity": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ReportedActivity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "type": "string"
+        },
+        "terminalId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "contentId",
+        "terminalId",
+        "cwd",
+        "state"
+      ],
+      "type": "object"
+    },
+    "ProcessOutput": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "list",
+              "type": "string"
+            },
+            "processes": {
+              "items": {
+                "$ref": "#/definitions/ProcessInfo"
+              },
+              "type": "array"
+            },
+            "unavailable": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "operation",
+            "processes",
+            "unavailable"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "complete": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            },
+            "limited": {
+              "type": "boolean"
+            },
+            "operation": {
+              "const": "read",
+              "type": "string"
+            },
+            "target": {
+              "$ref": "#/definitions/ProcessInfo"
+            },
+            "text": {
+              "type": "string"
+            },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "operation",
+            "target",
+            "text",
+            "complete",
+            "how",
+            "limited"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "send",
+              "type": "string"
+            },
+            "started": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "status": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "target": {
+              "$ref": "#/definitions/ProcessInfo"
+            },
+            "turn": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "target",
+            "turn"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "interrupt",
+              "type": "string"
+            },
+            "outcome": {
+              "type": "string"
+            },
+            "target": {
+              "$ref": "#/definitions/ProcessInfo"
+            }
+          },
+          "required": [
+            "operation",
+            "target",
+            "key",
+            "outcome"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "observed": {
+              "$ref": "#/definitions/ProcessInfo"
+            },
+            "operation": {
+              "const": "stop",
+              "type": "string"
+            },
+            "target": {
+              "$ref": "#/definitions/ProcessInfo"
+            }
+          },
+          "required": [
+            "operation",
+            "target",
+            "observed"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ReportedActivity": {
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limited": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observedMs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "progress": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reported": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sequence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceMs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/definitions/ActivityState"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "state",
+        "limited"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "enum": [
+        "applied",
+        "rejected",
+        "uncertain"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "fresh": {
+      "type": "boolean"
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "output": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProcessOutput"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/Status"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "requestId",
+    "status",
+    "version",
+    "fresh"
+  ],
+  "title": "ProcessResponse",
+  "type": "object"
+}

@@ -1,0 +1,910 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Axis": {
+      "enum": [
+        "horizontal",
+        "vertical"
+      ],
+      "type": "string"
+    },
+    "Canvas": {
+      "additionalProperties": false,
+      "properties": {
+        "portalMode": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/PortalMode"
+            }
+          ],
+          "default": "overlay"
+        },
+        "root": {
+          "$ref": "#/definitions/Node"
+        },
+        "sidebarCollapsed": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "root"
+      ],
+      "type": "object"
+    },
+    "Content": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "configuration": {
+          "additionalProperties": true,
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "launch": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Launch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shellIntent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startPending": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "typeId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "typeId",
+        "cwd"
+      ],
+      "type": "object"
+    },
+    "Context": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "workspace",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "voyage",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "vessel",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "portal",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Effort": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "type": "string"
+    },
+    "Fleet": {
+      "additionalProperties": false,
+      "properties": {
+        "closed": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "maximizedPlacement": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Split"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vessels": {
+          "items": {
+            "$ref": "#/definitions/Vessel"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "vessels"
+      ],
+      "type": "object"
+    },
+    "Launch": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "terminal",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "effort": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Effort"
+                }
+              ],
+              "default": "high"
+            },
+            "kind": {
+              "const": "codex",
+              "type": "string"
+            },
+            "model": {
+              "default": "gpt-6.1-sol",
+              "type": "string"
+            },
+            "permissions": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Permissions"
+                }
+              ],
+              "default": "yolo"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "argv": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "program",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "argv"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Layout": {
+      "additionalProperties": false,
+      "properties": {
+        "canvas": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Canvas"
+            }
+          ],
+          "default": {
+            "portalMode": "overlay",
+            "root": {
+              "children": [
+                {
+                  "kind": "block",
+                  "region": "sidebar",
+                  "size": {
+                    "kind": "fixed",
+                    "pixels": 224
+                  }
+                },
+                {
+                  "children": [
+                    {
+                      "kind": "block",
+                      "region": "fleet-strip",
+                      "size": {
+                        "kind": "fixed",
+                        "pixels": 40
+                      }
+                    },
+                    {
+                      "children": [
+                        {
+                          "kind": "block",
+                          "region": "active-fleet",
+                          "size": {
+                            "kind": "fill"
+                          }
+                        },
+                        {
+                          "kind": "block",
+                          "region": "portals",
+                          "size": {
+                            "kind": "fixed",
+                            "pixels": 340
+                          }
+                        }
+                      ],
+                      "kind": "row",
+                      "size": {
+                        "kind": "fill"
+                      }
+                    },
+                    {
+                      "kind": "block",
+                      "region": "context-bar",
+                      "size": {
+                        "kind": "content"
+                      }
+                    }
+                  ],
+                  "kind": "column",
+                  "size": {
+                    "kind": "fill"
+                  }
+                }
+              ],
+              "kind": "row",
+              "size": {
+                "kind": "fill"
+              }
+            },
+            "sidebarCollapsed": false
+          }
+        },
+        "contents": {
+          "items": {
+            "$ref": "#/definitions/Content"
+          },
+          "type": "array"
+        },
+        "context": {
+          "$ref": "#/definitions/Context"
+        },
+        "home": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Voyage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nextId": {
+          "type": "string"
+        },
+        "savedLayouts": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/SavedLayout"
+          },
+          "type": "array"
+        },
+        "selectedFleet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selectedVoyage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "view": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/WorkspaceView"
+            }
+          ],
+          "default": "fleet"
+        },
+        "voyages": {
+          "items": {
+            "$ref": "#/definitions/Voyage"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "voyages",
+        "contents",
+        "context",
+        "nextId"
+      ],
+      "type": "object"
+    },
+    "NameOrigin": {
+      "enum": [
+        "automatic",
+        "deliberate"
+      ],
+      "type": "string"
+    },
+    "Node": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "row",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "items": {
+                "$ref": "#/definitions/Node"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "column",
+              "type": "string"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "children"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block",
+              "type": "string"
+            },
+            "region": {
+              "$ref": "#/definitions/Region"
+            },
+            "size": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Size"
+                }
+              ],
+              "default": {
+                "kind": "fill"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "region"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PanelOwner": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "fleet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "portals",
+              "type": "string"
+            },
+            "voyage": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "voyage"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Permissions": {
+      "enum": [
+        "yolo",
+        "workspace-write",
+        "read-only"
+      ],
+      "type": "string"
+    },
+    "PortalLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "maximizedPlacement": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "$ref": "#/definitions/PortalMode"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Split"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "width": {
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "visible",
+        "mode",
+        "width"
+      ],
+      "type": "object"
+    },
+    "PortalMode": {
+      "enum": [
+        "overlay",
+        "make-room"
+      ],
+      "type": "string"
+    },
+    "Region": {
+      "enum": [
+        "sidebar",
+        "fleet-strip",
+        "active-fleet",
+        "portals",
+        "context-bar"
+      ],
+      "type": "string"
+    },
+    "SavedLayout": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/definitions/PanelOwner"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Split"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "owner",
+        "name"
+      ],
+      "type": "object"
+    },
+    "Size": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fill",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fixed",
+              "type": "string"
+            },
+            "pixels": {
+              "maximum": 4096,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "pixels"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Split": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "leaf",
+              "type": "string"
+            },
+            "placement": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "placement"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "axis": {
+              "$ref": "#/definitions/Axis"
+            },
+            "first": {
+              "$ref": "#/definitions/Split"
+            },
+            "kind": {
+              "const": "branch",
+              "type": "string"
+            },
+            "second": {
+              "$ref": "#/definitions/Split"
+            },
+            "share": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SplitShare"
+                }
+              ],
+              "default": 5000
+            }
+          },
+          "required": [
+            "kind",
+            "axis",
+            "first",
+            "second"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SplitShare": {
+      "maximum": 9999,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "Status": {
+      "enum": [
+        "applied",
+        "rejected",
+        "uncertain"
+      ],
+      "type": "string"
+    },
+    "Vessel": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nameOrigin": {
+          "$ref": "#/definitions/NameOrigin"
+        }
+      },
+      "required": [
+        "id",
+        "content",
+        "name"
+      ],
+      "type": "object"
+    },
+    "Voyage": {
+      "additionalProperties": false,
+      "properties": {
+        "closed": {
+          "type": "boolean"
+        },
+        "closedOrder": {
+          "default": "0",
+          "type": "string"
+        },
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fleets": {
+          "items": {
+            "$ref": "#/definitions/Fleet"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "portalLayout": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PortalLayout"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "portals": {
+          "items": {
+            "$ref": "#/definitions/Vessel"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "fleets",
+        "portals"
+      ],
+      "type": "object"
+    },
+    "WorkspaceView": {
+      "enum": [
+        "home",
+        "fleet"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "createdContents": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "createdWorkspace": {
+      "type": "boolean"
+    },
+    "fresh": {
+      "type": "boolean"
+    },
+    "layout": {
+      "$ref": "#/definitions/Layout"
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/Status"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "requestId",
+    "status",
+    "version",
+    "layout",
+    "fresh",
+    "createdWorkspace",
+    "createdContents"
+  ],
+  "title": "Response",
+  "type": "object"
+}

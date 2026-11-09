@@ -1,0 +1,380 @@
+mod arrangement;
+mod avatar;
+mod avatar_motion;
+#[cfg(all(test, target_os = "linux"))]
+mod canvas_test;
+mod content_budget;
+mod conversation;
+mod host;
+mod measure;
+mod notes;
+mod notes_draft;
+mod notes_input;
+mod notes_scope;
+mod notes_session;
+mod occluding;
+mod platform;
+mod quit;
+mod script_types;
+mod speech;
+mod split;
+mod terminal;
+mod terminal_screen;
+mod text;
+
+use anyhow::{Context as _, Result, bail};
+use gpui::{
+    App, AppContext, Bounds, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions, point, px,
+    size,
+};
+use gpui_shell::{AppAssets, ShellRoot, ShellRuntime};
+use std::{
+    env,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+};
+use voyager_app::client::Client;
+
+gpui::actions!(voyager, [Quit]);
+
+fn arguments() -> Result<(PathBuf, String)> {
+    let mut profile = None;
+    let mut session = None;
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--profile" => profile = args.next().map(PathBuf::from),
+            "--session" => session = args.next(),
+            "--help" => {
+                println!("voyager-shell --profile ABS_DIR --session NAME");
+                std::process::exit(0);
+            }
+            _ => bail!("Unknown argument: {arg}"),
+        }
+    }
+    let profile = profile.context("--profile is required")?;
+    if !profile.is_absolute() {
+        bail!("--profile must be an absolute path");
+    }
+    let session = session.context("--session is required")?;
+    if session.is_empty()
+        || !session
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        bail!("--session must contain lowercase letters, digits or hyphens");
+    }
+    Ok((profile, session))
+}
+
+fn seed(path: &Path, data: &str) -> Result<()> {
+    fs::create_dir_all(path.parent().context("Missing parent directory")?)?;
+    match OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(mut file) => file.write_all(data.as_bytes())?,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => (),
+        Err(error) => return Err(error.into()),
+    }
+    Ok(())
+}
+
+fn run() -> Result<()> {
+    let (profile, session) = arguments()?;
+    let package = profile.join("mods/header");
+    let theme = profile.join("themes/voyager.json");
+    seed(
+        &package.join("main.js"),
+        include_str!("../mods/header/main.js"),
+    )?;
+    seed(
+        &package.join("mod.json"),
+        include_str!("../mods/header/mod.json"),
+    )?;
+    seed(
+        &package.join("canvas.js"),
+        include_str!("../mods/header/canvas.js"),
+    )?;
+    seed(
+        &package.join("layout-panel.js"),
+        include_str!("../mods/header/layout-panel.js"),
+    )?;
+    seed(
+        &package.join("creation.js"),
+        include_str!("../mods/header/creation.js"),
+    )?;
+    seed(
+        &package.join("navigation-view.js"),
+        include_str!("../mods/header/navigation-view.js"),
+    )?;
+    seed(
+        &package.join("panel-view.js"),
+        include_str!("../mods/header/panel-view.js"),
+    )?;
+    seed(
+        &package.join("panels.js"),
+        include_str!("../mods/header/panels.js"),
+    )?;
+    seed(
+        &package.join("menu.js"),
+        include_str!("../mods/header/menu.js"),
+    )?;
+    seed(
+        &package.join("activity.js"),
+        include_str!("../mods/header/activity.js"),
+    )?;
+    seed(
+        &package.join("agents.js"),
+        include_str!("../mods/header/agents.js"),
+    )?;
+    seed(
+        &package.join("processes.js"),
+        include_str!("../mods/header/processes.js"),
+    )?;
+    seed(
+        &package.join("process-icons.js"),
+        include_str!("../mods/header/process-icons.js"),
+    )?;
+    seed(
+        &package.join("worktrees.js"),
+        include_str!("../mods/header/worktrees.js"),
+    )?;
+    seed(
+        &package.join("home.js"),
+        include_str!("../mods/header/home.js"),
+    )?;
+    seed(
+        &package.join("AGENTS.md"),
+        include_str!("../mods/header/AGENTS.md"),
+    )?;
+    seed(&theme, include_str!("../themes/voyager.json"))?;
+    seed(
+        &package.join("validate.js"),
+        include_str!("../../contract/generated/validate.js"),
+    )?;
+    seed(
+        &package.join("workspace.js"),
+        include_str!("../../contract/generated/workspace.js"),
+    )?;
+    seed(
+        &package.join("chat.js"),
+        include_str!("../mods/header/chat.js"),
+    )?;
+    seed(
+        &package.join("chat.svg"),
+        include_str!("../mods/header/chat.svg"),
+    )?;
+    for (name, source) in [
+        ("home.svg", include_str!("../mods/header/home.svg")),
+        ("sidebar.svg", include_str!("../mods/header/sidebar.svg")),
+        (
+            "sidebar-collapse.svg",
+            include_str!("../mods/header/sidebar-collapse.svg"),
+        ),
+        ("bash.svg", include_str!("../mods/header/bash.svg")),
+        ("note.svg", include_str!("../mods/header/note.svg")),
+        ("codex.svg", include_str!("../mods/header/codex.svg")),
+        ("claude.svg", include_str!("../mods/header/claude.svg")),
+        (
+            "icons-LICENSE.txt",
+            include_str!("../mods/header/icons-LICENSE.txt"),
+        ),
+        (
+            "icons-NOTICE.txt",
+            include_str!("../mods/header/icons-NOTICE.txt"),
+        ),
+        ("helmet.svg", include_str!("../mods/header/helmet.svg")),
+        ("orbit.svg", include_str!("../mods/header/orbit.svg")),
+        ("voyager.svg", include_str!("../mods/header/voyager.svg")),
+        (
+            "split-horizontal.svg",
+            include_str!("../mods/header/split-horizontal.svg"),
+        ),
+        (
+            "split-vertical.svg",
+            include_str!("../mods/header/split-vertical.svg"),
+        ),
+        ("close.svg", include_str!("../mods/header/close.svg")),
+        ("embed.svg", include_str!("../mods/header/embed.svg")),
+        ("overlay.svg", include_str!("../mods/header/overlay.svg")),
+        ("maximize.svg", include_str!("../mods/header/maximize.svg")),
+        ("restore.svg", include_str!("../mods/header/restore.svg")),
+        ("folder.svg", include_str!("../mods/header/folder.svg")),
+        ("branch.svg", include_str!("../mods/header/branch.svg")),
+        (
+            "speech-wave.svg",
+            include_str!("../mods/header/speech-wave.svg"),
+        ),
+    ] {
+        seed(&package.join(name), source)?;
+    }
+    seed(
+        &package.join("conversation.js"),
+        include_str!("../../contract/generated/conversation.js"),
+    )?;
+    let notes_package = profile.join("mods/notes");
+    voyager_app::content::seed_package(
+        &notes_package,
+        &[
+            ("main.js", include_str!("../../content/notes/main.js")),
+            ("mod.json", include_str!("../../content/notes/mod.json")),
+            (
+                "validate.js",
+                include_str!("../../contract/generated/validate.js"),
+            ),
+        ],
+    )?;
+    let content_owner = voyager_app::content::Owner::open(&profile)?;
+    let manifest: serde_json::Value = serde_json::from_slice(&fs::read(package.join("mod.json"))?)
+        .context("Reading header manifest")?;
+    if manifest.get("entry").and_then(serde_json::Value::as_str) != Some("main.js")
+        || manifest.get("version").and_then(serde_json::Value::as_u64) != Some(1)
+        || manifest
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .is_none_or(str::is_empty)
+    {
+        bail!("Header manifest requires a name, version 1 and main.js entry");
+    }
+    let initial_theme = fs::read(&theme).context("Reading theme")?;
+    let initial_source = host::source_snapshot(&package).map_err(|error| format!("{error:#}"));
+    let assets = AppAssets::new(package.clone());
+    let launches_path = profile.join("launches.json");
+    seed(
+        &launches_path,
+        &serde_json::to_string_pretty(&voyager_contract::launch::LaunchSettings::default())?,
+    )?;
+    let client = Client::with_content_and_launches(
+        session.clone(),
+        env::current_dir()?.to_string_lossy().into_owned(),
+        content_owner,
+        launches_path,
+    );
+    let viewers = terminal::Viewers::default();
+    let conversation = voyager_app::conversation_client::Client::with_audio(
+        profile.clone(),
+        client.clone(),
+        platform::audio_environment(),
+    );
+    gpui_platform::application()
+        .with_assets(assets)
+        .run(move |cx: &mut App| {
+            let mut registry = match gpui_shell::ComponentRegistry::new(
+                gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+                "voyager_native",
+            ) {
+                Ok(registry) => registry,
+                Err(error) => {
+                    eprintln!("Native registry: {error}");
+                    cx.quit();
+                    return;
+                }
+            };
+            if let Err(error) = measure::register(&mut registry) {
+                eprintln!("Native measurement registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = text::register(&mut registry) {
+                eprintln!("Native text registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = terminal::register(&mut registry, viewers.clone()) {
+                eprintln!("Terminal registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = arrangement::register(&mut registry) {
+                eprintln!("Arrangement registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = split::register(&mut registry) {
+                eprintln!("Split registration: {error}");
+                cx.quit();
+                return;
+            }
+            if let Err(error) = occluding::register(&mut registry) {
+                eprintln!("Native overlay registration: {error}");
+                cx.quit();
+                return;
+            }
+            let registry = match registry.freeze() {
+                Ok(registry) => registry,
+                Err(error) => {
+                    eprintln!("Native registry: {error}");
+                    cx.quit();
+                    return;
+                }
+            };
+            gpui_shell::init_with_components(cx, &registry);
+            cx.bind_keys([KeyBinding::new("ctrl-q", Quit, None)]);
+            let runtime = match ShellRuntime::new_with_components(cx, registry) {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    eprintln!("Script runtime failed: {error:#}");
+                    cx.quit();
+                    return;
+                }
+            };
+            let notes = notes::Host::new(notes_package.clone(), client.clone());
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    point(px(180.), px(130.)),
+                    size(px(1450.), px(940.)),
+                ))),
+                titlebar: Some(TitlebarOptions {
+                    title: Some(format!("Voyager — {session}").into()),
+                    ..Default::default()
+                }),
+                app_id: Some("voyager-native-mod-host".into()),
+                ..Default::default()
+            };
+            if let Err(error) = cx.open_window(options, |window, cx| {
+                let quit_conversation = conversation.clone();
+                speech::initialize(conversation.clone(), cx);
+                let avatar = avatar::Binding::new(client.clone(), window, cx);
+                let avatar_view = avatar.view();
+                let header = cx.new(|cx| {
+                    host::Header::new(
+                        runtime,
+                        host::Setup {
+                            package,
+                            theme_path: theme,
+                            initial_theme,
+                            initial_source,
+                            client,
+                            viewers,
+                            conversation,
+                            notes,
+                            avatar,
+                        },
+                        window,
+                        cx,
+                    )
+                });
+                quit::register(header.downgrade(), quit_conversation, cx);
+                cx.new(|cx| {
+                    ShellRoot::new(header.into(), window, cx).with_native_overlay(avatar_view)
+                })
+            }) {
+                eprintln!("Native window failed: {error}");
+                cx.quit();
+            }
+            cx.on_window_closed(|cx, _| {
+                if cx.windows().is_empty() {
+                    cx.quit();
+                }
+            })
+            .detach();
+            cx.activate(true);
+        });
+    Ok(())
+}
+
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("{error:#}");
+        std::process::exit(1);
+    }
+}

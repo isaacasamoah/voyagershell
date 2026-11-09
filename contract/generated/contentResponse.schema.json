@@ -1,0 +1,438 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ConfigurationSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "$ref": "#/definitions/NotesConfiguration"
+        },
+        "workspaceVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "configuration",
+        "workspaceVersion"
+      ],
+      "type": "object"
+    },
+    "DataDescription": {
+      "additionalProperties": false,
+      "properties": {
+        "defaults": true,
+        "schema": true
+      },
+      "required": [
+        "defaults"
+      ],
+      "type": "object"
+    },
+    "Notes": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "text"
+      ],
+      "type": "object"
+    },
+    "NotesConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "notesFile": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/NotesFile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "showHeading": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "showHeading"
+      ],
+      "type": "object"
+    },
+    "NotesFile": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "directory",
+        "filename"
+      ],
+      "type": "object"
+    },
+    "Snapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/definitions/Notes"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "contentId",
+        "revision",
+        "data"
+      ],
+      "type": "object"
+    },
+    "Version": {
+      "enum": [
+        "1"
+      ],
+      "type": "string"
+    }
+  },
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "const": "limited",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        },
+        "warningPresent": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "warningPresent",
+        "message"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DataDescription"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "schemaDeclared": {
+          "type": "boolean"
+        },
+        "stateSchema": true,
+        "status": {
+          "const": "described",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "schemaDeclared"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ConfigurationSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/Snapshot"
+        },
+        "status": {
+          "const": "snapshot",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "snapshot"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "filenames": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "const": "notes-list",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "filenames"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "$ref": "#/definitions/NotesConfiguration"
+        },
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/Snapshot"
+        },
+        "status": {
+          "const": "note-opened",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        },
+        "workspaceVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "snapshot",
+        "configuration",
+        "workspaceVersion"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "$ref": "#/definitions/NotesConfiguration"
+        },
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "const": "configured",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        },
+        "workspaceVersion": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "configuration",
+        "workspaceVersion"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/definitions/Snapshot"
+        },
+        "status": {
+          "const": "applied",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "snapshot"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "expectedRevision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "const": "rejected",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "message"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "expectedRevision": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "const": "uncertain",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/definitions/Version"
+        }
+      },
+      "required": [
+        "status",
+        "version",
+        "requestId",
+        "contentId",
+        "expectedRevision",
+        "message"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "Response"
+}

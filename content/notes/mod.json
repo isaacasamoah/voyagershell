@@ -1,0 +1,16 @@
+{
+  "name": "Notes",
+  "entry": "main.js",
+  "version": 1,
+  "contentConfiguration": 1,
+  "stateSchema": {
+    "$id": "voyager:notes-state:1",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "title": { "type": "string" },
+      "text": { "type": "string" }
+    },
+    "required": ["title", "text"]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Status": {
+      "enum": [
+        "applied",
+        "rejected",
+        "uncertain"
+      ],
+      "type": "string"
+    },
+    "TerminalReason": {
+      "enum": [
+        "ended"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "contentId": {
+      "type": "string"
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TerminalReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/Status"
+    }
+  },
+  "required": [
+    "requestId",
+    "contentId",
+    "status"
+  ],
+  "title": "TerminalResponse",
+  "type": "object"
+}

@@ -2,6 +2,13 @@
 
 Read CONSTRAINTS.md and CONTRIBUTING.md before changing code. Do not weaken the written checks or acceptance criteria.
 
+Prepare the pinned native SDK with `python3 desktop/prepare-sdk.py` before native
+Cargo or Node checks. The reviewed overlay patch belongs in `desktop/patches/`;
+the prepared user-cache checkout and generated `.cargo/config.toml` are local
+build inputs. Preserve one coherent SDK graph and installed dependency
+checkouts. The selected retained-rendering baseline is canonical development
+work, not completed foundation acceptance.
+
 VoyagerShell is a configurable workspace built on Herdr Core. Herdr Core owns terminals, screens and processes. Voyager owns workspace presentation, explicit context and its application policy. Do not introduce a second process supervisor or recreate native agent session recovery.
 
 This is an application for extensible content, not only a terminal manager. A terminal or coding agent is one content type. A content package may instead provide a document, graph, dashboard, game or another supported view, with an optional backend run by Core. Starting a program does not establish that its interface can be embedded or understood by an agent.
@@ -14,14 +21,16 @@ This is an application for extensible content, not only a terminal manager. A te
 - Prefer explicit types and a small number of modules. Add a dependency only for a primitive required now.
 - Keep runtime profiles, transcripts, credentials, private task documents and evidence out of Git.
 - Preserve the selected vocabulary: Voyage is a space, Fleet is a tab, Vessel places content in a Fleet, and Portal places content across a Voyage. Legacy storage/API names remain until deliberately migrated.
-- Electron is the current working renderer. GPUI remains an experiment until equivalent UX and increasing-load performance are demonstrated.
+- The native candidate uses Rust application code and GPUI rendering. Electron remains the preserved UX reference. The native candidate is not an accepted replacement until equivalent UX and increasing-load performance are demonstrated.
 - Use Rust best practices for Rust changes and Rust review alongside general review. Preserve the project's toolchain and lint rules.
 
 ## Application ownership and context
 
-The retained Electron reference in `experiments/electron-reference/` composes the application in `main.cjs`. The following legacy owner filenames are relative to that folder. `workspace.cjs` owns placement and avatar context; `portal-library.cjs` owns package files and instance data; `portal-host.cjs` checks content calls; `core.cjs` connects to external Herdr Core. Read these owners and the selected task specification before moving a boundary. The proposed Rust application and native renderer are not current file locations or accepted replacements.
+The native candidate's application queue is `app/src/client.rs`. Placement and explicit context belong to `app/src/workspace.rs` and `app/src/scope.rs`; content data belongs to `app/src/content.rs`; the external Core connection belongs to `app/src/core.rs`. `desktop/src/host.rs` binds native presentation to these owners. Read the relevant owning guide in `docs/` and the selected specification before changing a boundary. Existing source does not establish acceptance of its complete native journey.
 
-A Voyage is a space containing Fleets. A Fleet is a tab containing Vessel placements. A Portal is a persistent placement across a Voyage. One content type and instance interface should serve both placements. Keep content identity, placement and any backend terminal address separate. True Voyage-wide Portals remain proposed; legacy `realm`, `dimension` and `portal` storage/API names do not prove that behavior exists.
+The retained Electron reference in `experiments/electron-reference/` composes its application in `main.cjs`. Its `workspace.cjs`, `portal-library.cjs`, `portal-host.cjs` and `core.cjs` remain reference owners, not the native product's implementation locations.
+
+A Voyage is a space containing Fleets. A Fleet is a tab containing Vessel placements. A Portal is a persistent placement across a Voyage. The same content type and instance interface serves both placements. Keep content identity, placement and any backend terminal address separate. The native candidate retains Portal content across Fleet changes. Portal placement and presentation must belong to the shared canvas definition and Rust owner, with overlay as the default and make-room also supported. Native evidence is still required for the current composition; legacy `realm`, `dimension` and `portal` storage/API names alone prove no behavior.
 
 The avatar represents its user's authority while its dock selects context. Workspace, Voyage, Fleet, Vessel and Portal context must remain explicit and separate from keyboard focus, visual selection and delegated assignment. Fleet membership and Core parentage do not grant instruction rights. Do not claim the prototype enforces delegated ranks where it does not.
 
@@ -33,7 +42,7 @@ Make content types clear to agents. Describe supported renderers, per-instance c
 
 Preserve live authoring and reversible uninstall. A valid edit updates the existing instance; a broken edit must expose its error and retain the usable version where supported. Hiding, moving, switching Fleets or uninstalling a view must not stop its backend. Explicit stop targets only the verified selected Core program. Keep personal source edits and instance data when considering updates. Shipped packages currently seed once; an update or migration policy must be selected and proved rather than assumed.
 
-The reference private conversation in `experiments/electron-reference/companion.cjs` is separate from terminal agents and content instances. Its provider adapter handles native conversation and available voice capabilities. Application code owns scope, tools and policy. Keep user-visible conversation/results separate from private reasoning, credentials and account/audio-session data. Do not block application actions on provider work.
+The native private conversation lives in `app/src/conversation_client.rs`, its provider contract in `app/src/provider.rs`, and Codex conversion in `app/src/codex.rs` and `app/src/codex_protocol.rs`. The preserved Electron counterpart is `experiments/electron-reference/companion.cjs`. The private conversation is separate from terminal agents and content instances. The provider adapter handles native conversation and available voice capabilities. Application code owns scope, tools and policy. Keep user-visible conversation/results separate from private reasoning, credentials and account/audio-session data. Do not block application actions on provider work.
 
 Voyager's private administrator inspects, arranges, delegates and verifies. Working Vessels make project code, prose, configuration, skill and extension-source changes. Ordinary application actions and structured content-data updates remain administrator operations. Useful provider-native inspection complements the existing workspace/process/content tools; the exact native tool/write profile remains a design decision. Automatic per-Vessel conversation/transcript discovery is deferred. Current support is Codex-specific; additional providers and capability-driven voice controls require real integration proof.
 
@@ -57,7 +66,7 @@ Keep exploratory source under `experiments/<name>/`. The selected product struct
 
 For foundation specifications, plans, builds and reviews, read the selected initiative context and the [current/proposed architecture](/home/isaac/obsidian/Projects/voyagershellapp/explainer/walkthroughs/voyager-collaboration-tracer-bullet.html#architecture), including its common overview and the sections governing the assignment. The [original service architecture review](/home/isaac/obsidian/Projects/voyagershellapp/explainer/walkthroughs/service-restructure-review.html) supplies reference patterns for ownership, layers and contracts; it is not the current implementation. Carry these references into module briefs using the shared context-engineering skill.
 
-Use the existing maintained prove.py fixture. Tests, helpers, oneoffs and embedded programs all count under CONSTRAINTS.md. A source or unit check does not establish native behavior. Keep observed, inferred, proposed and unproved claims separate.
+Use the existing maintained prove.py fixture with one explicit route. --foundation selects product journeys, --reference selects the retained Electron fixture, and --native-mod-host/--native-avatar select named historical experiments. Missing or conflicting routes are errors; there is no implicit Electron fallback. Active native launch/input/capture/identity helpers and product journeys belong in tests/native/, with historical experiment implementations under experiments/. Keep shared helpers together and preserve candidate identity/ownership checks when repairing paths. Tests, helpers, oneoffs and embedded programs all count under CONSTRAINTS.md. A source or unit check does not establish native behavior. Keep observed, inferred, proposed and unproved claims separate.
 
 Use the installed `rust-best-practices` wrapper for Rust implementation and `rust-review` alongside `code-review-and-quality` for Rust review. Keep source comment-free, including doc comments. Put invariants and unsafe reasoning in the owning technical document. Follow CONTRIBUTING.md for formatting, locked tests, strict Clippy and interface checks. Do not import upstream lint presets or dependencies merely because a skill lists them. Exercise the actual app journey and a relevant failure; Linux evidence does not establish another platform.
 

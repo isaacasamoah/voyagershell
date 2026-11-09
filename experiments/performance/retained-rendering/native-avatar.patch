@@ -1,0 +1,98 @@
+--- a/desktop/src/main.rs
++++ b/desktop/src/main.rs
+@@ -334,6 +334,7 @@
+                 let quit_conversation = conversation.clone();
+                 speech::initialize(conversation.clone(), cx);
+                 let avatar = avatar::Binding::new(client.clone(), window, cx);
++                let avatar_view = avatar.view();
+                 let header = cx.new(|cx| {
+                     host::Header::new(
+                         runtime,
+@@ -353,7 +354,9 @@
+                     )
+                 });
+                 quit::register(header.downgrade(), quit_conversation, cx);
+-                cx.new(|cx| ShellRoot::new(header.into(), window, cx))
++                cx.new(|cx| {
++                    ShellRoot::new(header.into(), window, cx).with_native_overlay(avatar_view)
++                })
+             }) {
+                 eprintln!("Native window failed: {error}");
+                 cx.quit();
+--- a/desktop/src/avatar.rs
++++ b/desktop/src/avatar.rs
+@@ -765,6 +765,10 @@
+ }
+ 
+ impl Binding {
++    pub fn view(&self) -> gpui::AnyView {
++        self.view.clone().into()
++    }
++
+     pub fn new(client: Client, window: &mut Window, cx: &mut App) -> Self {
+         let workspace = window.window_handle();
+         let result = Rc::default();
+@@ -840,7 +844,7 @@
+     }
+ 
+     pub fn module(&self) -> HostModule {
+-        let view = self.view.clone();
++        let layer_view = self.view.downgrade();
+         let avatar = self.avatar.clone();
+         let targets = Rc::clone(&self.targets);
+         let layout_targets = Rc::clone(&self.targets);
+@@ -914,7 +918,7 @@
+                     )
+                     .into_any_element()
+             })
+-            .component("Layer", move |mut args, _, cx| {
++            .component("Layer", move |mut args, window, cx| {
+                 let key = args
+                     .props()
+                     .get("layoutKey")
+@@ -946,35 +950,41 @@
+                     let targets_retired = geometry.targets.len() != before;
+                     geometry.retire_portal_area() || targets_retired
+                 };
+-                avatar.update(cx, |avatar, cx| {
++                let changed = avatar.update(cx, |avatar, cx| {
++                    let mut changed = retired;
+                     if retired {
+                         cx.notify();
+                     }
+                     if let Some(epoch) = receipt_epoch {
++                        changed |= !receipt.is_empty() && receipt != avatar.dock_receipt;
+                         avatar.applied_dock(receipt, epoch, cx);
+                     }
+                     if let (Some(raw), Some(version)) = (scope, version)
+                         && version >= avatar.version
+                         && let Ok(scope) = serde_json::from_str::<Scope>(raw)
+                     {
+-                        let changed = avatar.scope != scope || avatar.projection_key != key;
++                        let projection_changed = avatar.scope != scope || avatar.projection_key != key;
++                        changed |= projection_changed;
+                         avatar.scope = scope;
+                         avatar.version = version;
+                         if avatar.projection_key != key {
+                             avatar.cancel_drag(cx);
+                         }
+                         avatar.projection_key = key.to_owned();
+-                        if changed {
++                        if projection_changed {
+                             cx.notify();
+                         }
+                     }
+                     avatar.update_dock_visibility(cx);
++                    changed
+                 });
++                if changed {
++                    notify_geometry(layer_view.clone(), avatar.downgrade(), window, cx);
++                }
+                 div()
+                     .relative()
+                     .size_full()
+                     .children(args.take_children())
+-                    .child(view.clone())
+                     .into_any_element()
+             })
+             .component("Target", move |mut args, _, cx| {

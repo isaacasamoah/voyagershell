@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Checkout": {
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commonDir": {
+          "type": "string"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "main": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "prunable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "commonDir",
+        "main",
+        "locked",
+        "prunable"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "enum": [
+        "applied",
+        "rejected",
+        "uncertain"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "checkouts": {
+      "items": {
+        "$ref": "#/definitions/Checkout"
+      },
+      "type": "array"
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/Status"
+    }
+  },
+  "required": [
+    "requestId",
+    "status",
+    "checkouts"
+  ],
+  "title": "Response",
+  "type": "object"
+}
