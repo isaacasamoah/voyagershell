@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub mod activity;
+pub mod avatar_animation;
 mod panels;
 pub use panels::{PanelInsertion, PanelOwner, PortalLayout, SavedLayout};
 pub mod administrator;

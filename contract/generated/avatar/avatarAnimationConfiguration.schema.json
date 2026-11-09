@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "Triggers": {
+      "additionalProperties": false,
+      "properties": {
+        "click": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dock": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hover": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "undock": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "properties": {
+    "pack": {
+      "type": "string"
+    },
+    "restPose": {
+      "type": "string"
+    },
+    "triggers": {
+      "$ref": "#/definitions/Triggers"
+    },
+    "version": {
+      "format": "uint8",
+      "maximum": 1,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "pack",
+    "restPose",
+    "triggers"
+  ],
+  "title": "Configuration",
+  "type": "object"
+}
