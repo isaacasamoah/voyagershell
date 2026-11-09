@@ -79,6 +79,10 @@ pub fn run(profile: PathBuf, session: String) -> Result<()> {
         include_str!("../mods/header/navigation-view.js"),
     )?;
     seed(
+        &package.join("rank-hat.js"),
+        include_str!("../mods/header/rank-hat.js"),
+    )?;
+    seed(
         &package.join("panel-view.js"),
         include_str!("../mods/header/panel-view.js"),
     )?;
@@ -173,6 +177,18 @@ pub fn run(profile: PathBuf, session: String) -> Result<()> {
         (
             "split-vertical.svg",
             include_str!("../mods/header/split-vertical.svg"),
+        ),
+        (
+            "hat-captain.svg",
+            include_str!("../mods/header/hat-captain.svg"),
+        ),
+        (
+            "hat-commodore.svg",
+            include_str!("../mods/header/hat-commodore.svg"),
+        ),
+        (
+            "hat-admiral.svg",
+            include_str!("../mods/header/hat-admiral.svg"),
         ),
         ("close.svg", include_str!("../mods/header/close.svg")),
         ("embed.svg", include_str!("../mods/header/embed.svg")),

@@ -23,6 +23,7 @@ const entries = [
   "desktop/mods/header/menu.ts",
   "desktop/mods/header/panels.ts",
   "desktop/mods/header/panel-view.ts",
+  "desktop/mods/header/rank-hat.ts",
   "desktop/mods/header/navigation-view.ts",
   "contract/generated/workspace.ts",
   "contract/generated/conversation.ts",

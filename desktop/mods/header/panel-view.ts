@@ -8,6 +8,7 @@ import { activityBadge } from "./activity.js";
 import { vesselFrame } from "./canvas.js";
 import { visiblePanels } from "./panels.js";
 import { processIcon } from "./process-icons.js";
+import { rankHat } from "./rank-hat.js";
 import type Workspace from "./main.js";
 import type { MenuItem } from "./menu.js";
 import type { PanelGroup } from "./panels.js";
@@ -63,6 +64,20 @@ export function renderPanel(
       label: "Rename",
       choose: (_version, cx) => workspace.editName(scope, placement.name, cx),
     },
+    ...(content.typeId === "terminal" && content.rank && content.rank !== "crew"
+      ? [
+          {
+            label: "Reset rank to Crew",
+            choose: (version: string, cx: UIContext) =>
+              workspace.run(
+                { operation: "set-agent-rank", id: placement.id, rank: "crew" },
+                cx,
+                undefined,
+                version,
+              ),
+          },
+        ]
+      : []),
     ...(["right", "bottom"] as const).map((side) => ({
       label: side === "right" ? "Split side by side" : "Split above and below",
       choose: (_version: string, cx: UIContext) =>
@@ -165,19 +180,7 @@ export function renderPanel(
                           )?.program || content.typeId,
                         ),
                       )
-                      .child(div().flex_1().min_w(0).child(title))
-                      .children(
-                        content.typeId === "terminal" && badge.label
-                          ? [
-                              div()
-                                .text_size(9)
-                                .text_color(colors.muted)
-                                .accessibility_label(badge.hint)
-                                .tooltip(badge.hint)
-                                .child(badge.label),
-                            ]
-                          : [],
-                      ),
+                      .child(div().flex_1().min_w(0).child(title)),
                     menu,
                   ),
                 ),
@@ -188,6 +191,23 @@ export function renderPanel(
                 .flex_shrink_0()
                 .child(workspace.splitControl(placement, group, "right"))
                 .child(workspace.splitControl(placement, group, "bottom"))
+                .children(
+                  content.typeId === "terminal"
+                    ? [rankHat(workspace, placement, content, scope)]
+                    : [],
+                )
+                .children(
+                  content.typeId === "terminal" && badge.label
+                    ? [
+                        div()
+                          .text_size(9)
+                          .text_color(colors.muted)
+                          .accessibility_label(badge.hint)
+                          .tooltip(badge.hint)
+                          .child(badge.label),
+                      ]
+                    : [],
+                )
                 .child(
                   Button.new(`maximize-${placement.id}`)
                     .accessibility_label(
