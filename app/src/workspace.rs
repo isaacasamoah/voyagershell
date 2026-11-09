@@ -27,6 +27,8 @@ impl Model {
             self.layout.home = Some(Voyage {
                 id,
                 name: "Home".into(),
+                name_origin: voyager_contract::NameOrigin::Deliberate,
+                primary_vessel: None,
                 closed: false,
                 closed_order: 0,
                 fleets: vec![fleet],
@@ -168,6 +170,8 @@ impl Model {
                 self.layout.voyages.push(Voyage {
                     id,
                     name,
+                    name_origin: voyager_contract::NameOrigin::Deliberate,
+                    primary_vessel: fleet.vessels.first().map(|panel| panel.id.clone()),
                     closed: false,
                     closed_order: 0,
                     fleets: vec![fleet],
@@ -189,6 +193,9 @@ impl Model {
                     .unwrap_or("/")
                     .to_owned();
                 self.apply(Action::CreateVoyage { name, cwd })?;
+                if let Some(voyage) = self.layout.voyages.last_mut() {
+                    voyage.name_origin = voyager_contract::NameOrigin::Automatic;
+                }
             }
             Action::CreateFleet { voyage, name } => {
                 let index = self
@@ -280,6 +287,9 @@ impl Model {
                     .map(|f| f.id.clone());
                 self.layout.selected_voyage = Some(id);
                 self.layout.view = WorkspaceView::Fleet;
+            }
+            Action::ConfirmVoyageClose { .. } | Action::CancelVoyageClose { .. } => {
+                return Err("Voyage shutdown confirmation belongs to the application owner".into());
             }
             Action::CloseVoyage { id } => {
                 let index = self
@@ -420,11 +430,13 @@ impl Model {
                 }
                 match target {
                     RenameTarget::Voyage { id } => {
-                        self.layout
+                        let voyage = self
+                            .layout
                             .containers_mut()
                             .find(|item| item.id == id)
-                            .ok_or("Voyage not found")?
-                            .name = name
+                            .ok_or("Voyage not found")?;
+                        voyage.name = name;
+                        voyage.name_origin = voyager_contract::NameOrigin::Deliberate;
                     }
                     RenameTarget::Fleet { id } => {
                         let (v, f) = self.fleet_index(&id).ok_or("Fleet not found")?;

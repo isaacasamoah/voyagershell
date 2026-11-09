@@ -70,7 +70,7 @@ mod linux {
     }
 
     #[test]
-    fn explicit_quit_stops_only_its_session_and_cold_reopen_keeps_ended_bindings() {
+    fn explicit_owner_shutdown_and_cold_reopen_prepare_plain_shells() {
         for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
             assert!(
                 std::env::var_os(key).is_none(),
@@ -237,8 +237,17 @@ mod linux {
             drop(client);
             let cold = Client::open(session.clone(), "/tmp".into());
             let restored = call(&cold, 0, Action::Inspect);
-            assert_eq!(restored.layout, layout);
-            assert!(restored.created_contents.is_empty());
+            let mut expected = (*layout).clone();
+            for item in expected
+                .contents
+                .iter_mut()
+                .filter(|item| item.backend.is_some())
+            {
+                item.backend = None;
+                item.launch = Some(voyager_contract::launch::Launch::Terminal);
+            }
+            assert_eq!(*restored.layout, expected);
+            assert_eq!(restored.created_contents.len(), addresses.len());
             reopened = Some(Core::connect(&session).unwrap());
             let core = reopened.as_mut().unwrap();
             let status = core.server_status().unwrap();
@@ -253,18 +262,33 @@ mod linux {
                 let terminal = core.terminal_get(address).unwrap();
                 assert_eq!(terminal.state, "finished");
             }
-            let retained = restored
+            let retained = restored.created_contents.first().unwrap();
+            let _viewer = cold
+                .terminal(retained.clone(), cold.request_id(), restored.version)
+                .unwrap();
+            let after = call(&cold, 0, Action::Inspect);
+            let address = &after
                 .layout
                 .contents
                 .iter()
-                .find(|content| content.backend.is_some())
-                .unwrap();
+                .find(|content| &content.id == retained)
+                .unwrap()
+                .backend
+                .as_ref()
+                .unwrap()
+                .0;
+            assert!(!addresses.contains(address));
+            let shell = core.terminal_get(address).unwrap();
+            assert_eq!(shell.state, "live");
             assert!(
-                cold.terminal(retained.id.clone(), cold.request_id(), restored.version)
-                    .is_err()
+                shell
+                    .argv
+                    .first()
+                    .is_some_and(|value| value.ends_with("bash"))
             );
-            assert_eq!(core.server_status().unwrap().live, 0);
-            observations["coldReopen"] = json!({"layoutEqual":true,"live":0,"addresses":addresses});
+            reopened_ids.push(identity(shell.pid.unwrap()));
+            assert_eq!(core.server_status().unwrap().live, 1);
+            observations["coldReopen"] = json!({"placementPreserved":true,"oldAddresses":addresses,"newShell":address,"live":1});
             drop(cold);
         }));
         let mut cleanup = Vec::new();

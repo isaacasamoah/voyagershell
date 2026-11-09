@@ -97,6 +97,52 @@ pub fn command(launch: &Launch, cwd: &str) -> Result<Vec<String>, String> {
     Ok(args)
 }
 
+pub(crate) fn terminal_command(launch: &Launch, cwd: &str) -> Result<Vec<String>, String> {
+    shell_command(launch, command(launch, cwd)?)
+}
+
+fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, String> {
+    let agent = match launch {
+        Launch::Codex { .. } => true,
+        Launch::Program { argv } => argv.first().is_some_and(|program| {
+            let name = Path::new(program)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("");
+            matches!(
+                name.trim_end_matches(".exe"),
+                "codex"
+                    | "claude"
+                    | "claude-code"
+                    | "pi"
+                    | "opencode"
+                    | "cursor-agent"
+                    | "copilot"
+                    | "amp"
+                    | "gemini"
+                    | "grok"
+            )
+        }),
+        Launch::Terminal => false,
+    };
+    if !agent {
+        return Ok(args);
+    }
+    let shell = which::which("bash").map_err(|error| format!("Bash is unavailable: {error}"))?;
+    let mut command = vec![
+        shell
+            .into_os_string()
+            .into_string()
+            .map_err(|_| "Shell path is not UTF-8")?,
+        "-i".into(),
+        "-c".into(),
+        "\"$@\"; exec \"$BASH\" -i".into(),
+        "voyager-agent".into(),
+    ];
+    command.extend(args);
+    Ok(command)
+}
+
 pub fn catalog(path: Option<&Path>, cwd: &str) -> Result<Catalog, String> {
     let settings = path.map(load).transpose()?.unwrap_or_default();
     let mut available = Vec::new();
@@ -117,4 +163,25 @@ pub fn catalog(path: Option<&Path>, cwd: &str) -> Result<Catalog, String> {
         errors,
         path: path.map(|path| path.to_string_lossy().into_owned()),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agent_command_keeps_arguments_literal_and_returns_to_bash() {
+        let args = shell_command(
+            &Launch::Program {
+                argv: vec!["claude".into(), "literal; $(never-run)".into()],
+            },
+            vec!["/vendor/cli.js".into(), "literal; $(never-run)".into()],
+        )
+        .unwrap();
+        assert_eq!(
+            &args[1..5],
+            ["-i", "-c", "\"$@\"; exec \"$BASH\" -i", "voyager-agent"]
+        );
+        assert_eq!(&args[5..], ["/vendor/cli.js", "literal; $(never-run)"]);
+    }
 }
