@@ -9,6 +9,7 @@ pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {
         path: vec!["Overwatch".into()],
         cwd: None,
         revision,
+        preview: None,
     };
     if layout.context == Context::Workspace {
         return Ok(focus);

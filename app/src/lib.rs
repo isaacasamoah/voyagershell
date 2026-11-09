@@ -11,6 +11,8 @@ pub mod observation;
 mod panels;
 mod process;
 mod scope;
+mod terminal_lifecycle;
+pub mod voyage_close;
 pub mod workspace;
 pub mod worktrees;
 
@@ -32,3 +34,7 @@ mod voice_host;
 mod voice_session;
 mod voice_transcript;
 mod voice_wire;
+
+#[path = "../../experiments/performance/typing-latency/trace.rs"]
+mod typing_trace;
+pub use typing_trace::record as record_terminal_trace;

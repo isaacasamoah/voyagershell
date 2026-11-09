@@ -4,7 +4,7 @@ use crate::{
     administrator::{self, Tools},
     client::Client as Workspace,
     codex::Codex,
-    conversation::{defer, fail, focus, notification},
+    conversation::{defer, fail, notification},
     provider::{
         Answer, Capabilities, Command, Event as ProviderEvent, Operation, Outcome, ToolCall,
         Visible,
@@ -652,7 +652,9 @@ impl Owner {
         if workspace.status != Status::Applied || !workspace.fresh {
             return Err("Inspect the workspace before starting this conversation".into());
         }
-        let context = focus(&workspace.layout, workspace.version)?;
+        let context = self
+            .workspace
+            .conversation_focus(&workspace.layout, workspace.version)?;
         self.context = Some(context.clone());
         self.tools = Tools::default();
         self.active = request.request_id.clone();
