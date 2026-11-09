@@ -6,9 +6,9 @@ from secrets import token_hex
 
 from PIL import ImageChops
 
-from proof_workspace import core_rpc, named_button
+from proof_workspace import click_control, core_rpc, named_button, review_frame, wait as wait_for
 from proof_clipboard import Clipboard
-from proof_process import observe_core_exit
+from proof_process import exit_observation, observe_core_exit, process_identity
 
 
 def provider_processes(evidence):
@@ -447,6 +447,7 @@ def prove(
             native("key", ord(character), False)
 
     pid = json.loads((evidence / "launch.json").read_text())["pid"]
+    targets = []
 
     if journey == "conversation-ux":
         return conversation_ux(
@@ -494,7 +495,7 @@ def prove(
         capture("administrator-home-before-turn")
     if not (evidence / "conversation-open.png").exists():
         time.sleep(0.5)
-        click(*named_button(native, evidence, "Chat"))
+        click_control(native, capture, geometry, evidence, pid, "Chat", targets)
     idle = wait(lambda state: state["phase"] == "idle", 5)
     assert idle["thread"] is None, "Opening chat started the provider"
     capture("conversation-open")
@@ -505,6 +506,9 @@ def prove(
             fixture = evidence / "profile/conversation/administrator-read.txt"
             fixture.parent.mkdir(parents=True, exist_ok=True)
             fixture.write_text(marker)
+        else:
+            workspace = evidence / "content-workspace"
+            workspace.mkdir()
     if process_case or content_case:
         deadline = time.monotonic() + 15
         while True:
@@ -518,7 +522,7 @@ def prove(
                     break
             assert time.monotonic() < deadline, "Initial real terminal was not bound"
             time.sleep(0.05)
-    native("focus", pid, "Message Voyager", 0)
+    click_control(native, capture, geometry, evidence, pid, "Message Voyager", targets)
     time.sleep(0.2)
     capture("conversation-focused")
     type_text(
@@ -526,7 +530,7 @@ def prove(
         if process_case
         else "Use your native file read tool to read administrator-read.txt in your current directory. Then use voyager_workspace to inspect the workspace and create exactly one Fleet named Native admin inside the existing Voyage. Report the file marker and actual result briefly. Do not change project files or launch agents."
         if administrator
-        else f"Use voyager_workspace to inspect this workspace. Create exactly two Notes instances: one Vessel beside the existing terminal in the selected Fleet and one Portal in this Voyage. Use voyager_content to describe and inspect each instance, then update its title and text with the inspected revision. The Vessel title must be Fleet notes and text must be FLEET_{marker}. The Portal title must be Voyage notes and text must be VOYAGE_{marker}. Inspect both again to verify saved data. Keep all existing content and context unchanged. Do not edit files, send terminal input, create Fleets, repeat an uncertain action or use native tools to bypass the content owner."
+        else f"Use voyager_workspace to inspect this workspace. Create exactly one Voyage named Content trial with cwd {workspace}. In its first Fleet create exactly two Notes instances: one Vessel beside its terminal and one Portal in that Voyage. Use voyager_content to describe and inspect each instance, then update its title and text with the inspected revision. The Vessel title must be Fleet notes and text must be FLEET_{marker}. The Portal title must be Voyage notes and text must be VOYAGE_{marker}. Inspect both again to verify saved data. Keep all previous content and avatar context unchanged. Do not edit files, send terminal input, create extra Fleets, repeat an uncertain action or use native tools to bypass the content owner."
         if content_case
         else "Count from one to one hundred in words. Use no tools."
         if journey == "conversation-interrupt"
@@ -640,14 +644,22 @@ def prove(
     )
     assert answers[0]["context"] == users[0]["context"]
     assert final["limited"] is False
-    assert users[0]["context"]["path"] == ["Workspace"]
+    assert users[0]["context"]["path"] == ["Overwatch"]
     assert users[0]["context"]["scope"] == {"kind": "workspace"}
     assert users[0]["context"]["revision"].isdigit()
     if content_case:
         tools = [message for message in final["messages"] if message["role"] == "tool"]
         assert tools and all(
-            message["tool"]["status"] == "applied" for message in tools
-        )
+            message["tool"]["status"] == "applied"
+            or (
+                message["tool"]["status"] == "rejected"
+                and message["tool"]["action"]["action"]["operation"] == "create-content"
+                and message["text"]
+                == "Workspace request refused: invalid_workspace: Layout changed; inspect it before making a new request"
+            )
+            for message in tools
+        ), tools
+        assert len({message["tool"]["requestId"] for message in tools}) == len(tools)
         assert all(
             message["context"] == users[0]["context"]
             and message["requestId"] == users[0]["requestId"]
@@ -668,15 +680,18 @@ def prove(
         assert sum(action["operation"] == "update" for action in actions) == 2
         observed = core_rpc(session, env, "doc.get", {"name": "voyager-layout-v1"})
         layout = observed["value"]
-        voyage = layout["voyages"][0]
+        assert len(layout["voyages"]) == len(initial["value"]["voyages"]) + 1
+        voyage = next(v for v in layout["voyages"] if v["name"] == "Content trial")
+        assert voyage["cwd"] == str(workspace) and len(voyage["fleets"]) == 1
         fleet = voyage["fleets"][0]
         assert (
-            len(layout["contents"]) == 3
+            len(layout["contents"]) == len(initial["value"]["contents"]) + 3
             and len(fleet["vessels"]) == 2
             and len(voyage["portals"]) == 1
         )
         assert layout["context"] == initial["value"]["context"]
-        assert layout["contents"][0] == initial["value"]["contents"][0]
+        assert layout["voyages"][0] == initial["value"]["voyages"][0]
+        assert layout["contents"][:len(initial["value"]["contents"])] == initial["value"]["contents"]
         ids = [fleet["vessels"][1]["content"], voyage["portals"][0]["content"]]
         expected = [
             {"title": "Fleet notes", "text": f"FLEET_{marker}"},
@@ -700,36 +715,39 @@ def prove(
                 calls[2]["action"]["action"]["expectedRevision"] == calls[1]["version"]
             )
             assert calls[3]["version"] == calls[2]["version"] != calls[1]["version"]
-        assert [
-            json.loads((evidence / "profile/data" / (key + ".json")).read_text())
-            for key in ids
-        ] == expected
-        click(*chat_close_point(native, pid, evidence))
-        deadline = time.monotonic() + 10
-        while True:
-            fields = native("fields", pid, ["Note title", "Note text"], "window")[
-                "fields"
-            ]
-            if len(fields) == 4 and all(
-                item["role"] == "entry" and item["width"] > 0 and item["height"] > 0
-                for item in fields
-            ):
-                break
-            assert time.monotonic() < deadline, fields
-            time.sleep(0.1)
+        files = []
+        for key, data in zip(ids, expected, strict=True):
+            content = next(item for item in layout["contents"] if item["id"] == key)
+            binding = content["configuration"]["notesFile"]
+            path = Path(binding["directory"]) / binding["filename"]
+            assert path.parent == workspace / "notes"
+            assert next(
+                panel["name"]
+                for panel in [*fleet["vessels"], *voyage["portals"]]
+                if panel["content"] == key
+            ) == path.name
+            assert path.read_text() == f"# {data['title']}\n\n{data['text']}"
+            files.append(str(path))
+        click_control(native, capture, geometry, evidence, pid, "Close chat", targets)
+        fields = native("fields", pid, ["Note title", "Note text"], "window")["fields"]
+        visual = review_frame(
+            capture, evidence,
+            "Both native Notes must visibly show these exact title/text values: " + json.dumps(expected),
+            "content-agent-both-native-views",
+        )
         (evidence / "content-agent-observed.json").write_text(
             json.dumps(
                 {
                     "layout": observed,
                     "ids": ids,
                     "data": expected,
+                    "files": files,
                     "fields": fields,
-                    "renderedTextRequiresVisualReview": True,
+                    "visual": visual,
                 },
                 indent=2,
             )
         )
-        capture("content-agent-both-native-views")
     if administrator:
         assert marker in " ".join(message["text"] for message in answers), (
             "Native file inspection did not return the undisclosed fixture marker"
@@ -866,7 +884,7 @@ def prove(
         native("scroll", 0, 1)
         time.sleep(0.3)
         capture("administrator-scrolled-answer")
-        click(*chat_close_point(native, pid, evidence))
+        click_control(native, capture, geometry, evidence, pid, "Close chat", targets)
         capture("administrator-native-workspace-effect")
         if process_case:
             click(275, 30)
@@ -900,17 +918,28 @@ def prove(
                 }
             )
         (evidence / "owned-shells.json").write_text(json.dumps(shells, indent=2))
+    core_before = core_rpc(session, env, "server.status", {})
+    core_identity = process_identity(core_before["pid"], metadata_only=True)
     close()
-    if administrator or content_case:
-        observe_core_exit(session, env, providers)
-        if process_case:
-            for shell in shells:
-                path = Path("/proc") / str(shell["pid"])
-                assert (
-                    not path.exists()
-                    or path.joinpath("stat").read_text().rsplit(") ", 1)[1].split()[19]
-                    != shell["start"]
-                ), shell
+    socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (session + ".sock")
+    exited = wait_for(
+        lambda: exit_observation(providers, socket),
+        lambda result: all(item["observedState"] in ("absent", "pid-reused") for item in result["processes"]),
+        "private provider exit after normal Quit",
+        10,
+    )
+    (evidence / "provider-quit-observed.json").write_text(json.dumps(exited, indent=2))
+    assert not exited["socketAbsent"], "Normal application Quit unexpectedly stopped Core"
+    core_after = core_rpc(session, env, "server.status", {})
+    assert core_after["pid"] == core_before["pid"]
+    assert process_identity(core_after["pid"], metadata_only=True) == core_identity
+    retained_core = {"before": core_before, "after": core_after, "identity": core_identity,
+                     "terminals": core_rpc(session, env, "terminal.list", {"all": True})}
+    (evidence / "core-retained-after-quit.json").write_text(json.dumps(retained_core, indent=2))
+    if process_case:
+        retained = exit_observation(shells, socket)
+        assert all(item["observedState"] not in ("absent", "pid-reused", "Z") for item in retained["processes"]), retained
+        (evidence / "shells-retained-after-quit.json").write_text(json.dumps(retained, indent=2))
     return (
         (
             ["native-content-agent-create-inspect-update-both-scopes"]
@@ -938,6 +967,7 @@ def private_turn(
     owned,
     name,
     accepted=None,
+    focus=None,
 ):
     def read():
         path = evidence / "conversation.json"
@@ -953,19 +983,22 @@ def private_turn(
         for message in before["messages"]
         if message["role"] == "user"
     }
-    wait(
-        lambda: native("fields", pid, ["Message Voyager"], "window")["fields"],
-        lambda fields: (
-            len(fields) == 1 and fields[0]["width"] > 0 and fields[0]["height"] > 0
-        ),
-        "visible private composer",
-    )
-    native("focus", pid, "Message Voyager", 0)
-    wait(
-        lambda: native("fields", pid, ["Message Voyager"], "window")["fields"],
-        lambda values: len(values) == 1 and values[0]["focused"],
-        "focused private composer",
-    )
+    if focus is None:
+        wait(
+            lambda: native("fields", pid, ["Message Voyager"], "window")["fields"],
+            lambda fields: (
+                len(fields) == 1 and fields[0]["width"] > 0 and fields[0]["height"] > 0
+            ),
+            "visible private composer",
+        )
+        native("focus", pid, "Message Voyager", 0)
+        wait(
+            lambda: native("fields", pid, ["Message Voyager"], "window")["fields"],
+            lambda values: len(values) == 1 and values[0]["focused"],
+            "focused private composer",
+        )
+    else:
+        focus()
     type_text(prompt)
     native("key", 65293, True)
     native("key", 65293, False)
@@ -1036,7 +1069,7 @@ def private_turn(
     return final, user
 
 
-def package_turn(*, native, pid, evidence, wait, type_text, operation, context, owned):
+def package_turn(*, native, pid, evidence, wait, type_text, operation, context, owned, focus=None):
     assert operation in ("remove", "restore") and context == {"kind": "workspace"}
     prompt = f"Use voyager_workspace to inspect this workspace once, then perform exactly one {operation}-content-package action with typeId notes. Keep all content, data, canvas, context, programs and source files unchanged. Use no other tools or effects. Never repeat an uncertain action. Report the actual package outcome briefly."
     final, user = private_turn(
@@ -1049,6 +1082,7 @@ def package_turn(*, native, pid, evidence, wait, type_text, operation, context, 
         context=context,
         owned=owned,
         name="notes-lifetime-package-" + operation,
+        focus=focus,
     )
     tools = [
         message

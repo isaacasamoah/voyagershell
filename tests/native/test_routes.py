@@ -1,5 +1,6 @@
 import ast
 import importlib
+import json
 import os
 import subprocess
 import sys
@@ -13,6 +14,117 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Routes(unittest.TestCase):
+    def test_accessibility_requeries_only_a_known_stale_read(self):
+        tree = ast.parse(
+            (Path(__file__).parent / "proof_native_accessibility.py").read_text()
+        )
+        query = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "fields"
+        )
+
+        class ReadError(Exception):
+            domain = "atspi_error"
+            code = 1
+            message = "Unknown object '/org/a11y/atspi/accessible/0/retired'"
+
+        calls, sleeps = [], []
+
+        def once(*args):
+            calls.append(args)
+            if len(calls) == 1:
+                raise ReadError()
+            return ["fresh"]
+
+        namespace = dict(
+            GLib=SimpleNamespace(Error=ReadError),
+            time=SimpleNamespace(sleep=sleeps.append),
+            _fields_once=once,
+            Atspi=SimpleNamespace(init=lambda: None, get_desktop=once),
+        )
+        exec(
+            compile(ast.Module(body=[query], type_ignores=[]), "accessible-read", "exec"),
+            namespace,
+        )
+        self.assertEqual(namespace["fields"](123), ["fresh"])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(sleeps, [0.05])
+        for attribute, value in [
+            ("domain", "other"),
+            ("code", 2),
+            ("message", "Permission denied"),
+        ]:
+            with patch.object(ReadError, attribute, value):
+                calls.clear()
+                with self.assertRaises(ReadError):
+                    namespace["fields"](123)
+                self.assertEqual(len(calls), 1)
+
+        def broken(*args):
+            calls.append(args)
+            raise ReadError()
+
+        namespace["_fields_once"] = broken
+        calls.clear()
+        with self.assertRaises(ReadError):
+            namespace["fields"](123)
+        self.assertEqual(len(calls), 2)
+
+    def test_native_quit_is_never_replayed(self):
+        tree = ast.parse((Path(__file__).parent / "proof_native_mod_host.py").read_text())
+        close = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "close"
+        )
+        events = []
+        namespace = dict(
+            verify=lambda: None,
+            execute=lambda *args: None,
+            capture=lambda *args: None,
+            native=lambda *args: events.append(args),
+            record={"pid": 99999999, "window": "owned"},
+            Path=Path,
+            reap_launched_candidate=lambda *args: None,
+            pending_process=None,
+            quit_requests=set(),
+        )
+        exec(
+            compile(ast.Module(body=[close], type_ignores=[]), "native-quit", "exec"),
+            namespace,
+        )
+        namespace["close"]()
+        with self.assertRaisesRegex(AssertionError, "already requested"):
+            namespace["close"]()
+        self.assertEqual(len(events), 4)
+
+    def test_feedback_import_does_not_require_the_legacy_notes_fixture(self):
+        with patch.dict(sys.modules):
+            sys.modules.pop("proof_demo_feedback", None)
+            sys.modules["proof_foundation_notes"] = None
+            importlib.import_module("proof_demo_feedback")
+
+    def test_terminal_target_requires_accessibility_or_a_measured_visible_point(self):
+        from proof_workspace import click_control
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory)
+            evidence.joinpath("measured-points.json").write_text(json.dumps({"0": {"name": "Terminal input", "point": [20, 30]}}))
+            events = []
+            def native(*args):
+                events.append(args)
+                return {"fields": []}
+            bounds = lambda: {"X": "100", "Y": "200", "WIDTH": "2900", "HEIGHT": "1880"}
+            click_control(native, lambda _: SimpleNamespace(size=(1450, 940), width=1450, height=940), bounds, evidence, 123, "Terminal input", [])
+            self.assertIn(("move", 104, 2076, 2), events)
+            self.assertIn(("move", 140, 260, 2), events)
+            self.assertEqual(events[-2:], [("button", True, 272), ("button", False, 272)])
+            evidence.joinpath("measured-points.json").write_text(json.dumps({"0": {"name": "Terminal input", "point": [1450, 30]}}))
+            events.clear()
+            with self.assertRaises(AssertionError):
+                click_control(native, lambda _: SimpleNamespace(size=(1450, 940), width=1450, height=940), bounds, evidence, 123, "Terminal input", [])
+            self.assertFalse(any(event[0] == "button" for event in events))
+
     def test_native_button_codes_keep_the_owned_window_press_guard(self):
         tree = ast.parse(
             (Path(__file__).parent / "proof_native_mod_host.py").read_text()
@@ -619,7 +731,7 @@ class Routes(unittest.TestCase):
     def test_warm_restore_clicks_only_the_owned_floating_window(self):
         proof = importlib.import_module("proof_avatar_window")
         original = {"pid": 7, "window": "main"}
-        for pointer in ("floating", "other"):
+        for pointer, remaining in (("floating", []), ("other", []), ("floating", ["floating"])):
             native_calls = []
             states = iter(("Iconic", "Normal"))
 
@@ -637,7 +749,7 @@ class Routes(unittest.TestCase):
                 return value
 
             with (
-                patch.object(proof, "floating_windows", return_value=["floating"]),
+                patch.object(proof, "floating_windows", side_effect=[["floating"], remaining]),
                 patch.object(proof.subprocess, "check_output", side_effect=execute),
             ):
                 options = dict(
@@ -658,8 +770,13 @@ class Routes(unittest.TestCase):
                     with self.assertRaises(AssertionError):
                         proof.warm_restore(**options)
                     self.assertEqual(native_calls, [("move", 130, 140, 2)])
+                elif remaining:
+                    with self.assertRaises(AssertionError):
+                        proof.warm_restore(**options)
                 else:
                     receipt = proof.warm_restore(**options)
+                    self.assertEqual(receipt["floatingAfterRestore"], [])
+                    self.assertEqual(receipt["boundsBefore"], receipt["boundsAfter"])
                     self.assertEqual(receipt["restorePointer"]["WINDOW"], "floating")
                     self.assertEqual(
                         native_calls,

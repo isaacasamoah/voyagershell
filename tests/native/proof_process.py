@@ -44,13 +44,20 @@ def observe_core_exit(session, env, owned=(), seconds=5):
 def process_identity(pid, *, metadata_only=False):
     process = Path(f"/proc/{pid}")
     if metadata_only:
+        executable = process.joinpath("exe")
+        target = executable.readlink()
+        if str(target).endswith(" (deleted)"):
+            executable.stat()
+            target = Path(str(target).removesuffix(" (deleted)"))
+        else:
+            target = executable.resolve(strict=True)
         return {
             "uid": process.stat().st_uid,
             "start": process.joinpath("stat")
             .read_text()
             .rsplit(") ", 1)[1]
             .split()[19],
-            "executable": str(process.joinpath("exe").resolve(strict=True)),
+            "executable": str(target),
         }
     key = b"VOYAGER_WORKSPACE_SESSION="
     session = next(
