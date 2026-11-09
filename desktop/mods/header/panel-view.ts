@@ -8,6 +8,7 @@ import { activityBadge } from "./activity.js";
 import { vesselFrame } from "./canvas.js";
 import { visiblePanels } from "./panels.js";
 import { processIcon } from "./process-icons.js";
+import { rankHat } from "./rank-hat.js";
 import type Workspace from "./main.js";
 import type { MenuItem } from "./menu.js";
 import type { PanelGroup } from "./panels.js";
@@ -63,6 +64,20 @@ export function renderPanel(
       label: "Rename",
       choose: (_version, cx) => workspace.editName(scope, placement.name, cx),
     },
+    ...(content.typeId === "terminal" && content.rank && content.rank !== "crew"
+      ? [
+          {
+            label: "Reset rank to Crew",
+            choose: (version: string, cx: UIContext) =>
+              workspace.run(
+                { operation: "set-agent-rank", id: placement.id, rank: "crew" },
+                cx,
+                undefined,
+                version,
+              ),
+          },
+        ]
+      : []),
     ...(["right", "bottom"] as const).map((side) => ({
       label: side === "right" ? "Split side by side" : "Split above and below",
       choose: (_version: string, cx: UIContext) =>
@@ -186,6 +201,11 @@ export function renderPanel(
               div()
                 .flex()
                 .flex_shrink_0()
+                .children(
+                  content.typeId === "terminal"
+                    ? [rankHat(workspace, placement, content, scope)]
+                    : [],
+                )
                 .child(workspace.splitControl(placement, group, "right"))
                 .child(workspace.splitControl(placement, group, "bottom"))
                 .child(
