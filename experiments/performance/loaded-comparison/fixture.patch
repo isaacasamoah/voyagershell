@@ -36,7 +36,20 @@
          assert all(record['identity'][key] == value for key, value in driver.process_identity(record['pid'], metadata_only=True).items())
          visible = subprocess.check_output(['xdotool', 'search', '--onlyvisible', '--pid', str(record['pid'])], env=driver.env, text=True).split()
          assert visible == [record['window']], 'A peer view disappeared'
-@@ -134,7 +140,7 @@
+@@ -111,7 +117,12 @@
+     if protocol.get('hiddenOwner'):
+         assert protocol['hiddenOwner'] == json.loads(Path('/home/isaac/.local/share/voyagershell-foundation/active-preview.json').read_text())
+         hidden_guard = views.enter_context(hidden_view(protocol['hiddenOwner'], driver, out))
++    first_case = protocol.get('firstCase', 1)
++    assert 1 <= first_case <= len(protocol['cases'])
++    assert not protocol.get('pairedBlocks') or first_case % 2 == 1
+     for index, (variant, condition) in enumerate(protocol['cases'], 1):
++        if index < first_case:
++            continue
+         assert time.monotonic() < deadline, 'Collection budget exhausted; stop new runs'
+         if hidden_guard:
+             hidden_guard()
+@@ -134,7 +145,7 @@
                                      stdout=(folder / 'load.stdout').open('x'), stderr=(folder / 'load.stderr').open('x'), start_new_session=True)
              driver.save(folder / 'load-owner.json', {'pid': load.pid, 'identity': driver.process_identity(load.pid, metadata_only=True)})
              driver.wait(lambda: (folder / 'load.jsonl').exists(), bool, 'CPU workers started')
