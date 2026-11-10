@@ -1,20 +1,19 @@
 # VoyagerShell
 
-VoyagerShell is a canvas for agents and humans to work together.
-
-It is a configurable workspace where you arrange terminals, coding agents, notes
-and project content around the work you are doing.
+VoyagerShell is a canvas for agents and humans to collaborate.
 
 ## Docking and collaboration
+
+VoyagerShell introduces a new human-to-agent collaboration primitive called docking.
 
 The avatar lets you choose the context you share with your assistant. Work with
 the whole workspace, or dock to a Voyage (space), Fleet (tab), Vessel (panel), or
 Portal (a panel that persists across a space's tabs).
 
-Docking changes context, not your authority. You remain the same user wherever
-you dock. A worker does not gain your rank or permissions by sharing that context.
-An accepted request keeps the context captured when you sent it; changing
-keyboard focus does not silently retarget it.
+Docking selects the context for your request. Your authority stays the same
+wherever you dock. A worker does not gain your rank or permissions by sharing
+that context. An accepted request keeps the context captured when you sent it.
+Changing keyboard focus does not silently retarget it.
 
 The current private assistant uses Codex and is separate from agents running in
 terminal panels. Broader delegated authority is still design and experimental
@@ -26,12 +25,12 @@ work.
 screens. Voyager connects through a typed Core adapter. The Rust application owns
 workspace state, content data, explicit context and application policy.
 
-JavaScript and TypeScript define configurable content and interface composition
-through a supported host. Rust and GPUI provide native rendering and registered
+JavaScript and TypeScript define content and interface layouts through the
+supported host. Rust and GPUI provide native rendering and registered
 terminal, editor and interface components. This lets people and agents change
 content, look and feel while keeping rendering local and native. Responsive
-interaction and performance as work grows are architectural aims; whole-app
-performance acceptance remains open.
+interaction and performance as work grows are architectural aims. Whole-app
+performance still needs verification.
 
 | Directory              | Responsibility                                                                            |
 | ---------------------- | ----------------------------------------------------------------------------------------- |
@@ -40,29 +39,28 @@ performance acceptance remains open.
 | [desktop/](desktop/)   | GPUI views, native terminal and editors, avatar presentation and interface composition.   |
 | [content/](content/)   | Shipped content presentation, currently Notes, using the Rust content owner.              |
 
-Vessels and Portals are placements of content, not separate implementations. The
-same content instance can have a panel in a tab or a persistent panel across its
-space. Its identity, saved data and optional Core backend stay separate from the
-placement. Hiding a view does not stop its program.
+A Vessel places content inside a tab. A Portal keeps content visible across a
+space's tabs. Both use the same content model. Content identity, saved data and
+an optional Core backend stay separate from the placement. Hiding a view does
+not stop its program.
 
 The extensible design allows content backed by a Core program and presented
 through JavaScript/TypeScript and supported native Rust components. Main currently
 supports Terminal and Notes content. Terminal panels render shells and terminal
 agents, with local history scrolling and wheel input for full-screen programs.
-Notes supports Markdown editing and preview in either placement. Interface scripts
-and themes are editable in a personal profile, with last-usable-view retention for
-supported live edits. Arbitrary program-window embedding and additional browser,
-game or dashboard renderers are not implemented content capabilities.
+Notes supports Markdown editing and preview in either placement. You can edit
+interface scripts and themes in a personal profile. For supported live edits, a
+broken script leaves the previous usable view in place. Arbitrary program-window
+embedding and browser, game or dashboard renderers remain unimplemented.
 
-Workspace operations use a common typed application contract for views and
-supported agent tools. The Rust owner validates each effect. A schema, panel
+Workspace operations share a typed contract used by views and supported agent
+tools. The Rust application checks each action before applying it. A schema, panel
 placement or Fleet membership grants no authority.
 
 ## What we're focusing on next
 
 We plan to develop richer docking interactions, improve human-agent collaboration
-and make the interface more intuitive. These are priorities for further design
-and implementation, not capabilities already shipped.
+and make the interface more intuitive. This work is planned, not shipped.
 
 ## Build and run
 
