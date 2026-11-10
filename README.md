@@ -58,6 +58,12 @@ Workspace operations use a common typed application contract for views and
 supported agent tools. The Rust owner validates each effect. A schema, panel
 placement or Fleet membership grants no authority.
 
+## What we're focusing on next
+
+We plan to develop richer docking interactions, improve human-agent collaboration
+and make the interface more intuitive. These are priorities for further design
+and implementation, not capabilities already shipped.
+
 ## Build and run
 
 The verified native target is Linux/X11. Wayland is included in the build;
