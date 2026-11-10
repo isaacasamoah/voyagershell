@@ -320,14 +320,13 @@ impl Render for Pane {
                     }
                 }),
             )
-            .on_scroll(cx.listener(|pane, event: &gpui::ScrollEvent, _, cx| {
-                pane.scroll_fraction -= f32::from(event.delta.pixel_delta(pane.cell_height).y)
-                    / f32::from(pane.cell_height);
-                let lines = pane.scroll_fraction.trunc() as isize;
-                pane.scroll_fraction -= lines as f32;
-                pane.screen.scroll(lines);
-                pane.dirty = true;
-                cx.notify();
+            .on_scroll(cx.listener(|pane, event: &gpui::ScrollEvent, window, cx| {
+                if let Err(error) = pane.scroll(event, window.scale_factor()) {
+                    pane.status = format!("Terminal scroll: {error:#}");
+                    cx.notify();
+                } else if pane.dirty {
+                    cx.notify();
+                }
                 cx.stop_propagation();
             }))
             .on_key_down(move |event, _, cx| {

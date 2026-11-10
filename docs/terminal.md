@@ -9,6 +9,23 @@ running. Confirmed Close Voyage is the separate operation that saves Notes and
 stops that Voyage's verified programs. Earlier shutdown checkpoints below do not
 override this owner decision.
 
+## Wheel input
+
+The native terminal keeps normal-screen history navigation local. When a program
+requests mouse tracking, wheel movement is encoded by the pinned terminal library
+using that program's active mouse protocol and the current cell/display geometry.
+An alternate-screen program without mouse tracking receives encoded up/down arrow
+keys, including its active cursor-key mode. This follows the retained Herdr
+interaction without changing the Core process or attachment policy.
+
+Fractional movement accumulates to complete lines in the existing pane. Program
+wheel input uses the current viewer's admission queue directly. It does not run
+keyboard input preparation, clear selection, commit composition or force a history
+viewport to the live edge. Received output still owns display invalidation.
+Normal keyboard/paste input retains its existing return-to-live behavior. Oversized
+encoded wheel input refuses before viewer admission rather than truncating or
+replaying input.
+
 ## Attachment geometry
 
 The adapter attaches using a current generated Terminal record. A newly started

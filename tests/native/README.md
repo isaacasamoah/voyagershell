@@ -57,3 +57,15 @@ The `notes-configuration` native journey still checks the former heading and
 cold-Quit behavior. Its runtime acceptance is pending an update for the current
 Notes and detach requirements. Passing route checks only confirms routing and
 fixture source checks; it does not accept that journey.
+
+The `terminal-scrolling` journey covers primary-screen history, alternate-screen
+arrow fallback, program mouse reporting and same-program reattachment. It uses
+the ordinary compositor input path, or `--isolated-x11 XVFB_PID` for a separately
+started, same-user Xvfb display. The isolated adapter verifies the exact Xvfb
+process/display and keeps the launcher's candidate input guards. Its measured
+terminal rectangle requires the recorded 1450 by 940 viewport. Set
+`VOYAGER_SCROLL_ISOLATED_X11=1` only for that isolated route. This path does not
+establish physical touchpad behavior or native IME. `VOYAGER_SCROLL_AGENT=1` adds
+one real installed-Codex response and captures actual wheel navigation and typing.
+Fixture cleanup explicitly ends only its verified dedicated Core after app Quit;
+that cleanup is separate from the application's detach policy.
