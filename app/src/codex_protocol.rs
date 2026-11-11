@@ -37,10 +37,17 @@ pub(crate) fn encode(command: Command) -> Result<(&'static str, Value), String> 
             text,
             effort,
             focus,
-        } => (
-            "turn/start",
-            json!({"threadId":thread,"input":[{"type":"text","text":text}],"effort":effort,"additionalContext":{"voyager.focus":{"kind":"application","value":serde_json::to_string(&focus).map_err(|error| error.to_string())?}}}),
-        ),
+            panels,
+        } => {
+            let mut context = json!({"voyager.focus":{"kind":"application","value":serde_json::to_string(&focus).map_err(|error| error.to_string())?}});
+            if !panels.is_empty() {
+                context["voyager.panels"] = json!({"kind":"application","value":serde_json::to_string(&panels).map_err(|error| error.to_string())?});
+            }
+            (
+                "turn/start",
+                json!({"threadId":thread,"input":[{"type":"text","text":text}],"effort":effort,"additionalContext":context}),
+            )
+        }
         Command::InterruptTurn { thread, turn } => {
             ("turn/interrupt", json!({"threadId":thread,"turnId":turn}))
         }
@@ -309,13 +316,24 @@ mod tests {
             revision: 42,
             preview: None,
         };
+        let panels: Vec<voyager_contract::observation::PanelObservation> = serde_json::from_value(json!([{"placementId":"placement-1","contentId":"content-1","backend":null,"directory":{"kind":"unavailable"},"program":null,"conversationName":null,"effectiveName":"work 2","address":"Voyage/Fleet/work 2","position":null}])).unwrap();
         let (method, params) = encode(Command::StartTurn {
             thread: "thread".into(),
             text: "bounded request".into(),
             effort: "high".into(),
             focus: Some(focus.clone()),
+            panels: panels.clone(),
         })
         .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(
+                params["additionalContext"]["voyager.panels"]["value"]
+                    .as_str()
+                    .unwrap()
+            )
+            .unwrap(),
+            serde_json::to_value(&panels).unwrap()
+        );
         assert_eq!(method, "turn/start");
         assert_eq!(params["threadId"], "thread");
         assert_eq!(params["input"][0]["text"], "bounded request");

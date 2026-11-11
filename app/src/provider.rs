@@ -53,6 +53,7 @@ pub(crate) enum Command {
         text: String,
         effort: String,
         focus: Option<Focus>,
+        panels: Vec<voyager_contract::observation::PanelObservation>,
     },
     InterruptTurn {
         thread: String,

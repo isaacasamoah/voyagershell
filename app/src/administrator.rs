@@ -131,7 +131,7 @@ pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
         },
         ToolDefinition {
             name: "voyager_workspace",
-            description: "Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Every response lists panels: each Vessel and Portal in focus with its placementId, contentId, on-screen effectiveName, unique address (Voyage/Fleet/Vessel, or Voyage/Portals/Portal), program, folder and position. Position counts column from the left along its row and row from the top along its column, with the corners the panel occupies; top right is the panel whose corners include top-right. When no Fleet is named, a position means the selected Fleet. A panel without a position is hidden or covered. Resolve a spoken name or position from panels; do not inspect again to locate one. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
+            description: "Inspect and manage the captured avatar focus. When voyager.panels lists the target, act at once with its exact ID and the focus revision as expectedVersion. Otherwise inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs. Every response lists panels: each Vessel and Portal in focus with its placementId, contentId, on-screen effectiveName, unique address (Voyage/Fleet/Vessel, or Voyage/Portals/Portal), program, folder and position. Position counts column from the left along its row and row from the top along its column, with the corners the panel occupies; top right is the panel whose corners include top-right. When no Fleet is named, a position means the selected Fleet. A panel without a position is hidden or covered. Resolve a spoken name or position from panels; do not inspect again to locate one. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
             schema,
         },
         ToolDefinition {
@@ -181,7 +181,7 @@ fn located(client: &Client, scope: &Context, mut response: Response, action: &Ac
     }
 }
 
-const RESPONSE_LIMIT: usize = 24 * 1024;
+pub(crate) const RESPONSE_LIMIT: usize = 24 * 1024;
 
 fn workspace_output(response: &Response, text: &str) -> String {
     let full = serde_json::to_string(response).unwrap_or_else(|_| text.to_owned());
