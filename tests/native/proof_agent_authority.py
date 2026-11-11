@@ -45,7 +45,8 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
             protected[pid] = process_identity(int(pid), metadata_only=True)
         except FileNotFoundError:
             observed.setdefault("previouslyAbsentProtected", []).append(pid)
-    assert "1826456" in protected, "The protected main app must remain running"
+    assert str(active["pid"]) in protected, "The selected working app must remain running"
+    assert all(protected[str(active["pid"])][key] == active["identity"][key] for key in ("uid", "start", "executable")), "The selected working app identity changed"
     observed["protectedBefore"] = protected
     prompts = evidence / "tasks"
     prompts.mkdir()
