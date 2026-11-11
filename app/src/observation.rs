@@ -183,6 +183,23 @@ pub(crate) fn capture(
     terminals: Option<&[Terminal]>,
 ) -> Result<WorkspaceObservation, String> {
     let visible = scope::project(layout, Some(scope));
+    let located = crate::locate::locate(layout, |placement| {
+        layout
+            .contents
+            .iter()
+            .find(|item| item.id == placement.content)
+            .map_or_else(
+                || placement.name.clone(),
+                |content| {
+                    let terminal = content.backend.as_ref().and_then(|backend| {
+                        terminals?
+                            .iter()
+                            .find(|terminal| terminal.address == backend.0)
+                    });
+                    effective_name(placement, content, &directory(content, terminal))
+                },
+            )
+    });
     let panels = visible
         .containers()
         .flat_map(|voyage| {
@@ -197,22 +214,23 @@ pub(crate) fn capture(
                 .contents
                 .iter()
                 .find(|item| item.id == placement.content)?;
+            let found = located.iter().find(|item| item.id == placement.id)?;
             let terminal = content.backend.as_ref().and_then(|backend| {
                 terminals?
                     .iter()
                     .find(|terminal| terminal.address == backend.0)
             });
             let foreground = terminal.and_then(|terminal| terminal.foreground.as_ref());
-            let directory = directory(content, terminal);
-            let name = effective_name(placement, content, &directory);
             Some(PanelObservation {
                 placement_id: placement.id.clone(),
                 content_id: content.id.clone(),
                 backend: content.backend.clone(),
-                directory,
+                directory: directory(content, terminal),
                 program: foreground.map(|process| process.name.clone()),
                 conversation_name: terminal.and_then(conversation_name),
-                effective_name: name,
+                effective_name: found.name.clone(),
+                address: found.address.clone(),
+                position: found.position.clone(),
             })
         })
         .collect::<Vec<_>>();
@@ -658,6 +676,54 @@ mod tests {
                 .unwrap()
                 .backend,
             Some(CoreTerminalId("t1".into()))
+        );
+    }
+
+    #[test]
+    fn panels_sharing_a_folder_keep_one_numbered_name_and_address_in_any_scope() {
+        let mut model = Model::default();
+        model
+            .apply(Action::CreateVoyage {
+                name: "Project".into(),
+                cwd: "/tmp/original".into(),
+            })
+            .unwrap();
+        let first = model.layout.voyages[0].fleets[0].vessels[0].id.clone();
+        model
+            .apply(Action::CreateContent {
+                type_id: "terminal".into(),
+                destination: voyager_contract::ContentDestination::Panel {
+                    owner: voyager_contract::PanelOwner::Fleet {
+                        id: model.layout.voyages[0].fleets[0].id.clone(),
+                    },
+                    insertion: voyager_contract::PanelInsertion::Beside {
+                        id: first,
+                        side: voyager_contract::Side::Right,
+                    },
+                },
+                launch: None,
+            })
+            .unwrap();
+        let second = model.layout.voyages[0].fleets[0].vessels[1].id.clone();
+        let layout = Arc::new(model.layout);
+        let whole = capture(&layout, 7, &Context::Workspace, None, None).unwrap();
+        let names: Vec<&str> = whole
+            .panels
+            .iter()
+            .map(|panel| panel.effective_name.as_str())
+            .collect();
+        assert_eq!(names[..2], ["original", "original 2"]);
+        let alone = capture(&layout, 7, &Context::Vessel { id: second }, None, None).unwrap();
+        assert_eq!(alone.panels.len(), 1);
+        assert_eq!(alone.panels[0], whole.panels[1]);
+        assert!(alone.panels[0].address.starts_with("Project/"));
+        assert!(alone.panels[0].address.ends_with("/original 2"));
+        assert_eq!(
+            alone.panels[0].position.as_ref().unwrap().corners,
+            [
+                voyager_contract::observation::Corner::TopRight,
+                voyager_contract::observation::Corner::BottomRight
+            ]
         );
     }
 }

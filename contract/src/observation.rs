@@ -12,6 +12,33 @@ pub enum Directory {
     Unavailable,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Corner {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Position {
+    #[schemars(transform = crate::administrator::standard_integer)]
+    pub column: u16,
+    #[schemars(transform = crate::administrator::standard_integer)]
+    pub row: u16,
+    #[schemars(transform = crate::administrator::standard_integer)]
+    pub column_span: u16,
+    #[schemars(transform = crate::administrator::standard_integer)]
+    pub row_span: u16,
+    #[schemars(transform = crate::administrator::standard_integer)]
+    pub columns: u16,
+    #[schemars(transform = crate::administrator::standard_integer)]
+    pub rows: u16,
+    pub corners: Vec<Corner>,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PanelObservation {
@@ -22,6 +49,8 @@ pub struct PanelObservation {
     pub program: Option<String>,
     pub conversation_name: Option<String>,
     pub effective_name: String,
+    pub address: String,
+    pub position: Option<Position>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

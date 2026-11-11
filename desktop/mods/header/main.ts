@@ -890,11 +890,16 @@ export default class Workspace extends View {
   }
 
   contentName(placement: Vessel): string {
-    return (
-      (placement.nameOrigin === "automatic" ? this.observedPanels : [])?.find(
-        (panel) => panel.placementId === placement.id,
-      )?.effectiveName || placement.name
-    );
+    const observed = this.observedPanels?.find(
+      (panel) => panel.placementId === placement.id,
+    )?.effectiveName;
+    if (!observed || placement.nameOrigin === "automatic") {
+      return observed || placement.name;
+    }
+    const numbered =
+      observed.startsWith(`${placement.name} `) &&
+      /^\d+$/.test(observed.slice(placement.name.length + 1));
+    return numbered ? observed : placement.name;
   }
 
   panelLabel(placement: Vessel): string {

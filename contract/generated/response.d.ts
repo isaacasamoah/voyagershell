@@ -95,6 +95,23 @@ export type PanelOwner =
       voyage: string;
     };
 export type WorkspaceView = "home" | "fleet";
+export type Directory =
+  | {
+      kind: "live";
+      path: string;
+    }
+  | {
+      kind: "voyage";
+      path: string;
+    }
+  | {
+      kind: "starting";
+      path: string;
+    }
+  | {
+      kind: "unavailable";
+    };
+export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type Status = "applied" | "rejected" | "uncertain";
 
 export interface Response {
@@ -104,6 +121,7 @@ export interface Response {
   fresh: boolean;
   layout: Layout;
   message?: string | null;
+  panels?: PanelObservation[];
   requestId: string;
   status: Status;
   version: string;
@@ -192,4 +210,24 @@ export interface SavedLayout {
   name: string;
   owner: PanelOwner;
   root?: Split | null;
+}
+export interface PanelObservation {
+  address: string;
+  backend?: string | null;
+  contentId: string;
+  conversationName?: string | null;
+  directory: Directory;
+  effectiveName: string;
+  placementId: string;
+  position?: Position | null;
+  program?: string | null;
+}
+export interface Position {
+  column: number;
+  columnSpan: number;
+  columns: number;
+  corners: Corner[];
+  row: number;
+  rowSpan: number;
+  rows: number;
 }

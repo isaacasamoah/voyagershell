@@ -3,11 +3,12 @@ use crate::provider::{ToolCall, ToolDefinition, ToolReply, ToolResult};
 use serde_json::{Value, json};
 use std::{sync::mpsc, thread};
 use voyager_contract::{
-    Action, Request, Status,
+    Action, Context, Request, Response, Status,
     administrator::{
         ProcessAction, ProcessInput, ProcessOutput, ProcessRequest, ToolAction, WorkspaceInput,
     },
     conversation::{CallbackId, Focus, ToolOutcome},
+    observation::PanelObservation,
 };
 
 #[derive(Clone)]
@@ -130,7 +131,7 @@ pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
         },
         ToolDefinition {
             name: "voyager_workspace",
-            description: "Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
+            description: "Inspect and manage the captured avatar focus. Inspect first (expectedVersion 0), then use its returned version for each effect. Use exact IDs from inspection. Every response lists panels: each Vessel and Portal in focus with its placementId, contentId, on-screen effectiveName, unique address (Voyage/Fleet/Vessel, or Voyage/Portals/Portal), program, folder and position. Position counts column from the left and row from the top of its Fleet, with spans and the corners the panel occupies; top right is the panel whose corners include top-right. A panel without a position is hidden or covered. Resolve a spoken name or position from panels; do not inspect again to locate one. Dock changes focus only when the human asks; it does not retarget this request. No project/content-file edits. The application supplies request identity and authority.",
             schema,
         },
         ToolDefinition {
@@ -148,6 +149,52 @@ pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {
 
 fn result(success: bool, text: String) -> ToolResult {
     ToolResult { success, text }
+}
+
+fn located(client: &Client, scope: &Context, mut response: Response, action: &Action) -> Response {
+    match client.observe(scope.clone(), response.version) {
+        Ok(observation)
+            if observation.version == response.version || !matches!(action, Action::Inspect) =>
+        {
+            response.panels = observation.panels;
+            response
+        }
+        Ok(_) => {
+            let again = Request {
+                request_id: client.request_id(),
+                expected_version: 0,
+                action: Action::Inspect,
+            };
+            match client.scoped_call(scope.clone(), again) {
+                Ok(mut fresh) => {
+                    fresh.request_id.clone_from(&response.request_id);
+                    fresh.panels = client
+                        .observe(scope.clone(), fresh.version)
+                        .map(|observation| observation.panels)
+                        .unwrap_or_default();
+                    fresh
+                }
+                Err(_) => response,
+            }
+        }
+        Err(_) => response,
+    }
+}
+
+fn workspace_output(response: &Response, text: &str) -> String {
+    let full = serde_json::to_string(response).unwrap_or_else(|_| text.to_owned());
+    if full.len() <= 24 * 1024 {
+        return full;
+    }
+    let brief = |panels: &[PanelObservation]| {
+        json!({"requestId":response.request_id,"status":response.status,"version":response.version.to_string(),"fresh":response.fresh,"panels":panels,"message":format!("{text}. Layout omitted because it exceeds the tool response bound. Inspect a narrower focus for details.")}).to_string()
+    };
+    let with_panels = brief(&response.panels);
+    if with_panels.len() <= 24 * 1024 {
+        with_panels
+    } else {
+        brief(&[])
+    }
 }
 
 fn refusal(id: Value, message: &str) -> ToolReply {
@@ -370,20 +417,15 @@ impl Tools {
                         expected_version,
                         action: action.clone(),
                     };
-                    match client.scoped_call(scope, request) {
+                    match client.scoped_call(scope.clone(), request) {
                         Ok(response) => {
+                            let response = located(&client, &scope, response, &action);
                             let text = outcome_text(
                                 &action,
                                 &response.status,
                                 response.message.as_deref(),
                             );
-                            let full =
-                                serde_json::to_string(&response).unwrap_or_else(|_| text.clone());
-                            let output = if full.len() <= 24 * 1024 {
-                                full
-                            } else {
-                                json!({"requestId":response.request_id,"status":response.status,"version":response.version.to_string(),"fresh":response.fresh,"message":format!("{text}. Layout omitted because it exceeds the tool response bound. Inspect a narrower focus for details.")}).to_string()
-                            };
+                            let output = workspace_output(&response, &text);
                             EffectResult {
                                 value: result(response.status == Status::Applied, output),
                                 text,
@@ -1224,6 +1266,12 @@ mod tests {
                     .unwrap(),
             )
             .unwrap();
+        let panel = &observed.panels[0];
+        assert_eq!(
+            panel.placement_id,
+            observed.layout.voyages[0].fleets[0].vessels[0].id
+        );
+        assert!(panel.address.ends_with(&panel.effective_name) && panel.position.is_some());
         callback["id"] = "callback-two".into();
         callback["params"]["callId"] = "call-two".into();
         callback["params"]["arguments"] = json!({"expectedVersion":observed.version.to_string(),"action":{"operation":"create-fleet","voyage":observed.layout.voyages[0].id,"name":"Delegated"}});

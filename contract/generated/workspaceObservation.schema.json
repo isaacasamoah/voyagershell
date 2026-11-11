@@ -49,6 +49,15 @@
         }
       ]
     },
+    "Corner": {
+      "enum": [
+        "top-left",
+        "top-right",
+        "bottom-left",
+        "bottom-right"
+      ],
+      "type": "string"
+    },
     "Directory": {
       "oneOf": [
         {
@@ -120,6 +129,9 @@
     "PanelObservation": {
       "additionalProperties": false,
       "properties": {
+        "address": {
+          "type": "string"
+        },
         "backend": {
           "type": [
             "string",
@@ -144,6 +156,16 @@
         "placementId": {
           "type": "string"
         },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Position"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "program": {
           "type": [
             "string",
@@ -155,7 +177,59 @@
         "placementId",
         "contentId",
         "directory",
-        "effectiveName"
+        "effectiveName",
+        "address"
+      ],
+      "type": "object"
+    },
+    "Position": {
+      "additionalProperties": false,
+      "properties": {
+        "column": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "columnSpan": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "columns": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "corners": {
+          "items": {
+            "$ref": "#/definitions/Corner"
+          },
+          "type": "array"
+        },
+        "row": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rowSpan": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rows": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "column",
+        "row",
+        "columnSpan",
+        "rowSpan",
+        "columns",
+        "rows",
+        "corners"
       ],
       "type": "object"
     }

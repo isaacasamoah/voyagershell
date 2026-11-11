@@ -25,6 +25,7 @@ export type Directory =
   | {
       kind: "unavailable";
     };
+export type Corner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export interface WorkspaceObservation {
   active?: string | null;
@@ -34,11 +35,22 @@ export interface WorkspaceObservation {
   version: string;
 }
 export interface PanelObservation {
+  address: string;
   backend?: string | null;
   contentId: string;
   conversationName?: string | null;
   directory: Directory;
   effectiveName: string;
   placementId: string;
+  position?: Position | null;
   program?: string | null;
+}
+export interface Position {
+  column: number;
+  columnSpan: number;
+  columns: number;
+  corners: Corner[];
+  row: number;
+  rowSpan: number;
+  rows: number;
 }

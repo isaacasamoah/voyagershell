@@ -8,6 +8,7 @@ The product foundation uses contract/, app/, desktop/ and content/. Keep explora
 | gpui-avatar/ | Original native avatar and corrected pose animation. | Partial proof, not accepted full parity. |
 | native-content/ | Native header and persistent Notes work. | Header accepted; Notes correction approved, acceptance remains pending. |
 | typed-content/ | Earlier typed contract/client work, including protocol and binding history. | Historical unaccepted draft. |
+| vessel-finding-local-voice/ | Shared panel names, addresses and positions for the avatar, and local voice for Claude or Codex. | Unmerged experiment; no native journey yet. |
 
 sources.json pins snapshot revisions and hashes, including local source that was not committed in its original worktree. These are source snapshots, not copied private profiles or a claim of accepted behavior. Existing original branches/worktrees remain for unfinished tasks and exact historical evidence. Do not use their presence as a reason to re-run solved feasibility questions.
 

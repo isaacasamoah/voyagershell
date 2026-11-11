@@ -500,6 +500,7 @@ impl Client {
                             ),
                             message: plan.as_ref().and_then(|plan| plan.message.clone()),
                             close_plan: plan.clone(),
+                            panels: Vec::new(),
                         };
                         if let Some((_, _, receipt)) = receipts
                             .iter_mut()
@@ -1573,6 +1574,7 @@ impl Client {
                     created_contents: eligible_contents(&layout, scope.as_ref(), &created_contents),
                     message: None,
                     close_plan: closing.projected(&layout, scope.as_ref()),
+                    panels: Vec::new(),
                 };
                 if worktree_requests
                     .iter()
@@ -2507,6 +2509,25 @@ impl Client {
         receive
             .recv()
             .await
+            .map_err(|_| "Workspace observation was not confirmed".to_owned())?
+    }
+
+    pub(crate) fn observe(
+        &self,
+        scope: Context,
+        version: u64,
+    ) -> Result<voyager_contract::observation::WorkspaceObservation, String> {
+        let (reply, receive) = async_channel::bounded(1);
+        self.sender
+            .try_send(Message::WorkspaceObservation {
+                scope,
+                version,
+                active: None,
+                reply,
+            })
+            .map_err(|_| "Workspace observation is unavailable".to_owned())?;
+        receive
+            .recv_blocking()
             .map_err(|_| "Workspace observation was not confirmed".to_owned())?
     }
 

@@ -1236,6 +1236,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     program: "bash",
     directory: { kind: "live", path: "/work" },
     effectiveName: "work",
+    address: "Voyage/Fleet/work",
   };
   layout.voyages[0].cwd = "/work";
   layout.voyages.push({
@@ -1389,6 +1390,7 @@ test("late active-directory observations cannot replace newer facts", async () =
         program: "bash",
         conversationName: null,
         effectiveName: "work",
+        address: "Voyage/Fleet/work",
       },
     ],
     branch: { kind: "named", name: branch },
