@@ -135,26 +135,29 @@ def prove(
 
         seen = {}
 
-        def watch(request):
+        def watch():
             while "answered" not in timing:
                 try:
                     state = json.loads((evidence / "conversation.json").read_text())
                 except (OSError, ValueError):
                     continue
-                now = round(time.monotonic() - timing["started"], 2)
-                for m in state["messages"]:
-                    if m["requestId"] == request and m["role"] != "user":
-                        tool = m.get("tool", {})
-                        step = tool.get("action", {}).get("action", {}).get("operation")
-                        seen.setdefault((step or "answer", tool.get("status", "")), now)
+                users = [m for m in state["messages"] if m["role"] == "user"]
+                if users and users[-1]["text"] == prompt:
+                    timing.setdefault("submitted", time.monotonic())
+                    now = round(time.monotonic() - timing["submitted"], 2)
+                    for m in state["messages"]:
+                        if m["requestId"] == users[-1]["requestId"] and m["role"] != "user":
+                            tool = m.get("tool", {})
+                            step = tool.get("action", {}).get("action", {}).get("operation")
+                            seen.setdefault((step or "answer", tool.get("status", "")), now)
                 time.sleep(0.03)
 
-        def accepted(_state, user):
+        def accepted(_state, _user):
             timing["started"] = time.monotonic()
-            threading.Thread(target=watch, args=(user["requestId"],)).start()
             wait(document, lambda doc: fleet(doc) != fleet(before), name, 90)
             timing["seconds"] = round(time.monotonic() - timing["started"], 1)
 
+        threading.Thread(target=watch).start()
         final, user = private_turn(
             native=native,
             pid=owner,
@@ -178,7 +181,7 @@ def prove(
                 "settings": settings,
                 "acceptedToEffectSeconds": timing["seconds"],
                 "acceptedToAnswerSeconds": answered,
-                "firstSeenSeconds": sorted((at, *step) for step, at in seen.items()),
+                "submittedToStepSeconds": sorted((at, *step) for step, at in seen.items()),
                 "calls": [m["tool"] for m in mine if m["role"] == "tool"],
                 "answer": [m["text"] for m in mine if m["role"] == "assistant"],
                 "fleet": fleet(after),
