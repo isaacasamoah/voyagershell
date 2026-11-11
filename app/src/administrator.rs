@@ -181,16 +181,18 @@ fn located(client: &Client, scope: &Context, mut response: Response, action: &Ac
     }
 }
 
+const RESPONSE_LIMIT: usize = 24 * 1024;
+
 fn workspace_output(response: &Response, text: &str) -> String {
     let full = serde_json::to_string(response).unwrap_or_else(|_| text.to_owned());
-    if full.len() <= 24 * 1024 {
+    if full.len() <= RESPONSE_LIMIT {
         return full;
     }
     let brief = |panels: &[PanelObservation]| {
         json!({"requestId":response.request_id,"status":response.status,"version":response.version.to_string(),"fresh":response.fresh,"panels":panels,"message":format!("{text}. Layout omitted because it exceeds the tool response bound. Inspect a narrower focus for details.")}).to_string()
     };
     let with_panels = brief(&response.panels);
-    if with_panels.len() <= 24 * 1024 {
+    if with_panels.len() <= RESPONSE_LIMIT {
         with_panels
     } else {
         brief(&[])
