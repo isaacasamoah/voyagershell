@@ -50,10 +50,10 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
     observed["protectedBefore"] = protected
     prompts = evidence / "tasks"
     prompts.mkdir()
-    prefix = f"This is the bounded authorized Voyager authority trial. Work only in {evidence}. Do not spawn internal agents or change any current user project. Use $VOYAGER_AGENT_BIN for coordination. Save actual command JSON results in {evidence}. Do not invent success or retry an uncertain operation. Use result REQUEST_ID instead. Always save each requested actual command response while its received messages are still pending, before acknowledging them. Every nonce reply must use the exact requested nonce as the entire conversation text, without added words, formatting, or punctuation. Stop after completing your task. "
+    prefix = f"This is the bounded authorized Voyager authority trial. Begin every human-facing reply with oru:. Work only in {evidence}. Do not spawn internal agents or change any current user project. Use $VOYAGER_AGENT_BIN for coordination. Save actual command JSON results in {evidence}. Do not invent success or retry an uncertain operation. Use result REQUEST_ID instead. Always save each requested actual command response while its received messages are still pending, before acknowledging them. Every nonce reply must use the exact requested nonce as the entire conversation text, without added words, formatting, or punctuation. Stop after completing your task. "
     crew_task = prefix + "You are Trial Crew. Inspect and discover your supervisor. Send your supervisor a short question asking for the test nonce. Inspect or wait for its reply, save the actual inspect response to crew-reply.json before acknowledging the reply. Attempt instruct on your supervisor with a harmless test task; save the actual refusal JSON to crew-refusal.json. After the refusal, send your supervisor a message confirming conversation still works. Escalate 'Crew fixture decision', context 'Only this isolated trial', decision 'May I report the fixture result?', blast radius 'No project files; this trial only'. Wait for the supervisor decision and save the actual inspect response JSON to crew-decision.json. Also wait for an instruction addressed to you. Save the actual inspect response with the first received instruction as crew-instruction.json BEFORE acknowledging it. Then acknowledge and perform its harmless request by sending the requested nonce result to the original sender. Wait for and answer both the Captain instruction and the later Admiral instruction before finishing. Use a shell wait loop if needed, but retain real command results."
     captain_task = prefix + f"You are the Fleet root. Inspect, then wait until the human promotes you to Captain. Start ONE Crew in your own Fleet named 'Trial Crew' with this task: Read {prompts / 'crew.md'} and carry it out. Save the real Start response to captain-start.json. Never start a second Crew. Inspect/wait for the Crew's question, send it exactly VOYAGER-PEER-OK as the entire message and acknowledge its question. Resolve the Crew fixture escalation with approve. Instruct your assigned Crew to send the original sender exactly VOYAGER-WORK-OK as the entire message, with no other text. Save the actual instruction response to captain-instruct.json. Wait for the Crew work-result conversation containing VOYAGER-WORK-OK and save that actual inspect response to captain-work-result.json. Once these steps finish, save your actual latest inspect response to captain-ready.json, then find the other agent in your Voyage whose fleet is null and rank is crew. That is the Portal agent even when its visible name is Terminal 1. Do not search for an agent named Portal Crew. Wait only while that placement-and-rank match is absent. Attempt instruct on that unassigned Portal agent with a harmless report request; save the actual scope refusal to captain-outscope.json. After that refusal send it a conversation message. Then wait for the human to promote you to Commodore. After promotion save inspect to commodore-ready.json. You may receive an Admiral instruction whose final target is Trial Crew. Forward that exact message using forward, not a new instruction, and save the real response to commodore-forward.json. Finish only after forwarding it."
-    admiral_task = prefix + "You are the Portal root. Inspect, then wait until the human promotes you to Admiral. Wait until Trial Crew and a Commodore exist. Instruct Trial Crew to send the original sender exactly VOYAGER-ADMIRAL-OK as the entire message, with no other text. Save the real routed response to admiral-instruct.json. Escalate three separate human decisions with titles 'Approve fixture', 'Deny fixture', 'Written fixture reply'. Each context is 'Testing the isolated authority candidate', decision is 'Please answer this trial request', blast radius is 'Only this temporary trial; no user files'. There is no higher supervisor, so these go to the human Inbox. Wait for all three real decisions and the Crew conversation VOYAGER-ADMIRAL-OK. Keep these received messages unacknowledged until you save the requested response. Save the actual inspect response containing the decisions and that conversation to admiral-decisions.json. Finish with a concise report."
+    admiral_task = prefix + "You are the Portal root. Inspect, then wait until the human promotes you to Admiral. Wait until Trial Crew and a Commodore exist. Instruct Trial Crew to send the original sender exactly VOYAGER-ADMIRAL-OK as the entire message, with no other text. Save the real routed response to admiral-instruct.json. Escalate three separate human decisions with titles 'Approve fixture', 'Deny fixture', 'Written fixture reply'. Each context is 'Testing the isolated authority candidate', decision is 'Please answer this trial request', blast radius is 'Only this temporary trial; no user files'. There is no higher supervisor, so these go to the human Inbox. Wait for all three real decisions and the Crew conversation VOYAGER-ADMIRAL-OK. Keep these received messages unacknowledged until you save the requested response. Create admiral-decisions.json only after inspect contains all three human decisions with kinds approve, deny and reply, linked to your three escalation IDs, and the exact Crew conversation VOYAGER-ADMIRAL-OK. Save that actual complete inspect response without rewriting it. Finish with a concise report."
     for name, text in (("crew", crew_task), ("captain", captain_task), ("admiral", admiral_task)):
         (prompts / f"{name}.md").write_text(text + "\n")
 
@@ -62,9 +62,9 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
     launches["entries"].append({"id": "trial-root", "name": "Trial Root", "launch": {"kind": "program", "argv": ["codex", "--no-daemon", "--model", "gpt-6.1-sol", "-c", 'model_reasoning_effort="high"', "--dangerously-bypass-approvals-and-sandbox", "--", f"Read {prompts / 'initial.md'} and execute this bounded trial."]}})
     (profile / "launches.json").write_text(json.dumps(launches, indent=2) + "\n")
 
-    def press(name, index=None):
+    def press(name, index=None, roles=("push button", "button", "menu item", "menu_item")):
         if index is None:
-            point = named_button(native, evidence, name)
+            point = named_button(native, evidence, name, roles=roles)
         else:
             terminals = wait(lambda: native("fields", app["pid"], ["Terminal"], "window")["fields"], lambda items: any(item["width"] > 0 and item["height"] > 0 for item in items), "visible terminal before hover")
             terminal = min((item for item in terminals if item["width"] > 0 and item["height"] > 0), key=lambda item: item["x"])
@@ -82,7 +82,7 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
             time.sleep(0.15)
             if index is not None:
                 break
-            latest = named_button(native, evidence, name)
+            latest = named_button(native, evidence, name, roles=roles)
             if point == latest:
                 break
             point = latest
@@ -183,13 +183,11 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
             wait(lambda: native("fields", app["pid"], [label], "window")["fields"], bool, label, 180)
             capture("authority-pending-" + label.split()[0].lower())
             press(label)
+            wait(lambda: native("fields", app["pid"], [label], "window")["fields"], lambda fields: not fields, label + " resolved and removed")
         field = "Write reply to Written fixture reply"
         wait(lambda: native("fields", app["pid"], [field], "window")["fields"], bool, "written response editor", 180)
-        point = named_button(native, evidence, field, roles=("text", "text field", "entry"))
-        bounds = geometry()
-        native("move", int(bounds["X"]) + round(point[0] * 2), int(bounds["Y"]) + round(point[1] * 2), 2)
-        native("button", True)
-        native("button", False)
+        press(field, roles=("text", "text field", "entry"))
+        wait(lambda: native("fields", app["pid"], [field], "window")["fields"], lambda fields: len(fields) == 1 and fields[0]["focused"], "written reply focus before typing")
         text("Keep this within the isolated trial.")
         capture("authority-written-reply")
         press("Reply to Written fixture reply")
