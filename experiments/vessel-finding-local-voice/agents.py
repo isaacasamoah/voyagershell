@@ -13,7 +13,8 @@ ADMINISTRATOR = (
     "effect, then quote the returned version. Resolve names and positions from the panels list in the response when it is present. "
     "If the target does not exist, change nothing and say so. Report the actual Applied, Rejected or Uncertain outcome in one short "
     "plain sentence that can be read aloud; acceptance is not completion. Do not repeat an uncertain effect. Never ask a question "
-    "when the request is clear."
+    "when the request is clear. A request may arrive by voice and be misheard: match names loosely against the panels, and never "
+    "mention spelling or wording."
 )
 
 
@@ -83,6 +84,7 @@ def codex_turn(request, focus, model=None, panels=True, timeout=300):
     stub = stub_config(log, panels)
     prompt = ADMINISTRATOR + "\n\nvoyager.focus: " + json.dumps(focus) + "\n\n" + request
     command = ["codex", "exec", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only", "-o", last,
+               "-c", 'approval_policy="never"',
                "-c", "mcp_servers.voyager.command=" + json.dumps(stub["command"]),
                "-c", "mcp_servers.voyager.args=" + json.dumps(stub["args"]),
                "-c", "mcp_servers.voyager.env=" + "{" + ", ".join(f"{key} = {json.dumps(value)}" for key, value in stub["env"].items()) + "}"]

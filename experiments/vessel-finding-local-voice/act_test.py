@@ -38,7 +38,7 @@ seconds = sorted(row[3]["seconds"] for row in rows)
 effect = sorted(row[3]["first_effect_seconds"] for row in rows if row[3]["first_effect_seconds"])
 print(f"[{agent} {model or 'default model'}, panels {'on' if panels else 'off'}] real actions right: {sum(row[1] for row in real)}/{len(real)} | "
       f"requests with no valid target left alone: {sum(row[1] for row in trick)}/{len(trick)} | "
-      f"request to effect: median {effect[len(effect) // 2]:.1f} s | whole turn: median {seconds[len(seconds) // 2]:.1f} s, worst {seconds[-1]:.1f} s | "
+      f"request to effect: median {(effect or [float('nan')])[len(effect) // 2]:.1f} s | whole turn: median {seconds[len(seconds) // 2]:.1f} s, worst {seconds[-1]:.1f} s | "
       f"tool calls per request: {sum(len(row[3]['calls']) for row in rows) / len(rows):.1f}")
 for label, right, effects, outcome in rows:
     shown = "; ".join(str(effect) for effect in effects)[:110] or "(no effect)"
