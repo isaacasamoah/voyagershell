@@ -79,7 +79,7 @@ Limits of the journey:
 
 - One layout, one folder and two requests. The fixture runs the application as an X11 client, so it says nothing about a Wayland-native window or another operating system.
 - The journey has its own setup. The existing `split-resize` and `pane-maximize` setup fails on main before any assertion of theirs, because it expects a single content and no content picker. Main now adds the Home Agents view and asks which content a split should open. That repair is outside this branch.
-- The journey takes the branch past the project's test-size limit: about 510 lines of tests against 369 lines of product source. Sharing its setup with the repaired split journeys would bring it back under.
+- With the agent switch below, the branch has about 610 lines of tests against about 960 lines of product source, inside the project's test-size limit.
 
 Not run:
 
@@ -136,6 +136,26 @@ Single runs on 11 November 2026 with Claude Code 2.1.322, Claude Haiku 5.5, LFM3
 - **Claude Code needs no separate server.** `inband_test.py` declares the tool as an in-process server. Claude Code then sends each tool message down its own output pipe and reads the reply from its input pipe. Two requests were right, with the effect at 3.5 and 1.8 seconds, the same as the separate server.
 - **Codex headless is blocked.** `codex exec` refused the stand-in tool for want of an approval, with approvals set to never inside the read-only sandbox. It was not run with the sandbox bypassed.
 
+### Swapping the acting agent, and the panel list in each request
+
+Two changes followed the timings above.
+
+- **The panel list travels with each request.** The application already inspects the workspace before a turn starts. The panels from that observation now go with the turn as `voyager.panels`, and the instructions let the avatar act at the focus revision without inspecting again. The version check still refuses a stale effect.
+- **The acting agent is a setting.** `conversation.json` accepts `agent` beside `model` and `effort`. `{"agent":"claude"}` selects Claude Code with `claude-haiku-5-5` at low effort. Codex stays the default. Claude Code gets Voyager's four tools as an in-process server, so each tool message travels on the pipe the application already holds and reaches the same dispatcher, identity checks and version checks as Codex. `app/src/claude.rs` holds the adapter.
+
+Results in the native journey, timed from the moment the application recorded the request, so agent start-up counts. Each figure is one request.
+
+| Acting agent | Requests | Submitted to effect | Submitted to answer |
+| --- | --- | --- | --- |
+| Codex `gpt-6.1-sol`, low effort, panel list in the request | 2 | 7.6 and 15.2 s | 9.3 and 16.6 s |
+| Claude Code `claude-haiku-5-5`, low effort, panel list in the request | 4 | 1.2 to 2.1 s | 2.2 to 3.0 s |
+
+- With the panel list, Codex skipped the inspection in five of six requests, yet its time to effect stayed at 8 to 15 seconds. Its delay is the model's step, not the extra round trip.
+- Claude made one tool call per request and was right in all four, across two runs. The first request of each run includes starting Claude Code.
+- Once Codex at high effort used the contentId in place of the placementId. The application refused it as "Panel not found", and Codex corrected itself. The instructions now name the placementId.
+- Claude has no native file tools in this session and no native voice. A voice start with Claude is refused and text stays available.
+- Claude Code's in-process server channel is documented only through Anthropic's Agent SDK, so a Claude Code update may change it.
+
 ### Why Claude uses MCP when Codex does not
 
 Codex's app-server accepts tool definitions from its host when a thread starts (`dynamicTools` in `app/src/codex_protocol.rs`) and calls the host back on the same pipe. Claude Code has no such option. Its only command-line door for outside tools is `--mcp-config`. Claude itself does not need MCP. There are three ways to give it Voyager's tools:
@@ -182,8 +202,7 @@ Start and stop the Omni server by hand. Project rules bar a second process super
 
 ### Not proven
 
-- Claude inside the application. The adapter still has to be written behind `app/src/provider.rs`, with its tool channel in front of the existing dispatcher and each call bound to the accepted turn.
-- Whether the delay is the model or the channel. Today's avatar took 9 to 18 seconds with a large Codex model at high effort in the real application. Claude Haiku took 2 to 4 seconds against the stand-in. The models, the effort and the workspace all differ, so the two figures do not compare one thing.
+- Claude with the local voice inside the application. Claude has no native voice, so voice in the application still needs Codex.
 - A real microphone, a real speaker, Isaac's voice, interruption and end-of-speech detection.
 - The settings file. `conversation.json` still accepts only model and effort.
 - Codex with the local voice. Inside the application Codex already holds the tools through its app-server, so the hand-off would be a turn on the existing thread.
