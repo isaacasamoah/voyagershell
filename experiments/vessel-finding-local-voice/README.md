@@ -55,13 +55,31 @@ On the crowded layout without `panels`, "Hide voyagershell 4" hid the Vessel sto
 - It passed twice, on the first build and on the final committed build. The avatar ran Codex `gpt-6.1-sol` at high effort, the application default.
 - Negative control: the same journey against a build of main fails at the first step, because all three panels show the same name.
 - The effect landed 9.1 to 17.5 seconds after the application accepted each request, over four requests. Each request used two tool calls, an inspection and the effect. This is the delay Isaac reports, and this branch does not change it.
+
+### Where the avatar's time goes
+
+The journey can set the avatar's model and effort through the profile's `conversation.json` (`VOYAGER_PROOF_AVATAR_SETTINGS`) and records when each step first shows in the conversation. `VOYAGER_PROOF_POSITION_ONLY` skips the name steps so the same request can run on a build of main.
+
+| Avatar setting | Requests | Accepted request to effect |
+| --- | --- | --- |
+| `gpt-6.1-sol`, high effort, the default | 4 | 9.1 to 17.5 s, mean 13.5 s |
+| `gpt-6.1-sol`, low effort | 6 | 7.0 to 12.5 s, mean 9.9 s |
+| `gpt-6.1-terra`, low effort | 2 | 9.4 and 11.7 s |
+| `gpt-6-luna`, low effort | 1 | Failed. It inspected, then could not form the rename call. |
+| Build of main, `gpt-6.1-sol`, low effort, position request only | 2 | 11.6 and 16.4 s |
+
+- Low effort saves about a quarter. A smaller model saves nothing more, and the smallest cannot use the tool.
+- At low effort the inspection result showed 1.7 to 4.0 seconds after the request was accepted. The effect followed 3.1 to 9.8 seconds after that, and in five of six requests 7.5 to 9.8 seconds. The answer began 1.1 to 2.3 seconds after the effect.
+- The slow part is therefore the model's step after it reads the inspection. The build of main shows the same gap, 8.2 and 11.4 seconds, so the panel list did not add it.
+- Codex on its own, outside the application, took 11.9 and 13.8 seconds for a one-word reply at low effort including start-up, with 12,822 tokens of context.
+- These are small samples from one layout on one evening. Thirteen timed runs were started and three stopped in the fixture before any request: one split that did not land and two accessibility read errors. The journey is not yet steady enough for acceptance.
 - With the native toolchain on the path, `npm test` now passes as a whole: the type check and 80 Node tests.
 
 Limits of the journey:
 
 - One layout, one folder and two requests. The fixture runs the application as an X11 client, so it says nothing about a Wayland-native window or another operating system.
 - The journey has its own setup. The existing `split-resize` and `pane-maximize` setup fails on main before any assertion of theirs, because it expects a single content and no content picker. Main now adds the Home Agents view and asks which content a split should open. That repair is outside this branch.
-- The journey takes the branch past the project's test-size limit: 477 lines of tests against 369 lines of product source. Sharing its setup with the repaired split journeys would bring it back under.
+- The journey takes the branch past the project's test-size limit: about 510 lines of tests against 369 lines of product source. Sharing its setup with the repaired split journeys would bring it back under.
 
 Not run:
 
