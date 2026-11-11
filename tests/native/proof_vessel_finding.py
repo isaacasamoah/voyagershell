@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -14,6 +15,7 @@ def prove(
     owner = json.loads((evidence / "launch.json").read_text())["pid"]
     socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / f"{session}.sock"
     owned = {}
+    settings = env.get("VOYAGER_PROOF_AVATAR_SETTINGS")
 
     def save(name, value):
         (evidence / f"{name}.json").write_text(json.dumps(value, indent=2))
@@ -74,7 +76,10 @@ def prove(
     def split(key, count):
         focus(fields("Terminal", count - 1)[0], count - 1)
         chord(native, key)
-        click(fields("Create Terminal Vessel")[0])
+        choice = fields("Create Terminal Vessel")[0]
+        while choice != (choice := fields("Create Terminal Vessel")[0]):
+            time.sleep(0.1)
+        click(choice)
         return bound(count)
 
     def focus(item, count):
@@ -128,10 +133,27 @@ def prove(
         before = document()
         timing = {}
 
-        def accepted(_state, _user):
-            started = time.monotonic()
+        seen = {}
+
+        def watch(request):
+            while "answered" not in timing:
+                try:
+                    state = json.loads((evidence / "conversation.json").read_text())
+                except (OSError, ValueError):
+                    continue
+                now = round(time.monotonic() - timing["started"], 2)
+                for m in state["messages"]:
+                    if m["requestId"] == request and m["role"] != "user":
+                        tool = m.get("tool", {})
+                        step = tool.get("action", {}).get("action", {}).get("operation")
+                        seen.setdefault((step or "answer", tool.get("status", "")), now)
+                time.sleep(0.03)
+
+        def accepted(_state, user):
+            timing["started"] = time.monotonic()
+            threading.Thread(target=watch, args=(user["requestId"],)).start()
             wait(document, lambda doc: fleet(doc) != fleet(before), name, 90)
-            timing["seconds"] = round(time.monotonic() - started, 1)
+            timing["seconds"] = round(time.monotonic() - timing["started"], 1)
 
         final, user = private_turn(
             native=native,
@@ -145,6 +167,7 @@ def prove(
             name=name,
             accepted=accepted,
         )
+        answered = timing["answered"] = round(time.monotonic() - timing["started"], 1)
         after = document()
         capture(name)
         mine = [m for m in final["messages"] if m["requestId"] == user["requestId"]]
@@ -152,7 +175,10 @@ def prove(
             name + "-result",
             {
                 "prompt": prompt,
+                "settings": settings,
                 "acceptedToEffectSeconds": timing["seconds"],
+                "acceptedToAnswerSeconds": answered,
+                "firstSeenSeconds": sorted((at, *step) for step, at in seen.items()),
                 "calls": [m["tool"] for m in mine if m["role"] == "tool"],
                 "answer": [m["text"] for m in mine if m["role"] == "assistant"],
                 "fleet": fleet(after),
@@ -185,30 +211,37 @@ def prove(
             )
         assert len(set(backends)) == 3, backends
         folder = Path(terminals(layout)[0]["cwd"]).name
-        names = shown(backends, [folder, f"{folder} 2", f"{folder} 3"])
+        plain = bool(env.get("VOYAGER_PROOF_POSITION_ONLY"))
+        names = {} if plain else shown(backends, [folder, f"{folder} 2", f"{folder} 3"])
         capture("finding-numbered-names")
         corner = max(
             zip(backends, panes()),
             key=lambda pair: (pair[1]["x"] + pair[1]["width"], -pair[1]["y"]),
         )[0]
         numbered = next(
-            backend
-            for backend, name in names.items()
-            if name != folder and backend != corner
+            (
+                backend
+                for backend, name in names.items()
+                if name != folder and backend != corner
+            ),
+            None,
         )
+        if settings:
+            (evidence / "profile/conversation.json").write_text(settings)
         click_control(native, capture, geometry, evidence, owner, "Chat", [])
-        ask(
-            f"Rename the vessel called {names[numbered]} to Port.",
-            "finding-by-name",
-            context,
-            lambda before, after: [item["name"] for item in fleet(after)["vessels"]]
-            == [
-                "Port" if item["id"] == vessel(before, numbered)["id"] else item["name"]
-                for item in fleet(before)["vessels"]
-            ],
-        )
-        after = shown(backends, [folder, f"{folder} 2", "Port"])
-        save("finding-names", {"before": names, "afterRename": after})
+        if not plain:
+            ask(
+                f"Rename the vessel called {names[numbered]} to Port.",
+                "finding-by-name",
+                context,
+                lambda before, after: [item["name"] for item in fleet(after)["vessels"]]
+                == [
+                    "Port" if item["id"] == vessel(before, numbered)["id"] else item["name"]
+                    for item in fleet(before)["vessels"]
+                ],
+            )
+            after = shown(backends, [folder, f"{folder} 2", "Port"])
+            save("finding-names", {"before": names, "afterRename": after})
         ask(
             "Maximize the top right vessel.",
             "finding-by-position",
