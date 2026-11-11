@@ -1274,6 +1274,9 @@ test("dock snapshots retain only identity-matched display labels", async () => {
   );
   assert.equal(view.observation, null, "Effects require a fresh observation");
   assert.equal(view.panelLabel(placement), "bash · work");
+  panel.effectiveName = "work 2";
+  assert.equal(view.panelLabel(placement), "bash · work 2");
+  panel.effectiveName = "work";
   placement.nameOrigin = "deliberate";
   placement.name = "My shell";
   assert.equal(view.contentName(placement), "My shell");

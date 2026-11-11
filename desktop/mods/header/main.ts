@@ -922,7 +922,11 @@ export default class Workspace extends View {
       observed?.program ||
       (content?.typeId === "terminal" ? "Terminal" : content?.typeId);
     const name = this.contentName(placement);
-    return [program, folder, name !== folder ? name : null]
+    const numbered =
+      folder !== undefined &&
+      name.startsWith(`${folder} `) &&
+      /^\d+$/.test(name.slice(folder.length + 1));
+    return [program, numbered ? null : folder, name !== folder ? name : null]
       .filter(Boolean)
       .join(" · ");
   }
