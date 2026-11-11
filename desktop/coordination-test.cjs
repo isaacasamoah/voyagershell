@@ -14,17 +14,43 @@ function inbox(
     )
     .replace(/^import [\s\S]*?;\n/gm, "")
     .replace("export class Inbox", "return class Inbox");
+  const input = new Proxy(
+    {},
+    {
+      get: (_target, name) => {
+        if (!["flex_1", "min_w", "h"].includes(name))
+          throw Error(`Unsupported native text method: ${name}`);
+        return () => input;
+      },
+    },
+  );
+  const element = new Proxy({}, { get: () => () => element });
+  const state = { new: (label) => ({ label, value: () => "" }) };
   const Inbox = new Function(
     "coordination",
     "coordination_watch",
     "request_id",
     "validateResponse",
+    "Name",
+    "NameState",
+    "Composer",
+    "ComposerState",
+    "div",
+    "projection",
+    "actionButton",
     source,
   )(
     call,
     async () => {},
     () => "retained-request",
     () => true,
+    { new: () => input },
+    { new: (value) => ({ label: "Name", value: () => value }) },
+    { new: () => input },
+    state,
+    () => element,
+    () => ({ muted: "#888888" }),
+    () => element,
   );
   const view = new Inbox("test-inbox");
   const tasks = [];
@@ -92,4 +118,25 @@ test("Inbox holds a failed observer instead of restarting on render", async () =
   view.observe(cx);
   assert.equal(tasks.length, 0);
   assert.equal(view.error, "Transport unavailable");
+});
+
+test("Escalation reply uses a supported native editor with its own label", () => {
+  const { view } = inbox();
+  const escalation = (id, title) => ({
+    id,
+    senderName: "Trial Admiral",
+    payload: {
+      kind: "escalation",
+      title,
+      context: "Only this trial",
+      decision: "Report the result?",
+      blastRadius: "No user files",
+    },
+  });
+  view.escalation(escalation("one", "First decision"));
+  view.escalation(escalation("two", "Second decision"));
+  assert.equal(view.drafts.get("one").label, "Write reply to First decision");
+  assert.equal(view.drafts.get("two").label, "Write reply to Second decision");
+  assert.notEqual(view.drafts.get("one"), view.drafts.get("two"));
+  assert.equal(view.drafts.get("one").value(), "");
 });
