@@ -105,11 +105,18 @@ LFM3-Omni listens and speaks on the laptop. An acting agent, Claude Code or Code
 
 ### Choosing the agent and the voice
 
-`agents.choose` reads two optional settings, `agent` and `voice`.
+The application's `conversation.json` and the experiment's `agents.choose` take the same four optional settings with the same rules.
 
-- With no setting, the agent is Claude when Claude Code is installed, otherwise Codex.
-- With Claude the voice is local. With Codex the voice stays Codex's own unless `voice` is set to `local`.
-- A missing agent or an impossible pair is refused with a plain message.
+| Setting | Values | Default with Claude | Default with Codex |
+| --- | --- | --- | --- |
+| `agent` | `claude`, `codex` | | Codex in the application; Claude in the experiment when Claude Code is installed |
+| `model` | Any model the agent accepts | `claude-haiku-5-5` | `gpt-6.1-sol` |
+| `effort` | Any level the agent accepts | `low` | `high` |
+| `voice` | `local` (LFM3 on the laptop), `codex` (Codex's own subscription voice) | `local` | `codex` |
+
+- Claude cannot select the Codex voice. An unknown agent or voice, or an impossible pair, is refused with a plain message before any turn.
+- In the application, a local voice start is refused for now with "Local voice needs the LFM3 voice runtime, which is not installed yet." Text keeps working.
+- `gpt-6.1-luna` is refused for a ChatGPT account. `gpt-6-luna` at low effort failed the rename twice with the panel list, as it did without it: it could not form the rename target.
 
 ### Files
 
@@ -118,6 +125,8 @@ LFM3-Omni listens and speaks on the laptop. An acting agent, Claude Code or Code
 | `agents.py` | The choice rule, a cold Claude turn, a kept-alive Claude session and a headless Codex turn. |
 | `workspace_stub.py`, `world.py` | A stand-in workspace owner over MCP. It serves the real generated tool schema, keeps the version rule and applies the few effects the tests use. |
 | `act_test.py`, `speed_test.py` | Grade the calls an agent makes, and time requests in a kept-alive session. |
+| `runtime_test.py` | Times one Omni runtime hearing a request and speaking an answer, with no agent. |
+| `voice_install.py` | Downloads, verifies and unpacks the local voice into a cache folder and prints its server command. |
 | `inband_test.py` | Gives Claude Code the tool over the pipe the host already holds, with no server process. |
 | `voice_loop.py` | The whole loop on WAV files. |
 | `voice_handoff.py`, `voice_ws.py`, `voice_t10_*`, `voice_t11_*`, `voice_t12_*` | The earlier measurements of Omni's hand-off decision, typed and spoken, and of the live voice channel. |
@@ -199,6 +208,35 @@ python3 prove.py --foundation --journey vessel-finding --launch --compositor --b
 ```
 
 Start and stop the Omni server by hand. Project rules bar a second process supervisor.
+
+### Getting the local voice onto a user's machine
+
+The local voice needs two things: the LFM3-Omni-2B weights with their audio projector, and a llama.cpp server that has the `/v1/realtime` voice API (b11960 or newer). Timed with `runtime_test.py` on five recorded requests, on an AMD Ryzen AI 9 HX 370 laptop with an RTX 5070 Ti Laptop GPU, llama.cpp b12242:
+
+| Runtime | Model files | Runtime download | Hand-off decision | First sound | Speech made per second |
+| --- | --- | --- | --- | --- | --- |
+| CUDA, Q8 weights and projector | 2.35 GB | about 1.1 GB with CUDA libraries | 0.24 to 0.42 s | 42 to 105 ms | 9 to 10 s |
+| CUDA, Q4_K_M weights and projector | 1.39 GB | about 1.1 GB | 0.16 to 0.43 s | 36 to 94 ms | 10 to 11 s |
+| Vulkan, Q4_K_M | 1.39 GB | 36 MB | 0.52 to 0.56 s, after a 10.8 s first request | 64 to 68 ms | 7 to 8 s |
+| CPU only, Q4_K_M | 1.39 GB | 23 MB | 0.89 to 1.15 s | 182 to 201 ms | 2.6 s |
+
+- The smaller Q4_K_M files heard all five requests as well as the Q8 files did and made the same decisions.
+- With no GPU at all, speech is still made 2.6 times faster than it plays, and a decision takes about a second. A slower laptop CPU has not been measured.
+- The server loaded in about one second with the files cached, so it can start when voice is first used.
+- The first Vulkan request took 10.8 seconds while the GPU code compiled.
+- Downloading both model files and both small runtimes took 27 seconds here.
+
+Licences:
+
+- The weights are under the LFM Open License v1.0. It allows redistribution with a copy of the licence and its notices. Commercial use is licensed only below US$10 million annual revenue.
+- llama.cpp is MIT licensed.
+
+`voice_install.py` is the proposed download path. It asks for the licence to be accepted, then downloads the Q4_K_M pair and the CPU or Vulkan runtime into `~/.cache/voyagershell/voice/<version>/`. Each file is pinned by size and SHA-256. Hugging Face publishes the model digests. The llama.cpp release publishes none, so the runtime digests are the ones measured on this download. Tested here:
+
+- Without `--accept-licence` it stops and names the licence and the revenue limit.
+- It kept present files, resumed a 100 MB partial projector, and downloaded the runtime in 8 seconds.
+- It replaced a corrupted runtime archive with a verified download, and deleted and refused a download that missed its pin.
+- The server command it wrote answered a spoken request: hand-off decision in 1.09 seconds, first sound in 182 ms.
 
 ### Not proven
 
