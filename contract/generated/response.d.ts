@@ -224,10 +224,8 @@ export interface PanelObservation {
 }
 export interface Position {
   column: number;
-  columnSpan: number;
   columns: number;
   corners: Corner[];
   row: number;
-  rowSpan: number;
   rows: number;
 }

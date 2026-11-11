@@ -895,11 +895,6 @@
           "minimum": 0,
           "type": "integer"
         },
-        "columnSpan": {
-          "maximum": 65535,
-          "minimum": 0,
-          "type": "integer"
-        },
         "columns": {
           "maximum": 65535,
           "minimum": 0,
@@ -916,11 +911,6 @@
           "minimum": 0,
           "type": "integer"
         },
-        "rowSpan": {
-          "maximum": 65535,
-          "minimum": 0,
-          "type": "integer"
-        },
         "rows": {
           "maximum": 65535,
           "minimum": 0,
@@ -930,8 +920,6 @@
       "required": [
         "column",
         "row",
-        "columnSpan",
-        "rowSpan",
         "columns",
         "rows",
         "corners"

@@ -29,10 +29,6 @@ pub struct Position {
     #[schemars(transform = crate::administrator::standard_integer)]
     pub row: u16,
     #[schemars(transform = crate::administrator::standard_integer)]
-    pub column_span: u16,
-    #[schemars(transform = crate::administrator::standard_integer)]
-    pub row_span: u16,
-    #[schemars(transform = crate::administrator::standard_integer)]
     pub columns: u16,
     #[schemars(transform = crate::administrator::standard_integer)]
     pub rows: u16,

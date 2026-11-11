@@ -81,21 +81,21 @@ fn place(root: &Split, area: Area, areas: &mut Vec<(PlacementId, Area)>) {
     }
 }
 
-fn lines(areas: &[(PlacementId, Area)], edge: fn(&Area) -> u64) -> Vec<u64> {
-    let mut lines: Vec<u64> = areas.iter().map(|(_, area)| edge(area)).collect();
-    lines.sort_unstable();
-    lines.dedup();
-    lines
-}
-
-fn count(lines: &[u64], from: u64, to: u64) -> u16 {
-    u16::try_from(
-        lines
-            .iter()
-            .filter(|line| (from..to).contains(*line))
-            .count(),
-    )
-    .unwrap_or(u16::MAX)
+fn rank(areas: &[(PlacementId, Area)], before: fn(&Area, &Area) -> bool) -> Vec<u16> {
+    let mut ranks = vec![0_u16; areas.len()];
+    for _ in 0..areas.len() {
+        for index in 0..areas.len() {
+            ranks[index] = areas
+                .iter()
+                .zip(&ranks)
+                .filter(|((_, other), _)| before(other, &areas[index].1))
+                .map(|(_, rank)| *rank)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1);
+        }
+    }
+    ranks
 }
 
 pub(crate) fn positions(
@@ -118,11 +118,16 @@ pub(crate) fn positions(
         Some(id) => areas.push((id.clone(), whole)),
         None => place(tree, whole, &mut areas),
     }
-    let lefts = lines(&areas, |area| area.left);
-    let tops = lines(&areas, |area| area.top);
+    let columns = rank(&areas, |other, area| {
+        other.right <= area.left && other.top < area.bottom && area.top < other.bottom
+    });
+    let rows = rank(&areas, |other, area| {
+        other.bottom <= area.top && other.left < area.right && area.left < other.right
+    });
     areas
         .iter()
-        .map(|(id, area)| {
+        .zip(columns.iter().zip(&rows))
+        .map(|((id, area), (column, row))| {
             let corners = [
                 (Corner::TopLeft, area.left == 0 && area.top == 0),
                 (Corner::TopRight, area.right == SPAN && area.top == 0),
@@ -133,12 +138,10 @@ pub(crate) fn positions(
                 ),
             ];
             let position = Position {
-                column: count(&lefts, 0, area.left) + 1,
-                row: count(&tops, 0, area.top) + 1,
-                column_span: count(&lefts, area.left, area.right),
-                row_span: count(&tops, area.top, area.bottom),
-                columns: count(&lefts, 0, SPAN),
-                rows: count(&tops, 0, SPAN),
+                column: *column,
+                row: *row,
+                columns: columns.iter().copied().max().unwrap_or(1),
+                rows: rows.iter().copied().max().unwrap_or(1),
                 corners: corners
                     .into_iter()
                     .filter_map(|(corner, occupied)| occupied.then_some(corner))
@@ -303,8 +306,6 @@ mod tests {
             Some(Position {
                 column: 1,
                 row: 1,
-                column_span: 1,
-                row_span: 2,
                 columns: 2,
                 rows: 2,
                 corners: vec![Corner::TopLeft, Corner::BottomLeft],
@@ -324,6 +325,48 @@ mod tests {
         let placed = positions(&root, &members, Some(&PlacementId("a".into())));
         assert_eq!(placed.len(), 1);
         assert_eq!(at(&placed, "a").unwrap().corners.len(), 4);
+    }
+
+    #[test]
+    fn columns_count_along_a_row_when_rows_split_unevenly() {
+        let members: Vec<Vessel> = ["a", "b", "c", "d", "e"]
+            .iter()
+            .map(|id| vessel(id, id))
+            .collect();
+        let third = SplitShare::try_from(3333).unwrap();
+        let top = Split::Branch {
+            axis: Axis::Horizontal,
+            share: third,
+            first: Box::new(leaf("a")),
+            second: Box::new(split(Axis::Horizontal, leaf("b"), leaf("c"))),
+        };
+        let root = Some(split(
+            Axis::Vertical,
+            top,
+            split(Axis::Horizontal, leaf("d"), leaf("e")),
+        ));
+        let placed = positions(&root, &members, None);
+        let found: Vec<(u16, u16, u16, u16)> = placed
+            .iter()
+            .map(|(_, position)| {
+                (
+                    position.column,
+                    position.row,
+                    position.columns,
+                    position.rows,
+                )
+            })
+            .collect();
+        assert_eq!(
+            found,
+            [
+                (1, 1, 3, 2),
+                (2, 1, 3, 2),
+                (3, 1, 3, 2),
+                (1, 2, 3, 2),
+                (2, 2, 3, 2)
+            ]
+        );
     }
 
     #[test]
