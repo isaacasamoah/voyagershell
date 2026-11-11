@@ -150,7 +150,7 @@ Results in the native journey, timed from the moment the application recorded th
 | Codex `gpt-6.1-sol`, low effort, panel list in the request | 2 | 7.6 and 15.2 s | 9.3 and 16.6 s |
 | Claude Code `claude-haiku-5-5`, low effort, panel list in the request | 4 | 1.2 to 2.1 s | 2.2 to 3.0 s |
 
-- With the panel list, Codex skipped the inspection in five of six requests, yet its time to effect stayed at 8 to 15 seconds. Its delay is the model's step, not the extra round trip.
+- With the panel list, Codex skipped the inspection in seven of eight requests across four runs, yet its time to effect stayed at 7.5 to 15 seconds. Its delay is the model's step, not the extra round trip.
 - Claude made one tool call per request and was right in all four, across two runs. The first request of each run includes starting Claude Code.
 - Once Codex at high effort used the contentId in place of the placementId. The application refused it as "Panel not found", and Codex corrected itself. The instructions now name the placementId.
 - Claude has no native file tools in this session and no native voice. A voice start with Claude is refused and text stays available.
