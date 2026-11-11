@@ -1,6 +1,6 @@
 # Vessel finding and local voice
 
-This is an unmerged experiment on `experiment/vessel-finding-local-voice`. It starts from main as of 11 November 2026, the product README merge. Nothing here is accepted product behavior, and no native app journey has run yet.
+This is an unmerged experiment on `experiment/vessel-finding-local-voice`. It starts from main as of 11 November 2026, the product README merge. Nothing here is accepted product behavior. One native journey has run in the real application with the real avatar, and it is described below.
 
 Isaac's main complaint about the avatar is the delay between asking for an action and seeing it happen. Neither prototype may add a model tool call.
 
@@ -14,6 +14,7 @@ The avatar used to read a stored name such as "Terminal 1" while the screen show
 - **One address.** Every Vessel and Portal has `Voyage/Fleet/Vessel` or `Voyage/Portals/Portal`. Repeated Voyage and Fleet names are numbered the same way, and a final pass keeps every address unique across the workspace.
 - **A position.** Each shown panel has a column counted from the left along its row, a row counted from the top along its column, the size of the grid and the corners it occupies. Every corner of a Fleet belongs to exactly one shown panel, so "top right" resolves to one Vessel. When no Fleet is named, a position means the selected Fleet.
 - **No extra call.** Every `voyager_workspace` response now carries `panels`, taken from the same observation the screen uses.
+- **One title.** A panel title showed the folder and then the folder again with its number. A numbered folder name now replaces the folder, for example `bash · voyagershell 2`.
 
 ### How it works
 
@@ -44,11 +45,28 @@ Run on Linux on 11 November 2026, in this worktree.
 
 On the crowded layout without `panels`, "Hide voyagershell 4" hid the Vessel stored as "Terminal 4", "Rename voyagershell 2" found nothing, and "Hide voyagershell 6", which does not exist, hid a real Vessel. Requests by position were right both ways, so the measured gain is in names.
 
+### Native journey
+
+`python3 prove.py --foundation --journey vessel-finding` drives the release build in its own session and profile. It opens three terminals in one folder, reads the names the panel titles expose, then types two requests to the real avatar and checks the layout the application stored.
+
+- The three panels showed the folder name, the folder name with 2 and the folder name with 3. Their stored names were still Terminal 1, 2 and 3.
+- "Rename the vessel called (folder) 3 to Port." The avatar inspected once and renamed the panel that showed that name.
+- "Maximize the top right vessel." The avatar inspected once and maximized the tall right panel.
+- It passed twice, on the first build and on the final committed build. The avatar ran Codex `gpt-6.1-sol` at high effort, the application default.
+- Negative control: the same journey against a build of main fails at the first step, because all three panels show the same name.
+- The effect landed 9.1 to 17.5 seconds after the application accepted each request, over four requests. Each request used two tool calls, an inspection and the effect. This is the delay Isaac reports, and this branch does not change it.
+- With the native toolchain on the path, `npm test` now passes as a whole: the type check and 80 Node tests.
+
+Limits of the journey:
+
+- One layout, one folder and two requests. The fixture runs the application as an X11 client, so it says nothing about a Wayland-native window or another operating system.
+- The journey has its own setup. The existing `split-resize` and `pane-maximize` setup fails on main before any assertion of theirs, because it expects a single content and no content picker. Main now adds the Home Agents view and asks which content a split should open. That repair is outside this branch.
+- The journey takes the branch past the project's test-size limit: 477 lines of tests against 369 lines of product source. Sharing its setup with the repaired split journeys would bring it back under.
+
 Not run:
 
-- `npm test` as a whole and any build of the desktop crate. The type check builds the native exporter, which needs `zig`, and `zig` is not on this shell's path.
-- Any native application journey. The desktop is reserved for another Vessel's task.
-- The avatar's own Codex model against the new list.
+- Any other native journey, and the `cargo` checks for the desktop crate beyond its release build.
+- An independent or fresh-context review.
 
 ### Known gaps
 
@@ -82,6 +100,7 @@ LFM3-Omni listens and speaks on the laptop. An acting agent, Claude Code or Code
 | `agents.py` | The choice rule, a cold Claude turn, a kept-alive Claude session and a headless Codex turn. |
 | `workspace_stub.py`, `world.py` | A stand-in workspace owner over MCP. It serves the real generated tool schema, keeps the version rule and applies the few effects the tests use. |
 | `act_test.py`, `speed_test.py` | Grade the calls an agent makes, and time requests in a kept-alive session. |
+| `inband_test.py` | Gives Claude Code the tool over the pipe the host already holds, with no server process. |
 | `voice_loop.py` | The whole loop on WAV files. |
 | `voice_handoff.py`, `voice_ws.py`, `voice_t10_*`, `voice_t11_*`, `voice_t12_*` | The earlier measurements of Omni's hand-off decision, typed and spoken, and of the live voice channel. |
 | `retest_*.py` | The earlier retest of LFM3 calling Voyager's tools itself, which found the two schema defects below. |
@@ -96,7 +115,20 @@ Single runs on 11 November 2026 with Claude Code 2.1.322, Claude Haiku 5.5, LFM3
 - **A kept-alive session is fast.** After the first request, the effect landed a median 1.9 seconds after the request and the answer was ready at 3.1 seconds. Each later request used one tool call, because the session already held a current version and the focus revision confirmed it.
 - **The spoken loop worked on five of five requests.** Omni decided in 0.24 to 0.44 seconds. A greeting was answered aloud 0.3 seconds after the request ended. Once Claude was running, an action took effect 2.3 to 3.1 seconds after the request ended and its spoken answer began at 3.7 to 4.4 seconds. The first action of the session took 7.2 and 9.0 seconds.
 - **Mishearing was absorbed.** Omni wrote "Deployes" and "Voyager shell 2". Claude matched Deploys and "voyagershell 2".
+- **Claude Code needs no separate server.** `inband_test.py` declares the tool as an in-process server. Claude Code then sends each tool message down its own output pipe and reads the reply from its input pipe. Two requests were right, with the effect at 3.5 and 1.8 seconds, the same as the separate server.
 - **Codex headless is blocked.** `codex exec` refused the stand-in tool for want of an approval, with approvals set to never inside the read-only sandbox. It was not run with the sandbox bypassed.
+
+### Why Claude uses MCP when Codex does not
+
+Codex's app-server accepts tool definitions from its host when a thread starts (`dynamicTools` in `app/src/codex_protocol.rs`) and calls the host back on the same pipe. Claude Code has no such option. Its only command-line door for outside tools is `--mcp-config`. Claude itself does not need MCP. There are three ways to give it Voyager's tools:
+
+| Channel | What it needs | What it costs |
+| --- | --- | --- |
+| Claude Code, tool messages on the pipe Voyager already holds | The Claude login already on the laptop | The messages are MCP-shaped. Anthropic documents this channel only through its Agent SDK, so a Claude Code update may change it. Measured here. |
+| Claude Code with a separate small server | The Claude login | One more process per session, and that process must reach back into the application. Measured here. |
+| The Anthropic API called directly, tools in each request | An API key billed apart from the Claude subscription | No MCP and no Claude Code. Voyager runs the model loop and manages the conversation itself. Not measured. |
+
+The administrator instructions tell the Codex avatar not to invoke MCP tools. Read in context, that keeps it off other servers configured on the machine. Claude Code is started with `--strict-mcp-config` and no built-in tools, so it sees Voyager's tool and nothing else.
 
 ### What LFM3 alone could not do
 
@@ -117,13 +149,23 @@ python3 voice_loop.py local/audio/request-2.wav
 python3 act_test.py claude
 VOYAGER_WORLD=crowded python3 act_test.py claude --no-panels
 python3 speed_test.py
+python3 inband_test.py
+```
+
+The native journey needs the release build and the desktop. On this laptop the build needs `zig` on the path and `LIBRARY_PATH` pointing at the native link libraries, as other worktrees set them.
+
+```sh
+cargo build --release --locked -p voyager-desktop --bin voyager-shell
+python3 prove.py --foundation --journey vessel-finding --launch --compositor --binary "$PWD/target/release/voyager-shell" \
+  --session voyager-unique-name --evidence /absolute/new/evidence --desktop-env /absolute/desktop-environment.json
 ```
 
 Start and stop the Omni server by hand. Project rules bar a second process supervisor.
 
 ### Not proven
 
-- Anything inside the application. The Claude adapter still has to be written behind `app/src/provider.rs`, with its tool channel in front of the existing dispatcher and each call bound to the accepted turn.
+- Claude inside the application. The adapter still has to be written behind `app/src/provider.rs`, with its tool channel in front of the existing dispatcher and each call bound to the accepted turn.
+- Whether the delay is the model or the channel. Today's avatar took 9 to 18 seconds with a large Codex model at high effort in the real application. Claude Haiku took 2 to 4 seconds against the stand-in. The models, the effort and the workspace all differ, so the two figures do not compare one thing.
 - A real microphone, a real speaker, Isaac's voice, interruption and end-of-speech detection.
 - The settings file. `conversation.json` still accepts only model and effort.
 - Codex with the local voice. Inside the application Codex already holds the tools through its app-server, so the hand-off would be a turn on the existing thread.
