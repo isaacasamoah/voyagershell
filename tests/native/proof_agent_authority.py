@@ -181,6 +181,7 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
         press("Embed Portals")
         for label in ("Approve Approve fixture", "Deny Deny fixture"):
             wait(lambda: native("fields", app["pid"], [label], "window")["fields"], bool, label, 180)
+            capture("authority-pending-" + label.split()[0].lower())
             press(label)
         field = "Write reply to Written fixture reply"
         wait(lambda: native("fields", app["pid"], [field], "window")["fields"], bool, "written response editor", 180)
@@ -190,6 +191,7 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
         native("button", True)
         native("button", False)
         text("Keep this within the isolated trial.")
+        capture("authority-written-reply")
         press("Reply to Written fixture reply")
         decisions = file("admiral-decisions.json", 180)
         admiral_id = decisions["snapshot"]["current"]

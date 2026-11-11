@@ -1,6 +1,6 @@
 import { div } from "gpui-kit";
 import { Popover } from "gpui-base";
-import { Name, NameState } from "voyager_native";
+import { Composer, ComposerState } from "voyager_native";
 import {
   coordination,
   coordination_watch,
@@ -197,7 +197,7 @@ export class Inbox {
     const colors = projection();
     let draft = this.drafts.get(message.id);
     if (!draft) {
-      draft = NameState.new("");
+      draft = ComposerState.new(`Write reply to ${payload.title}`);
       this.drafts.set(message.id, draft);
     }
     const reply = draft;
@@ -243,13 +243,7 @@ export class Inbox {
         .flex()
         .gap(6)
         .items_center()
-        .child(
-          Name.new(reply)
-            .accessibility_label(`Write reply to ${payload.title}`)
-            .flex_1()
-            .min_w(0)
-            .h(26),
-        )
+        .child(Composer.new(reply).flex_1().min_w(0))
         .child(
           actionButton(`reply-${message.id}`, `Reply to ${payload.title}`)
             .child("Reply")
