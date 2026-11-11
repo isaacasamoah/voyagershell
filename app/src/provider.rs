@@ -1,6 +1,25 @@
 use serde_json::Value;
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 use voyager_contract::conversation::{Focus, Phase, Role};
+
+pub(crate) fn executable(variable: &str, name: &str, label: &str) -> Result<PathBuf, String> {
+    let selected = env::var_os(variable).unwrap_or_else(|| name.into());
+    let path = PathBuf::from(&selected);
+    if path.components().count() > 1 || path.is_absolute() {
+        return path
+            .canonicalize()
+            .map_err(|_| format!("Selected {label} executable is unavailable"));
+    }
+    env::var_os("PATH")
+        .and_then(|paths| {
+            env::split_paths(&paths)
+                .map(|path| path.join(&selected))
+                .find(|path| path.is_file())
+        })
+        .ok_or_else(|| format!("{label} is not installed on the current application path"))?
+        .canonicalize()
+        .map_err(|_| format!("Selected {label} executable is unavailable"))
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Support {

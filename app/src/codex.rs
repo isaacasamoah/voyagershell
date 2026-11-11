@@ -9,7 +9,6 @@ pub(crate) use protocol::decode as normalize;
 pub(crate) use protocol::tool_reply as encode_tool_reply;
 use serde_json::{Value, json};
 use std::{
-    env,
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
@@ -63,22 +62,7 @@ pub(crate) fn reported_version(result: &Value) -> Option<&str> {
 
 impl Codex {
     pub(crate) fn executable() -> Result<PathBuf, String> {
-        let selected = env::var_os("VOYAGER_CODEX_BIN").unwrap_or_else(|| "codex".into());
-        let path = PathBuf::from(&selected);
-        if path.components().count() > 1 || path.is_absolute() {
-            return path
-                .canonicalize()
-                .map_err(|_| "Selected Codex executable is unavailable".into());
-        }
-        env::var_os("PATH")
-            .and_then(|paths| {
-                env::split_paths(&paths)
-                    .map(|path| path.join(&selected))
-                    .find(|path| path.is_file())
-            })
-            .ok_or_else(|| "Codex is not installed on the current application path".to_owned())?
-            .canonicalize()
-            .map_err(|_| "Selected Codex executable is unavailable".into())
+        crate::provider::executable("VOYAGER_CODEX_BIN", "codex", "Codex")
     }
     pub(crate) fn open(
         cwd: &Path,
