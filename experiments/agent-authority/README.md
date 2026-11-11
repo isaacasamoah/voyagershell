@@ -2,7 +2,7 @@
 
 This unmerged experiment extends the real Rust application owner and native workspace. The approved hats use uniform 12-pixel monochrome outlines. Core continues to own programs; the application owns conversation, explicit rank/assignment checks and escalation decisions. No current user program is adopted or replaced.
 
-Implementation is in progress. The scope policy and non-destructive inbox checks pass; the complete native communication, ranked creation and Inbox journeys are not established yet. The worktree-local SPEC.md and tasks/plan.md define the whole outcome. This source record is not a production capability claim.
+The 11 November Linux release-build trials completed real communication, ranked creation and instructions, supervisor routing and all three human Inbox decisions. A separate native journey retained the saved ranks and the same programs across hiding, Fleet changes and viewer reopening. The worktree-local SPEC.md and tasks/plan.md define the whole outcome. This source record is not a production capability claim.
 
 ## Ownership and binding
 
@@ -20,7 +20,7 @@ Conversation shares information and needs no work-changing rank. Starting, instr
 
 Read does not remove a message. Only its recipient can acknowledge it. Unanswered escalations remain pending even when read. The bounded inbox refuses capacity before discarding unread work. Recorded submission, recipient retrieval, acknowledgement, decision and actual completed work are distinct observations. No body is pasted into a terminal or surviving Bash process. Waiting releases the owner queue and rechecks the sender after waking.
 
-Escalations are intended to name the context, decision and affected work in plain language. They go to the actual supervisor or the human Inbox when none exists. Approve, Deny and a written response answer that exact agent run; they do not change its rank or execute unspecified work. The later complete implementation and native evidence must establish those paths before they are reported as working.
+Escalations are intended to name the context, decision and affected work in plain language. They go to the actual supervisor or the human Inbox when none exists. Approve, Deny and a written response answer that exact agent run; they do not change its rank or execute unspecified work. The real native trials establish those paths for the bounded fresh-Codex setup.
 
 ## Sources and verification
 
@@ -30,7 +30,7 @@ The Linux contracts are documented in [unix(7)](https://man7.org/linux/man-pages
 
 ## Current review boundary
 
-The typed contract and approved icon correction are pushed in the dependent experiment stack. Source review of the Rust owner found no remaining Required finding after preserving request IDs, separating option arguments from task text, and releasing only unused tickets after a confirmed launch refusal. The assignment-guard mutation failed as intended and passed after restoration. Full native enrollment, real conversation, child action and Inbox decisions remain unproved.
+The typed contract and approved icon correction are pushed in the dependent experiment stack. Source review of the Rust owner found no remaining Required finding after preserving request IDs, separating option arguments from task text, and releasing only unused tickets after a confirmed launch refusal. The assignment-guard mutation failed as intended and passed after restoration. The corrected native candidate has now completed enrollment, real conversation, child action and Inbox decisions. The original failed attempts remain retained; full formal acceptance and size accounting remain open.
 
 For this trial, a Captain's assignment also requires the same Fleet. Moving assigned Crew elsewhere retains the relationship record but ends that Captain's instruction authority until its scope matches again. Conversation remains available. This follows the current trial brief and is a behavior for user feedback, not a new automatic reassignment policy.
 
@@ -45,3 +45,9 @@ The narrow correction sets each of those three values through Codex's per-key `s
 ## Native reply field
 
 Escalation replies use the existing Composer with retained ComposerState. Its constructor supplies the accessible label and leaves the input blank. Each message keeps its own state. Name is a rename editor with a fixed accessibility label and does not expose an accessibility_label component method. Native06 reached real Admiral routing but failed while drawing this unsupported method. The corrected reply uses the standard 32-pixel Composer beside the existing compact buttons; no Rust binding or authority rule changes. The real journey must verify all three decisions and the actual reply text.
+
+## Verified experiment and remaining limits
+
+The final two complete native runs passed on the same optimized artifact. The original Admiral received Approve, Deny and the exact written reply, linked to its three escalation requests. Both work-authority refusals left conversation available. An unbound external command was refused. A settled screenshot and short recording show the reply text without an additional state-change handler. All test viewers and Core programs started by these verification rounds were closed; sampled protected programs were unchanged.
+
+Ordinary checks passed 199 Rust executions, 84 script tests and 31 runner tests, plus formatting, strict Clippy and generated-contract checks. Independent controls detected the old editor and stale-coordinate faults. This remains an unmerged experiment. The complete proving-code inventory and human UX acceptance are open. Exact installed-Core schema comparison still differs from the old pinned input, despite the successful native run. Fresh Codex support, explicit pull messages, no automatic idle wake and no communication re-enrollment after Quit remain the supported boundary.
