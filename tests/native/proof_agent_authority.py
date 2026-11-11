@@ -188,8 +188,16 @@ def prove(*, native, capture, geometry, close, start_frame, evidence, session, e
         wait(lambda: native("fields", app["pid"], [field], "window")["fields"], bool, "written response editor", 180)
         press(field, roles=("text", "text field", "entry"))
         wait(lambda: native("fields", app["pid"], [field], "window")["fields"], lambda fields: len(fields) == 1 and fields[0]["focused"], "written reply focus before typing")
+        capture("authority-reply-focused")
+        stream = json.loads((evidence / "authority-reply-focused-compositor.json").read_text())
+        native("record-start", str(evidence / "authority-written-reply.webm"), stream)
         text("Keep this within the isolated trial.")
+        time.sleep(0.3)
         capture("authority-written-reply")
+        time.sleep(0.7)
+        capture("authority-written-reply-settled")
+        observed["replyVideo"] = native("record-stop")["recording"]
+        observed["replyCaptureSettleSleepsSeconds"] = [0.3, 0.7]
         press("Reply to Written fixture reply")
         decisions = file("admiral-decisions.json", 180)
         admiral_id = decisions["snapshot"]["current"]
