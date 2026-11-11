@@ -77,18 +77,21 @@ def answer(message):
     return None if identity is None else {"__error__": {"code": -32601, "message": "Unsupported method"}}
 
 
-for line in sys.stdin:
-    line = line.strip()
-    if not line:
-        continue
-    message = json.loads(line)
+def reply(message):
+    """-> the JSON-RPC reply to one message, or None when it needs no reply"""
     result = answer(message)
     if message.get("id") is None or result is None:
-        continue
-    reply = {"jsonrpc": "2.0", "id": message["id"]}
+        return None
     if "__error__" in result:
-        reply["error"] = result["__error__"]
-    else:
-        reply["result"] = result
-    sys.stdout.write(json.dumps(reply) + "\n")
-    sys.stdout.flush()
+        return {"jsonrpc": "2.0", "id": message["id"], "error": result["__error__"]}
+    return {"jsonrpc": "2.0", "id": message["id"], "result": result}
+
+
+if __name__ == "__main__":
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        sent = reply(json.loads(line))
+        if sent is not None:
+            sys.stdout.write(json.dumps(sent) + "\n")
+            sys.stdout.flush()
