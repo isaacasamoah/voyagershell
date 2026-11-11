@@ -72,7 +72,7 @@ The journey can set the avatar's model and effort through the profile's `convers
 - At low effort the inspection result showed 1.7 to 4.0 seconds after the request was accepted. The effect followed 3.1 to 9.8 seconds after that, and in five of six requests 7.5 to 9.8 seconds. The answer began 1.1 to 2.3 seconds after the effect.
 - The slow part is therefore the model's step after it reads the inspection. The build of main shows the same gap, 8.2 and 11.4 seconds, so the panel list did not add it.
 - Codex on its own, outside the application, took 11.9 and 13.8 seconds for a one-word reply at low effort including start-up, with 12,822 tokens of context.
-- These are small samples from one layout on one evening. Thirteen timed runs were started and three stopped in the fixture before any request: one split that did not land and two accessibility read errors. The journey is not yet steady enough for acceptance.
+- These are small samples from one layout on one evening. Twelve timed runs were started and three stopped in the fixture before any request: one split that did not land and two accessibility read errors. The journey is not yet steady enough for acceptance.
 - With the native toolchain on the path, `npm test` now passes as a whole: the type check and 80 Node tests.
 
 Limits of the journey:
