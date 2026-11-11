@@ -1,6 +1,6 @@
 """A spoken request through the whole loop: Omni hears it, an acting agent performs it, Omni reads the answer aloud.
 
-usage: voice_loop.py [--settings FILE] [--agent claude|codex] [--voice local|native] <request.wav>...
+usage: voice_loop.py [--settings FILE] [--agent claude|codex] [--model NAME] [--effort LEVEL] [--voice local|codex] <request.wav>...
 
 Omni decides in text mode whether the request is workspace work. Workspace work goes to the acting agent as text.
 The agent's answer is spoken word for word. Requests and replies are WAV files; no microphone or speaker is used.
@@ -76,16 +76,17 @@ def main(arguments):
     settings = {}
     if "--settings" in arguments:
         settings = json.load(open(arguments[arguments.index("--settings") + 1]))
-    for key in ("agent", "voice"):
+    for key in ("agent", "model", "effort", "voice"):
         if f"--{key}" in arguments:
             settings[key] = arguments[arguments.index(f"--{key}") + 1]
     clips = [item for item in arguments if item.endswith(".wav")]
-    agent, voice = agents.choose(settings)
-    print(f"acting agent: {agent} | voice: {voice}")
-    if voice == "native":
+    choice = agents.choose(settings)
+    agent, voice = choice["agent"], choice["voice"]
+    print(f"acting agent: {agent} {choice['model']} at {choice['effort']} effort | voice: {voice}")
+    if voice == "codex":
         print("Codex's own voice handles speech inside the application. This loop only drives the local voice.")
         return
-    session = agents.ClaudeSession() if agent == "claude" else None
+    session = agents.ClaudeSession(model=choice["model"], effort=choice["effort"]) if agent == "claude" else None
     applied = 0
     for clip in clips:
         started = time.time()
@@ -95,7 +96,7 @@ def main(arguments):
         effect = None
         if kind == "handoff":
             focus = dict(world.FOCUS, revision=str(int(world.VERSION) + applied))
-            outcome = session.turn(text, focus) if session else agents.codex_turn(text, focus)
+            outcome = session.turn(text, focus) if session else agents.codex_turn(text, focus, model=choice["model"], effort=choice["effort"])
             effects = [call["action"] for call in outcome["calls"] if call["action"].get("operation") != "inspect"]
             applied += sum(1 for call in outcome["calls"] if call["status"] == "applied" and call["action"].get("operation") != "inspect")
             effect = decided + outcome["first_effect_seconds"] if outcome.get("first_effect_seconds") else None

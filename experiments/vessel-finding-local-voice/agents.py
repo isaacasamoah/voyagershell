@@ -22,17 +22,21 @@ def installed(name):
     return shutil.which(name) is not None
 
 
+DEFAULTS = {"claude": ("claude-haiku-5-5", "low", "local"), "codex": ("gpt-6.1-sol", "high", "codex")}
+
+
 def choose(settings, have=installed):
-    """Pick the acting agent and the voice. Claude is preferred when installed; Codex keeps its own voice by default."""
+    """Pick the acting agent, its model and effort, and the voice, with the same names and rules as the application's
+    conversation.json. Claude is preferred when installed. Codex keeps its own voice by default; Claude has only the local one."""
     agent = settings.get("agent") or next((name for name in ("claude", "codex") if have(name)), None)
     if agent not in ("claude", "codex"):
         raise ValueError("No acting agent is available; install Claude Code or Codex")
     if not have(agent):
         raise ValueError(f"The selected acting agent, {agent}, is not installed")
-    voice = settings.get("voice") or ("local" if agent == "claude" else "native")
-    if voice not in ("local", "native") or (voice == "native" and agent != "codex"):
-        raise ValueError("Voice must be local, or native with Codex")
-    return agent, voice
+    model, effort, voice = (settings.get(key) or default for key, default in zip(("model", "effort", "voice"), DEFAULTS[agent]))
+    if voice not in ("local", "codex") or (voice == "codex" and agent != "codex"):
+        raise ValueError("Voice must be local, or codex with Codex")
+    return {"agent": agent, "model": model, "effort": effort, "voice": voice}
 
 
 def stub_config(log, panels):
@@ -76,7 +80,7 @@ def claude_turn(request, focus, model="claude-haiku-5-5", panels=True, timeout=2
             "first_effect_seconds": (effects[0]["at"] - started) if effects else None}
 
 
-def codex_turn(request, focus, model=None, panels=True, timeout=300):
+def codex_turn(request, focus, model=None, panels=True, timeout=300, effort=None):
     """One cold headless Codex turn with the same stand-in tools. -> same shape as claude_turn."""
     work = tempfile.mkdtemp(prefix="voyager-act-")
     log = os.path.join(work, "calls.jsonl")
@@ -90,6 +94,8 @@ def codex_turn(request, focus, model=None, panels=True, timeout=300):
                "-c", "mcp_servers.voyager.env=" + "{" + ", ".join(f"{key} = {json.dumps(value)}" for key, value in stub["env"].items()) + "}"]
     if model:
         command += ["-m", model]
+    if effort:
+        command += ["-c", f'model_reasoning_effort="{effort}"']
     environment = {key: value for key, value in os.environ.items() if not key.startswith(("CLAUDE", "HC_"))}
     started = time.time()
     try:
@@ -108,13 +114,13 @@ def codex_turn(request, focus, model=None, panels=True, timeout=300):
 class ClaudeSession:
     """One Claude Code process kept alive across requests, so a request does not pay the start-up cost."""
 
-    def __init__(self, model="claude-haiku-5-5", panels=True):
+    def __init__(self, model="claude-haiku-5-5", panels=True, effort="low"):
         self.work = tempfile.mkdtemp(prefix="voyager-act-")
         self.log = os.path.join(self.work, "calls.jsonl")
         config = os.path.join(self.work, "mcp.json")
         json.dump({"mcpServers": {"voyager": stub_config(self.log, panels)}}, open(config, "w"))
         command = ["claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-                   "--model", model, "--system-prompt", ADMINISTRATOR, "--mcp-config", config, "--strict-mcp-config",
+                   "--model", model, "--effort", effort, "--system-prompt", ADMINISTRATOR, "--mcp-config", config, "--strict-mcp-config",
                    "--tools", "", "--allowedTools", TOOL, "--setting-sources", "", "--disable-slash-commands",
                    "--no-session-persistence"]
         environment = {key: value for key, value in os.environ.items() if not key.startswith("CLAUDE")}
