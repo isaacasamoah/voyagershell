@@ -1,0 +1,1220 @@
+schema: app-atlas/v0
+note: 'Interfaces between the parts: what kind of connection, what is sent and returned, how it fails and why. Shapes use field names from the code; observed_core links recorded Core messages from runs/.'
+interfaces:
+  - id: you-to-terminal-pane
+    name: 'You type, click, scroll or paste in a terminal pane'
+    from: ['ext:you', 'ext:gpui']
+    to: ['rs:voyager_desktop::terminal::view', 'rs:voyager_desktop::terminal', 'rs:voyager_desktop::terminal::input']
+    mechanism: call
+    nature: 'GPUI turns OS input into typed Rust events and calls the listeners the terminal pane attached in its render function, on the UI thread. No thread or language boundary is crossed: the pane encodes the event into terminal bytes at once and hands them to its Viewer. GPUI waits for nothing from Core.'
+    request:
+      plain: 'A key press with its key name, typed character, modifier flags and repeat flag; left-button press, drag and release positions for text selection; a scroll delta and position; or committed IME text through GPUI''s input-handler trait.'
+      shape: "KeyDownEvent { keystroke: { key, key_char?, modifiers: { shift, alt, control, platform, function } }, is_held }\nMouseDownEvent { position }          // left button: start selection, focus the pane\nMouseMoveEvent { position, pressed_button }   // drag selection while left is held\nMouseUpEvent { position }            // end selection (also on_mouse_up_out)\nScrollEvent { delta, position }      // wheel: mouse-report bytes or local scrollback\nEntityInputHandler::replace_text_in_range(text)   // IME commit\nCtrl+Shift+C / Ctrl+Shift+V (Command on macOS)    // copy selection / paste clipboard"
+      type_at: {path: desktop/src/terminal.rs, find: 'fn key(&mut self, event: &KeyDownEvent) -> Result<()> {'}
+    response:
+      plain: 'Nothing goes back to GPUI. The pane marks itself dirty and calls cx.notify() so GPUI redraws it. Any failure is written into a status line at the bottom of the pane.'
+      shape: 'status: String   // "Input: ...", "Terminal scroll: ...", "Selection: ..."'
+      type_at: {path: desktop/src/terminal_view.rs, find: '.when(!self.status.is_empty(), |view| {'}
+    errors: 'Errors become status text in the pane. Ctrl+Q, keys typed while an IME composition is open, and the workspace shortcuts (Ctrl+Shift+O, E, T, Ctrl+Alt+P, Ctrl+Shift+Z, or Cmd+Shift+Enter on macOS) return early without stopping propagation, so they bubble up to the header script or the Quit key binding instead of reaching the shell.'
+    limits: 'Encoded input over 64 KiB (including paste and its bracketed-paste markers) is refused by the Viewer; see terminal-input-frames.'
+    why: 'docs/terminal.md places pointer routing in terminal_view.rs and OS text composition in terminal_input.rs behind one registration boundary. Letting workspace shortcuts fall through keeps them working while a terminal has focus; the test workspace_shortcuts_leave_normal_terminal_input_alone pins the list.'
+    inferred: false
+    at: {path: desktop/src/terminal_view.rs, find: '.on_key_down(move |event, _, cx| {'}
+    steps: [typing-1, typing-2, typing-b1-1, typing-b1-2, typing-b2-1, split-vessel-1, stop-program-b3-1]
+  - id: you-to-header-handlers
+    name: 'Your clicks and keys reach the header script''s handlers'
+    from: ['ext:you', 'ext:gpui']
+    to: ['ts:desktop/mods/header/main.ts', 'ts:desktop/mods/header/panel-view.ts', 'ts:desktop/mods/header/chat.ts']
+    mechanism: script-call
+    nature: 'The header script builds its elements with gpui-kit and attaches JavaScript handlers such as on_click, on_mouse_down, on_key_down and on_hover. When GPUI dispatches an event to such an element on the UI thread, gpui-kit converts it to a plain object and calls the handler synchronously inside QuickJS. This covers the Vessel title drag, the maximize, close and split buttons, the Chat button and the window-wide keyboard shortcuts.'
+    request:
+      plain: 'A plain object with the key or button, positions and modifier flags, plus a cx context the handler uses to redraw, stop propagation or start async work.'
+      shape: "KeyEvent { key, keystroke, key_char?, modifiers: { shift, control, alt, platform, function }, is_held? }\nMouseButtonEvent { button, click_count, position: { x, y }, local_position?, bounds?, modifiers }\nMouseMoveEvent { position, local_position, bounds, modifiers }\nClickEvent { click_count, modifiers }\non_hover(hovered: boolean, cx)\n// panel-view.ts: on_mouse_down(\"left\") on a Vessel title -> workspace.startDrag(\"vessel\", id, event, cx)\n// main.ts: shell on_key_down -> shortcut(event, cx) for Ctrl+Shift+O/E/T and Ctrl+Alt+P"
+      type_at: {path: desktop/mods/header/main.ts, find: 'shortcut(event: KeyEvent, cx: UIContext) {'}
+    response:
+      plain: 'Nothing is returned. The handler changes script state (focus, drag, hover), calls cx.notify() to redraw or cx.stop_propagation(), or starts a typed workspace request through run(), which awaits invoke().'
+      shape: "run(action: Action, cx, done?, expectedVersion = this.version, prepareContents = true)\n// e.g. { operation: \"remove-panel\", id }  { operation: \"set-panel-maximized\", id, maximized }"
+      type_at: {path: desktop/mods/header/main.ts, find: 'done?: (result: Response | null, cx: AsyncContext) => void,'}
+    errors: 'The script writes refusals and caught errors into this.status, which the next render shows. While a request is in flight (busy), run() refuses resize gestures with "Resize was not saved while another workspace request was pending." and queues at most one unsent Close or Portal intent; shortcuts typed while busy wait in pendingShortcuts.'
+    limits: 'Event field types come from gpui-kit''s generated declarations (target/script-types/gpui-kit.d.ts, built by desktop/typecheck.cjs and not tracked in Git).'
+    why: 'The README says JavaScript and TypeScript define interface layouts through the supported host while rendering stays native. docs/workspace.md says the header keeps application requests and terminal preparation serialized, which is why busy state gates new requests.'
+    inferred: false
+    at: {path: desktop/mods/header/main.ts, find: 'this.shortcut(event, cx);'}
+    steps: [split-vessel-2, split-vessel-b1-1, move-vessel-1, move-vessel-b3-1, stop-program-b1-1, stop-program-b2-1, portal-1, portal-14, avatar-open-chat-12]
+  - id: arrangement-capture-to-script
+    name: 'Window-wide pointer moves during a drag go to the header script'
+    from: ['ext:you', 'rs:voyager_desktop::arrangement']
+    to: ['ts:desktop/mods/header/main.ts']
+    mechanism: script-call
+    nature: 'While a Vessel, Fleet or Voyage drag is active, the header script adds an ArrangementCapture native element. Rust registers capture-phase mouse handlers on the whole window and calls the script''s callback for every move and the left-button release, on the UI thread. The script decides when the drag has moved more than 7 pixels, previews the target, and on release sends move-panel.'
+    request:
+      plain: 'A kind string and the pointer''s window position. "move" while the left button is held, "cancel" if the button is no longer held, "up" on release.'
+      shape: 'callback(kind: "move" | "cancel" | "up", x: number, y: number, cx: Context) => void'
+      type_at: {path: desktop/src/arrangement.rs, find: '"(kind: string, x: number, y: number, cx: Context) => void",'}
+    response:
+      plain: 'Nothing. The script updates its drag state and redraws, or clears the drag on cancel.'
+      shape: "if (kind === \"cancel\") { this.drag = null; task.notify(); }\nelse if (kind === \"move\") this.moveDrag(x, y, task); else this.finishDrag(x, y, task);"
+      type_at: {path: desktop/mods/header/main.ts, find: 'ArrangementCapture.new((kind, x, y, task) => {'}
+    errors: 'invoke_and_report_with reports a throwing callback under the label "arrangement move" or "arrangement release". Escape, a changed snapshot or release outside a target cancels the gesture without a request.'
+    why: 'docs/arrangement.md says the native capture component uses the existing window and the current JavaScript callback and does not own the layout or start a process. Capturing at window level keeps the drag alive after the pointer leaves the title it started on.'
+    inferred: true
+    at: {path: desktop/src/arrangement.rs, find: 'moving.invoke_and_report_with('}
+    steps: [move-vessel-2, move-vessel-3, move-vessel-6, move-vessel-7]
+  - id: you-to-avatar
+    name: 'You click, drag, hover or press keys on the avatar'
+    from: ['ext:you', 'ext:gpui']
+    to: ['rs:voyager_desktop::avatar::view', 'rs:voyager_desktop::avatar']
+    mechanism: call
+    nature: 'The avatar is native Rust, not script. GPUI calls the AvatarView listeners on the UI thread; a press starts a Drag, and window-level capture handlers follow the pointer until release. A short click (under 350 ms, not moved) activates the avatar; a release after moving over a dock target sends a Dock request.'
+    request:
+      plain: 'Pointer press, move, release and exit events with window positions, the hover flag, and key presses on the focused avatar or on a focused dock Target.'
+      shape: "MouseDownEvent { position, modifiers.shift }   // Shift+press only animates\nMouseMoveEvent { position, pressed_button }     // capture phase; > 7 px = moved, Trigger::Undock\nMouseUpEvent { button: Left, position }         // capture phase; target_at(desktop point) -> dock\nMouseExitEvent { pressed_button: None }         // cancel the drag\non_hover(hovered: bool)                          // Trigger::Hover animation\nKeyDownEvent { keystroke.key: \"escape\" | \"s\" | \"f5\" | \"enter\" | \"space\", modifiers, is_held }\nTarget on_key_down: Shift+Enter                  // keyboard dock into that Target's scope"
+      type_at: {path: desktop/src/avatar.rs, find: 'fn released(&mut self, event: &gpui::MouseUpEvent, window: &Window, cx: &mut Context<Self>) {'}
+    response:
+      plain: 'Nothing to GPUI. The avatar changes its own state (drag, motion trigger, floating window) and calls cx.notify(), or calls dock(scope), which becomes a workspace request.'
+      shape: "fn dock(&mut self, scope: Scope, cx)   // Scope = voyager_contract::Context\nfn activate(&mut self, window, cx)    // click, Enter or Space"
+      type_at: {path: desktop/src/avatar.rs, find: 'fn dock(&mut self, scope: Scope, cx: &mut Context<Self>) {'}
+    errors: 'A failure to float or restore is stored as Err(message) in the avatar result and surfaced to the header script through take_result(). A moved release over no target repositions a floating avatar; a docked one plays a tone and stays.'
+    why: 'docs/avatar.md says native pointer events supply the source window and real pointer coordinates, and that a pointer release, recall or keyboard gesture sends the existing typed Dock request through the application client.'
+    inferred: false
+    at: {path: desktop/src/avatar/view.rs, find: 'cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {'}
+    steps: [avatar-open-chat-1, avatar-open-chat-1a, avatar-open-chat-2, avatar-open-chat-2a, dock-avatar-2, dock-avatar-3, dock-avatar-5, dock-avatar-5a]
+  - id: header-package-load
+    name: 'Rust loads the header package into QuickJS'
+    from: ['rs:voyager_desktop::host']
+    to: ['ts:desktop/mods/header/main.ts', 'ext:quickjs']
+    mechanism: script-call
+    nature: 'On the UI thread, host::load builds five host modules, puts them in a gpui-shell Policy and installs that policy as the default for exactly one load. gpui-shell then reads mod.json, evaluates main.js in the shared QuickJS runtime and constructs its default export, the Workspace view, whose init() runs at once. Rust waits for the load to finish; the script''s first request runs later as async work.'
+    request:
+      plain: 'The package folder in the profile, plus the policy that decides which modules the script may import.'
+      shape: "load(runtime, package: &Path, theme, workspace_binding, conversation, window, cx)\nPolicy::new()\n  .with_host_module(voyager_header)      .with_host_module(voyager_workspace)\n  .with_host_module(voyager_content_view) .with_host_module(voyager_conversation)\n  .with_host_module(voyager_avatar)\n// plus the frozen voyager_native component registry given to ShellRuntime at start\nmod.json { \"name\", \"version\": 1, \"entry\": \"main.js\", \"contentConfiguration\": 2 }"
+      type_at: {path: desktop/src/host.rs, find: 'fn load('}
+    response:
+      plain: 'A ShellRoot entity whose content is the script''s view. Header keeps it, starts a source watcher, and draws its content on every render.'
+      shape: "Result<Entity<ShellRoot>>\n// script side: export default class Workspace extends View { init(); render(cx) }"
+      type_at: {path: desktop/src/host.rs, find: ') -> Result<Entity<ShellRoot>> {'}
+    errors: 'A load error leaves no root. Header shows "Header load failed: ..." in a red box, and a task polling every 250 ms reloads once the package''s .js files or the theme change. LoadGuard refuses a nested load ("Nested package load is not allowed") and always restores an empty default policy afterwards, even on panic.'
+    limits: 'The source snapshot hashes at most 4096 .js or .mjs files, 8 directories deep.'
+    why: 'docs/workspace.md says voyager_workspace is installed only in the workspace chrome''s policy and content packages do not receive it. The LoadGuard test content_load_scope_restores_deny_after_normal_error_and_unwind shows the policy is meant to apply only for the duration of one load.'
+    inferred: false
+    at: {path: desktop/src/host.rs, find: 'runtime.try_load(package, window, cx)'}
+    steps: [startup-9, startup-b2-1, startup-b2-2]
+  - id: notes-package-load
+    name: 'Rust loads the Notes package into its own isolated QuickJS runtime'
+    from: ['rs:voyager_desktop::notes']
+    to: ['ts:content/notes/main.ts', 'ext:quickjs']
+    mechanism: script-call
+    nature: 'The Notes host owns a second, isolated ShellRuntime built only with the voyager_input registry. For each Notes content id, Loader::load builds a voyager_content module bound to that id and view, installs a policy naming the application "notes-<content id>", loads the entry file and mounts it as a ScriptView. It runs on the UI thread from the Notes watch loop.'
+    request:
+      plain: 'The Notes package folder, the entry file named in mod.json (main.js), and a policy carrying only that instance''s voyager_content module.'
+      shape: "Policy::new().with_application(format!(\"notes-{}\", id.0)).with_host_module(voyager_content)\nruntime.load_application(&self.package, entry)?   // runtime = ShellRuntime::new_isolated_with_components(voyager_input)\nmod.json { \"name\": \"Notes\", \"entry\": \"main.js\", \"version\": 1, \"stateSchema\": { title, text } }"
+      type_at: {path: desktop/src/notes.rs, find: '.with_application(application)'}
+    response:
+      plain: 'A mounted ScriptView entity, held as a Candidate until it is validated and published in place of the previous view.'
+      shape: 'Candidate { view: Entity<ScriptView>, binding: ViewBinding, retained, validated: false }'
+      type_at: {path: desktop/src/notes.rs, find: 'let view = runtime.mount_application(&application, window, cx)?;'}
+    errors: 'If the isolated runtime could not be created, every Notes component draws "Notes unavailable: <error>" and the content description is marked Unavailable with that reason.'
+    why: 'docs/content.md says all Notes instances share one isolated QuickJS VM with the private voyager_input registry and cannot import the header''s Terminal, Name or workspace modules; each candidate has its own captured voyager_content module and application generation.'
+    inferred: false
+    at: {path: desktop/src/notes.rs, find: 'let application = runtime.load_application(&self.package, entry)?;'}
+    steps: []
+  - id: script-element-tree
+    name: 'A script returns an element tree that GPUI draws'
+    from: ['ts:desktop/mods/header/main.ts', 'ts:content/notes/main.ts', 'ext:quickjs']
+    to: ['rs:voyager_desktop::host', 'ext:gpui']
+    mechanism: render
+    nature: 'When gpui-shell re-renders a ScriptView it calls the view''s render(cx) in QuickJS on the UI thread. The script returns a gpui-kit NativeElement tree built with chained style and handler calls; gpui-kit turns it into GPUI elements, and native components (Terminal, Split, Notes, Layer and others) are materialized by Rust. Header::render places that view in the window, cached unless accessibility is active.'
+    request:
+      plain: 'A tree of gpui-kit elements: div() boxes with layout and colour calls, text children, JavaScript handlers, and native component elements created with Name.new(...) and similar constructors with typed arguments or a props object.'
+      shape: "render(cx): NativeElement\ndiv().track_focus(this.focus).on_key_down(...).flex().w_full().bg(colors.background)\n  .child(NativeSplit.new(id, \"horizontal\", share, revision, reset, callback))\n  .child(Terminal.new(TerminalState.new(contentId)).size_full())\n  .child(Notes.new(content.id, { contentId: content.id }))\n  .child(Layer.new(\"avatar-layer\", { dockReceipt, dockEpoch, version, scope, layoutKey }))"
+      type_at: {path: desktop/mods/header/main.ts, find: 'render(cx: UIContext): NativeElement {'}
+    response:
+      plain: 'Nothing comes back to the script. GPUI lays out and paints the elements in the next frame.'
+      shape: "Header::render -> root.read(cx).content().clone()\n  .cached(StyleRefinement::default().size_full())   // unless window.is_a11y_active()"
+      type_at: {path: desktop/src/host.rs, find: 'view.cached(StyleRefinement::default().size_full())'}
+    errors: 'Load, theme, reload and quit errors are joined and drawn by Header::render in a red box at the bottom left. A native component with bad props draws its own message, such as "Invalid avatar scope" or "Notes requires a content identity".'
+    why: 'The README says scripts define layout through the supported host while rendering stays local and native. Caching the view avoids re-running script render on every frame; it is skipped when accessibility is active so the accessibility tree stays current (Header also invalidates Notes then).'
+    inferred: true
+    at: {path: desktop/src/host.rs, find: 'let view = root.read(cx).content().clone();'}
+    steps: [startup-11, move-vessel-5, portal-11, portal-12, portal-16, avatar-open-chat-14, notes-save-1, notes-save-19, launch-agent-3, launch-agent-2b, launch-agent-18, split-vessel-b3-2, launch-agent-11b]
+  - id: workspace-change-notices
+    name: 'The owner thread tells the header that something changed'
+    from: ['rs:voyager_app::client']
+    to: ['rs:voyager_desktop::host', 'host-module:voyager_workspace', 'ts:desktop/mods/header/main.ts']
+    mechanism: channel
+    nature: 'A long-lived GPUI task in Header subscribes to the owner thread with workspace_changes(after) and awaits a WorkspaceNotice on a one-slot channel. On each notice it stores the notice in a shared cell, re-reads reported activity on a background thread, and asks gpui-shell to refresh the script view. The script then reads the small notice() projection during render and decides whether to inspect.'
+    request:
+      plain: 'The last notice the header saw (or none). The owner replies with a fresh one-slot receiver and sends the current notice at once if it differs.'
+      shape: "Message::WorkspaceChanges { after: Option<WorkspaceNotice>, reply }\nWorkspaceNotice { package_revision: u64, revision: u64, activity_revision: u64, close_revision: u64 }"
+      type_at: {path: app/src/client.rs, find: 'pub struct WorkspaceNotice {'}
+    response:
+      plain: 'Inside the script, notice() returns the four counters as decimal strings. render compares them with the last seen values and calls inspectNotice, which runs { operation: "inspect" } only if the package or close revision changed or the layout revision is newer.'
+      shape: "notice(): { revision: string; closeRevision: string; packageRevision: string; activityRevision: string }\n// main.ts: BigInt(notice.revision) <= BigInt(this.version) -> no inspect"
+      type_at: {path: desktop/mods/header/main.ts, find: 'const ownerNotice = workspace_notice();'}
+    errors: 'If the owner is gone or the receiver is replaced, the task records "Workspace observer was replaced" (or the subscribe error) as a header watch error and stops listening.'
+    limits: 'One slot. The owner uses try_send, so a burst of changes keeps only the first unread notice; the next subscription compares its last pair with the current one, so the final state is still delivered.'
+    why: 'docs/workspace.md says the owner publishes confirmed change notices to one bounded native Header subscription, exposes only a small read-only revision projection to JavaScript, and that comparing the last pair with the current one means a full bounded notification cannot hide the final accepted state.'
+    inferred: false
+    at: {path: desktop/src/host.rs, find: 'let next = match changed_client.workspace_changes(after).await {'}
+    steps: [split-vessel-14, split-vessel-15, resize-split-14, move-vessel-13, program-exits-8, program-exits-9, program-exits-10, program-exits-16]
+  - id: host-voyager-workspace
+    name: 'The header script calls voyager_workspace'
+    from: ['ts:desktop/mods/header/main.ts', 'ts:contract/generated/workspace.ts', 'ts:desktop/mods/header/creation.ts', 'ts:desktop/mods/header/processes.ts', 'ts:desktop/mods/header/worktrees.ts']
+    to: ['host-module:voyager_workspace', 'rs:voyager_desktop::host']
+    mechanism: script-call
+    nature: 'Header-only door to the workspace owner. Plain functions run synchronously on the UI thread; async functions validate their arguments on the UI thread, then gpui-shell drives the returned future on another thread and resolves the script''s Promise. Most arguments and results are JSON strings checked by serde on the Rust side and by generated Ajv validators on the script side.'
+    request:
+      plain: 'Twelve functions. Requests travel as JSON text; revisions travel as decimal strings.'
+      shape: "request_id(): string                     revision(): string\ncall(request: string): Promise<string>                 // Request JSON\nterminal_open(request: string): Promise<string>        // TerminalRequest JSON\nworktree(request: string): Promise<string>             // worktree Request JSON\nprocesses(version: string): Promise<string>            // ProcessAction::List\nlaunches(): Promise<string>     context_facts(): Promise<string>\nworkspace_observation(version: string, active: string | null): Promise<string>\nnotice(): { revision; closeRevision; packageRevision; activityRevision }\nreported_activity(): string     refresh_activity(): Promise<void>"
+      type_at: {path: desktop/src/script_types.rs, find: 'pub const WORKSPACE: &str = r#"'}
+    response:
+      plain: 'JSON text the script parses and validates: Response, TerminalResponse, worktree Response, ProcessResponse, launch Catalog, context Facts, WorkspaceObservation or the activity Projection.'
+      shape: "Response { requestId, status: \"applied\"|\"rejected\"|\"uncertain\", version: \"42\", layout, fresh,\n           createdWorkspace, createdContents, message, closePlan? }\nTerminalResponse { requestId, contentId, status, reason?: \"ended\", message }\nCatalog { settings, available, errors, path }      Facts { version, scope, path, directory, branch }\nWorkspaceObservation { version, active, directory, panels, branch }\nProjection { terminals, limited, reason }          // reported_activity()"
+      type_at: {path: contract/src/lib.rs, find: 'pub struct Response {'}
+    errors: 'Bad arguments or oversize JSON throw at once ("Workspace request exceeds 64 KiB", "processes expects one decimal revision"). Owner failures become a HostError with the message text, which gpui-shell turns into a rejected Promise naming the module and function. A Promise whose view is reloaded stays pending for ever (gpui-kit''s documented cancellation rule).'
+    limits: 'call, worktree, context_facts and workspace_observation: 64 KiB of JSON. terminal_open: 1 KiB, and requestId and contentId at most 128 bytes each.'
+    why: 'docs/workspace.md says the module is installed only in the workspace chrome''s policy, a caller cannot grant itself a role through its request, and the host limits request JSON to 64 KiB before dispatching async work. It also says revisions cross JavaScript as decimal strings so a JavaScript number cannot round a Rust u64.'
+    inferred: false
+    at: {path: desktop/src/host.rs, find: 'let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)'}
+    steps:
+      - startup-10
+      - startup-12
+      - startup-14
+      - split-vessel-4
+      - split-vessel-7
+      - split-vessel-8
+      - split-vessel-17
+      - split-vessel-18
+      - resize-split-8
+      - resize-split-9
+      - move-vessel-8
+      - move-vessel-9
+      - portal-2
+      - portal-10
+      - launch-agent-1
+      - launch-agent-1a
+      - launch-agent-7
+      - launch-agent-8
+      - launch-agent-15
+      - dock-avatar-15
+      - ask-by-text-17
+      - program-exits-11
+      - program-exits-12
+  - id: host-voyager-header
+    name: 'The header script reads its theme colours from voyager_header'
+    from: ['ts:desktop/mods/header/main.ts']
+    to: ['host-module:voyager_header', 'rs:voyager_desktop::host']
+    mechanism: script-call
+    nature: 'One synchronous function, called during render on the UI thread. It reads the theme that Header parsed from themes/voyager.json, which a 250 ms polling task keeps current.'
+    request:
+      plain: 'No arguments.'
+      shape: 'projection(): { background: Color; foreground: Color; muted: Color; accent: Color }'
+      type_at: {path: desktop/src/script_types.rs, find: 'pub const HEADER: &str = r#"'}
+    response:
+      plain: 'Four six-digit hex colour strings. accent defaults to "#c4b5fd" when the theme omits it.'
+      shape: '{ "background": "#111316", "foreground": "#d4d5dc", "muted": "#878994", "accent": "#c4b5fd" }'
+      type_at: {path: desktop/src/host.rs, find: 'fn projection(value: &Theme) -> HostValue {'}
+    errors: 'If the theme file is invalid, the call throws the parse error (for example "Theme background must be a six-digit color") and Header shows the same text as a theme error.'
+    why: 'Keeps colour in a file the person can edit while Rust validates it and applies it to the native gpui-base theme too, so native and script parts match.'
+    inferred: true
+    at: {path: desktop/src/host.rs, find: 'let module = HostModule::new(crate::script_types::HEADER_MODULE)'}
+    steps: []
+  - id: host-voyager-content
+    name: 'A Notes package script calls voyager_content'
+    from: ['ts:content/notes/main.ts']
+    to: ['host-module:voyager_content', 'rs:voyager_desktop::notes']
+    mechanism: script-call
+    nature: 'Private module built per Notes content id and installed only in that instance''s isolated policy. invoke and changed are async: identity checks run on the UI thread, then the future runs on another thread and calls the bound content owner through the Client. The shipped Notes script imports only theme(); the other functions stay for older personal Notes packages.'
+    request:
+      plain: 'The content request as JSON text, with its request id and expected revision passed again beside it so Rust can check them before parsing a large body.'
+      shape: "identity(): string        request_id(): string        theme(): { background; foreground; muted; accent }\nchanged(after: string | null): Promise<string>         // next content notification version\ninvoke(request: string, requestId: string, expectedRevision: string): Promise<string>\n{ \"operation\": \"content.update\", \"version\": \"1\", \"requestId\", \"contentId\",\n  \"expectedRevision\": \"<sha-256 hex>\", \"data\": { \"title\", \"text\" } }\n// also content.inspect / describe / list-notes / configure / new-note / open-note / migrate-note"
+      type_at: {path: desktop/src/script_types.rs, find: 'export function invoke(request: string, requestId: string, expectedRevision: string): Promise<string>;'}
+    response:
+      plain: 'A content Response as JSON text, tagged by status.'
+      shape: "{ \"status\": \"applied\", \"version\": \"1\", \"requestId\", \"contentId\", \"snapshot\": { contentId, revision, data, warning? } }\n{ \"status\": \"snapshot\" | \"described\" | \"notes-list\" | \"note-opened\" | \"configured\" | \"limited\", ... }\n{ \"status\": \"rejected\", ..., \"expectedRevision\": string | null, \"message\" }\n{ \"status\": \"uncertain\", ..., \"expectedRevision\", \"message\" }"
+      type_at: {path: contract/src/content.rs, find: 'pub enum Response {'}
+    errors: 'Admission refusals come back as a typed rejected Response ("Request exceeds limit", "Content is busy"). A changed identity throws "Content request identity changed". Client errors throw a HostError whose text is the Rust Debug form, for example Rejected("Notes view was retired; nothing was queued").'
+    limits: 'Request and response at most 1 MiB plus 16 KiB. At most 8 admitted invokes per instance and 4 MiB of raw request bytes in total. requestId and expectedRevision at most 128 bytes.'
+    why: 'docs/content.md says the private host accepts the request id and expected revision beside the JSON, validates them and reserves the budget before copying a large request, and that the original voyager_content methods stay available for old packages.'
+    inferred: false
+    at: {path: desktop/src/notes.rs, find: 'let module = HostModule::new(crate::script_types::CONTENT_MODULE)'}
+    steps: []
+  - id: host-voyager-content-view
+    name: 'The header script places Notes and lists content types through voyager_content_view'
+    from: ['ts:desktop/mods/header/panel-view.ts', 'ts:desktop/mods/header/creation.ts']
+    to: ['host-module:voyager_content_view', 'rs:voyager_desktop::notes']
+    mechanism: script-call
+    nature: 'Header-only module. The Notes component runs on the UI thread when the header renders a Notes Vessel and returns one retained native Note view per content id. descriptions() is async and reads the content packages folder off the UI thread.'
+    request:
+      plain: 'A Notes element with its content id in props, or a request for the catalogue of content types.'
+      shape: "Notes.new(id: string, props: { contentId: string }): NativeElement\ndescriptions(): Promise<string>"
+      type_at: {path: desktop/src/script_types.rs, find: 'export const Notes: { new: (id: string, props: { contentId: string }) => import("gpui-kit").NativeElement };'}
+    response:
+      plain: 'The Notes element is a native view drawn in place. descriptions() returns a Catalog as JSON.'
+      shape: "Catalog { types: [ { typeId, name, availability: { status: \"ready\" | \"removed\" | \"unavailable\", reason? },\n                     host: { runtime, version }, view: { module, component }, placements: [\"fleet\"|\"voyage\"],\n                     configuration, state, actions, backend: \"core-terminal\"? } ] }"
+      type_at: {path: contract/src/content.rs, find: 'pub struct Catalog {'}
+    errors: 'A missing contentId draws "Notes requires a content identity". A broken Notes runtime draws "Notes unavailable: <error>" and marks notes Unavailable in the catalogue. descriptions() throws if the package root is missing or the JSON exceeds the envelope limit.'
+    limits: 'Catalogue JSON at most 1 MiB plus 16 KiB.'
+    why: 'docs/content.md says notes.rs installs a voyager_content_view component only in the Header policy and its native factory retains one view per content id.'
+    inferred: false
+    at: {path: desktop/src/notes.rs, find: 'HostModule::new(crate::script_types::CONTENT_VIEW_MODULE)'}
+    steps: [split-vessel-4, notes-save-18]
+  - id: host-voyager-conversation
+    name: 'The chat script talks to the private assistant through voyager_conversation'
+    from: ['ts:desktop/mods/header/chat.ts', 'ts:contract/generated/conversation.ts', 'ts:desktop/mods/header/navigation-view.ts']
+    to: ['host-module:voyager_conversation', 'rs:voyager_desktop::conversation']
+    mechanism: script-call
+    nature: 'Header-only module. call and snapshot are async; their futures run off the UI thread and block on the conversation client. snapshot is a long poll: it waits up to 20 seconds for the conversation version to move past the one the script already has. Speech is a native component for the voice control.'
+    request:
+      plain: 'A conversation Request as JSON (send text, interrupt, or start voice), or the last version the script saw.'
+      shape: "request_id(): string                         // \"conversation-<n>\"\ncall(request: string): Promise<string>\nsnapshot(after: string | null): Promise<string>\nSpeech.new(id, {}): NativeElement\nRequest { \"requestId\", \"action\": { \"operation\": \"send\", \"text\" } | { \"operation\": \"interrupt\" } | { \"operation\": \"start-voice\" } }"
+      type_at: {path: contract/src/conversation.rs, find: 'pub struct Request {'}
+    response:
+      plain: 'A Reply saying whether the request was accepted, or a Snapshot of the conversation (null when nothing changed within the wait).'
+      shape: "Reply { requestId, delivery: \"accepted\" | \"rejected\" | \"unconfirmed\", error }\nSnapshot { version: \"7\", thread, turn, model, phase: \"idle\"|\"starting\"|\"working\"|..., messages:\n           [ { id, requestId, role: \"user\"|\"assistant\"|\"tool\", text, context, tool? } ],\n           error, limited, omitted }"
+      type_at: {path: contract/src/conversation.rs, find: 'pub struct Snapshot {'}
+    errors: 'Oversize input throws "Conversation request exceeds 64 KiB". A full queue throws "Conversation busy or unavailable; nothing was queued"; no reply in 25 seconds throws "Conversation result unconfirmed; do not repeat this request". The generated send() also throws if the reply''s requestId does not match.'
+    limits: 'Request JSON 64 KiB. Owner queue 8 messages; call waits 25 s; snapshot waits up to 20 s.'
+    why: 'The long poll lets the chat follow streaming replies without a timer per frame. docs/terminal.md says the private queue keeps an eight-slot bound.'
+    inferred: true
+    at: {path: desktop/src/conversation.rs, find: 'HostModule::new(crate::script_types::CONVERSATION_MODULE)'}
+    steps: [ask-by-text-1, ask-by-text-2, ask-by-text-16, ask-by-text-16a, avatar-open-chat-13, ask-by-voice-19]
+  - id: host-voyager-avatar
+    name: 'The header script places avatar pieces and reads dock results through voyager_avatar'
+    from: ['ts:desktop/mods/header/main.ts', 'ts:desktop/mods/header/navigation-view.ts']
+    to: ['host-module:voyager_avatar', 'rs:voyager_desktop::avatar']
+    mechanism: script-call
+    nature: 'Header-only module, all synchronous on the UI thread. The script places Layer, Target, PortalArea and Brand elements; their props tell the native avatar the current scope and version, and their painted bounds become dock targets. When the avatar finishes a dock it emits Changed, Rust refreshes the script view, and render collects the result with take_result().'
+    request:
+      plain: 'Component props as strings (scope is Context JSON, version and epoch are decimal strings), and a few small queries.'
+      shape: "Layer.new(id, { dockReceipt: string; dockEpoch: string; version: string; scope: string; layoutKey: string })\nTarget.new(id, { scope: string; fallback: boolean })     // scope = '{\"kind\":\"fleet\",\"id\":\"<fleet id>\"}'\nPortalArea.new(id, {})    Brand.new(id, {})\nwindow_epoch(): string    dock_target_visible(scope: string): boolean    speech_in_primary(): boolean\ntake_result(): string | null    take_animation_notice(): string | null"
+      type_at: {path: desktop/src/script_types.rs, find: 'export const Layer: { new: (id: string, props: { dockReceipt: string;'}
+    response:
+      plain: 'Elements drawn natively. take_result() hands over, once, the Response JSON of the last native dock, or throws its error text.'
+      shape: "take_result() -> null | Response JSON { requestId, status, version, layout, ... }\ntake_animation_notice() -> null | string"
+      type_at: {path: desktop/src/avatar.rs, find: '.function("take_result", move |_| match result.borrow_mut().take() {'}
+    errors: 'An unparsable Target scope draws "Invalid avatar scope". A failed dock or float is thrown from take_result() as a HostError with the stored message; the script writes it into its status.'
+    why: 'docs/avatar.md says the application client remains the context owner and only the Dock response confirms the change; an applied receipt also reconciles window presentation when a script control requested the dock. Passing dockReceipt and dockEpoch back through Layer props is how that reconciliation reaches the native avatar.'
+    inferred: false
+    at: {path: desktop/src/avatar.rs, find: 'HostModule::new(crate::script_types::AVATAR_MODULE)'}
+    steps: [dock-avatar-1, dock-avatar-12, dock-avatar-13]
+  - id: host-voyager-native
+    name: 'The header script places native components from voyager_native'
+    from: ['ts:desktop/mods/header/main.ts', 'ts:desktop/mods/header/panel-view.ts']
+    to: ['host-module:voyager_native', 'rs:voyager_desktop::terminal', 'rs:voyager_desktop::split', 'rs:voyager_desktop::text', 'rs:voyager_desktop::arrangement']
+    mechanism: script-call
+    nature: 'A frozen gpui-shell component registry, not a HostModule. Its TypeScript declarations are generated from the Rust registrations. Constructors run on the UI thread during render; state constructors (NameState, TerminalState) create retained Rust entities that survive re-renders, and callbacks (Split, Column, MeasureHeight, ArrangementCapture) call back into the script.'
+    request:
+      plain: 'Constructor arguments by position: ids, revision strings, numbers, enum strings, state handles and script callbacks.'
+      shape: "TerminalState.new(content: string) / Terminal.new(state)            // state looks up the attached Viewer\nNameState.new(value) / Name.new(state);  ComposerState.new(value) / Composer.new(state)\nSplit.new(id, axis: \"horizontal\"|\"vertical\", share, revision, reset, (revision, share, cx) => void)\nColumn.new(id, widthPixels, revision, reset, (revision, widthPixels, cx) => void)\nMeasureHeight.new(id, (height, cx) => void, label?)   FollowScroll.new(id, revision)\nStatus.new(id, text)   Occluding.new()   ArrangementCapture.new((kind, x, y, cx) => void)\nTerminalState methods: rememberFocus(): boolean, focusIfUnchanged(): void"
+      type_at: {path: desktop/src/lib.rs, find: 'let mut declarations = gpui_shell::type_declarations(&native_registry(Default::default())?);'}
+    response:
+      plain: 'A native element the script can style and nest. Callbacks bring user results back, for example a Split drag ends with (revision, share) that the script sends as resize-panel-split.'
+      shape: "Terminal -> div().size_full().child(Entity<Pane>)\nSplit callback -> { operation: \"resize-panel-split\", owner, path, share }   // sent by the script"
+      type_at: {path: desktop/src/terminal.rs, find: 'let pane = request.with_state::<Entity<Pane>, _>(argument, Clone::clone)?;'}
+    errors: 'Constructor errors are strings returned to gpui-shell, such as "Terminal is not attached" when no Viewer was installed for that content id, or "Terminal requires content identity".'
+    why: 'Terminals, editors and dividers need retained native state and per-frame painting that script cannot do; the registry lets the script place them while Rust owns them. Generating declarations from the registry keeps names and argument types in one place.'
+    inferred: true
+    at: {path: desktop/src/lib.rs, find: '"voyager_native",'}
+    steps:
+      - startup-16
+      - split-vessel-23
+      - split-vessel-24
+      - split-vessel-25
+      - resize-split-1
+      - resize-split-2
+      - resize-split-5
+      - resize-split-6
+      - resize-split-16
+      - resize-split-b3-1
+      - move-vessel-15
+      - move-vessel-16
+      - portal-13
+  - id: host-voyager-input
+    name: 'The Notes script places native editors from voyager_input'
+    from: ['ts:content/notes/main.ts']
+    to: ['host-module:voyager_input', 'rs:voyager_desktop::notes_input', 'rs:voyager_desktop::notes_session']
+    mechanism: script-call
+    nature: 'A frozen component registry given only to the isolated Notes runtime. SessionState binds the script to the native Notes session for its view; the retained title and body editors are the session''s own editors, so text survives script reloads. All methods run synchronously on the UI thread; save() only asks the session to save.'
+    request:
+      plain: 'State constructors with no arguments, editor elements, and session methods.'
+      shape: "SessionState.new()   methods: status(): string, show_heading(): boolean, filenames(): string[],\n  filename(): string, list_notes(), exit_note(), new_note(), migrate_note(),\n  open_note(filename: string), save()\nRetainedTitleState.new() / RetainedTitle.new(state)    value(): string\nRetainedBodyState.new()  / RetainedBody.new(state)     value(): string\nTitleState.new(initial_value?) / Title, BodyState.new(initial_value?) / Body   // older packages"
+      type_at: {path: desktop/src/notes_input.rs, find: '"(filename: string): void",'}
+    response:
+      plain: 'Native editor elements, plain values from the session, or nothing for actions. save() becomes Intent::Script on the session.'
+      shape: 'save() -> session.save(Intent::Script(handle.view.clone()), cx); returns null'
+      type_at: {path: desktop/src/notes_input.rs, find: 'crate::notes_session::Intent::Script(handle.view.clone()),'}
+    errors: 'Each action method throws "Notes view is not active" for a retired view and "<name> takes no arguments" for bad calls. Retained states throw "Create SessionState before its retained editors" if called first.'
+    why: 'docs/content.md says SessionState.save is an optional explicit save intent permitted only for the active generation, and that native input events update the draft and request a save on blur.'
+    inferred: false
+    at: {path: desktop/src/notes_input.rs, find: 'let mut registry = ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, "voyager_input")?;'}
+    steps: [notes-save-1, notes-save-2]
+  - id: owner-queue
+    name: 'Every desktop request queues for the single owner thread'
+    from: ['rs:voyager_desktop::host', 'rs:voyager_desktop::avatar', 'rs:voyager_desktop::notes_session', 'rs:voyager_desktop::notes', 'rs:voyager_desktop::quit']
+    to: ['rs:voyager_app::client']
+    mechanism: channel
+    nature: 'Client is a cheap clone holding the sender of one bounded async channel. The owner thread, started in start_with_launches, blocks on recv and handles one Message at a time; only it holds the layout, the Core connection and the content owner. Each message carries its own one-slot reply channel, so the caller waits for exactly its own answer.'
+    request:
+      plain: 'One of 24 Message variants. Effects carry a request id, reads carry only a reply sender, and a few (ActivityChanged, the *Done and *Ready messages) are sent by the owner''s own helper threads.'
+      shape: "enum Message {\n  Workspace { request, scope: Option<Context>, reply: SyncSender<Response>, queued_at },\n  Terminal { content, request_id, expected_version, reply },  Process { scope, request, reply, queued_at },\n  Worktree { scope, request, reply },  Content { access, request, reply: ContentReply, close_ticket, native_save },\n  Launches, ContextFacts, WorkspaceObservation { scope, version, active }, WorkspaceChanges { after },\n  BindContent { id }, RegisterView, ContentChanges { binding, after }, NoteExit, Quit, RefreshActivity,\n  PrepareContext, CloseSaves, CloseDone, NoteRenameReady, WorktreeRemoveReady, WorktreeDone,\n  ProcessDone, ActivityChanged, RefreshContentViews }"
+      type_at: {path: app/src/client.rs, find: 'enum Message {'}
+    response:
+      plain: 'A typed result on the message''s own reply channel: std mpsc::sync_channel(1) for blocking callers, async_channel::bounded(1) for awaiting ones.'
+      shape: "PendingCall(mpsc::Receiver<Response>, Duration).wait() -> Result<Response, CallError>\nenum CallError { Rejected(String), Unconfirmed(String) }"
+      type_at: {path: app/src/client.rs, find: 'pub(crate) struct PendingCall(mpsc::Receiver<Response>, Duration);'}
+    errors: 'try_send on a full queue refuses at once with "Workspace busy or unavailable; nothing was queued" (or the terminal, process, worktree or content wording): known refusal, nothing happened. A reply that does not arrive in time becomes Unconfirmed, "... unconfirmed; do not repeat the request": the owner may still apply it. Client::call flattens both to a plain String, which the host turns into a HostError message.'
+    limits: 'Queue capacity 8. Timeouts: workspace 20 s (ConfirmVoyageClose 120 s), note exit 20 s, terminal, process, worktree and blocking content 25 s. Awaiting reads use send().await, which waits for room, and have no timeout. The owner keeps the last 32 receipts per family (workspace, terminal, process, worktree, content) and replays an identical request id instead of repeating it.'
+    why: 'docs/workspace.md says client.rs owns the current layout and revision on one worker thread, the channel holds at most eight pending calls, a client timeout reports an unconfirmed result and never retries it, and the actor keeps 32 request and outcome pairs.'
+    inferred: false
+    at: {path: app/src/client.rs, find: 'let (sender, receiver) = async_channel::bounded::<Message>(8);'}
+    steps: [startup-3]
+  - id: workspace-call
+    name: 'A workspace Request goes to the owner and a Response comes back'
+    from: ['rs:voyager_desktop::host', 'rs:voyager_desktop::avatar', 'rs:voyager_app::administrator']
+    to: ['rs:voyager_app::client', 'rs:voyager_app::workspace']
+    mechanism: channel
+    nature: 'call(request) and scoped_call(scope, request) both go through the private bound_call, which queues Message::Workspace and blocks the calling thread on its reply. The header calls it from the future gpui-shell drives off the UI thread, the avatar from a GPUI background task, the agent tools with a scope. The owner checks identity, freshness and expected version, applies the Action to a candidate layout, saves it to Core, and replies.'
+    request:
+      plain: 'A request id, the layout revision the caller last saw, and one of 35 Action variants tagged by operation.'
+      shape: "Request { \"requestId\": \"workspace-<pid>-<nanos>-<n>\", \"expectedVersion\": \"42\",\n          \"action\": { \"operation\": \"inspect\" } }\n// other actions: { \"operation\": \"select-fleet\", \"id\" }  { \"operation\": \"remove-panel\", \"id\" }\n//   { \"operation\": \"dock\", \"context\": { \"kind\": \"fleet\", \"id\" } }\n//   { \"operation\": \"create-content\", \"typeId\": \"terminal\", \"destination\": { \"kind\": \"panel\",\n//       \"owner\": { \"kind\": \"fleet\", \"id\" }, \"insertion\": { \"kind\": \"beside\", \"id\", \"side\": \"right\" } } }\n//   resize-panel-split, move-panel, set-portal-presentation, close-voyage, confirm-voyage-close, ..."
+      type_at: {path: contract/src/lib.rs, find: 'pub struct Request {'}
+    response:
+      plain: 'Always a full Response with the current confirmed layout (projected to the scope for scoped callers), even on refusal.'
+      shape: "Response { \"requestId\", \"status\": \"applied\" | \"rejected\" | \"uncertain\", \"version\": \"43\",\n           \"layout\": { voyages, home?, contents, selectedVoyage, selectedFleet, context, canvas,\n                       view, savedLayouts, nextId }, \"fresh\": true, \"createdWorkspace\": false,\n           \"createdContents\": [\"<content id>\"], \"message\": null, \"closePlan\"?: {...} }"
+      type_at: {path: contract/src/lib.rs, find: 'pub struct Response {'}
+    errors: 'Refusals come back inside the Response with status rejected and a message, such as "Inspect the workspace before making a change", "Layout changed; inspect it before making a new request", "Changed request identity; nothing was repeated" or "Voyager is quitting; no workspace effect was dispatched". A Core save that may or may not have landed is status uncertain. Queue full or timeout are CallError instead; call() turns them into a bare String.'
+    limits: 'Queue 8; 20 s wait (120 s for confirm-voyage-close); request id 1 to 128 bytes; 32 receipts replayed by request id.'
+    why: 'docs/workspace.md says new mutations must match the confirmed layout revision, an uncertain Core result requires inspection before another change, and an identical request returns its recorded outcome with the current snapshot.'
+    inferred: false
+    at: {path: app/src/client.rs, find: 'fn queue_workspace('}
+    steps:
+      - startup-13
+      - startup-b1-1
+      - split-vessel-9
+      - split-vessel-b2-1
+      - resize-split-10
+      - move-vessel-10
+      - portal-3
+      - portal-15
+      - launch-agent-5
+      - dock-avatar-7
+      - dock-avatar-8
+      - dock-avatar-5c
+      - ask-by-text-11
+      - ask-by-text-12
+  - id: terminal-open-call
+    name: 'Opening a terminal returns a live Viewer, not JSON'
+    from: ['rs:voyager_desktop::host']
+    to: ['rs:voyager_app::client', 'rs:voyager_app::core']
+    mechanism: channel
+    nature: 'Client::terminal queues Message::Terminal and blocks the future''s thread for the reply. The owner starts the program if needed and attaches a Core viewer channel, then replies with a Viewer handle. The host installs that Viewer in the shared Viewers map under the content id, where the TerminalState constructor later finds it, and turns the outcome into a TerminalResponse for the script.'
+    request:
+      plain: 'The content id, a request id and the layout revision the script last saw.'
+      shape: "TerminalRequest { \"requestId\": \"workspace-<pid>-<nanos>-<n>\", \"contentId\": \"<content id>\", \"expectedVersion\": \"42\" }\n// Rust: client.terminal(content: ContentId, request_id: String, expected_version: u64)"
+      type_at: {path: contract/src/lib.rs, find: 'pub struct TerminalRequest {'}
+    response:
+      plain: 'In Rust, Result<Viewer, core::Error>. The script receives only the status.'
+      shape: "Ok(Viewer { channel: u32, initial_size: (cols, rows), streams, input, control, ... })\nTerminalResponse { \"requestId\", \"contentId\", \"status\": \"applied\" | \"rejected\" | \"uncertain\",\n                   \"reason\"?: \"ended\", \"message\": null | \"<kind>: <message>\" }"
+      type_at: {path: desktop/src/host.rs, find: 'let response = voyager_contract::TerminalResponse {'}
+    errors: 'core::Error::Rejected { kind, message } becomes status rejected with "kind: message"; kind "finished" also sets reason "ended". Error::Uncertain becomes status uncertain; the generated openTerminal() throws "Terminal result unconfirmed; do not repeat the request" if the reply does not match. A stale receipt whose channel has closed is refused as viewer_expired and cannot replace a newer viewer.'
+    limits: 'Queue 8; 25 s wait; the owner keeps the last 32 terminal requests and replays identical ones.'
+    why: 'docs/terminal.md says this separate request exists because an applied attachment yields a native viewer retained by Rust, not a serializable layout value, and that the host checks the returned channel under the viewer-map lock so an expired channel cannot close a newer viewer.'
+    inferred: false
+    at: {path: app/src/client.rs, find: 'pub fn terminal('}
+    steps: [startup-15, split-vessel-19, split-vessel-20, split-vessel-22, split-vessel-b3-1, launch-agent-9, launch-agent-11a, launch-agent-14, ask-by-text-18]
+  - id: process-call
+    name: 'Listing or stopping terminal programs through the owner'
+    from: ['rs:voyager_desktop::host', 'rs:voyager_app::administrator', 'rs:voyager_app::voyage_close']
+    to: ['rs:voyager_app::client', 'rs:voyager_app::process']
+    mechanism: channel
+    nature: 'Client::process queues Message::Process with a scope and blocks for the reply. The header uses it only to list processes, from a background executor task; agent tools also read, send, interrupt and stop. A stop runs its Core wait on a helper thread that reports back with ProcessDone, so the owner keeps serving other messages.'
+    request:
+      plain: 'A request id and an input naming the expected layout revision and one process action.'
+      shape: "ProcessRequest { \"requestId\", \"input\": { \"expectedVersion\": \"42\",\n  \"action\": { \"operation\": \"list\" }\n          | { \"operation\": \"stop\", \"contentId\", \"terminalId\", \"pid\": 1234 }\n          | read { contentId, terminalId, lines <= 160 } | send { ..., pid, text } | interrupt { ..., pid } } }"
+      type_at: {path: contract/src/administrator.rs, find: 'pub struct ProcessRequest {'}
+    response:
+      plain: 'A ProcessResponse with status, the layout revision and freshness, and a typed output.'
+      shape: "ProcessResponse { \"requestId\", \"status\", \"version\": \"42\", \"fresh\", \"message\",\n  \"output\": { \"operation\": \"list\", \"processes\": [ { contentId, terminalId, pid, cwd, state,\n               foreground, agentName?, placementNames?, reportedActivity? } ], \"unavailable\": [] } }"
+      type_at: {path: contract/src/administrator.rs, find: 'pub struct ProcessResponse {'}
+    errors: 'Queue full: CallError::Rejected "Workspace busy or unavailable; no process request was queued". No reply in 25 s: CallError::Unconfirmed "Process result unconfirmed; do not repeat the request". The header host maps both to a HostError with that text.'
+    limits: 'Queue 8; 25 s; the header passes WorkspaceContext::Workspace as scope.'
+    why: 'Keeps process effects behind the same queue, revision check and receipts as layout changes; docs/workspace.md says process routes keep their existing application queue, grants, CAS and receipts.'
+    inferred: false
+    at: {path: app/src/client.rs, find: 'pub fn process('}
+    steps: [launch-agent-16, stop-program-3, stop-program-4, stop-program-9, stop-program-10]
+  - id: worktree-call
+    name: 'Listing, creating, opening or removing Git worktrees through the owner'
+    from: ['rs:voyager_desktop::host']
+    to: ['rs:voyager_app::client', 'rs:voyager_app::worktrees']
+    mechanism: channel
+    nature: 'The header''s worktree() host function spawns Client::worktree on the GPUI background executor, which queues Message::Worktree and blocks for the reply. Git runs on a helper thread that reports back through WorktreeDone, and a remove asks the owner for approval through WorktreeRemoveReady.'
+    request:
+      plain: 'A request id, expected layout revision, the Voyage and one action.'
+      shape: "Request { \"requestId\", \"expectedVersion\": \"42\", \"voyage\": \"<voyage id>\",\n          \"action\": { \"operation\": \"list\" } | { \"operation\": \"create\", \"name\", \"branch\", \"base\" }\n                  | { \"operation\": \"open\", \"path\" } | { \"operation\": \"remove\", \"path\" } }"
+      type_at: {path: contract/src/worktree.rs, find: 'pub struct Request {'}
+    response:
+      plain: 'Status, message and the current checkouts.'
+      shape: "Response { \"requestId\", \"status\": \"applied\" | \"rejected\" | \"uncertain\", \"message\",\n           \"checkouts\": [ { path, commonDir, main, branch, locked, prunable, dirty? } ] }"
+      type_at: {path: contract/src/worktree.rs, find: 'pub struct Response {'}
+    errors: 'Queue full: "Workspace busy or unavailable; no worktree request was queued". No reply in 25 s: "Worktree result unconfirmed; do not repeat the request". Both reach the script as a rejected Promise.'
+    limits: 'Request JSON 64 KiB at the host; queue 8; 25 s; 32 receipts.'
+    why: 'Same owner, revision and receipt rules as other effects, so a worktree opened as a Voyage is saved in the same layout transaction.'
+    inferred: true
+    at: {path: app/src/client.rs, find: 'pub fn worktree('}
+    steps: [launch-agent-1c]
+  - id: content-call
+    name: 'Reading, observing and changing content through the owner'
+    from: ['rs:voyager_desktop::notes_session', 'rs:voyager_desktop::notes', 'rs:voyager_app::administrator']
+    to: ['rs:voyager_app::client', 'rs:voyager_app::content']
+    mechanism: channel
+    nature: 'Effects (update, configure, new, open, migrate) use content, content_view or content_native_save, which try_send Message::Content and block up to 25 s. Reads (inspect, describe, list) use read_content or read_content_view, which await. view_changed subscribes with ContentChanges and awaits the next notification version, giving up if the view is retired. Before each content message the owner reloads the layout from Core to check the content still belongs there.'
+    request:
+      plain: 'Who is asking (an Access bound to the view or a scoped agent) and a content Request tagged by operation.'
+      shape: "Message::Content { access: Access, request: content::Request,\n                   reply: ContentReply::Blocking | Asynchronous, close_ticket, native_save }\ncontent::Request \"operation\": \"content.inspect\" | \"content.describe\" | \"content.list-notes\"\n  | \"content.update\" { expectedRevision, data } | \"content.configure\" { expectedVersion, configuration }\n  | \"content.new-note\" { expectedVersion, title } | \"content.open-note\" { expectedVersion, filename }\n  | \"content.migrate-note\" { expectedVersion }      // all carry version \"1\", requestId, contentId\nMessage::ContentChanges { binding, after: Option<u64> } -> Receiver<u64>"
+      type_at: {path: contract/src/content.rs, find: 'pub enum Request {'}
+    response:
+      plain: 'A shared Arc of a content Response tagged by status, or the next notification version for observers.'
+      shape: "Response \"status\": \"snapshot\" { snapshot, configuration? } | \"applied\" { snapshot }\n  | \"rejected\" { expectedRevision, message } | \"uncertain\" { expectedRevision, message }\n  | \"limited\" | \"described\" | \"notes-list\" | \"note-opened\" | \"configured\"\nSnapshot { contentId, revision: \"<sha-256 hex of the file bytes>\", data: { title, text }, warning? }"
+      type_at: {path: contract/src/content.rs, find: 'pub struct Snapshot {'}
+    errors: 'Before queuing: "Content effects cannot use read-only admission", "Content request exceeds the envelope limit; nothing was queued", "Notes view was retired; nothing was queued", "Workspace busy; no content operation was queued" (all CallError::Rejected). Waiting: "Content result unconfirmed; do not repeat the request" (Unconfirmed). Inside the owner, refusals become a typed rejected Response, for example "This Voyage is closing; its Notes are temporarily read-only".'
+    limits: 'Envelope 1 MiB data plus 16 KiB; queue 8; blocking calls 25 s; 32 content receipts keyed by request id and a SHA-256 fingerprint of the request.'
+    why: 'docs/content.md says app/src/content.rs owns persisted data and revisions, requests cannot supply their own binding or path, and background work asks the existing Client worker for a binding after checking the exact Notes placement.'
+    inferred: false
+    at: {path: app/src/client.rs, find: 'fn content_inner('}
+    steps: [notes-save-14, notes-save-16]
+  - id: owner-reads
+    name: 'Header reads: launch catalogue, context facts and workspace observation'
+    from: ['rs:voyager_desktop::host']
+    to: ['rs:voyager_app::client', 'rs:voyager_app::launch', 'rs:voyager_app::context', 'rs:voyager_app::observation']
+    mechanism: channel
+    nature: 'Async Client methods that await a one-slot async reply instead of blocking a thread. launches and context_facts wait for queue room with send().await; workspace_observation and refresh_activity use try_send and fail if the queue is full. The host then resolves Git branch facts from small marker files outside the owner thread.'
+    request:
+      plain: 'Nothing for launches and context facts; the expected revision and the focused placement for an observation.'
+      shape: "Message::Launches { reply }     Message::ContextFacts { reply }     Message::RefreshActivity { reply }\nMessage::WorkspaceObservation { scope: Context::Workspace, version: u64, active: Option<PlacementId>, reply }"
+      type_at: {path: app/src/client.rs, find: 'pub async fn workspace_observation('}
+    response:
+      plain: 'Typed values the host encodes to JSON for the script.'
+      shape: "launch::Catalog { settings, available, errors, path }\ncontext::Facts { version, scope, path: [names], directory: known{path}|multiple|unavailable,\n                 branch: named{name}|detached|unavailable }\nWorkspaceObservation { version, active, directory, branch,\n  panels: [ { placementId, contentId, backend, directory, program, conversationName, effectiveName } ] }"
+      type_at: {path: contract/src/observation.rs, find: 'pub struct WorkspaceObservation {'}
+    errors: 'Errors are plain Strings, such as "Workspace observation is unavailable" (queue full), "Workspace changed; observe it again" (stale version) or "Worker settings read was not confirmed". The host passes them on as HostError text.'
+    limits: 'No timeout. Facts and observation JSON at most 64 KiB at the host.'
+    why: 'The header''s startContext loop reads context facts and the observation every 3 seconds (CONTEXT_REFRESH_MS), so these reads await rather than hold a thread for a timeout. One surprise: an observation is not purely a read; the owner may save the layout to close Vessels whose programs exited or to rename Voyages, and then publishes a notice.'
+    inferred: true
+    at: {path: app/src/client.rs, find: 'pub async fn context_facts(&self) -> Result<voyager_contract::context::Facts, String> {'}
+    steps: [split-vessel-5, launch-agent-2, dock-avatar-16, program-exits-13]
+  - id: conversation-owner-call
+    name: 'The conversation host queues for the private conversation owner'
+    from: ['rs:voyager_desktop::conversation', 'rs:voyager_desktop::speech', 'rs:voyager_desktop::quit']
+    to: ['rs:voyager_app::conversation_client']
+    mechanism: channel
+    nature: 'A second owner thread with its own 8-slot async channel, separate from the workspace owner. call try_sends OwnerMessage::Call and blocks up to 25 s on a sync reply; snapshot does not queue at all, it waits on a condition variable over the shared projection. Quit uses send().await so it can wait for room without blocking GPUI.'
+    request:
+      plain: 'A conversation Request (send, interrupt, start voice), optionally bound to an audio lease.'
+      shape: "OwnerMessage::Call(Call { request: conversation::Request, binding: Option<Binding>, reply })\nconversation::Action { \"operation\": \"send\", \"text\" } | { \"operation\": \"interrupt\" } | { \"operation\": \"start-voice\" }\nsnapshot(after: Option<u64>)   // waits while version == after, up to 20 s"
+      type_at: {path: contract/src/conversation.rs, find: 'pub enum Action {'}
+    response:
+      plain: 'A Reply with a delivery outcome, or an optional Snapshot.'
+      shape: "Reply { requestId, delivery: \"accepted\" | \"rejected\" | \"unconfirmed\", error }\nOption<Snapshot>   // None when nothing changed in the wait"
+      type_at: {path: contract/src/conversation.rs, find: 'pub struct Reply {'}
+    errors: 'Plain Strings: "Conversation busy or unavailable; nothing was queued" when full, "Conversation result unconfirmed; do not repeat this request" after 25 s, "Conversation state unavailable" if the lock is poisoned.'
+    limits: 'Queue 8; call 25 s; snapshot 20 s.'
+    why: 'docs/terminal.md says the private queue keeps its eight-slot bound and uses the asynchronous channel so Quit can wait for admission without blocking GPUI or treating a full queue as completed shutdown.'
+    inferred: false
+    at: {path: app/src/conversation_client.rs, find: 'fn call_bound(&self, request: Request, binding: Option<Binding>) -> Result<Reply, String> {'}
+    steps: [ask-by-text-3, ask-by-text-16b, ask-by-voice-4, quit-5]
+  - id: terminal-input-frames
+    name: 'Keystroke bytes go from the pane to the Core writer thread'
+    from: ['rs:voyager_desktop::terminal']
+    to: ['rs:voyager_app::core', 'ext:hc']
+    mechanism: channel
+    nature: 'This path bypasses the owner thread. Viewer::input wraps the bytes in a Frame and try_sends it on a 64-slot std sync channel shared by all viewers; a writer thread owned by Core drains it and writes length-prefixed frames to the hc bridge''s stdin. The pane does not wait: the call returns as soon as the frame is queued.'
+    request:
+      plain: 'Raw terminal bytes already encoded by Ghostty (keys, paste, IME text, mouse-wheel reports), tagged with the viewer''s channel number.'
+      shape: "Frame { channel: u32, kind: u8, payload: Vec<u8> }\n// wire: channel u32 LE | kind u8 | length u32 LE | payload\nkind 0 = input bytes   (Viewer::input, Viewer::protocol_reply for terminal query replies)"
+      type_at: {path: app/src/wire.rs, find: 'pub struct Frame {'}
+    response:
+      plain: 'Only Ok(()) meaning "queued". Any echo or effect arrives later on the output stream.'
+      shape: 'Result<(), core::Error>   // Error::Rejected { kind, message } | Error::Uncertain(String)'
+      type_at: {path: app/src/core.rs, find: 'message: "Core output queue is unavailable; frame was not queued".into(),'}
+    errors: 'Rejected kind "too_large" ("Terminal input exceeds 64 KiB"), kind "busy" when the queue is full or closed ("Core output queue is unavailable; frame was not queued"), kind "quitting" after Quit closes input. The pane shows them with Rust Debug formatting, for example "Input: Rejected { kind: \"busy\", ... }".'
+    limits: 'Input frame payload 64 KiB; input queue 64 frames; the writer polls the input queue every 5 ms and writes control frames first.'
+    why: 'docs/terminal.md says a single framed Core connection carries RPC, viewer data, input, focus and credit. Keeping keystrokes off the owner queue means a slow workspace save cannot delay typing; giving control frames priority keeps credit and resize moving under heavy input.'
+    inferred: true
+    at: {path: app/src/core.rs, find: 'pub fn input(&self, bytes: Vec<u8>) -> Result<(), Error> {'}
+    steps: [typing-3, typing-4, typing-5, typing-b2-1, typing-b3-1, program-exits-1]
+  - id: terminal-output-stream
+    name: 'Core output reaches the pane through a per-viewer buffer'
+    from: ['rs:voyager_app::core', 'ext:hc']
+    to: ['rs:voyager_desktop::terminal', 'rs:voyager_desktop::terminal_screen']
+    mechanism: channel
+    nature: 'The Core reader thread appends each output frame''s bytes to that channel''s buffer under a mutex and pings a one-slot wake channel. Each Pane has a GPUI task that awaits viewer.ready(), then on the UI thread calls pump(), which takes bytes, feeds libghostty and returns credit. A close frame marks the buffer closed, which the pane shows as "Terminal ended".'
+    request:
+      plain: 'Bytes from the shell, already split into frames by channel; a wake signal with no data.'
+      shape: "Frame { channel, kind: 0, payload }   // output bytes -> Stream.bytes (VecDeque<u8>)\nFrame { channel, kind: 2 }            // CLOSE -> Stream.closed = true\nstruct Stream { bytes: VecDeque<u8>, closed: bool, wake: Sender<()>, ready: Receiver<()> }\nviewer.take(4096) -> Vec<u8>          // at most 64 KiB or 2 ms per pump"
+      type_at: {path: app/src/core.rs, find: 'struct Stream {'}
+    response:
+      plain: 'After parsing, the pane returns flow-control credit for the bytes it consumed, and sends any terminal query replies.'
+      shape: "viewer.credit(consumed: u32)   -> Frame { channel, kind: 1, payload: u32 LE }\nviewer.protocol_reply(bytes)   -> Frame { channel, kind: 0, payload }"
+      type_at: {path: app/src/core.rs, find: 'pub fn credit(&self, bytes: u32) -> Result<(), Error> {'}
+    errors: 'If the pipe breaks, both bridge threads mark the connection closed and wake every buffer; the pane shows "Core disconnected". Exceeding a buffer limit also makes the reader thread stop, so one overfull viewer drops the whole Core connection, not just that pane. take() errors show as "Terminal: ..." in the pane.'
+    limits: '1 MiB buffered per viewer, 16 MiB across all viewers, at most 64 viewer channels; Core frames up to 16 MiB; one pump parses at most 64 KiB in 4 KiB chunks within 2 ms.'
+    why: 'docs/terminal.md says libghostty-vt parses on the UI thread, credit is returned after parsing rather than on receipt, buffered output is bounded to 1 MiB per viewer and 16 MiB in aggregate, and a dispatch parses at most 64 KiB in 4 KiB chunks against a 2 ms budget.'
+    inferred: false
+    at: {path: desktop/src/terminal.rs, find: 'match self.viewer.take(4096) {'}
+    steps: [startup-17, typing-9, typing-10, typing-11, typing-12, stop-program-12, stop-program-13, program-exits-4, program-exits-5, program-exits-b2-1]
+  - id: terminal-control-frames
+    name: 'The pane tells Core its size, colours and focus'
+    from: ['rs:voyager_desktop::terminal']
+    to: ['rs:voyager_app::core', 'ext:hc']
+    mechanism: channel
+    nature: 'Small control frames on the viewer''s channel, try_sent on the separate 64-slot control queue that the writer thread drains first. The pane sends them from the UI thread when its measured grid changes or it gains or loses focus, and does not wait for an answer.'
+    request:
+      plain: 'Grid size in cells, cell size in pixels with foreground, background and cursor colours, a focus flag, or a close.'
+      shape: "kind 3 RESIZE:  payload = cols u16 LE, rows u16 LE\nkind 5 display: payload = JSON { \"cell\": [width, height], \"fg\": \"#rrggbb\", \"bg\": \"#rrggbb\", \"cursor\": \"#rrggbb\" | null }\nkind 4 FOCUS:   payload = [1] or [0]\nkind 2 CLOSE:   empty payload (closes the viewer; the program keeps running)"
+      type_at: {path: app/src/core.rs, find: 'pub fn display('}
+    response:
+      plain: 'Nothing beyond "queued". Core''s new output arrives on the output stream.'
+      shape: 'Result<(), core::Error>'
+      type_at: {path: app/src/core.rs, find: 'pub fn resize(&self, cols: u16, rows: u16) -> Result<(), Error> {'}
+    errors: 'If the control queue is full, the pane keeps the latest size in pending_resize, shows "Core resize: ..." and retries every 100 ms until it is queued or Core disconnects. A focus failure shows "Focus: ...".'
+    limits: 'Control queue 64 frames.'
+    why: 'docs/terminal.md says a deferred resize queues Core RESIZE and display facts on the same viewer, queue pressure retains the latest size for a nonblocking retry, Core owns focus reports and Voyager sends FOCUS once per focus transition, and closing a viewer sends CLOSE without stopping the terminal.'
+    inferred: false
+    at: {path: desktop/src/terminal.rs, find: 'let result = self.viewer.resize(cols, rows).and_then(|()| {'}
+    steps: []
+  - id: avatar-dock-request
+    name: 'The avatar sends a Dock request'
+    from: ['rs:voyager_desktop::avatar']
+    to: ['rs:voyager_app::client', 'rs:voyager_app::workspace', 'ts:desktop/mods/header/main.ts']
+    mechanism: channel
+    nature: 'On release over a target (or Shift+Enter on a focused Target), Avatar::dock builds a typed Request and runs client.call on the GPUI background executor so the UI thread never blocks. Only one dock is in flight; a second gesture is ignored while pending. When the reply arrives the avatar updates its scope and version, plays the dock animation if applied, stores the result and emits Changed so the header script re-renders and picks it up with take_result().'
+    request:
+      plain: 'A request id, the layout version the avatar last saw, and the Dock action with the target scope.'
+      shape: "Request { \"requestId\": \"workspace-<pid>-<nanos>-<n>\", \"expectedVersion\": \"<avatar.version>\",\n          \"action\": { \"operation\": \"dock\", \"context\": { \"kind\": \"fleet\", \"id\": \"<fleet id>\" } } }\n// context kinds: \"workspace\" | \"voyage\" | \"fleet\" | \"vessel\" | \"portal\""
+      type_at: {path: contract/src/lib.rs, find: 'Dock {'}
+    response:
+      plain: 'The normal workspace Response. If applied, layout.context is the new dock scope and the header stores requestId as its dockReceipt, which flows back to the avatar through Layer props.'
+      shape: "Result<Response, String>   // stored in avatar.result, read once by take_result()\nResponse { requestId, status: \"applied\", version, layout: { context: { kind, id }, ... }, ... }"
+      type_at: {path: desktop/src/avatar.rs, find: 'fn applied_dock(&mut self, request_id: &str, expected_epoch: u64, cx: &mut Context<Self>) {'}
+    errors: 'Refusals arrive as status rejected with a message such as "Dock target not found". Queue full or a 20 s timeout come back as Err(String) and are thrown by take_result() for the script to show.'
+    limits: 'Same as workspace-call: queue 8, 20 s.'
+    why: 'docs/avatar.md says the application client remains the context owner, the gesture sends the existing typed Dock request through that client, and only its response confirms the change. docs/workspace.md says the Client queue captures the explicit dock scope; after an applied dock the owner prepares context for the conversation (PrepareContext).'
+    inferred: false
+    at: {path: desktop/src/avatar.rs, find: 'action: Action::Dock { context: scope },'}
+    steps: [dock-avatar-5, dock-avatar-5a, dock-avatar-6, dock-avatar-7, dock-avatar-8, dock-avatar-10, dock-avatar-11, dock-avatar-12, dock-avatar-5c]
+  - id: notes-save
+    name: 'The Notes editor saves through the content owner'
+    from: ['rs:voyager_desktop::notes_session', 'rs:voyager_desktop::notes_draft']
+    to: ['rs:voyager_app::client', 'rs:voyager_app::content']
+    mechanism: channel
+    nature: 'When a native editor blurs (or the script calls SessionState.save), the session asks its Draft for a save ticket and builds a content Update carrying the revision the draft started from. It runs content_native_save on the GPUI background executor, which queues Message::Content and blocks up to 25 s. On the owner thread, the content owner refuses if the file''s current revision differs, otherwise writes the Markdown file atomically and replies with the new snapshot.'
+    request:
+      plain: 'The full title and text, plus the SHA-256 revision of the file bytes this draft was loaded from.'
+      shape: "content::Request::Update { \"operation\": \"content.update\", \"version\": \"1\",\n  \"requestId\": \"workspace-<pid>-<nanos>-<n>\", \"contentId\": \"<content id>\",\n  \"expectedRevision\": \"<sha-256 hex>\", \"data\": { \"title\": \"...\", \"text\": \"...\" } }\nSave { generation: u64, revision: String }   // from Draft::blur()"
+      type_at: {path: contract/src/content.rs, find: '#[serde(rename = "content.update")]'}
+    response:
+      plain: 'Applied with the new snapshot and revision, a known rejection, or uncertainty. Draft::finish records it; only an applied save for the current generation clears the dirty flag and shows "Saved".'
+      shape: "Ok(Response::Applied { snapshot: { revision: \"<new sha-256>\", data } })  -> draft.revision updated, \"Saved\"\nOk(Response::Rejected { message }) | Err(CallError::Rejected(m))        -> status = message, draft kept\nOk(Response::Uncertain { .. })     | Err(CallError::Unconfirmed(m))      -> unconfirmed; never resent on blur"
+      type_at: {path: desktop/src/notes_draft.rs, find: 'pub fn finish(&mut self, generation: u64, response: Result<&Response, &CallError>) -> bool {'}
+    errors: 'Stale base: rejected "Portal data changed. Read it again before saving." (the same wording is used for Notes) and, when the change is noticed on read, the draft keeps its original base with "Notes changed outside this draft. Its original revision is retained.". Closing Voyage: "This Voyage is closing; its Notes are temporarily read-only" unless the save holds the close ticket. Unconfirmed results are shown and never repeated automatically.'
+    limits: 'Notes data 1 MiB, envelope 1 MiB plus 16 KiB; queue 8; 25 s; only content updates may use a close ticket.'
+    why: 'docs/content.md says native input events update the draft and request a save on blur, a save already admitted to Client completes against the same session, known refusal permits a later deliberate retry, and unconfirmed saves remain unconfirmed and are never repeated by blur.'
+    inferred: false
+    at: {path: desktop/src/notes_session.rs, find: '.spawn(async move { client.content_native_save(ticket, &view, request) })'}
+    steps:
+      - notes-save-3
+      - notes-save-4
+      - notes-save-5
+      - notes-save-6
+      - notes-save-7
+      - notes-save-8
+      - notes-save-10
+      - notes-save-11
+      - notes-save-15
+      - notes-save-b1-1
+      - notes-save-b1-2
+      - notes-save-b1-3
+      - notes-save-b2-1
+      - notes-save-b2-2
+      - notes-save-b3-1
+      - notes-save-b3-2
+  - id: contract-to-typescript
+    name: 'The contract crate becomes TypeScript types, validators and wrappers'
+    from: ['rs:voyager_contract', 'bin:export']
+    to: ['ts:contract/generated/workspace.ts', 'ts:contract/generated/conversation.ts', 'ts:desktop/mods/header/main.ts', 'ts:content/notes/main.ts']
+    mechanism: build
+    nature: 'A developer step, not runtime. npm run contract:generate runs node contract/build.cjs --write, which runs the export binary through cargo, takes its JSON Schemas and writes contract/generated. The desktop binary then compiles those generated .js files in with include_str! and copies them into the profile at start-up, so the scripts import them as local files.'
+    request:
+      plain: 'One JSON object of draft-07 JSON Schemas, generated by schemars from the Rust types, printed by the export binary.'
+      shape: "cargo run --release --quiet --locked -p voyager-contract --bin export [-- --avatar]\n{ \"request\", \"response\", \"terminalRequest\", \"terminalResponse\", \"conversationRequest\",\n  \"conversationReply\", \"conversationSnapshot\", \"workspaceTool\", \"processTool\", \"processResponse\",\n  \"contentTool\", \"contentRequest\", \"contentResponse\", \"contentCatalog\", \"canvas\", \"contextFacts\",\n  \"workspaceObservation\", \"worktreeTool\", \"worktreeRequest\", \"worktreeResponse\",\n  \"reportedActivity\", \"notes\", \"notesConfiguration\", \"voiceState\", \"launchCatalog\" }\n// --avatar: avatarAnimationPack, avatarAnimationConfiguration -> generated/avatar/"
+      type_at: {path: contract/src/bin/export.rs, find: '"conversationRequest":schema::<conversation::Request>(),'}
+    response:
+      plain: 'Files in contract/generated. Scripts get the runtime files seeded into the profile and the .d.ts files only at type-check time.'
+      shape: "<name>.schema.json, <name>.d.ts            // json-schema-to-typescript\nvalidate.js, validate.d.ts                 // one Ajv standalone module, a type guard per schema\nworkspace.ts/.js/.d.ts                     // invoke(action, expectedVersion), openTerminal(contentId, expectedVersion)\nconversation.ts/.js                        // send(action), observe(after)\npackage.json {\"type\":\"module\"}\n// seeded: header gets validate.js, workspace.js, conversation.js; Notes gets validate.js"
+      type_at: {path: contract/build.cjs, find: 'files["validate.js"] = standalone('}
+    errors: 'npm run contract:check (build.cjs --check) regenerates in memory and throws "Contract drift: <file>" if any committed file differs. A cargo failure stops the script with exit code 1.'
+    limits: 'cargo output read with a 1 MiB buffer.'
+    why: 'AGENTS.md asks for one typed application contract with client definitions and runtime validators generated from the owning types instead of hand-written schemas. docs/workspace.md says build.cjs generates declarations and strict runtime validators from those types.'
+    inferred: false
+    at: {path: contract/build.cjs, find: 'execFileSync('}
+    steps: []
+  - id: host-declarations-to-typescript
+    name: 'Host module declarations become the scripts'' type definitions'
+    from: ['bin:export-script-types', 'rs:voyager_desktop::script_types']
+    to: ['ts:desktop/mods/header/main.ts', 'ts:content/notes/main.ts']
+    mechanism: build
+    nature: 'A developer step. npm run typecheck (or scripts:generate) runs desktop/typecheck.cjs, which runs export-script-types through cargo twice, once for the header and once with --notes. It writes the declarations under target/script-types, type-checks the .ts sources against them, and checks the emitted .js and desktop/script-types.json against the committed copies.'
+    request:
+      plain: 'TypeScript declaration text: gpui-kit''s own declarations, the voyager_native or voyager_input registry generated from Rust registrations, and the hand-written module bodies in script_types.rs.'
+      shape: "cargo run --quiet --locked -p voyager-desktop --bin export-script-types [-- --notes]\ndeclarations()       = type_declarations(native_registry) + declare module \"voyager_header\" | \"voyager_avatar\"\n                       | \"voyager_workspace\" | \"voyager_content_view\" | \"voyager_conversation\"\nnotes_declarations() = type_declarations(voyager_input registry) + declare module \"voyager_content\""
+      type_at: {path: desktop/src/lib.rs, find: 'pub fn declarations() -> Result<String> {'}
+    response:
+      plain: 'Local declaration files for the compiler, a record of which modules each package may import, and the compiled .js beside each .ts.'
+      shape: "target/script-types/raw.d.ts, gpui-kit.d.ts, notes-raw.d.ts, notes.d.ts   // not tracked in Git\ndesktop/script-types.json { header: { rawSha256, modules: [...] }, notes: { rawSha256, modules: [...] } }\ndesktop/mods/header/*.js, content/notes/main.js, content/ui.js           // formatted tsc output"
+      type_at: {path: desktop/typecheck.cjs, find: 'rawSha256: crypto.createHash("sha256").update(raw).digest("hex"),'}
+    errors: 'TypeScript diagnostics are printed and fail the run. In --check mode a differing file throws "Script/type drift: <file>".'
+    limits: 'cargo output read with a 4 MiB buffer.'
+    why: 'gpui-kit''s HostModule::declarations documentation says writing the TypeScript beside the registration keeps the two halves one thing and validate checks that every registered function is declared. The recorded modules lists show header and Notes see different modules (Notes cannot import voyager_workspace).'
+    inferred: false
+    at: {path: desktop/typecheck.cjs, find: '"export-script-types",'}
+    steps: []
+  - id: core-bridge-hello
+    name: 'The owner thread starts the hc connect bridge and says hello to Herdr Core'
+    from: ['rs:voyager_app::client', 'rs:voyager_app::core', 'rs:voyager_app::core_endpoint']
+    to: ['ext:hc']
+    mechanism: core-rpc
+    nature: 'The owner thread starts one child process, `hc connect --session <name>` (or the program named by VOYAGER_HC), and talks to Core only through that child''s stdin and stdout pipes. Its first act is one JSON-RPC hello written as a newline-ended text line, and it blocks until one reply line comes back. After that reply the same pipes carry only binary frames, so this is the one moment the connection speaks plain JSON lines.'
+    request:
+      plain: 'The session name goes in as an argument and as HC_SESSION; HC_SOCKET is set to the session''s socket path from core_endpoint and HC_TERMINAL_ID is removed. The hello asks for framed mode and protocol generation 1.'
+      shape: "hc connect --session voyager-<name>\n  env HC_SESSION=<session>\n      HC_SOCKET=$XDG_RUNTIME_DIR/herdr-core/<session>.sock   # else /run/user/<uid>/..., else state dir\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"hello\",\n \"params\": HelloParams {framed: true, generation: 1}}      # calls_you, core left empty\n# one line ending in \\n"
+      type_at: {path: app/core-schema.json, find: '"HelloParams": {'}
+    response:
+      plain: 'One JSON line. validate_hello requires generation 1, framed true, a non-empty core.id, all 13 methods Voyager uses and the features framed, attach and shell. The core.id is kept so a later stop can check it is the same Core. Whether methods also lists events.subscribe decides if activity is subscribed later.'
+      shape: "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\": HelloResult {\n   generation: 1, version, framed: true,\n   core: {id, name},\n   methods: [hello, doc.get, doc.set, terminal.get, terminal.run,\n             terminal.attach, terminal.list, terminal.read, terminal.send,\n             terminal.interrupt, terminal.kill, server.status, server.stop, ...],\n   features: [framed, attach, shell, ...]}}"
+      type_at: {path: app/core-schema.json, find: '"HelloResult": {'}
+    errors: 'A session without the voyager- prefix, or with characters other than lowercase letters, digits and hyphens, is refused before any process starts ("Use a dedicated voyager- session"). If hc cannot start, or the reply is missing, over 1 MiB, not JSON, an error, or lacks a required method or feature (kind unsupported_core), the bridge is killed and reaped. The owner keeps that error and returns it to every later workspace request; it never reconnects.'
+    limits: 'Reply line at most 1 MiB. No time limit on the reply read, so a silent bridge blocks the owner thread. The bridge''s stderr is inherited, so its messages appear on Voyager''s own stderr.'
+    why: 'core-schema.json describes framed as "Switch this connection to framed mode after the reply", so hello must be plain JSON and everything after it framed. docs/terminal.md says hello validates generation, framed mode, Core identity and the methods and features this adapter uses "without pinning the Core version or rejecting additive fields", which is why the check looks for required entries rather than an exact list. The prefix check keeps Voyager on a dedicated Core session, as its refusal text says.'
+    inferred: false
+    at: {path: app/src/core.rs, find: '.args(["connect", "--session", session])'}
+    steps: [startup-4, startup-b1-1, quit-11]
+    observed_core: [hello]
+  - id: core-frames
+    name: 'One framed pipe carries every conversation with Core'
+    from: ['rs:voyager_app::core', 'rs:voyager_app::wire']
+    to: ['ext:hc']
+    mechanism: core-stream
+    nature: 'After hello, every message in both directions is a binary frame on the bridge pipes. A writer thread drains two bounded queues, control frames first and then terminal input (waiting at most 5 ms for input), and a reader thread routes each incoming frame by channel. Callers never wait on a frame itself: they queue with a non-blocking try_send, and replies are matched later.'
+    request:
+      plain: 'A 9-byte header, then the payload. Channel 0 carries JSON-RPC requests and replies. Every other channel number is handed out by Core: one per attached terminal viewer and one for the activity subscription. The kind byte says what the payload is.'
+      shape: "Frame { channel: u32 little-endian (4 bytes), kind: u8 (1 byte),\n        length: u32 little-endian (4 bytes), payload }\nkind 0  data: channel 0 = one JSON-RPC message; terminal channel = terminal bytes;\n        activity channel = JSON lines from Core\nkind 1  credit: u32 little-endian count of bytes consumed (Voyager to Core)\nkind 2  close: empty payload (either side ends a channel)\nkind 3  resize: cols u16, rows u16 (little-endian)\nkind 4  focus: one byte, 1 focused or 0 blurred\nkind 5  display facts: JSON {\"cell\":[w,h],\"fg\",\"bg\",\"cursor\"}"
+      type_at: {path: app/src/wire.rs, find: 'pub struct Frame {'}
+    response:
+      plain: 'The reader thread reads a header, refuses a length over 16 MiB, reads the payload and routes it: channel 0 data to the waiting caller by id, viewer data to that viewer''s buffer, a close frame to mark that viewer ended, and frames on the activity channel to the activity observer. Anything else is ignored.'
+      shape: "read 9-byte header -> length <= MAX_FRAME (16 MiB) -> payload\nchannel 0, kind 0     -> parse JSON, hand to the reply waiting on \"id\"\nknown viewer, kind 0  -> append to its buffer, wake its Pane\nknown viewer, kind 2  -> mark the stream closed\nactivity channel      -> Activity::data (kind 0), otherwise fail activity\nother frames          -> ignored"
+      type_at: {path: app/src/wire.rs, find: 'pub fn read_from(reader: &mut impl Read) -> io::Result<Self> {'}
+    errors: 'There is no per-frame error reply. A read or write failure, an oversized frame, an unparseable channel-0 message, a viewer buffer overflow or an invalid attach channel ends the reader or writer thread. That thread marks the whole connection disconnected, drops every waiting reply (callers get "Core result unconfirmed"), marks activity "Core is disconnected" and wakes every viewer, which then shows "Core disconnected". Nothing reconnects.'
+    limits: 'MAX_FRAME is 16 MiB each way. The control and input queues hold 64 frames each. At most 64 attached viewer channels. Viewer buffers hold 1 MiB each and 16 MiB in total.'
+    why: 'docs/terminal.md: the "single framed Core connection carries RPC, viewer data, input, focus and credit." Taking control frames before input keeps RPCs, credit and resizes from queuing behind a burst of typed or pasted bytes (inferred from the writer loop order). docs/terminal.md calls the kind 5 frame display FACTS, sent together with RESIZE.'
+    inferred: false
+    at: {path: app/src/wire.rs, find: 'pub fn write_to(&self, writer: &mut impl Write) -> io::Result<()> {'}
+    steps: [startup-5, typing-5, typing-9]
+  - id: core-json-rpc
+    name: 'Requests to Core and their replies (JSON-RPC 2.0 on channel 0)'
+    from: ['rs:voyager_app::core', 'rs:voyager_app::core::pending', 'rs:voyager_app::client', 'rs:voyager_app::process', 'rs:voyager_app::context', 'rs:voyager_app::voyage_close']
+    to: ['ext:hc']
+    mechanism: core-rpc
+    nature: 'Request and reply. The owner thread numbers a JSON-RPC 2.0 request, registers a one-slot reply box under that id and queues one data frame on channel 0. Most calls then block the owner thread until the reader thread delivers the reply with the same id; terminal.send, terminal.interrupt and terminal.kill instead return a Pending handle that a separate waiter thread blocks on.'
+    request:
+      plain: 'A method from the generated Core API with its params struct from core_shapes, serialised to JSON. The id is a counter per connection that starts at 2, because hello used 1.'
+      shape: "Frame{channel: 0, kind: 0, payload:\n  {\"jsonrpc\":\"2.0\",\"id\":<n>,\"method\":\"<method>\",\"params\":{...}}}\nmethods used: doc.get, doc.set, terminal.get, terminal.run, terminal.attach,\n  terminal.list (all: true), terminal.read, terminal.send (wait: false),\n  terminal.interrupt (timeout: 5.0), terminal.kill, events.subscribe,\n  server.status, server.stop"
+      type_at: {path: app/src/core.rs, find: 'fn begin<P: Serialize, R: DeserializeOwned>('}
+    response:
+      plain: 'Exactly one of result or error, with jsonrpc "2.0" and the same id. A result is decoded into the method''s generated result type. An error must carry code, message and data.kind.'
+      shape: "{\"jsonrpc\":\"2.0\",\"id\":<n>,\"result\":{...}}           -> Ok(decoded result)\n{\"jsonrpc\":\"2.0\",\"id\":<n>,\"error\":{\"code\",\"message\",\"data\":{\"kind\"}}}\n  known kind (conflict, not_found, unavailable, finished, blocked, ...)\n                                                     -> Rejected {kind, message}\n  code -32603, unknown kind, malformed reply,\n  no reply in time, connection lost                  -> Uncertain(message)"
+      type_at: {path: app/src/core.rs, find: 'fn response(response: Value, id: u64) -> Result<Value, Error> {'}
+    errors: 'Two outcomes reach the caller. Rejected means Core refused and nothing happened, for example kind conflict on a stale doc.set. Uncertain means the outcome is unknown: no reply in time ("Core result unconfirmed; no request was repeated"), an internal or malformed error, or a lost connection. Nothing is retried. If the connection is down or nine replies are already waiting, the request is refused before sending as busy.'
+    limits: 'Request at most 1 MiB. At most 9 replies waiting at once. Each reply must arrive within 20 seconds of dispatch. A full control queue (64 frames) refuses with "Core control queue unavailable; request was not queued".'
+    why: 'docs/workspace.md: the connection "routes replies by request ID", "admits at most nine pending RPCs, including capacity for ordinary owner reads alongside at most eight admitted process effects", the twenty-second deadline "starts when dispatched", and "No timeout or disconnect repeats an effect". Pending handles exist so delayed process effects do not hold the owner ("This isolates delayed process effects").'
+    inferred: false
+    at: {path: app/src/core.rs, find: 'serde_json::to_vec(&json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}))'}
+    steps: [startup-13, launch-agent-11, launch-agent-16, stop-program-5, stop-program-7, stop-program-9, program-exits-13, dock-avatar-18]
+    observed_core: [terminal.list, terminal.read, events.subscribe]
+  - id: core-layout-document
+    name: 'The saved layout is one document in Core (doc.get, and doc.set with a version)'
+    from: ['rs:voyager_app::client']
+    to: ['ext:hc']
+    mechanism: core-rpc
+    nature: 'Request and reply on the owner thread, which blocks for each call. The owner reads the whole layout with doc.get and writes the whole layout back with doc.set, passing the version it last saw; Core stores it only if that version is still current, and returns the new version. Voyager keeps no layout file of its own.'
+    request:
+      plain: 'The document name is always voyager-layout-v1. doc.set sends the complete Layout as the value, plus the expected version.'
+      shape: "doc.get  DocGetParams {name: \"voyager-layout-v1\", on: None}\ndoc.set  DocSetParams {name: \"voyager-layout-v1\", on: None,\n           value: Layout {voyages, home?, contents, selected_voyage,\n                          selected_fleet, context, canvas, view,\n                          saved_layouts, next_id},       # camelCase in JSON\n           version: <version from the last doc.get or doc.set>}"
+      type_at: {path: app/core-schema.json, find: '"DocSetParams": {'}
+    response:
+      plain: 'doc.get returns the stored value (null if never written) and its version (0 if never written). doc.set returns only the new version. The owner adopts a changed layout in memory only after doc.set confirms it.'
+      shape: "DocGetResult {value: <Layout JSON or null>, version: u64}\nDocSetResult {version: u64}"
+      type_at: {path: app/core-schema.json, find: '"DocGetResult": {'}
+    errors: 'A stale version comes back as Rejected kind conflict: the owner keeps its old layout, marks its snapshot not fresh and refuses changes until the caller inspects again. A stored value that does not parse or validate is refused as "Stored workspace is invalid". A lost reply is Uncertain and also marks the snapshot not fresh. Nothing is retried.'
+    limits: 'Core takes a value of at most 1 MiB serialised; Voyager refuses any request over 1 MiB before sending. 20-second reply deadline per call.'
+    why: 'core-schema.json defines version as the "Current version from doc.get; zero for a name never written", which makes doc.set a compare-and-set. docs/workspace.md: client.rs "publishes a proposal only after Core confirms the save", so the in-memory layout always equals what Core holds. A second writer then gets a conflict instead of silently overwriting (inferred).'
+    inferred: false
+    at: {path: app/src/client.rs, find: '.document_set("voyager-layout-v1", layout, version)?'}
+    steps:
+      - startup-13
+      - startup-b3-1
+      - split-vessel-12
+      - split-vessel-13
+      - split-vessel-b2-1
+      - resize-split-12
+      - resize-split-13
+      - move-vessel-11
+      - move-vessel-12
+      - portal-4
+      - portal-5
+      - dock-avatar-9
+      - notes-save-9
+      - program-exits-15
+      - ask-by-text-13
+    observed_core: [doc.get, doc.set]
+  - id: core-terminal-run-attach
+    name: 'Starting a program in Core and attaching a viewer (terminal.run, terminal.attach)'
+    from: ['rs:voyager_app::client', 'rs:voyager_app::core', 'rs:voyager_app::launch']
+    to: ['ext:hc']
+    mechanism: core-rpc
+    nature: 'Blocking requests from the owner thread, triggered when the header script calls terminal_open for a Vessel. For a Vessel with no Core program yet, the owner saves a start marker in the layout, asks Core to run the program, then saves the returned address. In every case it then attaches, which makes Core open a new output channel for this viewer.'
+    request:
+      plain: 'terminal.run gets the argv built from the Vessel''s launch (empty for a plain shell, so Core picks the shell), the Vessel''s folder, no parent, and a label voyager-operation=voyager-start-<requestId> that matches the saved marker. terminal.attach names the terminal address and the size Core last reported for it.'
+      shape: "terminal.run    RunParams {argv: [] | [<abs path>/codex, --no-daemon, --model, ...]\n                                 | [<bash>, -i, -c, <script>, voyager-agent, <agent>, ...],\n                           cwd: \"<Vessel folder>\", no_parent: true,\n                           labels: {\"voyager-operation\": \"voyager-start-<requestId>\"}}\n                           # every other field left at its default\nterminal.attach AttachParams {terminal: \"t7\", cols, rows,   # from the Terminal record\n                           history: 0, observe: false, resumed: false,\n                           display: default, caller: None}"
+      type_at: {path: app/core-schema.json, find: '"RunParams": {'}
+    response:
+      plain: 'terminal.run returns the Terminal record. terminal.attach returns the record again plus a channel number; the reader thread creates a buffer for that channel and the owner wraps it in a Viewer that the desktop uses for input and output.'
+      shape: "Terminal {address: \"t7\", state: \"live\" | \"finished\", reason, pid, argv, cwd,\n          labels, cols, rows, screen, created_ms, ...}\nAttachResult {channel: u32, terminal: Terminal}"
+      type_at: {path: app/core-schema.json, find: '"AttachResult": {'}
+    errors: 'A refused run clears the marker and returns Rejected. An unclear run, a state other than live or finished, or reason spawn_pending leaves the marker saved and returns Uncertain with "Inspect Core terminals with voyager-operation=..."; the start is never repeated. Attach refuses zero dimensions before sending, and a reply with a different address or zero size is Uncertain. If attach fails right after a fresh start, the message says the program started and its binding was saved.'
+    limits: '20 seconds per Core call; the script''s terminal_open waits up to 25 seconds in total. The reader allows at most 64 attached channels and treats one more as a protocol failure that drops the whole connection; no check before attach was found in open_terminal. A channel''s buffer is removed only by Viewer::close, which the desktop calls only when the same content is attached again (host.rs install_viewer), so opening more than 64 different terminals in one session appears to drop the Core connection (inferred).'
+    why: 'docs/terminal.md: Voyager "stores a Core terminal address on a content instance, separate from its placement". The saved marker and the matching label let a later inspect find a start whose answer was lost, instead of starting a second program (error text and pathway split-vessel-20). no_parent and the removed HC_TERMINAL_ID keep programs independent of any terminal Voyager itself runs in (inferred).'
+    inferred: false
+    at: {path: app/src/client.rs, find: 'core.terminal_run_with(crate::core_shapes::RunParams {'}
+    steps: [startup-15, startup-b3-2, split-vessel-20, split-vessel-21, split-vessel-b3-1, launch-agent-10, launch-agent-11, launch-agent-12, launch-agent-13, launch-agent-11a, ask-by-text-18]
+    observed_core: [terminal.run, terminal.attach]
+  - id: core-terminal-kill
+    name: 'Stopping one program (terminal.kill)'
+    from: ['rs:voyager_app::process', 'rs:voyager_app::core', 'rs:voyager_app::client']
+    to: ['ext:hc']
+    mechanism: core-rpc
+    nature: 'A request whose reply is awaited off the owner thread. After checking the request against the captured focus and a fresh terminal.get, the owner queues terminal.kill and immediately starts a short-lived waiter thread that blocks on the reply and posts the result back to the owner. Two callers reach it: the assistant''s voyager_process stop action and a confirmed Voyage close.'
+    request:
+      plain: 'Only the terminal address. The PID check happens before sending: Core must report the terminal live with the same PID the caller named.'
+      shape: "KillParams {terminal: \"t7\", caller: None}\n# sent only if terminal.get just reported state \"live\" and pid == the requested pid"
+      type_at: {path: app/core-schema.json, find: '"KillParams": {'}
+    response:
+      plain: 'Core''s Terminal record after the kill. stop_result accepts it only for the same terminal, state live or finished, and a matching PID. finished becomes "Program ended"; live becomes "Stop requested; Core still reports running". Separately, Core closes the viewer channel with a close frame and the Pane shows "Terminal ended".'
+      shape: "Terminal {address: \"t7\", state: \"finished\" | \"live\", pid, exit_code, reason, ...}\n-> ProcessOutput::Stop {target, observed}"
+      type_at: {path: app/core-schema.json, find: '"Terminal": {'}
+    errors: 'Refused before sending if the identity or PID changed ("no stop was sent"), the content has an unconfirmed start, or eight process effects are already waiting. No reply within 20 seconds, or an unexpected terminal, PID or state, is Uncertain ("do not repeat"). The request id is kept as a receipt, so a repeat returns the stored answer instead of a second kill.'
+    limits: '20-second reply deadline from dispatch; at most 8 unfinished process effects; Client::process waits 25 seconds for the caller.'
+    why: 'The voyager_process tool description in administrator.rs: "Stop ends that terminal''s program and descendants only when explicitly requested; it reports Core''s observed state and does not restart it" and "These three effects require the inspected running PID". docs/workspace.md: "Send, Interrupt and Stop then wait outside that owner", so a slow Core does not block other workspace work.'
+    inferred: false
+    at: {path: app/src/core.rs, find: 'pub(crate) fn begin_terminal_kill('}
+    steps: [stop-program-5, stop-program-6, stop-program-7, stop-program-8, stop-program-9, stop-program-10, stop-program-11, stop-program-12]
+  - id: core-activity-events
+    name: 'Program activity events from Core (events.subscribe and the activity channel)'
+    from: ['ext:hc']
+    to: ['rs:voyager_app::core', 'rs:voyager_app::activity', 'rs:voyager_app::client']
+    mechanism: core-stream
+    nature: 'A subscription. The owner thread sends events.subscribe once after connecting (only if hello listed it) and again when the header asks for a refresh. Core answers with a snapshot and a channel number, then streams JSON-line notifications on that channel. The reader thread parses them, returns credit at once and marks activity dirty, which wakes the owner thread with an ActivityChanged message.'
+    request:
+      plain: 'An empty filter, so all terminals are watched. Before subscribing again Voyager sends a close frame for the old channel; afterwards it returns credit for every byte received.'
+      shape: "events.subscribe  SubscribeParams {}     # children_of, labels, terminal all empty\nthen on the activity channel:\n  Frame{channel: <activity>, kind: 1, payload: u32 bytes received}   # credit\n  Frame{channel: <old activity>, kind: 2}                           # close on resubscribe"
+      type_at: {path: app/core-schema.json, find: '"SubscribeParams": {'}
+    response:
+      plain: 'The reply lists matching terminals with their last reported status, the starting sequence and the channel. Notifications follow as JSON lines: event (types status, created, restarted, lost, finished, removed), missed (a replacement snapshot) and heartbeat.'
+      shape: "SubscribeResult {seq, channel, terminals: [Terminal]}\n{\"jsonrpc\":\"2.0\",\"method\":\"event\",\"params\":{\"seq\":n,\"type\":\"status\",\"terminal\":\"t1\",\n   \"data\":{\"status\":{\"state\":\"working\"},\"reported\":true,\"status_ms\":..,\"records\":{}}}}\\n\n{\"jsonrpc\":\"2.0\",\"method\":\"missed\",\"params\":{\"seq\":n,\"terminals\":[...]}}\\n\n{\"jsonrpc\":\"2.0\",\"method\":\"heartbeat\",\"params\":{\"seq\":n}}\\n"
+      type_at: {path: app/core-schema.json, find: '"SubscribeResult": {'}
+    errors: 'Problems never reach a caller as an error; the affected activity becomes Unknown with a reason. An unsupported Core gives "Activity subscription is unavailable"; a sequence gap, a closed channel, an invalid line or credit that cannot be queued each mark activity unknown; all of these except a sequence gap also send a close frame for the activity channel. Voyager does not repair this by itself; an explicit Refresh subscribes again.'
+    limits: 'A partial line at most 1 MiB; at most 256 KiB of bytes that arrive before the subscribe reply; at most 256 tracked terminal addresses.'
+    why: 'docs/terminal.md: the adapter "applies subscription snapshots, ordered events and Core''s missed replacement snapshots. It does not classify output or infer activity from silence", and "Unsupported observation, malformed metadata, gaps and channel loss remain unknown without an automatic repair RPC. Explicit Refresh can renew the observation on the same connection."'
+    inferred: false
+    at: {path: app/src/core.rs, find: 'self.call("events.subscribe", SubscribeParams::default());'}
+    steps: [startup-5, program-exits-7, program-exits-8]
+  - id: core-terminal-io
+    name: 'Typing into and drawing a terminal (input, output and credit frames)'
+    from: ['rs:voyager_desktop::terminal', 'rs:voyager_app::core']
+    to: ['ext:hc']
+    mechanism: core-stream
+    nature: 'A two-way byte stream per attached viewer, used straight from the GPUI main thread through the Viewer handle, without the owner thread. Sending never blocks: frames go on bounded queues with try_send and the writer thread delivers them. Output arrives on the reader thread, is buffered per channel, and is parsed on the main thread by the Pane, which then returns credit for what it parsed.'
+    request:
+      plain: 'Typed or pasted keys (encoded by libghostty), replies to terminal queries, resize and display facts when the pane size changes, focus changes, credit for parsed output, and close when a viewer is replaced.'
+      shape: "input    Frame{channel: <viewer>, kind: 0, payload: key bytes <= 64 KiB}  # input queue\nreply    Frame{channel, kind: 0, payload: query reply bytes}             # input queue, no quit check\ncredit   Frame{channel, kind: 1, payload: u32 parsed byte count}         # control queue\nclose    Frame{channel, kind: 2, payload: []}\nresize   Frame{channel, kind: 3, payload: cols u16, rows u16}\nfocus    Frame{channel, kind: 4, payload: [1] or [0]}\ndisplay  Frame{channel, kind: 5, payload: {\"cell\":[w,h],\"fg\",\"bg\",\"cursor\"}}"
+      type_at: {path: app/src/core.rs, find: 'pub fn input(&self, bytes: Vec<u8>) -> Result<(), Error> {'}
+    response:
+      plain: 'Core streams the program''s screen bytes (first paint, then live bytes) as data frames on the viewer channel, and a close frame when the program ends. Pane::pump takes 4 KiB at a time, at most 64 KiB or 2 ms per pass, feeds libghostty and then sends credit for the bytes parsed.'
+      shape: "output  Frame{channel, kind: 0, payload: VT bytes} -> viewer buffer -> Pane::pump\nend     Frame{channel, kind: 2}                     -> stream closed -> \"Terminal ended\""
+      type_at: {path: desktop/src/terminal.rs, find: 'fn pump(&mut self, cx: &mut Context<Self>) -> bool {'}
+    errors: 'Sending is refused at once and never retried: "quitting" after Quit closed input, "too_large" over 64 KiB, "busy" when a queue is full; for typed keys the Pane shows "Input: ...". Credit or a query reply that cannot be queued is kept and tried again on the next pump. A buffer overflow or a lost pipe disconnects the whole Core connection and every Pane shows "Core disconnected".'
+    limits: 'Input at most 64 KiB per frame. Input and control queues 64 frames each. Viewer buffer 1 MiB, all viewers 16 MiB. Parsing at most 64 KiB or 2 ms per pass, in 4 KiB pieces.'
+    why: 'docs/terminal.md: the viewer "returns credit after parsing, not on receipt", so Core cannot run further ahead than Voyager parses, and "The connection bounds buffered output to 1 MiB per viewer and 16 MiB in aggregate". Input bypasses the owner thread so a busy owner cannot delay typing (inferred; pathway typing-4 notes the owner is not involved).'
+    inferred: false
+    at: {path: app/src/core.rs, find: 'fn send(&self, queue: &SyncSender<Frame>, kind: u8, payload: Vec<u8>) -> Result<(), Error> {'}
+    steps: [typing-4, typing-5, typing-6, typing-8, typing-9, typing-10, typing-11, typing-b2-1, typing-b3-1, startup-17, stop-program-12, stop-program-13, program-exits-4, program-exits-5]
+  - id: core-server-stop
+    name: 'Stopping the whole Core session (server.status, then server.stop)'
+    from: ['rs:voyager_app::core', 'rs:voyager_app::client']
+    to: ['ext:hc']
+    mechanism: core-rpc
+    nature: 'Two blocking requests from the owner thread inside Core::quit, then the bridge process is killed and reaped. It is reached only through Client::quit, which app/tests/quit.rs calls but the desktop no longer does at e6bd5b1 (pathway quit-b3-1), so in normal use Voyager never stops Core and programs keep running after it exits.'
+    request:
+      plain: 'First it closes terminal input for all viewers and fails activity with "Voyager is quitting". Then server.status, to compare Core''s id with the one from hello, and only if it matches, server.stop with no parameters.'
+      shape: "server.status  StatusParams {}  -> StatusResult {core: {id, name}, version, pid, uptime_ms, ...}\ncheck          StatusResult.core.id == HelloResult.core.id\nserver.stop    StopParams {}"
+      type_at: {path: app/core-schema.json, find: '"StopParams": {'}
+    response:
+      plain: 'stopped true or false. If true, Voyager marks the connection closed, kills the hc connect child if it is still running and waits for it to exit.'
+      shape: 'StopResult {stopped: bool}'
+      type_at: {path: app/core-schema.json, find: '"StopResult": {'}
+    errors: 'A different Core id is Rejected changed_core and nothing is stopped. stopped false is Uncertain ("Core did not confirm session shutdown"). A bridge that does not exit within 5 seconds gives "Core connector exit is unconfirmed". The owner stores the first quit result and returns it for every later quit.'
+    limits: '20 seconds per request; 5 seconds for the bridge to exit.'
+    why: 'The identity check makes sure Voyager stops only the Core it connected to, not one restarted under the same session name (refusal text: "The connected Core identity changed; no session was stopped"). docs/terminal.md now says Quit leaves Core programs running, which is why the desktop no longer takes this path.'
+    inferred: false
+    at: {path: app/src/core.rs, find: 'self.call("server.stop", StopParams(Default::default()))'}
+    steps: [quit-b3-1, quit-b3-2]
+  - id: codex-app-server-start
+    name: 'Starting the private Codex app-server and initializing it'
+    from: ['rs:voyager_app::conversation_client', 'rs:voyager_app::codex', 'rs:voyager_app::codex::protocol']
+    to: ['ext:codex']
+    mechanism: process
+    nature: 'The conversation owner thread starts one Codex child process on the first chat message or voice start of a session, not at launch, and keeps it until quit. It writes newline-ended JSON to the child''s stdin; a reader thread reads newline-ended JSON from its stdout and passes decoded events to the owner on a 32-slot channel. Only one Voyager request to Codex is outstanding at a time.'
+    request:
+      plain: 'The executable is VOYAGER_CODEX_BIN, or codex found on PATH, run in <profile>/conversation with a fixed argument list. The first message is initialize; when it answers, Voyager sends the initialized notification and then thread/start.'
+      shape: "<codex> app-server --listen stdio:// -c features.shell_tool=true\n        -c features.multi_agent=false -c features.multi_agent_v2=false\ncwd <profile>/conversation; stdin and stdout piped; stderr discarded\n{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"voyager_native\",\n   \"version\":\"0.1.0\"},\"capabilities\":{\"experimentalApi\":true}}}\\n\n{\"method\":\"initialized\"}\\n\n# messages Voyager writes have no \"jsonrpc\" field"
+      type_at: {path: app/src/codex_protocol.rs, find: '"initialize",'}
+    response:
+      plain: 'The initialize result carries userAgent. Voyager keeps the version from its first token (originator/version) to compare with the voice package later.'
+      shape: '{"id":1,"result":{"userAgent":"<originator>/<version> ...", ...}}'
+      type_at: {path: app/src/codex.rs, find: 'pub(crate) fn reported_version(result: &Value) -> Option<&str> {'}
+    errors: 'If Codex is not on the path or cannot start, the chat phase becomes Failed with the error. A broken pipe, an unreadable or oversized line, or the process ending makes the reader send an error; the owner marks the provider disconnected and the conversation Unconfirmed, and nothing is restarted. On quit Voyager kills the child and waits up to 5 seconds, else "Private provider exit is unconfirmed".'
+    limits: 'Outgoing requests at most 64 KiB (128 KiB for voice requests). Incoming lines at most 1 MiB, except voyager_content tool calls, which may reach CONTENT_FRAME_LIMIT (about 2 MiB). 25-second deadline per request.'
+    why: 'docs/conversation.md: "Opening chat reads its current projection without starting Codex. The first human Send starts a separate installed Codex app-server over stdio and creates an ephemeral private thread", using "the existing native account, with no API-key route or account-file read by Voyager". The -c flags keep the native shell tool and turn off internal agents, matching "disabled internal agents" in the same document.'
+    inferred: false
+    at: {path: app/src/codex.rs, find: '"app-server",'}
+    steps: [ask-by-text-5, ask-by-voice-4, quit-7]
+  - id: codex-thread-start
+    name: 'Opening the private thread with the four Voyager tools (thread/start)'
+    from: ['rs:voyager_app::conversation_client', 'rs:voyager_app::administrator', 'rs:voyager_app::codex::protocol']
+    to: ['ext:codex']
+    mechanism: ipc
+    nature: 'One JSON-RPC request over Codex stdio, sent by the conversation owner right after initialized. The owner does not block: it records the request as pending and handles the reply when the reader thread delivers it.'
+    request:
+      plain: 'Model and effort (from conversation.json, or gpt-6.1-sol and high), the conversation folder, a read-only sandbox with approvals never requested, the ADMINISTRATOR instructions and four dynamic tools. Each tool''s input schema is a generated contract file compiled into the binary.'
+      shape: "{\"method\":\"thread/start\",\"params\":{\"model\",\"allowProviderModelFallback\":false,\"ephemeral\":true,\n  \"cwd\",\"approvalPolicy\":\"never\",\"sandbox\":\"read-only\",\"config\":{\"model_reasoning_effort\"},\n  \"baseInstructions\":ADMINISTRATOR,\"dynamicTools\":[{\"type\":\"function\",\"name\",\"description\",\"inputSchema\"}]}}\nvoyager_workspace {expectedVersion, action: {operation: inspect | create-content {typeId,\n                   destination, launch?} | dock {context} | move-panel | ... 35 operations}}\nvoyager_process   {expectedVersion, action: list | read {contentId, terminalId, lines <= 160}\n                   | send {contentId, terminalId, pid, text} | interrupt {.., pid} | stop {.., pid}}\nvoyager_content   {expectedVersion, action: describe | inspect | list-notes | migrate-note {contentId}\n                   | new-note {contentId, title} | open-note {contentId, filename}\n                   | update {contentId, expectedRevision, data} | configure {contentId, configuration}}\nvoyager_worktree  {expectedVersion, voyage, action: list | create {name, branch, base}\n                   | open {path} | remove {path}}"
+      type_at: {path: app/src/administrator.rs, find: 'pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {'}
+    response:
+      plain: 'The result''s thread.id becomes the conversation thread and its model is recorded. The owner then sends turn/start for the waiting message, or account/read when voice is starting.'
+      shape: '{"id":<n>,"result":{"thread":{"id":"<thread>"},"model":"<model>"}}'
+      type_at: {path: app/src/codex_protocol.rs, find: 'Operation::OpenConversation => result'}
+    errors: 'An error reply sets the chat phase to Failed with Codex''s message. A result without thread.id is Unconfirmed ("Provider did not return the expected conversation/turn identity").'
+    limits: 'The whole request, with the four schemas and instructions, must fit in 64 KiB.'
+    why: 'docs/conversation.md: the voyager_workspace tool "uses the same Rust Action type as the native workspace", and "The application supplies its request ID and binds the call to the human request''s original focus". The read-only sandbox and never-approval policy keep Codex to inspection; the ADMINISTRATOR text says "Working Vessels perform project, source, configuration, skill and extension-package changes."'
+    inferred: false
+    at: {path: app/src/codex_protocol.rs, find: '"thread/start",'}
+    steps: [ask-by-text-6]
+  - id: codex-turn-start
+    name: 'Sending a chat message with its frozen focus (turn/start with voyager.focus)'
+    from: ['rs:voyager_app::conversation_client', 'rs:voyager_app::client', 'rs:voyager_app::codex::protocol']
+    to: ['ext:codex']
+    mechanism: ipc
+    nature: 'One JSON-RPC request over Codex stdio from the conversation owner thread. Before sending, the owner inspects the workspace through the workspace owner queue and freezes the dock into a Focus, so the request carries where the avatar was docked at Send time. The owner does not block; the reply only confirms the turn id.'
+    request:
+      plain: 'The thread id, the person''s text as one text input, the effort, and the Focus as a JSON string under additionalContext "voyager.focus".'
+      shape: "{\"id\":<n>,\"method\":\"turn/start\",\"params\":{\"threadId\":\"<thread>\",\n  \"input\":[{\"type\":\"text\",\"text\":\"open a terminal here\"}],\"effort\":\"high\",\n  \"additionalContext\":{\"voyager.focus\":{\"kind\":\"application\",\"value\":\"<Focus as JSON text>\"}}}}\nFocus {scope: Context {kind: workspace | voyage | fleet | vessel | portal, id},\n       path: [\"<Voyage>\", \"<Fleet>\"], cwd: \"<shared folder>\" | null,\n       revision: \"<layout version>\", preview?: \"<dock preview text>\"}"
+      type_at: {path: contract/src/conversation.rs, find: 'pub struct Focus {'}
+    response:
+      plain: 'result.turn.id, which the owner stores as the active turn; tool calls and messages must name it.'
+      shape: '{"id":<n>,"result":{"turn":{"id":"<turn>", ...}}}'
+      type_at: {path: app/src/codex_protocol.rs, find: 'Operation::StartTurn => result'}
+    errors: 'A send is refused before anything is written if the text is empty or over 8192 bytes, a previous turn or tool effect is still running, the conversation is Unconfirmed, or the workspace inspect is not applied and fresh. An error reply sets the phase Failed. No reply in 25 seconds sets it Unconfirmed and nothing is resubmitted.'
+    limits: 'Text 1 to 8192 bytes. The dock preview is built from at most 4096 bytes of terminal and Notes text (context.rs); the contract allows 8192. Request at most 64 KiB; 25-second reply deadline.'
+    why: 'docs/conversation.md: "Rust binds a new request to the actual workspace context at Send" and "Later navigation or renaming does not rewrite a sent request." The focus informs Codex but grants nothing: the tool layer still enforces the captured scope ("The private provider cannot supply a different owner, scope or request identity").'
+    inferred: false
+    at: {path: app/src/codex_protocol.rs, find: '"turn/start",'}
+    steps: [ask-by-text-3, ask-by-text-4, ask-by-text-7, ask-by-text-8]
+  - id: codex-tool-call
+    name: 'Codex calls a Voyager tool and gets the result back (item/tool/call)'
+    from: ['ext:codex']
+    to: ['rs:voyager_app::codex::protocol', 'rs:voyager_app::conversation_client', 'rs:voyager_app::administrator', 'rs:voyager_app::client']
+    mechanism: ipc
+    nature: 'A request in the reverse direction: Codex sends a JSON-RPC request with its own id on stdout, and Voyager answers on stdin with the same id. The reader thread decodes it, and the conversation owner hands it to Tools::call, which either answers at once (a refusal or a stored result) or starts a short-lived effect thread that queues the work on the workspace owner and delivers the result later.'
+    request:
+      plain: 'The callback id, the thread and turn it belongs to, Codex''s callId, the tool name and its JSON arguments. Voyager adds the request id and the captured scope itself; the arguments cannot supply them.'
+      shape: "{\"id\":\"<callback id>\",\"method\":\"item/tool/call\",\"params\":{\"threadId\",\"turnId\",\n  \"callId\",\"tool\":\"voyager_workspace\",\"namespace\":null,\n  \"arguments\":{\"expectedVersion\":\"12\",\"action\":{\"operation\":\"create-content\",\n    \"typeId\":\"terminal\",\"destination\":{...}}}}}\n-> ToolCall {id, thread, turn, call, name, namespace, arguments}"
+      type_at: {path: app/src/provider.rs, find: 'pub(crate) struct ToolCall {'}
+    response:
+      plain: 'One reply with the same id. success is true only for an Applied outcome. The text is the full JSON response (for workspace, a short summary if it passes 24 KiB) or a refusal starting "Rejected before dispatch:". The same outcome is added to the chat as a Workspace message.'
+      shape: "{\"id\":\"<callback id>\",\"result\":{\"success\":true | false,\n  \"contentItems\":[{\"type\":\"inputText\",\"text\":\"<response JSON or refusal>\"}]}}\nany other callback method:\n{\"id\":\"<callback id>\",\"error\":{\"code\":-32601,\n  \"message\":\"Unsupported private provider callback; nothing was dispatched\"}}"
+      type_at: {path: app/src/codex_protocol.rs, find: 'pub(crate) fn tool_reply(reply: &ToolReply) -> Value {'}
+    errors: 'Refused before dispatch, with success false: another thread or turn, an unknown tool, a namespace, oversized arguments, the 32-call limit, no active turn or focus, another effect still running, or an earlier Uncertain effect (reads are still allowed). A repeated callId with the same arguments gets the stored result; changed arguments are refused. An invalid callback id gets error -32600. An Uncertain result is reported as such and never replayed.'
+    limits: 'Arguments at most 8 KiB (voyager_content 1 MiB plus 16 KiB). 32 calls per turn, 4 waiting reply ids per call, 16 early callbacks held until the turn id arrives. Workspace result text at most 24 KiB. The effect thread waits 20 seconds for a workspace reply and 25 seconds for process, worktree or content replies.'
+    why: 'docs/conversation.md: "The application supplies its request ID and binds the call to the human request''s original focus" and "Invalid or unsupported provider callbacks receive explicit errors without dispatching an application effect." Each effect runs on its own thread so the conversation owner keeps reading Codex events meanwhile (pathway stop-program-2).'
+    inferred: false
+    at: {path: app/src/codex_protocol.rs, find: 'return Some(Event::Tool(Box::new(ToolCall {'}
+    steps: [ask-by-text-8, ask-by-text-9, ask-by-text-10, ask-by-text-11, ask-by-text-14, ask-by-text-12b, ask-by-text-14a, stop-program-1, stop-program-2, stop-program-11, ask-by-voice-17]
+  - id: codex-notifications
+    name: 'Codex reply text and turn status flow into the chat (notifications)'
+    from: ['ext:codex']
+    to: ['rs:voyager_app::codex::protocol', 'rs:voyager_app::conversation_client', 'rs:voyager_app::conversation']
+    mechanism: ipc
+    nature: 'One-way notifications on Codex stdout, with no reply. The reader thread decodes them into Visible events, and the conversation owner folds them into the shared chat snapshot and bumps its version, which makes the chat script''s waiting observe call return.'
+    request:
+      plain: 'Pieces of the assistant''s text as it streams, the completed text, and the turn''s start, end or error. Notifications without a threadId, or with a method Voyager does not know, are dropped; realtime methods go to the voice path instead.'
+      shape: "item/agentMessage/delta  {threadId, turnId, itemId, delta}\nitem/completed           {threadId, turnId, item: {type: \"agentMessage\", id, text}}\nturn/started             {threadId, turn: {id, status: \"inProgress\"}}\nturn/completed           {threadId, turn: {id, status: \"completed\" | \"interrupted\" | ..., error: {message}}}\nerror                    {threadId, turnId, error: {message}, willRetry}\n-> Visible::Message | Started | Completed {phase} | Error {retrying}"
+      type_at: {path: app/src/provider.rs, find: 'pub(crate) enum Visible {'}
+    response:
+      plain: 'Nothing goes back to Codex. The snapshot gains or extends an assistant message, and its phase becomes Completed, Interrupted or Failed when the turn ends.'
+      shape: "Snapshot {version, thread, turn, model, phase, messages: [{id, request_id, role, text, ...}],\n          error, limited, omitted}"
+      type_at: {path: app/src/conversation.rs, find: 'pub(crate) fn notification(state: &mut Snapshot, value: &Visible, request: &str) -> bool {'}
+    errors: 'An error notification sets the phase Failed unless willRetry is true. Any turn/completed status other than completed or interrupted counts as Failed. Events that arrive before the turn id is known are held, at most 16.'
+    limits: 'One visible message at most 64 KiB; retained display text 256 KiB; a new request trims older history to 64 messages and 192 KiB. Text over a limit is cut and marked limited.'
+    why: 'docs/conversation.md: "Only visible agent messages reach the projection. Reasoning, account records, credentials and audio data do not." Decoding only these methods keeps everything else Codex emits out of the chat.'
+    inferred: false
+    at: {path: app/src/codex_protocol.rs, find: '"item/agentMessage/delta" => Visible::Message {'}
+    steps: [ask-by-text-15, ask-by-text-16, ask-by-voice-18]
+  - id: codex-interrupt-timeouts
+    name: 'Interrupting a turn, and what happens when Codex goes quiet'
+    from: ['rs:voyager_app::conversation_client', 'rs:voyager_app::codex::protocol']
+    to: ['ext:codex']
+    mechanism: ipc
+    nature: 'A JSON-RPC request from the conversation owner, sent when the person presses Interrupt while the phase is Starting or Working. Because only one request may be outstanding, it goes out at once or as soon as the pending request is answered. The turn ends only when Codex later sends turn/completed with status interrupted.'
+    request:
+      plain: 'The thread and the active turn id.'
+      shape: '{"id":<n>,"method":"turn/interrupt","params":{"threadId":"<thread>","turnId":"<turn>"}}'
+      type_at: {path: app/src/conversation_client.rs, find: 'fn interrupt_turn(&mut self) -> Result<(), String> {'}
+    response:
+      plain: 'An acknowledgement, then a separate turn/completed notification with status interrupted, which sets the phase Interrupted. Tool effects already applied stay applied.'
+      shape: "{\"id\":<n>,\"result\":{...}}                            -> acknowledged\nturn/completed {turn: {id, status: \"interrupted\"}}   -> Phase::Interrupted"
+      type_at: {path: app/src/conversation_client.rs, find: '"Provider acknowledgement unconfirmed; nothing was resubmitted".into(),'}
+    errors: 'Every provider request, this one included, has a 25-second deadline. When a text request''s deadline passes, the conversation becomes Unconfirmed with "Provider acknowledgement unconfirmed; nothing was resubmitted" and later sends are refused; a voice request ends voice instead. Nothing is resent.'
+    limits: '25 seconds per request; the owner loop checks for Codex events every 10 ms.'
+    why: 'docs/conversation.md: "Interrupt requests use the active native turn and await its actual completion notification. No timeout or disconnect automatically repeats work or replaces the runtime."'
+    inferred: false
+    at: {path: app/src/codex_protocol.rs, find: '("turn/interrupt", json!({"threadId":thread,"turnId":turn}))'}
+    steps: [ask-by-text-16a, ask-by-text-16b, ask-by-text-14b]
+  - id: voice-helper-pipes
+    name: 'Voyager drives the codex-voice-host helper over its pipes'
+    from: ['rs:voyager_app::voice_session', 'rs:voyager_app::voice_host', 'rs:voyager_app::voice_wire']
+    to: ['ext:codex-voice-host']
+    mechanism: ipc
+    nature: 'Voyager starts the helper that ships inside the Codex installation as a child process and talks to it with length-prefixed JSON on stdin and stdout. A native-voice thread runs a strict request-then-acknowledgement sequence with a timeout per step, and a voice-helper-reader thread reads frames. The helper owns the microphone, the speaker and the WebRTC connection, so no audio crosses these pipes.'
+    request:
+      plain: 'The helper is <codex package>/codex-resources/voice/bin/codex-voice-host, found two folders above the codex executable next to manifest.json, and run in the package folder with a cleared environment (only the audio, proxy and certificate variables from platform::audio_environment) and stderr discarded. Voyager then sends, in order: Hello, InitializeRuntime, StartTransport, ApplyAnswer with the SDP answer from Codex, OpenDevices naming no device (system defaults), SetAudioControls with both on, InspectAudio every 50 ms, and Close at the end.'
+      shape: "[u32 big-endian length][JSON Signal]       # serde tag \"type\", camelCase names\nHello {protocol: 1, build_commit: \"<40 hex from manifest.json>\"}\nInitializeRuntime {}\nStartTransport {}\nApplyAnswer {sdp}                          # from thread/realtime/sdp\nOpenDevices {selection: {microphone: None, speaker: None, channel: None}}\nSetAudioControls {controls: {microphone_muted: false, speaker_suppressed: false}}\nInspectAudio {}                            # every 50 ms while active\nClose {}"
+      type_at: {path: app/src/voice_wire.rs, find: 'pub(crate) enum Signal {'}
+    response:
+      plain: 'Each request expects one matching acknowledgement. The only payloads Voyager receives are the WebRTC offer, an SDP text it forwards to Codex, and microphone and speaker peak levels for the voice control. Voyager never receives audio samples.'
+      shape: "Ready {}   RuntimeReady {}   Offer {sdp}   TransportReady {} (or TransportTimedOut {})\nDevicesOpened {}   AudioControlsApplied {}\nAudioState {state: {microphone_peak: u16, speaker_peak: u16}}\nClosed {}"
+      type_at: {path: app/src/voice_wire.rs, find: 'pub(crate) fn read(reader: &mut impl Read) -> io::Result<Option<Signal>> {'}
+    errors: 'A wrong acknowledgement or a timeout stops the sequence with a specific message, such as "Native voice helper is incompatible", "Native WebRTC offer was not produced", "Native voice transport did not connect" or "Native microphone or speaker could not open". The helper is then closed (Close, else killed) and the error is stored in the voice state; text chat is unaffected. Stop voice kills the helper. Decode errors never repeat the frame bytes.'
+    limits: 'Frame at most 128 KiB; SDP 1 byte to 64 KiB; manifest at most 64 KiB. Timeouts: Hello 10 s, InitializeRuntime 10 s, StartTransport 10 s, waiting for Codex''s answer 30 s, ApplyAnswer 25 s, OpenDevices 10 s, SetAudioControls 5 s, InspectAudio 3 s, Close 5 s plus 5 s for the exit.'
+    why: 'docs/conversation.md: "The helper owns native WebRTC, microphone capture and speaker playback. Its control pipe carries big-endian length-prefixed JSON of at most 128 KiB, without audio samples", and Voyager "reuses the helper beside the exact installed Codex executable", checking manifest schema 1, the provider version and the exact build commit. The canonical-path check refuses a helper outside that package.'
+    inferred: false
+    at: {path: app/src/voice_host.rs, find: 'let child = Command::new(&package.helper)'}
+    steps: [ask-by-voice-1, ask-by-voice-6, ask-by-voice-7, ask-by-voice-8, ask-by-voice-12, ask-by-voice-13a, ask-by-voice-14]
+  - id: codex-realtime-session
+    name: 'The realtime voice session on the private Codex thread (thread/realtime/*)'
+    from: ['rs:voyager_app::conversation_client::audio', 'rs:voyager_app::conversation_client', 'rs:voyager_app::codex::protocol']
+    to: ['ext:codex']
+    mechanism: ipc
+    nature: 'JSON-RPC over the same Codex app-server stdio as text chat. The conversation owner checks the account, passes the helper''s WebRTC offer to Codex and hands Codex''s answer back to the native-voice thread. After that, audio flows between the helper and Codex''s realtime service without Voyager, which sees only notifications: transcripts and any backing turn the realtime model starts.'
+    request:
+      plain: 'account/read without a token refresh, then thread/realtime/start with the offer, a session id voyager-voice-<pid>-<generation>, voice sol, version v3, WebRTC transport, the opening focus as the first developer item, and the VOICE_INSTRUCTIONS prompt. thread/realtime/stop ends it.'
+      shape: "{\"method\":\"account/read\",\"params\":{\"refreshToken\":false}}\n{\"method\":\"thread/realtime/start\",\"params\":{\"threadId\",\"realtimeSessionId\":\"voyager-voice-<pid>-<gen>\",\n  \"voiceSessionId\":<same>,\"outputModality\":\"audio\",\"version\":\"v3\",\"voice\":\"sol\",\n  \"transport\":{\"type\":\"webrtc\",\"sdp\":\"<offer>\"},\"clientManagedHandoffs\":false,\n  \"delegationAckFiller\":true,\"backendReasoningStatus\":false,\n  \"initialItems\":[{\"role\":\"developer\",\"text\":\"<Focus JSON>\"}],\n  \"realtimeStartInstructions\":\"<Focus JSON>\",\"prompt\":VOICE_INSTRUCTIONS}}\n{\"method\":\"thread/realtime/stop\",\"params\":{\"threadId\"}}"
+      type_at: {path: app/src/conversation_audio.rs, find: 'let command = Command::StartAudio {'}
+    response:
+      plain: 'account/read must report account type chatgpt. Then notifications: realtime started (same session id, version v3), the SDP answer, transcript segments and deltas for both speakers, and closed or error. A turn/started on the thread while voice is live is bound as a voice turn whose tools act on the dock focus captured at that moment.'
+      shape: "{\"result\":{\"account\":{\"type\":\"chatgpt\"}}}\nthread/realtime/started {threadId, realtimeSessionId, version}\nthread/realtime/sdp     {threadId, sdp}                 -> ApplyAnswer to the helper\nthread/realtime/item/started | completed\n                        {item: {type: \"transcriptSegment\", id, role, text, realtimeSessionId}}\nthread/realtime/item/transcript/delta {itemId, delta}\nthread/realtime/closed | thread/realtime/error {threadId}\n-> AudioEvent::Started | Answer | Transcript | Closed | Failed"
+      type_at: {path: app/src/provider.rs, find: 'pub(crate) enum AudioEvent {'}
+    errors: 'Another account type ends voice ("Native speech requires the existing ChatGPT account..."). A Codex version that differs from the voice manifest stops before the helper starts. A refused account/read or realtime start ends voice with "The provider refused native voice. Text and accepted work remain available." A different session id or version ends voice. A voice request with no reply in 25 seconds ends voice ("Native voice acknowledgement is unconfirmed. No request was replayed."). A voice turn that would overlap a running text turn is refused and the conversation becomes Unconfirmed.'
+    limits: 'Voice requests at most 128 KiB. Each transcript item at most 64 KiB; all displayed voice transcript 256 KiB. 25-second reply deadline.'
+    why: 'docs/conversation.md: only "the ChatGPT account route" is accepted, Voyager "does not expose the account record, inspect credentials or select paid API audio", and "Private reasoning, raw audio negotiation and account data never enter these messages." Binding each voice turn to the dock at its start follows "Later docking or audio loss cannot retarget accepted tools."'
+    inferred: false
+    at: {path: app/src/codex_protocol.rs, find: '"thread/realtime/start",'}
+    steps: [ask-by-voice-4, ask-by-voice-5, ask-by-voice-5b, ask-by-voice-9, ask-by-voice-10, ask-by-voice-11, ask-by-voice-15, ask-by-voice-16, ask-by-voice-16a, ask-by-voice-17, ask-by-voice-13b]
+  - id: git-worktrees
+    name: 'Listing, creating and removing Git worktrees (git -C <folder> ...)'
+    from: ['rs:voyager_app::worktrees', 'rs:voyager_app::client']
+    to: ['ext:git']
+    mechanism: process
+    nature: 'Voyager runs the git program as a child process, one command at a time, on a thread that the owner thread spawns for each worktree request, and waits for each command to finish. Read commands capture stdout as text; the two changing commands, worktree add and worktree remove, run with stdin closed and only their exit status and stderr are used.'
+    request:
+      plain: 'Every command is git -C <Voyage folder> plus fixed arguments. Create checks the branch name and base, adds /.worktrees/ to the repository''s info/exclude file if missing, then adds the checkout under <main checkout>/.worktrees/<name>. Remove never forces. Requests come from the header worktree dialog or the voyager_worktree tool.'
+      shape: "list:   rev-parse --path-format=absolute --git-common-dir\n        worktree list --porcelain -z\n        rev-parse --show-toplevel\n        --no-optional-locks status --porcelain\ncreate: check-ref-format --branch <branch>\n        rev-parse --verify --end-of-options <base>^{commit}\n        list (above); append \"/.worktrees/\" to <common dir>/info/exclude if missing\n        worktree add -b <branch> -- <main>/.worktrees/<name> <commit>\nremove: worktree remove -- <path>\nopen:   list, then find <path>"
+      type_at: {path: app/src/worktrees.rs, find: 'fn read_git(cwd: &Path, args: &[&str]) -> Result<String, Error> {'}
+    response:
+      plain: 'The NUL-separated porcelain list is parsed record by record: worktree <path>, branch refs/heads/<name>, locked, prunable, and an empty field ending each record. The first record is the main checkout; dirty is set only for the checkout that matches --show-toplevel. After create or remove the list is read again to report the result.'
+      shape: "Checkout {path, common_dir, main, branch, locked, prunable, dirty}\nResponse {request_id, status: applied | rejected | uncertain, message, checkouts}"
+      type_at: {path: contract/src/worktree.rs, find: 'pub struct Checkout {'}
+    errors: 'A failing read command is Rejected with git''s stderr. A failing add or remove is Uncertain ("Git did not complete successfully; inspect before retrying: ..."), and so is a successful add whose checkout then cannot be found. Voyager refuses before running git for a name that is not a single folder, a base starting with "-", an existing destination, the main checkout, or a checkout a live program is using.'
+    limits: 'No timeout on git itself. The caller waits 25 seconds, then reports "Worktree result unconfirmed; do not repeat the request" while git may still be running. At most 32 recent worktree requests are remembered.'
+    why: 'The voyager_worktree tool description says "Remove never forces, deletes branches or stops programs; live process use is refused", so uncommitted work is not discarded. "--" and --end-of-options stop a branch, path or base from being read as an option, and the local exclude keeps new checkouts out of git status without editing a tracked .gitignore (both inferred).'
+    inferred: false
+    at: {path: app/src/worktrees.rs, find: '&["worktree", "add", "-b", branch, "--", path, commit.trim()],'}
+    steps: [launch-agent-1b, launch-agent-1c]
+  - id: git-voyage-close-check
+    name: 'Closing a Voyage asks git how many files have uncommitted changes'
+    from: ['rs:voyager_app::voyage_close', 'rs:voyager_app::worktrees']
+    to: ['ext:git']
+    mechanism: process
+    nature: 'When the person asks to close a Voyage whose folder lies inside a linked (non-main) worktree, the owner thread itself runs the git list commands and a status command while it prepares the confirmation plan, and blocks until they finish. This is the one place git runs on the owner thread.'
+    request:
+      plain: 'The same list commands as for worktrees, then a NUL-separated porcelain v1 status of the Voyage folder.'
+      shape: "git -C <Voyage folder> rev-parse ... / worktree list --porcelain -z / ...   # as in git-worktrees\ngit -C <Voyage folder> --no-optional-locks status --porcelain=v1 -z"
+      type_at: {path: app/src/worktrees.rs, find: 'pub fn uncommitted_changes(cwd: &Path) -> Result<u32, Error> {'}
+    response:
+      plain: 'A count of changed entries (a rename or copy counts once although it lists two paths), shown in the close plan as uncommitted_changes. For a folder that is not inside a linked worktree the count is left empty.'
+      shape: 'uncommitted_changes: Option<u32>     # field of the Voyage close plan'
+      type_at: {path: app/src/worktrees.rs, find: '&["--no-optional-locks", "status", "--porcelain=v1", "-z"],'}
+    errors: 'A failing list is treated as "not a worktree" and the count stays empty. A failing status refuses the close with "Could not inspect worktree changes: ...".'
+    limits: 'No timeout; a slow git delays every workspace request queued behind the close.'
+    why: 'The plan is shown before Notes are saved and programs stopped ("Confirm shutdown. Notes will be saved and running programs stopped."), so the person sees unsaved Git work in a worktree Voyage before confirming.'
+    inferred: true
+    at: {path: app/src/voyage_close.rs, find: '.map(|_| crate::worktrees::uncommitted_changes(directory))'}
+    steps: []
+  - id: git-head-file
+    name: 'The context bar reads the branch name straight from .git/HEAD'
+    from: ['ext:git']
+    to: ['rs:voyager_app::context', 'rs:voyager_desktop::host']
+    mechanism: file
+    nature: 'No git process is started here. When the header asks for context facts, the context_facts host function gets the dock''s facts from the owner thread and then, on a GPUI background thread, walks up from the dock''s folder to the nearest .git and reads its HEAD file.'
+    request:
+      plain: 'The dock''s single shared folder, if it has one. A .git folder is used directly; a .git file (as in a linked worktree) must contain "gitdir: <path>".'
+      shape: "for each ancestor of <dock folder> (at most 128):\n  <ancestor>/.git            folder, or file \"gitdir: <path>\"\n  <git dir>/HEAD             at most 4096 bytes, UTF-8"
+      type_at: {path: app/src/context.rs, find: 'fn branch(cwd: &Path) -> Branch {'}
+    response:
+      plain: 'The branch shown in the context bar: a name from "ref: refs/heads/<name>", Detached for a 40 or 64 hex digit commit id, otherwise Unavailable.'
+      shape: 'Branch {Named {name} | Detached | Unavailable}'
+      type_at: {path: contract/src/context.rs, find: 'pub enum Branch {'}
+    errors: 'Nothing fails loudly: any unreadable, oversized or unexpected file gives Unavailable.'
+    limits: 'HEAD and .git files at most 4096 bytes; at most 128 folders up; the whole facts reply at most 64 KiB.'
+    why: 'Reading two small files avoids starting git on every context refresh (inferred); the header refreshes context facts on a timer (pathway program-exits-11).'
+    inferred: true
+    at: {path: app/src/context.rs, find: 'let Some(value) = small_file(&git.join("HEAD")) else {'}
+    steps: [dock-avatar-15, dock-avatar-17]
+  - id: notes-markdown-file
+    name: 'A note is a Markdown file in the Voyage folder (read, atomic replace, SHA-256 revision)'
+    from: ['rs:voyager_app::content', 'rs:voyager_app::content::markdown']
+    to: ['ext:you', 'ext:terminal-agent']
+    mechanism: file
+    nature: 'The owner thread reads and writes the note file directly with blocking file calls; the note text is not stored in Core. Each read hashes the file bytes into a revision, and a save is accepted only if the file still has the revision the editor started from, so edits made outside Voyager, for example by another editor or a terminal agent, are not overwritten.'
+    request:
+      plain: 'The file is the directory and filename recorded in the Notes file binding in the layout. New notes and file listings use <owning Voyage folder>/notes (for the Home Voyage, the content''s own folder). A save sends title, text and the expected revision. Notes not bound to a Markdown file use the older <profile>/data/<content id>.json in the same way.'
+      shape: "path   <Voyage cwd>/notes/<name>.md               # one plain filename ending in .md\nbytes  \"# \" + title + \"\\n\\n\" + text               # title must fit on one line\nsave   check: SHA-256(current bytes) == expected_revision\n       write .<name>.md.tmp (create_new, original permissions, write, sync_all)\n       rename .<name>.md.tmp -> <name>.md         # replaces the file in one step\nnew    \"<title>.md\", then \"<title> 2.md\", ...     # create_new, never overwrites"
+      type_at: {path: app/src/content/markdown.rs, find: 'pub(crate) fn encode(notes: &Notes) -> Result<Vec<u8>, String> {'}
+    response:
+      plain: 'After the rename Voyager reads the file back and reports Applied, with the fresh snapshot, only if its revision equals the SHA-256 of the bytes it wrote. A read takes a first line starting "# " as the title; otherwise the filename stem is the title and the whole file is the text.'
+      shape: "revision = lowercase hex SHA-256 of the file bytes\nApplied   {version, request_id, content_id, snapshot: {content_id, revision,\n           data: {title, text}, warning?}}\nRejected | Uncertain {version, request_id, content_id, expected_revision, message}"
+      type_at: {path: app/src/content.rs, find: 'fn finish_write('}
+    errors: 'A revision mismatch is Rejected ("Portal data changed. Read it again before saving.") and nothing is written. Errors before the rename are Rejected and the temporary file is removed. A failed rename, or a read-back that does not match, is Uncertain ("Data changed after replacement"). A note over 1 MiB is refused ("Notes data exceeds 1 MiB"). Because the temporary file is opened with create_new, a leftover .<name>.md.tmp from a crash makes every later save of that note fail until it is removed (inferred from the code).'
+    limits: '1 MiB per note, read and write. Only the temporary file is synced; the folder is not synced after the rename.'
+    why: 'Writing a temporary file and renaming it means a reader sees either the old note or the new one, never half of one (inferred). The SHA-256 revision lets a draft detect outside edits; the voyager_content tool description says "A dirty visible draft retains its original revision; do not bypass stale refusal."'
+    inferred: true
+    at: {path: app/src/content.rs, find: 'temp_name.push(".tmp");'}
+    steps: [notes-save-10, notes-save-11, notes-save-12, notes-save-13, notes-save-b2-1]
+  - id: profile-seed
+    name: 'Seeding the profile once at start (header and Notes packages, theme, launches.json)'
+    from: ['rs:voyager_desktop', 'rs:voyager_app::content::package']
+    to: ['ts:desktop/mods/header/main.ts', 'ts:content/notes/main.ts', 'rs:voyager_desktop::host', 'rs:voyager_app::launch']
+    mechanism: file
+    nature: 'At start, before the window opens, the main thread copies files compiled into the binary into the profile folder. Each copy creates a file only if it does not exist yet, so later edits by the person are kept, and the edited files are what the app actually runs.'
+    request:
+      plain: 'Header package files go to <profile>/mods/header (main.js and its modules, ui.js, mod.json, AGENTS.md, icons, chat.js and the generated validate.js, workspace.js and conversation.js); the theme to themes/voyager.json; launches.json gets the default Terminal, Codex and Claude entries. The Notes package is copied only if neither <profile>/mods/notes nor <profile>/mods/.notes.removed exists.'
+      shape: "<profile>/mods/header/{main.js, ui.js, mod.json, canvas.js, ..., chat.js, *.svg,\n                       validate.js, workspace.js, conversation.js}\n<profile>/themes/voyager.json\n<profile>/mods/notes/{main.js, ui.js, mod.json, validate.js}   # whole package or nothing\n<profile>/launches.json  = LaunchSettings::default() as pretty JSON\n<profile>/data/          created for older Notes JSON\nseed(path, data): create_dir_all(parent); open with create_new and write, or skip if it exists"
+      type_at: {path: desktop/src/lib.rs, find: 'fn seed(path: &Path, data: &str) -> Result<()> {'}
+    response:
+      plain: 'Nothing is returned. run then reads mod.json back and requires a name, version 1 and the entry main.js.'
+      shape: 'io::Result<()>: Ok, or the first file-system error'
+      type_at: {path: app/src/content/package.rs, find: 'pub fn seed_package(package: &Path, files: &[(&str, &str)]) -> io::Result<()> {'}
+    errors: 'Any file-system error other than "already exists" stops start-up and the binary exits with status 1, as does a header mod.json without a name, version 1 and main.js. A write that fails halfway leaves a partial file that later starts will not replace (inferred from create_new followed by write_all).'
+    limits: 'No size limits. Seeded files are never refreshed when the binary changes.'
+    why: 'docs/content.md: "Packages are seeded once into the selected profile. Personal JavaScript is not overwritten." docs/agent-launch.md: launches.json is seeded once and the app "never overwrites an existing copy". The .notes.removed check keeps a package the person removed from coming back (docs/content.md: Notes seeding "occurs only when neither the active nor preserved directory" exists).'
+    inferred: false
+    at: {path: desktop/src/lib.rs, find: 'match OpenOptions::new().write(true).create_new(true).open(path) {'}
+    steps: [startup-2]
+  - id: launches-json
+    name: 'Reading launches.json when the Create Vessel picker opens'
+    from: ['ext:you', 'rs:voyager_desktop']
+    to: ['rs:voyager_app::launch', 'rs:voyager_app::client']
+    mechanism: file
+    nature: 'A blocking read on the owner thread each time the header asks for the launch catalogue with a Launches message, so edits take effect the next time the picker opens. Voyager never writes the file after seeding it.'
+    request:
+      plain: 'A default entry id and a list of entries, each with an id, a name and a launch: terminal, codex (model, effort, permissions) or program (argv).'
+      shape: "LaunchSettings {default: \"terminal\",\n  entries: [{id: \"terminal\", name: \"Terminal\", launch: {kind: \"terminal\"}},\n            {id: \"codex\", name: \"Codex\", launch: {kind: \"codex\", model: \"gpt-6.1-sol\",\n                                                  effort, permissions}},\n            {id: \"claude\", name: \"Claude\", launch: {kind: \"program\", argv: [\"claude\"]}}]}"
+      type_at: {path: contract/src/launch.rs, find: 'pub struct LaunchSettings {'}
+    response:
+      plain: 'A Catalog: the settings, the ids whose executable was found on PATH (relative names resolved from the folder Voyager was started in), one error line for each that was not, and the file path.'
+      shape: 'Catalog {settings, available: [id], errors: ["<name> is unavailable: ..."], path}'
+      type_at: {path: contract/src/launch.rs, find: 'pub struct Catalog {'}
+    errors: 'Over 8 KiB, invalid JSON, unknown fields, duplicate or empty ids or names, a missing default entry, or a program entry without an executable return an error string to the header instead of a catalogue; no default shell is substituted.'
+    limits: '8 KiB.'
+    why: 'docs/agent-launch.md: "Edit that file to configure entries, models, effort and permissions, then reopen the picker to read it again" and "Broken settings report their error; no default shell is silently substituted for a worker." The chosen launch is copied into the layout, so a later edit does not change programs already placed (inferred from open_terminal using the stored launch).'
+    inferred: false
+    at: {path: app/src/launch.rs, find: '.and_then(|file| file.take(8193).read_to_end(&mut source))'}
+    steps: [split-vessel-5, launch-agent-2]
+  - id: conversation-json
+    name: 'Choosing the assistant model and effort (conversation.json)'
+    from: ['ext:you']
+    to: ['rs:voyager_app::conversation_client']
+    mechanism: file
+    nature: 'An optional file the person writes. Voyager only reads it, on the conversation owner thread, at each send or voice start until Codex has been started; after that the values are fixed for the session.'
+    request:
+      plain: 'A JSON object with at most two string keys, model and effort. A missing file means the defaults.'
+      shape: '{"model": "gpt-6.1-sol", "effort": "high"}     # both optional, no other keys'
+      type_at: {path: app/src/conversation_client.rs, find: 'fn settings(profile: &Path) -> Result<(String, String), String> {'}
+    response:
+      plain: 'The model and effort used in thread/start and turn/start.'
+      shape: '(model, effort), default ("gpt-6.1-sol", "high")'
+      type_at: {path: app/src/conversation_client.rs, find: '.unwrap_or("gpt-6.1-sol");'}
+    errors: 'Invalid JSON is refused as "Invalid conversation settings: ...". Another key, a non-string or empty value, a model over 128 bytes or an effort over 32 bytes is refused with "Conversation settings require valid model and effort strings; no turn was submitted". The send is refused and Codex is not started.'
+    limits: 'Model at most 128 bytes, effort at most 32 bytes. No size bound on the file read.'
+    why: 'docs/conversation.md: "A profile-local conversation.json may contain model and effort strings. These change only this private administrator connection."'
+    inferred: false
+    at: {path: app/src/conversation_client.rs, find: 'let config: Value = match fs::read(profile.join("conversation.json")) {'}
+    steps: [ask-by-text-3, ask-by-text-5]
+  - id: theme-file
+    name: 'The theme file is re-read every 250 ms (themes/voyager.json)'
+    from: ['ext:you', 'rs:voyager_desktop']
+    to: ['rs:voyager_desktop::host']
+    mechanism: file
+    nature: 'The header host reads the file once at start. A GPUI task then re-reads it every 250 ms on a background thread and compares the bytes; a change is parsed and applied on the main thread, and the header script and Notes views are refreshed.'
+    request:
+      plain: 'Four colours as #rrggbb strings; accent is optional.'
+      shape: 'Theme {background: "#111316", foreground: "#d4d5dc", muted: "#878994", accent?: "#c4b5fd"}'
+      type_at: {path: desktop/src/host.rs, find: 'struct Theme {'}
+    response:
+      plain: 'Nothing is written back. A valid theme is applied to the GPUI theme and offered to scripts through the voyager_header host module.'
+      shape: 'Result<Theme>: every colour must be 7 characters, "#" and six hex digits'
+      type_at: {path: desktop/src/host.rs, find: 'fn theme(bytes: &[u8]) -> Result<Theme> {'}
+    errors: 'A missing file at start stops start-up ("Reading theme"). Later, an unreadable or invalid theme appears as a theme error in the header status box, and the previous theme stays in use.'
+    limits: 'Re-read every 250 ms; no size bound on the read.'
+    why: 'Polling lets a person edit the theme and see the result without restarting; the same loop also reloads changed header source after a failed load (pathway startup-b2-2).'
+    inferred: true
+    at: {path: desktop/src/host.rs, find: 'let theme = fs::read(theme_path).ok();'}
+    steps: [startup-2, startup-9, startup-b2-2]
+  - id: paplay-tone
+    name: 'Avatar dock and undock sounds are played by paplay'
+    from: ['rs:voyager_desktop::avatar', 'rs:voyager_desktop::platform']
+    to: ['ext:paplay']
+    mechanism: process
+    nature: 'Fire and forget. The avatar code on the main thread puts true (rising tone: a dock, or a drag dropped back onto the current dock) or false (falling tone: an undock or a float) on a 4-slot queue. One sound thread, started on first use, runs paplay for each item, writes the samples to its stdin and waits for it to exit.'
+    request:
+      plain: 'A 0.2-second sweep generated in code: 9,600 mono 32-bit float samples at 48 kHz (38,400 bytes), rising from 310 to 620 Hz for true and falling from 620 to 310 Hz for false, piped as raw audio.'
+      shape: "paplay --raw --rate=48000 --format=float32le --channels=1 \"--client-name=Voyager avatar\"\nstdin: samples(docking) as f32 little-endian"
+      type_at: {path: desktop/src/avatar_motion.rs, find: 'pub fn samples(docking: bool) -> Vec<f32> {'}
+    response:
+      plain: 'Only the exit status, which is checked.'
+      shape: 'exit status 0, else Err("Audio process exited <status>")'
+      type_at: {path: desktop/src/platform.rs, find: '"Audio process exited {status}"'}
+    errors: 'Errors never reach the avatar. A full queue prints "Avatar sound not queued"; a missing paplay or a failed run prints "Avatar sound unavailable: ..." to stderr.'
+    limits: '4 queued tones; one paplay at a time; no timeout, so a stuck paplay delays all later tones. The call is not limited to Linux in code, so where paplay is absent every tone prints an error.'
+    why: 'A separate thread and a non-blocking queue keep sound from ever delaying the avatar on the main thread, and generating the sweep in code avoids shipping sound files (both inferred).'
+    inferred: true
+    at: {path: desktop/src/platform.rs, find: 'let mut child = Command::new("paplay")'}
+    steps: [dock-avatar-3, dock-avatar-5, dock-avatar-5b, dock-avatar-11, avatar-open-chat-6]

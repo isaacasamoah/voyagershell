@@ -10,7 +10,7 @@ const { parse, stringify } = require("../architecture-map/yaml.cjs");
 
 const repository = path.resolve(__dirname, "../..");
 const mapConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "../architecture-map/config.json"), "utf8"));
-const LAYER_FILES = ["concepts.yaml", "modules.yaml", "pathways.yaml", "proposals.yaml", "proposed.yaml"];
+const LAYER_FILES = ["concepts.yaml", "modules.yaml", "pathways.yaml", "proposals.yaml", "proposed.yaml", "interfaces.yaml"];
 const EXCERPT_BEFORE = 3;
 const EXCERPT_AFTER = 12;
 const FINGERPRINT_LINES = 12;
@@ -237,6 +237,7 @@ function build(revision, layerDir) {
     for (const item of detail.evidence ?? []) if (edge.evidence.length < 8) edge.evidence.push({ kind, ...item });
     if (detail.hop) edge.hops.push(detail.hop);
     if (detail.note && !edge.notes.some((note) => note.plain === detail.note.plain)) edge.notes.push(detail.note);
+    if (detail.interface && !(edge.interfaces ??= []).includes(detail.interface)) edge.interfaces.push(detail.interface);
     edgeMap.set(key, edge);
   };
   const lift = (id) => {
@@ -260,6 +261,23 @@ function build(revision, layerDir) {
   for (const runtime of layer.runtime ?? []) {
     addEdge(runtime.from, runtime.to, "runtime", runtime.via, { note: { plain: runtime.plain, at: resolve(runtime.at) } });
   }
+  // Interfaces: named connections with the shape of what passes and why. Each adds a runtime link
+  // between its modules so it can be clicked even where no code reference exists.
+  const stepIds = new Set(pathways.flatMap((pathway) => [...pathway.steps, ...pathway.branches.flatMap((branch) => branch.steps)].map((step) => step.id)));
+  const coreRuns = fs.existsSync(path.join(path.dirname(layerDir), "runs")) ? fs.readdirSync(path.join(path.dirname(layerDir), "runs")).filter((file) => file.endsWith("-core.json")).sort().map((file) => JSON.parse(fs.readFileSync(path.join(path.dirname(layerDir), "runs", file), "utf8"))) : [];
+  const interfaces = (layer.interfaces ?? []).map((item) => {
+    for (const id of [...(item.from ?? []), ...(item.to ?? [])]) if (!moduleIds.has(id)) problems.push({ kind: "interface-unknown-module", id: `${item.id}:${id}` });
+    for (const id of item.steps ?? []) if (!stepIds.has(id)) problems.push({ kind: "interface-unknown-step", id: `${item.id}:${id}` });
+    const side = (part) => (part ? { ...part, typeAt: resolve(part.type_at) } : null);
+    const observed = (item.observed_core ?? []).map((method) => {
+      const run = coreRuns.find((entry) => entry.methods[method] || entry.notifications[method]);
+      const found = run?.methods[method] ?? run?.notifications[method];
+      if (!found) problems.push({ kind: "interface-unobserved-method", id: `${item.id}:${method}` });
+      return found ? { method, run: run.id, count: found.count, request: found.request ?? found.example, result: found.result, error: found.error } : null;
+    }).filter(Boolean);
+    return { ...item, request: side(item.request), response: side(item.response), at: resolve(item.at), observed };
+  });
+  for (const item of interfaces) for (const from of item.from ?? []) for (const to of item.to ?? []) addEdge(from, to, "runtime", item.mechanism ?? "interface", { interface: item.id });
   for (const pathway of pathways) {
     const walk = (steps) => {
       for (let index = 1; index < steps.length; index += 1) {
@@ -319,6 +337,8 @@ function build(revision, layerDir) {
     entryPoints,
     proposed,
     runs,
+    interfaces,
+    coreRuns: coreRuns.map(({ methods, notifications, ...rest }) => ({ ...rest, methods: Object.fromEntries(Object.entries(methods).map(([name, entry]) => [name, entry.count])) })),
     reading: layer.reading ?? [],
     history,
     anchors,
@@ -390,7 +410,7 @@ function buildProposed(layer, modules, moduleIds, edges, features, problems) {
 // Runtime observations: each pathway shows the run in which most of its steps were seen.
 function attachRuns(pathways, dir, problems) {
   if (!fs.existsSync(dir)) return [];
-  const runs = fs.readdirSync(dir).filter((file) => file.endsWith(".json")).sort().map((file) => JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")));
+  const runs = fs.readdirSync(dir).filter((file) => file.endsWith(".json") && !file.endsWith("-core.json")).sort().map((file) => JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")));
   const seenCount = (steps) => Object.values(steps ?? {}).filter((step) => step.seen).length;
   for (const pathway of pathways) {
     const candidates = runs.filter((run) => run.steps[pathway.id]);

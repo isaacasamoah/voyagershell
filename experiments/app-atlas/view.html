@@ -146,6 +146,11 @@ svg .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
 .edge.today { stroke: var(--edge-code); }
 .edge.broken { stroke: var(--problem); stroke-dasharray: 6 4; }
 .edge.inner { opacity: .28; }
+.edge.under { opacity: .16; }
+pre.shape { background: var(--code-bg); border-radius: 8px; padding: 8px 10px; font-size: 11.5px; line-height: 1.45; overflow-x: auto; margin: 4px 0; white-space: pre; }
+.iface { border: 1px solid var(--line); border-left: 4px solid var(--edge-runtime); border-radius: 9px; padding: 8px 10px; margin: 10px 0; }
+.iface h4 { margin: 0 0 4px; font-size: 14px; }
+.iface .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 8px 0 2px; }
 .edge.hot { opacity: 1; stroke-width: 2.6 !important; }
 .edge.sel { opacity: 1; stroke: var(--ink); stroke-width: 3.2 !important; }
 .hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
@@ -345,7 +350,7 @@ function computeView(focus) {
     g.count += e.count; g.src.push(e); agg.set(key, g);
     touch(a, "from"); touch(b, "into");
   }
-  const route = S.pathway && M.kind === "current" && S.tab === "map" ? activeSteps().map((s, i) => ({ i, id: endpoint(s.function && node(s.function) ? s.function : s.module) ?? endpoint(s.module) })) : null;
+  const route = S.pathway && M.kind === "current" && S.tab === "map" ? activeSteps().map((s, i) => ({ i, id: endpoint(s.function && node(s.function) ? s.function : s.module) ?? endpoint(s.module), via: s.via })) : null;
   if (route) for (const r of route) if (r.id?.startsWith("stub:") && !stubs.has(r.id)) stubs.set(r.id, { id: r.id, target: r.id.slice(5), into: 1, from: 0 });
   if (X) {
     const root = pos.get(focus);
@@ -434,7 +439,9 @@ function draw(svg, opts = {}) {
   const view = computeView(opts.focus);
   const { pos, route } = view;
   const changes = changeTotals(view);
-  const hot = new Set([...(route ? route.map((r) => r.id) : []), ...(changes ? changes.keys() : []), ...(opts.highlight ?? [])].filter(Boolean));
+  const iface = S.sel?.startsWith("iface:") ? interfaceById.get(S.sel.slice(6)) : null;
+  const ifaceEnds = iface && M.kind === "current" ? [...iface.from, ...iface.to].map((id) => view.endpoint(id)) : [];
+  const hot = new Set([...(route ? route.map((r) => r.id) : []), ...(changes ? changes.keys() : []), ...(opts.highlight ?? []), ...ifaceEnds].filter(Boolean));
   const focusing = hot.size > 0;
   const hotUp = new Set(); for (const id of hot) { let u = id; while (u && !u.startsWith("stub:")) { hotUp.add(u); u = node(u)?.parent; } }
   let frames = "", leaves = "", edges = "", marks = "";
@@ -446,12 +453,12 @@ function draw(svg, opts = {}) {
     else frames += frameSvg(n, b, { dim: focusing && !hotUp.has(id), root: id === opts.focus });
   }
   svg._edges = view.edges;
-  if (!route) view.edges.forEach((e, i) => {
+  view.edges.forEach((e, i) => {
     const a = pos.get(e.from), b = pos.get(e.to); if (!a || !b) return;
     const inner = view.focus && !e.from.startsWith("stub:") && !e.to.startsWith("stub:") && view.edges.length > 24;
     const w = Math.min(3.6, 0.9 + Math.log2(1 + e.count) * 0.45);
     const d = curve(a, b, e.category === "runtime" || e.category === "today" ? 0.5 : 0);
-    const cls = `edge ${e.category}${e.broken ? " broken" : ""}${inner ? " inner" : ""}${S.sel === "edge:" + e.key ? " sel" : ""}${focusing && !(hot.has(e.from) || hot.has(e.to)) ? " dim" : ""}`;
+    const cls = `edge ${e.category}${e.broken ? " broken" : ""}${inner ? " inner" : ""}${route ? " under" : ""}${S.sel === "edge:" + e.key ? " sel" : ""}${!route && focusing && !(hot.has(e.from) || hot.has(e.to)) ? " dim" : ""}`;
     edges += `<path class="${cls}" data-a="${esc(e.from)}" data-b="${esc(e.to)}" d="${d}" stroke-width="${w}" marker-end="url(#arrow-${e.broken ? "broken" : e.category})"/><path class="hit" data-edge="${i}" d="${d}"><title>${esc(edgeTitle(e))}. Click for details.</title></path>`;
   });
   if (route) {
@@ -460,7 +467,8 @@ function draw(svg, opts = {}) {
       const a = pos.get(route[i - 1].id), b = pos.get(route[i].id); if (!a || !b || route[i - 1].id === route[i].id) continue;
       const key = [route[i - 1].id, route[i].id].sort().join("|"); const k = seen.get(key) ?? 0; seen.set(key, k + 1);
       const bend = (k % 2 ? -1 : 1) * (0.5 + 0.5 * Math.floor(k / 2)) * (route[i - 1].id < route[i].id ? 1 : -1);
-      edges += `<path class="route${i === S.step ? " cur" : ""}" d="${curve(a, b, bend)}" marker-end="url(#arrow-route)"/>`;
+      const d = curve(a, b, bend);
+      edges += `<path class="route${i === S.step ? " cur" : ""}${S.sel === "hop:" + i ? " cur" : ""}" d="${d}" marker-end="url(#arrow-route)"/><path class="hit" data-hop="${i}" d="${d}"><title>Step ${i} to step ${i + 1}: ${esc(VIA[route[i].via] ?? "")}. Click for what passes.</title></path>`;
     }
     const byNode = new Map(); route.forEach((r) => { if (!r.id) return; if (!byNode.has(r.id)) byNode.set(r.id, []); byNode.get(r.id).push(r.i); });
     for (const [id, list] of byNode) {
@@ -591,6 +599,8 @@ function inspectNode(id, view) {
     if (pm) h += `<h3>In the proposed architecture</h3><p>${homeId === n.id ? (pm.data.status === "unchanged" ? "Stays where it is." : `Stays, and ${esc(STATUS[pm.data.status])}: ${esc(firstSentence(pm.data.plain))}`) : `Its code moves into <button class="link" data-goproposed="${esc(homeId)}">${esc(homeId.slice(2))}</button>.`} <button class="link" data-goproposed="${esc(homeId)}">Show it</button></p>`;
   }
   if (n.children.length && n.type !== "concept") h += `<h3>Inside</h3><ul class="list">${n.children.map((c) => `<li>${linkTo(c.id, c.type === "function" ? c.data.fn : shortName(c))}${c.data.plain ? `<div class="small muted">${esc(firstSentence(c.data.plain))}</div>` : ""}</li>`).join("")}</ul>`;
+  const touching = (DATA.interfaces ?? []).filter((x) => [...(x.from ?? []), ...(x.to ?? [])].some((m) => isInside(m, id)));
+  if (touching.length) h += `<h3>Interfaces</h3><ul class="list">${touching.slice(0, 24).map((x) => `<li><button class="link" data-iface="${esc(x.id)}">${esc(x.name)}</button> <span class="muted small">${esc(MECH[x.mechanism] ?? "")}</span></li>`).join("")}</ul>`;
   if (view) { const c = connections(view, id); if (c) h += `<h3>Connections from here</h3>${c}`; }
   const pw = pathwaysThrough(id); if (pw) h += `<h3>Pathways through here</h3><ul class="list">${pw}</ul>`;
   const pr = prsTouching(id); if (pr) h += `<h3>Changed by</h3><ul class="list">${pr}</ul>`;
@@ -622,8 +632,11 @@ function inspectEdge(e) {
   const A = endNode(e.from), B = endNode(e.to);
   let h = `<div class="kicker"><span>connection</span> <span class="chip">${esc(edgeKindLabel(e))}</span>${e.broken ? ` <span class="chip warn">breaks a proposed rule</span>` : ""}</div><h2>${esc(shortName(A))} → ${esc(shortName(B))}</h2>`;
   h += `<p class="small muted">From ${linkTo(A.id)} to ${linkTo(B.id)}</p>`;
+  const ifaces = M.kind === "current" ? edgeInterfaces(e) : [];
+  h += `<p>${esc(plainLine(e, A, B, ifaces))}</p>`;
+  if (ifaces.length) h += `<h3>What passes through, and why</h3>${ifaces.map((x, k) => interfaceCard(x, k === 0)).join("")}`;
   const kinds = new Set(e.src.flatMap((s) => s.kinds));
-  h += `<h3>What kind of connection</h3><ul class="list">${[...kinds].map((k) => `<li class="small"><strong>${esc(VIA[k] ? `At runtime: ${VIA[k]}` : k.replace("_", " "))}.</strong> ${esc(KIND[k] ?? (VIA[k] ? "A traced pathway passes control or data this way." : ""))}</li>`).join("")}</ul>`;
+  h += `<h3>Kinds of link on this line</h3><ul class="list">${[...kinds].map((k) => `<li class="small"><strong>${esc(VIA[k] ? `At runtime: ${VIA[k]}` : k.replace("_", " "))}.</strong> ${esc(KIND[k] ?? (VIA[k] ? "A traced pathway passes control or data this way." : ""))}</li>`).join("")}</ul>`;
   if (M.kind === "proposed") {
     const natures = e.src.filter((s) => s.nature); if (natures.length) h += `<h3>What the design intends</h3>${natures.map((s) => `<p>${esc(s.nature)}</p>`).join("")}`;
     const rules = [...new Set(e.src.flatMap((s) => s.breaks ?? []))].map((id) => DATA.proposed.rules.find((r) => r.id === id)).filter(Boolean);
@@ -643,6 +656,54 @@ function inspectEdge(e) {
   if (pairs.length > 40) h += `<p class="small muted">Showing the 40 strongest of ${pairs.length}. Open either end to narrow it down.</p>`;
   return h;
 }
+const interfaceById = new Map((DATA.interfaces ?? []).map((i) => [i.id, i]));
+const MECH = { call: "a direct function call", channel: "a message on a queue between threads", "core-rpc": "a request to Herdr Core", "core-stream": "a stream of frames from Herdr Core", "script-call": "a call between the script engine and Rust", ipc: "messages to another program", process: "starting another program", file: "a file both sides read or write", render: "drawing", build: "a build step" };
+function shapeBlock(part, label) {
+  if (!part) return "";
+  return `<div class="lbl">${esc(label)}</div><p class="small">${esc(part.plain ?? "")}</p>${part.shape ? `<pre class="shape">${esc(String(part.shape).trimEnd())}</pre>` : ""}${part.typeAt ? codeBlock(part.typeAt, "Where this shape is defined") : ""}`;
+}
+function interfaceCard(i, open = true) {
+  const ends = (list) => list.map((id) => (node(id) ? `<button class="link" data-open="${esc(id)}">${esc(fullName(node(id)))}</button>` : esc(id))).join(", ");
+  let h = `<div class="iface"><h4>${esc(i.name)}</h4><div class="small muted">${ends(i.from ?? [])} → ${ends(i.to ?? [])} · ${esc(MECH[i.mechanism] ?? i.mechanism ?? "")}</div>`;
+  h += `<div class="lbl">In plain terms</div><p class="small">${esc(i.nature ?? "")}</p>`;
+  h += `<details class="code"${open ? " open" : ""}><summary>What passes through</summary>${shapeBlock(i.request, "What is sent")}${shapeBlock(i.response, "What comes back")}</details>`;
+  if (i.errors) h += `<div class="lbl">When it fails</div><p class="small">${esc(i.errors)}</p>`;
+  if (i.limits) h += `<div class="lbl">Limits</div><p class="small">${esc(i.limits)}</p>`;
+  if (i.why) h += `<div class="lbl">Why it is built this way${i.inferred ? ` <span class="chip inferred">inferred</span>` : ""}</div><p class="small">${esc(i.why)}</p>`;
+  if (i.observed?.length) h += `<div class="lbl">Seen in a run</div>${i.observed.map((o) => `<details class="code"><summary><code>${esc(o.method)}</code> sent ${o.count} time${o.count === 1 ? "" : "s"} in run ${esc(o.run)}</summary><pre class="shape">${esc(JSON.stringify(o.request, null, 1))}</pre>${o.result !== undefined ? `<div class="small muted">Reply</div><pre class="shape">${esc(JSON.stringify(o.result, null, 1))}</pre>` : ""}</details>`).join("")}`;
+  if (i.steps?.length) h += `<div class="lbl">Pathway steps that use it</div><div class="small">${i.steps.map((sid) => { for (const p of DATA.pathways) { const k = p.steps.findIndex((x) => x.id === sid); if (k >= 0) return `<button class="link" data-path="${esc(p.id)}" data-step="${k}">${esc(p.name)}, step ${k + 1}</button>`; } return ""; }).filter(Boolean).join("; ")}</div>`;
+  if (i.at) h += codeBlock(i.at, "Where it crosses the boundary");
+  return h + `</div>`;
+}
+function plainLine(e, A, B, ifaces) {
+  const kinds = new Set(e.src.flatMap((s) => s.kinds));
+  if (ifaces.length) return `${shortName(A)} and ${shortName(B)} talk through ${ifaces.length === 1 ? "one interface" : `${ifaces.length} interfaces`}: ${ifaces.map((i) => i.name.charAt(0).toLowerCase() + i.name.slice(1)).join("; ")}.`;
+  if (e.category === "code") return `Code in ${shortName(A)} refers to types or functions defined in ${shortName(B)} (${e.count} reference${e.count === 1 ? "" : "s"}). This is a compile-time dependency: nothing is sent along it at runtime by itself.`;
+  if (e.category === "runtime") return `At runtime, control or data moves from ${shortName(A)} to ${shortName(B)} by ${[...kinds].map((k) => VIA[k] ?? k).join(", ")}.`;
+  if (e.category === "build") return `At build time, ${shortName(A)} produces or reads ${shortName(B)}.`;
+  return edgeKindLabel(e);
+}
+function edgeInterfaces(e) {
+  const svg = S.tab === "proposals" ? $("pmap") : $("map");
+  const same = (svg._edges ?? []).filter((x) => x.from === e.from && x.to === e.to);
+  const ids = new Set(same.flatMap((x) => x.src.flatMap((s) => s.interfaces ?? [])));
+  return [...ids].map((id) => interfaceById.get(id)).filter(Boolean);
+}
+function inspectHop(i) {
+  const steps = activeSteps(); const a = steps[i - 1], b = steps[i]; if (!a || !b) return "";
+  const p = pathwayById.get(S.pathway);
+  let h = `<div class="kicker"><span>hop in a pathway</span> <span class="chip">${esc(VIA[b.via] ?? b.via ?? "")}</span></div><h2>Step ${i} → step ${i + 1}</h2><p class="small muted">${esc(p.name)}</p>`;
+  h += `<p>From <code>${esc(a.fn ?? "")}</code> in ${linkTo(a.module)} on ${esc(RUNS[a.runs_on] ?? a.runs_on ?? "")} to <code>${esc(b.fn ?? "")}</code> in ${linkTo(b.module)} on ${esc(RUNS[b.runs_on] ?? b.runs_on ?? "")}.</p>`;
+  if (b.carries) h += `<h3>What passes</h3><p>${esc(b.carries)}</p>`;
+  h += `<h3>What happens on arrival</h3>${layered(b.says, 2)}`;
+  const ifaces = (DATA.interfaces ?? []).filter((x) => (x.steps ?? []).includes(b.id) || ((x.from ?? []).includes(a.module) && (x.to ?? []).includes(b.module)));
+  if (ifaces.length) h += `<h3>The interface it uses</h3>${ifaces.map((x) => interfaceCard(x)).join("")}`;
+  h += `<p><button class="link" data-step="${i}">Show step ${i + 1} in full</button></p>`;
+  return h;
+}
+function inspectInterface(i) {
+  return `<div class="kicker"><span>interface</span></div><h2>${esc(i.name)}</h2>${interfaceCard(i)}`;
+}
 function inspectFunction(n) {
   let h = kicker(n) + `<h2>${esc(n.data.fn)}</h2><p>${esc(n.data.plain ?? "")}</p>${codeBlock(n.data.at)}`;
   const steps = []; for (const p of DATA.pathways) p.steps.forEach((s, i) => { if (s.function === n.id) steps.push(`<li><button class="link" data-path="${esc(p.id)}" data-step="${i}">${esc(p.name)}, step ${i + 1}</button>${observedChip(s)}<div class="small muted">${esc(firstSentence(s.says))}</div></li>`); });
@@ -655,6 +716,7 @@ function startHere() {
   let h = `<h2>Start here</h2><p class="muted">Click a piece to open it and see what is inside: concepts, then crates and packages, features, modules and functions. Click any line to see what connects two parts, down to the source lines. Dashed boxes around the edge are parts outside the one you opened.</p>`;
   h += `<h3>The pieces</h3><ul class="list">${DATA.concepts.map((c) => `<li>${linkTo(c.id, c.name)}<div class="small muted">${esc(c.plain)}</div></li>`).join("")}</ul>`;
   h += pathwayGroups().map(([label, list]) => `<h3>${esc(label)}</h3><ul class="list">${list.map((p) => `<li><button class="link" data-path="${esc(p.id)}" data-step="0">${esc(p.name)}</button>${runSummary(p)}<div class="small muted">${esc(p.trigger)}</div></li>`).join("")}</ul>`).join("");
+  if (DATA.interfaces?.length) { const groups = {}; for (const x of DATA.interfaces) (groups[x.mechanism] ??= []).push(x); h += `<h3>Interfaces between the parts</h3>${Object.entries(groups).map(([m, list]) => `<p class="small muted">${esc((MECH[m] ?? m).replace(/^./, (c) => c.toUpperCase()))}</p><ul class="list">${list.map((x) => `<li><button class="link" data-iface="${esc(x.id)}">${esc(x.name)}</button></li>`).join("")}</ul>`).join("")}`; }
   if (DATA.entryPoints?.length) h += `<h3>Where execution enters, in start-up order</h3><ol class="steps">${DATA.entryPoints.map((e, i) => `<li style="cursor:default"><span class="n">${i + 1}</span><span class="t"><strong>${esc(e.who)}</strong>: <code>${esc(e.fn)}</code><br>${esc(e.plain)}${codeBlock(e.at)}</span></li>`).join("")}</ol>`;
   h += `<h3>Words this app uses</h3><dl class="grid2">${DATA.glossary.map((g) => `<dt>${esc(g.term)}</dt><dd>${esc(g.plain)}</dd>`).join("")}</dl>`;
   return h;
@@ -693,6 +755,9 @@ function inspectPathway() {
   const parts = sentences(s.says); h += `<p><strong>${S.step + 1}. ${esc(parts[0] ?? "")}</strong></p>`; if (parts.length > 1) h += `<p class="small">${esc(parts.slice(1).join(" "))}</p>`;
   if (s.fn) h += `<p class="small"><code>${esc(s.fn)}</code> in <button class="link" data-open="${esc(s.module)}">${esc(mod ? fullName(mod) : s.module)}</button></p>`;
   if (s.carries) h += `<p class="small"><span class="muted">Carries:</span> ${esc(s.carries)}</p>`;
+  const stepIfaces = (DATA.interfaces ?? []).filter((x) => (x.steps ?? []).includes(s.id));
+  if (stepIfaces.length) h += `<p class="small">Arrives over: ${stepIfaces.map((x) => `<button class="link" data-iface="${esc(x.id)}">${esc(x.name)}</button>`).join("; ")}</p>`;
+  if (S.step > 0) h += `<p class="small"><button class="link" data-hop="${S.step}">What passes from step ${S.step} to step ${S.step + 1}</button></p>`;
   h += `${observedLine(s)}${codeBlock(s.at)}</div>`;
   if (s.fails) h += `<div class="box fails"><span class="small"><strong>If it fails or is refused:</strong> ${esc(s.fails)}</span></div>`;
   for (const b of (p.better ?? []).filter((b) => b.step === s.id)) h += `<div class="box idea"><span class="chip proposal">idea</span>${b.inferred ? ` <span class="chip inferred">inferred</span>` : ""}<p class="small"><strong>${esc(b.idea)}</strong> ${esc(b.why)}</p></div>`;
@@ -773,7 +838,9 @@ function render() {
   const selEdge = S.sel?.startsWith("edge:") ? svg._edges?.find((e) => e.key === S.sel.slice(5)) : null;
   const selNode = S.sel && !S.sel.startsWith("edge:") ? node(S.sel) : null;
   let h;
-  if (selEdge) h = inspectEdge(selEdge);
+  if (S.sel?.startsWith("hop:") && isMap && S.pathway) h = inspectHop(Number(S.sel.slice(4)));
+  else if (S.sel?.startsWith("iface:") && interfaceById.get(S.sel.slice(6))) h = inspectInterface(interfaceById.get(S.sel.slice(6)));
+  else if (selEdge) h = inspectEdge(selEdge);
   else if (selNode) h = selNode.type === "function" ? inspectFunction(selNode) : inspectNode(selNode.id, view);
   else if (isMap && S.pathway) h = inspectPathway();
   else if (isMap && S.pr) h = inspectChanges() + (f ? hr + inspectNode(f, view) : "");
@@ -835,6 +902,8 @@ function renderAbout() {
   <tr><td>Crates, modules, scripts and the code links between them (${m.counts.modules} modules)</td><td>The architecture-map extractor, rules ${esc(m.observedGenerator.rules)}</td><td>Regenerated from the commit every build.</td></tr>
   <tr><td>Pull requests and commits</td><td>Git history since <code>${esc(DATA.history.from)}</code></td><td>Regenerated every build.</td></tr>
   <tr><td>Concepts, features, descriptions, entry points, reasons, pathways, proposals and the proposed architecture</td><td><code>experiments/app-atlas/layer/*.yaml</code></td><td>Every claim points at source text. The build finds each line again and flags any that moved or changed.</td></tr>
+  <tr><td>Interfaces: what each connection carries and why</td><td><code>experiments/app-atlas/layer/interfaces.yaml</code></td><td>Field names come from the code; each shape links to where it is defined.</td></tr>
+  <tr><td>Real messages to Herdr Core</td><td>Bytes recorded during traced runs, decoded by <code>trace/decode_core.py</code> into <code>runs/*-core.json</code>, with personal paths and names removed</td><td>Each example names its run.</td></tr>
   <tr><td>"Seen running" marks on pathway steps</td><td>Runs of the real app under a debugger in a private display, summarised in <code>experiments/app-atlas/runs/</code></td><td>Each run records the binary and commit it used.</td></tr></table>`;
   h += `<h2>Source anchors</h2><p>${Object.keys(DATA.anchors).length} anchors: ${Object.entries(statusCount).map(([k, v]) => `${v} ${esc(k)}`).join(", ")}.</p>`;
   h += DATA.problems.length ? `<table><tr><th>Problem</th><th>Where</th></tr>${DATA.problems.map((p) => `<tr><td>${esc(p.kind)}</td><td><code>${esc(p.id)}</code></td></tr>`).join("")}</table>` : `<p>No problems: every anchor resolved to exactly one line, and every module has a feature.</p>`;
@@ -855,8 +924,10 @@ function open(id) {
 function up() { const f = focusId(); if (!f) return; S.focus[S.tab] = node(f).parent ?? null; S.sel = null; render(); }
 function goTab(tab, target) { S.tab = tab; M = MODELS[tab === "proposed" ? "proposed" : "map"]; S.sel = null; if (target !== undefined) { const n = node(target); if (n) { S.focus[tab] = n.children.length ? target : n.parent; if (!n.children.length) S.sel = target; } } render(); }
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-open],[data-up],[data-edge],[data-path],[data-step],[data-stepmove],[data-showstep],[data-clearpath],[data-branch],[data-pr],[data-commit],[data-seq],[data-proposal],[data-goproposed],[data-gocurrent],[data-goproposal],.leaf,.stub,.frame-label,.badge");
+  const t = e.target.closest("[data-hop],[data-iface],[data-open],[data-up],[data-edge],[data-path],[data-step],[data-stepmove],[data-showstep],[data-clearpath],[data-branch],[data-pr],[data-commit],[data-seq],[data-proposal],[data-goproposed],[data-gocurrent],[data-goproposal],.leaf,.stub,.frame-label,.badge");
   if (!t) return; const ds = t.dataset;
+  if (ds.hop !== undefined) { S.sel = `hop:${ds.hop}`; return render(); }
+  if (ds.iface) { if (S.tab !== "map") { S.tab = "map"; M = MODELS.map; } S.sel = `iface:${ds.iface}`; return render(); }
   if (ds.open !== undefined) return open(ds.open);
   if (ds.up) return up();
   if (ds.edge !== undefined) { const svg = S.tab === "proposals" ? $("pmap") : $("map"); const edge = svg._edges?.[Number(ds.edge)]; if (edge) { if (S.tab === "proposals") { S.tab = "map"; S.focus.map = commonAncestor((DATA.proposals.find((x) => x.id === S.proposal)?.today_nodes ?? []).filter((id) => MODELS.map.T.has(id))); } S.sel = `edge:${edge.key}`; render(); } return; }
@@ -864,7 +935,7 @@ document.addEventListener("click", (e) => {
   if (ds.gocurrent) return goTab("map", ds.gocurrent);
   if (ds.goproposal) { S.tab = "proposals"; S.proposal = ds.goproposal; return render(); }
   if (ds.path !== undefined) { S.tab = "map"; M = MODELS.map; S.pathway = ds.path || null; S.step = Number(ds.step || 0); S.branch = null; S.sel = null; S._refit = Date.now(); return render(); }
-  if (ds.stepmove) { const n = activeSteps().length; S.step = Math.min(n - 1, Math.max(0, S.step + Number(ds.stepmove))); return render(); }
+  if (ds.stepmove) { const n = activeSteps().length; S.step = Math.min(n - 1, Math.max(0, S.step + Number(ds.stepmove))); if (S.sel?.startsWith("hop:")) S.sel = null; return render(); }
   if (ds.showstep) { const s = activeSteps()[S.step]; const m = s && node(s.module); if (m) { S.focus.map = m.children.length ? m.id : m.parent; S._refit = Date.now(); } return render(); }
   if (ds.clearpath !== undefined) { S.pathway = null; S.seq = false; return render(); }
   if (ds.branch !== undefined) { S.branch = ds.branch === "" ? null : Number(ds.branch); S.step = Math.min(S.step, activeSteps().length - 1); return render(); }
@@ -872,14 +943,14 @@ document.addEventListener("click", (e) => {
   if (ds.commit) { S.commit = ds.commit; $("commitsel").value = ds.commit; return render(); }
   if (ds.seq !== undefined) { S.seq = ds.seq === "1"; return render(); }
   if (ds.proposal) { S.proposal = ds.proposal; return render(); }
-  if (ds.step !== undefined && S.pathway) { S.step = Number(ds.step); return render(); }
+  if (ds.step !== undefined && S.pathway) { S.step = Number(ds.step); if (S.sel?.startsWith("hop:")) S.sel = null; return render(); }
   if (ds.id) { if (S.tab === "proposals") return goTab("map", ds.id); return open(ds.id); }
 });
 document.addEventListener("keydown", (e) => {
   const t = e.target.closest?.(".leaf,.stub,.pcard");
   if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); if (t.dataset.proposal) { S.proposal = t.dataset.proposal; return render(); } if (t.dataset.step !== undefined && S.pathway) { S.step = Number(t.dataset.step); return render(); } open(t.dataset.id); setTimeout(() => document.querySelector("#map .leaf")?.focus(), 0); return; }
   if (e.target.matches("input,select,textarea")) return;
-  if (S.pathway && S.tab === "map" && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); const n = activeSteps().length; S.step = Math.min(n - 1, Math.max(0, S.step + (e.key === "ArrowRight" ? 1 : -1))); return render(); }
+  if (S.pathway && S.tab === "map" && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); const n = activeSteps().length; S.step = Math.min(n - 1, Math.max(0, S.step + (e.key === "ArrowRight" ? 1 : -1))); if (S.sel?.startsWith("hop:")) S.sel = null; return render(); }
   if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); if (S.sel) S.sel = null; else if (S.pathway && S.tab === "map") { S.pathway = null; S.seq = false; } else if (S.pr && S.tab === "map") { S.pr = ""; S.commit = ""; } else return up(); return render(); }
   if (e.key === "/") { e.preventDefault(); $("find").focus(); }
 });
