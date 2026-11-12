@@ -1,6 +1,7 @@
 import argparse
 import importlib
 import runpy
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ ROUTES = {
 def main():
     parser = argparse.ArgumentParser(
         description="Choose one proving route. Add --help after a route for its driver options.",
+        epilog="Rust migration: --foundation --rust --check-lifecycle or --doctor. See tests/native/README.md.",
         add_help=False,
     )
     routes = parser.add_mutually_exclusive_group(required=True)
@@ -28,6 +30,21 @@ def main():
         return
     selected, remaining = parser.parse_known_args(arguments)
     root = Path(__file__).resolve().parent
+    if "--rust" in remaining:
+        if selected.route != "--foundation":
+            parser.error("Rust verification requires --foundation")
+        remaining.remove("--rust")
+        verifier = root / "tests/native/target/debug/voyager-verification"
+        if not verifier.is_file():
+            parser.error("Build the verifier with cargo build --manifest-path tests/native/Cargo.toml --locked")
+        mode = "run"
+        for flag, command in (("--doctor", "doctor"), ("--check-lifecycle", "check-lifecycle")):
+            if flag in remaining:
+                if mode != "run":
+                    parser.error("Choose one Rust verification command")
+                remaining.remove(flag)
+                mode = command
+        raise SystemExit(subprocess.run([str(verifier), mode, *remaining]).returncode)
     folder, module = ROUTES[selected.route]
     directory = root / folder
     sys.path.insert(0, str(directory))
