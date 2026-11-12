@@ -922,6 +922,29 @@ function open(id) {
   render();
 }
 function up() { const f = focusId(); if (!f) return; S.focus[S.tab] = node(f).parent ?? null; S.sel = null; render(); }
+// The same place in the other view: shared ids map directly; a moved module maps to its new home
+// (or back to the code it comes from); anything without a counterpart falls back to its nearest parent.
+function equivalent(id, to) {
+  if (!id) return null;
+  const target = MODELS[to].T, source = MODELS[to === "proposed" ? "map" : "proposed"].T;
+  let current = id;
+  while (current) {
+    if (target.has(current)) return current;
+    if (to === "proposed" && DATA.proposed.homes[current] && target.has(DATA.proposed.homes[current])) return DATA.proposed.homes[current];
+    if (to === "map") { const p = DATA.proposed.modules.find((m) => m.id === current); const back = p && [...(p.primary ?? []), ...(p.from ?? [])].find((x) => target.has(x)); if (back) return back; }
+    current = source.get(current)?.parent ?? null;
+  }
+  return null;
+}
+function carryPlace(to) {
+  const from = to === "proposed" ? "map" : "proposed";
+  const place = S.sel && !S.sel.includes(":") ? null : S.sel && MODELS[from].T.has(S.sel) ? S.sel : S.focus[from];
+  const id = equivalent(place, to);
+  const n = id ? MODELS[to].T.get(id) : null;
+  if (!n) { S.focus[to] = null; S.sel = null; return; }
+  S.focus[to] = n.children.length ? n.id : n.parent ?? null;
+  S.sel = n.children.length ? null : n.id;
+}
 function goTab(tab, target) { S.tab = tab; M = MODELS[tab === "proposed" ? "proposed" : "map"]; S.sel = null; if (target !== undefined) { const n = node(target); if (n) { S.focus[tab] = n.children.length ? target : n.parent; if (!n.children.length) S.sel = target; } } render(); }
 document.addEventListener("click", (e) => {
   const t = e.target.closest("[data-hop],[data-iface],[data-open],[data-up],[data-edge],[data-path],[data-step],[data-stepmove],[data-showstep],[data-clearpath],[data-branch],[data-pr],[data-commit],[data-seq],[data-proposal],[data-goproposed],[data-gocurrent],[data-goproposal],.leaf,.stub,.frame-label,.badge");
@@ -969,7 +992,12 @@ function init() {
   $("find").addEventListener("change", (e) => { const q = e.target.value.trim().toLowerCase(); if (!q) return; const all = [...M.T.values()]; const name = (x) => (x.type === "function" ? x.data.fn : fullName(x)).toLowerCase(); const n = all.find((x) => name(x) === q) ?? all.find((x) => x.type !== "concept" && name(x).includes(q)); if (n) open(n.id); });
   const active = () => ($("map").hasAttribute("hidden") ? $("seq") : $("map"));
   $("zin").onclick = () => zoomAt(active(), 1 / 1.3); $("zout").onclick = () => zoomAt(active(), 1.3); $("zfit").onclick = () => fit(active()); $("pzfit").onclick = () => fit($("pmap"));
-  for (const t of ["map", "proposed", "proposals", "about"]) $(`tab-${t}`).onclick = () => { S.tab = t; S.sel = null; render(); };
+  for (const t of ["map", "proposed", "proposals", "about"]) $(`tab-${t}`).onclick = () => {
+    const leaving = S.tab;
+    if ((t === "map" || t === "proposed") && (leaving === "map" || leaving === "proposed") && t !== leaving) carryPlace(t);
+    else S.sel = null;
+    S.tab = t; render();
+  };
   $("theme").onclick = () => { const r = document.documentElement; const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("atlas-theme", r.dataset.theme); } catch {} };
   try { const t = localStorage.getItem("atlas-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
   readHash(); if (S.pr) fillCommits();
