@@ -202,3 +202,5 @@ Herdr Core was inspected at its 0.1.19 source revision
 `hc connect` can autostart; the adapter instead uses the published plain JSON-RPC
 socket protocol with no start behavior. Herdr App guidance was inspected at
 `1581a587919dddd6f1efd5f78eb542c4b2b02cb5`. Upstream approval policies remain upstream.
+
+The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
