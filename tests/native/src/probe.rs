@@ -54,7 +54,10 @@ pub fn run(path: &Path, mode: &str) -> Result<()> {
                 let Some(end) = pending.iter().position(|b| *b == b'M') else {
                     break;
                 };
-                let up = pending[3..end].starts_with(b"64;");
+                let Some(up) = wheel_button(&pending[3..end]) else {
+                    pending.drain(..=end);
+                    continue;
+                };
                 (end + 1, up)
             } else if pending.starts_with(b"\x1b[A") || pending.starts_with(b"\x1bOA") {
                 (3, true)
@@ -73,4 +76,41 @@ pub fn run(path: &Path, mode: &str) -> Result<()> {
         path,
         &json!({"position":position,"pid":std::process::id(),"ended":true}),
     )
+}
+
+fn wheel_button(payload: &[u8]) -> Option<bool> {
+    let fields: Vec<_> = payload.split(|byte| *byte == b';').collect();
+    if fields.len() != 3
+        || fields
+            .iter()
+            .any(|field| field.is_empty() || !field.iter().all(u8::is_ascii_digit))
+    {
+        return None;
+    }
+    match fields[0] {
+        b"64" => Some(true),
+        b"65" => Some(false),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wheel_button;
+
+    #[test]
+    fn only_valid_wheel_reports_move_the_probe() {
+        assert_eq!(wheel_button(b"64;3;2"), Some(true));
+        assert_eq!(wheel_button(b"65;3;2"), Some(false));
+        for invalid in [
+            b"0;3;2".as_slice(),
+            b"66;3;2",
+            b"65;x;2",
+            b"64;3;",
+            b"64;3;2;4",
+            b"",
+        ] {
+            assert_eq!(wheel_button(invalid), None, "malformed report {invalid:?}");
+        }
+    }
 }
