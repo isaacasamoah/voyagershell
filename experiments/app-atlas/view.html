@@ -161,6 +161,9 @@ pre.shape { background: var(--code-bg); border-radius: 8px; padding: 8px 10px; f
 .chg text { fill: #fff; font-size: 10px; font-weight: 650; }
 .prob { fill: none; stroke: var(--problem); stroke-width: 2.5; stroke-dasharray: 5 3; pointer-events: none; }
 .prop rect.body { stroke-dasharray: 6 4; }
+.edge.planned { stroke: var(--proposed); stroke-dasharray: 5 4; }
+.cmp rect { fill: var(--c-amber); }
+.cmp text { fill: #fff; font-size: 10px; font-weight: 650; }
 @media (max-width: 860px) {
   main { flex-direction: column; }
   .stage { min-height: 62vh; }
@@ -190,7 +193,7 @@ pre.shape { background: var(--code-bg); border-radius: 8px; padding: 8px 10px; f
   <label id="pathway-wrap">Pathway <select id="pathway"></select></label>
   <label id="pr-wrap">Changes <select id="pr"></select></label>
   <label id="commit-wrap" hidden>Commit <select id="commitsel"></select></label>
-  <label id="today-wrap" hidden><input type="checkbox" id="today"> Today's links</label>
+  <label id="today-wrap" hidden><input type="checkbox" id="today"> Compare with code</label>
   <label>Find <input type="search" id="find" list="findlist" placeholder="module or function"></label>
   <datalist id="findlist"></datalist>
 </div>
@@ -226,6 +229,9 @@ const LANES = [{ id: "os", name: "You / OS" }, { id: "ui-thread", name: "UI thre
 const GRID = [["concept:you", "concept:desktop", "concept:app", "concept:core"], [null, "concept:scripts", "concept:contract", "concept:programs"]];
 const TYPE_NAME = { concept: "concept", container: "crate or package", slice: "feature", module: "module", function: "function" };
 const STATUS = { new: "new", changed: "changes", split: "split up", merged: "merged", moved: "moved", unchanged: "stays as it is" };
+const COMPARE = { matched: "built as planned", changed: "built, needs changes", moved: "code exists elsewhere", missing: "not built yet", unplanned: "not in the plan" };
+const comparisonPart = new Map((DATA.comparison?.parts ?? []).map((p) => [p.id, p]));
+const comparing = () => S.tab === "proposed" && S.today && DATA.comparison;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const $ = (id) => document.getElementById(id);
 const pathwayById = new Map(DATA.pathways.map((p) => [p.id, p]));
@@ -339,14 +345,16 @@ function computeView(focus) {
   const touch = (key, dir) => { if (!key?.startsWith("stub:")) return; const s = stubs.get(key) ?? { id: key, target: key.slice(5), into: 0, from: 0 }; s[dir] += 1; stubs.set(key, s); };
   const agg = new Map();
   const showToday = M.kind === "proposed" && S.today;
+  const plannedMissing = new Set((DATA.comparison?.links ?? []).filter((l) => l.status === "missing").map((l) => `${l.from}|${l.to}`));
   for (const e of M.edges) {
-    if (M.kind === "proposed" && e.category === "today" && !showToday) continue;
+    if (M.kind === "proposed" && e.category === "today" && (!showToday || !e.breaks?.length)) continue;
     const a = endpoint(e.from), b = endpoint(e.to);
     if (!a || !b || a === b) continue;
     if (a.startsWith("stub:") && b.startsWith("stub:")) continue;
     const broken = Boolean(e.breaks?.length);
     const key = `${e.category}${broken ? "!" : ""}|${a}|${b}`;
-    const g = agg.get(key) ?? { key, from: a, to: b, category: e.category, broken, count: 0, src: [] };
+    const planned = showToday && e.category === "proposed" && plannedMissing.has(`${e.from}|${e.to}`);
+    const g = agg.get(key) ?? { key, from: a, to: b, category: e.category, broken, planned, count: 0, src: [] };
     g.count += e.count; g.src.push(e); agg.set(key, g);
     touch(a, "from"); touch(b, "into");
   }
@@ -366,9 +374,10 @@ function computeView(focus) {
 // ---------- drawing ----------
 function wrap(text, max) { const out = []; let line = ""; for (const w of String(text ?? "").split(/\s+/)) { if ((line + " " + w).trim().length > max) { if (line) out.push(line); line = w; } else line = (line + " " + w).trim(); } if (line) out.push(line); return out; }
 function statusOf(n) { return M.kind === "proposed" && n?.type === "module" ? n.data.status : null; }
+function compareStatus(n) { return comparing() && n?.type === "module" ? comparisonPart.get(n.id)?.status ?? null : null; }
 function leafSvg(n, b, opts) {
-  const col = conceptColour(n.id), d = n.data, st = statusOf(n);
-  const isNew = st === "new";
+  const col = conceptColour(n.id), d = n.data, cs = compareStatus(n), st = cs ? null : statusOf(n);
+  const isNew = st === "new" || cs === "missing";
   let s = `<g class="leaf${isNew ? " prop" : ""}${opts.dim ? " dim" : ""}${S.sel === n.id ? " sel" : ""}" data-id="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(TYPE_NAME[n.type] + ": " + shortName(n))}${n.children.length ? ", opens" : ""}">`;
   s += `<rect class="body" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="${n.type === "concept" || n.type === "container" ? 10 : 7}" fill="color-mix(in srgb, ${col} ${n.type === "concept" ? 14 : 10}%, var(--panel))" stroke="${isNew ? "var(--proposed)" : col}" stroke-width="${isNew ? 2 : n.type === "concept" || n.type === "container" ? 1.6 : 1.2}"/>`;
   if (n.type !== "function") s += `<rect x="${b.x}" y="${b.y + 6}" width="4" height="${b.h - 12}" rx="2" fill="${col}"/>`;
@@ -390,7 +399,8 @@ function leafSvg(n, b, opts) {
   } else if (n.type === "module") {
     const name = shortName(n); const max = Math.round((b.w - 18) / 7.1);
     s += `<text x="${b.x + 10}" y="${b.y + 16}" font-size="12" class="mono" font-weight="600">${esc(name.length > max ? name.slice(0, max - 1) + "…" : name)}</text>`;
-    if (st && st !== "unchanged") s += `<text x="${b.x + 10}" y="${b.y + 32}" font-size="10.5" style="fill:${st === "new" ? "var(--proposed)" : "var(--c-amber)"}">${esc(STATUS[st])}${d.size ? ` · ${d.size.toLocaleString()} lines today` : ""}</text>`;
+    if (cs) s += `<text x="${b.x + 10}" y="${b.y + 32}" font-size="10.5" style="fill:${cs === "missing" ? "var(--proposed)" : cs === "matched" ? "var(--muted)" : "var(--c-amber)"}">${esc(COMPARE[cs])}</text>`;
+    else if (st && st !== "unchanged") s += `<text x="${b.x + 10}" y="${b.y + 32}" font-size="10.5" style="fill:${st === "new" ? "var(--proposed)" : "var(--c-amber)"}">${esc(STATUS[st])}${d.size ? ` · ${d.size.toLocaleString()} lines today` : ""}</text>`;
     else if (d.size) { const w = Math.min(b.w - 60, Math.max(3, Math.sqrt(d.size) * 2.2)); s += `<rect x="${b.x + 10}" y="${b.y + 26}" width="${w}" height="5" rx="2" fill="${col}" opacity=".55"/><text x="${b.x + 14 + w}" y="${b.y + 32}" font-size="9.5" style="fill:var(--muted)">${d.size.toLocaleString()}</text>`; }
     else s += `<text x="${b.x + 10}" y="${b.y + 32}" font-size="10" style="fill:var(--muted)">${esc(d.kind === "external" ? "outside this repo" : d.inline ? "inline module" : d.kind === "host-module" ? "host module" : "")}</text>`;
     if (d.experiment) s += `<text x="${b.x + b.w - 8}" y="${b.y + 14}" font-size="9.5" text-anchor="end" style="fill:var(--c-amber)">experiment</text>`;
@@ -458,7 +468,7 @@ function draw(svg, opts = {}) {
     const inner = view.focus && !e.from.startsWith("stub:") && !e.to.startsWith("stub:") && view.edges.length > 24;
     const w = Math.min(3.6, 0.9 + Math.log2(1 + e.count) * 0.45);
     const d = curve(a, b, e.category === "runtime" || e.category === "today" ? 0.5 : 0);
-    const cls = `edge ${e.category}${e.broken ? " broken" : ""}${inner ? " inner" : ""}${route ? " under" : ""}${S.sel === "edge:" + e.key ? " sel" : ""}${!route && focusing && !(hot.has(e.from) || hot.has(e.to)) ? " dim" : ""}`;
+    const cls = `edge ${e.category}${e.broken ? " broken" : ""}${e.planned ? " planned" : ""}${inner ? " inner" : ""}${route ? " under" : ""}${S.sel === "edge:" + e.key ? " sel" : ""}${!route && focusing && !(hot.has(e.from) || hot.has(e.to)) ? " dim" : ""}`;
     edges += `<path class="${cls}" data-a="${esc(e.from)}" data-b="${esc(e.to)}" d="${d}" stroke-width="${w}" marker-end="url(#arrow-${e.broken ? "broken" : e.category})"/><path class="hit" data-edge="${i}" d="${d}"><title>${esc(edgeTitle(e))}. Click for details.</title></path>`;
   });
   if (route) {
@@ -478,6 +488,20 @@ function draw(svg, opts = {}) {
     }
   }
   if (changes) for (const [id, t] of changes) { const b = pos.get(id); if (!b) continue; const label = `+${t.add} −${t.del}`; const w = label.length * 6 + 12; marks += `<g class="chg"><rect x="${b.x + 6}" y="${b.y + b.h - 9}" width="${w}" height="17" rx="8"/><text x="${b.x + 6 + w / 2}" y="${b.y + b.h + 3}" text-anchor="middle">${label}</text></g>`; }
+  if (comparing()) {
+    const brokenEnds = (M.edges ?? []).filter((e) => e.category === "today" && e.breaks?.length);
+    for (const [id, b] of pos) {
+      const n = b.stub ? null : node(id); if (!n || n.type === "module" || n.type === "function") continue;
+      const tally = { missing: 0, moved: 0, changed: 0 };
+      const walk = (x) => { if (x.type === "module") { const st = comparisonPart.get(x.id)?.status; if (st in tally) tally[st]++; } x.children.forEach(walk); };
+      walk(n);
+      const breaks = brokenEnds.filter((e) => isInside(e.from, id) || isInside(e.to, id)).length;
+      const words = [tally.missing && `${tally.missing} to build`, tally.moved && `${tally.moved} to move`, tally.changed && `${tally.changed} to change`, breaks && `${breaks} rule break${breaks === 1 ? "" : "s"}`].filter(Boolean);
+      if (!words.length) continue;
+      const label = words.join(" · "); const w = label.length * 5.9 + 14;
+      marks += `<g class="cmp"><rect x="${b.x + b.w - w + 6}" y="${b.y - 9}" width="${w}" height="18" rx="9"/><text x="${b.x + b.w - w / 2 + 6}" y="${b.y + 4}" text-anchor="middle">${esc(label)}</text></g>`;
+    }
+  }
   for (const id of opts.problems ?? []) { const b = pos.get(view.endpoint(id) ?? id); if (b) marks += `<rect class="prob" x="${b.x - 4}" y="${b.y - 4}" width="${b.w + 8}" height="${b.h + 8}" rx="11"/>`; }
   let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
   for (const b of pos.values()) { x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.w); y2 = Math.max(y2, b.y + b.h); }
@@ -615,6 +639,12 @@ function inspectProposed(n, view) {
     else if (sources.length) h += `<h3>Where its code comes from today</h3><ul class="list">${sources.map((id) => { const c = MODELS.map.T.get(id); return `<li><button class="link" data-gocurrent="${esc(id)}">${esc(fullName(c))}</button>${(d.primary ?? []).includes(id) || d.current === id ? "" : ` <span class="muted small">(part of it)</span>`}${c.data.size ? ` <span class="muted small">${c.data.size.toLocaleString()} lines</span>` : ""}</li>`; }).join("")}</ul>`;
     else h += `<p class="small muted">New code; nothing moves into it from today's map.</p>`;
     if (d.proposals?.length) h += `<h3>Comes from these proposals</h3><ul class="list">${d.proposals.map((p) => { const pr = DATA.proposals.find((x) => x.id === p); return `<li><button class="link" data-goproposal="${esc(p)}">${esc(pr?.step ?? "")} ${esc(pr?.title ?? p)}</button></li>`; }).join("")}</ul>`;
+    const cp = comparisonPart.get(n.id);
+    if (cp) {
+      const codeLinks = (cp.code ?? []).map((id) => `<button class="link" data-gocurrent="${esc(id)}">${esc(fullName(MODELS.map.T.get(id)))}</button>`).join(", ");
+      const sentence = { matched: `Built as planned: ${codeLinks}.`, changed: `Exists in the planned place (${codeLinks}) but the plan changes it.`, moved: `The code exists today, but elsewhere: ${codeLinks}. The plan ${esc(cp.how === "merged" ? "merges it here" : cp.how === "split" ? "splits it out of there" : "moves or renames it")}.`, missing: `Not built yet.${cp.absorbs?.length ? ` It will take code from ${cp.absorbs.map((id) => `<button class="link" data-gocurrent="${esc(id)}">${esc(fullName(MODELS.map.T.get(id)))}</button>`).join(", ")}.` : ""}`, unplanned: `In today's code but not in the plan.` }[cp.status] ?? "";
+      h += `<div class="box"><div class="kicker"><span>compared with today's code</span> <span class="chip${cp.status === "missing" ? " new" : cp.status === "matched" ? " seen" : " exp"}">${esc(COMPARE[cp.status])}</span></div><p class="small">${sentence}</p></div>`;
+    }
     const rules = DATA.proposed.rules.filter((r) => (r.from ?? []).some((p) => n.id.startsWith(p)) && !(r.except_from ?? []).some((p) => n.id.startsWith(p)));
     if (rules.length) h += `<h3>Rules it must follow</h3><ul class="list">${rules.map((r) => `<li class="small">${esc(r.plain)}</li>`).join("")}</ul>`;
   } else {
@@ -638,6 +668,12 @@ function inspectEdge(e) {
   const kinds = new Set(e.src.flatMap((s) => s.kinds));
   h += `<h3>Kinds of link on this line</h3><ul class="list">${[...kinds].map((k) => `<li class="small"><strong>${esc(VIA[k] ? `At runtime: ${VIA[k]}` : k.replace("_", " "))}.</strong> ${esc(KIND[k] ?? (VIA[k] ? "A traced pathway passes control or data this way." : ""))}</li>`).join("")}</ul>`;
   if (M.kind === "proposed") {
+    const planned = (DATA.proposed.interfaces ?? []).filter((x) => x.from.some((f) => isInside(f, A.id)) && x.to.some((t) => isInside(t, B.id)));
+    for (const x of planned) {
+      const cmp = (DATA.comparison?.interfaces ?? []).find((c) => c.id === x.id);
+      h += `<h3>Planned interface</h3>${interfaceCard({ ...x, request: x.request, response: x.response, steps: [] })}`;
+      if (cmp) h += `<div class="box"><div class="kicker"><span>compared with today's code</span> <span class="chip${cmp.status === "missing" ? " new" : " exp"}">${cmp.status === "missing" ? "not built yet" : cmp.status === "changed" ? "shape changes" : "same shape"}</span></div>${cmp.replaces ? `<p class="small">Replaces today's <button class="link" data-iface="${esc(cmp.replaces)}">${esc(interfaceById.get(cmp.replaces)?.name ?? cmp.replaces)}</button>.</p>` : `<p class="small">A new interface; nothing like it exists today.</p>`}${cmp.added?.length ? `<p class="small"><strong>Names it adds:</strong> <code>${esc(cmp.added.join(", "))}</code></p>` : ""}${cmp.removed?.length ? `<p class="small"><strong>Names it drops:</strong> <code>${esc(cmp.removed.join(", "))}</code></p>` : ""}<p class="small muted">Compared by the type and field names in the two shapes.</p></div>`;
+    }
     const natures = e.src.filter((s) => s.nature); if (natures.length) h += `<h3>What the design intends</h3>${natures.map((s) => `<p>${esc(s.nature)}</p>`).join("")}`;
     const rules = [...new Set(e.src.flatMap((s) => s.breaks ?? []))].map((id) => DATA.proposed.rules.find((r) => r.id === id)).filter(Boolean);
     if (rules.length) h += `<h3>Rule it breaks</h3>${rules.map((r) => `<p class="small">${esc(r.plain)}</p>`).join("")}<p class="small muted">Today's code does this. The proposed design forbids it, so this link has to change.</p>`;
@@ -727,7 +763,15 @@ function startProposed() {
   let h = `<div class="kicker"><span class="chip proposal">proposal</span></div><h2>The app after all twelve steps</h2><p>The same three crates and one owner thread. Every request goes through one pipeline, the script bridge is generated from one list of operations, and each kind of request lives in its own module. None of this is built.</p>`;
   h += `<p class="small muted">${DATA.proposed.modules.length} modules: ${Object.entries(st).map(([k, v]) => `${v} ${STATUS[k] ?? k}`).join(", ")}. Purple dashed boxes are new. Open a part to see where its code comes from today.</p>`;
   h += `<h3>Rules the design keeps</h3><ul class="list">${DATA.proposed.rules.map((r) => `<li class="small">${esc(r.plain)}</li>`).join("")}</ul>`;
-  h += `<p class="small">Tick <strong>Today's links</strong> to redraw today's code onto this layout. ${broken} of those links break a rule and show in red. They are the work the migration has to do.</p>`;
+  const c = DATA.comparison;
+  if (c) {
+    const sum = c.summary;
+    const list = (status) => c.parts.filter((p) => p.status === status).map((p) => `<li><button class="link" data-goproposed="${esc(p.id)}">${esc(p.id.replace(/^(p|rs|ts):/, "").replace(/^voyager_/, ""))}</button></li>`).join("");
+    h += `<h3>Compared with today's code</h3><p class="small">Tick <strong>Compare with code</strong> to colour every part by how far today's code is from the plan, with counts on each box and today's rule-breaking links in red.</p>`;
+    h += `<dl class="grid2"><dt>Built as planned</dt><dd>${sum.matched} modules</dd><dt>Built, needs changes</dt><dd>${sum.changed}</dd><dt>Code exists elsewhere</dt><dd>${sum.moved}</dd><dt>Not built yet</dt><dd>${sum.missing}</dd><dt>Not in the plan</dt><dd>${sum.unplanned}</dd><dt>Planned links not in code</dt><dd>${sum.links_missing}</dd><dt>Today's links breaking a rule</dt><dd>${sum.links_breaking_rules}</dd><dt>Interfaces that change shape</dt><dd>${sum.interfaces_changed}, plus ${sum.interfaces_missing} new</dd><dt>Stale claims</dt><dd>${sum.stale}</dd></dl>`;
+    for (const [status, title] of [["missing", "Not built yet"], ["moved", "Code exists elsewhere"], ["changed", "Built, needs changes"]]) h += `<details class="code"><summary>${esc(title)}</summary><ul class="list">${list(status)}</ul></details>`;
+    if (c.interfaces?.length) h += `<details class="code"><summary>Planned interface changes</summary><ul class="list">${c.interfaces.map((x) => { const pi = (DATA.proposed.interfaces ?? []).find((y) => y.id === x.id); return `<li class="small">${esc(pi?.name ?? x.id)} <span class="chip">${x.status === "missing" ? "new" : "shape changes"}</span></li>`; }).join("")}</ul></details>`;
+  }
   return h;
 }
 
@@ -859,7 +903,7 @@ function renderCrumbs() {
 function updateLegend() {
   $("legend-concepts").innerHTML = DATA.concepts.map((c) => `<span><span class="sw" style="background:var(--c-${c.colour})"></span>${esc(c.name)}</span>`).join("");
   $("legend-lines").innerHTML = S.tab === "proposed"
-    ? `<span><span class="ln" style="border-color:var(--proposed)"></span>intended connection</span><span><span class="ln" style="border-color:var(--edge-code)"></span>today's code</span><span><span class="ln" style="border-color:var(--problem);border-top-style:dashed"></span>today's code that breaks a rule</span><span><span class="sw" style="border:2px dashed var(--proposed)"></span>new module</span>`
+    ? `<span><span class="ln" style="border-color:var(--proposed)"></span>intended connection</span><span><span class="ln" style="border-color:var(--proposed);border-top-style:dashed"></span>planned, not in code yet</span><span><span class="sw" style="background:var(--c-amber)"></span>counts of work inside</span><span><span class="ln" style="border-color:var(--edge-code)"></span>today's code</span><span><span class="ln" style="border-color:var(--problem);border-top-style:dashed"></span>today's code that breaks a rule</span><span><span class="sw" style="border:2px dashed var(--proposed)"></span>new module</span>`
     : `<span><span class="ln" style="border-color:var(--edge-code)"></span>uses code</span><span><span class="ln" style="border-color:var(--edge-runtime)"></span>runtime hop</span><span><span class="ln" style="border-color:var(--route);border-top-width:3px"></span>selected pathway</span><span><span class="sw" style="background:var(--change)"></span>changed by PR</span><span>Dashed boxes are outside the part you opened. Esc goes up; ← and → step a pathway.</span>`;
 }
 

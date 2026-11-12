@@ -366,3 +366,107 @@ proposed_rules:
     plain: 'Request families do not call each other; they share state through the pipeline.'
     from: ['p:app::terminal', 'p:app::process', 'p:app::worktree', 'p:app::content::notes']
     to: ['p:app::terminal', 'p:app::process', 'p:app::worktree', 'p:app::content::notes']
+
+proposed_interfaces:
+  - id: facade-operation
+    replaces: workspace-call
+    name: Every request goes through the facade and returns one Outcome
+    from: ['rs:voyager_desktop::host', 'rs:voyager_desktop::avatar', 'rs:voyager_desktop::notes_session', 'p:app::assistant::tools']
+    to: ['p:app::api::facade']
+    mechanism: channel
+    nature: 'The desktop and the assistant tools call one facade function. It queues the operation for the owner thread, which runs it through admit, authorize, plan, apply, save and record, and replies with one Outcome.'
+    request:
+      plain: 'The operation name from the catalogue, its typed payload, who is asking and in which captured context.'
+      shape: |
+        Operation { requestId: RequestId, caller: Caller (person | agent),
+                    context: Context, name: OperationName, expectedVersion,
+                    payload: <the operation's catalogue type> }
+    response:
+      plain: 'Exactly one of applied, refused or uncertain, each carrying the request id.'
+      shape: |
+        Outcome = Applied { requestId, version, result }
+                | Refused { requestId, reason, message }
+                | Uncertain { requestId, message }
+    errors: 'Refused means nothing changed. Uncertain means it may have changed and must not be repeated blindly. No caller turns these into the same string.'
+    why: 'Today Client::call turns refused and uncertain into one text message for the header and avatar. One Outcome type keeps that difference all the way to the person, and recording the caller outside the payload lets policy decide authority in one place.'
+    proposals: [pipeline, catalogue]
+  - id: generated-host-operation
+    replaces: host-voyager-workspace
+    name: Scripts call one generated function per operation
+    from: ['p:header::session', 'ts:content/notes/main.ts']
+    to: ['p:desktop::bridge']
+    mechanism: script-call
+    nature: 'The bridge is generated from the operation catalogue. Each operation becomes a typed TypeScript function and its Rust registration, so scripts never build request strings by hand.'
+    request:
+      plain: 'A typed payload for one operation.'
+      shape: |
+        voyager.createContent(payload: CreateContent): Promise<Outcome<Created>>
+        voyager.resizePanelSplit(payload: ResizePanelSplit): Promise<Outcome<Layout>>
+        // one function for each catalogue operation, declarations generated with it
+    response:
+      plain: 'The same Outcome the facade returns, typed for that operation.'
+      shape: |
+        Outcome<T> = { status: "applied", result: T, version }
+                   | { status: "refused", reason, message }
+                   | { status: "uncertain", message }
+    errors: 'Refused and uncertain arrive as typed values, not as thrown text.'
+    why: 'Today one call(request: string) carries every request as JSON text and the declarations are hand-written strings that only match Rust by name. Generating both sides from one list makes a mismatch impossible.'
+    proposals: [catalogue]
+  - id: typed-core-port
+    replaces: core-json-rpc
+    name: The app talks to Herdr Core through a typed port
+    from: ['p:app::storage', 'p:app::terminal', 'p:app::process', 'p:app::observe']
+    to: ['p:app::adapters::core']
+    mechanism: call
+    nature: 'Families ask the Core adapter for typed operations. Only the adapter knows JSON-RPC, frames and Core''s words; everything else sees Rust enums.'
+    request:
+      plain: 'A typed Core request.'
+      shape: |
+        CorePort::call(CoreRequest::TerminalRun { cwd, argv, labels }
+                     | CoreRequest::DocSet { name, value, version }
+                     | CoreRequest::TerminalKill { terminal } | ...)
+    response:
+      plain: 'A typed reply, or a typed refusal or uncertainty.'
+      shape: |
+        Result<CoreReply, CoreError>
+        CoreError = Refused { kind: CoreRefusal } | Uncertain { message }
+        TerminalState = Live | Finished { reason: ExitReason }
+    errors: 'Core refusal kinds become an enum, so callers match on them instead of comparing strings.'
+    why: 'Today Core state words such as "live" and "finished" appear as strings in many modules. A typed port keeps Core''s vocabulary in one place and lets the compiler find every use.'
+    proposals: [vocabulary, facade]
+  - id: provider-turn
+    replaces: codex-turn-start
+    name: The assistant sends a turn to any provider
+    from: ['p:app::assistant::session']
+    to: ['p:app::assistant::provider']
+    mechanism: call
+    nature: 'The conversation owner sends a turn through the provider trait. Codex is one implementation; a test fake or another provider is another.'
+    request:
+      plain: 'The thread, the person''s input and the captured focus.'
+      shape: |
+        Provider::send_turn(Turn { thread, input, focus: Focus })
+    response:
+      plain: 'A stream of provider events.'
+      shape: |
+        Stream<ProviderEvent>
+        ProviderEvent = Message | ToolCall | TurnDone | Failed
+    errors: 'A provider failure ends the turn with Failed; nothing is resubmitted automatically.'
+    why: 'Today the conversation owner holds a concrete Codex value. A trait lets other assistants be added, and tests run without Codex.'
+    proposals: [provider]
+  - id: quit-fence
+    name: Quit fences the owner without stopping Core
+    from: ['rs:voyager_desktop::quit']
+    to: ['p:app::api::facade']
+    mechanism: channel
+    nature: 'Before exiting, the desktop asks the owner to refuse new effects and close viewer input, then waits for its answer.'
+    request:
+      plain: 'No payload.'
+      shape: |
+        facade.quit_fence()
+    response:
+      plain: 'Applied once the fence is up.'
+      shape: |
+        Outcome = Applied { requestId } | Uncertain { message }
+    errors: 'If the fence is uncertain, Quit still exits; programs keep running in Core.'
+    why: 'Today the desktop''s Quit never reaches the workspace owner, so its seven quitting checks are only exercised by tests.'
+    proposals: [pipeline]
