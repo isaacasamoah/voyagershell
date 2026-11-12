@@ -1,0 +1,273 @@
+schema: app-atlas/v0
+note: 'Hand-written layer for Herdr Core: the big pieces, where they start and why. Code facts come from the generator; every source reference here is checked against the commit when the map is built.'
+
+concepts:
+  - id: concept:callers
+    name: You, agents and apps
+    colour: neutral
+    plain: 'Whoever asks Core for something: a person typing hc commands, a coding agent running hc from its own terminal, or an app such as Voyager that keeps a connection open.'
+    scope: 'Outside this repository. People and agents use the hc command; apps speak the same JSON-RPC API through `hc connect` or the local socket.'
+    entry: 'Every request is one API method. The command line is one call per command, so `hc run` and an app''s terminal.run reach the same handler.'
+    entry_at: {path: crates/herdr-core/src/cli.rs, find: 'pub const COMMANDS: &[(&str, &str)] = &['}
+    why: 'AGENTS.md: one API; the CLI is one call per command. The schema is generated from one method table, so a person, an agent and an app cannot drift apart.'
+    scope_at: {path: AGENTS.md, find: 'One API; the CLI is one call per command.'}
+  - id: concept:cli
+    name: hc command
+    colour: blue
+    plain: 'The short-lived hc process you run. It parses the command, connects to the session''s Core (starting it if needed), makes one API call and prints the result. `hc attach` instead puts your terminal on a Core terminal until you detach.'
+    scope: 'The command-line modules of the herdr-core crate: argument parsing, connecting and autostarting, output formatting, the fuzzy picker, attach, file and machine subcommands, and the self-update.'
+    entry: 'main.rs only calls cli::main, which decides whether this process is a command, the Core daemon (serve) or the Holder (hold).'
+    entry_at: {path: crates/herdr-core/src/main.rs, find: 'std::process::exit(herdr_core::cli::main());'}
+    why: 'One binary keeps installs and updates simple: the same hc file is the command, the daemon and the holder. AGENTS.md asks for fewer files and fewer dependencies.'
+    inferred: true
+  - id: concept:core
+    name: Core daemon
+    colour: green
+    plain: 'One long-lived process per session. It keeps the record of every terminal, parses each terminal''s screen, tracks status and events, serves the API on a local socket and relays output to viewers. It draws nothing.'
+    scope: 'server.rs (the socket and connections), api.rs and api/ (the method table), runtime.rs (screens and the link to the Holder), events, status, waits, notes, viewers and relay, plus the ghostty-vt crate that parses terminal output.'
+    entry: '`hc serve` (started detached by the first command that finds no Core) takes the session lock, binds the socket and runs one async loop on a single thread.'
+    entry_at: {path: crates/herdr-core/src/server.rs, find: 'pub fn serve() -> io::Result<()> {'}
+    why: 'Programs must outlive the person''s window and any viewer. A daemon per session holds the facts, so viewers and agents can come and go. README: closing your viewer does not end the program.'
+    scope_at: {path: README.md, find: 'Closing your viewer does not end the program.'}
+  - id: concept:holder
+    name: Holder
+    colour: amber
+    plain: 'A separate process that owns every pseudo-terminal and is the parent of every program. It always reads their output and keeps the last megabyte of each, so the Core can crash or restart without losing programs.'
+    scope: 'holder.rs and its wire, holder_proto.rs, plus the helpers that clean up abandoned processes (sweep.rs).'
+    entry: 'The Core starts it with `hc hold --socket ...` when it first needs a terminal, and talks to it over its own small binary protocol.'
+    entry_at: {path: crates/herdr-core/src/runtime.rs, find: 'crate::client::spawn_detached(&self.paths, &["hold", "--socket", &socket], "holder.log")?;'}
+    why: 'holder.rs: spawn, pump, resize, signal, reap. No parsing, no policy. Keeping the dumb part separate means a Core update or crash never kills a running program.'
+    scope_at: {path: crates/herdr-core/src/holder.rs, find: '//! The holder: owns every PTY, is every program''s parent, always reads output.'}
+  - id: concept:machines
+    name: Other machines
+    colour: violet
+    plain: 'Cores on other machines, reached over SSH. Commands that name `box/t3` go over one framed connection the local Core keeps open to that machine.'
+    scope: 'machines.rs (profiles and the SSH pipe), remote.rs and remote/viewers.rs (the line to each machine and relayed viewers), and the `hc machine` commands.'
+    entry: 'At start the Core opens a line to every machine it added.'
+    entry_at: {path: crates/herdr-core/src/server.rs, find: 'crate::remote::start_all(&core);'}
+    why: 'docs/machines.md: an agent can run, read and wait on terminals anywhere with the same commands, without installing anything but hc on the other side.'
+    inferred: true
+  - id: concept:os
+    name: Operating system
+    colour: slate
+    plain: 'Everything that differs between Linux, macOS and Windows: sockets or named pipes, pseudo-terminals or ConPTY, process groups or job objects, service managers, paths and locale.'
+    scope: 'platform/ behind one interface, plus paths.rs, config.rs and locale.rs.'
+    entry: 'Shared code calls platform::… and has no #[cfg] of its own.'
+    entry_at: {path: AGENTS.md, find: 'Gate per OS only where the OS really behaves differently, and keep it in'}
+    why: 'AGENTS.md: gate per OS only where the OS really behaves differently, and keep it in platform/ behind one interface.'
+  - id: concept:programs
+    name: Programs
+    colour: rose
+    plain: 'What Core runs and what it calls on: shells and coding agents inside terminals, and outside tools such as ssh, curl, tar and the service managers.'
+    scope: 'Not part of this repository. Programs in terminals are children of the Holder; outside tools are started directly for one job.'
+
+containers:
+  - id: ext-container:callers
+    concept: concept:callers
+    kind: actor
+    name: People, agents and apps
+    plain: 'Anyone who runs hc or speaks its API.'
+  - id: part:cli
+    concept: concept:cli
+    kind: part of crate herdr-core
+    name: herdr-core command line
+    plain: 'The modules that run in a short-lived hc process.'
+  - id: part:core
+    concept: concept:core
+    kind: part of crate herdr-core
+    name: herdr-core daemon
+    plain: 'The modules that run inside the Core daemon.'
+  - id: crate:ghostty-vt
+    concept: concept:core
+    kind: crate
+    name: ghostty-vt
+    plain: 'A small safe wrapper over the few libghostty-vt calls Core needs to keep a screen per terminal.'
+  - id: lib:libghostty
+    concept: concept:core
+    kind: library
+    name: libghostty-vt
+    plain: 'The terminal emulator from Ghostty, built from vendor/ghostty. It turns output bytes into a grid of cells and answers terminal queries.'
+  - id: part:holder
+    concept: concept:holder
+    kind: part of crate herdr-core
+    name: herdr-core holder
+    plain: 'The modules that run inside the Holder process.'
+  - id: part:machines
+    concept: concept:machines
+    kind: part of crate herdr-core
+    name: herdr-core machines
+    plain: 'The modules that reach and relay to other machines.'
+  - id: ext-container:remote
+    concept: concept:machines
+    kind: external
+    name: Core on another machine
+    plain: 'The same hc, running on the other machine and reached through `ssh box hc connect`.'
+  - id: part:platform
+    concept: concept:os
+    kind: part of crate herdr-core
+    name: herdr-core platform layer
+    plain: 'The modules that hide the operating system from the rest.'
+  - id: ext-container:os
+    concept: concept:os
+    kind: external
+    name: Operating system services
+    plain: 'systemd, launchd, the Windows registry and console, and the file system.'
+  - id: ext-container:programs
+    concept: concept:programs
+    kind: external
+    name: Programs in terminals
+    plain: 'Shells and coding agents. The Holder starts them and owns their pseudo-terminals.'
+  - id: ext-container:tools
+    concept: concept:programs
+    kind: external
+    name: Outside tools
+    plain: 'ssh and scp for machines, curl and tar for updates, sh for quoted commands and templates.'
+
+externals:
+  - id: ext:person
+    container: ext-container:callers
+    feature: cli
+    name: Person at a terminal
+    plain: 'Types hc commands, or attaches to a terminal and types into it.'
+  - id: ext:agent
+    container: ext-container:callers
+    feature: agents
+    name: Coding agent
+    plain: 'An agent that reads `hc --skill` and runs hc from its own terminal to start, talk to and wait on other agents.'
+  - id: ext:app
+    container: ext-container:callers
+    feature: api
+    name: App (such as Voyager)
+    plain: 'Keeps one framed connection open, through `hc connect` or the socket, and draws terminals itself.'
+  - id: ext:libghostty
+    container: lib:libghostty
+    feature: screens
+    name: libghostty-vt
+    plain: 'Parses terminal output into a screen and answers queries such as cursor position.'
+  - id: ext:remote-core
+    container: ext-container:remote
+    feature: machines
+    name: Remote Core
+    plain: 'The Core on another machine, reached over SSH.'
+  - id: ext:service-manager
+    container: ext-container:os
+    feature: lifecycle
+    name: Service manager
+    plain: 'systemd on Linux (systemctl, systemd-run, busctl, loginctl), launchd on macOS, and the Windows registry run key.'
+    programs: ['program:systemctl', 'program:systemd-run', 'program:busctl', 'program:loginctl', 'program:reg']
+  - id: ext:macos-tools
+    container: ext-container:os
+    feature: platform
+    name: macOS tools
+    plain: 'codesign and ioreg, used to sign the app bundle and read the hardware identity.'
+    programs: ['program:codesign', 'program:ioreg']
+  - id: ext:program
+    container: ext-container:programs
+    feature: terminals
+    name: Program in a terminal
+    plain: 'A shell, a coding agent or any command. Its parent is the Holder.'
+  - id: ext:ssh
+    container: ext-container:tools
+    feature: machines
+    name: ssh and scp
+    plain: 'Carry the line to another machine and copy hc there.'
+    programs: ['program:ssh', 'program:scp']
+  - id: ext:release-tools
+    container: ext-container:tools
+    feature: lifecycle
+    name: curl and tar
+    plain: 'Download and unpack a release for `hc update`.'
+    programs: ['program:curl', 'program:tar']
+  - id: ext:sh
+    container: ext-container:tools
+    feature: terminals
+    name: sh
+    plain: 'Runs quoted command lines and templates.'
+    programs: ['program:sh', 'program:unused']
+
+features:
+  - id: cli
+    name: Commands and output
+    plain: 'Parsing hc commands, choosing a terminal, and printing results for a person or as JSON.'
+  - id: api
+    name: The API and its wire
+    plain: 'The method table, JSON-RPC envelopes and errors, framed mode with channels, and the generated schema.'
+  - id: lifecycle
+    name: Start, stop, restart and update
+    plain: 'Autostarting the Core, the session lock, starting the Holder, restarts that keep programs, service files and self-update.'
+  - id: terminals
+    name: Running programs
+    plain: 'Starting programs in terminals, their records and addresses, keep and recovery, ending them, and running one-off commands.'
+  - id: screens
+    name: Screens, output and viewers
+    plain: 'Parsing output into a screen, relaying bytes to attached viewers, first paint, sizes, and reading history.'
+  - id: input
+    name: Input
+    plain: 'Typing from people and agents: key names to bytes, one input queue per terminal, and files placed beside a terminal.'
+  - id: agents
+    name: Agents working together
+    plain: 'Status from OSC 7501, events, waits, notes from children to parents, and templates.'
+  - id: machines
+    name: Other machines
+    plain: 'Machine profiles, the SSH line, calls and viewers relayed to another Core.'
+  - id: files
+    name: Files
+    plain: 'Reading, writing and editing files on the machine that has them.'
+  - id: platform
+    name: Operating system differences
+    plain: 'Sockets and pipes, pseudo-terminals, process trees, paths, configuration and locale on each OS.'
+
+runtime:
+  - from: ext:person
+    to: 'bin:herdr-core'
+    via: process
+    plain: 'A person or agent runs hc; main hands over to cli::main.'
+    at: {path: crates/herdr-core/src/main.rs, find: 'std::process::exit(herdr_core::cli::main());'}
+  - from: 'rs:herdr_core::holder'
+    to: ext:program
+    via: process
+    plain: 'The Holder starts every program in its own pseudo-terminal and stays its parent.'
+  - from: 'rs:herdr_core::runtime'
+    to: 'rs:herdr_core::holder'
+    via: ipc
+    plain: 'The Core starts the Holder with `hc hold` and exchanges framed messages with it over a local socket.'
+    at: {path: crates/herdr-core/src/runtime.rs, find: 'crate::client::spawn_detached(&self.paths, &["hold", "--socket", &socket], "holder.log")?;'}
+  - from: 'rs:herdr_core::client'
+    to: 'rs:herdr_core::server'
+    via: rpc
+    plain: 'A command connects to the session socket (starting the Core if needed) and makes one JSON-RPC call.'
+    at: {path: crates/herdr-core/src/client.rs, find: 'pub fn connect_or_start(paths: &Paths) -> Result<Stream, RpcError> {'}
+  - from: 'rs:herdr_core::remote'
+    to: ext:remote-core
+    via: rpc
+    plain: 'The Core keeps one framed connection to each added machine, over ssh.'
+  - from: 'rs:ghostty_vt'
+    to: ext:libghostty
+    via: call
+    plain: 'Calls into libghostty-vt through its C interface.'
+
+glossary:
+  - term: Session
+    plain: 'One Core and its terminals, named by HC_SESSION. Tests and apps can use their own session so they never touch yours.'
+  - term: Terminal
+    plain: 'A program running in a pseudo-terminal that Core keeps alive. It has an address such as t7 and, optionally, a name.'
+  - term: Address
+    plain: 'How a terminal is named: t7 or a name here, box/t7 on the machine called box.'
+  - term: Holder
+    plain: 'The process that owns every pseudo-terminal. It outlives Core restarts so programs keep running.'
+  - term: Viewer
+    plain: 'A live attach stream on a framed connection: first paint, then raw bytes, with input going back.'
+  - term: Framed mode
+    plain: 'A connection that carries JSON-RPC on channel 0 and terminal streams on their own channels, each frame with a length.'
+  - term: Status
+    plain: 'What a program says it is doing (working, blocked, idle, done), reported through the OSC 7501 escape sequence. Core never guesses it from the screen.'
+  - term: Keep
+    plain: 'A terminal marked to come back as a fresh shell if its program is lost. It never reruns the task.'
+  - term: Note
+    plain: 'News about a child terminal typed into its parent agent, marked so the agent knows where it came from.'
+
+reading:
+  - 'Click a box to open it. The breadcrumb or Esc takes you back up.'
+  - 'Colour shows the concept a part belongs to. Lines show how parts depend on or call each other.'
+  - 'Choose a pathway to light up its route, then step through it.'
+  - 'Choose a pull request or commit to see which parts it touched.'

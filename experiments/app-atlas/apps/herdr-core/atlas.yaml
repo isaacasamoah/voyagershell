@@ -1,0 +1,50 @@
+schema: app-atlas/config-v0
+note: 'Herdr Core, the terminal runtime Voyager runs on, mapped as a second app. Its source is not in this repository: clone it and pass --source.'
+
+name: Herdr Core
+# No checkout here. Build with:
+#   git clone https://github.com/herdrdev/herdr-core && git -C herdr-core checkout v0.1.19
+#   node experiments/app-atlas/atlas.cjs build --app experiments/app-atlas/apps/herdr-core --source herdr-core --rev v0.1.19
+source: null
+
+# The architecture-map extractor settings for this repository.
+extractor:
+  repository: https://github.com/herdrdev/herdr-core
+  packageRoots: []
+  generators: {}
+  locationRoots: []
+  structLiterals: []
+  docs: [AGENTS.md, README.md, 'docs/*.md', schema/README.md]
+  history: {branch: master, from: null}
+
+# Every herdr-core module is placed in a container by its module note: one crate holds the
+# command, the daemon, the holder, the machine link and the platform layer.
+aliases: {}
+paths:
+  - {prefix: crates/ghostty-vt/, container: 'crate:ghostty-vt'}
+  - {prefix: crates/herdr-core/src/platform/, container: 'part:platform'}
+  - {prefix: crates/herdr-core/src/cli/, container: 'part:cli'}
+  - {prefix: crates/herdr-core/, container: 'part:core'}
+  - {prefix: vendor/ghostty/, container: 'lib:libghostty'}
+
+view:
+  title: Herdr Core atlas
+  binary: herdr-core
+  grid:
+    - ['concept:callers', 'concept:cli', 'concept:core', 'concept:machines']
+    - [null, 'concept:os', 'concept:holder', 'concept:programs']
+  strip_prefixes: [herdr_core::]
+  lanes:
+    - {id: you, name: You / agent / app, plain: the caller}
+    - {id: cli, name: hc command, plain: the hc command process}
+    - {id: core-loop, name: Core async loop, plain: the Core's async loop}
+    - {id: core-thread, name: Core thread, plain: a Core thread}
+    - {id: holder, name: Holder, plain: the Holder}
+    - {id: program, name: Program, plain: the program}
+    - {id: remote, name: Other machine, plain: the Core on another machine}
+    - {id: os, name: OS, plain: the operating system}
+  mechanisms:
+    rpc: {short: JSON-RPC call to the Core, long: a JSON-RPC request over the session socket}
+    stream: {short: bytes on an attach channel, long: a stream of terminal bytes on its own framed channel}
+    ipc: {short: frame on the Core-Holder wire, long: framed messages between the Core and the Holder}
+    network: {short: over ssh to another machine, long: a framed connection to another machine over ssh}

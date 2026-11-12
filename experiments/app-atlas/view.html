@@ -598,7 +598,8 @@ function codeBlock(id, label) {
 }
 function evidenceLine(ev) { const url = `${DATA.meta.repository}/blob/${DATA.meta.commit}/${ev.path}#L${ev.line}`; return `<div class="evline"><a href="${esc(url)}" target="_blank" rel="noopener">${esc(ev.path)}:${ev.line}</a> <span class="muted">${esc(ev.kind ?? "")}</span><code>${esc(ev.text)}</code></div>`; }
 const tag = (d) => (d?.inferred ? ` <span class="chip inferred" title="Judgement from reading the code, not stated in code or docs">inferred</span>` : "");
-function sentences(t) { return String(t ?? "").match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g)?.map((x) => x.trim()).filter(Boolean) ?? []; }
+// A sentence ends at . ! or ? followed by a space and a capital, a quote or a bracket, so file names and versions stay whole.
+function sentences(t) { return String(t ?? "").trim().split(/(?<=[.!?])\s+(?=[A-Z`"'(\[])/).map((x) => x.trim()).filter(Boolean); }
 function layered(t, n = 2, label = "More detail") { const all = sentences(t); if (all.length <= n) return `<p>${esc(t)}</p>`; return `<p>${esc(all.slice(0, n).join(" "))}</p><details class="code"><summary>${esc(label)}</summary><p>${esc(all.slice(n).join(" "))}</p></details>`; }
 function firstSentence(t) { return sentences(t)[0] ?? ""; }
 function kicker(n) {
