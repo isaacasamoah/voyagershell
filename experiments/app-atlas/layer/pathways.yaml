@@ -1,0 +1,1980 @@
+schema: app-atlas/v0
+note: 'Pathways traced by reading source at the recorded commit. Each step names the function, the thread it runs on and how it is reached.'
+pathways:
+  - id: startup
+    name: 'Start Voyager and draw the first useful frame'
+    trigger: 'The person runs `voyager-shell --profile <absolute dir> --session <name>`.'
+    summary: 'The binary checks its arguments, copies the header and Notes scripts into the profile if they are missing, and starts the workspace owner thread, which connects to Herdr Core through an `hc connect` bridge program. On the GPUI main thread it opens the window and loads the header script into QuickJS. The script''s first inspect request goes through a background thread to the owner thread, which reads or creates the saved layout in Core; each visible terminal is then attached and its Core output painted.'
+    steps:
+      - id: startup-1
+        fn: arguments
+        module: 'bin:voyager-shell'
+        at: {path: desktop/src/main.rs, find: 'fn arguments() -> Result<(PathBuf, String)> {'}
+        runs_on: ui-thread
+        via: process
+        says: 'The OS starts the binary. `main` reads `--profile` (an absolute folder holding the person''s scripts, theme and content) and `--session` (the Herdr Core session name). This is the process''s main thread, which later becomes the GPUI main thread.'
+        carries: 'command-line arguments'
+        fails: 'An unknown argument, a missing or relative profile, or a session containing anything other than lowercase letters, digits and hyphens prints the error and exits with status 1. No window opens.'
+      - id: startup-2
+        fn: 'voyager_desktop::run'
+        module: 'rs:voyager_desktop'
+        at: {path: desktop/src/lib.rs, find: 'pub fn run(profile: PathBuf, session: String) -> Result<()> {'}
+        runs_on: ui-thread
+        via: file
+        says: '`run` copies the built-in header scripts, icons, theme and generated contract helpers (validate.js, workspace.js, conversation.js) into `<profile>/mods/header`, and the Notes package into `<profile>/mods/notes`. Each copy only creates a missing file, so a file the person edited is never overwritten. It then opens the content owner over `<profile>/data`, checks that the header''s mod.json names main.js, version 1 and a name, hashes the header''s .js files for later reload detection, and seeds launches.json.'
+        carries: 'profile path; file contents compiled into the binary with include_str!'
+        fails: 'A file-system error other than "already exists", or a header manifest without a name, version 1 and main.js entry, stops start-up with an error and exit status 1.'
+      - id: startup-3
+        fn: 'Client::start_with_launches'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'fn start_with_launches('}
+        runs_on: ui-thread
+        via: call
+        says: 'Creates the workspace client: a queue with room for 8 messages and one new thread, the owner thread, which alone holds the layout, the Core connection and the content owner. The call returns at once. Every later workspace request becomes a message that this thread handles one at a time.'
+        carries: 'session name, current working directory, content owner, launches.json path'
+      - id: startup-4
+        fn: 'Core::connect_activity'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: '.args(["connect", "--session", session])'}
+        runs_on: owner-thread
+        via: process
+        says: 'The owner thread''s first act. It checks that the session starts with `voyager-`, then starts the `hc connect --session <name>` bridge program (or the program named by VOYAGER_HC) with HC_SOCKET set by core_endpoint::endpoint. It sends a JSON-RPC `hello` over the bridge''s stdin and reads one reply line; validate_hello requires Core''s permanent ID, the 13 methods Voyager uses and the framed, attach and shell features. The Core ID is kept so a later stop can confirm it is the same Core.'
+        carries: 'session name; socket path such as $XDG_RUNTIME_DIR/herdr-core/<session>.sock'
+        fails: 'A session without the `voyager-` prefix is refused ("Use a dedicated voyager- session"). If `hc` cannot start, or the hello reply is missing, malformed or lacks required capabilities, the bridge is killed and reaped. In every case the owner thread keeps the error and carries on without Core (see branch).'
+      - id: startup-5
+        fn: 'Core::connect_activity (bridge reader and writer threads)'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: 'let Ok(frame) = Frame::read_from(&mut output) else {'}
+        runs_on: background
+        via: core-stream
+        says: 'Two more threads start. The writer thread sends queued frames to the bridge, control frames before terminal input. The reader thread routes each frame from Core to the waiting RPC reply, a terminal''s output buffer or the activity observer. The owner thread then subscribes to program activity events (events.subscribe) when Core supports it, and enters its message loop, blocking until a message arrives.'
+        fails: 'When either thread loses the pipe it marks the connection closed, drops waiting replies and records "Core is disconnected" for activity.'
+      - id: startup-6
+        fn: 'conversation_client::Client::with_audio'
+        module: 'rs:voyager_app::conversation_client'
+        at: {path: app/src/conversation_client.rs, find: 'pub fn with_audio('}
+        runs_on: background
+        via: channel
+        says: 'Back on the main thread, `run` prepares the avatar animation pack and creates the private assistant client. It spawns its own conversation owner thread with an 8-slot queue. At start that thread only checks whether a Codex executable is available for voice; no Codex app-server is started yet.'
+      - id: startup-7
+        fn: 'voyager_desktop::run (GPUI launch callback)'
+        module: 'rs:voyager_desktop'
+        at: {path: desktop/src/lib.rs, find: '.run(move |cx: &mut App| {'}
+        runs_on: ui-thread
+        via: call
+        says: 'GPUI starts with the header package as its asset folder. The launch callback builds the native component registry (text, status, arrangement, split, overlay and the Terminal component, which shares the `viewers` map), binds Ctrl+Q to the Quit action, creates the QuickJS script runtime (ShellRuntime) and creates the Notes host with its own isolated script runtime.'
+        fails: 'A registry or script-runtime failure prints the error and calls cx.quit(), so the app exits without a window.'
+      - id: startup-8
+        fn: 'open_window callback'
+        module: 'rs:voyager_desktop'
+        at: {path: desktop/src/lib.rs, find: 'if let Err(error) = cx.open_window(options, |window, cx| {'}
+        runs_on: ui-thread
+        via: call
+        says: 'Opens a 1450 by 940 window titled with "Voyager" and the session name. Inside, it sets up speech and the avatar, builds the Header (host::Header::new), registers the Quit handler (quit::register) and makes ShellRoot the window root with the avatar drawn as a native overlay.'
+        fails: 'If the window cannot open, prints "Native window failed" and quits.'
+      - id: startup-9
+        fn: 'host::load'
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: 'runtime.try_load(package, window, cx)'}
+        runs_on: ui-thread
+        via: script-call
+        says: 'Header::new applies the theme, then `load` builds the host modules the script may import (voyager_header for theme colours, voyager_workspace for workspace calls, plus content view, conversation and avatar) and installs them as the load policy. gpui-shell reads mod.json, evaluates main.js in QuickJS and constructs its default export, the Workspace view. Header::new also starts a task that waits for workspace change notices from the owner thread.'
+        fails: 'A script error leaves no root view. The Header shows "Header load failed: ..." and retries (see branch).'
+      - id: startup-10
+        fn: Workspace.init
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'this.status = "Opening workspace";'}
+        runs_on: script
+        via: script-call
+        says: 'The header script''s init sets empty state, sets the status to "Opening workspace", starts an inspect request with run({operation: "inspect"}) and starts a loop that refreshes context facts. The request runs as an async task, so init returns at once.'
+      - id: startup-11
+        fn: Workspace.render
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: '.child(this.status || "Workspace canvas unavailable")'}
+        runs_on: ui-thread
+        via: render
+        says: 'GPUI draws the window. Header::render shows the script view; with no layout yet, the script renders the status "Opening workspace" and a Refresh button on the theme background. Because the inspect needs a round trip through two other threads and Core, this is normally the first frame.'
+        inferred: true
+      - id: startup-12
+        fn: 'voyager_workspace.call host function'
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: 'let result = client.call(request).map_err(gpui_shell::HostError::new)?;'}
+        runs_on: background
+        via: script-call
+        says: 'The script''s invoke (contract/generated/workspace.ts) builds a Request with a new request id and expected version 0, validates it against the generated schema and passes its JSON to the Rust host function `call`. gpui-shell drives that function''s future on a GPUI background thread, where Client::call puts a Workspace message on the owner''s queue and waits up to 20 seconds for the reply.'
+        carries: 'Request {requestId, expectedVersion: "0", action: inspect} as JSON'
+        fails: 'A full queue is refused at once ("Workspace busy or unavailable; nothing was queued"). No reply within 20 seconds returns "Workspace result unconfirmed; do not repeat the request".'
+      - id: startup-13
+        fn: 'owner thread Inspect, client::load'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'load(core, &cwd).and_then(|(loaded, revision, missing)| {'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The owner asks Core for the saved document "voyager-layout-v1" (doc.get), validates and prepares it. If none exists it creates a Voyage named "Voyager" for the working directory and saves it (doc.set). On the first inspect only, it lists Core''s terminals (terminal.list); a saved terminal placement whose program has ended or is missing is cleared so it opens a new ordinary shell, and agents are not resumed. It marks the layout fresh and replies with the layout and version.'
+        carries: 'the Inspect request; Core RPCs doc.get, doc.set and terminal.list'
+        fails: 'With no Core connection, the stored connect error is returned. A stored layout that does not parse or validate is refused ("Stored workspace is invalid"). A lost Core reply is uncertain and marks the layout not fresh.'
+      - id: startup-14
+        fn: 'Workspace.prepare, openTerminal, voyager_workspace.terminal_open'
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'opened = await openTerminal(vessel.content, this.version);'}
+        runs_on: script
+        via: script-call
+        says: 'The script accepts the snapshot (stores layout and version) and, for each visible Terminal placement, calls openTerminal. On an existing workspace it only attaches placements that already have a Core program, plus those the owner just marked for a new shell. The Rust host function `terminal_open` runs on a background thread and calls Client::terminal, which queues a Terminal message and waits up to 25 seconds.'
+        carries: 'TerminalRequest {requestId, contentId, expectedVersion}'
+        fails: 'A throw marks that placement "uncertain" and stops preparation; the error becomes the header status.'
+      - id: startup-15
+        fn: 'client::open_terminal'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'fn open_terminal('}
+        runs_on: owner-thread
+        via: core-rpc
+        says: 'For a placement bound to a Core program, the owner reads it (terminal.get). Otherwise it first saves a start marker in the layout, runs the program in Core (terminal.run with a voyager-operation label) and saves the new address. It then attaches (terminal.attach), which opens a Core output channel, and returns a Viewer: a handle to that channel''s buffer and the shared input and control queues.'
+        fails: 'Refused when the layout is not fresh, the version changed, the Voyage is closing or the content is not a terminal. An unconfirmed start is reported once with the label to look for in Core and is never repeated.'
+      - id: startup-16
+        fn: 'TerminalState constructor, Pane::new'
+        module: 'rs:voyager_desktop::terminal'
+        at: {path: desktop/src/terminal.rs, find: 'Pane::new(screen, viewer, font_family, cell_width, window, cx)'}
+        runs_on: ui-thread
+        via: script-call
+        says: 'On the background thread, install_viewer stores the Viewer in the shared `viewers` map under the content id. Back in the script, TerminalState.new(contentId) calls this registered constructor, which takes that Viewer, creates a terminal screen at the size Core reported and a Pane. The Pane starts a task that wakes whenever the reader thread signals new output.'
+        fails: 'If no Viewer is in the map, the constructor fails with "Terminal is not attached".'
+      - id: startup-17
+        fn: 'Pane::pump, Pane render'
+        module: 'rs:voyager_desktop::terminal'
+        at: {path: desktop/src/terminal.rs, find: 'fn pump(&mut self, cx: &mut Context<Self>) -> bool {'}
+        runs_on: ui-thread
+        via: core-stream
+        says: 'Core streams the program''s screen output on the attached channel; the reader thread buffers it. pump takes up to 64 KiB per pass (2 ms at most), feeds it to the terminal emulator, returns flow-control credit to Core and asks for a redraw. panel-view.ts places Terminal.new(state) in the Vessel, and terminal_view.rs paints the rows. This is the first useful frame.'
+        fails: 'Shows "Core disconnected" or "Terminal ended" in the pane when the channel closes.'
+    branches:
+      - name: 'Core is unreachable or the session name is refused'
+        from: startup-4
+        steps:
+          - id: startup-b1-1
+            fn: 'owner thread Workspace handling'
+            module: 'rs:voyager_app::client'
+            at: {path: app/src/client.rs, find: 'let result = match core.as_mut() {'}
+            runs_on: owner-thread
+            via: channel
+            says: 'The window still opens and the script still sends its inspect. The owner has no Core, so it returns the stored connect error as the result, rejected or uncertain, with an empty layout.'
+          - id: startup-b1-2
+            fn: Workspace.acceptSnapshot
+            module: 'ts:desktop/mods/header/main.ts'
+            at: {path: desktop/mods/header/main.ts, find: 'this.status = result.message || "";'}
+            runs_on: script
+            via: script-call
+            says: 'The script stores the message as its status. Render shows that message and a Refresh button. Refresh sends another inspect, but the owner never reconnects; a restart is needed.'
+      - name: 'Header script fails to load'
+        from: startup-9
+        steps:
+          - id: startup-b2-1
+            fn: 'Header::new'
+            module: 'rs:voyager_desktop::host'
+            at: {path: desktop/src/host.rs, find: 'Err(error) => (None, Some(format!("Header load failed: {error:#}"))),'}
+            runs_on: ui-thread
+            via: render
+            says: 'The Header keeps no root view and draws "Header load failed" with the error in its status box.'
+          - id: startup-b2-2
+            fn: 'Header poll task'
+            module: 'rs:voyager_desktop::host'
+            at: {path: desktop/src/host.rs, find: 'let source_path = retrying.then(|| package.clone());'}
+            runs_on: background
+            via: file
+            says: 'Every 250 ms a task rehashes the header''s .js files and rereads the theme on a background thread. When the source or a valid theme changes, it tries the load again on the UI thread.'
+      - name: 'First run with no saved layout'
+        from: startup-13
+        steps:
+          - id: startup-b3-1
+            fn: 'owner thread Inspect'
+            module: 'rs:voyager_app::client'
+            at: {path: app/src/client.rs, find: 'response.created_workspace = true;'}
+            runs_on: owner-thread
+            via: core-rpc
+            says: 'Core''s document is empty, so the owner applies CreateVoyage("Voyager", cwd), which also makes "Fleet 1" holding one "Terminal 1" placement with no program yet. It saves this with doc.set and flags the reply createdWorkspace.'
+          - id: startup-b3-2
+            fn: 'client::open_terminal (start path)'
+            module: 'rs:voyager_app::client'
+            at: {path: app/src/client.rs, find: 'core.terminal_run_with(crate::core_shapes::RunParams {'}
+            runs_on: owner-thread
+            via: core-rpc
+            says: 'Because the workspace was just created, the script prepares every visible terminal, not only bound ones. The owner saves a start marker, asks Core to run a shell in the working directory, saves the new address and attaches, then the main path continues at startup-16.'
+    better:
+      - step: startup-1
+        idea: 'Check the `voyager-` session prefix in `arguments()` as well as in Core::connect_activity.'
+        why: 'Today a session like `dev` passes the argument check, the window opens, and the person only sees a refused workspace with no Core.'
+        inferred: true
+      - step: startup-4
+        idea: 'Put a time limit on the hello handshake read.'
+        why: 'The read blocks the owner thread with no deadline, so a hung `hc connect` would make every workspace request time out as "unconfirmed" instead of saying Core is unreachable.'
+        inferred: true
+      - step: startup-2
+        idea: 'Refresh or version-check the generated contract helpers (validate.js, workspace.js) when they are older than the binary.'
+        why: 'Seeding never overwrites, so a profile made by an older build keeps old validators that can drift from the Rust contract after an upgrade, even though personal header edits should be kept.'
+        inferred: true
+    open_questions:
+      - 'Does `hc connect` start a Core server for the session when none is running, or fail? The bridge is external.'
+      - 'Is the "Opening workspace" frame always painted before the inspect reply arrives? That depends on GPUI scheduling, not on this source.'
+      - 'Speech and avatar setup inside open_window were not traced; they may add their own threads or windows.'
+  - id: typing
+    name: 'Typing into a terminal Vessel'
+    trigger: 'The person types `ls` and presses Enter while a terminal Vessel running a shell has keyboard focus.'
+    summary: 'The terminal Pane handles each key on the UI thread, encodes it with libghostty-vt and puts the bytes straight onto the Core connection''s input queue, without passing through the app owner thread. A writer thread sends them to Herdr Core, which writes them to the shell. The shell''s echo comes back through a reader thread, is parsed on the UI thread, and only then is the view repainted.'
+    steps:
+      - id: typing-1
+        fn: 'Pane::render (on_key_down listener)'
+        module: 'rs:voyager_desktop::terminal::view'
+        at: {path: desktop/src/terminal_view.rs, find: '.on_key_down(move |event, _, cx| {'}
+        runs_on: ui-thread
+        via: call
+        says: 'GPUI delivers the key-down event to the focused terminal element. Ctrl+Q, keys during an input-method composition and workspace shortcuts are left for other handlers; any other key goes to Pane::key, and the listener then stops propagation.'
+        carries: 'The GPUI keystroke (key name, modifiers, typed character, repeat flag).'
+      - id: typing-2
+        fn: 'Pane::key'
+        module: 'rs:voyager_desktop::terminal'
+        at: {path: desktop/src/terminal.rs, find: 'encoder.set_options_from_terminal(&self.screen.terminal);'}
+        runs_on: ui-thread
+        via: call
+        says: 'Builds a libghostty-vt key event from the key name (via key_code), modifiers and typed text, then encodes it using the terminal''s current keyboard modes. Printable keys such as `l` and `s` become their characters; Enter becomes whatever sequence those modes call for.'
+        carries: 'Encoded bytes for one key.'
+      - id: typing-3
+        fn: 'Pane::send'
+        module: 'rs:voyager_desktop::terminal'
+        at: {path: desktop/src/terminal.rs, find: 'fn send(&mut self, bytes: Vec<u8>) -> Result<()> {'}
+        runs_on: ui-thread
+        via: call
+        says: 'Hands the bytes to the Pane''s Viewer, then clears any selection and scrolls history back to the live screen. The Pane is marked dirty only if selection or scroll changed, so an ordinary key causes no repaint by itself; the shell''s echo does (docs/terminal.md, "Terminal input invalidation").'
+        fails: 'If the Viewer refuses, the Pane shows "Input: ..." in its status strip and leaves selection and scroll unchanged.'
+      - id: typing-4
+        fn: 'Viewer::input'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: 'pub fn input(&self, bytes: Vec<u8>) -> Result<(), Error> {'}
+        runs_on: ui-thread
+        via: call
+        says: 'The Viewer holds clones of the single Core connection''s queue senders, so the UI thread puts a data frame for this viewer''s channel directly on the bounded input queue (64 frames) with a non-blocking try_send. The app owner thread in client.rs is not involved.'
+        carries: 'A frame: channel number, kind 0 (data), payload of key bytes.'
+        fails: 'Refused as "quitting" once Quit has started, "too_large" above 64 KiB, or "busy" when the queue is full. Nothing is retried.'
+      - id: typing-5
+        fn: 'Core writer thread (Core::write_frame)'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: 'Err(_) => match inputs.recv_timeout(Duration::from_millis(5)) {'}
+        runs_on: background
+        via: channel
+        says: 'One writer thread, started when the owner thread connects to Core, owns the stdin pipe of the `hc connect` child process. It takes a waiting control frame first, otherwise waits up to 5 ms for an input frame, then write_frame writes the 9-byte header and payload and flushes.'
+        fails: 'A write or flush error ends the thread, marks the connection disconnected and wakes every viewer.'
+      - id: typing-6
+        fn: 'Herdr Core input handling'
+        module: 'ext:hc'
+        runs_on: core
+        via: core-rpc
+        says: 'The `hc connect` child (started in core.rs with HC_SOCKET set) carries the frame to Herdr Core, which writes the bytes to the shell''s pseudo-terminal. This is a data frame on the same framed connection as Core''s JSON-RPC requests, not a request with a reply.'
+        inferred: true
+      - id: typing-7
+        fn: 'Shell reads and echoes input'
+        module: 'ext:shell'
+        runs_on: program
+        via: ipc
+        says: 'Over the pseudo-terminal, the shell reads `l`, `s` and Enter, echoes the characters and, on Enter, runs `ls`, whose listing is written back to the same pseudo-terminal.'
+        inferred: true
+      - id: typing-8
+        fn: 'Herdr Core output streaming'
+        module: 'ext:hc'
+        runs_on: core
+        via: ipc
+        says: 'Core reads the pseudo-terminal output and sends it to each attached viewer as data frames on that viewer''s channel. It holds back once the viewer''s returned credit is used up, so Voyager limits how much unparsed output can pile up.'
+        inferred: true
+      - id: typing-9
+        fn: 'Core reader thread'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: 'buffer.bytes.extend(frame.payload);'}
+        runs_on: background
+        via: core-stream
+        says: 'One reader thread reads every frame from the `hc connect` stdout. A data frame for a known viewer channel is appended to that viewer''s buffer, and a token is posted to the viewer''s one-slot ready channel to wake its Pane.'
+        fails: 'If a viewer''s buffer would pass 1 MiB, or all buffers 16 MiB, the reader stops and the connection is marked disconnected; the Pane then shows "Core disconnected".'
+      - id: typing-10
+        fn: 'Pane::new (stream task)'
+        module: 'rs:voyager_desktop::terminal'
+        at: {path: desktop/src/terminal.rs, find: 'while waiter.ready().await.is_ok() {'}
+        runs_on: ui-thread
+        via: channel
+        says: 'Each Pane owns a GPUI foreground task that waits for the ready token and then runs pump on the UI thread. Between rounds it yields once to the event loop, and it waits on a 5 ms timer only when credit or a reply could not be queued.'
+      - id: typing-11
+        fn: 'Pane::pump'
+        module: 'rs:voyager_desktop::terminal'
+        at: {path: desktop/src/terminal.rs, find: 'fn pump(&mut self, cx: &mut Context<Self>) -> bool {'}
+        runs_on: ui-thread
+        via: call
+        says: 'Feeds output to the screen in 4 KiB pieces and stops at 64 KiB or 2 ms, so one busy terminal cannot hold the UI thread. It then returns credit for the parsed bytes on the control queue, forwards any query replies, and if anything was parsed marks the Pane dirty and calls cx.notify() once.'
+        carries: 'Output bytes from the viewer buffer.'
+        fails: 'Credit or a reply that cannot be queued is kept and retried on the next round.'
+      - id: typing-12
+        fn: 'Screen::write'
+        module: 'rs:voyager_desktop::terminal_screen'
+        at: {path: desktop/src/terminal_screen.rs, find: 'pub(super) fn write(&mut self, bytes: &[u8]) {'}
+        runs_on: ui-thread
+        via: call
+        says: 'libghostty-vt''s vt_write parses the byte stream into its grid of cells, cursor, colours and modes. Replies the terminal must send back, such as a cursor-position report, are collected by the on_pty_write callback for pump to forward.'
+      - id: typing-13
+        fn: 'Pane::render'
+        module: 'rs:voyager_desktop::terminal::view'
+        at: {path: desktop/src/terminal_view.rs, find: 'fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {'}
+        runs_on: ui-thread
+        via: render
+        says: 'On the next frame GPUI calls render. A new snapshot is taken only if the Pane is dirty; render then builds one element per row, plus a measuring canvas that tracks size changes and registers the Pane as the window''s text input handler.'
+      - id: typing-14
+        fn: 'Screen::snapshot'
+        module: 'rs:voyager_desktop::terminal_screen'
+        at: {path: desktop/src/terminal_screen.rs, find: 'pub(super) fn snapshot(&mut self) -> Result<Grid> {'}
+        runs_on: ui-thread
+        via: call
+        says: 'Reads libghostty-vt''s render state. Rows it reports unchanged keep their previous cell arrays, matched by row identity; only changed rows, such as the prompt line with the new text and cursor, are rebuilt.'
+      - id: typing-15
+        fn: 'row_paint::row'
+        module: 'rs:voyager_desktop::terminal::row_paint'
+        at: {path: desktop/src/terminal_rows.rs, find: 'if let Some(plan) = cache.borrow().as_ref().filter(|plan| plan.key == key) {'}
+        runs_on: ui-thread
+        via: render
+        says: 'Each row is a canvas with a cached draw plan keyed by its cells, cursor, selection, font and scale, so only changed rows are reshaped before backgrounds, glyphs and the cursor are painted. With accessibility active, or text overflow or clamping set, render uses per-cell elements instead.'
+    branches:
+      - name: 'An input method composes text'
+        from: typing-1
+        steps:
+          - id: typing-b1-1
+            fn: 'Pane::replace_and_mark_text_in_range'
+            module: 'rs:voyager_desktop::terminal::input'
+            at: {path: desktop/src/terminal_input.rs, find: 'fn replace_and_mark_text_in_range('}
+            runs_on: ui-thread
+            via: call
+            says: 'While an input method is composing, the key-down listener steps aside and the platform updates a local one-line preview drawn at the terminal cursor. Nothing is sent to the shell yet.'
+          - id: typing-b1-2
+            fn: 'Pane::replace_text_in_range'
+            module: 'rs:voyager_desktop::terminal::input'
+            at: {path: desktop/src/terminal_input.rs, find: 'fn replace_text_in_range('}
+            runs_on: ui-thread
+            via: call
+            says: 'Committed text goes to Pane::send and joins the main path at typing-3. Plain keys do not also arrive here because the key-down listener stops propagation, which relies on GPUI behaviour not shown in this repo.'
+            inferred: true
+      - name: 'Paste from the clipboard'
+        from: typing-1
+        steps:
+          - id: typing-b2-1
+            fn: 'Pane::paste_text'
+            module: 'rs:voyager_desktop::terminal'
+            at: {path: desktop/src/terminal.rs, find: 'fn paste_text(&mut self, text: &str) -> Result<()> {'}
+            runs_on: ui-thread
+            via: call
+            says: 'Ctrl+Shift+V on Linux (Command+V on macOS) reads the clipboard; Screen::paste_bytes adds bracketed-paste markers when the program asked for them. The result goes to Viewer::input like a key and is refused above 64 KiB.'
+      - name: 'The program asks the terminal a question'
+        from: typing-11
+        steps:
+          - id: typing-b3-1
+            fn: 'Viewer::protocol_reply'
+            module: 'rs:voyager_app::core'
+            at: {path: app/src/core.rs, find: 'pub fn protocol_reply(&self, bytes: Vec<u8>) -> Result<(), Error> {'}
+            runs_on: ui-thread
+            via: call
+            says: 'When parsed output contains a query such as a cursor-position request, the reply libghostty produced is queued on the same input queue. It skips the Quit check that typed input has.'
+    better:
+      - step: typing-5
+        idea: 'Let the writer thread wait on control and input frames together instead of checking control frames and then waiting up to 5 ms for input.'
+        why: 'A credit, resize or focus frame queued while the writer waits on input can sit for up to 5 ms, and late credit could slow output during heavy streaming.'
+        inferred: true
+      - step: typing-2
+        idea: 'Keep one libghostty key event and encoder per Pane instead of creating both on every key press.'
+        why: 'Pane::key allocates them for each keystroke; the source does not show whether that cost matters.'
+        inferred: true
+    open_questions:
+      - 'How Herdr Core turns a data frame into a pseudo-terminal write, and whether `hc connect` relays frames unchanged, is outside this repository.'
+      - 'Core''s credit window (how much output it sends before waiting for credit) is not visible in this repository.'
+      - 'Whether GPUI on every platform skips the text input handler once the key-down listener stops propagation (otherwise a key could be sent twice) is GPUI behaviour not shown here.'
+  - id: split-vessel
+    name: 'Split a Vessel and start a Terminal'
+    trigger: 'The person presses Ctrl+Shift+O (Cmd+Shift+O on macOS), or clicks a Vessel''s corner split control, and picks Terminal in the content picker.'
+    summary: 'The header script decides which Vessel to split and opens the content picker. The chosen create-content request crosses from the script through a Rust host function to the app''s single owner thread, which changes a copy of the layout, saves it as a Core document and replies. The header then makes a second request to start and attach the new terminal in Herdr Core, re-reads the layout and re-renders the Fleet with a native split holding the new terminal.'
+    steps:
+      - id: split-vessel-1
+        fn: 'Pane::render (key-down handler)'
+        module: 'rs:voyager_desktop::terminal::view'
+        at: {path: desktop/src/terminal_view.rs, find: 'if super::input::workspace_shortcut(&event.keystroke) {'}
+        runs_on: ui-thread
+        via: call
+        says: 'If a terminal has keyboard focus, GPUI offers it the key first. workspace_shortcut recognises Ctrl+Shift+O and the handler returns without consuming the key, so it bubbles up to the header instead of reaching the shell.'
+        carries: 'The keystroke and its modifiers.'
+      - id: split-vessel-2
+        fn: Workspace.shortcut
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: '  shortcut(event: KeyEvent, cx: UIContext) {'}
+        runs_on: script
+        via: call
+        says: 'The header shell''s on_key_down passes unhandled keys to shortcut. It accepts exactly one of Ctrl or Cmd, plus Shift and O, E or T, and ignores keys while a rename, layout name or menu is open.'
+        fails: 'If another workspace request is in flight, the key is queued in pendingShortcuts and replayed after that request; the queue is dropped if the request did not finish cleanly.'
+      - id: split-vessel-3
+        fn: 'Workspace.dispatchShortcut / Workspace.openSplit'
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: '  openSplit('}
+        runs_on: script
+        via: call
+        says: 'dispatchShortcut picks the panel group holding the last clicked Vessel (this.focused, set on a left mouse-down on the Vessel frame), or the first one. For O it calls openSplit with side right, which builds the destination ''beside this Vessel, on the right'' and opens the picker under the id split-<vessel>-right. The corner split control uses the same id, so both routes open the same popover.'
+        carries: 'Panel owner (Fleet or Portal column), target Vessel id, side.'
+        fails: 'openSplit returns without a message while busy, renaming or naming a layout.'
+      - id: split-vessel-4
+        fn: CreationPicker.open
+        module: 'ts:desktop/mods/header/creation.ts'
+        at: {path: desktop/mods/header/creation.ts, find: 'const metadata = await Promise.allSettled([launches(), descriptions()]);'}
+        runs_on: script
+        via: call
+        says: 'The picker records this opening as current, then asks the host for the launch catalog and the content type descriptions in parallel and checks both against the generated schemas. Only the current opening may apply a reply, so a late reply for an older opening is dropped.'
+        fails: 'A failed or invalid reply appears as an error line in the picker; the other choices still show.'
+      - id: split-vessel-5
+        fn: 'Client::launches (owner thread Launches message)'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'let _ = reply.try_send(crate::launch::catalog(launches.as_deref(), &cwd));'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The launches host function in desktop/src/host.rs sends a Launches message to the owner thread, which reads the launch settings and returns the catalog of program choices (Terminal, Codex and others).'
+        fails: 'If the owner is gone the promise rejects with ''Worker settings owner is unavailable''.'
+      - id: split-vessel-6
+        fn: 'CreationPicker.render (Terminal entry) -> Workspace.creationControl -> Workspace.run'
+        module: 'ts:desktop/mods/header/creation.ts'
+        at: {path: desktop/mods/header/creation.ts, find: 'chosen(opening.destination, "terminal", launch),'}
+        runs_on: script
+        via: call
+        says: 'Clicking Terminal turns the opening into a create-content action with typeId terminal, the chosen launch and the saved destination. creationControl passes it to Workspace.run with the layout version the picker was opened against. run marks the header busy, remembers which contents already exist and starts an async task.'
+        carries: 'create-content action and the expected layout version.'
+        fails: 'If a request is still pending, creationControl shows ''Wait for the pending workspace request. No Vessel was created.'' and sends nothing.'
+      - id: split-vessel-7
+        fn: invoke
+        module: 'ts:contract/generated/workspace.ts'
+        at: {path: contract/generated/workspace.ts, find: 'export async function invoke('}
+        runs_on: script
+        via: call
+        says: 'The generated wrapper adds a new request id from request_id(), checks the Request against the generated schema, calls the host function call with JSON, then checks the Response schema and that its requestId matches. The desktop seeds the compiled workspace.js from contract/generated into the header package.'
+        carries: 'Request {requestId, expectedVersion, action}.'
+        fails: 'A schema or id mismatch throws ''Invalid workspace request'' or ''Invalid workspace response''; run shows it as status and marks its snapshot not fresh.'
+      - id: split-vessel-8
+        fn: 'workspace host function call -> Client::call -> Client::queue_workspace'
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: 'let result = client.call(request).map_err(gpui_shell::HostError::new)?;'}
+        runs_on: background
+        via: script-call
+        says: 'The synchronous half of call runs on the UI thread and only checks the 64 KiB limit. The async half runs on the GPUI background executor: it parses the Request and calls Client::call, which try_sends a Workspace message into the owner''s queue (8 slots) and blocks waiting for the reply.'
+        fails: 'A full queue refuses at once with ''Workspace busy or unavailable; nothing was queued''. No reply within 20 seconds gives ''Workspace result unconfirmed; do not repeat the request''.'
+      - id: split-vessel-9
+        fn: 'owner thread: Workspace message admission'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'Some("Voyager is quitting; no workspace effect was dispatched".into());'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The owner thread handles one message at a time, so all layout changes happen in order. A repeat of a recent request id gets the stored outcome; an id reused for different content or by a worktree, content or process request is refused. It then refuses work while quitting, while its snapshot is not fresh, or when the expected version differs from its own.'
+        fails: 'Refusals return status rejected, for example ''Voyager is quitting; no workspace effect was dispatched'', ''Inspect the workspace before making a change'' or ''Layout changed; inspect it before making a new request''. For create-content the content owner must also report the type available.'
+      - id: split-vessel-10
+        fn: 'Model::apply (Action::CreateContent)'
+        module: 'rs:voyager_app::workspace'
+        at: {path: app/src/workspace.rs, find: 'let cwd = panels::insertion_cwd(&self.layout, &owner, &insertion)?;'}
+        runs_on: owner-thread
+        via: call
+        says: 'The owner applies the action to a copy of the layout, not the live one. It checks the type and launch, takes the working folder from the target Vessel''s content, picks a default name, and Model::placement mints new content and placement ids with no Core terminal yet.'
+        carries: 'Panel owner, insertion {beside, id, right}, typeId terminal, launch.'
+        fails: 'An unsupported type or invalid launch is rejected. If the target Vessel is no longer shown, insertion_cwd returns ''Panel insertion target changed''.'
+      - id: split-vessel-11
+        fn: 'panels::insert / panels::insert_leaf'
+        module: 'rs:voyager_app::panels'
+        at: {path: app/src/panels.rs, find: 'pub(crate) fn insert_leaf('}
+        runs_on: owner-thread
+        via: call
+        says: 'A Fleet''s arrangement is a binary split tree of branches and leaves. insert_leaf replaces the target Vessel''s leaf with a horizontal branch at the default share, old Vessel first and new Vessel second. insert then adds the new Vessel to the members and clears any maximized Vessel.'
+        fails: 'If the target leaf is not in the tree, the result is ''Panel insertion target changed'' and nothing is saved.'
+      - id: split-vessel-12
+        fn: 'owner thread save -> Core::document_set'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'let revision = save(core, &candidate.layout, version).map_err(|error| {'}
+        runs_on: owner-thread
+        via: core-rpc
+        says: 'After the Voyage-close check and creating any new Notes files (none here), the owner writes the whole layout to Herdr Core as the document voyager-layout-v1 with doc.set, passing the version it last read, and blocks until Core answers. It records the new terminal in created_contents, the owner''s list of contents it created and may start once.'
+        carries: 'Complete layout JSON and the expected document version.'
+      - id: split-vessel-13
+        fn: doc.set
+        module: 'ext:hc'
+        runs_on: core
+        via: core-rpc
+        says: 'Herdr Core stores the document only if the expected version still matches and returns the new version. The saved layout lives in Core, not in a Voyager file.'
+        fails: 'A stale version is refused with kind conflict. A lost or malformed reply is treated as uncertain.'
+      - id: split-vessel-14
+        fn: 'owner thread reply and WorkspaceNotice'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: '|| closing.revision != previous_close_revision'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The owner adopts the new layout and version and fills the Response: status applied, version, layout and the created terminals the header may open. Because the version moved, it tells Notes views to refresh and sends a WorkspaceNotice to the desktop''s listener. It keeps the outcome as a receipt (last 32 requests) and replies.'
+        carries: 'Response {requestId, status, version, layout, fresh, createdContents}.'
+        fails: 'A rejected error returns status rejected with ''kind: message''. An uncertain error returns status uncertain and marks the snapshot not fresh.'
+      - id: split-vessel-15
+        fn: 'Header::new workspace_task'
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: 'let next = match changed_client.workspace_changes(after).await {'}
+        runs_on: ui-thread
+        via: channel
+        says: 'A long-lived desktop task waits on the owner''s notice channel. It stores each notice in the shared cell the script reads with notice(), reads reported activity on the background executor, refreshes the header runtime and asks it to re-render.'
+        fails: 'If the owner replaces or drops the channel, the task records the error and stops listening.'
+      - id: split-vessel-16
+        fn: Workspace.acceptSnapshot
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: '  acceptSnapshot(result: Response, task: AsyncContext) {'}
+        runs_on: script
+        via: script-call
+        says: 'When the call promise resolves, the header keeps the result only if its version is not older than the one it holds. It replaces its layout, closes the picker and menus, bumps splitReset so each native Split re-applies its share, and starts follow-up reads. When it later sees the notice, its revision is not newer, so it skips another inspect.'
+        fails: 'An older version is ignored apart from showing its message.'
+      - id: split-vessel-17
+        fn: Workspace.prepare
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'opened = await openTerminal(vessel.content, this.version);'}
+        runs_on: script
+        via: call
+        says: 'Because the result is applied and fresh, run calls prepare. For each visible terminal Vessel with no backend that is in the allowed set (createdContents plus contents new since the request), it marks the opening pending and calls the generated openTerminal wrapper with the new version.'
+        carries: 'TerminalRequest {requestId, contentId, expectedVersion}.'
+        fails: 'If the wrapper throws, the opening is marked uncertain (''Terminal result unconfirmed; do not repeat the request'') and the snapshot is marked not fresh.'
+      - id: split-vessel-18
+        fn: 'workspace host function terminal_open -> Client::terminal'
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: 'let result = client.terminal('}
+        runs_on: background
+        via: script-call
+        says: 'terminal_open checks sizes on the UI thread, then on the background executor calls Client::terminal, which try_sends a Terminal message to the owner and waits up to 25 seconds.'
+        fails: 'A full queue gives ''Workspace busy or unavailable; no terminal was started''. A timeout gives uncertain ''Terminal result unconfirmed; no request was repeated''.'
+      - id: split-vessel-19
+        fn: 'owner thread: Terminal message admission'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: '"Inspect the workspace before opening a terminal".into(),'}
+        runs_on: owner-thread
+        via: channel
+        says: 'A repeat of the same terminal request returns its stored outcome. Otherwise the owner refuses while quitting, when the id belongs to another kind of request, when its snapshot is stale or the version moved, when the Voyage is closing, and when a just-created content is no longer visible.'
+        fails: 'Most refusals are rejected with a message. If an earlier start for this content is unconfirmed, that uncertain message is returned again so no second program starts.'
+      - id: split-vessel-20
+        fn: open_terminal
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'fn open_terminal('}
+        runs_on: owner-thread
+        via: core-rpc
+        says: 'open_terminal first saves the layout with a start_pending marker named voyager-start-<requestId>, then sends terminal.run with the launch argv, the folder and a voyager-operation label. When Core reports the terminal live, it saves the layout again with the backend address and clears the marker, then calls terminal.attach and builds a Viewer on the attached channel. The marker and label let a later inspect find an unconfirmed start instead of starting another.'
+        fails: 'If the marker save fails, no start is sent. If terminal.run is uncertain, the terminal is not live, or the backend save fails, the content is recorded as unconfirmed and the result is uncertain. If attach fails after a start, the message says the program started and its binding was saved.'
+      - id: split-vessel-21
+        fn: 'terminal.run / terminal.attach'
+        module: 'ext:hc'
+        runs_on: core
+        via: core-rpc
+        says: 'Herdr Core starts the program as its own child process, so Core rather than Voyager owns it. For the plain Terminal launch the argv is empty, which leaves the choice of shell to Core. Attach opens an output channel and reports the terminal''s size.'
+        inferred: true
+      - id: split-vessel-22
+        fn: install_viewer
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: 'fn install_viewer(viewers: &Viewers, content: &str, viewer: Viewer) -> Result<(), Error> {'}
+        runs_on: background
+        via: channel
+        says: 'Back on the background executor, the Viewer goes into the shared viewers map under the content id, closing an older viewer for that content on another channel. The host returns a TerminalResponse with status applied, rejected or uncertain.'
+        fails: 'A Core refusal of kind finished is reported with reason ended, so the Vessel can offer ''Start new shell''.'
+      - id: split-vessel-23
+        fn: 'Workspace.prepare (after openTerminal)'
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'this.terminals.set(vessel.content, TerminalState.new(vessel.content));'}
+        runs_on: script
+        via: script-call
+        says: 'On applied, the script creates a native TerminalState; its Rust constructor takes the Viewer from the viewers map and builds a Pane. The header then inspects again so it holds the layout that now includes the backend, and run moves focus to the new Vessel.'
+        fails: 'Without a viewer the constructor fails with ''Terminal is not attached''. If the follow-up inspect is not applied and fresh, prepare throws and the status explains why.'
+      - id: split-vessel-24
+        fn: 'Workspace.render / Workspace.pane'
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'return NativeSplit.new('}
+        runs_on: script
+        via: render
+        says: 'task.notify() makes GPUI re-render the header. render places the canvas regions with composeCanvas, and the active Fleet region walks the split tree in pane: each branch becomes a native Split with its axis and share, and each leaf goes to renderPanel, which shows Terminal.new(state) for the new terminal.'
+        carries: 'Split axis, share, layout version and the splitReset counter.'
+      - id: split-vessel-25
+        fn: 'Split::materialize / TerminalMaterializer::materialize'
+        module: 'rs:voyager_desktop::split'
+        at: {path: desktop/src/split.rs, find: 'impl ComponentMaterializer for Split {'}
+        runs_on: ui-thread
+        via: render
+        says: 'The Rust Split component turns the script''s request into a gpui-base resizable panel group with two children, keeping per-split state keyed by id; a measuring canvas sets panel sizes from the share after layout. The terminal child renders the Pane entity, whose task pumps output from the viewer into the screen.'
+        fails: 'A Split without exactly two children fails to render.'
+    branches:
+      - name: 'Corner split control instead of the shortcut'
+        from: split-vessel-2
+        steps:
+          - id: split-vessel-b1-1
+            fn: Workspace.splitControl
+            module: 'ts:desktop/mods/header/main.ts'
+            at: {path: desktop/mods/header/main.ts, find: '  splitControl('}
+            runs_on: script
+            via: render
+            says: 'Each Vessel''s title row has two split buttons that appear on hover. splitControl wraps each in creationControl with the destination beside this Vessel and the picker id split-<vessel>-<side>.'
+          - id: split-vessel-b1-2
+            fn: 'CreationPicker.render (Popover on_open_change)'
+            module: 'ts:desktop/mods/header/creation.ts'
+            at: {path: desktop/mods/header/creation.ts, find: 'this.open(id, destination, version, cx, hidden);'}
+            runs_on: script
+            via: call
+            says: 'Clicking the button opens the popover, and on_open_change calls open. From here the path joins split-vessel-4.'
+      - name: 'Core refuses the layout write as stale'
+        from: split-vessel-13
+        steps:
+          - id: split-vessel-b2-1
+            fn: 'owner thread result mapping'
+            module: 'rs:voyager_app::client'
+            at: {path: app/src/client.rs, find: 'if inspecting || kind == "conflict" {'}
+            runs_on: owner-thread
+            via: call
+            says: 'On a conflict the owner keeps its old layout, marks its snapshot not fresh and replies rejected with Core''s message. Every later change is refused until the header inspects.'
+          - id: split-vessel-b2-2
+            fn: Workspace.run
+            module: 'ts:desktop/mods/header/main.ts'
+            at: {path: desktop/mods/header/main.ts, find: 'if (!prepared) this.pendingShortcuts = [];'}
+            runs_on: script
+            via: script-call
+            says: 'The header shows the message, skips prepare and drops any queued shortcuts. No terminal is started.'
+      - name: 'Terminal start is unconfirmed'
+        from: split-vessel-20
+        steps:
+          - id: split-vessel-b3-1
+            fn: open_terminal
+            module: 'rs:voyager_app::client'
+            at: {path: app/src/client.rs, find: '"Terminal start {operation} is unconfirmed: {message}. Inspect Core terminals with voyager-operation={operation}; no start was repeated"'}
+            runs_on: owner-thread
+            via: call
+            says: 'If terminal.run comes back uncertain, the owner stores the message against the content and returns uncertain. The start_pending marker stays in the saved layout.'
+          - id: split-vessel-b3-2
+            fn: Workspace.terminalStatus
+            module: 'ts:desktop/mods/header/main.ts'
+            at: {path: desktop/mods/header/main.ts, find: 'return "Terminal start is unconfirmed. Inspect before trying again.";'}
+            runs_on: script
+            via: render
+            says: 'The new Vessel shows that the start is unconfirmed instead of a terminal. Asking again returns the same uncertain message, so Voyager never starts a second program on its own.'
+    better:
+      - step: split-vessel-8
+        idea: 'Wait for workspace replies on an async channel, as launches already does, instead of a blocking recv_timeout.'
+        why: 'Each call occupies a background executor thread for up to 20 seconds while the owner works.'
+        inferred: true
+      - step: split-vessel-20
+        idea: 'Send a WorkspaceNotice when open_terminal saves a new layout version.'
+        why: 'The Terminal message path changes the version twice but sends no notice itself, so other observers rely on an activity notice or their own inspect to see the backend.'
+        inferred: true
+      - step: split-vessel-3
+        idea: 'Track the last clicked Vessel from keyboard focus as well as mouse-down.'
+        why: 'this.focused changes on mouse-down, the maximize menu item and layout changes, but not when keyboard focus moves, so the split target can differ from the terminal the person is typing in.'
+        inferred: true
+    open_questions:
+      - 'How many threads the GPUI background executor has, and so whether blocking host calls can starve other background work, is not visible in this repository.'
+      - 'What Herdr Core runs for terminal.run with an empty argv (login shell, a fixed shell or something else) is decided inside Core, which is not in this repository.'
+      - 'When the new Pane first resizes the Core terminal to the split''s real size was not traced; it lives in desktop/src/terminal.rs.'
+  - id: notes-save
+    name: 'Edit and save a note'
+    trigger: 'The person types in a Notes Vessel''s title or body, then moves focus out of the editor.'
+    summary: 'Typing goes into a native gpui-base editor owned by a Rust Session, which keeps a draft and marks it dirty; the Notes script only places the editor. When focus leaves the editor, the Session sends one content Update to the app''s owner thread, which checks the draft''s base revision, writes the Markdown file in the Voyage''s notes folder by replacing it atomically, and confirms by reading it back. The owner then wakes the Session''s read loop, and every placement of that note shows the same Session, so they all update together.'
+    steps:
+      - id: notes-save-1
+        fn: Notes.render
+        module: 'ts:content/notes/main.ts'
+        at: {path: content/notes/main.ts, find: ': Body.new(this.text).w_full().flex_1().min_h(0).py(16).text_size(13),'}
+        runs_on: script
+        via: render
+        says: 'The Notes package script renders the title and body editors. this.text is a RetainedBodyState made in init(); its constructor returns the Rust Session''s text editor, so the draft lives in Rust and survives a reload of the package script.'
+      - id: notes-save-2
+        fn: 'Body::materialize'
+        module: 'rs:voyager_desktop::notes_input'
+        at: {path: desktop/src/notes_input.rs, find: '.child(Textarea::new(&state));'}
+        runs_on: ui-thread
+        via: render
+        says: 'The Rust Body component renders a gpui-base Textarea bound to that editor state. The native Textarea handles each keystroke and emits InputEvent::Change; the script does not re-render per keystroke.'
+        inferred: true
+      - id: notes-save-3
+        fn: 'Session::changed -> Draft::changed'
+        module: 'rs:voyager_desktop::notes_session'
+        at: {path: desktop/src/notes_session.rs, find: '    fn changed(&mut self, field: Field, cx: &mut Context<Self>) {'}
+        runs_on: ui-thread
+        via: call
+        says: 'The Session subscribes to both editors. On Change it compares the value with the last observed one and, if different, Draft::changed marks the field touched, bumps the draft generation and sets dirty. Nothing is written yet and there is no timed autosave.'
+        carries: 'Which field changed (title or text).'
+      - id: notes-save-4
+        fn: 'Session::new (Blur subscription)'
+        module: 'rs:voyager_desktop::notes_session'
+        at: {path: desktop/src/notes_session.rs, find: 'let text_events = cx.subscribe(&text, |session, _, event: &InputEvent, cx| match event {'}
+        runs_on: ui-thread
+        via: call
+        says: 'The save trigger is focus leaving the title or body: InputEvent::Blur calls Session::save with the Native intent. SessionState also has a save() method for scripts, but content/notes/main.ts does not call it.'
+      - id: notes-save-5
+        fn: 'Session::save'
+        module: 'rs:voyager_desktop::notes_session'
+        at: {path: desktop/src/notes_session.rs, find: '    pub fn save(&mut self, intent: Intent, cx: &mut Context<Self>) {'}
+        runs_on: ui-thread
+        via: call
+        says: 'save needs an active view binding and a Save from the draft. It builds a content Update with the draft''s base revision and the full title and text, adds the Voyage-close ticket if a close lease is held, and runs the blocking call on the background executor.'
+        carries: 'Update {requestId, contentId, expectedRevision, data {title, text}}.'
+        fails: 'If the selected file changed under a dirty draft, the status reads ''The selected file changed while this draft was open; the draft is retained'' and nothing is sent. A retired view sends nothing.'
+      - id: notes-save-6
+        fn: 'Draft::blur'
+        module: 'rs:voyager_desktop::notes_draft'
+        at: {path: desktop/src/notes_draft.rs, find: '    pub fn blur(&mut self) -> Option<Save> {'}
+        runs_on: ui-thread
+        via: call
+        says: 'Draft::blur allows one save at a time. It returns nothing for a clean draft or for a generation whose earlier save is unconfirmed, so an unknown result is never replayed. If no base revision has been read yet or a save is running, it records a pending blur that fires when the read or save finishes.'
+      - id: notes-save-7
+        fn: 'Client::content_native_save -> Client::content_inner'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: '    pub fn content_native_save('}
+        runs_on: background
+        via: channel
+        says: 'Only Update is allowed on this path. content_inner checks the envelope size, holds the view gate''s lock to confirm the view is Active rather than Pending or Retired, try_sends a Content message marked native_save to the owner, and blocks up to 25 seconds.'
+        fails: '''Notes view was retired; nothing was queued'', ''Workspace busy; no content operation was queued'', or after 25 seconds ''Content result unconfirmed; do not repeat the request''.'
+      - id: notes-save-8
+        fn: 'owner thread: Content message admission'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: '"This Voyage is closing; its Notes are temporarily read-only"'}
+        runs_on: owner-thread
+        via: channel
+        says: 'A repeat of a recent request id returns the stored response. Otherwise the owner refuses during a Notes rename, while the Voyage is closing (unless this native save carries the close ticket), while quitting, and for invalid, reused or oversized requests.'
+        fails: 'Refusals become a content Rejected response, for example ''This Voyage is closing; its Notes are temporarily read-only''.'
+      - id: notes-save-9
+        fn: 'load (layout read from Core)'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'let doc = core.document_get("voyager-layout-v1")?;'}
+        runs_on: owner-thread
+        via: core-rpc
+        says: 'Before running the request, the owner re-reads the layout document from Herdr Core with doc.get and adopts it, so the Note''s placement and file binding are checked against the latest saved layout.'
+        fails: 'If Core does not answer, the save is refused with the Core error.'
+        inferred: true
+      - id: notes-save-10
+        fn: 'content::run -> content::admit'
+        module: 'rs:voyager_app::content'
+        at: {path: app/src/content.rs, find: 'pub(crate) fn admit('}
+        runs_on: owner-thread
+        via: call
+        says: 'admit checks that the view''s binding is for this content and that a Notes placement for it is in the layout. register_content then binds the content to its Markdown file from the layout''s Notes configuration, or to a legacy JSON file in the profile''s data folder.'
+        fails: '''That content is outside this view'' or ''That Notes instance is outside the captured workspace scope''.'
+      - id: notes-save-11
+        fn: 'Owner::dispatch (Request::Update revision check)'
+        module: 'rs:voyager_app::content'
+        at: {path: app/src/content.rs, find: 'if current.revision != expected_revision {'}
+        runs_on: owner-thread
+        via: file
+        says: 'The owner reads the file and takes its revision as the SHA-256 of its bytes. If that differs from the draft''s base revision, the save is refused, so an edit made elsewhere (another editor or an agent) is not overwritten.'
+        fails: 'Refused with ''Portal data changed. Read it again before saving.'' A schema warning on the current data also refuses.'
+      - id: notes-save-12
+        fn: 'Owner::dispatch (Markdown write)'
+        module: 'rs:voyager_app::content'
+        at: {path: app/src/content.rs, find: 'let bytes = match markdown::encode(&data) {'}
+        runs_on: owner-thread
+        via: file
+        says: 'markdown::encode writes ''# Title'', a blank line, then the text. The owner writes that to a hidden .<name>.tmp beside the file with the original permissions, syncs it and renames it over the note, so the file is replaced in one step. The file is <Voyage folder>/notes/<name>.md; the note text is not stored in Core.'
+        fails: 'Errors before the rename are refused and the temporary file is removed. A failed rename is uncertain.'
+      - id: notes-save-13
+        fn: finish_write
+        module: 'rs:voyager_app::content'
+        at: {path: app/src/content.rs, find: 'fn finish_write('}
+        runs_on: owner-thread
+        via: file
+        says: 'The owner reads the file back. It reports Applied with the new snapshot only if the fresh read''s revision equals the hash of the bytes it wrote.'
+        fails: 'Otherwise the result is Uncertain, for example ''Data changed after replacement''.'
+      - id: notes-save-14
+        fn: 'Owner::notify and Content reply'
+        module: 'rs:voyager_app::content'
+        at: {path: app/src/content.rs, find: '    pub(crate) fn notify(&mut self, response: &Response) {'}
+        runs_on: owner-thread
+        via: channel
+        says: 'Owner::call passes the response to notify, which bumps this content''s change counter and wakes its subscriber. The client then bounds the response size, stores it as a receipt for repeat detection, refreshes Notes views and sends a WorkspaceNotice if the layout version moved, and delivers the reply.'
+        carries: 'Content Response (Applied with the new snapshot and revision, Rejected or Uncertain).'
+      - id: notes-save-15
+        fn: 'Draft::finish'
+        module: 'rs:voyager_desktop::notes_draft'
+        at: {path: desktop/src/notes_draft.rs, find: '    pub fn finish(&mut self, generation: u64, response: Result<&Response, &CallError>) -> bool {'}
+        runs_on: ui-thread
+        via: channel
+        says: 'The save task returns to the UI thread. Applied moves the base revision to the saved one and, if nothing was typed during the save, clears dirty and sets status ''Saved''. A rejection keeps the draft dirty with the message; an uncertain or timed-out result marks this generation unconfirmed. A blur that arrived during the save triggers another save.'
+      - id: notes-save-16
+        fn: 'Session::observe'
+        module: 'rs:voyager_desktop::notes_session'
+        at: {path: desktop/src/notes_session.rs, find: '    fn observe(&mut self, view: ViewBinding, window: &mut Window, cx: &mut Context<Self>) {'}
+        runs_on: ui-thread
+        via: channel
+        says: 'The Session''s read loop wakes on the change counter, sends an Inspect read through the same owner and hydrates the editors. Draft::load will not replace a dirty or diverged draft and only fills untouched fields, so outside changes arrive without overwriting typing.'
+        fails: 'If the file changed elsewhere, the status reads ''Notes changed outside this draft. Its original revision is retained.'' and the draft keeps its old base.'
+      - id: notes-save-17
+        fn: 'Note::new (Session observer)'
+        module: 'rs:voyager_desktop::notes'
+        at: {path: desktop/src/notes.rs, find: 'let observer = cx.observe(&session, |note, _, cx| {'}
+        runs_on: ui-thread
+        via: render
+        says: 'The Note view observes the Session. Each notify from the Session refreshes the mounted script view, so the status line from session.status() shows ''Saved'' or the error.'
+      - id: notes-save-18
+        fn: 'Notes host component'
+        module: 'rs:voyager_desktop::notes'
+        at: {path: desktop/src/notes.rs, find: 'let cached = host.views.borrow().get(&id).cloned();'}
+        runs_on: ui-thread
+        via: render
+        says: 'The header renders Notes.new(contentId) in every placement of the content, and the host returns the cached Note view for that content id. All placements share one Session, one draft and one script view, so no separate update is sent between them.'
+      - id: notes-save-19
+        fn: 'Notes.render (preview)'
+        module: 'ts:content/notes/main.ts'
+        at: {path: content/notes/main.ts, find: '? TextView.markdown("notes-preview-body", this.text.value())'}
+        runs_on: script
+        via: render
+        says: 'The preview toggle swaps the editor for a Markdown TextView built from the editor''s current value, so the preview shows the unsaved draft, not the saved file.'
+    branches:
+      - name: 'Voyage close flushes the draft under a close lease'
+        from: notes-save-4
+        steps:
+          - id: notes-save-b1-1
+            fn: 'Host::watch_close_saves'
+            module: 'rs:voyager_desktop::notes'
+            at: {path: desktop/src/notes.rs, find: 'pending.push(session.update(cx, |session, cx| session.flush_for_close(ticket.clone(), cx)));'}
+            runs_on: ui-thread
+            via: channel
+            says: 'When a Voyage close is confirmed, the owner asks the desktop to prepare that Voyage''s Notes. The desktop refuses for a legacy view, then calls flush_for_close on each Session with the close ticket.'
+          - id: notes-save-b1-2
+            fn: 'Session::flush'
+            module: 'rs:voyager_desktop::notes_session'
+            at: {path: desktop/src/notes_session.rs, find: '    fn flush('}
+            runs_on: ui-thread
+            via: call
+            says: 'flush makes both editors read-only, records a CloseLease with the ticket, and saves a dirty draft with the Close intent. The close waits until the draft is clean; an unconfirmed or failed save is reported back and stops the close.'
+          - id: notes-save-b1-3
+            fn: 'Closing::blocks_content'
+            module: 'rs:voyager_app::voyage_close'
+            at: {path: app/src/voyage_close.rs, find: '    pub fn blocks_content('}
+            runs_on: owner-thread
+            via: call
+            says: 'While the close holds its ticket, every change to those Notes is refused except a native save that carries the same ticket.'
+      - name: 'Save refused because the file changed elsewhere'
+        from: notes-save-11
+        steps:
+          - id: notes-save-b2-1
+            fn: 'Owner::dispatch (Request::Update)'
+            module: 'rs:voyager_app::content'
+            at: {path: app/src/content.rs, find: 'return rejected("Portal data changed. Read it again before saving.".into());'}
+            runs_on: owner-thread
+            via: call
+            says: 'The file''s revision no longer matches the draft''s base, so nothing is written.'
+          - id: notes-save-b2-2
+            fn: 'Draft::load'
+            module: 'rs:voyager_desktop::notes_draft'
+            at: {path: desktop/src/notes_draft.rs, find: '"Notes changed outside this draft. Its original revision is retained."'}
+            runs_on: ui-thread
+            via: channel
+            says: 'Draft::finish keeps the draft dirty. The read loop will not rebase a dirty draft, so it keeps the old base, and the next blur is refused the same way.'
+            inferred: true
+      - name: 'Save confirmation is lost'
+        from: notes-save-7
+        steps:
+          - id: notes-save-b3-1
+            fn: 'Client::content_inner'
+            module: 'rs:voyager_app::client'
+            at: {path: app/src/client.rs, find: 'CallError::Unconfirmed("Content result unconfirmed; do not repeat the request".into())'}
+            runs_on: background
+            via: channel
+            says: 'No reply arrives within 25 seconds, so the call returns unconfirmed. The write may or may not have happened.'
+          - id: notes-save-b3-2
+            fn: 'Draft::finish'
+            module: 'rs:voyager_desktop::notes_draft'
+            at: {path: desktop/src/notes_draft.rs, find: 'self.unconfirmed = Some(generation);'}
+            runs_on: ui-thread
+            via: call
+            says: 'finish marks this generation unconfirmed, and blur will not resend it. The next edit makes a new generation that can be saved; if the lost write had landed, that save is refused as a revision change.'
+            inferred: true
+    better:
+      - {step: notes-save-11, idea: 'Use a Notes-specific message for a revision conflict.', why: 'The refusal says ''Portal data changed'' even when the note is in a Vessel.', inferred: true}
+      - step: notes-save-16
+        idea: 'Offer a way to reload or rebase a draft after a revision conflict.'
+        why: 'Draft::load keeps a dirty draft''s stale base, so later saves keep failing, and opening another note is blocked until the draft is saved.'
+        inferred: true
+      - step: notes-save-4
+        idea: 'Consider saving after a pause in typing as well as on blur.'
+        why: 'Typed text exists only in the in-memory editor until focus leaves it, so a crash loses everything since the last blur.'
+        inferred: true
+    open_questions:
+      - 'Every placement of the same content gets the same cached Note view. Whether GPUI renders one entity in two places in one frame without problems was not established from source.'
+      - 'Owner::subscribe keeps one listener per content id, so a second subscriber would replace the Session''s. Nothing else subscribes today (content/notes/main.ts does not call changed), so the effect was not traced.'
+      - 'After a save, the save task and the read loop both update the Session on the UI thread; whether the follow-up read can overwrite the ''Saved'' status depends on their order, which the source does not fix.'
+  - id: assistant-request
+    name: 'Dock the avatar on a Fleet and ask Voyager for something'
+    trigger: 'The person drags the avatar onto a Fleet tab (or presses Shift+Enter on it), then types a request such as ''open a terminal in this tab'' in the avatar chat.'
+    summary: 'Docking sends a Dock request through the app''s single owner thread, which records the Fleet as the layout''s context and prepares a short preview of what is on screen there. When the person sends a chat message, the private conversation owner inspects the workspace, freezes the dock focus into the message and starts a turn in a Codex app-server child process. Codex calls a Voyager tool, the call is checked against the frozen focus and run through the same owner queue the UI uses, the result goes back to Codex and into the chat, and the desktop header later starts the new terminal through Herdr Core.'
+    steps:
+      - id: assistant-request-1
+        fn: 'Avatar::released'
+        module: 'rs:voyager_desktop::avatar'
+        at: {path: desktop/src/avatar.rs, find: 'fn released(&mut self, event: &gpui::MouseUpEvent'}
+        runs_on: ui-thread
+        via: call
+        says: 'When the person lets go of a moved avatar, Geometry::target_at looks for the dock target under the pointer and, if one is found, calls Avatar::dock with its scope. The header script registers each Fleet tab as a target through the avatar module''s Target component, which records the tab''s scope and painted bounds.'
+        carries: 'The pointer position and the target''s scope, here {kind: fleet, id} (the contract Context enum in contract/src/lib.rs).'
+        fails: 'If no target is under the pointer, the avatar does not dock; a floating avatar simply moves, otherwise it plays the release tone.'
+      - id: assistant-request-2
+        fn: 'Avatar::dock'
+        module: 'rs:voyager_desktop::avatar'
+        at: {path: desktop/src/avatar.rs, find: 'action: Action::Dock { context: scope },'}
+        runs_on: ui-thread
+        via: call
+        says: 'Builds a workspace Request with Action::Dock and the layout version the avatar last saw, then runs Client::call on the GPUI background executor so the UI thread does not block. Client::call puts the request on the owner thread''s bounded queue (8 slots) and waits up to 20 seconds for the reply.'
+        carries: 'Request {requestId, expectedVersion, action: Dock {context}}.'
+        fails: 'A second dock is ignored while one is pending. A full queue returns ''Workspace busy or unavailable; nothing was queued''. The avatar keeps the result and the header script reads it with take_result and shows any message in its status line.'
+      - id: assistant-request-3
+        fn: 'Model::apply (Action::Dock)'
+        module: 'rs:voyager_app::workspace'
+        at: {path: app/src/workspace.rs, find: 'Action::Dock { context } => {'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The owner thread checks the request identity, that the workspace was inspected and that the version still matches. The avatar''s request has no captured scope, and scope::check always allows Dock anyway. Model::apply confirms the Voyage, Fleet, Vessel or Portal exists and sets layout.context to it; the owner saves the layout document to Core and replies. Back on the UI thread, Avatar::applied_dock plays the dock tone and animation.'
+        carries: 'The new layout with context = the Fleet, and the new layout version.'
+        fails: 'Refused with ''Dock target not found'', ''Inspect the workspace before making a change'' or ''Layout changed; inspect it before making a new request''. The reply carries the message, which the header shows.'
+      - id: assistant-request-4
+        fn: 'context::prepare'
+        module: 'rs:voyager_app::context'
+        at: {path: app/src/context.rs, find: 'pub(crate) fn prepare('}
+        runs_on: owner-thread
+        via: channel
+        says: 'After an applied, fresh Dock, the owner sends itself a PrepareContext message, after it has already replied to the avatar. If the layout and context are unchanged, prepare reads the screens of up to three visible terminals in the docked scope through Core and the saved text of visible Notes, capped at 4096 bytes, and stores it in a shared slot.'
+        carries: 'Prepared {scope, revision, capture time, text}.'
+        fails: 'If the layout moved on before this message is handled, nothing is prepared. An unreadable screen is recorded as ''Current terminal screen is unavailable.'''
+      - id: assistant-request-5
+        fn: Chat.submit
+        module: 'ts:desktop/mods/header/chat.ts'
+        at: {path: desktop/mods/header/chat.ts, find: 'submit(cx: Context, interrupt = false) {'}
+        runs_on: script
+        via: call
+        says: 'Pressing Enter in the chat composer calls submit, which ignores empty text or a send already in flight and calls send({operation: send, text}). The generated wrapper in contract/generated/conversation.ts adds a host-issued request id and validates the request and reply against the contract schemas.'
+        carries: 'The typed text.'
+        fails: 'If the reply''s delivery is not ''accepted'', the chat shows the reply''s error, or ''Request refused''. Thrown errors are shown the same way.'
+      - id: assistant-request-6
+        fn: 'conversation host module call'
+        module: 'rs:voyager_desktop::conversation'
+        at: {path: desktop/src/conversation.rs, find: '.async_function("call", move |arguments| {'}
+        runs_on: background
+        via: script-call
+        says: 'The script''s call reaches this Rust host function. It refuses requests over 64 KiB and parses the JSON into the contract''s conversation Request. Its asynchronous half, which gpui-shell drives off the UI thread, calls conversation_client::Client::call; that queues OwnerMessage::Call on the conversation owner''s bounded channel and waits up to 25 seconds.'
+        carries: 'conversation::Request {requestId, action: Send {text}}.'
+        fails: '''Conversation busy or unavailable; nothing was queued'' or ''Conversation result unconfirmed; do not repeat this request'' reaches the chat as an error.'
+      - id: assistant-request-7
+        fn: 'Owner::apply'
+        module: 'rs:voyager_app::conversation_client'
+        at: {path: app/src/conversation_client.rs, find: 'fn apply('}
+        runs_on: background
+        via: channel
+        says: 'On the conversation owner thread (spawned by conversation_client::Client::with_audio), Owner::call first rejects request ids this client never issued or has already seen, so nothing is replayed. Owner::apply then refuses if the provider disconnected, the text is outside 1 to 8192 bytes, or a tool effect or previous turn is still running. It then asks the workspace owner for an Inspect through the normal owner queue and requires an applied, fresh answer.'
+        carries: 'The send request, then the inspected layout and version from the owner thread.'
+        fails: 'Rejected with reasons such as ''Voyager is still handling the previous request'' or ''Inspect the workspace before starting this conversation''. If a provider message had already been sent, the reply is ''unconfirmed'' and the chat phase becomes Unconfirmed.'
+      - id: assistant-request-8
+        fn: 'Client::conversation_focus'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'pub(crate) fn conversation_focus('}
+        runs_on: background
+        via: call
+        says: 'Freezes the dock into a Focus for this request. conversation::focus takes the scope from layout.context, a readable path such as the Voyage and Fleet names, a working directory when every Vessel in the Fleet shares one, and the layout revision; the dock preview is added only if its scope and revision still match. The owner stores this Focus for the whole turn and attaches it to the user message, so a later dock does not retarget the request.'
+        carries: 'voyager_contract::conversation::Focus {scope, path, cwd, revision, preview}.'
+        fails: 'If the docked target vanished, focus returns ''Focused workspace target is missing'' and the send is rejected.'
+      - id: assistant-request-9
+        fn: 'Codex::open'
+        module: 'rs:voyager_app::codex'
+        at: {path: app/src/codex.rs, find: '"app-server",'}
+        runs_on: background
+        via: process
+        says: 'The owner adds the user message to the shared chat snapshot with phase Starting. On the first message of the session it starts ''codex app-server --listen stdio://'' in the profile''s conversation folder, with the shell tool on and multi-agent features off, and a reader thread for its stdout. Later messages reuse the running process.'
+        carries: 'Model and effort from the profile''s conversation.json (default gpt-6.1-sol, high).'
+        fails: 'If Codex is not on the application path or cannot start, the chat phase becomes Failed and the error is shown.'
+      - id: assistant-request-10
+        fn: 'administrator::catalog'
+        module: 'rs:voyager_app::administrator'
+        at: {path: app/src/administrator.rs, find: 'pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {'}
+        runs_on: background
+        via: ipc
+        says: 'When Codex answers the initialize request, the owner sends thread/start with this catalog as dynamic tools: voyager_worktree, voyager_workspace, voyager_process and voyager_content, each with a description and a JSON schema generated from the contract. The thread is ephemeral, read-only sandboxed, never asks for approval, and carries the ADMINISTRATOR instructions.'
+        carries: 'Four tool definitions built from contract/generated/*Tool.schema.json, plus model, effort and instructions.'
+        fails: 'If Codex refuses thread/start, the chat phase becomes Failed with Codex''s message.'
+      - id: assistant-request-11
+        fn: 'protocol::encode (Command::StartTurn)'
+        module: 'rs:voyager_app::codex::protocol'
+        at: {path: app/src/codex_protocol.rs, find: '"turn/start",'}
+        runs_on: background
+        via: ipc
+        says: 'start_turn sets the phase to Working and sends turn/start over the app-server''s JSON-RPC on stdin: the user''s text, the effort, and the frozen Focus as additional context named voyager.focus. Each request gets a 25-second deadline.'
+        carries: '{threadId, input text, effort, additionalContext voyager.focus = Focus JSON}.'
+      - id: assistant-request-12
+        fn: 'Codex turn (external)'
+        module: 'ext:codex'
+        runs_on: program
+        via: ipc
+        says: 'Codex reads the request and focus and decides to use voyager_workspace: its description tells it to inspect first with expectedVersion 0, then use the returned version. For ''open a terminal in this tab'' it would then ask for create-content of type terminal in the docked Fleet. Each tool call is sent back as an item/tool/call request.'
+        carries: '{threadId, turnId, callId, tool, arguments: {expectedVersion, action}}.'
+        inferred: true
+      - id: assistant-request-13
+        fn: 'protocol::decode'
+        module: 'rs:voyager_app::codex::protocol'
+        at: {path: app/src/codex_protocol.rs, find: 'return Some(Event::Tool(Box::new(ToolCall {'}
+        runs_on: background
+        via: ipc
+        says: 'The Codex stdout reader thread reads one JSON line at a time, bounded to 1 MiB except for voyager_content frames. A request with an id and method item/tool/call becomes Event::Tool and is sent to the conversation owner on a channel.'
+        fails: 'Any other callback from Codex, such as an approval request, is answered with error -32601 ''Unsupported private provider callback; nothing was dispatched''. A broken or oversized frame disconnects the provider and the chat shows the error.'
+      - id: assistant-request-14
+        fn: 'Tools::call'
+        module: 'rs:voyager_app::administrator'
+        at: {path: app/src/administrator.rs, find: 'pub fn call('}
+        runs_on: background
+        via: channel
+        says: 'The conversation owner hands the call to Tools::call, holding it until turn/start has answered if needed. The call must match the accepted thread and turn, name one of the four tools and carry no namespace. A repeated callId with the same arguments gets the stored result. Otherwise it checks the 32-call limit, the 8 KiB argument limit, that a turn is active with a captured Focus and no other effect running, and parses the arguments. It then starts a short-lived effect thread and replies later.'
+        carries: 'The parsed WorkspaceInput and the Focus scope captured at send time, not the current dock.'
+        fails: 'Refusals go straight back to Codex as an unsuccessful result starting ''Rejected before dispatch:'', for example ''No active tool capacity; nothing was dispatched''.'
+      - id: assistant-request-15
+        fn: 'effect thread (Dispatch::Workspace)'
+        module: 'rs:voyager_app::administrator'
+        at: {path: app/src/administrator.rs, find: 'match client.scoped_call(scope, request) {'}
+        runs_on: background
+        via: call
+        says: 'The effect thread builds a workspace Request with a request id issued by Voyager, not by Codex, and calls Client::scoped_call with the captured scope. That puts Message::Workspace on the same bounded owner queue the header and avatar use, and waits up to 20 seconds.'
+        carries: 'Request {requestId, expectedVersion, action: CreateContent {typeId: terminal, destination: panel in the Fleet}} plus scope = the docked Fleet.'
+        fails: 'A full queue gives ''Workspace busy or unavailable; nothing was queued'' (Rejected). No reply in time gives an Uncertain result: ''Workspace result unconfirmed; do not repeat the request''.'
+      - id: assistant-request-16
+        fn: 'scope::check'
+        module: 'rs:voyager_app::scope'
+        at: {path: app/src/scope.rs, find: 'pub(crate) fn check('}
+        runs_on: owner-thread
+        via: channel
+        says: 'The owner thread runs the same checks as for UI requests (identity, quitting, freshness, expected version), then checks authority. scope::check projects the layout down to the captured Fleet and allows create-content only in that Fleet, either beside a Vessel inside it or into an empty Fleet. The first inspect call passes the same check and returns a layout trimmed to the Fleet.'
+        fails: 'Outside the focus: ''That target is outside this request''s captured avatar focus. Ask the human before changing focus.'' If the Fleet is gone: ''The request''s captured focus no longer exists''.'
+      - id: assistant-request-17
+        fn: 'Model::apply (Action::CreateContent)'
+        module: 'rs:voyager_app::workspace'
+        at: {path: app/src/workspace.rs, find: 'Action::CreateContent {'}
+        runs_on: owner-thread
+        via: call
+        says: 'On a copy of the layout, apply checks the content type, allows a program launch only for terminals, then creates a Content with no Core terminal yet and a Vessel inserted into the Fleet''s split. The owner saves the layout document to Core with the expected version, records the new terminal as allowed to start once (record_created_terminals), notifies the desktop that the revision changed, and replies with the layout projected to the captured scope.'
+        carries: 'The new Vessel and Content ids and the new version.'
+        fails: 'A Core save conflict or failure is reported as Rejected or Uncertain; the in-memory layout is only replaced after the save succeeds.'
+      - id: assistant-request-18
+        fn: 'Owner::tool_result'
+        module: 'rs:voyager_app::conversation_client'
+        at: {path: app/src/conversation_client.rs, find: 'fn tool_result(&mut self) -> Result<(), String> {'}
+        runs_on: background
+        via: channel
+        says: 'The conversation owner polls Tools each loop turn. When the effect thread''s result arrives it adds a Tool message to the chat snapshot (for example ''Content created'') and writes a JSON-RPC result to Codex''s stdin with success and the full response JSON. A response over 24 KiB is replaced by a short summary without the layout.'
+        carries: 'ToolOutcome {tool, callId, requestId, action, status, version} and the result text.'
+      - id: assistant-request-19
+        fn: 'conversation::notification'
+        module: 'rs:voyager_app::conversation'
+        at: {path: app/src/conversation.rs, find: 'pub(crate) fn notification(state: &mut Snapshot, value: &Visible, request: &str) -> bool {'}
+        runs_on: background
+        via: ipc
+        says: 'Codex streams its reply as agentMessage deltas and completed items, then turn/completed. The reader thread decodes them and the owner folds them into the shared snapshot: assistant text is appended for the active request, and the turn''s final status sets the phase. Each change bumps the snapshot version and wakes waiting readers.'
+        fails: 'A Codex error event sets the phase to Failed (unless Codex says it will retry) and stores the message. Oversized replies are cut and marked ''The displayed response is incomplete...''.'
+      - id: assistant-request-20
+        fn: 'Chat.toggle observe loop'
+        module: 'ts:desktop/mods/header/chat.ts'
+        at: {path: desktop/mods/header/chat.ts, find: 'const next = await observe(this.state?.version ?? null);'}
+        runs_on: script
+        via: script-call
+        says: 'While the chat is open, the script calls observe with the last version it has. The host snapshot function waits up to 20 seconds for a newer version, then returns the whole snapshot. render lists messages labelled You, Workspace (tool outcomes) or Voyager, shows ''Thinking…'' while the turn runs, and shows any error.'
+        carries: 'conversation Snapshot {version, phase, messages, error, limited, omitted}.'
+      - id: assistant-request-21
+        fn: Workspace.prepare
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'opened = await openTerminal(vessel.content, this.version);'}
+        runs_on: script
+        via: script-call
+        says: 'The desktop''s workspace watcher (host.rs) wakes on the owner''s revision notice and re-renders the header. render sees the new revision and runs an inspect; the reply lists the agent-created terminal in createdContents. prepare then calls openTerminal for that Vessel, which goes to the terminal_open host function and Client::terminal.'
+        carries: 'TerminalRequest {requestId, contentId, expectedVersion}.'
+        fails: 'The header records rejected or uncertain openings per Vessel and shows a status such as ''Terminal start is unconfirmed. Inspect before trying again.'''
+      - id: assistant-request-22
+        fn: open_terminal
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'fn open_terminal('}
+        runs_on: owner-thread
+        via: channel
+        says: 'The owner thread marks the Vessel''s content as start pending and saves, asks Core to run the launch (an empty argv for a plain terminal) in the Vessel''s directory, binds the returned Core terminal address, saves again and attaches a viewer. The new Vessel now shows a live terminal in the docked Fleet.'
+        carries: 'Core terminal.run with cwd and a voyager-operation label, then terminal.attach.'
+        fails: 'Only content recorded as newly created may start a program. An unclear Core answer leaves the marker in place and returns Uncertain; nothing is retried automatically.'
+    branches:
+      - name: 'Dock with Shift+Enter instead of dragging'
+        from: assistant-request-1
+        steps:
+          - id: assistant-request-1a
+            fn: 'Target on_key_down'
+            module: 'rs:voyager_desktop::avatar'
+            at: {path: desktop/src/avatar.rs, find: '&& event.keystroke.modifiers.shift'}
+            runs_on: ui-thread
+            via: call
+            says: 'Each dock target is a keyboard tab stop described as ''Shift+Enter to dock Voyager in this context''. When the focused Fleet target gets Shift+Enter, it calls Avatar::dock with that target''s scope and the pathway continues at step 2.'
+      - name: 'Codex asks for a change outside the captured focus'
+        from: assistant-request-16
+        steps:
+          - id: assistant-request-16a
+            fn: 'scope::check refusal'
+            module: 'rs:voyager_app::scope'
+            at: {path: app/src/scope.rs, find: 'captured avatar focus. Ask the human before changing focus.'}
+            runs_on: owner-thread
+            via: call
+            says: 'The target is not inside the projected Fleet, so check returns an error. The owner replies Rejected with the message prefixed ''invalid_workspace:'' and changes nothing.'
+          - id: assistant-request-16b
+            fn: outcome_text
+            module: 'rs:voyager_app::administrator'
+            at: {path: app/src/administrator.rs, find: 'fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> String {'}
+            runs_on: background
+            via: channel
+            says: 'The effect thread turns the reply into ''Workspace request refused: ...''. Codex receives it as an unsuccessful tool result, and its instructions tell it to report the real outcome and ask the human before changing focus.'
+          - id: assistant-request-16c
+            fn: Chat.render
+            module: 'ts:desktop/mods/header/chat.ts'
+            at: {path: desktop/mods/header/chat.ts, find: '? "Workspace"'}
+            runs_on: script
+            via: script-call
+            says: 'The refusal appears in the chat as a message labelled Workspace, followed by Codex''s own explanation labelled Voyager.'
+      - name: 'An effect or the provider stays unconfirmed'
+        from: assistant-request-18
+        steps:
+          - id: assistant-request-18a
+            fn: 'Tools::poll'
+            module: 'rs:voyager_app::administrator'
+            at: {path: app/src/administrator.rs, find: 'self.uncertain |= result.status == Status::Uncertain;'}
+            runs_on: background
+            via: channel
+            says: 'An Uncertain result (for example a timed-out owner reply) marks the turn uncertain. Later calls in the turn may still read, but any new effect is refused with ''An earlier effect is unconfirmed. Inspect and report it; do not replay it.'''
+          - id: assistant-request-18b
+            fn: 'conversation owner deadline'
+            module: 'rs:voyager_app::conversation_client'
+            at: {path: app/src/conversation_client.rs, find: '"Provider acknowledgement unconfirmed; nothing was resubmitted".into(),'}
+            runs_on: background
+            via: channel
+            says: 'If Codex does not answer a request within 25 seconds, the owner sets the phase to Unconfirmed with this error and resubmits nothing. New sends are refused while the phase is Unconfirmed.'
+          - id: assistant-request-18c
+            fn: Chat.render
+            module: 'ts:desktop/mods/header/chat.ts'
+            at: {path: desktop/mods/header/chat.ts, find: 'const error = this.error || this.state?.error;'}
+            runs_on: script
+            via: script-call
+            says: 'The chat shows either the local send error or the snapshot''s error text under the messages, so the person sees that the result is unknown.'
+    better:
+      - step: assistant-request-8
+        idea: 'Tell the model, or show the person, when the dock preview was dropped because the layout revision changed after docking.'
+        why: 'The preview is attached only when the revision is unchanged, so any later layout change silently removes the on-screen context.'
+        inferred: true
+      - step: assistant-request-4
+        idea: 'Read the dock preview screens off the owner thread.'
+        why: 'Up to three Core screen reads run on the single owner thread, so a request queued right after a dock waits behind them.'
+        inferred: true
+      - step: assistant-request-17
+        idea: 'Say in the create-content tool result that the terminal start is still pending in the desktop.'
+        why: 'The tool reports ''Content created'' before any program runs; the shell only starts when the header script later inspects and calls openTerminal.'
+        inferred: true
+    open_questions:
+      - 'How Codex chooses which tool to call and in what order happens inside the external codex app-server; only the tool descriptions and ADMINISTRATOR instructions in this repo guide it.'
+      - 'The claim that an async host function''s future runs off the UI thread comes from gpui-shell''s documentation at the pinned gpui-kit revision, not from Voyager''s own source.'
+      - 'No code in app/ starts an agent-created terminal by itself; it starts only when a running header script inspects and calls openTerminal. It is unclear whether that dependency on the header is intended for every case, such as a busy header.'
+      - 'The exact JSON-RPC rules of the app-server (whether turn/completed can arrive before a pending tool reply, retry behaviour) are defined by Codex, not by this repository.'
+  - id: launch-agent
+    name: 'Start a terminal agent in a Vessel'
+    trigger: 'The person opens the content picker for a new or split Vessel and chooses an agent entry such as Codex or Claude.'
+    summary: 'The header''s content picker asks the owner thread for the launch catalog, which comes from the profile''s launches.json and is checked against the PATH. Choosing an entry sends create-content with that launch; the owner creates the Vessel and records a one-time permission to start it. The header then opens the terminal, the owner asks Herdr Core to run the agent wrapped in an interactive bash, and the Agents list later recognises the running program from Core''s process list.'
+    steps:
+      - id: launch-agent-1
+        fn: CreationPicker.open
+        module: 'ts:desktop/mods/header/creation.ts'
+        at: {path: desktop/mods/header/creation.ts, find: 'const metadata = await Promise.allSettled([launches(), descriptions()]);'}
+        runs_on: script
+        via: call
+        says: 'Opening a split or empty Fleet area opens the picker for that destination. It asks the host for the launch catalog and the content type descriptions at the same time, and validates both against the contract schemas.'
+        carries: 'The destination: a panel in a Fleet (beside a Vessel or empty) or a new Fleet.'
+        fails: 'Validation or host errors are collected and shown in the picker.'
+      - id: launch-agent-2
+        fn: 'launch::catalog'
+        module: 'rs:voyager_app::launch'
+        at: {path: app/src/launch.rs, find: 'pub fn catalog(path: Option<&Path>, cwd: &str) -> Result<Catalog, String> {'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The launches host function sends Message::Launches to the owner thread, which calls catalog. It reads the profile''s launches.json (seeded on first run with Terminal, Codex and Claude), checks it is at most 8 KiB with unique ids and a valid default, and looks up each entry''s executable on the PATH. Entries that resolve are listed as available.'
+        carries: 'Catalog {settings with entries and default, available ids, errors, path}.'
+        fails: 'An invalid launches.json makes the whole catalog an error, shown in the picker.'
+      - id: launch-agent-3
+        fn: CreationPicker.render
+        module: 'ts:desktop/mods/header/creation.ts'
+        at: {path: desktop/mods/header/creation.ts, find: 'chosen(opening.destination, "terminal", launch),'}
+        runs_on: script
+        via: render
+        says: 'The picker shows one button per available entry, default first, such as ''Create Codex Vessel''. Clicking builds a create-content action with typeId terminal and the entry''s launch, or create-fleet-with-content for a new Fleet.'
+        carries: '{operation: create-content, destination, typeId: terminal, launch: {kind: codex, model, effort, permissions} or {kind: program, argv}}.'
+      - id: launch-agent-4
+        fn: 'Workspace.creationControl callback'
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'this.run(action, cx, undefined, version);'}
+        runs_on: script
+        via: call
+        says: 'The header runs the action with the version the picker opened at. run calls invoke from the generated workspace wrapper, which goes to the host call function and Client::call on the owner queue.'
+        fails: 'If another workspace request is pending: ''Wait for the pending workspace request. No Vessel was created.'''
+      - id: launch-agent-5
+        fn: 'Model::apply (Action::CreateContent)'
+        module: 'rs:voyager_app::workspace'
+        at: {path: app/src/workspace.rs, find: 'let panel = self.placement(cwd, type_id, name, launch)?;'}
+        runs_on: owner-thread
+        via: channel
+        says: 'With no captured scope the authority check passes. The owner confirms the content type is available; apply allows a launch only on terminal content and validates it with launch::argv, then stores a Content with the launch and no Core terminal, and a Vessel placed in the split. The layout is saved to Core.'
+        fails: 'Refused for an unsupported type, a launch on non-terminal content, an empty model or executable, or a stale version.'
+      - id: launch-agent-6
+        fn: record_created_terminals
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'fn record_created_terminals('}
+        runs_on: owner-thread
+        via: call
+        says: 'The owner remembers the new terminal with its exact launch as a one-time permission to start it. The reply''s createdContents lists it, so the header knows it may start this Vessel.'
+        carries: 'CreatedTerminal {content id, launch}.'
+      - id: launch-agent-7
+        fn: Workspace.prepare
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'opened = await openTerminal(vessel.content, this.version);'}
+        runs_on: script
+        via: script-call
+        says: 'After the applied reply, prepare walks the visible Vessels and calls openTerminal for terminals listed in createdContents, then inspects again to pick up the bound terminal.'
+        carries: 'TerminalRequest {requestId, contentId, expectedVersion}.'
+      - id: launch-agent-8
+        fn: 'terminal_open host function'
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: '.async_function("terminal_open", move |arguments| {'}
+        runs_on: background
+        via: script-call
+        says: 'Checks the request size and ids, then calls Client::terminal, which queues Message::Terminal and waits up to 25 seconds. The owner refuses reused ids, a stale or uninspected layout, a closing Voyage, an earlier unconfirmed start, or created content that is not visible.'
+        fails: 'Refusals return as a TerminalResponse with status rejected and a message; a timeout is uncertain: ''Terminal result unconfirmed; no request was repeated''.'
+      - id: launch-agent-9
+        fn: 'open_terminal (start marker)'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'item.start_pending = Some(operation.clone());'}
+        runs_on: owner-thread
+        via: channel
+        says: 'open_terminal checks that the stored launch still matches the recorded permission, then writes a start-pending marker named voyager-start-<request id> into the layout and saves it before asking Core to start anything. If anything goes wrong later, the marker shows a start may exist.'
+        fails: 'A changed launch is refused: ''The creation launch changed; no program was started''. A saved worker without the permission is refused: ''This saved worker has no new-creation permission; no command was restarted''.'
+      - id: launch-agent-10
+        fn: 'launch::shell_command'
+        module: 'rs:voyager_app::launch'
+        at: {path: app/src/launch.rs, find: 'fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, String> {'}
+        runs_on: owner-thread
+        via: call
+        says: 'terminal_command builds the argv. For Codex it is codex --no-daemon --model <model> with the reasoning effort and permission flags; the executable is resolved on the PATH to a full path. Known agent programs are wrapped as bash -i -c with a script that runs the agent and then execs an interactive bash, so the Vessel keeps a shell after the agent exits. Arguments stay literal.'
+        carries: 'argv, for example [/usr/bin/bash, -i, -c, <script>, voyager-agent, /path/to/codex, --no-daemon, ...].'
+        fails: 'A missing executable: ''Executable <name> is unavailable''. The marker is then cleared and the start is refused.'
+      - id: launch-agent-11
+        fn: 'Core::terminal_run_with'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: 'self.call("terminal.run", params)'}
+        runs_on: owner-thread
+        via: core-rpc
+        says: 'Sends terminal.run to Herdr Core over its socket with the argv, the Vessel''s working directory, no_parent, and a voyager-operation label matching the marker.'
+      - id: launch-agent-12
+        fn: 'terminal.run (Herdr Core)'
+        module: 'ext:hc'
+        runs_on: core
+        via: process
+        says: 'Herdr Core starts the program in a new terminal it owns and returns the terminal''s address and state. The program keeps running in Core even if Voyager''s viewer detaches.'
+      - id: launch-agent-13
+        fn: 'open_terminal (bind and attach)'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'item.backend = Some(CoreTerminalId(address.clone()));'}
+        runs_on: owner-thread
+        via: core-rpc
+        says: 'If Core reports the terminal live or finished, the owner stores the Core address on the content, clears the marker, saves the layout and sends terminal.attach to get a viewer.'
+        fails: 'A start that is still pending, or a failed save after start, is recorded as unconfirmed and returned as Uncertain; nothing is started again.'
+      - id: launch-agent-14
+        fn: install_viewer
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: '.and_then(|viewer| install_viewer(&viewers, &request.content_id.0, viewer));'}
+        runs_on: background
+        via: channel
+        says: 'The viewer is registered for the content so the native terminal view can show the screen Core streams. The header marks the opening applied and creates the terminal''s script state; the person now sees the agent running in the Vessel.'
+      - id: launch-agent-15
+        fn: 'Workspace.startContext loop'
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'await this.readProcesses(task);'}
+        runs_on: script
+        via: call
+        says: 'Every 3 seconds, if an Agents Vessel is visible, and after every accepted workspace snapshot, the header reads processes. inspectProcesses calls the processes host function, which calls Client::process with the whole-workspace scope and a List action.'
+        fails: 'A stale revision or owner error empties the list and keeps the message, which the Agents list shows as unavailable.'
+      - id: launch-agent-16
+        fn: 'process::start (List)'
+        module: 'rs:voyager_app::process'
+        at: {path: app/src/process.rs, find: 'let listed = core.terminal_list()?;'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The owner reloads the layout from Core and requires the same revision, then asks Core for its terminal list and builds a ProcessInfo for every terminal content that has a Core address.'
+        carries: 'ProcessInfo {contentId, terminalId, pid, cwd, state, foreground program, agentName, placementNames, reportedActivity}.'
+        fails: '''Inspect the current workspace revision before using processes'' when the revision moved on.'
+      - id: launch-agent-17
+        fn: 'observation::conversation_name'
+        module: 'rs:voyager_app::observation'
+        at: {path: app/src/observation.rs, find: 'pub(crate) fn conversation_name(terminal: &Terminal) -> Option<String> {'}
+        runs_on: owner-thread
+        via: call
+        says: 'process::info names the agent. If the foreground program is a known agent and its terminal title looks like a session name, the title is used; otherwise agent_name uses the folder of the live working directory. effective_name gives each Vessel''s display name, and reported activity is parsed from Core''s terminal metadata.'
+      - id: launch-agent-18
+        fn: agentsView
+        module: 'ts:desktop/mods/header/agents.ts'
+        at: {path: desktop/mods/header/agents.ts, find: 'const agent = recognized ? AGENT_NAMES[recognized] : undefined;'}
+        runs_on: script
+        via: render
+        says: 'The Agents list makes a row for each live terminal Vessel, plus visible Notes and Agents Vessels; terminals without a live process are left out. It recognises the agent from the foreground program name (codex shows as Codex), groups rows by reported activity (Needs attention, Working, Done, Idle) and lets the person click a row to reveal its Vessel.'
+    branches:
+      - name: 'Start the agent in a new Git worktree'
+        from: launch-agent-1
+        steps:
+          - id: launch-agent-1a
+            fn: 'worktree call'
+            module: 'ts:desktop/mods/header/worktrees.ts'
+            at: {path: desktop/mods/header/worktrees.ts, find: 'const raw: unknown = JSON.parse(await worktree(JSON.stringify(request)));'}
+            runs_on: script
+            via: script-call
+            says: 'The worktree dialog sends create {name, branch, base HEAD} for the selected Voyage. The host calls Client::worktree, and the owner checks freshness, version and that the Voyage has a working directory.'
+          - id: launch-agent-1b
+            fn: 'worktrees::create'
+            module: 'rs:voyager_app::worktrees'
+            at: {path: app/src/worktrees.rs, find: '&["worktree", "add", "-b", branch, "--", path, commit.trim()],'}
+            runs_on: background
+            via: process
+            says: 'On a thread spawned by the owner, git creates the branch and checkout under the main checkout''s .worktrees folder, after adding /.worktrees/ to Git''s local exclude file.'
+          - id: launch-agent-1c
+            fn: worktree_voyage_action
+            module: 'rs:voyager_app::client'
+            at: {path: app/src/client.rs, find: 'vec![worktree_voyage_action('}
+            runs_on: owner-thread
+            via: channel
+            says: 'When Git reports back, the owner opens a Voyage at the checkout (or selects or reopens one already there) with a default Terminal Vessel, saves, and records that terminal as startable. The person then launches the agent in this Voyage from step 1.'
+      - name: 'The agent''s executable is missing'
+        from: launch-agent-2
+        steps:
+          - id: launch-agent-2a
+            fn: 'launch::catalog'
+            module: 'rs:voyager_app::launch'
+            at: {path: app/src/launch.rs, find: 'Err(error) => errors.push(format!("{} is unavailable: {error}", entry.name)),'}
+            runs_on: owner-thread
+            via: call
+            says: 'An entry whose executable is not on the PATH is left out of available and an error such as ''Claude is unavailable: ...'' is added.'
+          - id: launch-agent-2b
+            fn: CreationPicker.render
+            module: 'ts:desktop/mods/header/creation.ts'
+            at: {path: desktop/mods/header/creation.ts, find: 'for (const error of this.catalog.errors)'}
+            runs_on: script
+            via: render
+            says: 'The picker does not offer that entry and shows the error text in red under the choices.'
+      - name: 'Core does not confirm the start'
+        from: launch-agent-11
+        steps:
+          - id: launch-agent-11a
+            fn: 'open_terminal (uncertain start)'
+            module: 'rs:voyager_app::client'
+            at: {path: app/src/client.rs, find: 'Terminal start {operation} is unconfirmed: {message}'}
+            runs_on: owner-thread
+            via: call
+            says: 'If Core''s answer is uncertain, the owner keeps the start-pending marker, records the content as unconfirmed and returns Uncertain, telling the person to look for the voyager-operation label in Core. It never runs the program again by itself.'
+          - id: launch-agent-11b
+            fn: Workspace.terminalStatus
+            module: 'ts:desktop/mods/header/main.ts'
+            at: {path: desktop/mods/header/main.ts, find: 'return "Terminal start is unconfirmed. Inspect before trying again.";'}
+            runs_on: script
+            via: render
+            says: 'The Vessel shows ''Terminal start is unconfirmed. Inspect before trying again.'' The Agents list leaves it out, because it has no live Core process.'
+    better:
+      - step: launch-agent-10
+        idea: 'Default the Codex entry to workspace-write permissions, or show the permission level on the picker button.'
+        why: 'The seeded Codex entry uses Permissions::Yolo, which adds --dangerously-bypass-approvals-and-sandbox, so one click starts an agent with no sandbox or approvals.'
+        inferred: true
+      - step: launch-agent-17
+        idea: 'Keep one list of known agent program names in the contract and use it in launch.rs, observation.rs and agents.ts.'
+        why: 'The three hand-written lists already differ (''cursor'' is recognised in observation.rs and agents.ts but not wrapped by launch.rs), so the same program can be treated differently.'
+        inferred: true
+      - step: launch-agent-15
+        idea: 'Drive process identity changes from Core''s event stream, which Voyager already subscribes to for activity, instead of a 3-second poll.'
+        why: 'Each poll is a full owner-thread round trip with a Core terminal list, and the list can lag a just-started agent by up to 3 seconds.'
+        inferred: true
+      - step: launch-agent-9
+        idea: 'Explain in the Vessel why a saved agent Vessel that never started cannot start after a restart, and offer a deliberate start action.'
+        why: 'The start permission lives only in the owner thread''s memory, so after a restart open_terminal refuses with ''This saved worker has no new-creation permission''.'
+        inferred: true
+    open_questions:
+      - 'How Herdr Core runs the argv (pseudo-terminal, environment, process group, what no_parent means) is defined by the external hc program.'
+      - 'How an agent program''s working, done or blocked state gets into Core''s terminal metadata is outside this repository; activity.rs only parses what Core reports.'
+      - 'When an agent Vessel is created in a Fleet that is not visible, the owner refuses to start it (''Created content is not currently visible''); it is not clear from source when the header retries once the Fleet is shown.'
+  - id: stop-program
+    name: 'Stopping a terminal program'
+    trigger: 'The person asks the assistant to stop the program running in a terminal Vessel.'
+    summary: 'At e6bd5b1 a Vessel has no Stop button; its close button only closes the viewer, and the program keeps running. One program is stopped through the assistant''s voyager_process tool: the app owner thread checks the request against the saved layout and Core''s live record, then sends Core a terminal.kill request. Core ends the program and closes the viewer channel, the Pane shows "Terminal ended", and the Vessel stays in the layout.'
+    steps:
+      - id: stop-program-1
+        fn: 'Owner::receive (conversation owner)'
+        module: 'rs:voyager_app::conversation_client'
+        at: {path: app/src/conversation_client.rs, find: 'ProviderEvent::Tool(call) => {'}
+        runs_on: background
+        via: ipc
+        says: 'Codex app-server sends a JSON-RPC item/tool/call for voyager_process with operation stop, naming the content ID, Core terminal ID and the PID the assistant saw when it listed processes. The conversation owner thread hands the call to the tool layer.'
+        carries: 'Tool arguments (expectedVersion, contentId, terminalId, pid).'
+      - id: stop-program-2
+        fn: 'Tools::call'
+        module: 'rs:voyager_app::administrator'
+        at: {path: app/src/administrator.rs, find: '"voyager_process" => serde_json::from_value::<ProcessInput>(arguments.clone())'}
+        runs_on: background
+        via: call
+        says: 'Checks the call belongs to the current thread and turn, that the turn is active, that no other tool effect is running and that no earlier effect is unconfirmed. It parses the input and runs the effect on a short-lived thread, so the conversation owner keeps handling events.'
+        fails: 'Refused before dispatch; the refusal text goes back to Codex.'
+      - id: stop-program-3
+        fn: 'Client::process'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'pub fn process('}
+        runs_on: background
+        via: call
+        says: 'On the tool''s effect thread, posts Message::Process to the app owner''s queue (8 messages) and waits up to 25 s for the reply.'
+        fails: 'A full queue is refused with "no process request was queued"; a timeout is reported as unconfirmed with "do not repeat".'
+      - id: stop-program-4
+        fn: 'owner loop (Message::Process)'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'crate::process::start(core, &layout, &scope, &request.input.action)'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The owner refuses during Quit, for a reused request ID, beyond 8 unfinished effects, or when the request''s workspace version is stale. It then reloads the saved layout from Core (doc.get) and checks the version again before calling process::start.'
+        fails: 'Rejected with a message; no stop is sent.'
+      - id: stop-program-5
+        fn: 'process::start'
+        module: 'rs:voyager_app::process'
+        at: {path: app/src/process.rs, find: 'let terminal = core.terminal_get(&address.0)?;'}
+        runs_on: owner-thread
+        via: core-rpc
+        says: 'Checks the content is inside the request''s captured focus, is a terminal bound to that Core terminal ID and has no unconfirmed start. It then asks Core for the terminal''s current record with terminal.get, a blocking round trip on the owner thread.'
+        fails: 'Refused when the content is outside the captured focus or does not match the named terminal; nothing is sent.'
+      - id: stop-program-6
+        fn: 'process::start (Stop arm)'
+        module: 'rs:voyager_app::process'
+        at: {path: app/src/process.rs, find: 'ProcessAction::Stop { pid, .. } => {'}
+        runs_on: owner-thread
+        via: call
+        says: 'Continues only if Core reports the program live with the same PID the assistant named, so a request based on an older listing is refused.'
+        fails: '"The inspected running process identity has changed or ended; no stop was sent".'
+      - id: stop-program-7
+        fn: 'Core::begin_terminal_kill'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: 'pub(crate) fn begin_terminal_kill('}
+        runs_on: owner-thread
+        via: call
+        says: 'Registers a pending reply under a new request ID and queues a JSON-RPC terminal.kill request on the control queue for the writer thread. It returns at once, so the owner thread does not wait for the program to end.'
+        fails: 'A full control queue refuses with "Core control queue unavailable; request was not queued".'
+      - id: stop-program-8
+        fn: 'Herdr Core terminal.kill'
+        module: 'ext:hc'
+        runs_on: core
+        via: core-rpc
+        says: 'Core ends the terminal''s program and its descendants, records the terminal as finished and replies with the terminal record. The voyager_process tool description in administrator.rs states this contract; Core''s code is outside this repo.'
+        inferred: true
+      - id: stop-program-9
+        fn: 'owner loop (effect waiter thread)'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'let result = effect.wait();'}
+        runs_on: background
+        via: core-rpc
+        says: 'The owner starts a waiter thread that blocks on the pending reply, which the reader thread delivers by request ID. Effect::wait then runs stop_result, which accepts only the same terminal and PID in state live or finished.'
+        fails: 'No reply within 20 s of dispatch, or an unexpected terminal, PID or state, becomes an uncertain result marked "do not repeat".'
+      - id: stop-program-10
+        fn: 'owner loop (Message::ProcessDone)'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'process_response(request_id.clone(), version, &mut fresh, result);'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The waiter posts ProcessDone back to the owner, which builds the response, stores it as the receipt for that request ID and replies to the tool thread. A repeated request ID gets this stored answer instead of a second stop.'
+      - id: stop-program-11
+        fn: process_text
+        module: 'rs:voyager_app::administrator'
+        at: {path: app/src/administrator.rs, find: '"Stop requested; Core still reports running"'}
+        runs_on: background
+        via: channel
+        says: 'The tool thread reports "Program ended" when Core says finished, or "Stop requested; Core still reports running" otherwise, and the reply goes back to Codex.'
+      - id: stop-program-12
+        fn: 'Core reader thread'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: 'buffer.closed = true;'}
+        runs_on: background
+        via: core-stream
+        says: 'Meanwhile Core closes the viewer channel with a CLOSE frame (kind 2). The reader thread marks that viewer''s stream closed, keeps any unread bytes and wakes the Pane.'
+        inferred: true
+      - id: stop-program-13
+        fn: 'Pane::pump'
+        module: 'rs:voyager_desktop::terminal'
+        at: {path: desktop/src/terminal.rs, find: 'self.status = "Terminal ended".into();'}
+        runs_on: ui-thread
+        via: channel
+        says: 'The Pane parses any remaining output first, because Viewer::finished is true only once the stream is closed and empty. It then sets its status to "Terminal ended", requests a repaint, and its stream task ends.'
+      - id: stop-program-14
+        fn: 'Pane::render'
+        module: 'rs:voyager_desktop::terminal::view'
+        at: {path: desktop/src/terminal_view.rs, find: '.when(!self.status.is_empty(), |view| {'}
+        runs_on: ui-thread
+        via: render
+        says: 'The last screen stays visible with a "Terminal ended" strip along the bottom. Because the header still holds this Vessel''s terminal state, it keeps showing the Pane, with no Start new shell button.'
+      - id: stop-program-15
+        fn: 'terminal_lifecycle::close_exited'
+        module: 'rs:voyager_app::terminal_lifecycle'
+        at: {path: app/src/terminal_lifecycle.rs, find: '&& terminal.reason.as_deref() == Some("exited")'}
+        runs_on: owner-thread
+        via: channel
+        says: 'On the header''s next workspace observation, the owner removes a Vessel only when Core reports its program finished with reason exited. A stopped program (reason killed in the unit test fixture) keeps its Vessel.'
+        inferred: true
+    branches:
+      - name: 'Closing the Vessel instead'
+        from: stop-program-1
+        steps:
+          - id: stop-program-b1-1
+            fn: 'renderPanel (close button)'
+            module: 'ts:desktop/mods/header/panel-view.ts'
+            at: {path: desktop/mods/header/panel-view.ts, find: '.tooltip("Close viewer. The process keeps running.")'}
+            runs_on: script
+            via: call
+            says: 'The Vessel''s close button sends a remove-panel request, which takes the placement out of the layout. Its tooltip states that the program keeps running in Core.'
+      - name: 'Closing the whole Voyage'
+        from: stop-program-1
+        steps:
+          - id: stop-program-b2-1
+            fn: 'VoyageClose (confirmation)'
+            module: 'ts:desktop/mods/header/voyage-close.ts'
+            at: {path: desktop/mods/header/voyage-close.ts, find: 'Save Notes and stop this Voyage''s programs. Other Voyages stay open.'}
+            runs_on: script
+            via: call
+            says: 'Close Voyage lists the Voyage''s content and asks for confirmation before saving Notes and stopping its programs.'
+          - id: stop-program-b2-2
+            fn: 'voyage_close::execute'
+            module: 'rs:voyager_app::voyage_close'
+            at: {path: app/src/voyage_close.rs, find: 'action: ProcessAction::Stop {'}
+            runs_on: background
+            via: call
+            says: 'On its own thread, after Notes are saved, it inspects the workspace and sends one Stop process request per program through Client::process, joining the main path at stop-program-3. Each program must be reported finished, and the first refusal or unconfirmed result ends the loop.'
+      - name: 'Pressing Ctrl+C instead'
+        from: stop-program-1
+        steps:
+          - id: stop-program-b3-1
+            fn: 'Pane::key'
+            module: 'rs:voyager_desktop::terminal'
+            at: {path: desktop/src/terminal.rs, find: 'fn ghostty_encodes_control_c_as_terminal_interrupt() {'}
+            runs_on: ui-thread
+            via: call
+            says: 'Ctrl+C in the terminal is ordinary input: libghostty encodes it as byte 3 (this unit test checks it), and it follows the typing pathway. The program decides whether to end; Voyager sends no stop request.'
+    better:
+      - step: stop-program-1
+        idea: 'Offer a Stop action on a terminal Vessel that sends the same Stop process request the assistant uses.'
+        why: 'Today one program can be ended only by asking the assistant, typing into it or closing its whole Voyage, while the visible close button keeps it running.'
+        inferred: true
+      - step: stop-program-14
+        idea: 'Show the "This program has ended." message and Start new shell button for a program that ends while attached, as for one found ended at attach time.'
+        why: 'The attached case shows only a status strip, although host.rs and panel-view.ts already offer a restart for the attach-time case.'
+        inferred: true
+    open_questions:
+      - 'How Herdr Core ends the program (signal, grace period, descendants) is outside this repository; only the tool description states the contract.'
+      - 'The reason Core records after terminal.kill is not shown; only the unit test fixture uses "killed".'
+      - 'Whether Core always sends a CLOSE frame on a viewer channel when its program ends is not shown; Voyager only handles one.'
+      - 'host.rs maps a "finished" attach refusal to the ended reason, and the header then shows "This program has ended." with Start new shell. When the header would re-attach a stopped Vessel within one session was not established.'
+  - id: program-exits
+    name: 'Shell exits by itself'
+    trigger: 'The person types `exit` and presses Enter in a terminal Vessel running a plain shell.'
+    summary: 'The keystrokes follow the typing pathway and the shell ends. Core closes the viewer channel, so the Pane parses the last output and shows "Terminal ended". On the header''s next workspace observation (every 3 seconds) the app owner asks Core for its terminals, sees the shell finished with reason exited, removes the Vessel, saves the layout and notifies the header, which reloads the layout without that Vessel.'
+    steps:
+      - id: program-exits-1
+        fn: 'Pane::send'
+        module: 'rs:voyager_desktop::terminal'
+        at: {path: desktop/src/terminal.rs, find: 'fn send(&mut self, bytes: Vec<u8>) -> Result<()> {'}
+        runs_on: ui-thread
+        via: call
+        says: 'The `exit` keystrokes and Enter travel as in the typing pathway, encoded on the UI thread and queued straight onto the Core connection.'
+      - id: program-exits-2
+        fn: 'Shell exits'
+        module: 'ext:shell'
+        runs_on: program
+        via: ipc
+        says: 'The shell reads the command from its pseudo-terminal and exits.'
+        inferred: true
+      - id: program-exits-3
+        fn: 'Herdr Core records the end'
+        module: 'ext:hc'
+        runs_on: core
+        via: process
+        says: 'Core sees its child exit and marks the terminal finished with reason exited. It closes each attached viewer channel with a CLOSE frame and emits a finished event on the activity subscription.'
+        inferred: true
+      - id: program-exits-4
+        fn: 'Core reader thread'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: 'buffer.closed = true;'}
+        runs_on: background
+        via: core-stream
+        says: 'The reader thread marks the viewer''s stream closed, keeps any bytes not yet parsed and wakes the Pane.'
+      - id: program-exits-5
+        fn: 'Pane::pump'
+        module: 'rs:voyager_desktop::terminal'
+        at: {path: desktop/src/terminal.rs, find: 'self.status = "Terminal ended".into();'}
+        runs_on: ui-thread
+        via: channel
+        says: 'The Pane parses the last output first, since Viewer::finished is true only when the stream is closed and empty. It then sets "Terminal ended", requests a repaint, and its stream task returns.'
+      - id: program-exits-6
+        fn: 'Pane::render'
+        module: 'rs:voyager_desktop::terminal::view'
+        at: {path: desktop/src/terminal_view.rs, find: '.when(!self.status.is_empty(), |view| {'}
+        runs_on: ui-thread
+        via: render
+        says: 'The final screen stays visible with a "Terminal ended" strip along the bottom. The Vessel is still in the layout at this point.'
+      - id: program-exits-7
+        fn: 'Activity::notification'
+        module: 'rs:voyager_app::activity'
+        at: {path: app/src/activity.rs, find: '} else if matches!(event.kind.as_str(), "lost" | "finished" | "removed")'}
+        runs_on: background
+        via: core-stream
+        says: 'The same reader thread passes activity-channel frames to Activity. A finished event for a bound terminal replaces its reported status with "Program observation ended or was lost" and calls changed(), which raises the revision and wakes the owner once.'
+      - id: program-exits-8
+        fn: next_message
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'if activity.take_dirty()'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The wake posts Message::ActivityChanged to the owner''s queue (client.rs line 347). On receiving it, next_message sees the dirty flag and sends the header''s listener a WorkspaceNotice with the new activity revision; the layout is not touched.'
+      - id: program-exits-9
+        fn: 'header workspace task'
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: 'let next = match changed_client.workspace_changes(after).await {'}
+        runs_on: ui-thread
+        via: channel
+        says: 'A desktop host task waiting on workspace_changes receives the notice, reads the reported activity on the background executor, stores both and refreshes the header script.'
+      - id: program-exits-10
+        fn: Workspace.render
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'this.readActivity(ownerNotice.activityRevision);'}
+        runs_on: script
+        via: script-call
+        says: 'The header sees a new activity revision and updates the Vessel''s activity badge. The workspace revision has not changed, so it does not reload the layout.'
+      - id: program-exits-11
+        fn: Workspace.startContext
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'await task.sleep(CONTEXT_REFRESH_MS);'}
+        runs_on: script
+        via: call
+        says: 'Independently, the header''s context loop runs every 3 seconds (CONTEXT_REFRESH_MS). Each round''s readObservation calls the host function workspace_observation with the header''s workspace version and active Vessel; clicking a different Vessel also starts a read.'
+      - id: program-exits-12
+        fn: 'host workspace_observation'
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: '.async_function("workspace_observation", move |arguments| {'}
+        runs_on: background
+        via: script-call
+        says: 'The host checks the arguments and calls Client::workspace_observation, which posts Message::WorkspaceObservation to the owner queue and awaits the reply. gpui-kit drives async host functions on the background executor, so the UI thread does not wait.'
+      - id: program-exits-13
+        fn: 'owner loop (Message::WorkspaceObservation)'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'let terminals = core.as_mut().ok().and_then(|core| core.terminal_list().ok());'}
+        runs_on: owner-thread
+        via: channel
+        says: 'The owner asks Core for all terminals (terminal.list, a blocking round trip). If one is finished with reason exited and was live earlier in this session, it runs close_exited on a copy of the layout, then records the currently live terminals for next time.'
+        fails: 'If the header''s version is stale it answers "Workspace changed; observe it again" and changes nothing.'
+      - id: program-exits-14
+        fn: 'terminal_lifecycle::close_exited'
+        module: 'rs:voyager_app::terminal_lifecycle'
+        at: {path: app/src/terminal_lifecycle.rs, find: 'model.apply(voyager_contract::Action::RemovePanel { id: id.clone() })?;'}
+        runs_on: owner-thread
+        via: call
+        says: 'For every visible Vessel or Portal whose terminal was live and is now finished with reason exited, it applies RemovePanel. Losing a viewer or the Core connection never counts as an exit (docs/terminal.md).'
+      - id: program-exits-15
+        fn: 'owner loop (save)'
+        module: 'rs:voyager_app::client'
+        at: {path: app/src/client.rs, find: 'match save(current_core, &candidate.layout, version) {'}
+        runs_on: owner-thread
+        via: core-rpc
+        says: 'The owner saves the new layout to Core''s voyager-layout-v1 document with the expected version (doc.set). On success it adopts the new layout and revision and sends a WorkspaceNotice to the header.'
+        fails: 'If the save fails the owner marks its copy not fresh and returns "Exited panel closure unconfirmed"; the layout is unchanged.'
+      - id: program-exits-16
+        fn: Workspace.inspectNotice
+        module: 'ts:desktop/mods/header/main.ts'
+        at: {path: desktop/mods/header/main.ts, find: 'if (!this.busy) this.inspectNotice(cx);'}
+        runs_on: script
+        via: script-call
+        says: 'The header sees the workspace revision move past its own, runs an inspect request and accepts the new layout. The Vessel is gone; if it was the Fleet''s only Vessel, the Fleet is left empty.'
+    branches:
+      - name: 'An agent exits back to Bash'
+        from: program-exits-2
+        steps:
+          - id: program-exits-b1-1
+            fn: 'agent launch command'
+            module: 'rs:voyager_app::launch'
+            at: {path: app/src/launch.rs, find: '"\"$@\"; exec \"$BASH\" -i".into(),'}
+            runs_on: program
+            via: process
+            says: 'A recognised agent runs under `bash -i -c ''"$@"; exec "$BASH" -i''`. When the agent exits, Bash replaces itself with an interactive shell in the same terminal, so the terminal does not finish and the Vessel stays with a prompt.'
+      - name: 'The Core connection is lost'
+        from: program-exits-4
+        steps:
+          - id: program-exits-b2-1
+            fn: 'Pane::pump'
+            module: 'rs:voyager_desktop::terminal'
+            at: {path: desktop/src/terminal.rs, find: 'self.status = "Core disconnected".into();'}
+            runs_on: ui-thread
+            via: channel
+            says: 'If the reader or writer thread stops, every viewer is woken and the Pane shows "Core disconnected" instead. The layout keeps the Vessel, because a lost connection does not show that the shell exited.'
+      - name: 'The shell ended while Voyager was not running'
+        from: program-exits-13
+        steps:
+          - id: program-exits-b3-1
+            fn: 'terminal_lifecycle::prepare_reopen'
+            module: 'rs:voyager_app::terminal_lifecycle'
+            at: {path: app/src/terminal_lifecycle.rs, find: 'pub(crate) fn prepare_reopen(layout: &mut Layout, terminals: &[Terminal]) -> Vec<ContentId> {'}
+            runs_on: owner-thread
+            via: call
+            says: 'close_exited only removes Vessels whose terminal was seen live in this session. At the next start, a retained Vessel whose shell is confirmed finished keeps its content ID and is prepared to start a fresh plain shell when it is shown (client.rs line 1678).'
+    better:
+      - step: program-exits-11
+        idea: 'Run close_exited when Core''s activity subscription reports a finished terminal, instead of waiting for the header''s 3-second observation.'
+        why: 'The owner is already woken by that event (program-exits-8), yet Vessel removal waits for the header to poll and needs a header to be running.'
+        inferred: true
+      - step: program-exits-13
+        idea: 'Move the exited-Vessel cleanup out of the WorkspaceObservation read into its own owner step.'
+        why: 'A message named as an observation currently saves the layout, which hides where this layout change comes from.'
+        inferred: true
+    open_questions:
+      - 'Whether Core sends a CLOSE frame on exit, and in what order relative to the activity finished event, is outside this repository.'
+      - 'Only the header''s workspace_observation call (host.rs) leads to close_exited; behaviour with no header script running was not traced.'
+      - 'Whether the Pane and its Viewer are dropped after the Vessel is removed, and whether a CLOSE is then sent for the already-closed channel, was not traced.'
+  - id: quit
+    name: 'Quit Voyager while programs keep running'
+    trigger: 'The person presses Ctrl+Q in the workspace window.'
+    summary: 'Ctrl+Q runs a Quit handler on the GPUI main thread. It shows "Closing Voyager. Programs keep running." and waits, on a background thread, for the private assistant owner to stop its Codex app-server and audio. If that succeeds GPUI stops and the process exits; the Core bridge loses its pipes and Core keeps every program running. At this commit the workspace owner is not told about the quit, so its "Voyager is quitting" refusals and its Core stop are not used by the desktop.'
+    steps:
+      - id: quit-1
+        fn: 'Quit key binding'
+        module: 'rs:voyager_desktop'
+        at: {path: desktop/src/lib.rs, find: 'cx.bind_keys([KeyBinding::new("ctrl-q", Quit, None)]);'}
+        runs_on: ui-thread
+        via: call
+        says: 'Ctrl+Q is bound to the `Quit` action declared in lib.rs. No header control or menu dispatches Quit; the window close button takes a different path (see branch).'
+      - id: quit-2
+        fn: 'quit::register Quit handler'
+        module: 'rs:voyager_desktop::quit'
+        at: {path: desktop/src/quit.rs, find: 'cx.on_action(move |_: &Quit, cx| {'}
+        runs_on: ui-thread
+        via: call
+        says: 'The handler keeps one state: Ready, Pending or Finished. From Ready it moves to Pending, so only one shutdown ever runs.'
+        fails: 'While Pending, another Ctrl+Q is ignored. After a failed quit it only shows the error again. After a successful one it calls cx.quit().'
+      - id: quit-3
+        fn: 'Header::quit_status'
+        module: 'rs:voyager_desktop::host'
+        at: {path: desktop/src/host.rs, find: 'pub(crate) fn quit_status(&mut self, status: String, cx: &mut Context<Self>) {'}
+        runs_on: ui-thread
+        via: render
+        says: 'Sets the message "Closing Voyager. Programs keep running." and asks for a redraw. Header::render shows it in the same bottom-left box it uses for load and theme errors.'
+      - id: quit-4
+        fn: 'quit::register spawned task'
+        module: 'rs:voyager_desktop::quit'
+        at: {path: desktop/src/quit.rs, find: '.spawn(async move { conversation.quit().await });'}
+        runs_on: background
+        via: call
+        says: 'A UI task starts the private conversation shutdown on the GPUI background executor and awaits it, so the window keeps drawing while shutdown runs. Only the conversation client is shut down here.'
+      - id: quit-5
+        fn: 'conversation_client::Client::quit'
+        module: 'rs:voyager_app::conversation_client'
+        at: {path: app/src/conversation_client.rs, find: '.send(OwnerMessage::Quit(reply))'}
+        runs_on: background
+        via: channel
+        says: 'Sends Quit on the conversation owner''s 8-slot queue using an async send, so a full queue makes Quit wait for room instead of failing or blocking GPUI. It then waits for the reply.'
+        fails: 'If the owner thread is gone: "The private shutdown owner is unavailable". If the reply is lost: "Private shutdown was not confirmed; do not repeat it".'
+      - id: quit-6
+        fn: 'conversation owner loop, Owner::quit'
+        module: 'rs:voyager_app::conversation_client'
+        at: {path: app/src/conversation_client.rs, find: 'let result = owner.quit();'}
+        runs_on: background
+        via: channel
+        says: 'The conversation owner thread checks its queue between 10 ms waits for assistant events. On Quit it ends native audio, finishes any voice start, and drops the pending provider acknowledgement, tool callbacks not yet dispatched, the voice offer and the realtime session.'
+        carries: 'the reply channel for the shutdown result'
+      - id: quit-7
+        fn: 'Codex::shutdown'
+        module: 'rs:voyager_app::codex'
+        at: {path: app/src/codex.rs, find: 'pub(crate) fn shutdown(&mut self) -> Result<(), String> {'}
+        runs_on: background
+        via: process
+        says: 'If a Codex app-server was started for the private assistant, it is killed and reaped, with 5 seconds allowed for exit. This child belongs to Voyager, not Core, so it is stopped rather than left running.'
+        fails: '"Private provider exit is unconfirmed"; the provider handle is kept and the failure is reported.'
+      - id: quit-8
+        fn: 'Owner::quit (audio wait and result)'
+        module: 'rs:voyager_app::conversation_client'
+        at: {path: app/src/conversation_client.rs, find: 'let deadline = Instant::now() + Duration::from_secs(6);'}
+        runs_on: background
+        via: call
+        says: 'Waits up to 6 seconds for the native audio helper to confirm it exited, then marks a running conversation Interrupted, or Unconfirmed if anything failed. The owner keeps this result: later private requests are refused with "Voyager is quitting; no private request was accepted", and a repeated request id gets its earlier reply.'
+        fails: '"Native audio helper exit is unconfirmed" is added to the failures.'
+      - id: quit-9
+        fn: 'quit::register completion'
+        module: 'rs:voyager_desktop::quit'
+        at: {path: desktop/src/quit.rs, find: 'Ok(()) => cx.quit(),'}
+        runs_on: ui-thread
+        via: call
+        says: 'Back on the UI thread, a clean result calls cx.quit() and records Finished(Ok).'
+        fails: 'Any failure shows "Quit did not complete. Nothing was repeated." with the details and records Finished(Err); the app stays open (see branch).'
+      - id: quit-10
+        fn: 'GPUI quit, main returns'
+        module: 'bin:voyager-shell'
+        at: {path: desktop/src/main.rs, find: 'arguments().and_then(|(profile, session)| voyager_desktop::run(profile, session))'}
+        runs_on: ui-thread
+        via: call
+        says: 'On Linux, GPUI stops its event loop and runs its own quit callbacks; `run` returns Ok and `main` returns, so the process exits. No code sends a close for each terminal viewer or stops the workspace owner first.'
+      - id: quit-11
+        fn: 'process exit and the Core bridge'
+        module: 'rs:voyager_app::core'
+        at: {path: app/src/core.rs, find: 'let mut child = Command::new(env::var_os("VOYAGER_HC").unwrap_or_else(|| "hc".into()))'}
+        runs_on: os
+        via: process
+        says: 'The owner thread and the bridge reader and writer threads end with the process. Their Core value is never dropped, so its Drop does not kill the bridge. The OS closes the pipes to `hc connect`, which detaches every viewer at once.'
+        inferred: true
+      - id: quit-12
+        fn: 'Herdr Core keeps programs'
+        module: 'ext:hc'
+        runs_on: core
+        via: core-stream
+        says: 'Core owns the shells and agents, so they keep running with their screens. The next start with the same session attaches the saved placements to those live programs. The docs state this outcome; the Core side of the disconnect is not in this repository.'
+        inferred: true
+    branches:
+      - name: 'Window close button'
+        from: quit-1
+        steps:
+          - id: quit-b1-1
+            fn: 'avatar::Binding::new close hook, Avatar::float'
+            module: 'rs:voyager_desktop::avatar'
+            at: {path: desktop/src/avatar.rs, find: 'window.on_window_should_close(cx, move |window, cx| {'}
+            runs_on: ui-thread
+            via: call
+            says: 'Closing the workspace window does not quit. The avatar opens a small floating avatar window and minimizes the workspace, then the close is cancelled. Programs and the assistant keep running.'
+          - id: quit-b1-2
+            fn: 'on_window_closed handler'
+            module: 'rs:voyager_desktop'
+            at: {path: desktop/src/lib.rs, find: 'if cx.windows().is_empty() {'}
+            runs_on: ui-thread
+            via: call
+            says: 'Only if floating fails (for example, the avatar has no painted position) does the window close. With no windows left, this handler calls cx.quit() directly, skipping the private conversation shutdown in quit-4 to quit-8.'
+      - name: 'Private shutdown fails'
+        from: quit-9
+        steps:
+          - id: quit-b2-1
+            fn: 'quit::register Quit handler (Finished with an error)'
+            module: 'rs:voyager_desktop::quit'
+            at: {path: desktop/src/quit.rs, find: 'State::Finished(Err(error)) => {'}
+            runs_on: ui-thread
+            via: render
+            says: 'The error stays in the header status box. Every later Ctrl+Q only shows it again; nothing is retried. The window close path is the remaining way out.'
+      - name: 'Workspace owner quit gate (present but not called by the desktop)'
+        from: quit-4
+        steps:
+          - id: quit-b3-1
+            fn: 'Client::quit, owner thread Message::Quit'
+            module: 'rs:voyager_app::client'
+            at: {path: app/src/client.rs, find: 'let result = quit_result.get_or_insert_with(|| {'}
+            runs_on: owner-thread
+            via: channel
+            says: 'Client::quit exists and app/tests/quit.rs calls it, but the desktop stopped calling it in commit fca3573. If called, the owner stores one quit result. Afterwards it refuses workspace effects, terminal opens, process and worktree actions and content changes with "Voyager is quitting; ...", while Inspect still returns the cached layout.'
+          - id: quit-b3-2
+            fn: 'Core::quit'
+            module: 'rs:voyager_app::core'
+            at: {path: app/src/core.rs, find: 'pub(crate) fn quit(&mut self) -> Result<(), Error> {'}
+            runs_on: owner-thread
+            via: core-rpc
+            says: 'Closes terminal input for all viewers, checks with server.status that Core''s ID is unchanged, then sends server.stop, which stops the whole Core session and its programs, and reaps the bridge within 5 seconds. Stopping programs conflicts with "programs keep running", which matches why the desktop no longer uses it.'
+            inferred: true
+    better:
+      - step: quit-4
+        idea: 'Send the workspace owner a quit fence that refuses new effects and closes viewer input, without calling server.stop.'
+        why: 'During the private shutdown, which can take over 10 seconds, the header still accepts layout changes, terminal starts and typing, and any Core request still in flight at exit has no reported outcome.'
+        inferred: true
+      - step: quit-b1-2
+        idea: 'Route the close-button fallback through the Quit action instead of calling cx.quit() directly.'
+        why: 'The fallback skips the private shutdown, so a running Codex app-server or audio helper may be left without being reaped.'
+        inferred: true
+      - step: quit-2
+        idea: 'After a failed quit, offer an explicit "Quit anyway" rather than only repeating the error.'
+        why: 'Today Ctrl+Q can never finish after one failure, and the person must know to use the window close path.'
+        inferred: true
+      - step: quit-11
+        idea: 'Close the Core bridge deliberately (Core::close, without server.stop) before exiting.'
+        why: 'Viewer detachment currently depends on the OS closing pipes and on `hc connect` exiting when its input closes, which this repository cannot confirm.'
+        inferred: true
+    open_questions:
+      - 'Does `hc connect` exit on its own when Voyager''s end of the pipes closes, and does Core treat that as a detach of every attached viewer? Not visible in this repository.'
+      - 'docs/terminal.md says Ctrl+Q "closes the application viewers", but no explicit viewer close runs on this path. Is the implicit disconnect the intended mechanism?'
+      - 'Was dropping the workspace owner''s quit gate in fca3573 meant to drop the refusals too, or only the server.stop?'
+      - 'Does GPUI on Linux drop window entities (Panes, Viewers) before `run` returns? If so, a Viewer drop could matter; the source of Viewer shows no Drop.'
+entry_points:
+  - who: 'voyager-shell binary (desktop crate)'
+    fn: main
+    at: {path: desktop/src/main.rs, find: 'fn main() {'}
+    plain: 'The process starts here. It parses --profile and --session and hands them to voyager_desktop::run.'
+    why: 'The binary stays a thin argument parser so the desktop library holds all start-up logic.'
+    inferred: true
+  - who: 'voyager_desktop library'
+    fn: 'voyager_desktop::run'
+    at: {path: desktop/src/lib.rs, find: 'pub fn run(profile: PathBuf, session: String) -> Result<()> {'}
+    plain: 'Seeds the profile, creates the app clients, then starts GPUI. It returns only after GPUI quits.'
+    why: 'One function owns the whole lifetime, so everything created here lives until quit.'
+    inferred: true
+  - who: 'voyager_app (content packages)'
+    fn: 'content::seed_package'
+    at: {path: app/src/content/package.rs, find: 'pub fn seed_package(package: &Path, files: &[(&str, &str)]) -> io::Result<()> {'}
+    plain: 'The first call into the app crate. It writes the Notes package into the profile unless it, or a removed copy, already exists.'
+    why: 'A removed package stays removed, and the person''s edits are kept.'
+  - who: 'voyager_app (workspace owner thread)'
+    fn: 'Client::start_with_launches'
+    at: {path: app/src/client.rs, find: 'fn start_with_launches('}
+    plain: 'Spawns the owner thread, the single place that holds the layout, the Core connection and the content owner, and returns a cheap cloneable Client.'
+    why: 'Every change is applied in order on one thread, so callers on any thread see one consistent layout version.'
+    inferred: true
+  - who: 'Herdr Core (through the `hc connect` bridge process)'
+    fn: 'Core::connect_activity'
+    at: {path: app/src/core.rs, find: '.args(["connect", "--session", session])'}
+    plain: 'The owner thread starts `hc connect --session <name>` and speaks framed JSON-RPC to Core through its stdin and stdout, starting with `hello`.'
+    why: 'Core is a separate program that owns terminals and saved documents; this is Voyager''s only connection to it.'
+  - who: 'Core bridge reader thread'
+    fn: 'Core::connect_activity reader loop'
+    at: {path: app/src/core.rs, find: 'let Ok(frame) = Frame::read_from(&mut output) else {'}
+    plain: 'Reads every frame from Core and routes it to an RPC reply, a terminal output buffer or the activity observer. A matching writer thread sends frames out.'
+    why: 'Output and replies arrive at any time, so one thread drains the pipe while the owner thread waits on its queue.'
+    inferred: true
+  - who: 'voyager_app (conversation owner thread)'
+    fn: 'conversation_client::Client::with_audio'
+    at: {path: app/src/conversation_client.rs, find: 'pub fn with_audio('}
+    plain: 'Spawns the private assistant''s owner thread. It starts the Codex app-server only when the assistant is first used.'
+    why: 'Assistant work and audio are kept off the workspace owner and the UI thread.'
+    inferred: true
+  - who: 'GPUI runtime'
+    fn: 'gpui_platform::application().run launch callback'
+    at: {path: desktop/src/lib.rs, find: '.run(move |cx: &mut App| {'}
+    plain: 'GPUI calls this on the main thread once the platform is connected. From here on the main thread is GPUI''s UI thread.'
+    why: 'GPUI windows, entities and script views must be created inside its application context.'
+  - who: 'gpui-shell QuickJS runtime'
+    fn: 'ShellRuntime::new_with_components'
+    at: {path: desktop/src/lib.rs, find: 'let runtime = match ShellRuntime::new_with_components(cx, registry) {'}
+    plain: 'Creates the QuickJS engine with Voyager''s native components (Terminal, Split, Status and others) registered.'
+    why: 'Scripts can then build views from both gpui-kit elements and Voyager''s native components.'
+  - who: 'QuickJS header script (first evaluation)'
+    fn: 'host::load, ShellRuntime::try_load'
+    at: {path: desktop/src/host.rs, find: 'runtime.try_load(package, window, cx)'}
+    plain: 'Evaluates `<profile>/mods/header/main.js` under a policy that exposes only the voyager_* host modules, then constructs the Workspace view.'
+    why: 'The header UI is an editable script the person owns; the policy limits what it can reach.'
+    inferred: true
+  - who: 'QuickJS header script (script side)'
+    fn: Workspace.init
+    at: {path: desktop/mods/header/main.ts, find: 'init(_props: unknown, cx: AsyncContext) {'}
+    plain: 'The first script code that runs. It sets the opening status and sends the first inspect to the workspace owner.'
+    why: 'The script has no layout until the owner returns one from Core.'
+  - who: 'Notes script runtime'
+    fn: 'notes::Host::new'
+    at: {path: desktop/src/notes.rs, find: 'pub fn new(package: PathBuf, client: Client) -> Self {'}
+    plain: 'Creates a separate, isolated QuickJS runtime for the Notes package at start-up. The Notes script itself is evaluated later, once per Notes view shown.'
+    why: 'Content packages are kept apart from the header script and from each other.'
+    inferred: true
+  - who: 'Native terminal component (script into Rust)'
+    fn: 'TerminalState state constructor'
+    at: {path: desktop/src/terminal.rs, find: 'move |args, window, cx: &mut App| {'}
+    plain: 'Runs when the script calls TerminalState.new(contentId). It takes the attached Viewer from the shared map and creates the terminal Pane.'
+    why: 'The script decides where terminals appear; Rust owns the Core channel and the drawing.'
+  - who: 'voyager_contract (at start-up)'
+    fn: 'LaunchSettings::default'
+    at: {path: desktop/src/lib.rs, find: '&serde_json::to_string_pretty(&voyager_contract::launch::LaunchSettings::default())?,'}
+    plain: 'The contract crate has no start function; its types are used directly. This is its first use at start-up, writing the default launches.json.'
+    why: 'Shared types keep Rust, scripts and agents on one vocabulary.'
+  - who: 'contract schema exporter (separate binary)'
+    fn: main
+    at: {path: contract/src/bin/export.rs, find: 'fn main() {'}
+    plain: 'A build-time tool, not part of start-up. It prints JSON Schemas for the contract types (or avatar schemas with --avatar), from which contract/generated is produced.'
+    why: 'Generated TypeScript and validators stay in step with the Rust types.'
+  - who: 'desktop script-type exporter (separate binary)'
+    fn: main
+    at: {path: desktop/src/bin/export-script-types.rs, find: 'fn main() -> Result<()> {'}
+    plain: 'A build-time tool, not part of start-up. It prints TypeScript declarations for the header''s host modules and native components, or for Notes with --notes.'
+    why: 'Scripts can be type-checked against the host modules Rust actually provides.'

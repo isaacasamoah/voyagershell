@@ -1,0 +1,233 @@
+schema: app-atlas/v0
+note: 'Proposals from the 11 November architecture review, restated against this map. None of this is implemented or accepted. Counts marked with `count` are recomputed from the code at every build.'
+
+proposals:
+  - id: guardrails
+    step: M1
+    title: Guardrails before any move
+    plain: 'Run the checks the project already has on every pull request, and add a few architecture checks that fail on new tangles.'
+    today: 'There is no CI workflow in the repository, although CONSTRAINTS.md describes one. Nothing stops a module from depending on something it should not, or product code from compiling a file out of experiments/.'
+    today_nodes: ['rs:voyager_app::typing_trace', 'rs:voyager_desktop::frame_profile', 'rs:voyager_desktop::glyph_probe', 'rs:voyager_desktop::redraw_probe']
+    evidence:
+      - plain: 'CONSTRAINTS.md says CI exists. The only file under .github is CODEOWNERS.'
+        path: CONSTRAINTS.md
+        find: 'The existing CI runs the ordinary Rust and desktop checks'
+      - plain: 'The app crate compiles a file from experiments/ into the product.'
+        path: app/src/lib.rs
+        find: '#[path = "../../experiments/performance/typing-latency/trace.rs"]'
+    change: 'Add CI that runs formatting, tests, Clippy, the script type check and the contract check. Add checks that read this map''s generated facts: no product include of experiments/, module links only in allowed directions, and named words (like "terminal") only in their home module.'
+    why: 'Every later step moves code. Without checks that run on their own, a move can quietly re-create the tangle it removed, and agents get no signal when they cross a boundary.'
+    cost: 'A day or two to set up. New checks start in report mode so existing problems become a short known list instead of a red build.'
+    decision: D4
+  - id: diagnostics
+    step: M2
+    title: One home for measurement probes
+    plain: 'Put timing and redraw probes behind one small diagnostics module instead of compiling experiment files into the product.'
+    today: 'Four probe files from experiments/performance are compiled straight into the app and desktop crates; two of them always, even in normal builds.'
+    today_nodes: ['rs:voyager_app::typing_trace', 'rs:voyager_desktop::frame_profile', 'rs:voyager_desktop::glyph_probe', 'rs:voyager_desktop::redraw_probe']
+    evidence:
+      - plain: 'The desktop crate includes an experiment file by path.'
+        path: desktop/src/lib.rs
+        find: '#[path = "../../experiments/performance/avatar-redraw/probe.rs"]'
+    change: 'Create a diagnostics module in each crate with a narrow interface (start a trace, record a mark). Experiments plug into it; product code never names an experiment file.'
+    adds:
+      - {name: 'app::diagnostics', container: 'crate:voyager-app', feature: diagnostics, plain: 'Narrow probe interface; experiments plug in.'}
+      - {name: 'desktop::diagnostics', container: 'crate:voyager-desktop', feature: diagnostics, plain: 'Same for frame and redraw probes.'}
+    why: 'Experiments are meant to be thrown away or promoted deliberately. Compiling them in by path makes them part of the product without review, and the project''s own rule says experimental source stays under experiments/.'
+    cost: 'Small. Probes keep working; only how they are wired changes.'
+    depends: [guardrails]
+  - id: vocabulary
+    step: M3
+    title: Typed words instead of repeated strings
+    plain: 'Give content types, Core states and agent program names one typed home each, so a rename is one change instead of a search.'
+    today: 'The content type name "terminal" is written as a string in many app files although a type table exists. Three separate lists of agent programs already disagree about Cursor.'
+    today_nodes: ['rs:voyager_app::content::description', 'rs:voyager_app::launch', 'rs:voyager_app::observation', 'ts:desktop/mods/header/agents.ts']
+    evidence:
+      - plain: 'Lines containing the literal "terminal" in production app files (some may be test code in the same file).'
+        count: '"terminal"'
+        paths: [app/src/activity.rs, app/src/client.rs, app/src/content.rs, app/src/content/package.rs, app/src/core.rs, app/src/observation.rs, app/src/process.rs, app/src/terminal_lifecycle.rs, app/src/workspace.rs]
+      - plain: 'The content type table that should be the single home.'
+        path: app/src/content/description.rs
+        find: 'const IMPLEMENTATIONS: &[Implementation] = &['
+      - plain: 'The launch list knows "cursor-agent" but not "cursor"; the observation list and the header know both.'
+        path: app/src/launch.rs
+        find: '| "cursor-agent"'
+    change: 'Turn these words into Rust types (an enum or a small table) owned by one module each. Scripts read the list from Rust instead of keeping their own.'
+    why: 'When the same word lives in eight places, a change in one place silently disagrees with the others. That is exactly how the Cursor lists drifted.'
+    cost: 'Mechanical changes across several files, no change in behaviour or wire shape.'
+    pathways:
+      - {pathway: launch-agent, step: launch-agent-17, how: 'The Agents list would read one shared table instead of its own copy.'}
+    depends: [guardrails]
+  - id: pipeline
+    step: M4
+    title: One admission pipeline and request ledger
+    plain: 'Every request passes the same six stages in the owner thread: admit, authorize, plan, apply, save, record. The checks are written once.'
+    today: 'The owner thread in client.rs checks request ids, collisions and "quitting" separately for each kind of request, and keeps five separate receipt lists. Note: at this commit the desktop''s Quit never calls the owner''s quit, so those quitting checks are only reached by tests.'
+    today_nodes: ['rs:voyager_app::client']
+    evidence:
+      - plain: 'Lines checking whether Voyager is quitting, inside the one owner closure.'
+        count: 'quit_result.is_some()'
+        path: app/src/client.rs
+      - plain: 'Lines checking a request id is present and short enough.'
+        count: 'request_id.len() > 128'
+        path: app/src/client.rs
+      - plain: 'Receipt and request lists declared in the owner closure.'
+        count: 'VecDeque::new()'
+        path: app/src/client.rs
+      - plain: 'Desktop Quit closes the private assistant and exits; it does not ask the workspace owner to quit.'
+        path: desktop/src/quit.rs
+        find: '.spawn(async move { conversation.quit().await });'
+    change: 'Introduce a request record and one outcome type (applied, refused, uncertain). The owner runs each request through one function per stage; each request family only supplies its plan and its effect.'
+    adds:
+      - {name: 'app::api::ledger', container: 'crate:voyager-app', feature: workspace-layout, plain: 'One list of seen request ids and their outcomes.'}
+      - {name: 'app::api::admit', container: 'crate:voyager-app', feature: workspace-layout, plain: 'Identity, collision, quitting and closing gates, written once.'}
+    why: 'A rule written five times will be changed in four. One pipeline makes the rules visible in one screen of code and makes "what happens to every request" easy to explain to a person or an agent.'
+    cost: 'A careful refactor of the largest file, with every journey re-run. No wire or behaviour change is intended.'
+    pathways:
+      - {pathway: split-vessel, step: split-vessel-9, how: 'Admission becomes one named stage instead of a branch inside a long match.'}
+      - {pathway: notes-save, step: notes-save-8, how: 'Content requests pass the same gates as workspace requests.'}
+      - {pathway: assistant-request, step: assistant-request-16, how: 'Agent requests and your requests visibly share one authority check.'}
+      - {pathway: quit, step: quit-4, how: 'A quit fence becomes one gate the pipeline checks, without stopping Core.'}
+    decision: D1
+    depends: [vocabulary]
+  - id: families
+    step: M5
+    title: A module per kind of request
+    plain: 'Split the 4,400-line client.rs into one module per request family: workspace, content, terminal, process, worktree, Voyage close.'
+    today: 'All families live in one closure in client.rs, so any change to one family edits the same file as every other.'
+    today_nodes: ['rs:voyager_app::client']
+    evidence:
+      - plain: 'The owner thread starts here and runs to the end of one very long closure.'
+        path: app/src/client.rs
+        find: 'fn start_with_launches('
+    change: 'After the pipeline exists, move each family''s plan and effect into its own module. client.rs keeps the queue and the pipeline.'
+    adds:
+      - {name: 'app::family::terminal', container: 'crate:voyager-app', feature: terminals, plain: 'Plan and effect for terminal requests.'}
+      - {name: 'app::family::content', container: 'crate:voyager-app', feature: content-model, plain: 'Plan and effect for content requests.'}
+    why: 'Smaller files with one job are easier to review, test and hand to an agent with a clear boundary.'
+    cost: 'Mostly moving code once the pipeline is in place.'
+    depends: [pipeline]
+  - id: content-registry
+    step: M6
+    title: Content types describe themselves
+    plain: 'Each content type (Terminal, Notes, Agents) registers what it can do; generic code asks the registry instead of naming types.'
+    today: 'Notes and terminal rules sit inside the generic owner thread, and generic code checks type names as strings.'
+    today_nodes: ['rs:voyager_app::client', 'rs:voyager_app::content', 'rs:voyager_app::content::description']
+    evidence:
+      - plain: 'The type table exists but only lists names and modules, not capabilities.'
+        path: app/src/content/description.rs
+        find: 'const IMPLEMENTATIONS: &[Implementation] = &['
+    change: 'Add capabilities to each content type (has a Core program, can be saved, can be renamed). Move Notes logic into a Notes module behind the registry.'
+    adds:
+      - {name: 'app::content::registry', container: 'crate:voyager-app', feature: content-model, plain: 'Content types and their capabilities.'}
+      - {name: 'app::content::notes', container: 'crate:voyager-app', feature: notes, plain: 'Notes rules, out of the owner thread.'}
+    why: 'Adding a new kind of content (a browser, a dashboard) should mean adding one module, not editing the owner thread in several places.'
+    cost: 'Moderate. Notes behaviour must stay identical, which the Notes journeys check.'
+    pathways:
+      - {pathway: notes-save, step: notes-save-10, how: 'The save would go straight to the Notes module through the registry.'}
+    depends: [families]
+  - id: catalogue
+    step: M7
+    title: One list of operations generates the bridge
+    plain: 'Describe each operation once; generate the script host functions, their TypeScript declarations, the script wrappers and the agent tool list from it.'
+    today: 'The script bridge is written by hand in several places. Adding one operation touches six to eleven spots, and the TypeScript declarations are hand-written strings that only match Rust by name.'
+    today_nodes: ['rs:voyager_desktop::host', 'rs:voyager_desktop::script_types', 'ts:contract/generated/workspace.ts', 'rs:voyager_app::administrator']
+    evidence:
+      - plain: 'Hand-written TypeScript declarations for the workspace host module.'
+        path: desktop/src/script_types.rs
+        find: 'pub const WORKSPACE: &str = r#"'
+      - plain: 'Where the workspace host module is registered by hand.'
+        path: desktop/src/host.rs
+        find: 'let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)'
+    change: 'One catalogue in Rust lists every operation with its request, result and limits. A generator writes the host registration, declarations, wrappers and agent tools; a test checks they all name the same operations.'
+    adds:
+      - {name: 'app::api::catalogue', container: 'crate:voyager-app', feature: script-host, plain: 'Every operation, described once.'}
+    why: 'Scripts, agents and the UI must describe an operation the same way. A generated bridge cannot drift, and agents adding a feature have one place to start. Herdr App uses the same single command table.'
+    cost: 'Writing the generator is real work. It pays back on every new operation.'
+    pathways:
+      - {pathway: split-vessel, step: split-vessel-8, how: 'The host call would be generated from the catalogue instead of hand-wired.'}
+    decision: D3
+    depends: [pipeline]
+  - id: projections
+    step: M8
+    title: Scripts read answers from Rust instead of copying rules
+    plain: 'Where a script re-derives a rule (default names, agent lists, who can start what), Rust computes it and the script reads it.'
+    today: 'The header names new Fleets itself and keeps its own agent list. Those copies have already drifted from Rust.'
+    today_nodes: ['ts:desktop/mods/header/main.ts', 'ts:desktop/mods/header/agents.ts', 'rs:voyager_app::observation']
+    evidence:
+      - plain: 'The header script decides the default Fleet name itself.'
+        path: desktop/mods/header/main.ts
+        find: 'name: `Fleet ${voyage.fleets.length + 1}`,'
+    change: 'Add read operations that return what the view needs already decided. Never add fields to existing responses: installed profiles validate replies with closed schemas and would reject them.'
+    why: 'An agent and a script must get the same answer. If the rule lives in a script, agents never see it and the two drift.'
+    cost: 'Each projection is small; the care is in keeping existing response shapes unchanged.'
+    pathways:
+      - {pathway: launch-agent, step: launch-agent-18, how: 'The Agents list would show names Rust decided.'}
+    decision: D3
+    depends: [catalogue]
+  - id: facade
+    step: M9
+    title: A small front door for the app crate, and clear lifetimes
+    plain: 'The desktop uses a short list of app functions instead of reaching into Core internals, and every viewer and lease has one owner that closes it.'
+    today: 'Fifteen app modules are public, the desktop imports Core-level types directly, and viewers are closed only when replaced, against a cap of 64 streams.'
+    today_nodes: ['rs:voyager_app::core', 'rs:voyager_desktop::terminal', 'rs:voyager_desktop::host']
+    evidence:
+      - plain: 'The desktop reads a Core limit directly from the app''s Core adapter.'
+        path: desktop/src/terminal_input.rs
+        find: 'if text.len() > voyager_app::core::MAX_INPUT_BYTES {'
+      - plain: 'The Core reader refuses more than 64 open streams.'
+        path: app/src/core.rs
+        find: '|| streams.buffers.len() >= 64'
+    change: 'Make internal modules pub(crate) and expose a facade. Give viewers and Notes save leases an owner that closes them when a placement goes away.'
+    why: 'The compiler then enforces the boundary, which is stronger than any review or guideline.'
+    cost: 'Moderate; touches many imports in the desktop.'
+    pathways:
+      - {pathway: typing, step: typing-4, how: 'Typing would still go straight to Core, but through a facade call rather than a Core type.'}
+    decision: D5
+    depends: [families]
+  - id: packages
+    step: M10
+    title: An explicit, safe update for installed scripts
+    plain: 'Installed profile scripts are copied once and never updated. Add a deliberate update that only replaces files you have not edited.'
+    today: 'Start-up copies scripts and generated helpers into the profile only if they are missing, so an older profile keeps old validators and helpers forever.'
+    today_nodes: ['rs:voyager_desktop', 'rs:voyager_app::content::package']
+    evidence:
+      - plain: 'The seed helper writes a file only when it does not exist.'
+        path: app/src/content/package.rs
+        find: 'pub fn seed_package(package: &Path, files: &[(&str, &str)]) -> io::Result<()> {'
+    change: 'Record the shipped hash of each file and a compatibility version in the manifest. An update replaces unedited files and reports edited ones.'
+    why: 'Your edits are protected, and new features can reach existing profiles without breaking them.'
+    cost: 'Needs decision D2 on the exact mechanism first.'
+    pathways:
+      - {pathway: startup, step: startup-2, how: 'Seeding would check versions instead of only checking that files exist.'}
+    decision: D2
+  - id: header-split
+    step: M11
+    title: Split the header script into a controller and views
+    plain: 'The header''s main.ts holds state, requests and drawing together. Split it into one session controller and separate views.'
+    today: 'main.ts in the header mod is over 2,000 lines and mixes request handling with layout drawing.'
+    today_nodes: ['ts:desktop/mods/header/main.ts']
+    evidence:
+      - plain: 'Lines in the header main script.'
+        count: ''
+        path: desktop/mods/header/main.ts
+    change: 'Views import the controller; they never edit each other''s state. The controller is the only part that calls host modules.'
+    why: 'People and agents edit these scripts. Smaller views with one owner of state are safer to change live.'
+    cost: 'Moderate; the header journeys must look identical before and after.'
+    pathways:
+      - {pathway: split-vessel, step: split-vessel-17, how: 'Prepare and render would live in different files with a clear hand-off.'}
+  - id: provider
+    step: M12
+    title: The assistant behind a provider interface
+    plain: 'The conversation client talks to "a provider" through a trait, with Codex as the first implementation.'
+    today: 'The conversation owner holds a concrete Codex value and calls Codex directly.'
+    today_nodes: ['rs:voyager_app::conversation_client', 'rs:voyager_app::codex', 'rs:voyager_app::provider']
+    evidence:
+      - plain: 'The owner keeps a Codex value, not a provider.'
+        path: app/src/conversation_client.rs
+        find: 'provider: Option<Codex>,'
+    change: 'Define the provider trait from what the owner actually uses (open, send turn, answer a tool call, shut down) and make Codex implement it.'
+    why: 'Other assistants can be added without editing the conversation owner, and tests can use a fake provider.'
+    cost: 'Small to moderate, and only worth doing when a second provider is real.'
+    pathways:
+      - {pathway: assistant-request, step: assistant-request-9, how: 'Opening the assistant would go through the trait.'}

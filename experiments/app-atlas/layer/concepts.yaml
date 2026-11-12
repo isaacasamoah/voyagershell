@@ -1,0 +1,293 @@
+schema: app-atlas/v0
+note: 'Hand-written layer: the big pieces, where they start and why. Code facts come from the generator; every source reference here is checked against the commit when the map is built.'
+
+concepts:
+  - id: concept:you
+    name: You
+    colour: neutral
+    plain: 'The person at the keyboard. Every pathway starts with something you do, or with a program doing something on its own.'
+  - id: concept:desktop
+    name: Desktop UI
+    colour: blue
+    plain: 'The window you see. It draws every panel natively with GPUI, runs the interface scripts, and turns your keys and clicks into requests.'
+    scope: 'The voyager-desktop crate plus three libraries it builds on: GPUI draws the window, gpui-kit runs TypeScript in a QuickJS engine, and libghostty-vt understands terminal output.'
+    entry: 'The voyager-shell program starts in desktop/src/main.rs, which only reads --profile and --session and hands over to voyager_desktop::run.'
+    entry_at: {path: desktop/src/main.rs, find: 'voyager_desktop::run(profile, session)'}
+    why: 'Drawing stays in this process and in native code so that typing and painting never wait for another program. The README states the aim: change content and look through scripts while keeping rendering local and native.'
+    scope_at: {path: README.md, find: 'content, look and feel while keeping rendering local and native'}
+  - id: concept:scripts
+    name: Interface scripts
+    colour: violet
+    plain: 'TypeScript that decides layout and look: the header with its navigation, menus and Vessel controls, and the Notes content. It runs inside the desktop and can be edited in your profile.'
+    scope: 'The header mod (desktop/mods/header), the Notes package (content/notes) and a shared helper (content/ui.ts). Installed copies live in the profile, so your edits survive.'
+    entry: 'The desktop loads each package from the profile and calls its main.ts. Scripts reach Rust only through host modules such as voyager_workspace.'
+    why: 'People and agents can change interface and content without rebuilding the app, while Rust keeps the rules. A script cannot grant itself authority: every request it makes is checked by the app.'
+    inferred: true
+  - id: concept:contract
+    name: Shared contract
+    colour: amber
+    plain: 'The shared vocabulary: names and shapes for Voyages, Fleets, Vessels, requests and results. Rust uses it directly; scripts and agent tools get generated copies.'
+    scope: 'The voyager-contract crate defines identities, requests and results with JSON schemas. contract/build.cjs generates TypeScript types and validators from those schemas.'
+    scope_at: {path: contract/src/lib.rs, find: 'pub mod activity;'}
+    entry: 'Nothing runs here at start-up. Other crates use its types; contract/src/bin/export.rs prints the schemas that the generator turns into TypeScript.'
+    entry_at: {path: contract/src/bin/export.rs, find: 'fn main() {'}
+    why: 'Views and agent tools must describe the same operation the same way. The README says workspace operations share a typed contract used by views and supported agent tools.'
+  - id: concept:app
+    name: Voyager app
+    colour: green
+    plain: 'The rules and the memory. It owns the workspace layout, content data, docking context and policy, checks every action before applying it, and talks to Herdr Core and Codex on your behalf.'
+    scope: 'The voyager-app crate: one owner thread that applies every change in order, plus modules for workspace, content, terminals, worktrees, context, the private assistant and the Core adapter.'
+    scope_at: {path: app/src/lib.rs, find: 'pub mod client;'}
+    entry: 'The desktop starts the app by creating its client, which spawns the owner thread and connects to Herdr Core.'
+    why: 'One place decides whether an action is allowed, whether it comes from you, a script or an agent. The README: the Rust application checks each action before applying it; a schema, panel placement or Fleet membership grants no authority.'
+    entry_at: {path: README.md, find: 'The Rust application checks each action before applying it'}
+  - id: concept:core
+    name: Herdr Core
+    colour: rose
+    plain: 'A separate program, hc, that runs your terminal programs and keeps their screens. Programs keep running when the Voyager window closes. Voyager also saves its layout document there.'
+    scope: 'External to this repository. Voyager talks to it through a generated, typed API pinned to Core 0.1.16.'
+    scope_at: {path: README.md, find: 'owns terminal programs and'}
+    entry: 'Voyager starts `hc connect --session ...` as a child process and exchanges JSON-RPC messages over its input and output.'
+    entry_at: {path: app/src/core.rs, find: 'let mut child = Command::new(env::var_os("VOYAGER_HC").unwrap_or_else(|| "hc".into()))'}
+    why: 'Keeping programs in a separate long-lived process means closing or restarting the window does not kill your shells and agents, and several viewers can attach to one program.'
+    inferred: true
+  - id: concept:programs
+    name: Programs
+    colour: slate
+    plain: 'Everything Voyager starts or watches: shells and terminal agents (run by Herdr Core), Codex as the private assistant, git for worktrees, and paplay for avatar sounds.'
+    scope: 'Not part of this repository. Shells and terminal agents run inside Core; Codex, git and paplay are started directly by Voyager.'
+
+containers:
+  - id: ext-container:you
+    concept: concept:you
+    kind: actor
+    name: You
+    plain: 'Keyboard, mouse, and later voice.'
+  - id: crate:voyager-desktop
+    concept: concept:desktop
+    kind: crate
+    name: voyager-desktop
+  - id: lib:gpui
+    concept: concept:desktop
+    kind: library
+    name: GPUI
+    plain: 'The UI framework from the Zed editor. It owns the window, the event loop, layout and painting on the GPU.'
+  - id: lib:gpui-kit
+    concept: concept:desktop
+    kind: library
+    name: gpui-kit (QuickJS)
+    plain: 'Runs TypeScript in an embedded QuickJS engine and lets scripts build GPUI views and call Rust host modules.'
+  - id: lib:libghostty
+    concept: concept:desktop
+    kind: library
+    name: libghostty-vt
+    plain: 'The terminal emulator core from Ghostty. It turns a program''s output bytes into a grid of styled cells.'
+  - id: package:desktop/mods/header
+    concept: concept:scripts
+    kind: package
+    name: Header mod
+  - id: package:content/notes
+    concept: concept:scripts
+    kind: package
+    name: Notes package
+  - id: files:content-ui
+    concept: concept:scripts
+    kind: package
+    name: Shared content helpers
+    plain: 'content/ui.ts: small helpers shared by content packages.'
+  - id: artifact:contract/generated
+    concept: concept:contract
+    kind: generated
+    name: Generated script types
+    plain: 'TypeScript types and validators written by contract/build.cjs from the contract''s JSON schemas. Do not edit by hand.'
+  - id: crate:voyager-contract
+    concept: concept:contract
+    kind: crate
+    name: voyager-contract
+  - id: crate:voyager-app
+    concept: concept:app
+    kind: crate
+    name: voyager-app
+  - id: ext-container:hc
+    concept: concept:core
+    kind: external
+    name: Herdr Core (hc)
+    plain: 'Runs programs in pseudo-terminals, keeps their screens, streams output to viewers and stores documents such as the Voyager layout.'
+  - id: ext-container:terminal-programs
+    concept: concept:programs
+    kind: external
+    name: Shells and terminal agents
+    plain: 'Whatever runs inside a terminal Vessel: bash or zsh, Codex CLI, Claude Code and so on. Core starts and owns them.'
+  - id: ext-container:codex
+    concept: concept:programs
+    kind: external
+    name: Codex app-server
+    plain: 'The private assistant behind the avatar. Voyager starts it as a child process and talks to it over JSON-RPC.'
+  - id: ext-container:tools
+    concept: concept:programs
+    kind: external
+    name: Other tools
+    plain: 'git for worktrees, paplay for avatar sounds, and the Codex voice helper.'
+
+externals:
+  - id: ext:you
+    container: ext-container:you
+    feature: startup-quit
+    name: You
+    plain: 'Keys, clicks and drags.'
+  - id: ext:gpui
+    container: lib:gpui
+    feature: platform
+    name: GPUI
+    plain: 'Window, events, layout and GPU painting.'
+    crates: ['dep:gpui-pre', 'dep:gpui-pre-platform']
+  - id: ext:quickjs
+    container: lib:gpui-kit
+    feature: script-host
+    name: QuickJS script runtime
+    plain: 'Evaluates the TypeScript packages and provides the gpui-kit modules scripts import.'
+    crates: ['dep:gpui-base', 'dep:gpui-shell']
+    runtime_modules: ['runtime-module:gpui-base', 'runtime-module:gpui-kit', 'runtime-module:gpui-shell']
+  - id: ext:libghostty
+    container: lib:libghostty
+    feature: terminals
+    name: libghostty-vt
+    plain: 'Parses terminal output into styled cells.'
+    crates: ['dep:libghostty-vt']
+  - id: ext:hc
+    container: ext-container:hc
+    feature: core-adapter
+    name: hc
+    plain: 'Herdr Core: programs, screens and documents.'
+    programs: ['program:hc']
+  - id: ext:shell
+    container: ext-container:terminal-programs
+    feature: terminals
+    name: Shell
+    plain: 'Your login shell inside a terminal Vessel.'
+  - id: ext:terminal-agent
+    container: ext-container:terminal-programs
+    feature: agents
+    name: Terminal agent
+    plain: 'Codex CLI, Claude Code or another agent started in a terminal Vessel.'
+  - id: ext:codex
+    container: ext-container:codex
+    feature: assistant
+    name: codex app-server
+    plain: 'The private assistant process.'
+    programs: ['program:codex']
+  - id: ext:git
+    container: ext-container:tools
+    feature: worktrees-voyage-close
+    name: git
+    plain: 'Creates and inspects worktrees.'
+    programs: ['program:git']
+  - id: ext:paplay
+    container: ext-container:tools
+    feature: platform
+    name: paplay
+    plain: 'Plays avatar sounds on Linux.'
+    programs: ['program:paplay']
+
+features:
+  - id: startup-quit
+    name: Start-up and quit
+    plain: 'Starting Voyager, choosing the profile, connecting to Herdr Core, and quitting so that views detach while programs keep running.'
+  - id: workspace-layout
+    name: Workspace layout
+    plain: 'Voyages, Fleets, Vessels and Portals: splitting, moving, resizing, renaming and maximizing, and the saved layout document.'
+  - id: terminals
+    name: Terminals
+    plain: 'Terminal content: starting a shell in Core, drawing its screen, keyboard and mouse input, scrolling, stopping and ended shells.'
+  - id: notes
+    name: Notes
+    plain: 'Notes content: editing, Markdown preview, drafts and saving.'
+  - id: content-model
+    name: Content model
+    plain: 'What content is in general: content types, packages and manifests, descriptions, renaming and seeding the profile.'
+  - id: context-docking
+    name: Context and docking
+    plain: 'Where the avatar is docked (Workspace, Voyage, Fleet, Vessel or Portal) and the scope and authority checks that follow from it.'
+  - id: assistant
+    name: Private assistant
+    plain: 'The avatar conversation with Codex, the Voyager tools it may call and the conversation client.'
+  - id: voice
+    name: Voice
+    plain: 'Speech input and output for the assistant.'
+  - id: avatar
+    name: Avatar
+    plain: 'The avatar''s look, animation packs and motion.'
+  - id: agents
+    name: Terminal agents
+    plain: 'Launching agents such as Codex or Claude Code in a Vessel, and the read-only Agents list of running programs.'
+  - id: worktrees-voyage-close
+    name: Worktrees and closing Voyages
+    plain: 'Git worktrees for agent work, and closing a Voyage safely.'
+  - id: script-host
+    name: Script host
+    plain: 'Running TypeScript in the desktop: the host modules scripts call, their type declarations and the header mod.'
+  - id: core-adapter
+    name: Core adapter
+    plain: 'Talking to Herdr Core: starting the connection, sending requests, matching replies and translating Core''s words.'
+  - id: shared-contract
+    name: Shared contract
+    plain: 'Identities, requests and results shared by Rust, scripts and agent tools, and the generated copies.'
+  - id: platform
+    name: Platform
+    plain: 'Operating-system pieces: clipboard, sounds, fonts and the window.'
+  - id: diagnostics
+    name: Diagnostics
+    plain: 'Performance probes and traces, several compiled from experiments/.'
+
+runtime:
+  - from: rs:voyager_app::core
+    to: ext:hc
+    via: core-rpc
+    plain: 'Starts hc connect and exchanges JSON-RPC lines over its input and output.'
+    at: {path: app/src/core.rs, find: '.args(["connect", "--session", session])'}
+  - from: ext:hc
+    to: ext:shell
+    via: process
+    plain: 'Core runs each terminal program in its own pseudo-terminal.'
+  - from: ext:hc
+    to: ext:terminal-agent
+    via: process
+    plain: 'Terminal agents are ordinary Core programs.'
+  - from: rs:voyager_app::codex
+    to: ext:codex
+    via: ipc
+    plain: 'Starts codex app-server and speaks JSON-RPC over standard input and output.'
+    at: {path: app/src/codex.rs, find: '"app-server",'}
+
+glossary:
+  - term: Voyage
+    plain: 'A space. It holds Fleets and may hold Portals.'
+  - term: Fleet
+    plain: 'A tab inside a Voyage. It holds Vessels arranged in a split tree.'
+  - term: Vessel
+    plain: 'A placement of content inside one Fleet, shown as a panel. The Vessel is the place; the content is what it shows. A Vessel is data in the layout, not a separate piece of code.'
+  - term: Portal
+    plain: 'A placement that stays visible across all Fleets of a Voyage.'
+  - term: Content
+    plain: 'What a Vessel or Portal shows: a terminal, a Note or the Agents list. Content has its own identity and saved data, separate from where it is placed.'
+  - term: Core program
+    plain: 'A program that Herdr Core runs, such as a shell. A terminal Vessel shows one; hiding the Vessel does not stop the program.'
+  - term: Viewer
+    plain: 'A live connection from Voyager to one Core program''s screen. Output arrives through it.'
+  - term: Owner thread
+    plain: 'The single app thread that applies every workspace change in order, so two requests never edit the layout at once.'
+  - term: Host module
+    plain: 'A named set of Rust functions a script may import, such as voyager_workspace. It is the only door from scripts into Rust.'
+  - term: Profile
+    plain: 'Your personal folder, given by --profile. It holds installed scripts, themes and settings you can edit.'
+  - term: Refused or uncertain
+    plain: 'Every request ends applied, refused (nothing changed) or uncertain (it may have changed; Voyager will not retry it blindly).'
+  - term: Docking context
+    plain: 'Where the avatar is docked. It decides which part of the workspace a request is about, not who you are or what you may do.'
+
+reading:
+  - 'Pick a level at the top: Concepts, Containers, Features, Modules or Functions. Each level is the same app at a finer grain.'
+  - 'Colour shows the concept a part belongs to. Lines show how parts depend on or call each other.'
+  - 'Select any box to see what it holds, where it starts and why it exists, with the source lines behind each claim.'
+  - 'Choose a pathway to light up its route at any level, then step through it, or open the sequence view to see the order and the threads.'
+  - 'Choose a pull request or commit to see which parts it touched.'

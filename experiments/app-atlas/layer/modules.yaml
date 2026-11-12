@@ -1,0 +1,2230 @@
+schema: app-atlas/v0
+note: 'Plain descriptions of each module and crate: what it holds, where it starts and why. Module ids come from the generated architecture YAML.'
+crates:
+  - id: 'crate:voyager-app'
+    plain: 'The Rust application layer: it owns workspace state, content data, explicit context and policy, and adapts Herdr Core and the Codex provider, with no window code.'
+    scope: 'app/src/lib.rs is a 40-line table of contents. It makes public the modules the desktop calls (client, content, context, core, launch, observation, voyage_close, workspace, worktrees, wire, conversation, conversation_client, provider) and the inline core_shapes module of generated Core types. Helpers such as activity, administrator, canvas, core_endpoint, panels, process, scope, terminal_lifecycle, codex and the five voice modules stay private. Lines 38 to 40 use a #[path] attribute to compile experiments/performance/typing-latency/trace.rs as the private typing_trace module and re-export its record function as record_terminal_trace.'
+    scope_at: {path: app/src/lib.rs, find: 'pub mod client;'}
+    entry: 'The desktop''s startup (desktop/src/lib.rs, around lines 196 to 240) calls in first: it seeds the Notes package with content::seed_package, opens the content owner with content::Owner::open, then calls Client::with_content_and_launches, which spawns the owner thread. It then wraps that Client in conversation_client::Client::with_audio.'
+    entry_at: {path: app/src/client.rs, find: 'pub fn with_content_and_launches('}
+    why: 'docs/workspace.md says app/src/lib.rs exposes the Rust application independently of GPUI, and app/Cargo.toml lists no GPUI dependency. AGENTS.md names contract/, app/, desktop/ and content/ as the selected product structure, with app/ holding the workspace, content, context and Core owners.'
+    inferred: false
+  - id: 'crate:voyager-desktop'
+    plain: 'The native desktop app: the GPUI window, the native terminal and Notes editors, the avatar, and the host that runs the TypeScript header and Notes scripts.'
+    scope: 'lib.rs declares 24 modules (plus a Linux-only test module), the `Quit` action, and three public functions: `run` (start the app), `declarations` and `notes_declarations` (print TypeScript declarations for scripts). At the end it pulls three diagnostic probes in from `experiments/performance/` with `#[path]`: the redraw probe always, the glyph and frame probes only with the `frame-profiler` feature.'
+    scope_at: {path: desktop/src/lib.rs, find: 'mod arrangement;'}
+    entry: 'The `voyager-shell` binary''s `main` (desktop/src/main.rs) checks `--profile` (an absolute folder) and `--session` (lowercase letters, digits, hyphens) and then calls `voyager_desktop::run`. A second binary, desktop/src/bin/export-script-types.rs, calls `declarations` or `notes_declarations` to print script type definitions.'
+    entry_at: {path: desktop/src/main.rs, find: 'arguments().and_then(|(profile, session)| voyager_desktop::run(profile, session))'}
+    why: 'docs/workspace.md says app/src/lib.rs exposes the Rust application independently of GPUI, while desktop/src/lib.rs owns native composition, asset seeding and view modules. The README gives desktop/ the GPUI views, native terminal and editors, avatar presentation and interface composition.'
+    inferred: false
+  - id: 'crate:voyager-contract'
+    plain: 'The shared typed vocabulary: identities, workspace actions, requests, responses and tool inputs that Rust, the scripts and agents all use.'
+    scope: 'lib.rs declares 12 public modules (activity, avatar_animation, administrator, canvas, content, context, conversation, launch, observation, voice, voyage_close, worktree), a private `panels` module whose types it re-exports, and an inline private `decimal` serde helper. It defines the id types, the saved `Layout` tree (Voyage, Fleet, Vessel, Content, Split), the dock `Context`, the 35 workspace `Action`s and the `Request`/`Response` envelopes, plus `TerminalRequest`/`TerminalResponse`.'
+    scope_at: {path: contract/src/lib.rs, find: 'pub mod activity;'}
+    entry: 'It has no runtime entry: the app and desktop crates link it as a library. Its `export` binary (contract/src/bin/export.rs) prints JSON Schemas for selected types. contract/build.cjs runs that binary through cargo and writes contract/generated/: a .schema.json and .d.ts per type, one Ajv `validate.js`, and the `workspace` and `conversation` script wrappers. `--check` fails on any drift.'
+    entry_at: {path: contract/src/bin/export.rs, find: 'fn main() {'}
+    why: 'AGENTS.md asks for one typed application contract for UI, content and agent callers, with client definitions and runtime validators generated from the owning types instead of hand-written schemas. docs/workspace.md says contract/ owns the request, response, identity and layout types and build.cjs generates declarations and validators from them.'
+    inferred: false
+  - id: 'pkg:header'
+    plain: 'The header mod: the TypeScript package that draws the whole workspace window (sidebar, Fleet tabs, panels, Portal column, context bar, chat) and sends typed workspace requests.'
+    scope: 'mod.json names the package `Voyager header` with entry `main.js`, version 1 and `contentConfiguration` 2 (the package AGENTS.md still says 1). main.ts default-exports the `Workspace` view. Fourteen helper .ts files cover canvas layout, panels, navigation, creation, menus, chat, agents, processes, worktrees and Voyage close; home.ts and layout-panel.ts are compiled and seeded but not imported. Each .ts compiles to a .js beside it, and lib.rs seeds those .js files, icons and the generated contract wrappers into the profile.'
+    scope_at: {path: desktop/mods/header/mod.json, find: '"entry": "main.js",'}
+    entry: 'host.rs `load` installs the host modules into a script policy and calls `runtime.try_load(package, ...)`. gpui-shell loads the package''s `main.js`, whose default export is the `Workspace` view; its `init` sends the first `inspect` request and starts the context refresh loop. lib.rs refuses to start unless mod.json names `main.js`, version 1 and a non-empty name.'
+    entry_at: {path: desktop/src/host.rs, find: 'runtime.try_load(package, window, cx)'}
+    why: 'The README says JavaScript and TypeScript define content and interface layouts through the supported host, so people and agents can change content, look and feel while rendering stays local and native. The header AGENTS.md adds that Rust owns placement, content, context and persistence.'
+    inferred: false
+  - id: 'pkg:notes'
+    plain: 'The Notes content package: a small TypeScript view for a Markdown note that runs in its own restricted script runtime.'
+    scope: 'mod.json names the package `Notes` with entry `main.js`, version 1, `contentConfiguration` 2 and a `stateSchema` (a title and a text string). main.ts default-exports the `Notes` view, built from native retained editors imported from `voyager_input`, colours from `voyager_content`, and the shared helpers in ui.js.'
+    scope_at: {path: content/notes/mod.json, find: '"stateSchema": {'}
+    entry: 'notes.rs `Loader::load` builds a `voyager_content` host module for one Notes content id, then calls `runtime.load_application` with the entry named in mod.json (default `main.js`) and mounts the result. This happens in the Notes watch loop after a Notes component first appears in the header.'
+    entry_at: {path: desktop/src/notes.rs, find: 'let application = runtime.load_application(&self.package, entry)?;'}
+    why: 'docs/content.md says all Notes instances share one isolated QuickJS VM with the private voyager_input registry and cannot import the header''s Terminal, Name or workspace modules. The header AGENTS.md says source reload grants no Header, process or private-conversation authority to a content package.'
+    inferred: false
+  - id: 'ts:content/ui.ts'
+    plain: 'Shared UI helpers (colours, buttons, menus, a toggle) used by both the header and Notes packages.'
+    scope: 'Exports a `ui` colour and size table and builders `actionButton`, `dialogActions`, `menuSurface`, `menuButton`, `disclosureButton` and `toggle`, all built from gpui-kit and gpui-base elements.'
+    scope_at: {path: content/ui.ts, find: 'export const ui = {'}
+    entry: 'It is never loaded on its own. lib.rs seeds its compiled ui.js into the header package and into the Notes package, and scripts import it as `./ui.js`.'
+    entry_at: {path: desktop/src/lib.rs, find: 'seed(&package.join("ui.js"), include_str!("../../content/ui.js"))?;'}
+    why: 'One look for buttons and menus across both packages; it is copied into each package because each package loads from its own folder.'
+    inferred: true
+modules:
+  - id: 'rs:voyager_app'
+    feature: startup-quit
+    plain: 'The crate root. It only declares the app''s modules, generates Core''s message types, and borrows the typing-latency tracer from experiments/.'
+    holds: 'nothing: declarations only.'
+    entry: {fn: 'voyager_app::client', path: app/src/lib.rs, find: 'pub mod client;', plain: 'Makes the application Client public. It is the first thing the desktop builds at startup.'}
+    key:
+      - {fn: 'voyager_app::core_shapes', path: app/src/lib.rs, find: 'pub mod core_shapes {', plain: 'Inline module whose types are generated from app/core-schema.json at compile time.'}
+      - fn: 'typing_trace (#[path] include)'
+        path: app/src/lib.rs
+        find: '#[path = "../../experiments/performance/typing-latency/trace.rs"]'
+        plain: 'Compiles a file that lives under experiments/ into the product crate.'
+      - fn: 'voyager_app::record_terminal_trace'
+        path: app/src/lib.rs
+        find: 'pub use typing_trace::record as record_terminal_trace;'
+        plain: 'Re-exports the tracer so the desktop''s terminal view can record keystroke stages.'
+      - {fn: 'tests (cfg(test))', path: app/src/lib.rs, find: 'mod tests;', plain: 'Crate-level unit tests in app/src/tests.rs (1,557 lines), compiled only for tests.'}
+    inferred: false
+    size: 40
+    note: 'The feature assignment is a judgement call: the root has no behaviour of its own, and it is grouped with startup because the desktop links against it at launch.'
+  - id: 'rs:voyager_app::activity'
+    feature: agents
+    plain: 'Keeps a live cache of what each terminal program says it is doing (working, blocked, idle, done or error), read from Core''s optional activity stream.'
+    holds: 'A map from Core terminal address to the last reported activity, a revision counter, the subscription channel and sequence number, small buffers for partial and early stream bytes, and a dirty flag with a wake callback.'
+    entry:
+      fn: 'activity::Activity'
+      path: app/src/activity.rs
+      find: 'pub(crate) struct Activity {'
+      plain: 'The shared cache. The Core adapter''s reader thread and the client owner thread both hold it behind one Arc<Mutex>.'
+    key:
+      - fn: 'Activity::install'
+        path: app/src/activity.rs
+        find: 'pub(crate) fn install(&mut self, value: Value) -> Result<u32, String> {'
+        plain: 'Accepts Core''s subscribe reply: records the channel, applies the first snapshot, then replays bytes that arrived early.'
+      - fn: 'Activity::data'
+        path: app/src/activity.rs
+        find: 'pub(crate) fn data(&mut self, channel: u32, bytes: &[u8]) -> u32 {'
+        plain: 'Takes raw bytes from the activity channel and applies the complete event lines in them.'
+      - fn: 'Activity::bind'
+        path: app/src/activity.rs
+        find: 'pub(crate) fn bind<''a>(&mut self, addresses: impl IntoIterator<Item = &''a str>) {'
+        plain: 'Limits tracking to the terminal addresses the layout binds, at most 256. The client owner thread calls it before handling each message.'
+      - fn: 'Activity::projection'
+        path: app/src/activity.rs
+        find: 'pub(crate) fn projection(&self) -> Projection {'
+        plain: 'Produces the read-only view behind Client::reported_activity, which Vessel headers and the Agents list show.'
+    talks_to: 'Fed by the Core adapter''s reader thread from Core''s framed connection (core.rs activity_frame). Client::reported_activity reads it for the desktop.'
+    why: 'docs/terminal.md (Program-reported activity) says the adapter applies snapshots and ordered events and never infers activity from output or silence; gaps and channel loss stay unknown.'
+    inferred: false
+    size: 629
+  - id: 'rs:voyager_app::administrator'
+    feature: assistant
+    plain: 'Runs the private assistant''s four Voyager tools (workspace, process, content, worktree): it checks each tool call, hands it to the app Client on a worker thread, and keeps receipts so a call is never run twice.'
+    holds: 'Per-turn tool receipts (at most 32 calls, each with its argument fingerprint and reply ids), at most one in-flight Work item, and a flag recording any uncertain outcome.'
+    entry:
+      fn: 'administrator::Tools::call'
+      path: app/src/administrator.rs
+      find: '    pub fn call('
+      plain: 'Checks a tool call against the accepted thread, turn and tool name, applies the size and 32-call limits, returns a stored result for a repeated call, and otherwise starts at most one effect.'
+    key:
+      - fn: 'administrator::catalog'
+        path: app/src/administrator.rs
+        find: 'pub(crate) fn catalog() -> Result<Vec<ToolDefinition>, String> {'
+        plain: 'Builds the four tool definitions from the generated JSON schemas in contract/generated, with the usage rules written into each description.'
+      - fn: 'Tools::call worker thread'
+        path: app/src/administrator.rs
+        find: 'thread::spawn(move || {'
+        plain: 'Turns the parsed tool input into one Client call (scoped_call, process, worktree or content), which then waits in the client owner queue.'
+      - fn: 'administrator::Tools::poll'
+        path: app/src/administrator.rs
+        find: 'pub fn poll(&mut self) -> Option<Completed> {'
+        plain: 'Polled by the conversation owner loop; returns the finished result and a reply for every callback id that was waiting on it.'
+      - {fn: 'administrator::Dispatch', path: app/src/administrator.rs, find: 'enum Dispatch {', plain: 'The four kinds of effect a tool call can become.'}
+    talks_to: 'Called by the conversation owner thread with tool calls decoded from Codex. Its worker thread sends requests into the app Client''s owner queue.'
+    why: 'docs/conversation.md (Typed provider conversion) says the administrator retains dispatch, caller checks and receipt policy, while the Codex adapter only encodes and decodes.'
+    inferred: false
+    size: 1480
+    note: 'Lines 766 onward are tests.'
+  - id: 'rs:voyager_app::canvas'
+    feature: workspace-layout
+    plain: 'Checks that a canvas, the window''s arrangement of sidebar, Fleet strip, active Fleet, Portals column and context bar, is valid before it is used.'
+    holds: 'nothing: pure functions.'
+    entry:
+      fn: 'canvas::validate'
+      path: app/src/canvas.rs
+      find: 'pub(crate) fn validate(canvas: &Canvas) -> Result<(), String> {'
+      plain: 'Refuses trees deeper than 12 levels or larger than 64 nodes, duplicate or missing regions, and a Portals column that is not rightmost beside the active Fleet.'
+    key:
+      - {fn: 'canvas::validate::visit', path: app/src/canvas.rs, find: '    fn visit(', plain: 'Recursive check of each node. Every alternative in a stack must keep the same regions.'}
+    talks_to: 'Called when the layout document is loaded from Core (client.rs load) and when an UpdateCanvas action is applied (workspace.rs).'
+    inferred: false
+    size: 348
+  - id: 'rs:voyager_app::client'
+    feature: workspace-layout
+    plain: 'The application''s single request queue. A Client is a cheap, cloneable handle; every request it sends is handled one at a time by one owner thread, which holds the Core connection and the current workspace layout.'
+    holds: 'The Client handle holds the queue sender (8 slots), a request sequence, a package revision, a process identity, the shared activity cache and the latest prepared dock preview. The owner thread holds the Core connection, the current layout and its version, a fresh flag, the last 32 receipts for each request family (workspace, terminal, process, content, worktree), unconfirmed terminal starts, newly created terminals allowed to start, live terminal bindings, the workspace-change listener, the quit result, the Voyage close state and any Notes rename in progress.'
+    entry:
+      fn: 'Client::with_content_and_launches'
+      path: app/src/client.rs
+      find: 'pub fn with_content_and_launches('
+      plain: 'Called once by desktop/src/lib.rs at startup. It creates the queue and the Client handle and spawns the owner thread.'
+    key:
+      - fn: 'Client::start_with_launches (owner thread start)'
+        path: app/src/client.rs
+        find: 'let mut core = Core::connect_activity(&session, observed_activity.clone());'
+        plain: 'First line of the spawned owner thread: it connects to Herdr Core, then sets up the state it alone will own.'
+      - fn: 'owner loop'
+        path: app/src/client.rs
+        find: 'while let Ok(message) = next_message('
+        plain: 'Waits for the next message. next_message also binds the activity cache to the layout''s terminals and publishes an activity notice if anything changed.'
+      - fn: 'main dispatch match'
+        path: app/src/client.rs
+        find: 'let (request, scope, reply) = match message {'
+        plain: 'One arm per message type. Most arms finish and continue; Workspace and NoteExit fall through to the shared workspace handling below.'
+      - fn: 'shared workspace handling'
+        path: app/src/client.rs
+        find: 'let inspecting = matches!(request.action, Action::Inspect);'
+        plain: 'Start of the path every workspace Request takes after dedupe: Inspect, freshness and version checks, scope check, special actions, then apply and save.'
+      - fn: 'Client::call'
+        path: app/src/client.rs
+        find: 'pub fn call(&self, request: Request) -> Result<Response, String> {'
+        plain: 'Blocking workspace request used by the header host, the avatar and the conversation; waits up to 20 seconds (120 for confirming a Voyage close).'
+      - {fn: 'Client::terminal', path: app/src/client.rs, find: '    pub fn terminal(', plain: 'Opens a terminal viewer for a content id and returns a core::Viewer; used by host.rs terminal_open.'}
+      - fn: 'Client::process'
+        path: app/src/client.rs
+        find: '    pub fn process('
+        plain: 'Scoped process request (list, read, send, interrupt, stop); used by the header''s Agents list and by the assistant tools.'
+      - {fn: 'Client::worktree', path: app/src/client.rs, find: '    pub fn worktree(', plain: 'Git worktree request from the header''s worktree dialog or the assistant.'}
+      - {fn: 'Client::workspace_changes', path: app/src/client.rs, find: 'pub async fn workspace_changes(', plain: 'Subscribes to WorkspaceNotice revisions so the desktop knows when to re-inspect.'}
+      - {fn: 'Client::workspace_observation', path: app/src/client.rs, find: 'pub async fn workspace_observation(', plain: 'Live folders, programs and names for visible panels, for the header.'}
+      - fn: 'Client::context_facts'
+        path: app/src/client.rs
+        find: 'pub async fn context_facts(&self) -> Result<voyager_contract::context::Facts, String> {'
+        plain: 'Scope, path and folder for the context bar.'
+      - fn: 'Client::launches'
+        path: app/src/client.rs
+        find: 'pub async fn launches(&self) -> Result<voyager_contract::launch::Catalog, String> {'
+        plain: 'Reads the launch catalog (launches.json); host.rs exposes it to the header script as the launches function.'
+      - fn: 'Client::reported_activity / refresh_activity'
+        path: app/src/client.rs
+        find: 'pub fn reported_activity(&self) -> voyager_contract::activity::Projection {'
+        plain: 'Reads program-reported activity without entering the queue; refresh_activity (line 278) asks the owner to renew the Core subscription.'
+      - {fn: 'Client::bind_content_view', path: app/src/client.rs, find: 'pub async fn bind_content_view(', plain: 'Binds a Notes view to its content instance and returns a ViewBinding.'}
+      - {fn: 'Client::content_view', path: app/src/client.rs, find: 'pub fn content_view(', plain: 'Blocking content request from a Notes view (for example Update), refused if the view is not active.'}
+      - {fn: 'Client::read_content_view', path: app/src/client.rs, find: 'pub async fn read_content_view(', plain: 'Async read-only content request (Describe, Inspect, ListNotes) from a Notes view.'}
+      - {fn: 'Client::view_changed', path: app/src/client.rs, find: 'pub async fn view_changed(', plain: 'Waits for the next change to a view''s content, or for the view to retire.'}
+      - {fn: 'Client::content_native_save', path: app/src/client.rs, find: 'pub fn content_native_save(', plain: 'The Notes host''s save path during Voyage close or rename; only Update is allowed.'}
+      - fn: 'Client::close_save_requests'
+        path: app/src/client.rs
+        find: 'pub fn close_save_requests('
+        plain: 'Registers the desktop''s Notes save bridge, which receives SaveRequest messages during close and rename.'
+      - fn: 'Client::note_exit_request / exit_note'
+        path: app/src/client.rs
+        find: 'pub fn note_exit_request('
+        plain: 'Builds the RemovePanel request for a Notes Exit; exit_note (line 2462) sends it with the saved revision so the panel only closes if nothing changed.'
+      - fn: 'Client::refresh_content_views / package_revision / request_id'
+        path: app/src/client.rs
+        find: 'pub fn request_id(&self) -> String {'
+        plain: 'Small helpers the desktop also uses: unique request ids, the content package revision (line 2131) and a nudge to content views (line 2135).'
+    talks_to: 'Sends requests to Herdr Core through the Core adapter (document get and set of voyager-layout-v1, terminal list, get, run and attach). Asks the content owner for Notes data. Spawns short-lived worker threads for Git worktree commands, process effects that wait on Core, Voyage close and Notes rename waits; each reports back as a message on the same queue.'
+    why: 'AGENTS.md names app/src/client.rs as the native application queue and says a received request is not a completed effect and uncertain operations are never replayed. That is why each family keeps receipts by request id and a timeout is reported as unconfirmed rather than retried.'
+    inferred: false
+    size: 4382
+    note: 'This file holds the main request queue and is 4,382 lines. Lines 310 to 2117 are one function, start_with_launches, whose spawned thread is the owner loop. Its match handles each message family: content, worktree, process, terminal, observation and close messages finish in their own arms, while workspace requests and Notes exits fall through to a shared tail (lines 1562 to 2108) that dedupes, checks scope and version, applies the action to a copy of the layout, saves it to Core and notifies listeners. The public API follows at lines 2119 to 2627: async methods for GPUI tasks, and blocking methods that try_send (so a full 8-slot queue gives a busy refusal) and then wait 20 to 25 seconds. Helpers for terminal start, layout load and save, and Notes selection sit at lines 2778 to 3430, with test modules interleaved at 2687, 3432, 4033 and 4292. Client::quit asks Core to stop its whole session (server.stop), but the desktop''s Ctrl+Q handler at this commit (desktop/src/quit.rs) only quits the conversation client, so Core programs keep running.'
+    sections:
+      - name: 'Message vocabulary'
+        path: app/src/client.rs
+        find: 'enum Message {'
+        plain: 'Lines 29 to 141. One enum variant per request family the owner thread accepts, each carrying its own reply channel.'
+      - name: 'Owner thread start and state'
+        path: app/src/client.rs
+        find: 'let mut core = Core::connect_activity(&session, observed_activity.clone());'
+        plain: 'Lines 310 to 378. Creates the 8-slot channel and the Client handle, spawns the owner thread, connects to Core and sets up the owner''s state.'
+      - name: 'Main loop and dispatch'
+        path: app/src/client.rs
+        find: 'let (request, scope, reply) = match message {'
+        plain: 'Line 379 waits for a message and line 395 matches it. Arms that finish end with continue; Workspace and NoteExit return a request for the shared workspace tail.'
+      - name: 'Conversation focus'
+        path: app/src/client.rs
+        find: 'pub(crate) fn conversation_focus('
+        plain: 'Lines 255 to 267. Builds the assistant''s focus (scope, path, folder, revision) and attaches the dock preview if it still matches. The conversation client and voice call it after an Inspect.'
+      - name: 'Dock preview preparation'
+        path: app/src/client.rs
+        find: 'crate::context::prepare(&layout, version, core, content.as_mut());'
+        plain: 'Lines 396 to 419, queued from lines 2081 to 2108. After a successful Dock the owner sends itself a PrepareContext message that reads a bounded preview of docked terminals and Notes for the assistant.'
+      - name: 'Voyage close messages'
+        path: app/src/client.rs
+        find: 'Message::CloseSaves { sender } => {'
+        plain: 'Lines 437 to 528. CloseSaves registers the desktop''s Notes save bridge. CloseDone takes the close worker''s result, re-checks the plan and scope, applies CloseVoyage to a copy of the layout and saves it.'
+      - name: 'Voyage close actions in the workspace tail'
+        path: app/src/client.rs
+        find: 'Action::ConfirmVoyageClose { id, plan } => {'
+        plain: 'Lines 1727 to 1776. CloseVoyage prepares a plan for the human to confirm. Confirm and Cancel are refused for scoped (agent) callers; Confirm spawns a worker running voyage_close::execute and defers the reply until CloseDone arrives.'
+      - name: 'Activity, quit and launches'
+        path: app/src/client.rs
+        find: 'Message::ActivityChanged => continue,'
+        plain: 'Lines 529 to 551. Activity wake-ups, an explicit activity refresh, Quit (stops the Core session once and keeps the result) and reading the launch catalog.'
+      - name: 'Content views, observation and change notices'
+        path: app/src/client.rs
+        find: 'let result = (|| -> Result<voyager_contract::observation::WorkspaceObservation, String> {'
+        plain: 'Lines 552 to 630. Registers content views, returns context facts, builds the workspace observation (which can also rename automatic Voyages and close panels whose shell exited) and installs the WorkspaceChanges listener that wakes the desktop.'
+      - name: 'Content and Notes requests'
+        path: app/src/client.rs
+        find: 'Message::BindContent { id, reply } => {'
+        plain: 'Lines 631 to 857. Binds a content id, subscribes to content changes, and handles every content request: dedupe by request id; refuse during a rename, a Voyage close or quit; reload the layout from Core; then route note selection to select_note, configuration to configure, and the rest to content::run.'
+      - name: 'Worktree requests'
+        path: app/src/client.rs
+        find: 'let prepared = (|| -> Result<(String, Vec<String>), String> {'
+        plain: 'Lines 858 to 1255. Worktree checks identity, freshness and scope, then runs Git on a worker thread. Remove first asks the owner (WorktreeRemoveReady, lines 858 to 930) to recheck that no live program uses the checkout. WorktreeDone (lines 931 to 1067) selects, reopens, creates or closes the matching Voyage and saves the layout.'
+      - name: 'Process requests'
+        path: app/src/client.rs
+        find: 'crate::process::start(core, &layout, &scope, &request.input.action)'
+        plain: 'Lines 1256 to 1429. Process requests from the assistant tools, the Agents list and Voyage close. List and read answer at once; send, interrupt and stop wait on a worker thread and return as ProcessDone.'
+      - name: 'Terminal opening'
+        path: app/src/client.rs
+        find: 'let request = TerminalRequest {'
+        plain: 'Lines 1454 to 1560. After identity, quit, freshness, close and visibility checks, calls open_terminal (lines 2986 to 3155), which marks the start in the layout, asks Core to run the program, saves the new backend address and attaches a viewer.'
+      - name: 'Workspace request tail'
+        path: app/src/client.rs
+        find: 'let inspecting = matches!(request.action, Action::Inspect);'
+        plain: 'Lines 1562 to 2108. Every workspace Request and Notes exit ends here. It refuses reused ids, handles Inspect (reload, create the first Voyage, prepare ended shells for reopening), checks freshness, version and scope, handles special actions, then applies the rest.'
+      - name: 'Notes rename'
+        path: app/src/client.rs
+        find: 'if let Some(plan) = crate::content::rename::Plan::capture('
+        plain: 'Lines 1779 to 1880. Renaming a Notes panel renames its Markdown file. The owner first asks the Notes host to settle saves and waits for NoteRenameReady (lines 420 to 436), then moves the file, saves the layout and rebinds the content.'
+      - name: 'Content packages'
+        path: app/src/client.rs
+        find: 'if let Action::RemoveContentPackage { type_id }'
+        plain: 'Lines 1881 to 1917. Removing or restoring a content package goes to the content owner and bumps the package revision.'
+      - name: 'Apply and save'
+        path: app/src/client.rs
+        find: '_ => candidate.apply(request.action.clone()),'
+        plain: 'Lines 1966 to 2023. The ordinary path: apply the action to a cloned layout with workspace::Model, re-check close state, verify terminal liveness for a new shell or reopen, create data for new Notes, save to Core, and record new terminals that may start.'
+      - name: 'Reply and notify'
+        path: app/src/client.rs
+        find: 'let prepare_dock = matches!(request.action, Action::Dock { .. })'
+        plain: 'Lines 2043 to 2108. Fills the response, wakes content views and the workspace listener when the version, packages or close plan changed, keeps a receipt and replies.'
+      - name: 'Public async API'
+        path: app/src/client.rs
+        find: 'pub async fn bind_content(&self, id: ContentId)'
+        plain: 'Lines 2119 to 2512. Async methods used from GPUI tasks: content binding and change watching, content reads, workspace notices, observation, context facts, launches and quit.'
+      - name: 'Public blocking API'
+        path: app/src/client.rs
+        find: 'pub fn call(&self, request: Request) -> Result<Response, String> {'
+        plain: 'Lines 2513 to 2627. call, scoped_call, worktree, process and terminal: try_send, then wait with a timeout; a timeout is reported as unconfirmed, never retried.'
+      - name: 'Layout document load and save'
+        path: app/src/client.rs
+        find: 'fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Error> {'
+        plain: 'Lines 3179 to 3198. Reads and writes the Core document voyager-layout-v1; load validates the canvas, normalises the layout and syncs Notes labels.'
+      - name: 'Notes selection and configuration'
+        path: app/src/client.rs
+        find: 'fn select_note('
+        plain: 'Lines 3200 to 3430. select_note creates, opens or migrates a Notes Markdown file; configure changes Notes settings. Both save the layout change to Core.'
+      - {name: Tests, path: app/src/client.rs, find: 'mod terminal_outcome_tests {', plain: 'Unit tests are inside the file at lines 2687 to 2777, 3432 to 4032, 4033 to 4291 and 4292 to 4345.'}
+  - id: 'rs:voyager_app::codex'
+    feature: assistant
+    plain: 'Starts and talks to the private Codex app-server, a child process that speaks newline-delimited JSON-RPC on stdin and stdout.'
+    holds: 'The Codex child process and its stdin, the resolved executable path, the version Codex reports, and the one pending request id and operation, shared with the reader thread.'
+    entry:
+      fn: 'codex::Codex::open'
+      path: app/src/codex.rs
+      find: 'pub(crate) fn open('
+      plain: 'Starts codex app-server with the shell tool on and multi-agent features off, and spawns a reader thread that decodes each line into a provider Event.'
+    key:
+      - fn: 'Codex::request'
+        path: app/src/codex.rs
+        find: 'pub(crate) fn request(&mut self, id: u64, command: ProviderCommand) -> Result<(), String> {'
+        plain: 'Encodes a provider Command, records it as the pending request and writes it, refusing more than 64 KiB (128 KiB for audio).'
+      - fn: 'Codex::reply'
+        path: app/src/codex.rs
+        find: 'pub(crate) fn reply(&mut self, reply: &ToolReply, content: bool) -> Result<(), String> {'
+        plain: 'Writes a tool result back to Codex. Content replies may be about 2 MiB so Notes data fits.'
+      - {fn: 'Codex::executable', path: app/src/codex.rs, find: 'pub(crate) fn executable() -> Result<PathBuf, String> {', plain: 'Finds Codex from VOYAGER_CODEX_BIN or PATH.'}
+      - fn: 'Codex::voice_package'
+        path: app/src/codex.rs
+        find: 'pub(crate) fn voice_package(&self) -> Result<Package, String> {'
+        plain: 'Finds the voice helper bundled with this Codex install and checks that its version matches the running Codex.'
+    talks_to: 'The Codex app-server child process (ipc: JSON-RPC over stdio). Decoded events go to the conversation owner thread over a sync channel.'
+    why: 'docs/conversation.md (Typed provider conversion): the Codex adapter owns request encoding, bounded frame decoding and conversion into provider.rs values, so the conversation owner sees only typed events.'
+    inferred: false
+    size: 276
+  - id: 'rs:voyager_app::codex::protocol'
+    feature: assistant
+    plain: 'Translates between Voyager''s provider commands and Codex app-server JSON messages, in both directions.'
+    holds: 'nothing: pure functions.'
+    entry:
+      fn: 'codex::protocol::decode'
+      path: app/src/codex_protocol.rs
+      find: 'pub(crate) fn decode(value: Value, pending: Option<(u64, Operation)>) -> Option<Event> {'
+      plain: 'Turns one JSON message from Codex into a provider Event: a reply to the pending request, a visible conversation event, a tool call, audio, or nothing.'
+    key:
+      - fn: 'codex::protocol::encode'
+        path: app/src/codex_protocol.rs
+        find: 'pub(crate) fn encode(command: Command) -> Result<(&''static str, Value), String> {'
+        plain: 'Maps each Command to a Codex method and params: initialize, thread/start, turn/start, turn/interrupt, account/read and realtime start and stop.'
+      - fn: 'codex::protocol::tool_reply'
+        path: app/src/codex_protocol.rs
+        find: 'pub(crate) fn tool_reply(reply: &ToolReply) -> Value {'
+        plain: 'Encodes a tool result or error in the shape Codex expects.'
+      - fn: 'codex::protocol::outcome'
+        path: app/src/codex_protocol.rs
+        find: 'fn outcome(value: &Value, operation: Operation) -> Outcome {'
+        plain: 'Reads a response as Applied, Rejected or Unconfirmed, and extracts the thread or turn id it should carry.'
+    inferred: false
+    size: 387
+    note: 'thread/start fixes approvalPolicy never and a read-only sandbox for the private assistant (line 32).'
+  - id: 'rs:voyager_app::content'
+    feature: content-model
+    plain: 'The content owner. It stores and checks content data (today only Notes has data) and decides which caller may read or change which content instance.'
+    holds: 'The profile''s data folder, the last snapshot per content id, the set of registered instances, a change counter and one waiting listener per instance, weak handles to open views, and the selected Markdown file per Notes instance.'
+    entry:
+      fn: 'content::Owner'
+      path: app/src/content.rs
+      find: 'pub struct Owner {'
+      plain: 'Opened once by the desktop (Owner::open) and then moved into the client owner thread, which is the only code that uses it.'
+    key:
+      - fn: 'content::run'
+        path: app/src/content.rs
+        find: 'pub(crate) fn run('
+        plain: 'Admits a request, then either lists the Notes folder or forwards it to Owner::call and attaches the current configuration.'
+      - fn: 'content::admit'
+        path: app/src/content.rs
+        find: 'pub(crate) fn admit('
+        plain: 'Checks the caller: a view may touch only its own content; an agent must name the current workspace version and stay inside its captured scope.'
+      - fn: 'content::Owner::call'
+        path: app/src/content.rs
+        find: 'pub fn call(&mut self, binding: &Binding, request: Request) -> Response {'
+        plain: 'Performs the request against the stored data and notifies subscribers of a change.'
+      - {fn: 'content::initialize_created', path: app/src/content.rs, find: 'pub(crate) fn initialize_created(', plain: 'Creates data for Notes instances that a workspace action has just added.'}
+    talks_to: 'Called only from the client owner thread. Reads and writes profile/data/<id>.json and the selected Markdown files on disk.'
+    why: 'AGENTS.md says content data belongs to app/src/content.rs and that a schema describes data but does not grant authority.'
+    inferred: false
+    size: 1520
+    note: 'Despite its general name, most request handling is Notes-specific; Terminal and Agents content keep no data here. Lines 1009 onward are tests.'
+  - id: 'rs:voyager_app::content::description'
+    feature: content-model
+    plain: 'The fixed list of content types (Terminal, Agents, Notes) and how each is described to scripts and agents: renderer, tool, schemas and allowed actions.'
+    holds: 'nothing: a static table and pure functions.'
+    entry:
+      fn: 'content::describe'
+      path: app/src/content/description.rs
+      find: 'pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {'
+      plain: 'Builds the Description of one content type, including the Notes state schema from its installed package.'
+    key:
+      - fn: 'content::description::IMPLEMENTATIONS'
+        path: app/src/content/description.rs
+        find: 'const IMPLEMENTATIONS: &[Implementation] = &['
+        plain: 'The three built-in types with their renderer module, component, backend, tool and generated schemas.'
+      - fn: 'content::discover'
+        path: app/src/content/description.rs
+        find: 'pub fn discover(packages: &Path) -> Result<Catalog, String> {'
+        plain: 'Describes every type as a Catalog; the desktop calls it.'
+      - fn: 'content::require_action'
+        path: app/src/content/description.rs
+        find: 'pub fn require_action(description: &Description, name: &str) -> Result<(), String> {'
+        plain: 'Refuses an action the description does not advertise.'
+    inferred: false
+    size: 266
+  - id: 'rs:voyager_app::content::markdown'
+    feature: notes
+    plain: 'Reads, writes, lists and creates the Markdown files that hold Notes, with a 1 MiB limit.'
+    holds: 'nothing: pure functions over files.'
+    entry:
+      fn: 'content::markdown::parse'
+      path: app/src/content/markdown.rs
+      find: 'pub(crate) fn parse(name: &str, bytes: &[u8]) -> Result<Notes, String> {'
+      plain: 'Turns file bytes into a title and body: a first line ''# Title'' becomes the title, otherwise the file name does.'
+    key:
+      - {fn: 'content::markdown::encode', path: app/src/content/markdown.rs, find: 'pub(crate) fn encode(notes: &Notes) -> Result<Vec<u8>, String> {', plain: 'Writes ''# Title'', a blank line and the body.'}
+      - fn: 'content::markdown::create'
+        path: app/src/content/markdown.rs
+        find: 'pub(crate) fn create(directory: &Path, notes: &Notes) -> Result<String, String> {'
+        plain: 'Creates Title.md, or Title 2.md and so on, never overwriting an existing file.'
+      - fn: 'content::markdown::list'
+        path: app/src/content/markdown.rs
+        find: 'pub(crate) fn list(directory: &Path) -> Result<Vec<String>, String> {'
+        plain: 'Lists the .md files in a Notes folder, sorted.'
+    inferred: false
+    size: 172
+  - id: 'rs:voyager_app::content::package'
+    feature: content-model
+    plain: 'Seeds a shipped content package into the profile once, and removes or restores it by renaming its folder.'
+    holds: 'nothing: pure functions over folders.'
+    entry:
+      fn: 'content::seed_package'
+      path: app/src/content/package.rs
+      find: 'pub fn seed_package(package: &Path, files: &[(&str, &str)]) -> io::Result<()> {'
+      plain: 'Copies the given files into a new package folder only if neither the folder nor its removed copy exists; the desktop calls it at startup for Notes.'
+    key:
+      - fn: 'content::package::remove'
+        path: app/src/content/package.rs
+        find: 'pub(crate) fn remove(package: &Path) -> Result<(), String> {'
+        plain: 'Moves the package to a hidden .name.removed folder, keeping personal edits.'
+      - {fn: 'content::package::restore', path: app/src/content/package.rs, find: 'pub(crate) fn restore(package: &Path) -> Result<(), String> {', plain: 'Moves the removed folder back.'}
+      - fn: 'content::package::move_package (Linux)'
+        path: app/src/content/package.rs
+        find: 'fn move_package(source: &Path, destination: &Path) -> Result<(), String> {'
+        plain: 'Uses renameat2 with RENAME_NOREPLACE so nothing is overwritten; other platforms refuse.'
+    why: 'AGENTS.md: shipped packages currently seed once, and uninstall must be reversible while keeping personal source edits.'
+    inferred: false
+    size: 196
+  - id: 'rs:voyager_app::content::rename'
+    feature: content-model
+    plain: 'Renames a Notes panel by renaming its Markdown file on disk, and keeps panel labels in step with file names.'
+    holds: 'nothing: Plan is a value the client keeps while a rename is in progress.'
+    entry:
+      fn: 'content::rename::Plan::capture'
+      path: app/src/content/rename.rs
+      find: '    pub fn capture('
+      plain: 'Recognises a Rename action on a Vessel or Portal that shows Notes and records the file, every content id sharing it, the new filename and the file''s current hash.'
+    key:
+      - fn: 'content::rename::move_file'
+        path: app/src/content/rename.rs
+        find: 'pub(crate) fn move_file(file: &NotesFile, name: &str, expected: &str) -> Result<(), String> {'
+        plain: 'Checks the file still has the expected hash, then renames it in place without replacing an existing file (Linux and macOS only).'
+      - fn: 'content::rename::synchronize_labels'
+        path: app/src/content/rename.rs
+        find: 'pub(crate) fn synchronize_labels(layout: &mut Layout) {'
+        plain: 'On every layout load, sets each Notes panel''s name to its file name.'
+      - fn: 'content::rename::label'
+        path: app/src/content/rename.rs
+        find: 'pub(crate) fn label(layout: &mut Layout, id: &ContentId, filename: &str) {'
+        plain: 'Names every placement of one content instance after its file.'
+    inferred: false
+    size: 355
+  - id: 'rs:voyager_app::content::view'
+    feature: notes
+    plain: 'A ViewBinding is a native view''s claim on one content instance, with a Pending, Active or Retired phase, so requests from a closed view are refused before they reach the queue.'
+    holds: 'The content binding and a shared gate: the phase behind a mutex and two channels that wake waiters when the view is published or retired.'
+    entry: {fn: 'content::ViewBinding', path: app/src/content/view.rs, find: 'pub struct ViewBinding {', plain: 'Created by Owner::register_view and handed to the desktop''s Notes view.'}
+    key:
+      - fn: 'ViewBinding::activate'
+        path: app/src/content/view.rs
+        find: 'pub fn activate(&self) -> Result<(), String> {'
+        plain: 'Moves Pending to Active and releases queued reads waiting for publication.'
+      - {fn: 'ViewBinding::retire', path: app/src/content/view.rs, find: 'pub fn retire(&self) {', plain: 'Marks the view Retired and wakes anything waiting on it so it can refuse.'}
+      - {fn: 'content::view::Phase', path: app/src/content/view.rs, find: 'pub(crate) enum Phase {', plain: 'Pending, Active or Retired.'}
+    talks_to: 'client.rs admit_view waits on the gate before queueing a view''s request.'
+    inferred: false
+    size: 78
+  - id: 'rs:voyager_app::context'
+    feature: context-docking
+    plain: 'Builds what the assistant and the context bar know about the docked context: facts (scope, path, folder, Git branch) and a bounded text preview of docked terminals and Notes.'
+    holds: 'nothing long-lived; Prepared is a value the client keeps for one scope and revision.'
+    entry:
+      fn: 'context::capture'
+      path: app/src/context.rs
+      find: 'pub(crate) fn capture(layout: &Arc<Layout>, version: u64) -> Result<Facts, String> {'
+      plain: 'Returns the docked scope''s path and, if all its content shares one folder, that folder.'
+    key:
+      - fn: 'context::prepare'
+        path: app/src/context.rs
+        find: 'pub(crate) fn prepare('
+        plain: 'Runs on the client owner thread after a Dock: reads up to three visible panels (terminal screens from Core, saved Notes) into at most 4 KiB of text.'
+      - fn: 'context::resolve'
+        path: app/src/context.rs
+        find: 'pub fn resolve(mut facts: Facts) -> Facts {'
+        plain: 'Adds the Git branch by reading .git/HEAD. The desktop calls it after the owner replies, so file reads stay off the owner thread.'
+      - fn: 'context::Prepared::preview'
+        path: app/src/context.rs
+        find: 'pub fn preview(&self, focus: &voyager_contract::conversation::Focus) -> Option<String> {'
+        plain: 'Returns the preview only if the focus still has the same scope and revision, labelled as bounded, untrusted context.'
+    inferred: false
+    size: 376
+  - id: 'rs:voyager_app::conversation'
+    feature: assistant
+    plain: 'Small pure helpers for the private conversation: computing the assistant''s focus from the layout, and updating the visible conversation snapshot.'
+    holds: 'nothing: pure functions.'
+    entry:
+      fn: 'conversation::focus'
+      path: app/src/conversation.rs
+      find: 'pub(crate) fn focus(layout: &Layout, revision: u64) -> Result<Focus, String> {'
+      plain: 'Turns the layout''s dock context into a Focus: scope, a readable path, a shared folder if any, and the revision.'
+    key:
+      - fn: 'conversation::notification'
+        path: app/src/conversation.rs
+        find: 'pub(crate) fn notification(state: &mut Snapshot, value: &Visible, request: &str) -> bool {'
+        plain: 'Applies a visible provider event to the snapshot if it belongs to the current thread and turn.'
+      - fn: 'conversation::defer'
+        path: app/src/conversation.rs
+        find: 'pub(crate) fn defer(state: &mut Snapshot, events: &mut VecDeque<Visible>, value: Visible) -> bool {'
+        plain: 'Holds up to 16 early events and marks the display incomplete if more arrive.'
+      - fn: 'conversation::fail'
+        path: app/src/conversation.rs
+        find: 'pub(crate) fn fail(state: &mut Snapshot, error: String, phase: Phase) -> bool {'
+        plain: 'Records an error and moves an unfinished turn to the given phase.'
+    inferred: false
+    size: 452
+  - id: 'rs:voyager_app::conversation_client'
+    feature: assistant
+    plain: 'The private assistant''s owner: a second serial thread that runs the Codex conversation, its tool calls and voice, and publishes a snapshot for the desktop to draw.'
+    holds: 'The Client handle holds the queue sender (8 slots), the shared snapshot behind a mutex and condition variable, a request sequence and the shared voice state. The owner thread holds the Codex process, model and effort, the active request, deferred events, waiting tool callbacks, the tool receipts, the captured focus and realtime voice state.'
+    entry:
+      fn: 'conversation_client::Client::with_audio'
+      path: app/src/conversation_client.rs
+      find: 'pub fn with_audio('
+      plain: 'Called by desktop/src/lib.rs with the app Client. Creates the queue and snapshot and spawns the conversation owner thread.'
+    key:
+      - fn: 'conversation owner thread'
+        path: app/src/conversation_client.rs
+        find: 'thread::spawn(move || {'
+        plain: 'Each pass handles audio events and captured scopes, polls tool results, takes one command, then waits up to 10 ms for a Codex event.'
+      - {fn: 'Owner::call', path: app/src/conversation_client.rs, find: '    fn call(', plain: 'Accepts a request only if its id was issued and not seen before, applies it, and keeps the last 32 replies.'}
+      - fn: 'Owner::receive'
+        path: app/src/conversation_client.rs
+        find: 'fn receive(&mut self, event: ProviderEvent) -> Result<(), String> {'
+        plain: 'Handles one event from Codex: responses, visible messages, tool calls and audio.'
+      - fn: 'conversation_client::ADMINISTRATOR'
+        path: app/src/conversation_client.rs
+        find: 'const ADMINISTRATOR: &str ='
+        plain: 'The fixed instructions given to the assistant: inspect before acting, report real outcomes, never repeat an uncertain effect, no project edits.'
+    talks_to: 'The Codex app-server through codex.rs. The app Client: an Inspect at the start of each turn (line 647) to capture the focus, and tool effects through administrator.rs.'
+    why: 'AGENTS.md says the private conversation is separate from terminal agents and content, and application actions must not wait on provider work. A separate owner thread with its own queue keeps the two apart.'
+    inferred: true
+    size: 1108
+    note: 'Lines 1014 onward are tests. Model and effort come from the profile''s conversation.json (settings, line 979).'
+  - id: 'rs:voyager_app::conversation_client::audio'
+    feature: voice
+    plain: 'The voice half of the conversation owner: it starts a native voice session, relays the WebRTC offer and answer through Codex realtime, and turns spoken turns into conversation messages.'
+    holds: 'The current Realtime record: generation, thread, session id, the answer channel to the voice worker, and start and stop flags.'
+    entry:
+      fn: 'conversation_client Owner::start_audio'
+      path: app/src/conversation_audio.rs
+      find: 'pub(super) fn start_audio(&mut self) -> Result<(), String> {'
+      plain: 'Checks the voice package, captures the focus and spawns the native voice worker for a new generation.'
+    key:
+      - fn: 'Owner::realtime_event'
+        path: app/src/conversation_audio.rs
+        find: 'pub(super) fn realtime_event(&mut self, value: &ProviderAudio) -> Result<(), String> {'
+        plain: 'Handles Codex realtime events, including the SDP answer passed back to the voice worker.'
+      - fn: 'Owner::voice_turn'
+        path: app/src/conversation_audio.rs
+        find: 'pub(super) fn voice_turn(&mut self, value: &Visible) -> Result<bool, String> {'
+        plain: 'Handles a spoken turn on the backing thread and captures a fresh focus for it.'
+      - fn: 'Owner::capture_scope'
+        path: app/src/conversation_audio.rs
+        find: 'fn capture_scope(&self, generation: u64, turn: Option<String>) -> Result<(), String> {'
+        plain: 'Queues an Inspect on the app Client and waits for it on a voice-turn-focus thread, so the conversation owner never blocks on the workspace.'
+      - {fn: VOICE_INSTRUCTIONS, path: app/src/conversation_audio.rs, find: 'const VOICE_INSTRUCTIONS: &str =', plain: 'The fixed voice instructions: the voice and the text thread are one administrator.'}
+    inferred: false
+    size: 537
+  - id: 'rs:voyager_app::core'
+    feature: core-adapter
+    plain: 'The Herdr Core adapter. It starts hc connect for a dedicated voyager- session and carries JSON-RPC requests, terminal output, input and activity over that one framed pipe.'
+    holds: 'The hc connect child process, control and input frame queues, the map of pending replies, per-channel terminal output buffers, connection flags, the request sequence, Core''s identity and the shared activity cache.'
+    entry:
+      fn: 'core::Core::connect_activity'
+      path: app/src/core.rs
+      find: 'pub(crate) fn connect_activity('
+      plain: 'Refuses session names that are not voyager-..., starts hc connect, sends hello, checks Core''s identity, and spawns a writer thread and a reader thread.'
+    key:
+      - fn: 'Core::begin'
+        path: app/src/core.rs
+        find: 'fn begin<P: Serialize, R: DeserializeOwned>('
+        plain: 'Assigns a request id, refuses requests over 1 MiB, registers a Pending reply and queues the request as a frame on channel 0.'
+      - fn: 'Core::document_get'
+        path: app/src/core.rs
+        find: 'pub fn document_get(&mut self, name: &str) -> Result<DocGetResult, Error> {'
+        plain: 'Reads a named Core document; the client keeps the workspace layout in voyager-layout-v1. document_set (line 688) writes it with a version check.'
+      - fn: 'Core::terminal_attach'
+        path: app/src/core.rs
+        find: 'pub fn terminal_attach(&mut self, terminal: &Terminal) -> Result<AttachResult, Error> {'
+        plain: 'Asks Core to attach to a terminal; the reply names the channel its output will arrive on.'
+      - fn: 'Core::viewer'
+        path: app/src/core.rs
+        find: 'pub fn viewer(&self, attached: &AttachResult) -> Result<Viewer, Error> {'
+        plain: 'Wraps an attached channel as a Viewer that the desktop''s terminal view reads output from and writes input to.'
+    talks_to: 'Herdr Core through the hc connect child''s stdin and stdout; that child connects to Core''s socket, whose path core_endpoint computes. Two background threads write and read frames.'
+    why: 'docs/terminal.md: a single framed Core connection carries RPC, viewer data, input, focus and credit.'
+    inferred: false
+    size: 1520
+    note: 'Core::quit (line 884) checks Core''s identity and then asks Core to stop its whole session with server.stop. Only the app Client''s Quit message reaches it, and the desktop''s Ctrl+Q handler does not send that message at this commit. Lines 1131 onward are tests.'
+  - id: 'rs:voyager_app::core::pending'
+    feature: core-adapter
+    plain: 'One outstanding Core request: a reply slot that the reader thread fills and the caller waits on for up to 20 seconds.'
+    holds: 'The request id and method, a one-slot receiver, and a handle to the shared replies map.'
+    entry: {fn: 'core::Pending::register', path: app/src/core_pending.rs, find: 'pub(super) fn register(', plain: 'Adds a reply slot unless Core is disconnected or 9 requests are already waiting.'}
+    key:
+      - {fn: 'core::Pending::wait', path: app/src/core_pending.rs, find: 'pub(crate) fn wait(self) -> Result<R, Error> {', plain: 'Waits for the reply; a timeout becomes Uncertain and nothing is resent.'}
+      - {fn: 'Drop for Pending', path: app/src/core_pending.rs, find: 'impl<R> Drop for Pending<R> {', plain: 'Removes the slot so a late reply is discarded.'}
+    talks_to: 'process.rs keeps a Pending for send, interrupt and stop so a worker thread can wait for it.'
+    inferred: false
+    size: 120
+  - id: 'rs:voyager_app::core_endpoint'
+    feature: core-adapter
+    plain: 'Works out the path of Herdr Core''s socket (or Windows named pipe) for a session, the same way Core does.'
+    holds: 'nothing: pure functions.'
+    entry:
+      fn: 'core_endpoint::endpoint (Unix)'
+      path: app/src/core_endpoint.rs
+      find: 'let uid = unsafe { libc::getuid() };'
+      plain: 'Uses XDG_RUNTIME_DIR, else /run/user/<uid>, else the state folder, then herdr-core/<session>.sock.'
+    key:
+      - {fn: 'core_endpoint::unix_endpoint', path: app/src/core_endpoint.rs, find: 'fn unix_endpoint(', plain: 'The pure path rule, separated so a test can check it matches Core.'}
+    talks_to: 'core.rs passes the result to hc connect as HC_SOCKET.'
+    inferred: false
+    size: 87
+  - id: 'rs:voyager_app::core_shapes'
+    feature: core-adapter
+    plain: 'Rust types for Core''s messages (hello, documents, terminals, server), generated at compile time from app/core-schema.json by the typify macro.'
+    holds: 'nothing: generated types.'
+    entry:
+      fn: 'core_shapes (typify::import_types!)'
+      path: app/src/lib.rs
+      find: 'typify::import_types!("core-schema.json");'
+      plain: 'Expands into structs such as RunParams, Terminal and AttachResult that core.rs uses for every request and reply.'
+    key:
+      - {fn: app/core-schema.json, path: app/core-schema.json, find: '"title": "CoreMessages",', plain: 'The checked-in subset of Core''s schema (1,588 lines) that the macro reads.'}
+      - {fn: app/core-schema.cjs, path: app/core-schema.cjs, find: 'const digest = createHash("sha256")', plain: 'The Node script that regenerates the subset from hc schema --json after checking its hash.'}
+    why: 'docs/terminal.md: core-schema.cjs extracts the used hello, document, terminal and server message types from the reviewed Core 0.1.16 schema after checking its SHA-256, and Cargo generates the Rust types from that checked schema.'
+    inferred: false
+    size: 3
+    note: 'This is a 3-line inline module in lib.rs (lines 24 to 26); the size counts only those lines.'
+  - id: 'rs:voyager_app::launch'
+    feature: agents
+    plain: 'Turns a saved launch entry (plain terminal, a program, or Codex with model, effort and permissions) into the command line Core should run.'
+    holds: 'nothing: pure functions.'
+    entry:
+      fn: 'launch::catalog'
+      path: app/src/launch.rs
+      find: 'pub fn catalog(path: Option<&Path>, cwd: &str) -> Result<Catalog, String> {'
+      plain: 'Reads launches.json and reports which entries'' programs exist on PATH. The client owner calls it for Client::launches.'
+    key:
+      - fn: 'launch::terminal_command'
+        path: app/src/launch.rs
+        find: 'pub(crate) fn terminal_command(launch: &Launch, cwd: &str) -> Result<Vec<String>, String> {'
+        plain: 'The argv used by client.rs open_terminal when it asks Core to run a program.'
+      - fn: 'launch::argv'
+        path: app/src/launch.rs
+        find: 'pub fn argv(launch: &Launch) -> Result<Vec<String>, String> {'
+        plain: 'Builds the raw arguments, including codex --model, effort and sandbox or approval flags.'
+      - fn: 'launch::shell_command'
+        path: app/src/launch.rs
+        find: 'fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, String> {'
+        plain: 'Wraps known agent programs (codex, claude, gemini and others) in bash -i so a shell remains after the agent exits.'
+      - {fn: 'launch::load', path: app/src/launch.rs, find: 'pub fn load(path: &Path) -> Result<LaunchSettings, String> {', plain: 'Reads and validates launches.json, at most 8 KiB.'}
+    inferred: false
+    size: 187
+  - id: 'rs:voyager_app::observation'
+    feature: agents
+    plain: 'Builds the workspace observation the header shows: for each visible panel, its live folder, foreground program and agent conversation title, plus names derived from them.'
+    holds: 'nothing: pure functions.'
+    entry:
+      fn: 'observation::capture'
+      path: app/src/observation.rs
+      find: 'pub(crate) fn capture('
+      plain: 'Runs on the client owner thread with Core''s terminal list and returns a WorkspaceObservation for the given scope.'
+    key:
+      - fn: 'observation::resolve'
+        path: app/src/observation.rs
+        find: 'pub fn resolve(mut observation: WorkspaceObservation) -> WorkspaceObservation {'
+        plain: 'Adds the Git branch; host.rs runs it on a background task.'
+      - {fn: 'observation::voyage_names', path: app/src/observation.rs, find: 'pub(crate) fn voyage_names(', plain: 'Names automatically named Voyages after their primary terminal''s live folder.'}
+      - fn: 'observation::conversation_name'
+        path: app/src/observation.rs
+        find: 'pub(crate) fn conversation_name(terminal: &Terminal) -> Option<String> {'
+        plain: 'Uses a terminal title as the conversation name only when the foreground program is a known agent and the title looks safe.'
+      - fn: 'observation::validate_source'
+        path: app/src/observation.rs
+        find: 'pub(crate) fn validate_source('
+        plain: 'Checks the folder chosen for a new Voyage or Fleet, including a live terminal''s current folder.'
+    inferred: false
+    size: 663
+  - id: 'rs:voyager_app::panels'
+    feature: workspace-layout
+    plain: 'The panel arrangement rules: split trees inside a Fleet or a Portal column, and the actions that save, load, resize, move, hide, maximize, remove and reveal panels.'
+    holds: 'nothing: functions over a Layout.'
+    entry:
+      fn: 'panels::apply'
+      path: app/src/panels.rs
+      find: 'pub(crate) fn apply(layout: &mut Layout, action: voyager_contract::Action) -> Result<(), String> {'
+      plain: 'Applies one panel action to a layout; workspace::Model::apply forwards panel actions here.'
+    key:
+      - fn: 'panels::normalize'
+        path: app/src/panels.rs
+        find: 'pub(crate) fn normalize(layout: &mut Layout) -> Result<(), String> {'
+        plain: 'Repairs and normalises a loaded layout, including the Portal column width.'
+      - fn: 'panels::visible'
+        path: app/src/panels.rs
+        find: 'pub(crate) fn visible(root: &Option<Split>, members: &[Vessel]) -> Option<Split> {'
+        plain: 'The split tree with hidden panels pruned; many modules use it to decide what is on screen.'
+      - {fn: 'panels::insert', path: app/src/panels.rs, find: 'pub(crate) fn insert(', plain: 'Places new content empty or beside a captured panel.'}
+      - {fn: 'panels::validate', path: app/src/panels.rs, find: 'pub(crate) fn validate(layout: &Layout) -> Result<(), String> {', plain: 'Checks every arrangement''s tree against its panels and content.'}
+    inferred: false
+    size: 948
+  - id: 'rs:voyager_app::process'
+    feature: agents
+    plain: 'Carries out process actions on terminals bound in the caller''s scope: list, read the screen and history, send text, interrupt and stop.'
+    holds: 'nothing: functions; Effect values hold a pending Core reply.'
+    entry:
+      fn: 'process::start'
+      path: app/src/process.rs
+      find: 'pub(crate) fn start('
+      plain: 'Checks that the target is inside the scope and matches the inspected terminal, then answers list and read at once or starts send, interrupt or stop.'
+    key:
+      - fn: 'process::Effect::wait'
+        path: app/src/process.rs
+        find: 'pub(crate) fn wait(self) -> Result<ProcessOutput, Error> {'
+        plain: 'Runs on a worker thread spawned by the client owner and waits for Core''s reply to send, interrupt or stop.'
+      - fn: 'process::info'
+        path: app/src/process.rs
+        find: 'fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo {'
+        plain: 'Describes one terminal for callers, including its reported activity.'
+      - fn: 'process::stop_result'
+        path: app/src/process.rs
+        find: 'fn stop_result(target: ProcessInfo, observed: ProcessInfo) -> Result<ProcessOutput, Error> {'
+        plain: 'Reports what Core observed after a stop, without restarting anything.'
+    talks_to: 'Core terminal get, read, send, interrupt and kill through core.rs. Reached from the assistant''s voyager_process tool, the header''s Agents list (host.rs processes) and Voyage close.'
+    inferred: false
+    size: 376
+  - id: 'rs:voyager_app::provider'
+    feature: assistant
+    plain: 'Provider-neutral vocabulary for the private conversation: capabilities, commands, responses, visible events, tool calls and audio events.'
+    holds: 'nothing: types only.'
+    entry: {fn: 'provider::Command', path: app/src/provider.rs, find: 'pub(crate) enum Command {', plain: 'What the conversation owner can ask a provider to do.'}
+    key:
+      - {fn: 'provider::Event', path: app/src/provider.rs, find: 'pub(crate) enum Event {', plain: 'What a provider can report back.'}
+      - {fn: 'provider::ToolCall', path: app/src/provider.rs, find: 'pub(crate) struct ToolCall {', plain: 'A tool call with its thread, turn, call id and arguments.'}
+      - {fn: 'provider::Capabilities', path: app/src/provider.rs, find: 'pub struct Capabilities {', plain: 'Text, tools, interruption and voice support, shown to the desktop.'}
+    why: 'AGENTS.md places the provider contract in app/src/provider.rs and Codex conversion in codex.rs and codex_protocol.rs.'
+    inferred: false
+    size: 318
+  - id: 'rs:voyager_app::scope'
+    feature: context-docking
+    plain: 'Enforces docking scope: it cuts the layout down to what a scope may see, and decides whether an action is allowed inside that scope.'
+    holds: 'nothing: pure functions.'
+    entry:
+      fn: 'scope::check'
+      path: app/src/scope.rs
+      find: 'pub(crate) fn check('
+      plain: 'Workspace scope allows everything. Narrower scopes allow actions only on their own Voyage or Fleet, and never creating Voyages, changing the canvas or content packages.'
+    key:
+      - fn: 'scope::project'
+        path: app/src/scope.rs
+        find: 'pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layout> {'
+        plain: 'Returns the part of the layout a scope may see; every response to a scoped caller is projected this way.'
+    why: 'AGENTS.md: Fleet membership and Core parentage do not grant instruction rights, and state checks stay at the effect owner.'
+    inferred: false
+    size: 379
+  - id: 'rs:voyager_app::terminal_lifecycle'
+    feature: terminals
+    plain: 'Decides what happens to terminal panels whose programs ended: prepare them to start a fresh shell on reopen, or close panels whose shell exited.'
+    holds: 'nothing: pure functions.'
+    entry:
+      fn: 'terminal_lifecycle::prepare_reopen'
+      path: app/src/terminal_lifecycle.rs
+      find: 'pub(crate) fn prepare_reopen(layout: &mut Layout, terminals: &[Terminal]) -> Vec<ContentId> {'
+      plain: 'On the first Inspect, clears the backend of visible terminals whose program finished so a plain shell can start; it never restarts an agent.'
+    key:
+      - fn: 'terminal_lifecycle::close_exited'
+        path: app/src/terminal_lifecycle.rs
+        find: 'pub(crate) fn close_exited('
+        plain: 'Removes panels whose live shell has since exited, during a workspace observation.'
+      - fn: 'terminal_lifecycle::prepare_voyage_reopen'
+        path: app/src/terminal_lifecycle.rs
+        find: 'pub(crate) fn prepare_voyage_reopen('
+        plain: 'The same preparation limited to one Voyage being reopened.'
+    why: 'docs/terminal.md: after a computer restart, confirmed-ended terminal placements open ordinary shells without automatically resuming agents.'
+    inferred: false
+    size: 222
+  - id: 'rs:voyager_app::typing_trace'
+    feature: diagnostics
+    plain: 'An opt-in typing-latency tracer: when enabled for a voyager-typing- session, it timestamps the stages of a keystroke and writes them as JSON lines to stderr.'
+    holds: 'A lazily created global: a start time, a 4,096-event channel to a writer thread, and attempted and dropped counters.'
+    entry:
+      fn: 'typing_trace::record (voyager_app::record_terminal_trace)'
+      path: experiments/performance/typing-latency/trace.rs
+      find: 'pub fn record(stage: &''static str, value: usize) {'
+      plain: 'Records one stage; does nothing unless VOYAGER_TYPING_TRACE=1 and the session name starts with voyager-typing-.'
+    key:
+      - fn: 'typing_trace::transport'
+        path: experiments/performance/typing-latency/trace.rs
+        find: 'pub(crate) fn transport(stage: &''static str, channel: u32, bytes: usize) {'
+        plain: 'Called by Core::write_frame before and after each terminal input write.'
+      - fn: 'typing_trace::TRACE'
+        path: experiments/performance/typing-latency/trace.rs
+        find: 'static TRACE: LazyLock<Option<Trace>> = LazyLock::new(|| {'
+        plain: 'Starts the typing-trace writer thread, which stops after 120 seconds.'
+    talks_to: 'Writes to stderr. Python scripts in the same experiment folder (observe.py and others) belong to the same typing-latency experiment.'
+    inferred: false
+    size: 207
+    note: 'The source lives under experiments/ and is compiled into the product crate through #[path] in lib.rs.'
+  - id: 'rs:voyager_app::voice'
+    feature: voice
+    plain: 'Shared voice state: the phase, generation, audio levels and error the desktop shows, plus which avatar audio lease currently owns the session.'
+    holds: 'The voice State, the current run (lease binding, helper cancellation, stopping flag, failure) and the next binding id, behind one mutex.'
+    entry: {fn: 'voice::Shared', path: app/src/voice.rs, find: 'pub(crate) struct Shared(Mutex<Inner>);', plain: 'Shared between the conversation client, its owner thread and the voice worker.'}
+    key:
+      - fn: 'voice::Shared::begin'
+        path: app/src/voice.rs
+        find: 'pub fn begin(&self, binding: &Binding) -> Result<u64, String> {'
+        plain: 'Starts a new generation if the lease is valid, voice is available and no session is active.'
+      - fn: 'voice::Shared::stop'
+        path: app/src/voice.rs
+        find: 'pub fn stop(&self, binding: &Binding) -> Result<(), String> {'
+        plain: 'Stops the current session for the lease holder by cancelling the helper.'
+      - {fn: 'voice::Shared::finish', path: app/src/voice.rs, find: 'pub fn finish(', plain: 'Records how a generation ended and whether the helper''s exit was confirmed.'}
+    inferred: false
+    size: 343
+  - id: 'rs:voyager_app::voice_host'
+    feature: voice
+    plain: 'Finds and runs Codex''s native voice helper (codex-voice-host), the separate program that owns the microphone, speaker and WebRTC transport.'
+    holds: 'Package: the helper path, build commit and version. Host: the helper''s stdin, a receiver for its replies and a cancellation handle that kills it on drop.'
+    entry:
+      fn: 'voice_host::Package::discover'
+      path: app/src/voice_host.rs
+      find: 'pub fn discover(executable: &Path) -> Result<Self, String> {'
+      plain: 'Reads codex-resources/voice/manifest.json next to the Codex install and checks the helper path and identity.'
+    key:
+      - {fn: 'voice_host::Host::spawn', path: app/src/voice_host.rs, find: 'pub fn spawn(', plain: 'Starts the helper with a cleared environment plus the allowed audio variables.'}
+      - fn: 'voice_host::Host::exchange'
+        path: app/src/voice_host.rs
+        find: 'pub fn exchange(&mut self, signal: &Signal, timeout: Duration) -> Result<Signal, String> {'
+        plain: 'Sends one signal and waits for the reply.'
+      - {fn: 'voice_host::Cancellation::stop', path: app/src/voice_host.rs, find: 'pub fn stop(&self) -> Result<(), String> {', plain: 'Kills the helper process.'}
+    inferred: false
+    size: 352
+  - id: 'rs:voyager_app::voice_session'
+    feature: voice
+    plain: 'The native-voice worker thread that drives the helper through setup (handshake, runtime, WebRTC offer and answer, devices) and then polls audio levels.'
+    holds: 'nothing beyond the running thread''s locals.'
+    entry:
+      fn: 'voice_session::spawn'
+      path: app/src/voice_session.rs
+      find: 'pub(crate) fn spawn('
+      plain: 'Starts the native-voice thread and returns the channel the conversation owner uses to pass back Codex''s SDP answer.'
+    key:
+      - {fn: 'voice_session::run', path: app/src/voice_session.rs, find: 'fn run(', plain: 'The setup sequence; each step checks the generation is still current, then polls levels every 50 ms.'}
+      - {fn: 'voice_session::Event', path: app/src/voice_session.rs, find: 'pub(crate) enum Event {', plain: 'Offer and Finished events sent to the conversation owner.'}
+    inferred: false
+    size: 170
+  - id: 'rs:voyager_app::voice_transcript'
+    feature: voice
+    plain: 'Adds spoken transcript items from Codex realtime to the conversation snapshot as messages.'
+    holds: 'nothing: pure functions.'
+    entry:
+      fn: 'voice_transcript::notification'
+      path: app/src/voice_transcript.rs
+      find: 'pub(crate) fn notification('
+      plain: 'Accepts a transcript item only for the current thread and voice session and appends or extends the matching message.'
+    inferred: false
+    size: 139
+  - id: 'rs:voyager_app::voice_wire'
+    feature: voice
+    plain: 'The message format between Voyager and the voice helper: typed JSON signals in frames with a 4-byte big-endian length, up to 128 KiB.'
+    holds: 'nothing: types and pure functions.'
+    entry: {fn: 'voice_wire::Signal', path: app/src/voice_wire.rs, find: 'pub(crate) enum Signal {', plain: 'Every message either side may send, from Hello to Closed.'}
+    key:
+      - fn: 'voice_wire::read'
+        path: app/src/voice_wire.rs
+        find: 'pub(crate) fn read(reader: &mut impl Read) -> io::Result<Option<Signal>> {'
+        plain: 'Reads and checks one frame, including the 64 KiB limit on SDP text.'
+      - {fn: 'voice_wire::write', path: app/src/voice_wire.rs, find: 'pub(crate) fn write(writer: &mut impl Write, signal: &Signal) -> io::Result<()> {', plain: 'Writes one frame.'}
+    inferred: false
+    size: 151
+  - id: 'rs:voyager_app::voyage_close'
+    feature: worktrees-voyage-close
+    plain: 'Plans, confirms and carries out closing a Voyage: list its programs and Notes, wait for the Notes host to save, then stop each verified program.'
+    holds: 'Closing: the current plan, a close revision, the Notes save bridge sender, the request ticket, the Notes ids and a snapshot of the target Voyage and its content.'
+    entry:
+      fn: 'voyage_close::Closing::prepare'
+      path: app/src/voyage_close.rs
+      find: 'pub fn prepare('
+      plain: 'Runs on the client owner thread for CloseVoyage: builds the plan the human is asked to confirm. No program stops yet.'
+    key:
+      - {fn: 'voyage_close::Closing::confirm', path: app/src/voyage_close.rs, find: 'pub fn confirm(', plain: 'Accepts the exact plan, asks the Notes host to prepare saves and returns the Confirmed work.'}
+      - fn: 'voyage_close::execute'
+        path: app/src/voyage_close.rs
+        find: 'pub(crate) fn execute(client: &Client, confirmed: Confirmed) -> Result<(), Error> {'
+        plain: 'Runs on a worker thread: waits for Notes saves, then for each program inspects the workspace, sends a Stop process request through the Client and checks Core reports it finished.'
+      - {fn: 'voyage_close::SaveRequest', path: app/src/voyage_close.rs, find: 'pub enum SaveRequest {', plain: 'Messages to the desktop''s Notes host for close and rename: prepare and release saves.'}
+      - {fn: 'voyage_close::Closing::blocks_content', path: app/src/voyage_close.rs, find: 'pub fn blocks_content(', plain: 'Makes the closing Voyage''s Notes read-only except for the host''s own save.'}
+    why: 'docs/workspace.md (Confirmed Voyage shutdown): Close Voyage is distinct from hiding panels or quitting, needs human confirmation, saves Notes first, and the Client keeps processing messages while the host acknowledges saves.'
+    inferred: false
+    size: 503
+  - id: 'rs:voyager_app::wire'
+    feature: core-adapter
+    plain: 'The frame format on the Core connection: a 4-byte channel, a 1-byte kind and a 4-byte length (little-endian), then the payload, up to 16 MiB.'
+    holds: 'nothing: one struct and two functions.'
+    entry: {fn: 'wire::Frame::read_from', path: app/src/wire.rs, find: 'pub fn read_from(reader: &mut impl Read) -> io::Result<Self> {', plain: 'Reads one frame; the Core reader thread calls it in a loop.'}
+    key:
+      - {fn: 'wire::Frame::write_to', path: app/src/wire.rs, find: 'pub fn write_to(&self, writer: &mut impl Write) -> io::Result<()> {', plain: 'Writes one frame; the Core writer thread calls it.'}
+    inferred: false
+    size: 45
+  - id: 'rs:voyager_app::workspace'
+    feature: workspace-layout
+    plain: 'The workspace model: applies a workspace Action (create, move, rename and close Voyages, Fleets and panels, dock, Home, canvas) to a Layout value.'
+    holds: 'Model holds one Layout value while an action is applied.'
+    entry:
+      fn: 'workspace::Model::apply'
+      path: app/src/workspace.rs
+      find: 'pub fn apply(&mut self, action: Action) -> Result<(), String> {'
+      plain: 'Applies one action, or refuses it with a message; panel actions go to panels::apply.'
+    key:
+      - fn: 'workspace::Model::prepare'
+        path: app/src/workspace.rs
+        find: 'pub(crate) fn prepare(layout: Layout, cwd: &str) -> Result<Layout, String> {'
+        plain: 'Normalises a loaded layout and creates Home, with an Agents panel, if it is missing.'
+      - {fn: 'workspace::Model::start_new_shell', path: app/src/workspace.rs, find: 'pub fn start_new_shell(', plain: 'Marks an ended terminal to start a plain shell in the same placement.'}
+    talks_to: 'None at runtime. client.rs applies the model to a copy of the layout and saves the result to Core.'
+    inferred: false
+    size: 596
+  - id: 'rs:voyager_app::worktrees'
+    feature: worktrees-voyage-close
+    plain: 'Runs Git to list, open, create and remove worktrees for a Voyage''s repository.'
+    holds: 'nothing: functions that run git.'
+    entry: {fn: 'worktrees::execute', path: app/src/worktrees.rs, find: 'pub(crate) fn execute(', plain: 'Runs one worktree action; called on a worker thread spawned by the client owner.'}
+    key:
+      - fn: 'worktrees::create'
+        path: app/src/worktrees.rs
+        find: 'pub fn create(cwd: &Path, name: &str, branch: &str, base: &str) -> Result<Checkout, Error> {'
+        plain: 'Validates the name, branch and base and creates the checkout.'
+      - fn: 'worktrees::remove'
+        path: app/src/worktrees.rs
+        find: 'pub fn remove(cwd: &Path, path: &str) -> Result<Vec<Checkout>, Error> {'
+        plain: 'Removes a checkout with ordinary git worktree remove and returns what remains.'
+      - {fn: 'worktrees::check_live_directories', path: app/src/worktrees.rs, find: 'pub(crate) fn check_live_directories(', plain: 'Refuses removal if any live program''s folder is inside the checkout.'}
+      - {fn: 'worktrees::list', path: app/src/worktrees.rs, find: 'pub fn list(cwd: &Path) -> Result<Vec<Checkout>, Error> {', plain: 'Lists the repository''s registered checkouts.'}
+    talks_to: 'git child processes.'
+    why: 'docs/workspace.md (Worktree and Home feedback candidate): removal never forces, keeps the branch and is refused while a live program uses the checkout.'
+    inferred: false
+    size: 394
+  - id: 'rs:voyager_desktop'
+    feature: startup-quit
+    plain: 'The desktop crate root: it seeds the profile with the header and Notes packages, builds the application owners, opens the GPUI window and wires Quit.'
+    holds: 'Nothing long-lived of its own. `run` builds the app `Client`, the Notes host, the avatar binding, the conversation client and the shared terminal `Viewers` map, then moves them into the window.'
+    entry:
+      fn: 'voyager_desktop::run'
+      path: desktop/src/lib.rs
+      find: 'pub fn run(profile: PathBuf, session: String) -> Result<()> {'
+      plain: 'Seeds missing profile files, checks the header manifest, builds the owners, then starts GPUI and opens the single workspace window.'
+    key:
+      - fn: native_registry
+        path: desktop/src/lib.rs
+        find: 'fn native_registry(viewers: terminal::Viewers) -> Result<gpui_shell::FrozenComponentRegistry> {'
+        plain: 'Registers the native components scripts may use (text, measure, status, arrangement, split, occluding, terminal) under the name `voyager_native`.'
+      - fn: declarations
+        path: desktop/src/lib.rs
+        find: 'pub fn declarations() -> Result<String> {'
+        plain: 'Produces the header''s TypeScript declarations from the same registry plus the host module declarations in script_types.rs.'
+      - fn: notes_declarations
+        path: desktop/src/lib.rs
+        find: 'pub fn notes_declarations() -> Result<String> {'
+        plain: 'Produces the Notes package''s declarations from the separate `voyager_input` registry and the `voyager_content` module.'
+      - fn: seed
+        path: desktop/src/lib.rs
+        find: 'fn seed(path: &Path, data: &str) -> Result<()> {'
+        plain: 'Writes a file only if it does not exist yet, so personal edits in the profile are never overwritten.'
+    sections:
+      - {name: 'Module declarations', path: desktop/src/lib.rs, find: 'mod arrangement;', plain: 'Declares the desktop''s view modules; `canvas_test` is compiled only for Linux tests.'}
+      - {name: 'Quit action', path: desktop/src/lib.rs, find: 'gpui::actions!(voyager, [Quit]);', plain: 'Declares the GPUI `Quit` action that ctrl-q triggers and quit.rs handles.'}
+      - name: 'Run function'
+        path: desktop/src/lib.rs
+        find: 'pub fn run(profile: PathBuf, session: String) -> Result<()> {'
+        plain: 'The single entry called by main.rs with the profile folder and session name.'
+      - name: 'Seed the header package'
+        path: desktop/src/lib.rs
+        find: 'let package = profile.join("mods/header");'
+        plain: 'Copies the compiled header scripts, icons, theme, AGENTS.md and generated contract wrappers into profile/mods/header, once.'
+      - name: 'Seed the Notes package'
+        path: desktop/src/lib.rs
+        find: 'let notes_package = profile.join("mods/notes");'
+        plain: 'Copies the Notes main.js, ui.js, mod.json and validate.js into profile/mods/notes through the app''s content seeding.'
+      - name: 'Content owner and header manifest check'
+        path: desktop/src/lib.rs
+        find: 'let content_owner = voyager_app::content::Owner::open(&profile)?;'
+        plain: 'Opens the app''s content owner, then stops startup if the header mod.json lacks a name, version 1 or the main.js entry.'
+      - name: 'Application owners'
+        path: desktop/src/lib.rs
+        find: 'let client = Client::with_content_and_launches('
+        plain: 'Builds the app `Client` (the workspace owner), loads avatar animations, creates the terminal viewer map and the private conversation client.'
+      - name: 'GPUI application start'
+        path: desktop/src/lib.rs
+        find: '.run(move |cx: &mut App| {'
+        plain: 'Starts the GPUI app with the header package as its asset folder; the closure runs on the UI thread.'
+      - name: 'Native registry and script runtime'
+        path: desktop/src/lib.rs
+        find: 'let runtime = match ShellRuntime::new_with_components(cx, registry) {'
+        plain: 'Freezes the native component registry and creates the QuickJS script runtime; either failure quits the app.'
+      - name: 'Window setup'
+        path: desktop/src/lib.rs
+        find: 'let options = WindowOptions {'
+        plain: 'Sets a 1450 by 940 window at (180, 130), titled with the session name, with app id `voyager-native-mod-host`.'
+      - name: 'Root view'
+        path: desktop/src/lib.rs
+        find: 'ShellRoot::new(header.into(), window, cx).with_native_overlay(avatar_view)'
+        plain: 'Inside `open_window` it starts speech, builds the avatar binding and the `host::Header` view, and makes a `ShellRoot` around the header with the avatar in the native overlay slot.'
+      - name: Render
+        path: desktop/src/host.rs
+        find: 'impl Render for Header {'
+        plain: 'lib.rs has no render code; the root''s content is the `Header` view in host.rs, which draws the loaded script view plus an error strip.'
+      - name: 'Event wiring'
+        path: desktop/src/lib.rs
+        find: 'quit::register(header.downgrade(), quit_conversation, cx);'
+        plain: 'Binds ctrl-q to `Quit` (line 255), registers the Quit handler, and quits the app when the last window closes (line 312).'
+      - name: 'Native component registry'
+        path: desktop/src/lib.rs
+        find: 'fn native_registry(viewers: terminal::Viewers) -> Result<gpui_shell::FrozenComponentRegistry> {'
+        plain: 'One registry serves both the running app and the declaration exporter.'
+      - {name: 'Declaration exporters', path: desktop/src/lib.rs, find: 'pub fn declarations() -> Result<String> {', plain: 'Header and Notes TypeScript declarations, used by the export-script-types binary.'}
+      - name: 'Experiment probe includes'
+        path: desktop/src/lib.rs
+        find: '#[path = "../../experiments/performance/avatar-redraw/probe.rs"]'
+        plain: 'Pulls in the redraw probe (always compiled), the inline `typing_trace` alias, and, only with `frame-profiler`, the glyph and frame probes (lines 374-380).'
+    why: 'docs/workspace.md says desktop/src/lib.rs owns native composition, asset seeding and view modules, and that the declaration exporter calls the same library and registry as the running app so each registration has one owner. docs/avatar.md says the avatar mounts in ShellRoot''s native-overlay slot, outside cached workspace content.'
+    inferred: false
+    size: 380
+    note: 'Only 380 lines, and about 150 of them seed script files; the window''s drawing lives in host.rs `Header` and in the header scripts.'
+  - id: 'rs:voyager_desktop::arrangement'
+    feature: workspace-layout
+    plain: 'A native `ArrangementCapture` component that, while a panel is being dragged, captures every mouse move and the left-button release in the window and reports them to the header script.'
+    holds: 'Nothing: the component keeps no state.'
+    entry:
+      fn: 'arrangement::register'
+      path: desktop/src/arrangement.rs
+      find: 'pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {'
+      plain: 'Registers `ArrangementCapture`, whose only argument is a `(kind, x, y, cx)` callback.'
+    key:
+      - fn: 'Capture::materialize'
+        path: desktop/src/arrangement.rs
+        find: 'fn materialize(&self, request: MaterializeRequest<''_>) -> anyhow::Result<gpui::AnyElement> {'
+        plain: 'Draws a full-size invisible canvas that installs capture-phase mouse handlers: a move reports `move` (or `cancel` if the left button is no longer down) and a left release reports `up`.'
+    talks_to: 'The header''s main.ts adds it only while a drag is active and handles the callbacks in `moveDrag` and `finishDrag`.'
+    inferred: false
+    size: 96
+  - id: 'rs:voyager_desktop::avatar'
+    feature: context-docking
+    plain: 'The avatar controller: it tracks where dock targets are on screen, handles dragging the avatar, sends the `Dock` request that changes the workspace context, and floats the avatar into its own window.'
+    holds: 'One `Avatar` entity: the last workspace version and dock scope, the active drag, measured target geometry, the animation `Motion`, the floating window handle and position, a window epoch, the pending dock task and the last dock result for the script.'
+    entry:
+      fn: 'avatar::Binding::new'
+      path: desktop/src/avatar.rs
+      find: 'pub fn new(client: Client, prepared: Prepared, window: &mut Window, cx: &mut App) -> Self {'
+      plain: 'Creates the avatar entity and its workspace view, and makes a close request on the workspace window float the avatar instead of closing.'
+    key:
+      - fn: 'Avatar::dock'
+        path: desktop/src/avatar.rs
+        find: 'fn dock(&mut self, scope: Scope, cx: &mut Context<Self>) {'
+        plain: 'Sends `Action::Dock` with the chosen scope through `Client::call` on the background executor; only the reply updates the scope.'
+      - fn: 'Avatar::released'
+        path: desktop/src/avatar.rs
+        find: 'fn released(&mut self, event: &gpui::MouseUpEvent, window: &Window, cx: &mut Context<Self>) {'
+        plain: 'On mouse release after a drag, docks to the target under the pointer, moves the floating window, or plays a tone; a short click activates instead.'
+      - fn: 'Binding::module'
+        path: desktop/src/avatar.rs
+        find: 'pub fn module(&self) -> HostModule {'
+        plain: 'Builds the `voyager_avatar` host module: `Brand`, `Layer`, `Target` and `PortalArea` components plus `window_epoch`, `dock_target_visible`, `speech_in_primary`, `take_result` and `take_animation_notice`.'
+      - fn: 'Avatar::float'
+        path: desktop/src/avatar.rs
+        find: 'fn float(&mut self, window: &Window, cx: &mut Context<Self>) -> bool {'
+        plain: 'Opens a separate floating avatar window at the avatar''s painted position and minimises the workspace window.'
+    talks_to: 'Sends Dock requests to the app''s owner thread via `Client`; uses platform.rs for X11 window ids, positions and tones; the header script reads the dock result with `take_result`.'
+    why: 'docs/avatar.md says avatar.rs owns one GPUI avatar entity and the workspace and floating views hold handles to it, so its pose sequence and active gesture survive window changes. It also says the client stays the context owner and only the Dock response confirms a change.'
+    inferred: false
+    size: 1286
+    note: 'Closing the workspace window normally floats the avatar and minimises the workspace rather than closing it.'
+  - id: 'rs:voyager_desktop::avatar::paint'
+    feature: avatar
+    plain: 'Paints the avatar''s current pose, and a fading second pose during a transition, scaled into a circle.'
+    holds: 'Nothing: pure drawing functions.'
+    entry:
+      fn: 'avatar::paint::layers'
+      path: desktop/src/avatar/paint.rs
+      find: 'pub(super) fn layers(pack: Arc<Compiled>, frame: Frame, diameter: f32) -> AnyElement {'
+      plain: 'Returns the back pose layer and, if the frame has one, a front pose layer at its opacity.'
+    key:
+      - fn: 'avatar::paint::layer'
+        path: desktop/src/avatar/paint.rs
+        find: 'fn layer(pack: Arc<Compiled>, pose: usize, opacity: f32, diameter: f32) -> AnyElement {'
+        plain: 'Fits the pack''s canvas into the bounds and paints the pose''s clipped image region at its anchor.'
+    inferred: false
+    size: 69
+  - id: 'rs:voyager_desktop::avatar::view'
+    feature: avatar
+    plain: 'The avatar''s on-screen view, used both in the workspace overlay and in the floating window: it draws the avatar, the landing preview while dragging, and catches mouse and key input.'
+    holds: '`AvatarView`: a handle to the shared `Avatar`, which surface it is (workspace or floating), shared target geometry, focus, visibility and minimise watchers, and wake-up timers.'
+    entry: {fn: 'AvatarView::new', path: desktop/src/avatar/view.rs, find: 'pub(super) fn new(', plain: 'Subscribes to the avatar entity and, in the workspace, to window visibility and X11 minimise state.'}
+    key:
+      - {fn: 'AvatarView::render', path: desktop/src/avatar/view.rs, find: 'impl Render for AvatarView {', plain: 'Positions the avatar, draws its layers and status, and shows where it would land.'}
+      - fn: 'AvatarView::events'
+        path: desktop/src/avatar/view.rs
+        find: 'fn events(&self) -> impl IntoElement {'
+        plain: 'Installs capture-phase mouse handlers that forward moves and releases to the `Avatar` controller.'
+      - fn: 'AvatarView::watch_minimize'
+        path: desktop/src/avatar/view.rs
+        find: 'fn watch_minimize(&mut self, window: &Window, cx: &mut Context<Self>) {'
+        plain: 'Watches the workspace window''s X11 hidden state on a background task.'
+    inferred: false
+    size: 674
+  - id: 'rs:voyager_desktop::avatar_motion'
+    feature: avatar
+    plain: 'Plays avatar animation clips from the compiled pack when something triggers them (hover, click, dock, undock), with eased fades, and respects reduced motion.'
+    holds: '`Motion`: the current pack, the current frame (back pose, optional fading front pose), reduced-motion flag, a generation counter and the clip being played.'
+    entry: {fn: 'Motion::new', path: desktop/src/avatar_motion.rs, find: 'pub fn new(pack: Arc<Compiled>, reduced_motion: bool) -> Self {', plain: 'Starts at the pack''s rest pose.'}
+    key:
+      - {fn: 'Motion::trigger', path: desktop/src/avatar_motion.rs, find: 'pub fn trigger(&mut self, trigger: Trigger) -> bool {', plain: 'Starts the clip bound to a trigger, if any.'}
+      - {fn: 'Motion::tick', path: desktop/src/avatar_motion.rs, find: 'pub fn tick(&mut self) -> Refresh {', plain: 'Advances playback to now and says whether another frame is needed.'}
+      - fn: samples
+        path: desktop/src/avatar_motion.rs
+        find: 'pub fn samples(docking: bool) -> Vec<f32> {'
+        plain: 'Generates the 0.2 second dock or undock tone (a sweep between 310 and 620 Hz) that platform.rs plays.'
+    inferred: false
+    size: 324
+  - id: 'rs:voyager_desktop::avatar_pack'
+    feature: avatar
+    plain: 'Loads, checks and compiles the avatar animation pack from profile/avatar, seeding the default pack first and falling back to it if the personal pack is broken.'
+    holds: 'Nothing between calls; it returns a `Prepared` value (folder, compiled pack, optional error text).'
+    entry:
+      fn: 'avatar_pack::prepare'
+      path: desktop/src/avatar_pack.rs
+      find: 'pub fn prepare(directory: &Path) -> Result<Prepared> {'
+      plain: 'Seeds images, pack.json, configuration.json and their generated JSON Schemas, then loads the folder; on error it compiles the built-in pack and reports the error.'
+    key:
+      - {fn: 'avatar_pack::load', path: desktop/src/avatar_pack.rs, find: 'pub fn load(directory: &Path) -> Result<Arc<Compiled>> {', plain: 'Reads and compiles the configuration and pack in a folder.'}
+      - {fn: 'avatar_pack::compile', path: desktop/src/avatar_pack.rs, find: 'fn compile(', plain: 'Turns named poses and clips into indexed drawings and timelines, checking references.'}
+      - fn: 'avatar_pack::image'
+        path: desktop/src/avatar_pack.rs
+        find: 'fn image(path: &Path, remaining: &mut u64) -> Result<Arc<RenderImage>> {'
+        plain: 'Decodes one PNG within a shared 64 MiB decoded-image budget.'
+    inferred: false
+    size: 386
+  - id: 'rs:voyager_desktop::avatar_pack::defaults'
+    feature: avatar
+    plain: 'The built-in avatar pack: an idle astronaut and three stretch frames, with hover playing `stretch` and dock playing `float`.'
+    holds: 'Nothing: it builds the default configuration and pack on demand.'
+    entry: {fn: 'avatar_pack::defaults::pack', path: desktop/src/avatar_pack/defaults.rs, find: 'pub fn pack() -> (Configuration, Pack) {', plain: 'Returns the default configuration and pack description.'}
+    key:
+      - {fn: 'avatar_pack::defaults::source', path: desktop/src/avatar_pack/defaults.rs, find: 'pub fn source(name: &str) -> PathBuf {', plain: 'Maps an image name to its file under desktop/assets.'}
+    inferred: false
+    size: 108
+  - id: 'rs:voyager_desktop::content_budget'
+    feature: notes
+    plain: 'An admission limit for Notes script requests: at most 8 in flight per content instance and 4 MiB in flight in total.'
+    holds: 'A shared counter of in-flight requests per content id and total bytes.'
+    entry:
+      fn: 'Budget::reserve'
+      path: desktop/src/content_budget.rs
+      find: 'pub fn reserve(&self, id: &str, bytes: usize) -> Option<Permit> {'
+      plain: 'Returns a permit if the request fits, otherwise `None`; it uses `try_lock`, so a busy counter also refuses.'
+    key:
+      - {fn: 'Permit::drop', path: desktop/src/content_budget.rs, find: 'impl Drop for Permit {', plain: 'Gives the bytes and the slot back when the request finishes.'}
+    talks_to: 'notes.rs answers a refused request with a `Rejected` response saying `Content is busy` or `Request exceeds limit`.'
+    inferred: false
+    size: 71
+  - id: 'rs:voyager_desktop::conversation'
+    feature: assistant
+    plain: 'The `voyager_conversation` host module that lets the header''s chat send messages to the private assistant and read its state.'
+    holds: 'Nothing: it captures clones of the conversation client.'
+    entry:
+      fn: 'conversation::module'
+      path: desktop/src/conversation.rs
+      find: 'pub fn module(client: Client) -> HostModule {'
+      plain: 'Builds the module with `request_id`, `call`, `snapshot` and the `Speech` component.'
+    key:
+      - fn: 'call (host function)'
+        path: desktop/src/conversation.rs
+        find: '.async_function("call", move |arguments| {'
+        plain: 'Parses a conversation request of at most 64 KiB and passes it to the conversation client.'
+      - fn: 'snapshot (host function)'
+        path: desktop/src/conversation.rs
+        find: '.async_function("snapshot", move |arguments| {'
+        plain: 'Returns the conversation snapshot newer than a given revision, or null; can also write it to a test evidence file.'
+      - {fn: 'Speech (component)', path: desktop/src/conversation.rs, find: '.component("Speech", crate::speech::component(speech))', plain: 'Exposes speech.rs''s voice button to scripts.'}
+    talks_to: 'The app''s conversation client, which talks to the Codex app-server.'
+    inferred: false
+    size: 57
+  - id: 'rs:voyager_desktop::frame_profile'
+    feature: diagnostics
+    plain: 'An opt-in frame recorder that copies GPUI''s foreground frame journal to a JSON-lines file during typing experiments.'
+    holds: 'A writer thread named `frame-work` and its output file, only when enabled.'
+    entry:
+      fn: 'frame_profile::start'
+      path: experiments/performance/frame-work/probe.rs
+      find: 'pub(crate) fn start(cx: &mut gpui::App) {'
+      plain: 'Does nothing unless VOYAGER_FRAME_PROFILE=1, the session starts with `voyager-typing-` and VOYAGER_FRAME_PROFILE_STOP is absolute; then records for up to 120 s or 20,000 records.'
+    key:
+      - {fn: event_data, path: experiments/performance/frame-work/probe.rs, find: 'fn event_data(event: ForegroundEvent) -> Value {', plain: 'Turns one journal event into a JSON record with timing ages.'}
+      - {fn: presented_data, path: experiments/performance/frame-work/probe.rs, find: 'fn presented_data(t: PresentedFrame) -> Value {', plain: 'Records a presented-frame boundary.'}
+    inferred: false
+    size: 175
+    note: 'Compiled only with the `frame-profiler` feature; lib.rs includes it from experiments/ with `#[path]`.'
+  - id: 'rs:voyager_desktop::glyph_probe'
+    feature: diagnostics
+    plain: 'A typing-latency probe that spots a fixed test string typed after a `›` prompt, first in the parsed terminal and then in the drawn grid, and records trace events.'
+    holds: 'Nothing: an enabled flag read once from the environment.'
+    entry:
+      fn: 'glyph_probe::observe_parsed'
+      path: experiments/performance/typing-latency/glyph.rs
+      find: 'pub(crate) fn observe_parsed(terminal: &libghostty_vt::Terminal<''_, ''_>) {'
+      plain: 'Called by terminal.rs after parsing output; records how much of the string has arrived.'
+    key:
+      - fn: 'glyph_probe::observe'
+        path: experiments/performance/typing-latency/glyph.rs
+        find: 'pub(crate) fn observe(grid: Option<&Grid>) -> Option<usize> {'
+        plain: 'Called by terminal_view.rs before painting; records how much of the string the snapshot shows.'
+      - fn: prefix
+        path: experiments/performance/typing-latency/glyph.rs
+        find: 'fn prefix<''a>(mut cells: impl Iterator<Item = &''a str>) -> Option<usize> {'
+        plain: 'Counts how many characters of `xvqzjkmnprst` follow the prompt.'
+    inferred: false
+    size: 145
+    note: 'Compiled only with `frame-profiler` and active only with VOYAGER_TYPING_TRACE=1 and a `voyager-typing-` session.'
+  - id: 'rs:voyager_desktop::host'
+    feature: script-host
+    plain: 'The script bridge: the `Header` view that loads the header package into QuickJS with the host modules it may import, live-reloads the theme and source, follows workspace change notices, and shows errors.'
+    holds: '`Header`: the loaded `ShellRoot`, the source watcher, three background tasks (theme and source poll, workspace change loop, Notes close-save watcher) and error strings. `WorkspaceBinding`: the app `Client`, terminal `Viewers`, Notes host, avatar binding, latest owner notice and reported activity.'
+    entry:
+      fn: 'Header::new'
+      path: desktop/src/host.rs
+      find: 'pub fn new('
+      plain: 'Applies the theme, loads the package, starts watching it, starts a loop on `workspace_changes` that refreshes the script view, and polls theme and source every 250 ms.'
+    key:
+      - {fn: load, path: desktop/src/host.rs, find: 'fn load(', plain: 'Builds the script policy from the five host modules below, enters a `LoadGuard` and calls `runtime.try_load`.'}
+      - {fn: 'voyager_header (host module)', path: desktop/src/host.rs, find: 'let module = HostModule::new(crate::script_types::HEADER_MODULE)', plain: '`projection()` returns the current theme colours.'}
+      - fn: 'voyager_workspace (host module)'
+        path: desktop/src/host.rs
+        find: 'let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)'
+        plain: 'Workspace calls for the header: `request_id`, `call`, `terminal_open`, `worktree`, `processes`, `launches`, `context_facts`, `workspace_observation`, `reported_activity`, `refresh_activity`, `revision` and `notice`.'
+      - fn: 'voyager_content_view (host module)'
+        path: desktop/src/host.rs
+        find: 'let policy = policy.with_host_module(workspace_binding.notes.module(Rc::new(move || {'
+        plain: 'Built in notes.rs: `descriptions()` and the `Notes` component.'
+      - fn: 'voyager_conversation (host module)'
+        path: desktop/src/host.rs
+        find: 'let policy = policy.with_host_module(crate::conversation::module(conversation.clone()))?;'
+        plain: 'Built in conversation.rs: chat requests, snapshots and the `Speech` component.'
+      - fn: 'voyager_avatar (host module)'
+        path: desktop/src/host.rs
+        find: 'let policy = policy.with_host_module(workspace_binding.avatar.module())?;'
+        plain: 'Built in avatar.rs: dock target components and dock results.'
+      - fn: 'call (voyager_workspace)'
+        path: desktop/src/host.rs
+        find: '.async_function("call", move |arguments| {'
+        plain: 'Parses a workspace `Request` of at most 64 KiB, passes it to `Client::call` and returns the JSON `Response`.'
+      - fn: 'terminal_open (voyager_workspace)'
+        path: desktop/src/host.rs
+        find: '.async_function("terminal_open", move |arguments| {'
+        plain: 'Asks the client to attach a Core terminal viewer and stores it in the shared `Viewers` map that the native Terminal component reads.'
+      - fn: LoadGuard
+        path: desktop/src/host.rs
+        find: 'pub(crate) struct LoadGuard;'
+        plain: 'Sets the default script policy only for the duration of one load, refuses nested loads, and resets it even after an error or panic.'
+      - fn: 'Header::render'
+        path: desktop/src/host.rs
+        find: 'impl Render for Header {'
+        plain: 'Draws the script view (cached unless accessibility is active) and a red strip listing load, theme, watch or quit messages.'
+    talks_to: 'Sends workspace requests to the app''s owner thread through `Client`; attaches Core terminal viewers; polls the theme file and package source on the background executor. The native components in `voyager_native` are registered globally in lib.rs, not here.'
+    why: 'AGENTS.md says desktop/src/host.rs binds native presentation to the application owners (client, workspace, scope, content, Core).'
+    inferred: false
+    size: 1020
+  - id: 'rs:voyager_desktop::measure'
+    feature: script-host
+    plain: 'Two native layout helpers for scripts: `MeasureHeight` reports a child''s painted height, and `FollowScroll` is a scroll box that jumps to the bottom when a revision string changes.'
+    holds: 'Per-id keyed window state: the last measured height, and a scroll handle with the last revision.'
+    entry:
+      fn: 'measure::register'
+      path: desktop/src/measure.rs
+      find: 'pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {'
+      plain: 'Registers `FollowScroll` and `MeasureHeight`.'
+    key:
+      - {fn: 'Measure::materialize', path: desktop/src/measure.rs, find: 'impl ComponentMaterializer for Measure {', plain: 'Wraps one child and calls the script back, deferred, when its height changes.'}
+      - {fn: 'FollowScroll::materialize', path: desktop/src/measure.rs, find: 'impl ComponentMaterializer for FollowScroll {', plain: 'Scrolls to the bottom when the revision differs from the last one.'}
+    talks_to: 'Used by the header''s chat.ts and navigation-view.ts.'
+    inferred: false
+    size: 179
+  - id: 'rs:voyager_desktop::notes'
+    feature: notes
+    plain: 'The Notes host: it gives the header a `Notes` component and content descriptions, and runs the Notes package in a separate isolated script runtime per content instance, reloading it when its source or file changes.'
+    holds: '`Host`: the isolated runtime, package folder, request budget, `Client`, one `Note` view per content id and the watch task. Each `Note`: the current and pending script views with their content bindings, its native `Session`, and an error.'
+    entry:
+      fn: 'notes::Host::new'
+      path: desktop/src/notes.rs
+      find: 'pub fn new(package: PathBuf, client: Client) -> Self {'
+      plain: 'Creates the isolated QuickJS runtime with the `voyager_input` components; a failure makes Notes show as unavailable.'
+    key:
+      - fn: 'Host::module'
+        path: desktop/src/notes.rs
+        find: 'pub fn module(&self, colors: Colors) -> HostModule {'
+        plain: 'The header''s `voyager_content_view` module: `descriptions()` lists content types, and `Notes` returns the cached or new view for a content id.'
+      - fn: 'Host::watch'
+        path: desktop/src/notes.rs
+        find: 'fn watch(&self, window: &mut Window, cx: &mut App) {'
+        plain: 'Every 250 ms checks package source, mod.json and each note''s file; on change it binds the content view and loads a new candidate.'
+      - fn: 'Loader::load'
+        path: desktop/src/notes.rs
+        find: 'fn load('
+        plain: 'Builds the per-instance `voyager_content` module (`identity`, `request_id`, `changed`, `theme`, `invoke`) and loads and mounts the package.'
+      - fn: 'Note::publish'
+        path: desktop/src/notes.rs
+        find: 'fn publish(&mut self, window: &mut Window, cx: &mut Context<Self>) {'
+        plain: 'Swaps in the pending view only after it rendered without error, retiring the previous binding.'
+    talks_to: 'The app `Client` content-view calls (`bind_content_view`, `content_view`, `read_content_view`, `view_changed`, `refresh_content_views`); file reads on the background executor.'
+    why: 'docs/content.md says notes.rs owns one background package watcher for all retained Notes and that all Notes share one isolated QuickJS VM that cannot import header modules. content/notes/AGENTS.md says a broken source edit keeps the previous usable version where supported, which the pending and current pair implements.'
+    inferred: false
+    size: 826
+  - id: 'rs:voyager_desktop::notes_draft'
+    feature: notes
+    plain: 'Bookkeeping for one note''s unsaved draft: what changed, which file revision it was based on, whether a save is running, and when a save result is uncertain.'
+    holds: '`Draft`: generation counter, base revision, dirty flag, status text, touched fields, saving flag, a pending blur and the generation of an unconfirmed save.'
+    entry:
+      fn: 'Draft::blur'
+      path: desktop/src/notes_draft.rs
+      find: 'pub fn blur(&mut self) -> Option<Save> {'
+      plain: 'On leaving an editor, returns a save to send, or remembers to save later if one is already running; it never resends an unconfirmed save.'
+    key:
+      - fn: 'Draft::finish'
+        path: desktop/src/notes_draft.rs
+        find: 'pub fn finish(&mut self, generation: u64, response: Result<&Response, &CallError>) -> bool {'
+        plain: 'Records a save result as saved, refused or unconfirmed, and says whether a waiting save should now go.'
+      - {fn: 'Draft::load', path: desktop/src/notes_draft.rs, find: 'pub fn load(', plain: 'Accepts new file data only for fields the user has not edited; otherwise keeps the draft and warns.'}
+      - {fn: 'Draft::changed', path: desktop/src/notes_draft.rs, find: 'pub fn changed(&mut self, field: Field) {', plain: 'Marks a field edited and bumps the generation.'}
+    inferred: false
+    size: 195
+  - id: 'rs:voyager_desktop::notes_input'
+    feature: notes
+    plain: 'The `voyager_input` component registry for the Notes runtime: the `SessionState` the script calls and the native title and body editors.'
+    holds: 'Nothing itself; states it creates point at the note''s `Session`.'
+    entry:
+      fn: 'notes_input::registry'
+      path: desktop/src/notes_input.rs
+      find: 'pub fn registry() -> Result<FrozenComponentRegistry, RegistryError> {'
+      plain: 'Registers `SessionState` (status, filenames, list, new, open, migrate, exit and save methods), `Title`/`Body`, and the retained title and body editors.'
+    key:
+      - fn: 'SessionState (state)'
+        path: desktop/src/notes_input.rs
+        find: 'StateDescriptor::new("SessionState", "SessionState", vec![], |args, _, _| {'
+        plain: 'Hands the script the session for the note being loaded, through notes_scope.'
+      - fn: new_title
+        path: desktop/src/notes_input.rs
+        find: 'pub(crate) fn new_title(value: String, window: &mut Window, cx: &mut App) -> Entity<InputState> {'
+        plain: 'Creates the native one-line title editor.'
+      - fn: new_body
+        path: desktop/src/notes_input.rs
+        find: 'pub(crate) fn new_body(value: String, window: &mut Window, cx: &mut App) -> Entity<TextareaState> {'
+        plain: 'Creates the native multi-line body editor.'
+    inferred: false
+    size: 367
+  - id: 'rs:voyager_desktop::notes_scope'
+    feature: notes
+    plain: 'Thread-local scoping that tells Notes components which session they belong to while a script loads, and collects component errors during one render.'
+    holds: 'Two thread-locals: the session being loaded, and the current render frame''s error slot.'
+    entry:
+      fn: 'LoadSession::enter'
+      path: desktop/src/notes_scope.rs
+      find: 'pub fn enter(session: Entity<Session>, view: ViewBinding) -> Result<Self> {'
+      plain: 'Marks a session as loading for the duration of one script load; nested loads are refused.'
+    key:
+      - fn: 'notes_scope::session'
+        path: desktop/src/notes_scope.rs
+        find: 'pub fn session() -> Result<SessionHandle, String> {'
+        plain: 'Called when the script creates `SessionState`; marks the load as retaining the session.'
+      - {fn: 'Build::enter', path: desktop/src/notes_scope.rs, find: 'pub fn enter() -> Self {', plain: 'Opens an error slot for one render of a Notes view.'}
+      - fn: 'notes_scope::component'
+        path: desktop/src/notes_scope.rs
+        find: 'pub fn component<T>(result: Result<T>) -> Result<T> {'
+        plain: 'Records a component error into the open slot so the host can reject a broken candidate.'
+    why: 'Script-created components receive no direct reference to the Rust session, so a thread-local scoped to the load carries it.'
+    inferred: true
+    size: 133
+  - id: 'rs:voyager_desktop::notes_session'
+    feature: notes
+    plain: 'One note''s native editing session: the real title and body editors, the draft, the selected Markdown file, and the save, list, open, new, convert and exit operations sent to the app''s content owner.'
+    holds: '`Session`: title and body editor entities, `Draft`, notes configuration, file names, workspace version, active content binding, pending intent, read and save tasks, and a close lease used while a Voyage closes.'
+    entry:
+      fn: 'Session::new'
+      path: desktop/src/notes_session.rs
+      find: 'pub fn new(id: ContentId, client: Client, window: &mut Window, cx: &mut Context<Self>) -> Self {'
+      plain: 'Creates the two editors and subscribes so an edit updates the draft and leaving an editor saves.'
+    key:
+      - fn: 'Session::save'
+        path: desktop/src/notes_session.rs
+        find: 'pub fn save(&mut self, intent: Intent, cx: &mut Context<Self>) {'
+        plain: 'Sends an `Update` with the base revision through `content_native_save` on the background executor, unless the file changed under the draft.'
+      - fn: 'Session::activate'
+        path: desktop/src/notes_session.rs
+        find: 'pub fn activate(&mut self, view: ViewBinding, window: &mut Window, cx: &mut Context<Self>) {'
+        plain: 'Binds the session to a newly published script view and starts observing its content.'
+      - fn: 'Session::flush_for_close'
+        path: desktop/src/notes_session.rs
+        find: 'pub fn flush_for_close('
+        plain: 'Saves the draft under a Voyage close ticket and returns a channel that reports when it is done.'
+      - {fn: 'Session::select_note', path: desktop/src/notes_session.rs, find: 'pub fn select_note(', plain: 'Handles new, open and convert requests that choose which Markdown file this content shows.'}
+    talks_to: 'The app `Client` content owner (`content_native_save`, content view reads) and the Voyage close flow.'
+    why: 'docs/content.md says notes_session.rs owns the real native editors, dirty draft, original revision and accepted save per content id, so a script reload cannot replace a dirty buffer.'
+    inferred: false
+    size: 657
+  - id: 'rs:voyager_desktop::occluding'
+    feature: script-host
+    plain: 'A native `Occluding` container that stops mouse events reaching whatever lies beneath it, used for overlays such as compact Chat.'
+    holds: Nothing.
+    entry:
+      fn: 'occluding::register'
+      path: desktop/src/occluding.rs
+      find: 'pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {'
+      plain: 'Registers `Occluding`, which takes no arguments.'
+    key:
+      - {fn: 'Occluding::materialize', path: desktop/src/occluding.rs, find: 'let element = div().id(request.element_id().clone()).occlude();', plain: 'Returns a plain div marked to occlude.'}
+    inferred: false
+    size: 135
+    note: 'Most of the file is a test that loads the unused layout-panel.js.'
+  - id: 'rs:voyager_desktop::platform'
+    feature: platform
+    plain: 'Operating-system glue: a safe environment for the audio helper, X11 window ids, moving and restoring the floating avatar window, watching minimise state, and playing dock tones.'
+    holds: '`WindowPosition` and `WindowState` hold X11 connections; `tone` keeps one audio thread fed by a small channel.'
+    entry:
+      fn: 'platform::audio_environment'
+      path: desktop/src/platform.rs
+      find: 'pub fn audio_environment() -> Vec<(OsString, OsString)> {'
+      plain: 'Picks the environment variables the voice audio helper may see and disables GStreamer plugin scanning.'
+    key:
+      - {fn: 'platform::tone', path: desktop/src/platform.rs, find: 'pub fn tone(docking: bool) {', plain: 'Queues a dock or undock tone for a background thread that pipes it into `paplay`.'}
+      - {fn: 'WindowPosition::restore_bounds', path: desktop/src/platform.rs, find: 'pub fn restore_bounds(', plain: 'Restores a window to given bounds through X11.'}
+      - {fn: 'WindowState::new', path: desktop/src/platform.rs, find: 'pub fn new(window: u32) -> Result<Self, String> {', plain: 'Opens an X11 watch on a window''s hidden (minimised) state.'}
+      - {fn: 'platform::native_window', path: desktop/src/platform.rs, find: 'pub fn native_window(window: &gpui::Window) -> Result<u32, String> {', plain: 'Returns the X11 window id behind a GPUI window.'}
+    talks_to: 'The X11 server and the `paplay` program.'
+    inferred: false
+    size: 474
+    note: 'The window functions work only on Linux/X11; other systems get an error.'
+  - id: 'rs:voyager_desktop::quit'
+    feature: startup-quit
+    plain: 'Handles the Quit action: it shows `Closing Voyager. Programs keep running.`, shuts down the private conversation, then quits, or shows an error without retrying.'
+    holds: 'One state cell: Ready, Pending or Finished with the result.'
+    entry:
+      fn: 'quit::register'
+      path: desktop/src/quit.rs
+      find: 'pub fn register('
+      plain: 'Installs the `Quit` action handler; a second press while pending does nothing, and after a failure it shows the error again.'
+    key:
+      - fn: 'conversation shutdown'
+        path: desktop/src/quit.rs
+        find: '.spawn(async move { conversation.quit().await });'
+        plain: 'Runs the conversation client''s `quit` on the background executor before closing the app.'
+    talks_to: 'The private conversation client; terminal programs in Core are left running.'
+    inferred: false
+    size: 68
+  - id: 'rs:voyager_desktop::redraw_probe'
+    feature: diagnostics
+    plain: 'An opt-in redraw counter: with VOYAGER_REDRAW_PROBE set, it counts named render events and prints a JSON summary about once a second, at most 40 times.'
+    holds: 'A thread-local table of counts and timestamps.'
+    entry:
+      fn: 'redraw_probe::record'
+      path: experiments/performance/avatar-redraw/probe.rs
+      find: 'pub fn record(name: &''static str, amount: u64) {'
+      plain: 'Adds to a named count; the header''s accessibility poll triggers the printed report.'
+    talks_to: 'Called from host.rs (`header_renders`, `a11y_poll_active`) and terminal_view.rs (`terminal_renders`, `terminal_canvas_rows`).'
+    inferred: false
+    size: 53
+    note: 'Compiled into every build, unlike the other probes. Its README says the temporary hooks were removed after observation, but at e6bd5b1 host.rs and terminal_view.rs still call it.'
+  - id: 'rs:voyager_desktop::script_types'
+    feature: script-host
+    plain: 'The names and TypeScript declarations of every host module scripts can import.'
+    holds: 'Nothing: string constants.'
+    entry: {fn: 'script_types::WORKSPACE', path: desktop/src/script_types.rs, find: 'pub const WORKSPACE: &str = r#"', plain: 'Declares the `voyager_workspace` functions the header calls.'}
+    key:
+      - fn: 'script_types::HEADER_MODULE'
+        path: desktop/src/script_types.rs
+        find: 'pub const HEADER_MODULE: &str = "voyager_header";'
+        plain: 'The first of six module names: voyager_header, voyager_workspace, voyager_conversation, voyager_content_view, voyager_content, voyager_avatar.'
+      - {fn: 'script_types::CONTENT', path: desktop/src/script_types.rs, find: 'pub const CONTENT: &str = r#"', plain: 'Declares the Notes package''s `voyager_content` functions.'}
+      - {fn: 'script_types::AVATAR', path: desktop/src/script_types.rs, find: 'pub const AVATAR: &str = r#"', plain: 'Declares the avatar components and functions.'}
+    why: 'docs/workspace.md says the declaration exporter uses the same library and registrations as the running app, so each registration has one owner for both runtime and generated script definitions.'
+    inferred: false
+    size: 69
+  - id: 'rs:voyager_desktop::speech'
+    feature: voice
+    plain: 'The voice button: one app-wide `Speech` view that starts or stops assistant voice and shows its phase.'
+    holds: '`Speech`: the conversation audio lease, the latest voice `State`, an error, and the watch and call tasks. A GPUI global holds the single instance.'
+    entry:
+      fn: 'speech::initialize'
+      path: desktop/src/speech.rs
+      find: 'pub(crate) fn initialize(client: Client, cx: &mut App) {'
+      plain: 'Creates the global `Speech` view once; lib.rs calls it when the window opens.'
+    key:
+      - fn: 'Speech::activate'
+        path: desktop/src/speech.rs
+        find: 'fn activate(&mut self, cx: &mut Context<Self>) {'
+        plain: 'Stops voice if it is preparing, negotiating or active; otherwise starts it on the background executor.'
+      - {fn: 'Speech::observe', path: desktop/src/speech.rs, find: 'fn observe(&mut self, cx: &mut Context<Self>) {', plain: 'Watches voice state changes and redraws.'}
+      - {fn: 'speech::component', path: desktop/src/speech.rs, find: 'pub fn component(', plain: 'The factory behind the script `Speech` component.'}
+    talks_to: 'The app conversation client''s `AudioLease`.'
+    inferred: false
+    size: 288
+  - id: 'rs:voyager_desktop::split'
+    feature: workspace-layout
+    plain: 'Native resizable dividers for scripts: `Split` divides two panes by a ratio, and `Column` sizes the Portal column in pixels; each reports a finished drag to the script.'
+    holds: 'Per-divider state: the native resizable state, the current configuration, the drag gesture, and the size awaiting the owner''s answer.'
+    entry:
+      fn: 'split::register'
+      path: desktop/src/split.rs
+      find: 'pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {'
+      plain: 'Registers `Split` (id, axis, share, revision, reset, callback) and `Column` (id, width in pixels, revision, reset, callback).'
+    key:
+      - fn: 'Split::materialize'
+        path: desktop/src/split.rs
+        find: 'impl ComponentMaterializer for Split {'
+        plain: 'Builds the two-pane group and a tracker that reports the new share or width when a drag ends.'
+      - fn: 'Gesture::finish'
+        path: desktop/src/split.rs
+        find: 'fn finish(&mut self, current: &Config) -> Option<Config> {'
+        plain: 'Reports a drag only if the divider''s id and revision did not change during it.'
+      - fn: valid_identity
+        path: desktop/src/split.rs
+        find: 'fn valid_identity(id: &str, revision: &str, reset: f64) -> bool {'
+        plain: 'Checks the id, decimal revision and reset counter passed from the script.'
+    talks_to: 'The header''s main.ts turns the callback into a `resize-panel-split` or Portal width request.'
+    inferred: false
+    size: 539
+  - id: 'rs:voyager_desktop::status'
+    feature: script-host
+    plain: 'A native `Status` component: a text line marked with the accessibility role `status` so screen readers announce it.'
+    holds: Nothing.
+    entry: {fn: 'status::register', path: desktop/src/status.rs, find: 'pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {', plain: 'Registers `Status(id, text)`.'}
+    inferred: false
+    size: 52
+  - id: 'rs:voyager_desktop::terminal'
+    feature: terminals
+    plain: 'The native terminal: a `TerminalState` and `Terminal` component whose `Pane` reads a Core terminal''s output through its viewer, parses it, draws it, and sends keys, paste, wheel and resize back.'
+    holds: '`Pane`: the parsed `Screen`, the Core `Viewer`, the latest grid snapshot and row paint caches, font metrics, pending resize, unsent credit and replies, selection and IME state. `Viewers`: the content id to viewer map shared with host.rs.'
+    entry:
+      fn: 'terminal::register'
+      path: desktop/src/terminal.rs
+      find: 'pub fn register(registry: &mut ComponentRegistry, viewers: Viewers) -> Result<(), RegistryError> {'
+      plain: 'Registers `TerminalState(content)`, which finds the attached viewer and builds a `Pane`, and the `Terminal(state)` component.'
+    key:
+      - fn: 'Pane::pump'
+        path: desktop/src/terminal.rs
+        find: 'fn pump(&mut self, cx: &mut Context<Self>) -> bool {'
+        plain: 'Takes up to 64 KiB of output in 4 KiB chunks within 2 ms, parses it, sends terminal replies, returns credit to Core and marks the view dirty.'
+      - fn: 'Pane::new'
+        path: desktop/src/terminal.rs
+        find: 'let task = cx.spawn(async move |this, cx| {'
+        plain: 'Starts the loop that waits for the viewer to have data and calls `pump`, yielding to the UI between rounds.'
+      - fn: 'Pane::key'
+        path: desktop/src/terminal.rs
+        find: 'fn key(&mut self, event: &KeyDownEvent) -> Result<()> {'
+        plain: 'Encodes a key press with libghostty-vt''s encoder for the terminal''s current modes and sends the bytes.'
+      - fn: 'Pane::resize'
+        path: desktop/src/terminal.rs
+        find: 'fn resize(&mut self, cols: u16, rows: u16, width: u32, height: u32, cx: &mut Context<Self>) {'
+        plain: 'Sends a new size to Core, retrying every 100 ms while the viewer refuses.'
+    talks_to: 'Herdr Core, through the app''s `core::Viewer` (take, credit, input, protocol reply, focus, resize).'
+    why: 'docs/terminal.md says the viewer parses Core''s VT stream with libghostty-vt on the UI thread and returns credit after parsing, not on receipt; it also names terminal.rs as the stream, focus and resize part of a split into private modules.'
+    inferred: false
+    size: 953
+  - id: 'rs:voyager_desktop::terminal::background'
+    feature: terminals
+    plain: 'Groups a terminal row''s cells into background-colour spans, merging the empty same-colour tail into one span in compact mode.'
+    holds: 'Nothing: pure functions.'
+    entry: {fn: 'terminal::background::spans', path: desktop/src/terminal_background.rs, find: 'pub(super) fn spans<''a>(', plain: 'Yields cell ranges to paint with one background each.'}
+    key:
+      - fn: 'terminal::background::span_width'
+        path: desktop/src/terminal_background.rs
+        find: 'pub(super) fn span_width(cell_width: f32, scale: f32, cells: usize) -> f32 {'
+        plain: 'Width of a span as the sum of individually device-rounded cell widths.'
+    why: 'docs/terminal.md says a merged range must sum individually rounded cell widths, because rounding the total changes the edge of a coloured tail.'
+    inferred: false
+    size: 132
+  - id: 'rs:voyager_desktop::terminal::font'
+    feature: terminals
+    plain: 'Chooses the terminal''s monospace font and works out cell width and how many columns fit.'
+    holds: 'Nothing: pure functions.'
+    entry:
+      fn: 'terminal::font::family'
+      path: desktop/src/terminal_font.rs
+      find: 'pub fn family(names: &[String]) -> &str {'
+      plain: 'Prefers DejaVu Sans Mono, Noto Sans Mono, Liberation Mono, Menlo or Consolas, then any font named mono.'
+    key:
+      - fn: 'terminal::font::cell_width'
+        path: desktop/src/terminal_font.rs
+        find: 'pub(super) fn cell_width(font_advance: f32, scale: f32) -> f32 {'
+        plain: 'Rounds the font''s advance to whole device pixels.'
+      - fn: 'terminal::font::fitted_columns'
+        path: desktop/src/terminal_font.rs
+        find: 'pub(super) fn fitted_columns(inner_width: f32, cell_width: f32) -> u16 {'
+        plain: 'Number of whole cells that fit, at least one.'
+    inferred: false
+    size: 63
+  - id: 'rs:voyager_desktop::terminal::input'
+    feature: terminals
+    plain: 'Keyboard and input-method text for the terminal: which shortcuts belong to the workspace rather than the shell, IME composition, and paste.'
+    holds: '`Composition`: the text being composed by an input method and its selection.'
+    entry:
+      fn: 'terminal::input::workspace_shortcut'
+      path: desktop/src/terminal_input.rs
+      find: 'pub(super) fn workspace_shortcut(key: &gpui::Keystroke) -> bool {'
+      plain: 'Says whether a keystroke (for example ctrl-shift-o, -e or -t) should go to the workspace instead of the terminal.'
+    key:
+      - fn: 'EntityInputHandler for Pane'
+        path: desktop/src/terminal_input.rs
+        find: 'impl EntityInputHandler for Pane {'
+        plain: 'Lets the operating system''s text input deliver composed and committed text to the pane.'
+      - fn: 'Pane::paste'
+        path: desktop/src/terminal_input.rs
+        find: 'fn paste(&mut self, item: ClipboardItem, _: &mut Window, cx: &mut Context<Self>) {'
+        plain: 'Sends clipboard text, respecting the terminal''s bracketed-paste mode.'
+    inferred: false
+    size: 267
+  - id: 'rs:voyager_desktop::terminal::row_paint'
+    feature: terminals
+    plain: 'Paints one terminal row (text runs, backgrounds, underline, cursor) and reuses the prepared drawing when the row did not change.'
+    holds: 'A per-row cache of the last paint plan.'
+    entry:
+      fn: 'terminal::row_paint::row'
+      path: desktop/src/terminal_rows.rs
+      find: 'pub(super) fn row(input: Input, cache: Cache) -> gpui::Div {'
+      plain: 'Returns a row element that builds or reuses its `Plan` at paint time.'
+    key:
+      - {fn: 'Plan::new', path: desktop/src/terminal_rows.rs, find: 'fn new(key: Key, window: &mut Window) -> Self {', plain: 'Shapes the row''s text and lays out its rectangles.'}
+      - {fn: 'terminal::row_paint::Input', path: desktop/src/terminal_rows.rs, find: 'pub(super) struct Input {', plain: 'Everything that decides a row''s look; equal input means the cached plan is reused.'}
+    inferred: false
+    size: 263
+  - id: 'rs:voyager_desktop::terminal::scroll'
+    feature: terminals
+    plain: 'Turns mouse-wheel movement into bytes for the program when the program wants them; otherwise the wheel scrolls local history.'
+    holds: 'Nothing: one pure function.'
+    entry:
+      fn: 'terminal::scroll::input'
+      path: desktop/src/terminal_scroll.rs
+      find: 'pub(super) fn input('
+      plain: 'Encodes wheel steps as mouse events if the program tracks the mouse, as arrow keys on the alternate screen, or returns `None` for local scrolling; refuses input over 64 KiB.'
+    why: 'docs/terminal.md says normal-screen history stays local, mouse-tracking programs get encoded wheel events, and alternate-screen programs without mouse tracking get arrow keys.'
+    inferred: false
+    size: 110
+  - id: 'rs:voyager_desktop::terminal::view'
+    feature: terminals
+    plain: 'Draws the terminal pane: snapshots the screen when new output arrived, measures the space to pick columns and rows, paints rows and cursor, and routes mouse, wheel and keys.'
+    holds: 'Nothing beyond the `Pane` it renders.'
+    entry: {fn: 'Render for Pane', path: desktop/src/terminal_view.rs, find: 'impl Render for Pane {', plain: 'GPUI calls this each time the pane is drawn.'}
+    key:
+      - {fn: 'screen snapshot', path: desktop/src/terminal_view.rs, find: 'match self.screen.snapshot() {', plain: 'Takes a new grid only when the pane is dirty.'}
+      - fn: 'fit to bounds'
+        path: desktop/src/terminal_view.rs
+        find: 'let cols = super::font::fitted_columns('
+        plain: 'Computes columns and rows from the painted size and requests a resize when they change.'
+    inferred: false
+    size: 388
+  - id: 'rs:voyager_desktop::terminal_screen'
+    feature: terminals
+    plain: 'Wraps the libghostty-vt terminal: colours, parsing output, collecting replies the terminal sends back, selection, paste encoding, resizing and snapshots for drawing.'
+    holds: '`Screen`: the libghostty-vt terminal and render iterators, a reply buffer capped at 64 KiB, cached rows by row id, selection gesture state.'
+    entry:
+      fn: 'Screen::new'
+      path: desktop/src/terminal_screen.rs
+      find: 'pub(super) fn new(cols: u16, rows: u16) -> Result<Self> {'
+      plain: 'Creates a terminal with Voyager''s default colours and palette and a reply collector.'
+    key:
+      - {fn: 'Screen::write', path: desktop/src/terminal_screen.rs, find: 'pub(super) fn write(&mut self, bytes: &[u8]) {', plain: 'Feeds program output to the VT parser.'}
+      - {fn: 'Screen::snapshot', path: desktop/src/terminal_screen.rs, find: 'pub(super) fn snapshot(&mut self) -> Result<Grid> {', plain: 'Builds a `Grid` of rows, reusing cached rows that did not change.'}
+      - fn: 'Screen::take_replies'
+        path: desktop/src/terminal_screen.rs
+        find: 'pub(super) fn take_replies(&mut self) -> Vec<u8> {'
+        plain: 'Hands over replies (such as status reports) to send to the program through Core.'
+      - fn: 'Screen::paste_bytes'
+        path: desktop/src/terminal_screen.rs
+        find: 'pub(super) fn paste_bytes(&self, text: &str) -> Result<Vec<u8>> {'
+        plain: 'Encodes pasted text for the terminal''s paste mode.'
+    inferred: false
+    size: 417
+    note: 'Declared in lib.rs as a sibling of `terminal`, though only terminal code uses it.'
+  - id: 'rs:voyager_desktop::text'
+    feature: script-host
+    plain: 'Native text inputs for scripts: `Name` (renaming) and `Composer` (the chat message box), each with a retained state the script keeps.'
+    holds: 'Nothing itself; `NameState` and `ComposerState` hold gpui-base input states.'
+    entry:
+      fn: 'text::register'
+      path: desktop/src/text.rs
+      find: 'pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {'
+      plain: 'Registers `Name`/`NameState` and `Composer`/`ComposerState`.'
+    key:
+      - {fn: register_text, path: desktop/src/text.rs, find: 'fn register_text(', plain: 'Registers one state with a `focus` method and input events, plus its component.'}
+      - {fn: 'Text::materialize', path: desktop/src/text.rs, find: 'fn materialize(&self, request: MaterializeRequest<''_>) -> anyhow::Result<AnyElement> {', plain: 'Draws the input; a click focuses it.'}
+    inferred: false
+    size: 140
+  - id: 'rs:voyager_desktop::typing_trace'
+    feature: diagnostics
+    plain: 'A three-line alias so desktop code can call `crate::typing_trace::record`, which is the app crate''s terminal trace recorder.'
+    holds: Nothing.
+    entry:
+      fn: 'typing_trace::record'
+      path: desktop/src/lib.rs
+      find: 'pub(crate) use voyager_app::record_terminal_trace as record;'
+      plain: 'Re-exports `voyager_app::record_terminal_trace`, which app/src/lib.rs compiles from experiments/performance/typing-latency/trace.rs.'
+    talks_to: 'Called from terminal.rs and terminal_view.rs at each step of a key press and output (`key_received`, `input_admitted`, `output_parsed`, `render_start` and others).'
+    inferred: false
+    size: 3
+    note: 'Inline in desktop/src/lib.rs lines 370-372, not a separate file.'
+  - id: 'rs:voyager_contract'
+    feature: shared-contract
+    plain: 'The contract root: id types, the saved workspace layout, the dock context, the list of workspace actions and the request and response envelopes.'
+    holds: 'Nothing at runtime: type definitions only.'
+    entry: {fn: 'voyager_contract::Request', path: contract/src/lib.rs, find: 'pub struct Request {', plain: 'A workspace request: request id, expected layout version and one `Action`.'}
+    key:
+      - fn: 'voyager_contract::Action'
+        path: contract/src/lib.rs
+        find: 'pub enum Action {'
+        plain: 'The 35 workspace operations, from `inspect` and `create-voyage` to `dock` and `set-portal-presentation`.'
+      - fn: 'voyager_contract::Response'
+        path: contract/src/lib.rs
+        find: 'pub struct Response {'
+        plain: 'Status (applied, rejected, uncertain), new version, the full shared `Layout`, created ids, message and an optional Voyage close plan.'
+      - fn: 'voyager_contract::Layout'
+        path: contract/src/lib.rs
+        find: 'pub struct Layout {'
+        plain: 'The saved workspace: Voyages, Home, contents, selection, dock context, canvas, view and saved layouts.'
+      - {fn: 'voyager_contract::Context', path: contract/src/lib.rs, find: 'pub enum Context {', plain: 'The dock scope: workspace, or one Voyage, Fleet, Vessel or Portal.'}
+    why: 'AGENTS.md asks for one typed contract for UI, content and agent callers with generated clients and validators. docs/workspace.md says placement, content and Core terminal identities are distinct types.'
+    inferred: false
+    size: 526
+  - id: 'rs:voyager_contract::activity'
+    feature: agents
+    plain: 'The shape of program-reported activity: a state (unknown, working, blocked, idle, done, error) with optional reason, progress and messages, keyed by Core terminal id.'
+    holds: 'Nothing: types only.'
+    entry: {fn: 'activity::Projection', path: contract/src/activity.rs, find: 'pub struct Projection {', plain: 'Reported activity for every terminal, plus whether the set was limited and why.'}
+    key:
+      - {fn: 'activity::ReportedActivity', path: contract/src/activity.rs, find: 'pub struct ReportedActivity {', plain: 'One terminal''s latest self-reported status.'}
+      - {fn: 'activity::ActivityState', path: contract/src/activity.rs, find: 'pub enum ActivityState {', plain: 'The six states.'}
+    inferred: false
+    size: 43
+  - id: 'rs:voyager_contract::administrator'
+    feature: assistant
+    plain: 'The tool vocabulary of Voyager''s private administrator (the assistant): workspace and process tool inputs, process listings, and the tool receipts shown in the conversation.'
+    holds: 'Nothing: types only.'
+    entry:
+      fn: 'administrator::ProcessAction'
+      path: contract/src/administrator.rs
+      find: 'pub enum ProcessAction {'
+      plain: 'List, read, send, interrupt or stop a terminal program, each naming content, terminal and (except list and read) pid.'
+    key:
+      - fn: 'administrator::ProcessInfo'
+        path: contract/src/administrator.rs
+        find: 'pub struct ProcessInfo {'
+        plain: 'One running program: content, terminal, pid, cwd, state, foreground program, agent name, panel names and reported activity.'
+      - {fn: 'administrator::ProcessResponse', path: contract/src/administrator.rs, find: 'pub struct ProcessResponse {', plain: 'Status, version, freshness and the operation''s output.'}
+      - {fn: 'administrator::ToolAction', path: contract/src/administrator.rs, find: 'pub enum ToolAction {', plain: 'A receipt naming which tool (workspace, process, content, worktree) ran which action.'}
+      - {fn: 'administrator::WorkspaceInput', path: contract/src/administrator.rs, find: 'pub struct WorkspaceInput {', plain: 'The workspace tool''s input: expected version and an `Action`.'}
+    inferred: false
+    size: 162
+    note: 'The header''s Agents list and content chooser also use `ProcessResponse` through the `processes` host function.'
+  - id: 'rs:voyager_contract::avatar_animation'
+    feature: avatar
+    plain: 'The schema of an avatar animation pack and its configuration: canvas, poses, clips and which clip plays on hover, click, dock and undock.'
+    holds: 'Nothing: types only.'
+    entry: {fn: 'avatar_animation::Pack', path: contract/src/avatar_animation.rs, find: 'pub struct Pack {', plain: 'A pack: id, canvas, image files, named poses and clips (effects must be empty).'}
+    key:
+      - {fn: 'avatar_animation::Configuration', path: contract/src/avatar_animation.rs, find: 'pub struct Configuration {', plain: 'Which pack file to use, its rest pose and its triggers.'}
+      - {fn: 'Triggers::clip', path: contract/src/avatar_animation.rs, find: 'pub fn clip(&self, trigger: Trigger) -> Option<&str> {', plain: 'Looks up the clip name for a trigger.'}
+    inferred: false
+    size: 89
+    note: 'The export binary writes its schemas to contract/generated/avatar/ with `--avatar`; avatar_pack.rs seeds them into the profile.'
+  - id: 'rs:voyager_contract::canvas'
+    feature: workspace-layout
+    plain: 'The saved outer window layout: a tree of rows, columns and stacks whose leaves are named regions (sidebar, Fleet strip, active Fleet, Portals, context bar).'
+    holds: 'Nothing: types and a default.'
+    entry: {fn: 'canvas::Canvas', path: contract/src/canvas.rs, find: 'pub struct Canvas {', plain: 'The root node, whether the sidebar is collapsed, and the Portal mode.'}
+    key:
+      - {fn: 'canvas::Node', path: contract/src/canvas.rs, find: 'pub enum Node {', plain: 'Row, column, stack or block, each with a size (fill, content or fixed pixels).'}
+      - fn: 'Default for Canvas'
+        path: contract/src/canvas.rs
+        find: 'impl Default for Canvas {'
+        plain: 'A 224 px sidebar, a 40 px Fleet strip, the active Fleet beside a 340 px Portal column, and the context bar.'
+      - {fn: 'canvas::PortalMode', path: contract/src/canvas.rs, find: 'pub enum PortalMode {', plain: 'Overlay (default) or make-room.'}
+    inferred: false
+    size: 104
+  - id: 'rs:voyager_contract::content'
+    feature: content-model
+    plain: 'Content types and the content protocol: descriptions of each type, and the versioned request and response for content operations, currently the Notes ones.'
+    holds: 'Nothing: types only.'
+    entry:
+      fn: 'content::Request'
+      path: contract/src/content.rs
+      find: 'pub enum Request {'
+      plain: '`content.configure`, describe, inspect, migrate, list, new, open and update, each with request id, content id and expected revision.'
+    key:
+      - {fn: 'content::Response', path: contract/src/content.rs, find: 'pub enum Response {', plain: 'Limited, described, snapshot, notes list, note opened, configured, applied, rejected or uncertain.'}
+      - fn: 'content::Catalog'
+        path: contract/src/content.rs
+        find: 'pub struct Catalog {'
+        plain: 'The list of content type `Description`s (availability, host, view, placements, data shapes, actions, backend).'
+      - {fn: 'content::Notes', path: contract/src/content.rs, find: 'pub struct Notes {', plain: 'A note''s data: title and text.'}
+    why: 'docs/content.md says contract/src/content.rs owns the versioned Notes request, response and data types.'
+    inferred: false
+    size: 391
+  - id: 'rs:voyager_contract::context'
+    feature: context-docking
+    plain: 'Context facts for the current dock scope: the scope, its path of names, its configured starting folder and Git branch.'
+    holds: 'Nothing: types only.'
+    entry: {fn: 'context::Facts', path: contract/src/context.rs, find: 'pub struct Facts {', plain: 'Version, scope, path, directory and branch.'}
+    key:
+      - {fn: 'context::Directory', path: contract/src/context.rs, find: 'pub enum Directory {', plain: 'Known path, multiple folders, or unavailable.'}
+      - {fn: 'context::Branch', path: contract/src/context.rs, find: 'pub enum Branch {', plain: 'Named branch, detached, or unavailable.'}
+    inferred: false
+    size: 31
+  - id: 'rs:voyager_contract::conversation'
+    feature: assistant
+    plain: 'The private conversation protocol: send, interrupt or start voice; the delivery reply; and the snapshot of messages and tool outcomes the chat shows.'
+    holds: 'Nothing: types only.'
+    entry: {fn: 'conversation::Request', path: contract/src/conversation.rs, find: 'pub struct Request {', plain: 'A request id and one action.'}
+    key:
+      - {fn: 'conversation::Snapshot', path: contract/src/conversation.rs, find: 'pub struct Snapshot {', plain: 'Version, thread, turn, model, phase, messages, error, and how many messages were left out.'}
+      - {fn: 'conversation::Reply', path: contract/src/conversation.rs, find: 'pub struct Reply {', plain: 'Accepted, rejected or unconfirmed.'}
+      - {fn: 'conversation::Focus', path: contract/src/conversation.rs, find: 'pub struct Focus {', plain: 'The dock scope, path, folder and revision captured with a request, with an optional short preview.'}
+    inferred: false
+    size: 138
+  - id: 'rs:voyager_contract::decimal'
+    feature: shared-contract
+    plain: 'A serde helper that writes a `u64` as a decimal string and reads it back.'
+    holds: 'Nothing: two functions.'
+    entry: {fn: 'decimal::serialize', path: contract/src/lib.rs, find: 'pub fn serialize<S: Serializer>(value: &u64, serializer: S) -> Result<S::Ok, S::Error> {', plain: 'Writes the number as text.'}
+    key:
+      - fn: 'decimal::deserialize'
+        path: contract/src/lib.rs
+        find: 'pub fn deserialize<''de, D: Deserializer<''de>>(deserializer: D) -> Result<u64, D::Error> {'
+        plain: 'Parses the text back into a number.'
+    why: 'docs/workspace.md says layout revisions and the allocation counter cross JavaScript as decimal strings so a JavaScript number cannot round a Rust u64.'
+    inferred: false
+    size: 12
+    note: 'Inline in contract/src/lib.rs lines 515-526; other contract modules use it as `crate::decimal`.'
+  - id: 'rs:voyager_contract::launch'
+    feature: agents
+    plain: 'Launch settings for new terminal content: a plain terminal, Codex with model, effort and permissions, or any program by argv.'
+    holds: 'Nothing: types and defaults.'
+    entry: {fn: 'launch::LaunchSettings', path: contract/src/launch.rs, find: 'pub struct LaunchSettings {', plain: 'The default entry id and the list of launch entries.'}
+    key:
+      - {fn: 'launch::Launch', path: contract/src/launch.rs, find: 'pub enum Launch {', plain: 'Terminal, Codex or Program.'}
+      - fn: 'Default for LaunchSettings'
+        path: contract/src/launch.rs
+        find: 'impl Default for LaunchSettings {'
+        plain: 'Terminal (default), Codex and Claude entries; lib.rs seeds this into profile/launches.json.'
+      - {fn: 'launch::Catalog', path: contract/src/launch.rs, find: 'pub struct Catalog {', plain: 'Settings plus which programs are available, errors and the settings path.'}
+    inferred: false
+    size: 100
+    note: 'The Codex default permission is `Yolo`.'
+  - id: 'rs:voyager_contract::observation'
+    feature: context-docking
+    plain: 'A workspace observation: for each visible panel its live or starting folder, program, conversation name and effective name, plus the active panel, folder and branch.'
+    holds: 'Nothing: types only.'
+    entry: {fn: 'observation::WorkspaceObservation', path: contract/src/observation.rs, find: 'pub struct WorkspaceObservation {', plain: 'Version, active placement, directory, panels and branch.'}
+    key:
+      - {fn: 'observation::PanelObservation', path: contract/src/observation.rs, find: 'pub struct PanelObservation {', plain: 'One panel''s placement, content, backend, folder, program and names.'}
+      - {fn: 'observation::Directory', path: contract/src/observation.rs, find: 'pub enum Directory {', plain: 'Live, Voyage, starting, or unavailable.'}
+    talks_to: 'The header reads it every 3 s through `workspace_observation` to name panels and pick folders for new Voyages.'
+    inferred: false
+    size: 37
+  - id: 'rs:voyager_contract::panels'
+    feature: workspace-layout
+    plain: 'Panel ownership and placement: a panel group belongs to a Fleet or to a Voyage''s Portal column; new panels go into an empty group or beside a panel; Portal column settings and saved arrangements.'
+    holds: 'Nothing: types and compatibility readers.'
+    entry: {fn: 'panels::PanelOwner', path: contract/src/panels.rs, find: 'pub enum PanelOwner {', plain: 'Fleet id, or the Portals of a Voyage.'}
+    key:
+      - {fn: 'panels::PortalLayout', path: contract/src/panels.rs, find: 'pub struct PortalLayout {', plain: 'The Portal column''s split, maximised panel, visibility, mode and width (default 340).'}
+      - {fn: 'panels::SavedLayout', path: contract/src/panels.rs, find: 'pub struct SavedLayout {', plain: 'A named saved split arrangement for an owner.'}
+      - {fn: 'Deserialize for SavedLayout', path: contract/src/panels.rs, find: 'impl<''de> Deserialize<''de> for SavedLayout {', plain: 'Also reads the older form that named only a Fleet.'}
+      - {fn: 'Deserialize for Vessel', path: contract/src/panels.rs, find: 'impl<''de> Deserialize<''de> for Vessel {', plain: 'Reads a Vessel whose name may be missing, defaulting it to empty.'}
+    inferred: false
+    size: 105
+    note: 'The module is private; lib.rs re-exports its four types at the crate root.'
+  - id: 'rs:voyager_contract::voice'
+    feature: voice
+    plain: 'Voice state for the assistant: phase, capability, session ids, microphone and speaker peaks, and error.'
+    holds: 'Nothing: types only.'
+    entry: {fn: 'voice::State', path: contract/src/voice.rs, find: 'pub struct State {', plain: 'Version, generation, phase, capability, thread, turn, realtime session, peaks and error.'}
+    key:
+      - {fn: 'voice::Phase', path: contract/src/voice.rs, find: 'pub enum Phase {', plain: 'Off, preparing, negotiating, active, stopping, failed or unconfirmed.'}
+      - {fn: 'voice::Capability', path: contract/src/voice.rs, find: 'pub enum Capability {', plain: 'Checking, unavailable, candidate or compatible.'}
+    inferred: false
+    size: 48
+  - id: 'rs:voyager_contract::voyage_close'
+    feature: worktrees-voyage-close
+    plain: 'The plan for closing a Voyage: what will be closed (content, type, terminal, pid), its phase, and how many uncommitted changes exist.'
+    holds: 'Nothing: types only.'
+    entry: {fn: 'voyage_close::Plan', path: contract/src/voyage_close.rs, find: 'pub struct Plan {', plain: 'Id, Voyage, name, version, phase, entries, uncommitted change count and message.'}
+    key:
+      - {fn: 'voyage_close::Entry', path: contract/src/voyage_close.rs, find: 'pub struct Entry {', plain: 'One content item that closing will affect.'}
+      - {fn: 'voyage_close::Phase', path: contract/src/voyage_close.rs, find: 'pub enum Phase {', plain: 'Ready, saving, incomplete or closed.'}
+    inferred: false
+    size: 40
+  - id: 'rs:voyager_contract::worktree'
+    feature: worktrees-voyage-close
+    plain: 'Git worktree requests for a Voyage (list, create, open, remove) and the checkouts returned.'
+    holds: 'Nothing: types only.'
+    entry: {fn: 'worktree::Request', path: contract/src/worktree.rs, find: 'pub struct Request {', plain: 'Request id, expected version, Voyage and action.'}
+    key:
+      - {fn: 'worktree::Action', path: contract/src/worktree.rs, find: 'pub enum Action {', plain: 'List; create with name, branch and base; open a path; remove a path.'}
+      - {fn: 'worktree::Checkout', path: contract/src/worktree.rs, find: 'pub struct Checkout {', plain: 'Path, common Git dir, whether main, branch, locked, prunable and dirty.'}
+      - {fn: 'worktree::Response', path: contract/src/worktree.rs, find: 'pub struct Response {', plain: 'Status, message and checkouts.'}
+    inferred: false
+    size: 72
+  - id: 'ts:desktop/mods/header/main.ts'
+    feature: script-host
+    plain: 'The header package''s `Workspace` view: it keeps the latest workspace snapshot, sends one workspace request at a time, opens terminals, and composes the window from the other header files.'
+    holds: 'The layout snapshot and its version, busy flag, focused and hovered panels, drag and rename state, `TerminalState` per terminal content, terminal openings, chat, menus, creation picker, worktree and close dialogs, context facts, observation, processes and reported activity, status text.'
+    entry: {fn: Workspace, path: desktop/mods/header/main.ts, find: 'export default class Workspace extends View {', plain: 'The default export that gpui-shell mounts as the header.'}
+    key:
+      - {fn: Workspace.init, path: desktop/mods/header/main.ts, find: 'init(_props: unknown, cx: AsyncContext) {', plain: 'Sets up state, sends `inspect`, and starts the 3 s context loop.'}
+      - fn: Workspace.run
+        path: desktop/mods/header/main.ts
+        find: '  run('
+        plain: 'Sends an `Action` with the expected version through the generated `invoke`; while another request is pending it refuses or queues the action and says so.'
+      - fn: Workspace.prepare
+        path: desktop/mods/header/main.ts
+        find: '  async prepare('
+        plain: 'For each visible terminal panel, calls `openTerminal`, creates its `TerminalState` when applied, then re-inspects the workspace.'
+      - fn: Workspace.acceptSnapshot
+        path: desktop/mods/header/main.ts
+        find: 'acceptSnapshot(result: Response, task: AsyncContext) {'
+        plain: 'Takes a response''s layout if it is not older than the current version.'
+      - fn: Workspace.render
+        path: desktop/mods/header/main.ts
+        find: 'render(cx: UIContext): NativeElement {'
+        plain: 'Reads avatar dock results and owner notices, then builds the window from the canvas regions.'
+    talks_to: '`voyager_workspace` (through the generated workspace.js wrapper), `voyager_avatar`, `voyager_header` and the `voyager_native` components.'
+    inferred: false
+    size: 2197
+    note: 'The profile runs main.js, the compiled copy beside this file; personal edits to main.js are live-reloaded.'
+  - id: 'ts:desktop/mods/header/activity.ts'
+    feature: agents
+    plain: 'Turns a program''s reported activity into a short badge label and hover hint.'
+    holds: 'Nothing: one pure function.'
+    entry:
+      fn: activityBadge
+      path: desktop/mods/header/activity.ts
+      find: 'export function activityBadge('
+      plain: 'Returns a capitalised state such as `Working`, or `Status unavailable`; the hint says it is not a verified task result.'
+    inferred: false
+    size: 23
+  - id: 'ts:desktop/mods/header/agents.ts'
+    feature: agents
+    plain: 'The Agents content view: a read-only list of terminal programs across Voyages, grouped by status (needs attention, working, done, idle).'
+    holds: 'Nothing: render functions over the layout, process list and reported activity.'
+    entry: {fn: agentsView, path: desktop/mods/header/agents.ts, find: 'export function agentsView(', plain: 'Builds the rows and groups, with icons and click-to-navigate.'}
+    key:
+      - {fn: statusGroup, path: desktop/mods/header/agents.ts, find: 'function statusGroup(', plain: 'Maps blocked and error to `Needs attention`, working to `Working`, done to `Done`, all else to `Idle`.'}
+      - fn: AGENT_NAMES
+        path: desktop/mods/header/agents.ts
+        find: 'const AGENT_NAMES: Record<string, string> = {'
+        plain: 'Display names for known agent programs (Codex, Claude, Pi, OpenCode, Cursor and others).'
+    inferred: false
+    size: 397
+  - id: 'ts:desktop/mods/header/canvas.ts'
+    feature: workspace-layout
+    plain: 'Builds the window''s outer layout from the saved canvas tree, and draws the frame around each panel.'
+    holds: 'Nothing: pure functions.'
+    entry:
+      fn: composeCanvas
+      path: desktop/mods/header/canvas.ts
+      find: 'export function composeCanvas('
+      plain: 'Walks rows, columns and stacks and asks the caller for each region''s element; the Portals block becomes a column beside the rest.'
+    key:
+      - {fn: vesselFrame, path: desktop/mods/header/canvas.ts, find: 'export function vesselFrame(', plain: 'Wraps a panel in a rounded frame, with a gradient when selected.'}
+    inferred: false
+    size: 95
+  - id: 'ts:desktop/mods/header/chat.ts'
+    feature: assistant
+    plain: 'The chat panel for the private assistant: opening and closing, polling the conversation while open, sending messages and drawing them.'
+    holds: '`Chat`: open and present flags, measured heights, the latest snapshot, pending flag, error, and the native `ComposerState`.'
+    entry: {fn: Chat, path: desktop/mods/header/chat.ts, find: 'export class Chat {', plain: 'Created in the header''s init; submitting the composer sends the message.'}
+    key:
+      - {fn: Chat.toggle, path: desktop/mods/header/chat.ts, find: 'toggle(cx: Context) {', plain: 'Opens or closes; while open, calls `observe` every 50 ms for a newer snapshot.'}
+      - {fn: Chat.submit, path: desktop/mods/header/chat.ts, find: 'submit(cx: Context, interrupt = false) {', plain: 'Sends the composer text, or an interrupt, through the generated `send`.'}
+    talks_to: '`voyager_conversation` through the generated conversation.js wrapper.'
+    inferred: false
+    size: 266
+  - id: 'ts:desktop/mods/header/creation.ts'
+    feature: content-model
+    plain: 'The content chooser that opens for a chosen place: it lists content types and launch options and hidden panels to reopen, and builds the matching create or reopen action.'
+    holds: '`CreationPicker`: the open destination and its workspace version, the launch catalog, Notes and Agents availability, hidden panels, error.'
+    entry: {fn: CreationPicker, path: desktop/mods/header/creation.ts, find: 'export class CreationPicker {', plain: 'One picker per header; `open` fills it for a destination.'}
+    key:
+      - fn: 'CreationPicker.open (metadata)'
+        path: desktop/mods/header/creation.ts
+        find: 'const metadata = await Promise.allSettled([launches(), descriptions()]);'
+        plain: 'Loads the launch catalog and content descriptions in parallel and validates both.'
+      - {fn: chosen, path: desktop/mods/header/creation.ts, find: 'function chosen(', plain: 'Builds `create-content` or `create-fleet-with-content` for the chosen type and launch.'}
+    inferred: false
+    size: 290
+  - id: 'ts:desktop/mods/header/home.ts'
+    feature: workspace-layout
+    plain: 'A simple Home overview: buttons for each Voyage and its Fleets.'
+    holds: 'Nothing: one render function.'
+    entry: {fn: homeOverview, path: desktop/mods/header/home.ts, find: 'export function homeOverview(', plain: 'Returns the overview element; clicking sends `select-voyage` or `select-fleet`.'}
+    inferred: false
+    size: 38
+    note: 'Not imported by any header file at e6bd5b1. It is still compiled and seeded, and a native proof test edits it; the header AGENTS.md says not to restore the former special overview.'
+  - id: 'ts:desktop/mods/header/layout-panel.ts'
+    feature: workspace-layout
+    plain: 'A JSON text editor overlay for the workspace canvas.'
+    holds: '`LayoutPanel`: a textarea state, version, error and pending flags.'
+    entry: {fn: LayoutPanel, path: desktop/mods/header/layout-panel.ts, find: 'export class LayoutPanel {', plain: 'Shows the canvas as editable JSON and validates it before applying.'}
+    inferred: false
+    size: 143
+    note: 'Not imported by main.ts at e6bd5b1; occluding.rs tests and tests/native/proof_canvas.py use it. The header AGENTS.md says there is no human workspace layout JSON editor.'
+  - id: 'ts:desktop/mods/header/menu.ts'
+    feature: workspace-layout
+    plain: 'Right-click menus for workspace items that remember the workspace version they were opened at.'
+    holds: '`WorkspaceMenu`: the open menu''s id, version and items.'
+    entry: {fn: WorkspaceMenu, path: desktop/mods/header/menu.ts, find: 'export class WorkspaceMenu {', plain: 'Renders a popover on right-click; choosing an item passes the captured version to it.'}
+    inferred: false
+    size: 45
+  - id: 'ts:desktop/mods/header/navigation-view.ts'
+    feature: workspace-layout
+    plain: 'Draws the sidebar (Voyages, avatar brand target, chat, worktrees), the Fleet tab strip and the bottom context bar.'
+    holds: 'Nothing: render functions that read the `Workspace` instance.'
+    entry: {fn: renderSidebar, path: desktop/mods/header/navigation-view.ts, find: 'export function renderSidebar(', plain: 'The left sidebar.'}
+    key:
+      - {fn: renderFleets, path: desktop/mods/header/navigation-view.ts, find: 'export function renderFleets(', plain: 'The Fleet tab strip for the current Voyage.'}
+      - {fn: renderContext, path: desktop/mods/header/navigation-view.ts, find: 'export function renderContext(', plain: 'The bottom bar with dock scope, folder, branch and the speech control.'}
+    inferred: false
+    size: 618
+  - id: 'ts:desktop/mods/header/panel-view.ts'
+    feature: workspace-layout
+    plain: 'Draws one Vessel or Portal panel: its title bar with activity badge and controls, and its body (Agents list, Notes view or native terminal).'
+    holds: 'Nothing: one render function over the `Workspace`.'
+    entry: {fn: renderPanel, path: desktop/mods/header/panel-view.ts, find: 'export function renderPanel(', plain: 'Builds the panel, its menu (rename, split, maximise or restore, close) and its body.'}
+    key:
+      - {fn: 'Terminal body', path: desktop/mods/header/panel-view.ts, find: '? Terminal.new(terminal).size_full()', plain: 'Uses the native `Terminal` component once a `TerminalState` exists.'}
+      - {fn: 'Notes body', path: desktop/mods/header/panel-view.ts, find: '? Notes.new(content.id, { contentId: content.id })', plain: 'Uses the `Notes` component from `voyager_content_view`.'}
+    inferred: false
+    size: 334
+  - id: 'ts:desktop/mods/header/panels.ts'
+    feature: workspace-layout
+    plain: 'Reads the owner''s layout to find the current Voyage, its panel groups, and which panels are visible, maximised or hidden.'
+    holds: 'Nothing: pure functions.'
+    entry: {fn: panelGroups, path: desktop/mods/header/panels.ts, find: 'export function panelGroups(layout: Layout): PanelGroup[] {', plain: 'One group per Fleet and per Voyage Portal column, including Home.'}
+    key:
+      - {fn: activeGroups, path: desktop/mods/header/panels.ts, find: 'export function activeGroups(layout: Layout): PanelGroup[] {', plain: 'The selected Fleet''s group and, if shown, the Portal column.'}
+      - {fn: visiblePanels, path: desktop/mods/header/panels.ts, find: 'export function visiblePanels(', plain: 'Panels in the split tree that are not hidden, optionally only the maximised one.'}
+      - {fn: hiddenPanels, path: desktop/mods/header/panels.ts, find: 'export function hiddenPanels(', plain: 'Hidden panels that can be reopened: live terminals, or Notes and Agents without a backend.'}
+    why: 'The header AGENTS.md says panels.ts selects groups and visible members from the owner''s projection and does not own another layout or repeat Rust placement policy.'
+    inferred: false
+    size: 142
+  - id: 'ts:desktop/mods/header/process-icons.ts'
+    feature: agents
+    plain: 'Picks a small icon for a program name (Codex, Claude, bash, activity, or a default).'
+    holds: Nothing.
+    entry:
+      fn: processIcon
+      path: desktop/mods/header/process-icons.ts
+      find: 'export function processIcon(program: string | null | undefined): NativeElement {'
+      plain: 'Returns an image or svg element sized 14.'
+    inferred: false
+    size: 17
+  - id: 'ts:desktop/mods/header/processes.ts'
+    feature: agents
+    plain: 'Reads the list of running terminal programs for a workspace version.'
+    holds: Nothing.
+    entry:
+      fn: inspectProcesses
+      path: desktop/mods/header/processes.ts
+      find: 'export async function inspectProcesses('
+      plain: 'Calls `processes(version)`, validates the response, and returns the list only if it is applied, fresh and for the same version.'
+    talks_to: '`voyager_workspace.processes`, which runs the app''s process list on the background executor.'
+    inferred: false
+    size: 20
+  - id: 'ts:desktop/mods/header/voyage-close.ts'
+    feature: worktrees-voyage-close
+    plain: 'The Close Voyage dialog: shows what closing will stop and save, then confirms or cancels.'
+    holds: '`VoyageClose`: the current close plan, pending flag, message.'
+    entry:
+      fn: VoyageClose.observe
+      path: desktop/mods/header/voyage-close.ts
+      find: 'observe(plan: Plan | null | undefined): void {'
+      plain: 'Called with each response''s close plan; opens a dialog that Escape and backdrop clicks cannot dismiss.'
+    key:
+      - {fn: VoyageClose.act, path: desktop/mods/header/voyage-close.ts, find: 'private act(confirm: boolean, cx: Context): void {', plain: 'Sends confirm or cancel through the generated `invoke`.'}
+    inferred: false
+    size: 168
+  - id: 'ts:desktop/mods/header/voyage-colours.ts'
+    feature: workspace-layout
+    plain: 'Gives each Voyage a colour from a six-colour palette, shifting the hue on each further cycle.'
+    holds: Nothing.
+    entry: {fn: voyageColour, path: desktop/mods/header/voyage-colours.ts, find: 'export function voyageColour(index: number): `#${string}` {', plain: 'Returns a hex colour for a Voyage''s position.'}
+    inferred: false
+    size: 14
+  - id: 'ts:desktop/mods/header/worktrees.ts'
+    feature: worktrees-voyage-close
+    plain: 'Git worktree controls for a Voyage: discovers its worktrees and opens a dialog to create, open or remove one.'
+    holds: '`WorktreeControls`: per-Voyage observations (folder, version, checkouts), the open dialog, and a chain that runs one discovery at a time.'
+    entry: {fn: WorktreeControls, path: desktop/mods/header/worktrees.ts, find: 'export class WorktreeControls {', plain: 'Created by the header''s `Workspace` view.'}
+    key:
+      - fn: WorktreeControls.inspect
+        path: desktop/mods/header/worktrees.ts
+        find: 'inspect(voyage: string, cwd: string, version: string, cx: Context): void {'
+        plain: 'Lists a Voyage''s worktrees once per folder and version.'
+      - {fn: call, path: desktop/mods/header/worktrees.ts, find: 'async function call(', plain: 'Validates a worktree request, calls the `worktree` host function and checks the reply''s request id.'}
+      - fn: WorktreeControls.groups
+        path: desktop/mods/header/worktrees.ts
+        find: 'groups(voyages: WorktreeVoyage[]): WorktreeGroups {'
+        plain: 'Groups Voyages so worktree Voyages sit under their main checkout.'
+    inferred: false
+    size: 574
+  - id: 'ts:content/notes/main.ts'
+    feature: notes
+    plain: 'The Notes view: a file menu (new, open, exit), a preview toggle, a convert button for old JSON notes, and the native title and body editors.'
+    holds: 'Handles to the native session, title and body states, and the preview, file list and menu flags.'
+    entry: {fn: Notes, path: content/notes/main.ts, find: 'export default class Notes extends View {', plain: 'The default export the Notes runtime mounts for one content instance.'}
+    key:
+      - fn: Notes.init
+        path: content/notes/main.ts
+        find: 'init(): void {'
+        plain: 'Creates `SessionState`, `RetainedTitleState` and `RetainedBodyState`, which attach to the native session for this content.'
+      - {fn: Notes.render, path: content/notes/main.ts, find: 'render(): NativeElement {', plain: 'Draws the menu, title, Markdown preview or body editor, and status line.'}
+    why: 'content/notes/AGENTS.md says the restricted script calls its retained SessionState and gets no general filesystem access, while Rust keeps the draft, revision and focus across source replacement.'
+    inferred: false
+    size: 199
+  - id: 'ts:content/ui.ts'
+    feature: script-host
+    plain: 'Shared UI helpers for both script packages: a colour table and builders for buttons, menus, dialogs and a toggle switch.'
+    holds: 'Nothing: constants and pure builders.'
+    entry: {fn: ui, path: content/ui.ts, find: 'export const ui = {', plain: 'Background, foreground, border and accent colours and button heights.'}
+    key:
+      - {fn: actionButton, path: content/ui.ts, find: 'export function actionButton(id: string, label: string): NativeElement {', plain: 'A bordered labelled button.'}
+      - {fn: menuSurface, path: content/ui.ts, find: 'export function menuSurface(', plain: 'A menu container with the `menu` role.'}
+      - {fn: menuButton, path: content/ui.ts, find: 'export function menuButton(id: string, label: string): NativeElement {', plain: 'A menu item button.'}
+      - {fn: toggle, path: content/ui.ts, find: 'export function toggle(', plain: 'A small switch used for the Notes preview.'}
+    inferred: false
+    size: 104
+    container: 'files:content-ui'
+  - id: 'host-module:voyager_workspace'
+    feature: script-host
+    plain: 'The door from scripts to the workspace: inspect and change the layout, open terminals, list launches and processes, and read change notices.'
+    holds: 'Nothing of its own: each function forwards to Rust code that owns the state.'
+    entry: {fn: voyager_workspace, path: desktop/src/host.rs, find: 'let workspace = HostModule::new(crate::script_types::WORKSPACE_MODULE)', plain: 'Where the module is registered for scripts.'}
+  - id: 'host-module:voyager_header'
+    feature: script-host
+    plain: 'A few values only the header script needs, such as its projection of window state.'
+    holds: 'Nothing of its own: each function forwards to Rust code that owns the state.'
+    entry: {fn: voyager_header, path: desktop/src/host.rs, find: 'let module = HostModule::new(crate::script_types::HEADER_MODULE)', plain: 'Where the module is registered for scripts.'}
+  - id: 'host-module:voyager_conversation'
+    feature: script-host
+    plain: 'The private assistant for scripts: send a message, read the conversation and place the speech element.'
+    holds: 'Nothing of its own: each function forwards to Rust code that owns the state.'
+    entry: {fn: voyager_conversation, path: desktop/src/conversation.rs, find: CONVERSATION_MODULE, plain: 'Where the module is registered for scripts.'}
+  - id: 'host-module:voyager_content_view'
+    feature: script-host
+    plain: 'Native content views a script can place, such as the Notes editor, and the list of content type descriptions.'
+    holds: 'Nothing of its own: each function forwards to Rust code that owns the state.'
+    entry: {fn: voyager_content_view, path: desktop/src/notes.rs, find: 'HostModule::new(crate::script_types::CONTENT_VIEW_MODULE)', plain: 'Where the module is registered for scripts.'}
+  - id: 'host-module:voyager_content'
+    feature: script-host
+    plain: 'What a content package script may do with its own content: identity, change notices, requests and the theme.'
+    holds: 'Nothing of its own: each function forwards to Rust code that owns the state.'
+    entry: {fn: voyager_content, path: desktop/src/notes.rs, find: 'let module = HostModule::new(crate::script_types::CONTENT_MODULE)', plain: 'Where the module is registered for scripts.'}
+  - id: 'host-module:voyager_avatar'
+    feature: script-host
+    plain: 'Avatar pieces a script can place (brand, layer, dock targets) and the results of docking.'
+    holds: 'Nothing of its own: each function forwards to Rust code that owns the state.'
+    entry: {fn: voyager_avatar, path: desktop/src/avatar.rs, find: AVATAR_MODULE, plain: 'Where the module is registered for scripts.'}
+  - id: 'host-module:voyager_native'
+    feature: script-host
+    plain: 'Native components scripts can place: text, measurement, status, arrangement, splits, overlays and terminals.'
+    holds: 'Nothing of its own: each function forwards to Rust code that owns the state.'
+    entry: {fn: voyager_native, path: desktop/src/lib.rs, find: '"voyager_native",', plain: 'Where the module is registered for scripts.'}
+  - id: 'host-module:voyager_input'
+    feature: script-host
+    plain: 'The native title and body editors used by Notes.'
+    holds: 'Nothing of its own: each function forwards to Rust code that owns the state.'
+    entry: {fn: voyager_input, path: desktop/src/notes_input.rs, find: 'ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, "voyager_input")', plain: 'Where the module is registered for scripts.'}
+  - id: 'bin:voyager-shell'
+    feature: startup-quit
+    plain: 'The program you run. main.rs only reads --profile and --session and hands over to voyager_desktop::run.'
+    holds: Nothing.
+    entry: {fn: main, path: desktop/src/main.rs, find: 'fn main() {', plain: 'Parses the arguments and calls voyager_desktop::run; prints the error and exits with status 1 if anything fails.'}
+    why: 'A thin entry point keeps start-up logic in the library, where tests can reach it.'
+    inferred: true
+  - id: 'bin:export'
+    feature: shared-contract
+    plain: 'A small build-time program that prints the contract''s JSON schemas; contract/build.cjs turns them into TypeScript.'
+    holds: Nothing.
+    entry: {fn: main, path: contract/src/bin/export.rs, find: 'fn main() {', plain: 'Writes every contract schema as JSON.'}
+  - id: 'bin:export-script-types'
+    feature: script-host
+    plain: 'A small build-time program that prints the TypeScript declarations for the host modules, used by the script type check.'
+    holds: Nothing.
+    entry: {fn: main, path: desktop/src/bin/export-script-types.rs, find: 'fn main()', plain: 'Prints voyager_desktop::declarations().'}
+  - id: 'ts:contract/generated/workspace.ts'
+    feature: shared-contract
+    plain: 'Generated TypeScript types and request wrappers for workspace operations. Written by contract/build.cjs; do not edit by hand.'
+    holds: 'Nothing: types and thin wrappers.'
+  - {id: 'ts:contract/generated/conversation.ts', feature: shared-contract, plain: 'Generated TypeScript types for the private conversation. Written by contract/build.cjs.', holds: 'Nothing: types only.'}
