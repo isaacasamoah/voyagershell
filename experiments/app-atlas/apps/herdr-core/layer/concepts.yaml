@@ -24,7 +24,7 @@ concepts:
     name: Core daemon
     colour: green
     plain: 'One long-lived process per session. It keeps the record of every terminal, parses each terminal''s screen, tracks status and events, serves the API on a local socket and relays output to viewers. It draws nothing.'
-    scope: 'server.rs (the socket and connections), api.rs and api/ (the method table), runtime.rs (screens and the link to the Holder), events, status, waits, notes, viewers and relay, plus the ghostty-vt crate that parses terminal output.'
+    scope: 'server.rs (the socket and connections), api.rs and api/ (the method table), runtime.rs (screens and the link to the Holder), events, status, waits, notes, viewers and relay, sweep.rs (cleaning up after a lost Holder), plus the ghostty-vt crate that parses terminal output.'
     entry: '`hc serve` (started detached by the first command that finds no Core) takes the session lock, binds the socket and runs one async loop on a single thread.'
     entry_at: {path: crates/herdr-core/src/server.rs, find: 'pub fn serve() -> io::Result<()> {'}
     why: 'Programs must outlive the person''s window and any viewer. A daemon per session holds the facts, so viewers and agents can come and go. README: closing your viewer does not end the program.'
@@ -33,7 +33,7 @@ concepts:
     name: Holder
     colour: amber
     plain: 'A separate process that owns every pseudo-terminal and is the parent of every program. It always reads their output and keeps the last megabyte of each, so the Core can crash or restart without losing programs.'
-    scope: 'holder.rs and its wire, holder_proto.rs, plus the helpers that clean up abandoned processes (sweep.rs).'
+    scope: 'holder.rs and its wire, holder_proto.rs. The Core, not the Holder, cleans up after a Holder that was lost (sweep.rs).'
     entry: 'The Core starts it with `hc hold --socket ...` when it first needs a terminal, and talks to it over its own small binary protocol.'
     entry_at: {path: crates/herdr-core/src/runtime.rs, find: 'crate::client::spawn_detached(&self.paths, &["hold", "--socket", &socket], "holder.log")?;'}
     why: 'holder.rs: spawn, pump, resize, signal, reap. No parsing, no policy. Keeping the dumb part separate means a Core update or crash never kills a running program.'
@@ -42,7 +42,7 @@ concepts:
     name: Other machines
     colour: violet
     plain: 'Cores on other machines, reached over SSH. Commands that name `box/t3` go over one framed connection the local Core keeps open to that machine.'
-    scope: 'machines.rs (profiles and the SSH pipe), remote.rs and remote/viewers.rs (the line to each machine and relayed viewers), and the `hc machine` commands.'
+    scope: 'machines.rs (profiles and the SSH pipe), remote.rs and remote/viewers.rs (the line to each machine and relayed viewers). The `hc machine` commands that add and manage machines run in the hc command.'
     entry: 'At start the Core opens a line to every machine it added.'
     entry_at: {path: crates/herdr-core/src/server.rs, find: 'crate::remote::start_all(&core);'}
     why: 'docs/machines.md: an agent can run, read and wait on terminals anywhere with the same commands, without installing anything but hc on the other side.'
@@ -111,7 +111,7 @@ containers:
     concept: concept:os
     kind: external
     name: Operating system services
-    plain: 'systemd, launchd, the Windows registry and console, and the file system.'
+    plain: 'systemd, launchd, the Windows console and the file system.'
   - id: ext-container:programs
     concept: concept:programs
     kind: external
@@ -153,14 +153,14 @@ externals:
     container: ext-container:os
     feature: lifecycle
     name: Service manager
-    plain: 'systemd on Linux (systemctl, systemd-run, busctl, loginctl), launchd on macOS, and the Windows registry run key.'
-    programs: ['program:systemctl', 'program:systemd-run', 'program:busctl', 'program:loginctl', 'program:reg']
+    plain: 'systemd on Linux (systemctl, systemd-run, busctl, loginctl) and launchd on macOS. On Linux, hc also turns on lingering for the user when it is off. Windows has no service manager here: the Core starts as a detached process.'
+    programs: ['program:systemctl', 'program:systemd-run', 'program:busctl', 'program:loginctl']
   - id: ext:macos-tools
     container: ext-container:os
     feature: platform
-    name: macOS tools
-    plain: 'codesign and ioreg, used to sign the app bundle and read the hardware identity.'
-    programs: ['program:codesign', 'program:ioreg']
+    name: Platform tools
+    plain: 'codesign and ioreg on macOS, to sign the app bundle and read the hardware identity, and reg on Windows, to read the machine id.'
+    programs: ['program:codesign', 'program:ioreg', 'program:reg']
   - id: ext:program
     container: ext-container:programs
     feature: terminals
