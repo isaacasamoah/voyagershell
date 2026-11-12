@@ -43,6 +43,8 @@ view:
     - {id: program, name: Program, plain: the program}
     - {id: remote, name: Other machine, plain: the Core on another machine}
     - {id: os, name: OS, plain: the operating system}
+  runs: 'Each run started a copy of the hc release build in an isolated session (its own runtime, state, config and home folders, so no systemd service or lingering), drove it with a script and small shell programs, and recorded every process''s system calls with strace. A step is seen when the system call its effect needs appears on the expected process and thread.'
+  run_seen: 'steps with an effect outside their own process were seen in the traced system calls. Steps that stay inside one process cannot be seen this way.'
   mechanisms:
     rpc: {short: JSON-RPC call to the Core, long: a JSON-RPC request over the session socket}
     stream: {short: bytes on an attach channel, long: a stream of terminal bytes on its own framed channel}

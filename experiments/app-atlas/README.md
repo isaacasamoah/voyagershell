@@ -85,9 +85,16 @@ python3 trace/analyze.py /some/scratch/NAME --id DATE-NAME --layer apps/voyager/
 
 The driver's coordinates assume the default 1920x1200 display and a new profile. Use an optimized build of the commit you map; steps whose function the optimizer inlined are marked as not visible, not as failed. Voice is not driven: it would open the real microphone and stream audio to OpenAI.
 
+Herdr Core is traced with strace instead of a debugger, because its release build has no symbols. `herdr-drive.sh` runs one scripted session in an isolated Herdr session: a clean environment, `HC_SESSION=atlas`, and private runtime, state, config and home folders under the run folder. A runtime folder other than `/run/user/<uid>` makes Herdr start its Core directly, so it never registers a systemd service or turns on lingering; shims for `systemd-run`, `systemctl` and `loginctl` log any call and fail. The programs are small shell scripts, so no real agent runs. At the end it ends those programs, stops that Core and kills anything of the run still alive. `herdr_analyze.py` matches each step to the system call its effect needs (a frame on a socket, a pseudo-terminal read or write, a process start, a saved file), on the process and thread the step names, and redacts machine and personal identifiers.
+
+```sh
+./trace/herdr-drive.sh /var/tmp/hca-NAME /path/to/herdr-core   # short path: socket paths are limited to 108 bytes
+python3 trace/herdr_analyze.py /var/tmp/hca-NAME --id DATE-NAME --layer apps/herdr-core/layer --out apps/herdr-core/runs/DATE-NAME.json [--plain text] [--finding pathway=text]
+```
+
 ## Limits
 
 - Function-level links come only from traced pathways; there is no call graph.
-- Pathways were traced by reading source. Runs confirm which in-app functions ran and on which thread; script, Core and outside-program steps cannot be seen by the debugger.
+- Pathways were traced by reading source. Voyager runs confirm which in-app functions ran and on which thread; script, Core and outside-program steps cannot be seen by the debugger. Herdr runs confirm steps whose effect leaves their process; steps that stay inside one process cannot be seen.
 - Module links are a lower bound (see the architecture-map README).
 - Feature assignment and every reason are judgements; `inferred: true` marks reasons not stated in code or docs.

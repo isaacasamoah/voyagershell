@@ -1,5 +1,5 @@
 schema: app-atlas/v0
-note: 'Pathways traced by reading Herdr Core source at v0.1.19. Each step names the function, the thread or process it runs on and how it is reached. None was traced at runtime.'
+note: 'Pathways traced by reading Herdr Core source at v0.1.19. Each step names the function, the thread or process it runs on and how it is reached. Eight of the nine were then run in an isolated session under strace (runs/); run-on-machine needs a second machine.'
 pathways:
   - id: run-background
     name: 'Start a program in the background: hc run --bg'
@@ -1067,6 +1067,7 @@ pathways:
             says: 'Every 100 ms the Holder''s supervise thread checks whether a Core is connected. If none has been for HC_HOLDER_GRACE_MS (default 3 s) and it still holds terminals, it calls spawn_core itself, backing off (doubling, at most 60 s) after repeated starts within 5 minutes. A Holder with no terminals exits instead. If both the command and the Holder start a Core, try_lock on core.lock lets one serve and the other exit at once.'
   - id: run-on-machine
     name: 'Run a command on another machine: hc run --on box'
+    not_run: 'Not run. It needs a second machine reachable over SSH, and `hc machine add` installs hc there.'
     trigger: 'A person or agent runs `hc run --on box --cwd /srv/app cargo test` and waits for the result.'
     summary: 'The command makes one terminal.run call to the local Core with on: "box". remote::route sees the machine name and the call is forwarded over the line the Core keeps open to box: an ssh process running `herdr-core connect` there, carrying framed JSON-RPC to box''s Core. Box''s Core starts cargo test in /srv/app, waits until it finishes or the wait times out, and replies with the record and output. The local Core rewrites addresses such as t3 to box/t3 and hands the reply back, and the command prints the output and exits with the program''s exit code.'
     steps:

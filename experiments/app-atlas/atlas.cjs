@@ -369,7 +369,7 @@ function collect(revision, app) {
   }
 
   const entryPoints = (layer.entry_points ?? []).map((entry) => ({ ...entry, at: resolve(entry.at) }));
-  const runs = attachRuns(pathways, app.runsDir, problems);
+  const runs = attachRuns(pathways, app.runsDir, problems, config.view?.run_seen);
   const proposed = buildProposed(layer, modules, moduleIds, [...edgeMap.values()], features, problems);
   const history = buildHistory(app, commit, fileToModule);
   const anchorProblems = Object.values(anchors).filter((anchor) => !["current", "unreviewed"].includes(anchor.status));
@@ -473,7 +473,7 @@ function buildProposed(layer, modules, moduleIds, edges, features, problems) {
 }
 
 // Runtime observations: each pathway shows the run in which most of its steps were seen.
-function attachRuns(pathways, dir, problems) {
+function attachRuns(pathways, dir, problems, seenNote = "steps inside voyager-shell were seen running. Script, Core and outside-program steps cannot be seen by the debugger.") {
   if (!fs.existsSync(dir)) return [];
   const runs = fs.readdirSync(dir).filter((file) => file.endsWith(".json") && !file.endsWith("-core.json")).sort().map((file) => JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")));
   const seenCount = (steps) => Object.values(steps ?? {}).filter((step) => step.seen).length;
@@ -490,7 +490,7 @@ function attachRuns(pathways, dir, problems) {
     const observations = best.steps[pathway.id];
     for (const step of [...pathway.steps, ...pathway.branches.flatMap((branch) => branch.steps)]) if (observations[step.id]) step.observed = { ...observations[step.id], run: best.id };
     const main = pathway.steps.map((step) => observations[step.id]).filter((entry) => entry?.checkable);
-    pathway.run = `Run ${best.id}: ${main.filter((entry) => entry.seen).length} of ${main.length} steps inside voyager-shell were seen running. Script, Core and outside-program steps cannot be seen by the debugger.`;
+    pathway.run = `Run ${best.id}: ${main.filter((entry) => entry.seen).length} of ${main.length} ${seenNote}`;
   }
   return runs.map(({ steps, ...rest }) => rest);
 }
