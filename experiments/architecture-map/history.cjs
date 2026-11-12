@@ -156,14 +156,18 @@ function capital(text) {
 }
 
 function merges(repository, branch, from) {
-  const list = execFileSync("git", ["-C", repository, "rev-list", "--first-parent", "--reverse", `${from}^..${branch}`], { encoding: "utf8" })
+  const list = execFileSync("git", ["-C", repository, "rev-list", "--first-parent", "--reverse", from ? `${from}^..${branch}` : branch], { encoding: "utf8" })
     .trim()
     .split("\n")
     .filter(Boolean);
   return list.map((commit) => {
     const [subject, ...body] = execFileSync("git", ["-C", repository, "log", "-1", "--format=%s%n%b", commit], { encoding: "utf8" }).trim().split("\n");
     const pull = /^Merge pull request #(\d+) from \S+?\/(\S+)/.exec(subject);
-    return { commit, pull: pull ? Number(pull[1]) : null, branch: pull ? pull[2] : null, title: pull ? body.find((line) => line.trim())?.trim() ?? subject : subject };
+    if (pull) return { commit, pull: Number(pull[1]), branch: pull[2], title: body.find((line) => line.trim())?.trim() ?? subject };
+    // A squash merge: one commit whose subject ends with the pull request number.
+    const squash = /^(.*\S)\s+\(#(\d+)\)$/.exec(subject);
+    if (squash) return { commit, pull: Number(squash[2]), branch: null, title: squash[1] };
+    return { commit, pull: null, branch: null, title: subject };
   });
 }
 

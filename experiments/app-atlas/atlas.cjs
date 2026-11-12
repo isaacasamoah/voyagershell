@@ -4,25 +4,44 @@ const { execFileSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { observe } = require("../architecture-map/observe.cjs");
+const { observe, lockReach } = require("../architecture-map/observe.cjs");
 const { merges } = require("../architecture-map/history.cjs");
 const { parse, stringify } = require("../architecture-map/yaml.cjs");
 const { toDocuments, compareDocuments, modelFrom } = require("./format.cjs");
 
-const repository = path.resolve(__dirname, "../..");
-const mapConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "../architecture-map/config.json"), "utf8"));
+const TOOL_ROOT = path.resolve(__dirname, "../..");
+const DEFAULT_APP = path.join(__dirname, "apps", "voyager");
 const LAYER_FILES = ["concepts.yaml", "modules.yaml", "pathways.yaml", "proposals.yaml", "proposed.yaml", "interfaces.yaml"];
 const EXCERPT_BEFORE = 3;
 const EXCERPT_AFTER = 12;
 const FINGERPRINT_LINES = 12;
 
-const git = (args, options = {}) => execFileSync("git", ["-C", repository, ...args], { encoding: "utf8", maxBuffer: 1 << 28, ...options });
+const gitIn = (repository) => (args, options = {}) => execFileSync("git", ["-C", repository, ...args], { encoding: "utf8", maxBuffer: 1 << 28, ...options });
 const digest = (text, size = 12) => crypto.createHash("sha256").update(text).digest("hex").slice(0, size);
 
 function options(argv) {
   const out = { command: argv[0] };
   for (let index = 1; index < argv.length; index += 2) out[argv[index].replace(/^--/, "")] = argv[index + 1];
   return out;
+}
+
+// An app is a folder with atlas.yaml (where the code is, how to read it, how to show it),
+// layer/ (the hand-written meaning) and optionally runs/ (traced runs).
+function loadApp(dir = DEFAULT_APP, overrides = {}) {
+  const root = path.resolve(dir);
+  const config = parse(fs.readFileSync(path.join(root, "atlas.yaml"), "utf8")) ?? {};
+  const source = overrides.source ? path.resolve(overrides.source) : config.source ? path.resolve(root, config.source) : null;
+  if (!source) throw new Error(`${config.name ?? root}: atlas.yaml names no source checkout; pass --source DIR`);
+  const extractor = typeof config.extractor === "string" ? JSON.parse(fs.readFileSync(path.resolve(root, config.extractor), "utf8")) : config.extractor;
+  return {
+    root,
+    config,
+    source,
+    extractor,
+    layerDir: overrides.layer ? path.resolve(overrides.layer) : path.join(root, "layer"),
+    runsDir: path.join(root, "runs"),
+    git: gitIn(source),
+  };
 }
 
 function loadLayer(dir) {
@@ -40,7 +59,7 @@ function loadLayer(dir) {
   return layer;
 }
 
-function sourceReader(commit) {
+function sourceReader(git, commit) {
   const cache = new Map();
   return (file) => {
     if (!cache.has(file)) {
@@ -109,13 +128,15 @@ const CODE_EDGES = new Set(["uses", "imports", "exposes", "embeds", "includes"])
 const BUILD_EDGES = new Set(["generates", "generated_from", "runs"]);
 const RUNTIME_EDGES = new Set(["spawns"]);
 
-function collect(revision, layerDir) {
+function collect(revision, app) {
+  const { git, layerDir, config } = app;
+  const mapConfig = app.extractor;
   const commit = git(["rev-parse", revision]).trim();
-  const observed = observe(repository, commit, mapConfig).observed;
+  const observed = observe(app.source, commit, mapConfig).observed;
   const layer = loadLayer(layerDir);
   const lockFile = path.join(layerDir, "anchors.lock.yaml");
   const lock = fs.existsSync(lockFile) ? parse(fs.readFileSync(lockFile, "utf8"))?.anchors ?? {} : null;
-  const read = sourceReader(commit);
+  const read = sourceReader(git, commit);
   const { anchors, resolve } = anchorResolver(read, lock);
   const problems = [];
 
@@ -125,7 +146,7 @@ function collect(revision, layerDir) {
   const features = layer.features ?? [];
   const featureIds = new Set(features.map((feature) => feature.id));
 
-  const crateAlias = { "pkg:header": "package:desktop/mods/header", "pkg:notes": "package:content/notes", "ts:content/ui.ts": "files:content-ui" };
+  const crateAlias = config.aliases ?? {};
   const crateNotes = new Map((layer.crates ?? []).map((entry) => [crateAlias[entry.id] ?? entry.id, entry]));
   const containers = (layer.containers ?? []).map((base) => {
     const note = crateNotes.get(base.id) ?? {};
@@ -140,7 +161,7 @@ function collect(revision, layerDir) {
   const containerOf = (node) => {
     const override = notes.get(node.id)?.container;
     if (override) return override;
-    if (node.kind === "host-module") return "crate:voyager-desktop";
+    if (node.kind === "host-module" && config.host_modules) return config.host_modules;
     let parent = node.parent;
     while (parent && !containerIds.has(parent)) parent = byId.get(parent)?.parent;
     return parent ?? null;
@@ -247,7 +268,7 @@ function collect(revision, layerDir) {
     if (!node) return null;
     if (node.kind === "program") return (layer.externals ?? []).find((external) => (external.programs ?? []).includes(id))?.id ?? null;
     if (node.kind === "package") return modules.find((module) => module.container === id && /main\.ts$/.test(module.file ?? ""))?.id ?? null;
-    if (node.kind === "artifact" && id === "artifact:contract/generated") return "ts:contract/generated/workspace.ts";
+    if (config.lift?.[id]) return config.lift[id];
     if (node.kind === "runtime-module") return (layer.externals ?? []).find((external) => (external.runtime_modules ?? []).includes(id))?.id ?? null;
     if (node.kind === "dependency") return (layer.externals ?? []).find((external) => (external.crates ?? []).includes(id))?.id ?? null;
     return null;
@@ -265,7 +286,7 @@ function collect(revision, layerDir) {
   // Interfaces: named connections with the shape of what passes and why. Each adds a runtime link
   // between its modules so it can be clicked even where no code reference exists.
   const stepIds = new Set(pathways.flatMap((pathway) => [...pathway.steps, ...pathway.branches.flatMap((branch) => branch.steps)].map((step) => step.id)));
-  const coreRuns = fs.existsSync(path.join(path.dirname(layerDir), "runs")) ? fs.readdirSync(path.join(path.dirname(layerDir), "runs")).filter((file) => file.endsWith("-core.json")).sort().map((file) => JSON.parse(fs.readFileSync(path.join(path.dirname(layerDir), "runs", file), "utf8"))) : [];
+  const coreRuns = fs.existsSync(app.runsDir) ? fs.readdirSync(app.runsDir).filter((file) => file.endsWith("-core.json")).sort().map((file) => JSON.parse(fs.readFileSync(path.join(app.runsDir, file), "utf8"))) : [];
   const interfaces = (layer.interfaces ?? []).map((item) => {
     for (const id of [...(item.from ?? []), ...(item.to ?? [])]) if (!moduleIds.has(id)) problems.push({ kind: "interface-unknown-module", id: `${item.id}:${id}` });
     for (const id of item.steps ?? []) if (!stepIds.has(id)) problems.push({ kind: "interface-unknown-step", id: `${item.id}:${id}` });
@@ -311,9 +332,9 @@ function collect(revision, layerDir) {
   }
 
   const entryPoints = (layer.entry_points ?? []).map((entry) => ({ ...entry, at: resolve(entry.at) }));
-  const runs = attachRuns(pathways, path.join(path.dirname(layerDir), "runs"), problems);
+  const runs = attachRuns(pathways, app.runsDir, problems);
   const proposed = buildProposed(layer, modules, moduleIds, [...edgeMap.values()], features, problems);
-  const history = buildHistory(commit, fileToModule, modules);
+  const history = buildHistory(app, commit, fileToModule);
   const anchorProblems = Object.values(anchors).filter((anchor) => !["current", "unreviewed"].includes(anchor.status));
   return {
     meta: {
@@ -321,6 +342,10 @@ function collect(revision, layerDir) {
       short: commit.slice(0, 7),
       date: git(["log", "-1", "--format=%cs", commit]).trim(),
       repository: mapConfig.repository,
+      app: config.name ?? null,
+      layer: path.relative(TOOL_ROOT, layerDir).split(path.sep).join("/"),
+      proposal: config.proposal ?? null,
+      view: config.view ?? {},
       observedGenerator: observed.provenance.generator,
       counts: { modules: modules.length, functions: functions.size, edges: edgeMap.size, pathways: pathways.length, anchors: Object.keys(anchors).length },
       locked: Boolean(lock),
@@ -431,7 +456,7 @@ function attachRuns(pathways, dir, problems) {
   return runs.map(({ steps, ...rest }) => rest);
 }
 
-function numstat(args) {
+function numstat(git, args) {
   const files = [];
   for (const line of git(args).split("\n")) {
     const match = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line);
@@ -440,14 +465,10 @@ function numstat(args) {
   return files;
 }
 
-function buildHistory(commit, fileToModule, modules) {
-  const containerDirs = [
-    ["app/", "crate:voyager-app"],
-    ["desktop/mods/header/", "package:desktop/mods/header"],
-    ["desktop/", "crate:voyager-desktop"],
-    ["contract/", "crate:voyager-contract"],
-    ["content/notes/", "package:content/notes"],
-  ];
+function buildHistory(app, commit, fileToModule) {
+  const { git } = app;
+  const mapConfig = app.extractor;
+  const containerDirs = (app.config.paths ?? []).map((entry) => [entry.prefix, entry.container]);
   const place = (file) => {
     if (fileToModule.has(file)) return { module: fileToModule.get(file) };
     const container = containerDirs.find(([prefix]) => file.startsWith(prefix));
@@ -455,25 +476,26 @@ function buildHistory(commit, fileToModule, modules) {
   };
   const annotate = (files) => files.map((file) => ({ ...file, ...place(file.path) }));
   const prs = [];
-  for (const merge of merges(repository, commit, mapConfig.history.from)) {
+  if (!mapConfig.history) return { from: null, prs: [] };
+  for (const merge of merges(app.source, commit, mapConfig.history.from)) {
     const parents = git(["rev-list", "--parents", "-n", "1", merge.commit]).trim().split(" ").slice(1);
     const commits = [];
     if (parents.length === 2) {
       const list = git(["log", "--no-merges", "--reverse", "--format=%H%x09%cs%x09%s", `${parents[0]}..${parents[1]}`]).trim().split("\n").filter(Boolean);
       for (const row of list) {
         const [sha, date, subject] = row.split("\t");
-        commits.push({ sha, date, subject, files: annotate(numstat(["show", "--no-renames", "--numstat", "--format=", sha])) });
+        commits.push({ sha, date, subject, files: annotate(numstat(git, ["show", "--no-renames", "--numstat", "--format=", sha])) });
       }
     }
-    const files = parents.length ? annotate(numstat(["diff", "--no-renames", "--numstat", parents[0], merge.commit])) : [];
+    const files = parents.length ? annotate(numstat(git, ["diff", "--no-renames", "--numstat", parents[0], merge.commit])) : [];
     prs.push({ pull: merge.pull, branch: merge.branch, title: merge.title, commit: merge.commit, date: git(["log", "-1", "--format=%cs", merge.commit]).trim(), files, commits });
   }
   return { from: mapConfig.history.from, prs };
 }
 
 // Build = read the code, write the architecture documents, then derive the page model from the documents alone.
-function build(revision, layerDir) {
-  const documents = toDocuments(collect(revision, layerDir));
+function build(revision, app = loadApp()) {
+  const documents = toDocuments(collect(revision, app));
   documents.comparison = documents.intended ? compareDocuments(documents.intended, documents.code) : null;
   return { documents, model: modelFrom(documents) };
 }
@@ -489,17 +511,18 @@ function readDocument(file) {
 function render(model) {
   const template = fs.readFileSync(path.join(__dirname, "view.html"), "utf8");
   const json = JSON.stringify(model).replace(/</g, "\\u003c");
-  return template.replace("/*ATLAS_DATA*/null", () => json);
+  const title = String(model.meta.view?.title ?? (model.meta.app ? `${model.meta.app} atlas` : "App atlas")).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  return template.replace(/<title>[^<]*<\/title>/, () => `<title>${title}</title>`).replace(/(<h1 id="apptitle">)[^<]*(<\/h1>)/, (_, a, b) => `${a}${title}${b}`).replace("/*ATLAS_DATA*/null", () => json);
 }
 
 function main(argv) {
   const args = options(argv);
-  const layerDir = path.resolve(args.layer ?? path.join(__dirname, "layer"));
   const revision = args.rev ?? "HEAD";
+  const app = () => loadApp(args.app ?? DEFAULT_APP, { source: args.source, layer: args.layer });
   const out = path.resolve(args.out ?? path.join(__dirname, "out"));
   if (args.command === "build") {
     fs.mkdirSync(out, { recursive: true });
-    const { documents, model } = build(revision, layerDir);
+    const { documents, model } = build(revision, app());
     writeDocuments(documents, out);
     fs.writeFileSync(path.join(out, "atlas.json"), `${JSON.stringify(model, null, 1)}\n`);
     fs.writeFileSync(path.join(out, "atlas.html"), render(model));
@@ -524,24 +547,25 @@ function main(argv) {
     return;
   }
   if (args.command === "check") {
-    const { model } = build(revision, layerDir);
+    const { model } = build(revision, app());
     for (const problem of model.problems) process.stdout.write(`${JSON.stringify(problem)}\n`);
     process.stdout.write(`${model.meta.counts.anchors} anchors, ${model.problems.length} problem(s) at ${model.meta.short}\n`);
     process.exitCode = model.problems.length ? 1 : 0;
     return;
   }
   if (args.command === "lock") {
-    const { model } = build(revision, layerDir);
+    const target = app();
+    const { model } = build(revision, target);
     const anchors = {};
     for (const anchor of Object.values(model.anchors).sort((a, b) => a.id.localeCompare(b.id))) if (anchor.fingerprint) anchors[anchor.id] = anchor.fingerprint;
-    fs.writeFileSync(path.join(layerDir, "anchors.lock.yaml"), stringify({ schema: "app-atlas/v0", commit: model.meta.commit, note: "Fingerprints of the source under each anchor when the layer was last reviewed. A changed fingerprint marks the claim for review.", anchors }));
+    fs.writeFileSync(path.join(target.layerDir, "anchors.lock.yaml"), stringify({ schema: "app-atlas/v0", commit: model.meta.commit, note: "Fingerprints of the source under each anchor when the layer was last reviewed. A changed fingerprint marks the claim for review.", anchors }));
     process.stdout.write(`${Object.keys(anchors).length} anchors locked at ${model.meta.short}\n`);
     return;
   }
-  process.stderr.write("Usage: node atlas.cjs build|check|lock [--rev REV] [--layer DIR] [--out DIR]\n       node atlas.cjs render --code FILE [--intended FILE] [--comparison FILE] [--out DIR]\n       node atlas.cjs compare --intended FILE --code FILE [--out FILE]\n");
+  process.stderr.write("Usage: node atlas.cjs build|check|lock [--app DIR] [--source DIR] [--rev REV] [--out DIR]\n       node atlas.cjs render --code FILE [--intended FILE] [--comparison FILE] [--out DIR]\n       node atlas.cjs compare --intended FILE --code FILE [--out FILE]\n");
   process.exitCode = 2;
 }
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { build, collect, anchorResolver, loadLayer };
+module.exports = { build, collect, anchorResolver, loadLayer, loadApp };

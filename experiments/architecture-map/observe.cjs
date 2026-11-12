@@ -650,6 +650,7 @@ function observeScopes(snapshot, graph, config) {
 }
 
 function observeTypeScript(snapshot, graph, config) {
+  if (!config.typescript) return null;
   let ts;
   try {
     ts = require(require.resolve("typescript", { paths: [snapshot.repository, process.cwd()] }));

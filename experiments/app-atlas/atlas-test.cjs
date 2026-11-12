@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { build, anchorResolver, loadLayer } = require("./atlas.cjs");
+const { build, anchorResolver, loadLayer, loadApp } = require("./atlas.cjs");
 const { modelFrom, compareDocuments } = require("./format.cjs");
 const { stringify, parse } = require("../architecture-map/yaml.cjs");
 const Ajv = require("ajv");
@@ -36,12 +36,12 @@ test("a reviewed anchor whose code changed is flagged, not trusted", () => {
 });
 
 test("the layer parses with the strict YAML reader", () => {
-  const layer = loadLayer(path.join(__dirname, "layer"));
+  const layer = loadLayer(path.join(__dirname, "apps", "voyager", "layer"));
   assert.ok(layer.concepts.length >= 6);
   assert.ok(layer.pathways.length >= 9);
 });
 
-const built = build(BASE, path.join(__dirname, "layer"));
+const built = build(BASE, loadApp(path.join(__dirname, "apps", "voyager")));
 
 test("the map builds at the baseline with every claim anchored and every module placed", () => {
   const { model } = built;

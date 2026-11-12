@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Voyager Shell atlas</title>
+<title>App atlas</title>
 <style>
 :root {
   --bg: #f7f7f5; --panel: #ffffff; --ink: #1c1d21; --muted: #5d6270; --faint: #8b90a0; --line: #d9dbe1; --line-soft: #e9eaee;
@@ -45,6 +45,7 @@ nav.tabs button[aria-selected="true"], .seg button[aria-pressed="true"] { backgr
 .iconbtn { border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 4px 9px; cursor: pointer; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .toolbar[hidden] { display: none; }
+nav.tabs button[hidden] { display: none; }
 .toolbar label { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .toolbar label[hidden] { display: none; }
 .toolbar select, .toolbar input[type=search] { border: 1px solid var(--line); background: var(--bg); border-radius: 7px; padding: 4px 8px; max-width: 220px; }
@@ -178,7 +179,7 @@ pre.shape { background: var(--code-bg); border-radius: 8px; padding: 8px 10px; f
 </head>
 <body>
 <header class="top">
-  <h1>Voyager Shell atlas</h1>
+  <h1 id="apptitle">App atlas</h1>
   <span class="commit" id="commit"></span>
   <nav class="tabs" role="tablist" aria-label="Views">
     <button role="tab" id="tab-map" aria-selected="true">How it works</button>
@@ -212,7 +213,20 @@ pre.shape { background: var(--code-bg); border-radius: 8px; padding: 8px 10px; f
 <section id="about"><div class="about" id="aboutbody"></div></section>
 <script>
 const DATA = /*ATLAS_DATA*/null;
-const VIA = { call: "function call", channel: "message on a channel", "core-rpc": "request to Herdr Core", "core-stream": "stream from Herdr Core", "script-call": "script and Rust host call", render: "render and paint", process: "starts or signals a process", file: "file read or write", ipc: "message to another process" };
+// What the app calls things comes from its atlas.yaml (carried in the code document as `view`).
+const VIEW = DATA.meta.view ?? {};
+const MECHANISMS = {
+  call: ["function call", "a direct function call"], channel: ["message on a channel", "a message on a queue between threads"],
+  rpc: ["JSON-RPC request", "a JSON-RPC request over a socket"], stream: ["byte stream", "a stream of bytes on its own channel"],
+  "core-rpc": ["request to the core service", "a request to the core service"], "core-stream": ["stream from the core service", "a stream of frames from the core service"],
+  "script-call": ["script and Rust host call", "a call between the script engine and Rust"], render: ["render and paint", "drawing"],
+  process: ["starts or signals a process", "starting another program"], file: ["file read or write", "a file both sides read or write"],
+  ipc: ["message to another process", "messages to another program"], network: ["connection to another machine", "a connection to another machine"],
+  signal: ["operating-system signal", "an operating-system signal"], build: [null, "a build step"],
+};
+for (const [k, v] of Object.entries(VIEW.mechanisms ?? {})) MECHANISMS[k] = [v.short ?? MECHANISMS[k]?.[0] ?? k, v.long ?? MECHANISMS[k]?.[1] ?? k];
+const VIA = Object.fromEntries(Object.entries(MECHANISMS).filter(([, v]) => v[0]).map(([k, v]) => [k, v[0]]));
+const MECH = Object.fromEntries(Object.entries(MECHANISMS).map(([k, v]) => [k, v[1]]));
 const KIND = {
   uses: "Rust code here names functions or types defined there, through a use statement or a path such as crate::core::Viewer.",
   uses_crate: "Uses an external Rust library.",
@@ -224,9 +238,12 @@ const KIND = {
   generates: "Build time: a generator writes the other.", generated_from: "Build time: generated from the other.", runs: "Build time: runs the other.",
   proposed: "A connection the proposed design intends.", build: "Build time: generated from the other.",
 };
-const RUNS = { "ui-thread": "UI thread", "owner-thread": "app owner thread", background: "background thread", script: "script engine", core: "Herdr Core", program: "a program", os: "operating system" };
-const LANES = [{ id: "os", name: "You / OS" }, { id: "ui-thread", name: "UI thread" }, { id: "script", name: "Script (QuickJS)" }, { id: "owner-thread", name: "App owner thread" }, { id: "background", name: "Background thread" }, { id: "core", name: "Herdr Core" }, { id: "program", name: "Program" }];
-const GRID = [["concept:you", "concept:desktop", "concept:app", "concept:core"], [null, "concept:scripts", "concept:contract", "concept:programs"]];
+const LANES = VIEW.lanes?.length ? VIEW.lanes : [{ id: "os", name: "Outside", plain: "outside the app" }, { id: "main", name: "Main thread", plain: "the main thread" }, { id: "background", name: "Background thread", plain: "a background thread" }, { id: "program", name: "Program", plain: "another program" }];
+const RUNS = Object.fromEntries(LANES.map((l) => [l.id, l.plain ?? l.name]));
+const LANE0 = LANES[0].id;
+const GRID = VIEW.grid ?? [];
+const STRIP = (VIEW.strip_prefixes ?? []).map((p) => new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+const stripName = (t) => STRIP.reduce((x, r) => x.replace(r, ""), t);
 const TYPE_NAME = { concept: "concept", container: "crate or package", slice: "feature", module: "module", function: "function" };
 const STATUS = { new: "new", changed: "changes", split: "split up", merged: "merged", moved: "moved", unchanged: "stays as it is" };
 const COMPARE = { matched: "built as planned", changed: "built, needs changes", moved: "code exists elsewhere", missing: "not built yet", unplanned: "not in the plan" };
@@ -272,7 +289,7 @@ function shortName(n) {
 }
 function fullName(n) {
   if (!n) return "";
-  if (n.type === "module" && n.id.startsWith("rs:")) return n.id.slice(3).replace(/^voyager_/, "");
+  if (n.type === "module" && n.id.startsWith("rs:")) return stripName(n.id.slice(3));
   if (n.type === "module" && n.id.startsWith("ts:")) return n.id.slice(3);
   if (n.type === "module" && n.id.startsWith("p:")) return n.id.slice(2);
   if (n.type === "slice") return `${n.data.name} in ${shortName(M.T.get(n.parent))}`;
@@ -328,8 +345,13 @@ function measure(n, depth, out, big) {
 function place(id, x, y, out) { const b = out.get(id); b.x = x; b.y = y; if (!b.leaf) for (const k of b.kids) { const kb = out.get(k); place(k, x + b.pad + kb.rx, y + b.head + b.pad + kb.ry, out); } }
 function topLayout() {
   const out = new Map();
-  for (const c of DATA.concepts) out.set(c.id, { w: LEAF.concept[0], h: LEAF.concept[1], leaf: true });
-  GRID.forEach((row, ri) => row.forEach((id, ci) => { if (id) { const b = out.get(id); b.x = ci * (LEAF.concept[0] + 70); b.y = ri * (LEAF.concept[1] + 60); } }));
+  const concepts = [...M.T.values()].filter((n) => n.type === "concept").map((n) => n.id);
+  for (const id of concepts) out.set(id, { w: LEAF.concept[0], h: LEAF.concept[1], leaf: true });
+  // Concepts the grid does not place follow in rows of four.
+  const rows = GRID.map((row) => row.map((id) => (out.has(id) ? id : null)));
+  const placed = new Set(rows.flat());
+  for (const id of concepts) if (!placed.has(id)) { let row = rows.at(-1); if (!row || row.filter(Boolean).length >= 4 || row.length >= 4) rows.push((row = [])); row.push(id); }
+  rows.forEach((row, ri) => row.forEach((id, ci) => { if (id) { const b = out.get(id); b.x = ci * (LEAF.concept[0] + 70); b.y = ri * (LEAF.concept[1] + 60); } }));
   return out;
 }
 
@@ -693,7 +715,6 @@ function inspectEdge(e) {
   return h;
 }
 const interfaceById = new Map((DATA.interfaces ?? []).map((i) => [i.id, i]));
-const MECH = { call: "a direct function call", channel: "a message on a queue between threads", "core-rpc": "a request to Herdr Core", "core-stream": "a stream of frames from Herdr Core", "script-call": "a call between the script engine and Rust", ipc: "messages to another program", process: "starting another program", file: "a file both sides read or write", render: "drawing", build: "a build step" };
 function shapeBlock(part, label) {
   if (!part) return "";
   return `<div class="lbl">${esc(label)}</div><p class="small">${esc(part.plain ?? "")}</p>${part.shape ? `<pre class="shape">${esc(String(part.shape).trimEnd())}</pre>` : ""}${part.typeAt ? codeBlock(part.typeAt, "Where this shape is defined") : ""}`;
@@ -747,7 +768,7 @@ function inspectFunction(n) {
   return h;
 }
 function pathwayGroups() { const common = DATA.pathways.filter((p) => p.common), other = DATA.pathways.filter((p) => !p.common); return common.length ? [["Most used", common], ["Other pathways", other]] : [["Pathways", other]]; }
-function runSummary(p) { const steps = p.steps.filter((s) => s.observed && s.observed.checkable); if (!steps.length) return p.not_run ? ` <span class="chip">not run yet</span>` : ""; const seen = steps.filter((s) => s.observed.seen).length; return ` <span class="chip seen" title="Steps inside voyager-shell whose function was seen running in a traced run">seen running: ${seen} of ${steps.length}</span>${p.findings?.length ? ` <span class="chip warn">finding</span>` : ""}`; }
+function runSummary(p) { const steps = p.steps.filter((s) => s.observed && s.observed.checkable); if (!steps.length) return p.not_run ? ` <span class="chip">not run yet</span>` : ""; const seen = steps.filter((s) => s.observed.seen).length; return ` <span class="chip seen" title="Steps inside ${esc(VIEW.binary ?? "the app")} whose function was seen running in a traced run">seen running: ${seen} of ${steps.length}</span>${p.findings?.length ? ` <span class="chip warn">finding</span>` : ""}`; }
 function startHere() {
   let h = `<h2>Start here</h2><p class="muted">Click a piece to open it and see what is inside: concepts, then crates and packages, features, modules and functions. Click any line to see what connects two parts, down to the source lines. Dashed boxes around the edge are parts outside the one you opened.</p>`;
   h += `<h3>The pieces</h3><ul class="list">${DATA.concepts.map((c) => `<li>${linkTo(c.id, c.name)}<div class="small muted">${esc(c.plain)}</div></li>`).join("")}</ul>`;
@@ -766,7 +787,7 @@ function startProposed() {
   const c = DATA.comparison;
   if (c) {
     const sum = c.summary;
-    const list = (status) => c.parts.filter((p) => p.status === status).map((p) => `<li><button class="link" data-goproposed="${esc(p.id)}">${esc(p.id.replace(/^(p|rs|ts):/, "").replace(/^voyager_/, ""))}</button></li>`).join("");
+    const list = (status) => c.parts.filter((p) => p.status === status).map((p) => `<li><button class="link" data-goproposed="${esc(p.id)}">${esc(stripName(p.id.replace(/^(p|rs|ts):/, "")))}</button></li>`).join("");
     h += `<h3>Compared with today's code</h3><p class="small">Tick <strong>Compare with code</strong> to colour every part by how far today's code is from the plan, with counts on each box and today's rule-breaking links in red.</p>`;
     h += `<dl class="grid2"><dt>Built as planned</dt><dd>${sum.matched} modules</dd><dt>Built, needs changes</dt><dd>${sum.changed}</dd><dt>Code exists elsewhere</dt><dd>${sum.moved}</dd><dt>Not built yet</dt><dd>${sum.missing}</dd><dt>Not in the plan</dt><dd>${sum.unplanned}</dd><dt>Planned links not in code</dt><dd>${sum.links_missing}</dd><dt>Today's links breaking a rule</dt><dd>${sum.links_breaking_rules}</dd><dt>Interfaces that change shape</dt><dd>${sum.interfaces_changed}, plus ${sum.interfaces_missing} new</dd><dt>Stale claims</dt><dd>${sum.stale}</dd></dl>`;
     for (const [status, title] of [["missing", "Not built yet"], ["moved", "Code exists elsewhere"], ["changed", "Built, needs changes"]]) h += `<details class="code"><summary>${esc(title)}</summary><ul class="list">${list(status)}</ul></details>`;
@@ -832,13 +853,13 @@ function inspectChanges() {
 function drawSequence() {
   const svg = $("seq"); const steps = activeSteps(); if (!steps.length) return;
   const laneW = 196, top = 50, rowH = 62, left = 20;
-  const used = LANES.filter((l) => steps.some((s) => (s.runs_on ?? "os") === l.id) || l.id === "os");
+  const used = LANES.filter((l) => steps.some((s) => (s.runs_on ?? LANE0) === l.id) || l.id === LANE0);
   const x = (lane) => left + used.findIndex((l) => l.id === lane) * laneW + laneW / 2;
   let h = `<defs><marker id="sq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--route)"/></marker></defs><g class="vp">`;
   used.forEach((l, i) => { const cx = left + i * laneW + laneW / 2; h += `<text x="${cx}" y="24" text-anchor="middle" font-size="12.5" font-weight="650">${esc(l.name)}</text><line x1="${cx}" y1="34" x2="${cx}" y2="${top + steps.length * rowH}" stroke="var(--line)" stroke-dasharray="3 4"/>`; });
   steps.forEach((s, i) => {
-    const cx = x(s.runs_on ?? "os"), cy = top + i * rowH + 20;
-    if (i > 0) { const px = x(steps[i - 1].runs_on ?? "os"), py = top + (i - 1) * rowH + 20; h += `<path d="M${px},${py + 16} C${px},${cy - 10} ${cx},${py + 30} ${cx},${cy - 16}" fill="none" stroke="var(--route)" stroke-width="${i === S.step ? 3 : 1.6}" marker-end="url(#sq-arrow)"/><text x="${(px + cx) / 2 + 6}" y="${(py + cy) / 2 + 4}" font-size="10" style="fill:var(--muted)">${esc(VIA[s.via] ?? s.via ?? "")}</text>`; }
+    const cx = x(s.runs_on ?? LANE0), cy = top + i * rowH + 20;
+    if (i > 0) { const px = x(steps[i - 1].runs_on ?? LANE0), py = top + (i - 1) * rowH + 20; h += `<path d="M${px},${py + 16} C${px},${cy - 10} ${cx},${py + 30} ${cx},${cy - 16}" fill="none" stroke="var(--route)" stroke-width="${i === S.step ? 3 : 1.6}" marker-end="url(#sq-arrow)"/><text x="${(px + cx) / 2 + 6}" y="${(py + cy) / 2 + 4}" font-size="10" style="fill:var(--muted)">${esc(VIA[s.via] ?? s.via ?? "")}</text>`; }
     const label = s.fn ?? s.module; const w = Math.min(laneW - 10, Math.max(90, label.length * 6.6 + 36)); const seen = s.observed?.seen;
     h += `<g class="leaf${i === S.step ? " sel" : ""}" data-step="${i}" tabindex="0" role="button" aria-label="Step ${i + 1}: ${esc(label)}"><rect class="body" x="${cx - w / 2}" y="${cy - 16}" width="${w}" height="32" rx="8" fill="color-mix(in srgb, ${conceptColour(s.module)} 14%, var(--panel))" stroke="${seen ? "var(--seen)" : conceptColour(s.module)}" stroke-width="${seen ? 2.2 : 1}"/><circle cx="${cx - w / 2 + 14}" cy="${cy}" r="9" style="fill:var(--route)"/><text x="${cx - w / 2 + 14}" y="${cy + 4}" text-anchor="middle" font-size="10" font-weight="700" style="fill:var(--bg)">${i + 1}</text><text x="${cx - w / 2 + 28}" y="${cy + 4}" font-size="11.5" class="mono">${esc(label.length > 23 ? label.slice(0, 22) + "…" : label)}</text><title>${esc(s.says)}</title></g>`;
   });
@@ -861,7 +882,7 @@ function render() {
   if (S.tab === "about") return renderAbout();
   M = MODELS[S.tab === "proposed" ? "proposed" : "map"];
   const isMap = S.tab === "map";
-  $("pathway-wrap").hidden = !isMap; $("pr-wrap").hidden = !isMap; $("commit-wrap").hidden = !isMap || !S.pr; $("today-wrap").hidden = isMap;
+  $("pathway-wrap").hidden = !isMap; $("pr-wrap").hidden = !isMap || !DATA.history.prs.length; $("commit-wrap").hidden = !isMap || !S.pr; $("today-wrap").hidden = isMap;
   $("pathway").value = S.pathway ?? ""; $("pr").value = S.pr; $("today").checked = S.today;
   renderCrumbs();
   const seq = isMap && S.pathway && S.seq;
@@ -942,18 +963,22 @@ function commonAncestor(ids) {
 function renderAbout() {
   const m = DATA.meta; const statusCount = {}; for (const a of Object.values(DATA.anchors)) statusCount[a.status] = (statusCount[a.status] ?? 0) + 1;
   let h = `<h2 style="margin-top:0">About this map</h2><p>Generated from <code>${esc(m.commit)}</code> (${esc(m.date)}) of <a href="${esc(m.repository)}" target="_blank" rel="noopener">${esc(m.repository.replace("https://", ""))}</a>.</p>`;
+  const layer = m.layer ?? "layer";
+  const appDir = layer.replace(/\/layer$/, "");
   h += `<h2>What is generated and what is written by hand</h2><table><tr><th>Part</th><th>Source</th><th>How it stays true</th></tr>
-  <tr><td>Crates, modules, scripts and the code links between them (${m.counts.modules} modules)</td><td>The architecture-map extractor, rules ${esc(m.observedGenerator.rules)}</td><td>Regenerated from the commit every build.</td></tr>
-  <tr><td>Pull requests and commits</td><td>Git history since <code>${esc(DATA.history.from)}</code></td><td>Regenerated every build.</td></tr>
-  <tr><td>Concepts, features, descriptions, entry points, reasons, pathways, proposals and the proposed architecture</td><td><code>experiments/app-atlas/layer/*.yaml</code></td><td>Every claim points at source text. The build finds each line again and flags any that moved or changed.</td></tr>
-  <tr><td>Interfaces: what each connection carries and why</td><td><code>experiments/app-atlas/layer/interfaces.yaml</code></td><td>Field names come from the code; each shape links to where it is defined.</td></tr>
-  <tr><td>Real messages to Herdr Core</td><td>Bytes recorded during traced runs, decoded by <code>trace/decode_core.py</code> into <code>runs/*-core.json</code>, with personal paths and names removed</td><td>Each example names its run.</td></tr>
-  <tr><td>"Seen running" marks on pathway steps</td><td>Runs of the real app under a debugger in a private display, summarised in <code>experiments/app-atlas/runs/</code></td><td>Each run records the binary and commit it used.</td></tr></table>`;
+  <tr><td>Crates, modules, scripts and the code links between them (${m.counts.modules} modules)</td><td>The architecture-map extractor, rules ${esc(m.observedGenerator.rules)}</td><td>Regenerated from the commit every build.</td></tr>`;
+  if (DATA.history.prs.length) h += `<tr><td>Pull requests and commits</td><td>Git history${DATA.history.from ? ` since <code>${esc(DATA.history.from)}</code>` : ""}</td><td>Regenerated every build.</td></tr>`;
+  h += `<tr><td>Concepts, features, descriptions, entry points, reasons and pathways${DATA.proposed ? ", proposals and the intended architecture" : ""}</td><td><code>${esc(layer)}/*.yaml</code></td><td>Every claim points at source text. The build finds each line again and flags any that moved or changed.</td></tr>`;
+  if (DATA.interfaces.length) h += `<tr><td>Interfaces: what each connection carries and why</td><td><code>${esc(layer)}/interfaces.yaml</code></td><td>Field names come from the code; each shape links to where it is defined.</td></tr>`;
+  if (DATA.coreRuns.length) h += `<tr><td>${esc(VIEW.recorded_messages ?? "Recorded messages")}</td><td>Bytes recorded during traced runs, decoded into <code>${esc(appDir)}/runs/*-core.json</code>, with personal paths and names removed</td><td>Each example names its run.</td></tr>`;
+  if (DATA.runs.length) h += `<tr><td>"Seen running" marks on pathway steps</td><td>Runs of the real app under a debugger, summarised in <code>${esc(appDir)}/runs/</code></td><td>Each run records the binary and commit it used.</td></tr>`;
+  h += `</table>`;
   h += `<h2>Source anchors</h2><p>${Object.keys(DATA.anchors).length} anchors: ${Object.entries(statusCount).map(([k, v]) => `${v} ${esc(k)}`).join(", ")}.</p>`;
   h += DATA.problems.length ? `<table><tr><th>Problem</th><th>Where</th></tr>${DATA.problems.map((p) => `<tr><td>${esc(p.kind)}</td><td><code>${esc(p.id)}</code></td></tr>`).join("")}</table>` : `<p>No problems: every anchor resolved to exactly one line, and every module has a feature.</p>`;
-  if (DATA.runs?.length) h += `<h2>Traced runs</h2><p>Each run started the real app on a private X display under a debugger, with its own profile and its own Herdr Core session, drove it with simulated input, then quit it and stopped only that Core session. Breakpoints never pause the app; each one records the function and the thread it ran on.</p><table><tr><th>Run</th><th>What it did</th><th>Binary</th></tr>${DATA.runs.map((r) => `<tr><td>${esc(r.id)}<br><span class="muted">${esc(r.date ?? "")}</span></td><td>${esc(r.plain ?? "")}${(r.findings ?? []).map((f) => `<p class="small"><strong>Finding:</strong> ${esc(f.plain)}</p>`).join("")}</td><td><code>${esc((r.binary_sha256 ?? "").slice(0, 12))}</code> ${esc(r.binary_note ?? "")}</td></tr>`).join("")}</table>`;
+  if (DATA.runs?.length) h += `<h2>Traced runs</h2><p>${esc(VIEW.runs ?? "Each run started the real app under a debugger and recorded which functions ran, and on which thread.")}</p><table><tr><th>Run</th><th>What it did</th><th>Binary</th></tr>${DATA.runs.map((r) => `<tr><td>${esc(r.id)}<br><span class="muted">${esc(r.date ?? "")}</span></td><td>${esc(r.plain ?? "")}${(r.findings ?? []).map((f) => `<p class="small"><strong>Finding:</strong> ${esc(f.plain)}</p>`).join("")}</td><td><code>${esc((r.binary_sha256 ?? "").slice(0, 12))}</code> ${esc(r.binary_note ?? "")}</td></tr>`).join("")}</table>`;
   h += `<h2>Limits</h2><ul><li>Function-level links come only from traced pathways. There is no full call graph.</li><li>"Seen running" means the step's function ran during a traced run, on the thread shown. The optimizer inlines some functions, which then cannot be seen this way; those steps say so.</li><li>Module links are a lower bound: the extractor reads Rust with patterns.</li><li>Feature grouping and every reason are judgements. Reasons not stated in code or docs are marked inferred.</li><li>The proposed architecture is a design, not built code.</li></ul>`;
-  h += `<h2>Rebuild</h2><pre class="src"><span class="l">  node experiments/app-atlas/atlas.cjs build --rev ${esc(m.short)}</span><span class="l">  node experiments/app-atlas/atlas.cjs check --rev HEAD</span></pre>`;
+  const appArg = appDir ? ` --app ${appDir}` : "";
+  h += `<h2>Rebuild</h2><pre class="src"><span class="l">  node experiments/app-atlas/atlas.cjs build${esc(appArg)} --rev ${esc(m.short)}</span><span class="l">  node experiments/app-atlas/atlas.cjs check${esc(appArg)} --rev HEAD</span></pre>`;
   $("aboutbody").innerHTML = h; writeHash();
 }
 
@@ -1023,6 +1048,9 @@ document.addEventListener("keydown", (e) => {
 });
 function fillCommits() { const pr = DATA.history.prs.find((p) => String(p.pull ?? p.commit) === S.pr); $("commitsel").innerHTML = `<option value="">All ${pr?.commits.length ?? 0} commits together</option>` + (pr?.commits ?? []).slice().reverse().map((c) => `<option value="${esc(c.sha)}">${esc(c.date)} · ${esc(c.subject.slice(0, 70))}</option>`).join(""); $("commitsel").value = S.commit; }
 function init() {
+  if (!DATA.proposed) $("tab-proposed").hidden = true;
+  else if (DATA.meta.intended?.tab) $("tab-proposed").textContent = DATA.meta.intended.tab;
+  if (!DATA.proposals.length) $("tab-proposals").hidden = true;
   $("commit").textContent = `${DATA.meta.short} · ${DATA.meta.date}`;
   $("pathway").innerHTML = `<option value="">None</option>` + pathwayGroups().map(([label, list]) => `<optgroup label="${esc(label)}">${list.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</optgroup>`).join("");
   $("pathway").addEventListener("change", (e) => { S.pathway = e.target.value || null; S.step = 0; S.branch = null; S.sel = null; S._refit = Date.now(); render(); });

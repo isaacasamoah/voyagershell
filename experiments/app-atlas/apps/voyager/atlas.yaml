@@ -1,0 +1,52 @@
+schema: app-atlas/config-v0
+note: 'Everything the atlas needs to know about Voyager Shell that is not in its layer: where the code is, how the extractor reads it, and how the page names and lays out its parts.'
+
+name: Voyager Shell
+# The git checkout to read, relative to this file. --source overrides it.
+source: ../../../..
+# The architecture-map extractor settings, shared with experiments/architecture-map.
+extractor: ../../../architecture-map/config.json
+
+# Layer ids that name a generated node differently.
+aliases:
+  'pkg:header': 'package:desktop/mods/header'
+  'pkg:notes': 'package:content/notes'
+  'ts:content/ui.ts': 'files:content-ui'
+# Host modules have no file of their own; they belong to the crate that registers them.
+host_modules: 'crate:voyager-desktop'
+# Generated nodes that stand for one module in the map.
+lift:
+  'artifact:contract/generated': 'ts:contract/generated/workspace.ts'
+# Where a changed file belongs when it is in no module (pull-request history).
+paths:
+  - {prefix: app/, container: 'crate:voyager-app'}
+  - {prefix: desktop/mods/header/, container: 'package:desktop/mods/header'}
+  - {prefix: desktop/, container: 'crate:voyager-desktop'}
+  - {prefix: contract/, container: 'crate:voyager-contract'}
+  - {prefix: content/notes/, container: 'package:content/notes'}
+
+# The intended architecture written in layer/proposed.yaml.
+proposal:
+  title: 'Proposed architecture after the twelve steps of the 11 November review'
+  tab: Proposed architecture
+
+view:
+  title: Voyager Shell atlas
+  binary: voyager-shell
+  grid:
+    - ['concept:you', 'concept:desktop', 'concept:app', 'concept:core']
+    - [null, 'concept:scripts', 'concept:contract', 'concept:programs']
+  strip_prefixes: [voyager_]
+  lanes:
+    - {id: os, name: You / OS, plain: operating system}
+    - {id: ui-thread, name: UI thread, plain: UI thread}
+    - {id: script, name: Script (QuickJS), plain: script engine}
+    - {id: owner-thread, name: App owner thread, plain: app owner thread}
+    - {id: background, name: Background thread, plain: background thread}
+    - {id: core, name: Herdr Core, plain: Herdr Core}
+    - {id: program, name: Program, plain: a program}
+  mechanisms:
+    core-rpc: {short: request to Herdr Core, long: a request to Herdr Core}
+    core-stream: {short: stream from Herdr Core, long: a stream of frames from Herdr Core}
+  runs: 'Each run started the real app on a private X display under a debugger, with its own profile and its own Herdr Core session, drove it with simulated input, then quit it and stopped only that Core session. Breakpoints never pause the app; each one records the function and the thread it ran on.'
+  recorded_messages: Real messages to Herdr Core

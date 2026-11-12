@@ -20,7 +20,8 @@ function toDocuments(model) {
   const code = {
     schema: "architecture/v1",
     kind: "code",
-    source: { ...source, producer: "experiments/app-atlas (facts from experiments/architecture-map, meaning from layer/*.yaml, runtime from runs/)", extractor: model.meta.observedGenerator },
+    source: { ...source, app: model.meta.app ?? undefined, layer: model.meta.layer ?? undefined, producer: "experiments/app-atlas (facts from experiments/architecture-map, meaning from the app's layer/*.yaml, runtime from its runs/)", extractor: model.meta.observedGenerator },
+    view: model.meta.view ?? {},
     levels: LEVELS,
     features: model.features,
     parts: partsOf(model, model.modules, model.functions),
@@ -44,7 +45,7 @@ function toDocuments(model) {
   const intended = {
     schema: "architecture/v1",
     kind: "intended",
-    source: { producer: "experiments/app-atlas/layer/proposed.yaml", based_on: source, title: "Proposed architecture after the twelve steps of the 11 November review" },
+    source: { producer: `${model.meta.layer ?? "layer"}/proposed.yaml`, based_on: source, title: model.meta.proposal?.title ?? "Proposed architecture", tab: model.meta.proposal?.tab ?? "Proposed architecture" },
     levels: LEVELS,
     features: [...model.proposed.features, ...model.features],
     parts: partsOf(model, modules, model.functions.filter((fn) => modules.some((module) => module.id === fn.module))),
@@ -164,6 +165,8 @@ function modelFrom({ code, intended, comparison }) {
   const model = {
     meta: {
       commit: code.source.commit, short: code.source.short, date: code.source.date, repository: code.source.repository,
+      app: code.source.app ?? null, layer: code.source.layer ?? null, view: code.view ?? {},
+      intended: intended ? { title: intended.source?.title ?? null, tab: intended.source?.tab ?? null } : null,
       observedGenerator: code.source.extractor ?? {},
       counts: { modules: of(code, "module").length, functions: of(code, "function").length, edges: code.links.length, pathways: (code.pathways ?? []).length, anchors: Object.keys(code.anchors ?? {}).length },
     },
