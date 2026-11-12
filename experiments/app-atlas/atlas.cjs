@@ -10,7 +10,7 @@ const { parse, stringify } = require("../architecture-map/yaml.cjs");
 
 const repository = path.resolve(__dirname, "../..");
 const mapConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "../architecture-map/config.json"), "utf8"));
-const LAYER_FILES = ["concepts.yaml", "modules.yaml", "pathways.yaml", "proposals.yaml"];
+const LAYER_FILES = ["concepts.yaml", "modules.yaml", "pathways.yaml", "proposals.yaml", "proposed.yaml"];
 const EXCERPT_BEFORE = 3;
 const EXCERPT_AFTER = 12;
 const FINGERPRINT_LINES = 12;
@@ -228,13 +228,15 @@ function build(revision, layerDir) {
 
   // Edges at module level: generated relationships plus runtime hops from the layer and from pathways.
   const edgeMap = new Map();
-  const addEdge = (from, to, category, kind, detail) => {
+  const addEdge = (from, to, category, kind, detail = {}) => {
     if (!from || !to || from === to || !moduleIds.has(from) || !moduleIds.has(to)) return;
     const key = `${category}|${from}|${to}`;
-    const edge = edgeMap.get(key) ?? { from, to, category, kinds: [], count: 0, details: [] };
+    const edge = edgeMap.get(key) ?? { from, to, category, kinds: [], count: 0, evidence: [], hops: [], notes: [] };
     if (!edge.kinds.includes(kind)) edge.kinds.push(kind);
-    edge.count += detail?.count ?? 1;
-    if (detail?.label && edge.details.length < 6 && !edge.details.some((item) => item.label === detail.label)) edge.details.push(detail);
+    edge.count += detail.count ?? 1;
+    for (const item of detail.evidence ?? []) if (edge.evidence.length < 8) edge.evidence.push({ kind, ...item });
+    if (detail.hop) edge.hops.push(detail.hop);
+    if (detail.note && !edge.notes.some((note) => note.plain === detail.note.plain)) edge.notes.push(detail.note);
     edgeMap.set(key, edge);
   };
   const lift = (id) => {
@@ -253,16 +255,15 @@ function build(revision, layerDir) {
     if (!category) continue;
     const from = lift(edge.from);
     const to = lift(edge.to);
-    const evidence = edge.evidence?.[0];
-    addEdge(from, to, category, edge.kind, { count: edge.occurrences ?? 1, label: evidence ? `${evidence.path}:${evidence.line}` : null, text: evidence?.text });
+    addEdge(from, to, category, edge.kind, { count: edge.occurrences ?? 1, evidence: (edge.evidence ?? []).slice(0, 3).map((item) => ({ path: item.path, line: item.line, text: item.text })) });
   }
   for (const runtime of layer.runtime ?? []) {
-    addEdge(runtime.from, runtime.to, "runtime", runtime.via, { label: runtime.plain, at: resolve(runtime.at) });
+    addEdge(runtime.from, runtime.to, "runtime", runtime.via, { note: { plain: runtime.plain, at: resolve(runtime.at) } });
   }
   for (const pathway of pathways) {
     const walk = (steps) => {
       for (let index = 1; index < steps.length; index += 1) {
-        addEdge(steps[index - 1].module, steps[index].module, "runtime", steps[index].via, { label: `${pathway.name}, step ${index + 1}` });
+        addEdge(steps[index - 1].module, steps[index].module, "runtime", steps[index].via, { hop: { pathway: pathway.id, step: index } });
       }
     };
     walk(pathway.steps);
@@ -291,6 +292,8 @@ function build(revision, layerDir) {
   }
 
   const entryPoints = (layer.entry_points ?? []).map((entry) => ({ ...entry, at: resolve(entry.at) }));
+  const runs = attachRuns(pathways, path.join(path.dirname(layerDir), "runs"), problems);
+  const proposed = buildProposed(layer, modules, moduleIds, [...edgeMap.values()], features, problems);
   const history = buildHistory(commit, fileToModule, modules);
   const anchorProblems = Object.values(anchors).filter((anchor) => !["current", "unreviewed"].includes(anchor.status));
   return {
@@ -314,11 +317,97 @@ function build(revision, layerDir) {
     proposals,
     glossary: layer.glossary ?? [],
     entryPoints,
+    proposed,
+    runs,
     reading: layer.reading ?? [],
     history,
     anchors,
     problems: [...problems, ...anchorProblems.map((anchor) => ({ kind: `anchor-${anchor.status}`, id: `${anchor.path}#${anchor.find}` }))],
   };
+}
+
+// The architecture after the proposals: proposed modules replace the current modules they claim;
+// unclaimed modules stay. Today's links are redrawn between the new homes and checked against the rules.
+function buildProposed(layer, modules, moduleIds, edges, features, problems) {
+  const entries = layer.proposed_modules ?? [];
+  if (!entries.length) return null;
+  const byId = new Map(modules.map((module) => [module.id, module]));
+  const home = new Map();
+  const changes = new Map();
+  for (const entry of entries) if (byId.has(entry.id) && !entry.container) changes.set(entry.id, entry);
+  const created = entries.filter((entry) => !changes.has(entry.id));
+  const primaries = new Set(created.flatMap((entry) => entry.primary ?? []));
+  for (const entry of created) {
+    for (const source of entry.from ?? []) {
+      if (!moduleIds.has(source)) problems.push({ kind: "proposed-unknown-source", id: entry.id, source });
+      if ((entry.primary ?? []).includes(source)) home.set(source, entry.id);
+    }
+  }
+  for (const entry of created) for (const source of entry.from ?? []) if (!home.has(source) && primaries.has(source)) home.set(source, entry.id);
+  const featureIds = new Set([...features.map((feature) => feature.id), ...(layer.proposed_features ?? []).map((feature) => feature.id)]);
+  const out = [];
+  for (const module of modules) {
+    if (primaries.has(module.id)) continue;
+    const change = changes.get(module.id);
+    out.push({ ...module, status: change?.status ?? "unchanged", plain: change?.plain ?? module.plain, proposals: change?.proposals ?? [], from: [module.id], current: module.id });
+  }
+  for (const entry of entries) {
+    if (changes.has(entry.id)) continue;
+    if (!featureIds.has(entry.feature)) problems.push({ kind: "proposed-unknown-feature", id: entry.id, feature: entry.feature });
+    out.push({ id: entry.id, kind: "proposed", name: entry.name, container: entry.container, feature: entry.feature, status: entry.status, plain: entry.plain, proposals: entry.proposals ?? [], from: entry.from ?? [], primary: entry.primary ?? [], size: (entry.from ?? []).filter((source) => (entry.primary ?? []).includes(source)).reduce((sum, source) => sum + (byId.get(source)?.size ?? 0), 0) || null });
+  }
+  for (const module of out) module.slice = `fs:${module.container}|${module.feature ?? "unassigned"}`;
+  const ids = new Set(out.map((module) => module.id));
+  const mapTo = (id) => (ids.has(id) ? id : home.get(id) ?? null);
+  const rules = layer.proposed_rules ?? [];
+  const starts = (id, list) => (list ?? []).some((prefix) => id.startsWith(prefix));
+  const broken = (from, to, category) => category === "build" ? [] : rules.filter((rule) => starts(from, rule.from) && starts(to, rule.to) && !starts(to, rule.except_to) && !starts(from, rule.except_from)).map((rule) => rule.id);
+  const edgeMap = new Map();
+  for (const edge of layer.proposed_edges ?? []) {
+    if (!ids.has(edge.from) || !ids.has(edge.to)) {
+      problems.push({ kind: "proposed-edge-endpoint", id: `${edge.from}->${edge.to}` });
+      continue;
+    }
+    edgeMap.set(`proposed|${edge.from}|${edge.to}`, { from: edge.from, to: edge.to, category: edge.kind === "build" ? "build" : "proposed", kinds: [edge.kind ?? "proposed"], count: 1, nature: edge.nature, breaks: broken(edge.from, edge.to, edge.kind === "build" ? "build" : "proposed"), today: [] });
+  }
+  for (const edge of edges) {
+    if (edge.category === "build") continue;
+    const from = mapTo(edge.from);
+    const to = mapTo(edge.to);
+    if (!from || !to || from === to) continue;
+    const key = `today|${from}|${to}`;
+    const item = edgeMap.get(key) ?? { from, to, category: "today", kinds: [], count: 0, breaks: broken(from, to, "today"), today: [] };
+    item.count += edge.count;
+    for (const kind of edge.kinds) if (!item.kinds.includes(kind)) item.kinds.push(kind);
+    if (item.today.length < 12) item.today.push({ from: edge.from, to: edge.to, kinds: edge.kinds, count: edge.count });
+    edgeMap.set(key, item);
+  }
+  const homes = {};
+  for (const module of modules) homes[module.id] = mapTo(module.id) ?? module.id;
+  return { features: layer.proposed_features ?? [], modules: out, edges: [...edgeMap.values()], rules, homes };
+}
+
+// Runtime observations: each pathway shows the run in which most of its steps were seen.
+function attachRuns(pathways, dir, problems) {
+  if (!fs.existsSync(dir)) return [];
+  const runs = fs.readdirSync(dir).filter((file) => file.endsWith(".json")).sort().map((file) => JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")));
+  const seenCount = (steps) => Object.values(steps ?? {}).filter((step) => step.seen).length;
+  for (const pathway of pathways) {
+    const candidates = runs.filter((run) => run.steps[pathway.id]);
+    const ids = new Set([...pathway.steps, ...pathway.branches.flatMap((branch) => branch.steps)].map((step) => step.id));
+    for (const run of candidates) for (const id of Object.keys(run.steps[pathway.id])) if (!ids.has(id)) problems.push({ kind: "run-unknown-step", id: `${run.id}:${id}` });
+    pathway.findings = runs.flatMap((run) => (run.findings ?? []).filter((finding) => finding.pathway === pathway.id).map((finding) => ({ ...finding, run: run.id })));
+    if (!candidates.length) {
+      if (pathway.not_run) pathway.run = pathway.not_run;
+      continue;
+    }
+    const best = candidates.reduce((a, b) => (seenCount(b.steps[pathway.id]) > seenCount(a.steps[pathway.id]) ? b : a));
+    const observations = best.steps[pathway.id];
+    for (const step of [...pathway.steps, ...pathway.branches.flatMap((branch) => branch.steps)]) if (observations[step.id]) step.observed = { ...observations[step.id], run: best.id };
+    const main = pathway.steps.map((step) => observations[step.id]).filter((entry) => entry?.checkable);
+    pathway.run = `Run ${best.id}: ${main.filter((entry) => entry.seen).length} of ${main.length} steps inside voyager-shell were seen running. Script, Core and outside-program steps cannot be seen by the debugger.`;
+  }
+  return runs.map(({ steps, ...rest }) => rest);
 }
 
 function numstat(args) {

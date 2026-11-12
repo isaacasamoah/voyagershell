@@ -1,0 +1,368 @@
+schema: app-atlas/v0
+note: 'The proposed architecture after all twelve steps of the 11 November review. Nothing here is implemented or accepted. A proposed module lists the current modules its code comes from; a current module that no proposed module claims stays where it is. The build checks every listed module exists, and redraws today''s links between the new homes so rule breaks show.'
+
+proposed_features:
+  - id: request-pipeline
+    name: Request pipeline
+    plain: 'One path every request takes through the owner thread: admit, authorize, plan, apply, save, record.'
+
+proposed_modules:
+  # --- app crate: the request pipeline -------------------------------------------------
+  - id: 'p:app::api::facade'
+    container: 'crate:voyager-app'
+    feature: request-pipeline
+    name: api::facade
+    status: changed
+    plain: 'The only public door into the app crate. The desktop and agent tools call these functions; every other module becomes private to the crate.'
+    from: ['rs:voyager_app']
+    primary: ['rs:voyager_app']
+    proposals: [facade]
+  - id: 'p:app::api::catalogue'
+    container: 'crate:voyager-app'
+    feature: request-pipeline
+    name: api::catalogue
+    status: new
+    plain: 'Every operation described once: its name, request and result types, limits and which gates apply. The script bridge, its TypeScript declarations and the agent tool list are generated from it.'
+    from: ['rs:voyager_app::administrator']
+    proposals: [catalogue]
+  - id: 'p:app::api::owner'
+    container: 'crate:voyager-app'
+    feature: request-pipeline
+    name: api::owner
+    status: split
+    plain: 'The queue and the single owner thread, now short: it takes each request and runs it through the six stages in order.'
+    from: ['rs:voyager_app::client']
+    primary: ['rs:voyager_app::client']
+    proposals: [pipeline, families]
+  - id: 'p:app::api::admit'
+    container: 'crate:voyager-app'
+    feature: request-pipeline
+    name: api::admit
+    status: new
+    plain: 'Stage one, written once: request id shape, collisions between kinds of request, quitting and Voyage-closing gates.'
+    from: ['rs:voyager_app::client']
+    proposals: [pipeline]
+  - id: 'p:app::api::ledger'
+    container: 'crate:voyager-app'
+    feature: request-pipeline
+    name: api::ledger
+    status: new
+    plain: 'One list of seen request ids and their outcomes, replacing the five receipt lists. A repeated id gets its stored outcome back.'
+    from: ['rs:voyager_app::client']
+    proposals: [pipeline]
+  - id: 'p:app::api::outcome'
+    container: 'crate:voyager-app'
+    feature: request-pipeline
+    name: api::outcome
+    status: new
+    plain: 'Maps every result to applied, refused or uncertain once, with the messages people read. No caller flattens refused and uncertain together any more.'
+    from: ['rs:voyager_app::client']
+    proposals: [pipeline]
+  # --- app crate: rules, state and families --------------------------------------------
+  - id: 'p:app::policy'
+    container: 'crate:voyager-app'
+    feature: context-docking
+    name: policy
+    status: moved
+    plain: 'Stage two: one authorize function for every kind of request, using the context captured when the request was sent.'
+    from: ['rs:voyager_app::scope']
+    primary: ['rs:voyager_app::scope']
+    proposals: [pipeline]
+  - id: 'p:app::storage'
+    container: 'crate:voyager-app'
+    feature: workspace-layout
+    name: storage
+    status: new
+    plain: 'Stage five: reads and writes the layout document in Core, owns its name and version, and any future migration.'
+    from: ['rs:voyager_app::client']
+    proposals: [pipeline, facade]
+  - id: 'p:app::projection'
+    container: 'crate:voyager-app'
+    feature: workspace-layout
+    name: projection
+    status: new
+    plain: 'Answers read operations with decisions already made, such as default names and the list of agent programs, so scripts stop copying rules.'
+    from: []
+    proposals: [projections]
+  - id: 'p:app::content::registry'
+    container: 'crate:voyager-app'
+    feature: content-model
+    name: content::registry
+    status: changed
+    plain: 'The content types and what each can do (has a Core program, can be saved, can be renamed). Generic code asks the registry instead of naming types.'
+    from: ['rs:voyager_app::content::description']
+    primary: ['rs:voyager_app::content::description']
+    proposals: [content-registry, vocabulary]
+  - id: 'p:app::content::service'
+    container: 'crate:voyager-app'
+    feature: content-model
+    name: content::service
+    status: changed
+    plain: 'Type-neutral content requests (read, update, subscribe) behind the pipeline.'
+    from: ['rs:voyager_app::content']
+    primary: ['rs:voyager_app::content']
+    proposals: [content-registry]
+  - id: 'p:app::content::packages'
+    container: 'crate:voyager-app'
+    feature: content-model
+    name: content::packages
+    status: changed
+    plain: 'One installer for profile packages: seeds once, records shipped hashes, and updates only files you have not edited.'
+    from: ['rs:voyager_app::content::package']
+    primary: ['rs:voyager_app::content::package']
+    proposals: [packages]
+  - id: 'p:app::content::notes'
+    container: 'crate:voyager-app'
+    feature: notes
+    name: content::notes
+    status: new
+    plain: 'Notes as one content type module: its plan and effect, Markdown files, views and the save lease, out of the owner thread.'
+    from: ['rs:voyager_app::content::markdown', 'rs:voyager_app::content::view', 'rs:voyager_app::client']
+    primary: ['rs:voyager_app::content::markdown', 'rs:voyager_app::content::view']
+    proposals: [content-registry]
+  - id: 'p:app::terminal'
+    container: 'crate:voyager-app'
+    feature: terminals
+    name: terminal
+    status: new
+    plain: 'The terminal family: start markers, one-time start permission, unconfirmed starts, attachments and ended shells.'
+    from: ['rs:voyager_app::terminal_lifecycle', 'rs:voyager_app::client']
+    primary: ['rs:voyager_app::terminal_lifecycle']
+    proposals: [families]
+  - id: 'p:app::process'
+    container: 'crate:voyager-app'
+    feature: agents
+    name: process
+    status: changed
+    plain: 'The process family behind the pipeline: list and stop programs, checked against Core''s live record.'
+    from: ['rs:voyager_app::process', 'rs:voyager_app::client']
+    primary: ['rs:voyager_app::process']
+    proposals: [families]
+  - id: 'p:app::observe'
+    container: 'crate:voyager-app'
+    feature: agents
+    name: observe
+    status: merged
+    plain: 'Facts derived from Core: what each program reports it is doing, its folder and name. Fed by Core events instead of a 3-second poll.'
+    from: ['rs:voyager_app::observation', 'rs:voyager_app::activity']
+    primary: ['rs:voyager_app::observation', 'rs:voyager_app::activity']
+    proposals: [projections]
+  - id: 'p:app::worktree'
+    container: 'crate:voyager-app'
+    feature: worktrees-voyage-close
+    name: worktree
+    status: changed
+    plain: 'The worktree family behind the pipeline; it reaches git only through the git adapter.'
+    from: ['rs:voyager_app::worktrees', 'rs:voyager_app::client']
+    primary: ['rs:voyager_app::worktrees']
+    proposals: [families]
+  - id: 'p:app::assistant::session'
+    container: 'crate:voyager-app'
+    feature: assistant
+    name: assistant::session
+    status: merged
+    plain: 'The private conversation: its owner thread, chat state and focus, talking to any provider through the provider trait.'
+    from: ['rs:voyager_app::conversation_client', 'rs:voyager_app::conversation']
+    primary: ['rs:voyager_app::conversation_client', 'rs:voyager_app::conversation']
+    proposals: [provider]
+  - id: 'p:app::assistant::provider'
+    container: 'crate:voyager-app'
+    feature: assistant
+    name: assistant::provider
+    status: changed
+    plain: 'The provider trait: open, send a turn, answer a tool call, shut down. Today this module only holds shared types.'
+    from: ['rs:voyager_app::provider']
+    primary: ['rs:voyager_app::provider']
+    proposals: [provider]
+  - id: 'p:app::assistant::codex'
+    container: 'crate:voyager-app'
+    feature: assistant
+    name: assistant::codex
+    status: merged
+    plain: 'Codex as one provider: starts codex app-server and translates its JSON-RPC.'
+    from: ['rs:voyager_app::codex', 'rs:voyager_app::codex::protocol']
+    primary: ['rs:voyager_app::codex', 'rs:voyager_app::codex::protocol']
+    proposals: [provider]
+  - id: 'p:app::assistant::tools'
+    container: 'crate:voyager-app'
+    feature: assistant
+    name: assistant::tools
+    status: changed
+    plain: 'The Voyager tools the assistant may call, generated from the catalogue and executed through the same pipeline as your own requests.'
+    from: ['rs:voyager_app::administrator']
+    primary: ['rs:voyager_app::administrator']
+    proposals: [catalogue]
+  - id: 'p:app::adapters::core'
+    container: 'crate:voyager-app'
+    feature: core-adapter
+    name: adapters::core
+    status: merged
+    plain: 'The typed port to Herdr Core: connection, frames, pending replies and Core''s vocabulary as Rust types. Nothing else names Core states as strings.'
+    from: ['rs:voyager_app::core', 'rs:voyager_app::core::pending', 'rs:voyager_app::core_endpoint', 'rs:voyager_app::core_shapes', 'rs:voyager_app::wire']
+    primary: ['rs:voyager_app::core', 'rs:voyager_app::core::pending', 'rs:voyager_app::core_endpoint', 'rs:voyager_app::core_shapes', 'rs:voyager_app::wire']
+    proposals: [vocabulary, facade]
+  - id: 'p:app::adapters::git'
+    container: 'crate:voyager-app'
+    feature: core-adapter
+    name: adapters::git
+    status: new
+    plain: 'The only place that runs git.'
+    from: ['rs:voyager_app::worktrees']
+    proposals: [families]
+  - id: 'p:app::diagnostics'
+    container: 'crate:voyager-app'
+    feature: diagnostics
+    name: diagnostics
+    status: new
+    plain: 'Named trace points with a narrow interface. Experiments read the output; product code never compiles an experiment file.'
+    from: ['rs:voyager_app::typing_trace']
+    primary: ['rs:voyager_app::typing_trace']
+    proposals: [diagnostics]
+  # --- desktop crate -------------------------------------------------------------------
+  - id: 'p:desktop::bridge'
+    container: 'crate:voyager-desktop'
+    feature: script-host
+    name: bridge (generated)
+    status: new
+    plain: 'Host modules generated from the operation catalogue, with one JSON adapter and the catalogue''s limits. Replaces the hand-written registrations and declarations.'
+    from: ['rs:voyager_desktop::script_types', 'host-module:voyager_workspace', 'host-module:voyager_header', 'host-module:voyager_content', 'host-module:voyager_conversation', 'rs:voyager_desktop::host']
+    primary: ['rs:voyager_desktop::script_types', 'host-module:voyager_workspace', 'host-module:voyager_header', 'host-module:voyager_content', 'host-module:voyager_conversation']
+    proposals: [catalogue]
+  - id: 'rs:voyager_desktop::host'
+    status: changed
+    plain: 'Loads and reloads the header package and shows script errors. Host module registration moves to the generated bridge.'
+    proposals: [catalogue]
+  - id: 'rs:voyager_desktop'
+    status: changed
+    plain: 'Composition only: opens the window, wires components and starts the app. Seeding the profile moves to the package installer.'
+    proposals: [packages, diagnostics]
+  - id: 'rs:voyager_desktop::quit'
+    status: changed
+    plain: 'Quit sends the owner a quit fence that refuses new effects and closes viewer input, without stopping Core, then exits.'
+    proposals: [pipeline, facade]
+  - id: 'p:desktop::diagnostics'
+    container: 'crate:voyager-desktop'
+    feature: diagnostics
+    name: diagnostics
+    status: new
+    plain: 'Frame, glyph and redraw probes behind one interface instead of experiment files compiled in by path.'
+    from: ['rs:voyager_desktop::frame_profile', 'rs:voyager_desktop::glyph_probe', 'rs:voyager_desktop::redraw_probe', 'rs:voyager_desktop::typing_trace']
+    primary: ['rs:voyager_desktop::frame_profile', 'rs:voyager_desktop::glyph_probe', 'rs:voyager_desktop::redraw_probe', 'rs:voyager_desktop::typing_trace']
+    proposals: [diagnostics]
+  # --- scripts -------------------------------------------------------------------------
+  - id: 'p:header::session'
+    container: 'package:desktop/mods/header'
+    feature: script-host
+    name: session.ts
+    status: new
+    plain: 'The header''s session controller: the only part that calls host modules. It owns requests, the layout snapshot and outcome handling.'
+    from: ['ts:desktop/mods/header/main.ts']
+    proposals: [header-split]
+  - id: 'ts:desktop/mods/header/main.ts'
+    status: changed
+    plain: 'Thin composition: builds the views and hands them the session controller.'
+    proposals: [header-split]
+  - id: 'ts:desktop/mods/header/agents.ts'
+    status: changed
+    plain: 'Shows the agent list Rust decides, instead of its own copy of program names.'
+    proposals: [projections, vocabulary]
+  - id: 'p:generated::bridge'
+    container: 'artifact:contract/generated'
+    feature: shared-contract
+    name: bridge.ts (generated)
+    status: new
+    plain: 'Generated TypeScript declarations and wrappers for every catalogue operation.'
+    from: []
+    proposals: [catalogue]
+  # --- contract crate ------------------------------------------------------------------
+  - id: 'p:contract::request'
+    container: 'crate:voyager-contract'
+    feature: shared-contract
+    name: request
+    status: new
+    plain: 'RequestId and the one Outcome type (applied, refused, uncertain) every operation returns.'
+    from: []
+    proposals: [pipeline]
+  - id: 'p:contract::operation'
+    container: 'crate:voyager-contract'
+    feature: shared-contract
+    name: operation
+    status: new
+    plain: 'The shapes the catalogue uses to describe operations, their limits and gates.'
+    from: []
+    proposals: [catalogue]
+  - id: 'p:contract::projection'
+    container: 'crate:voyager-contract'
+    feature: shared-contract
+    name: projection
+    status: new
+    plain: 'Shapes of the read-only answers scripts and agents receive. New operations, never new fields on existing responses.'
+    from: []
+    proposals: [projections]
+
+proposed_edges:
+  - {from: 'ts:desktop/mods/header/main.ts', to: 'p:header::session', nature: 'Views send intents to the controller and read its state.'}
+  - {from: 'ts:desktop/mods/header/panel-view.ts', to: 'p:header::session', nature: 'Views send intents to the controller and read its state.'}
+  - {from: 'ts:desktop/mods/header/navigation-view.ts', to: 'p:header::session', nature: 'Views send intents to the controller and read its state.'}
+  - {from: 'p:header::session', to: 'p:generated::bridge', nature: 'Calls generated wrappers; no hand-written request strings.'}
+  - {from: 'ts:content/notes/main.ts', to: 'p:generated::bridge', nature: 'The Notes package calls its bound content module through generated wrappers.'}
+  - {from: 'p:generated::bridge', to: 'p:desktop::bridge', nature: 'The TypeScript and Rust halves of one generated bridge.'}
+  - {from: 'p:desktop::bridge', to: 'p:app::api::facade', nature: 'Every script request enters the app through the facade.'}
+  - {from: 'rs:voyager_desktop', to: 'p:app::api::facade', nature: 'Composition starts the app through the facade.'}
+  - {from: 'rs:voyager_desktop::terminal', to: 'p:app::api::facade', nature: 'Terminal views use facade types for viewers and input limits.'}
+  - {from: 'rs:voyager_desktop::notes_session', to: 'p:app::api::facade', nature: 'The Notes editor saves through the facade with its save lease.'}
+  - {from: 'rs:voyager_desktop::avatar', to: 'p:app::api::facade', nature: 'Docking is an ordinary request through the facade.'}
+  - {from: 'rs:voyager_desktop::quit', to: 'p:app::api::facade', nature: 'Quit sends the quit fence.'}
+  - {from: 'p:app::api::facade', to: 'p:app::api::owner', nature: 'Queues each request for the owner thread.'}
+  - {from: 'p:app::api::owner', to: 'p:app::api::admit', nature: 'Stage 1: admit.'}
+  - {from: 'p:app::api::admit', to: 'p:app::api::ledger', nature: 'Looks up the request id.'}
+  - {from: 'p:app::api::owner', to: 'p:app::policy', nature: 'Stage 2: authorize in the captured context.'}
+  - {from: 'p:app::api::owner', to: 'rs:voyager_app::workspace', nature: 'Stages 3 and 4: plan and apply layout changes.'}
+  - {from: 'p:app::api::owner', to: 'p:app::terminal', nature: 'Stages 3 and 4 for terminal requests.'}
+  - {from: 'p:app::api::owner', to: 'p:app::content::service', nature: 'Stages 3 and 4 for content requests.'}
+  - {from: 'p:app::api::owner', to: 'p:app::process', nature: 'Stages 3 and 4 for process requests.'}
+  - {from: 'p:app::api::owner', to: 'p:app::worktree', nature: 'Stages 3 and 4 for worktree requests.'}
+  - {from: 'p:app::api::owner', to: 'rs:voyager_app::voyage_close', nature: 'Stages 3 and 4 for closing a Voyage.'}
+  - {from: 'p:app::api::owner', to: 'p:app::storage', nature: 'Stage 5: save the layout.'}
+  - {from: 'p:app::api::owner', to: 'p:app::api::outcome', nature: 'Stage 6: record and report the outcome.'}
+  - {from: 'p:app::api::owner', to: 'p:app::projection', nature: 'Answers read operations.'}
+  - {from: 'p:app::content::service', to: 'p:app::content::registry', nature: 'Asks what a content type can do.'}
+  - {from: 'p:app::content::service', to: 'p:app::content::notes', nature: 'Runs the Notes type''s plan and effect.'}
+  - {from: 'p:app::storage', to: 'p:app::adapters::core', nature: 'Reads and writes the layout document.'}
+  - {from: 'p:app::terminal', to: 'p:app::adapters::core', nature: 'Starts, attaches and stops programs through the typed port.'}
+  - {from: 'p:app::process', to: 'p:app::adapters::core', nature: 'Lists and stops programs through the typed port.'}
+  - {from: 'p:app::observe', to: 'p:app::adapters::core', nature: 'Subscribes to Core events.'}
+  - {from: 'p:app::worktree', to: 'p:app::adapters::git', nature: 'Creates and inspects worktrees.'}
+  - {from: 'p:app::adapters::git', to: 'ext:git', nature: 'Runs git as a child process.'}
+  - {from: 'p:app::adapters::core', to: 'ext:hc', nature: 'hc connect, JSON-RPC and binary frames.'}
+  - {from: 'p:app::assistant::tools', to: 'p:app::api::facade', nature: 'Agent requests take the same pipeline as yours.'}
+  - {from: 'p:app::assistant::tools', to: 'p:app::api::catalogue', nature: 'The tool list is generated from the catalogue.'}
+  - {from: 'p:app::assistant::session', to: 'p:app::assistant::provider', nature: 'Talks to the provider through the trait.'}
+  - {from: 'p:app::assistant::codex', to: 'p:app::assistant::provider', nature: 'Implements the provider trait.'}
+  - {from: 'p:app::assistant::codex', to: 'ext:codex', nature: 'Starts codex app-server and speaks JSON-RPC over stdio.'}
+  - {from: 'p:app::api::catalogue', to: 'p:contract::operation', nature: 'Describes operations with contract types.'}
+  - {from: 'p:app::api::outcome', to: 'p:contract::request', nature: 'Returns the shared Outcome type.'}
+  - {from: 'p:app::projection', to: 'p:contract::projection', nature: 'Returns projection shapes.'}
+  - {from: 'p:desktop::bridge', to: 'p:app::api::catalogue', nature: 'Generated from the catalogue at build time.', kind: build}
+  - {from: 'p:generated::bridge', to: 'p:app::api::catalogue', nature: 'Generated from the catalogue at build time.', kind: build}
+
+proposed_rules:
+  - id: facade-only
+    plain: 'Desktop code uses only the app facade.'
+    from: ['rs:voyager_desktop', 'p:desktop', 'bin:voyager-shell']
+    to: ['rs:voyager_app', 'p:app']
+    except_to: ['p:app::api::facade']
+  - id: scripts-through-bridge
+    plain: 'Scripts reach Rust only through the generated bridge.'
+    from: ['ts:', 'p:header']
+    to: ['rs:', 'host-module:', 'p:app', 'p:desktop']
+    except_to: ['p:desktop::bridge', 'host-module:voyager_native', 'host-module:voyager_input', 'host-module:voyager_content_view']
+  - id: adapters-own-programs
+    plain: 'Only adapters start or talk to outside programs.'
+    from: ['rs:', 'p:']
+    to: ['ext:hc', 'ext:git', 'ext:codex']
+    except_from: ['p:app::adapters', 'p:app::assistant::codex']
+  - id: families-stay-apart
+    plain: 'Request families do not call each other; they share state through the pipeline.'
+    from: ['p:app::terminal', 'p:app::process', 'p:app::worktree', 'p:app::content::notes']
+    to: ['p:app::terminal', 'p:app::process', 'p:app::worktree', 'p:app::content::notes']
