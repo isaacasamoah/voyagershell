@@ -176,6 +176,11 @@ externals:
     name: codex app-server
     plain: 'The private assistant process.'
     programs: ['program:codex']
+  - id: ext:codex-voice-host
+    container: ext-container:codex
+    feature: voice
+    name: codex-voice-host
+    plain: 'Codex''s voice helper. It owns the microphone, the speaker and the realtime voice connection; Voyager starts it and passes messages between it and Codex.'
   - id: ext:git
     container: ext-container:tools
     feature: worktrees-voyage-close

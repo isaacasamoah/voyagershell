@@ -86,7 +86,7 @@ proposals:
     pathways:
       - {pathway: split-vessel, step: split-vessel-9, how: 'Admission becomes one named stage instead of a branch inside a long match.'}
       - {pathway: notes-save, step: notes-save-8, how: 'Content requests pass the same gates as workspace requests.'}
-      - {pathway: assistant-request, step: assistant-request-16, how: 'Agent requests and your requests visibly share one authority check.'}
+      - {pathway: ask-by-text, step: ask-by-text-12, how: 'Agent requests and your requests visibly share one authority check.'}
       - {pathway: quit, step: quit-4, how: 'A quit fence becomes one gate the pipeline checks, without stopping Core.'}
     decision: D1
     depends: [vocabulary]
@@ -230,4 +230,4 @@ proposals:
     why: 'Other assistants can be added without editing the conversation owner, and tests can use a fake provider.'
     cost: 'Small to moderate, and only worth doing when a second provider is real.'
     pathways:
-      - {pathway: assistant-request, step: assistant-request-9, how: 'Opening the assistant would go through the trait.'}
+      - {pathway: ask-by-text, step: ask-by-text-5, how: 'Opening the assistant would go through the trait.'}
