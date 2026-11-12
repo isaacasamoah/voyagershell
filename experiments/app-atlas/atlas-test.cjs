@@ -79,3 +79,59 @@ test("a code part no intended part claims is reported as unplanned", () => {
   const comparison = compareDocuments(intended, built.documents.code);
   assert.equal(comparison.parts.find((part) => part.id === "rs:voyager_desktop::speech")?.status, "unplanned");
 });
+
+// A spec reader's v0 file, small enough to read: two components, one relation, three rules.
+const { fromV0 } = require("./import-v0.cjs");
+const specV0 = {
+  sources: [{ id: "spec:a", path: "SPEC.md", sha256: "0", title: "A spec", role: "test" }],
+  components: [
+    { id: "intended:app", name: "Application", summary: "The app crate.", binds: ["crate:voyager-app"], cite: [{ source: "spec:a", line: 1, text: "app/ holds policy" }] },
+    { id: "intended:client", name: "Client queue", parent: "intended:app", binds: ["rs:voyager_app::client"] },
+    { id: "intended:tools", name: "Agent tools", parent: "intended:app", binds: ["agent-tool:*"] },
+    { id: "intended:gone", name: "Something unbuilt", parent: "intended:app", binds: ["rs:voyager_app::nowhere"] },
+    { id: "intended:core", name: "Herdr Core", binds: ["program:hc"] },
+  ],
+  relations: [{ id: "calls(intended:client,intended:core)", from: "intended:client", to: "intended:core", kind: "calls", summary: "The client reaches Core." }],
+  rules: [
+    { id: "desktop-spawns-nothing", statement: "The desktop starts no programs.", check: { type: "forbid_edge", from: ["rs:voyager_desktop*"], to: ["program:*"], kinds: ["spawns"], allow: [] } },
+    { id: "app-without-gpui", statement: "The app does not reach GPUI.", check: { type: "forbid_reach", from: "crate:voyager-app", to: ["gpui*"] } },
+    { id: "judged-one", statement: "A judged rule.", check: { type: "judged", question: "Is it so?" } },
+  ],
+  gaps: ["Something the spec leaves open."],
+};
+
+test("a v0 spec file converts to a valid intended document and compares at every level", () => {
+  const read = () => null;
+  const annotations = { decisions: [{ rule: "judged-one", result: "conforms", rationale: "Yes.", fingerprint: "x", evidence: [{ path: "nowhere.rs", line: 1 }] }] };
+  const intended = fromV0(specV0, annotations, built.documents.code, { read, commit: BASE });
+  const validate = new Ajv({ allErrors: true, strict: false }).compile(require("./architecture-v1.schema.json"));
+  assert.ok(validate(intended), JSON.stringify(validate.errors?.slice(0, 3)));
+  assert.equal(intended.parts.find((part) => part.id === "intended:app").level, "container");
+  assert.equal(intended.parts.find((part) => part.id === "intended:app").parent, "concept:app");
+  assert.equal(intended.parts.find((part) => part.id === "intended:client").level, "feature");
+  const comparison = compareDocuments(intended, built.documents.code);
+  const status = (id) => comparison.parts.find((part) => part.id === id)?.status;
+  assert.equal(status("intended:app"), "matched");
+  assert.equal(status("intended:client"), "matched");
+  assert.equal(status("intended:tools"), "matched", "a wildcard over extractor ids finds the module that offers the tools");
+  assert.equal(status("intended:gone"), "missing");
+  assert.equal(status("intended:core"), "matched", "program:hc is an alias of the Herdr Core stand-in");
+  assert.equal(comparison.homes["rs:voyager_app::canvas"], "intended:app", "unnamed modules belong to the nearest part that binds their crate");
+  assert.equal(comparison.homes["rs:voyager_app::client"], "intended:client");
+  assert.equal(comparison.links[0].status, "matched");
+  const rule = (id) => comparison.rules.find((item) => item.id === id);
+  assert.equal(rule("desktop-spawns-nothing").status, "broken");
+  assert.ok(rule("desktop-spawns-nothing").violations.some((item) => item.to === "program:paplay"));
+  assert.equal(rule("app-without-gpui").status, "holds");
+  assert.equal(rule("judged-one").status, "stale", "an answer whose lines no longer match is not trusted");
+});
+
+test("a build file names the crate that holds it without claiming the whole crate", () => {
+  const intended = fromV0({ components: [
+    { id: "intended:schema", name: "Core schema", binds: ["generator:app/core-schema.cjs"] },
+    { id: "intended:app", name: "Application", binds: ["crate:voyager-app"] },
+  ] }, null, built.documents.code, { read: () => null, commit: BASE });
+  const comparison = compareDocuments(intended, built.documents.code);
+  assert.equal(comparison.parts.find((part) => part.id === "intended:schema").status, "matched");
+  assert.equal(comparison.homes["rs:voyager_app::client"], "intended:app");
+});

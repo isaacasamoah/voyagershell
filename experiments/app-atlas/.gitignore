@@ -1,1 +1,4 @@
+# Built pages and documents.
 out/
+# Documents derived from untracked specifications stay on this machine.
+apps/*/local/

@@ -255,23 +255,25 @@ const pathwayById = new Map(DATA.pathways.map((p) => [p.id, p]));
 
 // ---------- models: today's code and the proposed architecture share one shape ----------
 function buildModel(kind) {
-  const modules = kind === "current" ? DATA.modules : DATA.proposed.modules;
-  const features = kind === "current" ? DATA.features : [...DATA.proposed.features, ...DATA.features];
+  const P = kind === "current" ? null : DATA.proposed;
+  const modules = P ? P.modules : DATA.modules;
+  const features = P ? [...P.features, ...DATA.features] : DATA.features;
   const featureById = new Map(features.map((f) => [f.id, f]));
   const order = new Map(features.map((f, i) => [f.id, i]));
   const T = new Map();
   const add = (id, type, level, parent, data) => { const n = { id, type, level, parent, children: [], data }; T.set(id, n); if (parent) T.get(parent)?.children.push(n); return n; };
-  for (const c of DATA.concepts) add(c.id, "concept", 1, null, c);
-  for (const c of DATA.containers) add(c.id, "container", 2, c.concept, c);
-  const slices = [...new Map(modules.map((m) => [m.slice, { id: m.slice, container: m.container, feature: m.feature ?? "unassigned" }])).values()].sort((a, b) => (order.get(a.feature) ?? 99) - (order.get(b.feature) ?? 99));
-  for (const s of slices) if (T.has(s.container)) add(s.id, "slice", 3, s.container, { ...s, name: featureById.get(s.feature)?.name ?? "Unassigned" });
+  for (const c of P?.concepts ?? DATA.concepts) add(c.id, "concept", 1, null, c);
+  for (const c of P?.containers ?? DATA.containers) add(c.id, "container", 2, c.concept, c);
+  // Today's map groups modules by feature; an intended document states its own feature-level parts.
+  const slices = (P?.slices ?? [...new Map(modules.map((m) => [m.slice, { id: m.slice, container: m.container, feature: m.feature ?? "unassigned" }])).values()]).slice().sort((a, b) => (order.get(a.feature) ?? 99) - (order.get(b.feature) ?? 99));
+  for (const s of slices) if (T.has(s.container)) add(s.id, "slice", 3, s.container, { ...s, name: featureById.get(s.feature)?.name ?? s.name ?? "Unassigned" });
   const sorted = [...modules].sort((a, b) => (a.kind === "external") - (b.kind === "external") || String(a.name).localeCompare(String(b.name)));
   for (const m of sorted) if (T.has(m.slice)) add(m.id, "module", 4, m.slice, m);
   for (const f of DATA.functions) if (T.has(f.module)) add(f.id, "function", 5, f.module, f);
   for (const n of T.values()) { let c = n; while (c.parent) c = T.get(c.parent); n.concept = c.id; }
   return { kind, T, edges: kind === "current" ? DATA.edges : DATA.proposed.edges, featureById };
 }
-const MODELS = { map: buildModel("current"), proposed: buildModel("proposed") };
+const MODELS = { map: buildModel("current"), proposed: DATA.proposed ? buildModel("proposed") : { kind: "proposed", T: new Map(), edges: [], featureById: new Map() } };
 let M = MODELS.map;
 const node = (id) => M.T.get(id);
 const conceptColour = (id) => `var(--c-${node(node(id)?.concept)?.data.colour ?? "neutral"})`;
@@ -350,7 +352,12 @@ function topLayout() {
   // Concepts the grid does not place follow in rows of four.
   const rows = GRID.map((row) => row.map((id) => (out.has(id) ? id : null)));
   const placed = new Set(rows.flat());
-  for (const id of concepts) if (!placed.has(id)) { let row = rows.at(-1); if (!row || row.filter(Boolean).length >= 4 || row.length >= 4) rows.push((row = [])); row.push(id); }
+  for (const id of concepts) {
+    if (placed.has(id)) continue;
+    const gap = rows.find((row) => row.includes(null));
+    if (gap) { gap[gap.indexOf(null)] = id; continue; }
+    let row = rows.at(-1); if (!row || row.length >= 4) rows.push((row = [])); row.push(id);
+  }
   rows.forEach((row, ri) => row.forEach((id, ci) => { if (id) { const b = out.get(id); b.x = ci * (LEAF.concept[0] + 70); b.y = ri * (LEAF.concept[1] + 60); } }));
   return out;
 }
@@ -396,7 +403,7 @@ function computeView(focus) {
 // ---------- drawing ----------
 function wrap(text, max) { const out = []; let line = ""; for (const w of String(text ?? "").split(/\s+/)) { if ((line + " " + w).trim().length > max) { if (line) out.push(line); line = w; } else line = (line + " " + w).trim(); } if (line) out.push(line); return out; }
 function statusOf(n) { return M.kind === "proposed" && n?.type === "module" ? n.data.status : null; }
-function compareStatus(n) { return comparing() && n?.type === "module" ? comparisonPart.get(n.id)?.status ?? null : null; }
+function compareStatus(n) { return comparing() && n && n.type !== "function" ? comparisonPart.get(n.id)?.status ?? null : null; }
 function leafSvg(n, b, opts) {
   const col = conceptColour(n.id), d = n.data, cs = compareStatus(n), st = cs ? null : statusOf(n);
   const isNew = st === "new" || cs === "missing";
@@ -409,15 +416,21 @@ function leafSvg(n, b, opts) {
     const pl = wrap(d.plain, Math.round((b.w - 24) / 7.2)); const max = Math.floor((b.h - 52) / 16);
     pl.slice(0, max).forEach((l, i) => (s += `<text x="${tx}" y="${b.y + 48 + i * 16}" font-size="12.5" style="fill:var(--muted)">${esc(l)}${i === max - 1 && pl.length > max ? "…" : ""}</text>`));
   } else if (n.type === "container") {
-    s += `<text x="${tx}" y="${b.y + 23}" font-size="14.5" font-weight="650">${esc(d.name)}</text>`;
+    const title = wrap(d.name, Math.round((b.w - 16) / 7.2));
+    s += `<text x="${tx}" y="${b.y + 23}" font-size="14.5" font-weight="650">${esc(title[0] + (title.length > 1 ? "…" : ""))}</text>`;
     const mc = countModules(n), lines = sizeOf(n);
-    s += `<text x="${tx}" y="${b.y + 42}" font-size="11.5" style="fill:var(--muted)">${esc(d.kind)}${mc && !["external", "library", "actor"].includes(d.kind) ? ` · ${mc} module${mc === 1 ? "" : "s"}` : ""}${lines ? ` · ${lines.toLocaleString()} lines` : ""}</text>`;
+    const sub = cs ? COMPARE[cs] : d.kind ? `${d.kind}${mc && !["external", "library", "actor"].includes(d.kind) ? ` · ${mc} module${mc === 1 ? "" : "s"}` : ""}${lines ? ` · ${lines.toLocaleString()} lines` : ""}` : d.binds ? `names ${d.binds.length} code part${d.binds.length === 1 ? "" : "s"}` : "";
+    s += `<text x="${tx}" y="${b.y + 42}" font-size="11.5" style="fill:${cs === "missing" ? "var(--proposed)" : cs && cs !== "matched" ? "var(--c-amber)" : "var(--muted)"}">${esc(sub)}</text>`;
     const pl = wrap(d.plain ?? "", Math.round((b.w - 24) / 6.6)); const max = Math.max(1, Math.floor((b.h - 50) / 15));
     pl.slice(0, max).forEach((l, i) => (s += `<text x="${tx}" y="${b.y + 60 + i * 15}" font-size="11.5" style="fill:var(--muted)">${esc(l)}${i === max - 1 && pl.length > max ? "…" : ""}</text>`));
   } else if (n.type === "slice") {
-    s += `<text x="${tx}" y="${b.y + 21}" font-size="12.5" font-weight="650">${esc(d.name)}</text>`;
+    const title = wrap(d.name, Math.round((b.w - 18) / 6.6)); const two = title.length > 1;
+    s += `<text x="${tx}" y="${b.y + (two ? 18 : 21)}" font-size="12.5" font-weight="650">${esc(title[0])}</text>`;
+    if (two) s += `<text x="${tx}" y="${b.y + 32}" font-size="12.5" font-weight="650">${esc(title[1] + (title.length > 2 ? "…" : ""))}</text>`;
     const mc = countModules(n), lines = sizeOf(n);
-    s += `<text x="${tx}" y="${b.y + 38}" font-size="11" style="fill:var(--muted)">${mc} module${mc === 1 ? "" : "s"}${lines ? ` · ${lines.toLocaleString()} lines` : ""}</text>`;
+    // A spec's feature-level part names code instead of holding modules.
+    const sub = cs ? COMPARE[cs] : !mc && d.binds ? `names ${d.binds.length} code part${d.binds.length === 1 ? "" : "s"}` : `${mc} module${mc === 1 ? "" : "s"}${lines ? ` · ${lines.toLocaleString()} lines` : ""}`;
+    s += `<text x="${tx}" y="${b.y + (two ? 47 : 38)}" font-size="11" style="fill:${cs === "missing" ? "var(--proposed)" : cs && cs !== "matched" ? "var(--c-amber)" : "var(--muted)"}">${esc(sub)}</text>`;
   } else if (n.type === "module") {
     const name = shortName(n); const max = Math.round((b.w - 18) / 7.1);
     s += `<text x="${b.x + 10}" y="${b.y + 16}" font-size="12" class="mono" font-weight="600">${esc(name.length > max ? name.slice(0, max - 1) + "…" : name)}</text>`;
@@ -442,7 +455,7 @@ function frameSvg(n, b, opts) {
   const col = conceptColour(n.id), st = statusOf(n);
   let s = `<g class="frame${opts.dim ? " dim" : ""}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="${n.type === "concept" ? 14 : 9}" fill="color-mix(in srgb, ${col} ${n.type === "concept" ? 5 : 7}%, var(--bg))" stroke="${st === "new" ? "var(--proposed)" : col}" stroke-opacity="${opts.root ? 0.7 : 0.4}" stroke-width="${opts.root ? 1.6 : 1.2}"${st === "new" ? ' stroke-dasharray="6 4"' : ""}/>`;
   const fs = opts.root ? 15 : n.type === "container" ? 12.5 : 11.5;
-  s += `<text class="frame-label${n.type === "module" ? " mono" : ""}" data-id="${esc(n.id)}" x="${b.x + 10}" y="${b.y + (HEAD[n.type] ?? 18) - 7}" font-size="${fs}" font-weight="${opts.root || n.type === "container" ? 700 : 600}" style="fill:${col}">${esc(shortName(n))}${n.type === "container" && n.data.kind !== "crate" ? `<tspan font-weight="400" style="fill:var(--muted)"> · ${esc(n.data.kind)}</tspan>` : ""}${!opts.root ? ` <tspan style="fill:var(--faint)">›</tspan>` : ""}</text></g>`;
+  s += `<text class="frame-label${n.type === "module" ? " mono" : ""}" data-id="${esc(n.id)}" x="${b.x + 10}" y="${b.y + (HEAD[n.type] ?? 18) - 7}" font-size="${fs}" font-weight="${opts.root || n.type === "container" ? 700 : 600}" style="fill:${col}">${esc(shortName(n))}${n.type === "container" && n.data.kind && n.data.kind !== "crate" ? `<tspan font-weight="400" style="fill:var(--muted)"> · ${esc(n.data.kind)}</tspan>` : ""}${!opts.root ? ` <tspan style="fill:var(--faint)">›</tspan>` : ""}</text></g>`;
   return s;
 }
 function sidePoint(b, tx, ty) {
@@ -515,7 +528,7 @@ function draw(svg, opts = {}) {
     for (const [id, b] of pos) {
       const n = b.stub ? null : node(id); if (!n || n.type === "module" || n.type === "function") continue;
       const tally = { missing: 0, moved: 0, changed: 0 };
-      const walk = (x) => { if (x.type === "module") { const st = comparisonPart.get(x.id)?.status; if (st in tally) tally[st]++; } x.children.forEach(walk); };
+      const walk = (x) => { const st = comparisonPart.get(x.id)?.status; if (st in tally) tally[st]++; x.children.forEach(walk); };
       walk(n);
       const breaks = brokenEnds.filter((e) => isInside(e.from, id) || isInside(e.to, id)).length;
       const words = [tally.missing && `${tally.missing} to build`, tally.moved && `${tally.moved} to move`, tally.changed && `${tally.changed} to change`, breaks && `${breaks} rule break${breaks === 1 ? "" : "s"}`].filter(Boolean);
@@ -652,6 +665,29 @@ function inspectNode(id, view) {
   const pr = prsTouching(id); if (pr) h += `<h3>Changed by</h3><ul class="list">${pr}</ul>`;
   return h;
 }
+const RULE = { holds: "holds", broken: "broken", "needs-judgement": "needs a judgement", stale: "judgement out of date", unchecked: "not checked" };
+const ruleResult = new Map((DATA.comparison?.rules ?? []).map((r) => [r.id, r]));
+const ruleChip = (id) => { const r = ruleResult.get(id); return r ? ` <span class="chip${r.status === "broken" ? " warn" : r.status === "holds" ? " seen" : ""}">${esc(RULE[r.status] ?? r.status)}</span>` : ""; };
+const standsFor = new Map(); for (const part of [...DATA.modules, ...DATA.containers]) for (const name of [...(part.aliases ?? []), ...(part.contains ?? [])]) if (!standsFor.has(name)) standsFor.set(name, part.id);
+const codeName = (id) => { const c = MODELS.map.T.get(id) ?? MODELS.map.T.get(standsFor.get(id)); return c ? (c.id === id ? fullName(c) : `${id.replace(/^[a-z-]+:/, "")} (${fullName(c)})`) : id; };
+const codeButtons = (ids) => ids.map((id) => (MODELS.map.T.has(id) ? `<button class="link" data-gocurrent="${esc(id)}">${esc(codeName(id))}</button>` : `<code>${esc(id)}</code>`)).join(", ");
+function citeList(cites) {
+  const specs = new Map((DATA.proposed?.specs ?? []).map((x) => [x.id, x]));
+  return `<ul class="list">${cites.map((c) => `<li class="small"><span class="muted">${esc(specs.get(c.source)?.title ?? c.source)}, line ${esc(c.line)}</span><br>${esc(c.text)}</li>`).join("")}</ul>`;
+}
+function compareBox(cp) {
+  const codeLinks = codeButtons(cp.code ?? []);
+  const where = cp.outside?.length ? ` ${codeButtons(cp.outside)} ${cp.outside.length === 1 ? "lies" : "lie"} outside the part it belongs to here.` : "";
+  const sentence = {
+    matched: `Found in today's code: ${codeLinks}.`,
+    changed: `Exists in the planned place (${codeLinks}) but the plan changes it.`,
+    moved: cp.outside ? `Found in today's code (${codeLinks}), but not where this design places it.${where}` : `The code exists today, but elsewhere: ${codeLinks}. The plan ${esc(cp.how === "merged" ? "merges it here" : cp.how === "split" ? "splits it out of there" : "moves or renames it")}.`,
+    missing: `Not found in today's code.${cp.absorbs?.length ? ` It will take code from ${codeButtons(cp.absorbs)}.` : ""}`,
+    unplanned: `In today's code but not in the plan.`,
+  }[cp.status] ?? "";
+  const unmatched = cp.unmatched?.length ? `<p class="small muted">Named but not found in the code map: ${cp.unmatched.map((x) => `<code>${esc(x)}</code>`).join(", ")}.</p>` : "";
+  return `<div class="box"><div class="kicker"><span>compared with today's code</span> <span class="chip${cp.status === "missing" ? " new" : cp.status === "matched" ? " seen" : " exp"}">${esc(COMPARE[cp.status])}</span></div><p class="small">${sentence}</p>${unmatched}</div>`;
+}
 function inspectProposed(n, view) {
   const d = n.data; let h = "";
   if (n.type === "module") {
@@ -659,23 +695,21 @@ function inspectProposed(n, view) {
     const sources = (d.from ?? []).filter((id) => MODELS.map.T.has(id));
     if (d.status === "unchanged") h += `<p class="small muted">Stays as it is. <button class="link" data-gocurrent="${esc(d.current ?? n.id)}">See it in today's map</button></p>`;
     else if (sources.length) h += `<h3>Where its code comes from today</h3><ul class="list">${sources.map((id) => { const c = MODELS.map.T.get(id); return `<li><button class="link" data-gocurrent="${esc(id)}">${esc(fullName(c))}</button>${(d.primary ?? []).includes(id) || d.current === id ? "" : ` <span class="muted small">(part of it)</span>`}${c.data.size ? ` <span class="muted small">${c.data.size.toLocaleString()} lines</span>` : ""}</li>`; }).join("")}</ul>`;
-    else h += `<p class="small muted">New code; nothing moves into it from today's map.</p>`;
+    else if (!d.binds?.length) h += `<p class="small muted">New code; nothing moves into it from today's map.</p>`;
     if (d.proposals?.length) h += `<h3>Comes from these proposals</h3><ul class="list">${d.proposals.map((p) => { const pr = DATA.proposals.find((x) => x.id === p); return `<li><button class="link" data-goproposal="${esc(p)}">${esc(pr?.step ?? "")} ${esc(pr?.title ?? p)}</button></li>`; }).join("")}</ul>`;
-    const cp = comparisonPart.get(n.id);
-    if (cp) {
-      const codeLinks = (cp.code ?? []).map((id) => `<button class="link" data-gocurrent="${esc(id)}">${esc(fullName(MODELS.map.T.get(id)))}</button>`).join(", ");
-      const sentence = { matched: `Built as planned: ${codeLinks}.`, changed: `Exists in the planned place (${codeLinks}) but the plan changes it.`, moved: `The code exists today, but elsewhere: ${codeLinks}. The plan ${esc(cp.how === "merged" ? "merges it here" : cp.how === "split" ? "splits it out of there" : "moves or renames it")}.`, missing: `Not built yet.${cp.absorbs?.length ? ` It will take code from ${cp.absorbs.map((id) => `<button class="link" data-gocurrent="${esc(id)}">${esc(fullName(MODELS.map.T.get(id)))}</button>`).join(", ")}.` : ""}`, unplanned: `In today's code but not in the plan.` }[cp.status] ?? "";
-      h += `<div class="box"><div class="kicker"><span>compared with today's code</span> <span class="chip${cp.status === "missing" ? " new" : cp.status === "matched" ? " seen" : " exp"}">${esc(COMPARE[cp.status])}</span></div><p class="small">${sentence}</p></div>`;
-    }
-    const rules = DATA.proposed.rules.filter((r) => (r.from ?? []).some((p) => n.id.startsWith(p)) && !(r.except_from ?? []).some((p) => n.id.startsWith(p)));
-    if (rules.length) h += `<h3>Rules it must follow</h3><ul class="list">${rules.map((r) => `<li class="small">${esc(r.plain)}</li>`).join("")}</ul>`;
   } else {
-    if (n.type === "slice") h += `<p>${esc(M.featureById.get(n.data.feature)?.plain ?? "")}</p>`;
-    else if (n.data.plain) h += `<p>${esc(n.data.plain)}</p>`;
+    if (n.type === "slice" && !d.plain) h += `<p>${esc(M.featureById.get(d.feature)?.plain ?? "")}</p>`;
+    else if (d.plain) h += `<p>${esc(d.plain)}</p>`;
     const mods = []; const walk = (x) => { if (x.type === "module") mods.push(x); x.children.forEach(walk); }; walk(n);
     const st = {}; mods.forEach((m) => (st[m.data.status] = (st[m.data.status] ?? 0) + 1));
-    h += `<p class="small muted">${Object.entries(st).map(([k, v]) => `${v} ${STATUS[k] ?? k}`).join(" · ")}</p>`;
+    if (mods.length) h += `<p class="small muted">${Object.entries(st).map(([k, v]) => `${v} ${STATUS[k] ?? k}`).join(" · ")}</p>`;
   }
+  const cp = comparisonPart.get(n.id);
+  if (cp) h += compareBox(cp);
+  if (d.note) h += `<h3>Worth knowing</h3>${layered(d.note)}`;
+  if (d.cite?.length) h += `<h3>What the specs say</h3>${citeList(d.cite)}`;
+  const rules = DATA.proposed.rules.filter((r) => (r.applies_to ?? []).includes(n.id) || (n.type === "module" && (r.from ?? []).some?.((p) => n.id.startsWith(p)) && !(r.except_from ?? []).some((p) => n.id.startsWith(p))));
+  if (rules.length) h += `<h3>Rules it must follow</h3><ul class="list">${rules.map((r) => `<li class="small">${esc(r.plain)}${ruleChip(r.id)}</li>`).join("")}</ul>`;
   if (n.children.length && n.type !== "concept") h += `<h3>Inside</h3><ul class="list">${n.children.map((c) => `<li>${linkTo(c.id, c.type === "function" ? c.data.fn : shortName(c))}${statusOf(c) && statusOf(c) !== "unchanged" ? ` <span class="chip${statusOf(c) === "new" ? " new" : ""}">${esc(STATUS[statusOf(c)])}</span>` : ""}</li>`).join("")}</ul>`;
   if (view) { const c = connections(view, n.id); if (c) h += `<h3>Connections from here</h3>${c}`; }
   return h;
@@ -779,20 +813,33 @@ function startHere() {
   return h;
 }
 function startProposed() {
-  const st = {}; DATA.proposed.modules.forEach((m) => (st[m.status] = (st[m.status] ?? 0) + 1));
-  const broken = DATA.proposed.edges.filter((e) => e.category === "today" && e.breaks.length).length;
-  let h = `<div class="kicker"><span class="chip proposal">proposal</span></div><h2>The app after all twelve steps</h2><p>The same three crates and one owner thread. Every request goes through one pipeline, the script bridge is generated from one list of operations, and each kind of request lives in its own module. None of this is built.</p>`;
-  h += `<p class="small muted">${DATA.proposed.modules.length} modules: ${Object.entries(st).map(([k, v]) => `${v} ${STATUS[k] ?? k}`).join(", ")}. Purple dashed boxes are new. Open a part to see where its code comes from today.</p>`;
-  h += `<h3>Rules the design keeps</h3><ul class="list">${DATA.proposed.rules.map((r) => `<li class="small">${esc(r.plain)}</li>`).join("")}</ul>`;
+  const P = DATA.proposed, I = DATA.meta.intended ?? {};
+  const st = {}; P.modules.forEach((m) => (st[m.status] = (st[m.status] ?? 0) + 1));
+  let h = `<div class="kicker"><span class="chip proposal">${esc(I.tab ?? "intended")}</span></div><h2>${esc(I.title ?? "Intended architecture")}</h2>${P.summary ? `<p>${esc(P.summary)}</p>` : ""}`;
+  if (P.modules.length) h += `<p class="small muted">${P.modules.length} modules: ${Object.entries(st).map(([k, v]) => `${v} ${STATUS[k] ?? k}`).join(", ")}. Purple dashed boxes are new. Open a part to see where its code comes from today.</p>`;
+  else h += `<p class="small muted">Open a part to see what the specs say about it and where its code is today.</p>`;
   const c = DATA.comparison;
+  const nameOf = (id) => { const x = MODELS.proposed.T.get(id); return x ? shortName(x) : stripName(id.replace(/^(p|rs|ts):/, "")); };
   if (c) {
     const sum = c.summary;
-    const list = (status) => c.parts.filter((p) => p.status === status).map((p) => `<li><button class="link" data-goproposed="${esc(p.id)}">${esc(stripName(p.id.replace(/^(p|rs|ts):/, "")))}</button></li>`).join("");
+    const list = (status) => c.parts.filter((p) => p.status === status).map((p) => `<li><button class="link" data-goproposed="${esc(p.id)}">${esc(nameOf(p.id))}</button></li>`).join("");
     h += `<h3>Compared with today's code</h3><p class="small">Tick <strong>Compare with code</strong> to colour every part by how far today's code is from the plan, with counts on each box and today's rule-breaking links in red.</p>`;
-    h += `<dl class="grid2"><dt>Built as planned</dt><dd>${sum.matched} modules</dd><dt>Built, needs changes</dt><dd>${sum.changed}</dd><dt>Code exists elsewhere</dt><dd>${sum.moved}</dd><dt>Not built yet</dt><dd>${sum.missing}</dd><dt>Not in the plan</dt><dd>${sum.unplanned}</dd><dt>Planned links not in code</dt><dd>${sum.links_missing}</dd><dt>Today's links breaking a rule</dt><dd>${sum.links_breaking_rules}</dd><dt>Interfaces that change shape</dt><dd>${sum.interfaces_changed}, plus ${sum.interfaces_missing} new</dd><dt>Stale claims</dt><dd>${sum.stale}</dd></dl>`;
-    for (const [status, title] of [["missing", "Not built yet"], ["moved", "Code exists elsewhere"], ["changed", "Built, needs changes"]]) h += `<details class="code"><summary>${esc(title)}</summary><ul class="list">${list(status)}</ul></details>`;
-    if (c.interfaces?.length) h += `<details class="code"><summary>Planned interface changes</summary><ul class="list">${c.interfaces.map((x) => { const pi = (DATA.proposed.interfaces ?? []).find((y) => y.id === x.id); return `<li class="small">${esc(pi?.name ?? x.id)} <span class="chip">${x.status === "missing" ? "new" : "shape changes"}</span></li>`; }).join("")}</ul></details>`;
+    h += `<dl class="grid2"><dt>Built as planned</dt><dd>${sum.matched} parts</dd><dt>Built, needs changes</dt><dd>${sum.changed}</dd><dt>Code exists elsewhere</dt><dd>${sum.moved}</dd><dt>Not built yet</dt><dd>${sum.missing}</dd><dt>Not in the plan</dt><dd>${sum.unplanned}</dd><dt>Planned links not in code</dt><dd>${sum.links_missing}</dd><dt>Today's links breaking a rule</dt><dd>${sum.links_breaking_rules}</dd>${c.interfaces?.length ? `<dt>Interfaces that change shape</dt><dd>${sum.interfaces_changed}, plus ${sum.interfaces_missing} new</dd>` : ""}<dt>Stale claims</dt><dd>${sum.stale}</dd></dl>`;
+    for (const [status, title] of [["missing", "Not built yet"], ["moved", "Code exists elsewhere"], ["changed", "Built, needs changes"]]) if (c.parts.some((p) => p.status === status)) h += `<details class="code"><summary>${esc(title)}</summary><ul class="list">${list(status)}</ul></details>`;
+    if (sum.unplanned) h += `<details class="code"><summary>In today's code but not in the plan</summary><ul class="list">${c.parts.filter((p) => p.status === "unplanned").map((p) => `<li>${codeButtons([p.id])}</li>`).join("")}</ul></details>`;
+    const missingLinks = c.links.filter((l) => l.status === "missing");
+    if (missingLinks.length) h += `<details class="code"><summary>Planned links not found in code</summary><ul class="list">${missingLinks.map((l) => `<li class="small">${esc(nameOf(l.from))} → ${esc(nameOf(l.to))}${l.nature ? `<div class="muted">${esc(l.nature)}</div>` : ""}</li>`).join("")}</ul></details>`;
+    if (c.contested?.length) h += `<details class="code"><summary>Code that two parts both claim</summary><ul class="list">${c.contested.map((x) => `<li class="small">${codeButtons([x.code])}: ${x.parts.map((id) => esc(nameOf(id))).join(" and ")}. Counted under ${esc(nameOf(x.home))}.</li>`).join("")}</ul></details>`;
+    if (c.interfaces?.length) h += `<details class="code"><summary>Planned interface changes</summary><ul class="list">${c.interfaces.map((x) => { const pi = (P.interfaces ?? []).find((y) => y.id === x.id); return `<li class="small">${esc(pi?.name ?? x.id)} <span class="chip">${x.status === "missing" ? "new" : "shape changes"}</span></li>`; }).join("")}</ul></details>`;
   }
+  if (P.rules.length) {
+    const order = ["broken", "needs-judgement", "stale", "unchecked", "holds"];
+    const sorted = P.rules.slice().sort((a, b) => order.indexOf(ruleResult.get(a.id)?.status) - order.indexOf(ruleResult.get(b.id)?.status));
+    h += `<h3>Rules the design keeps</h3><ul class="list">${sorted.map((r) => { const res = ruleResult.get(r.id); const detail = res?.violations?.length ? `<div class="small muted">${res.violations.slice(0, 4).map((v) => esc(v.package ?? `${codeName(v.from)} → ${codeName(v.to)}`)).join("; ")}${res.violations.length > 4 ? `; and ${res.violations.length - 4} more` : ""}</div>` : res?.answer ? `<div class="small muted">${esc(res.answer.rationale ?? "")}</div>` : res?.question ? `<div class="small muted">Question: ${esc(res.question)}</div>` : ""; return `<li class="small">${esc(r.plain)}${ruleChip(r.id)}${detail}</li>`; }).join("")}</ul>`;
+  }
+  if (P.assumptions?.length) h += `<details class="code"><summary>Facts about the code settled by hand</summary><ul class="list">${P.assumptions.map((a) => `<li class="small">${esc(a.note ?? `${a.from} ${a.kind} ${a.to}`)} <span class="chip${a.checked?.current ? " seen" : " warn"}">${a.checked?.current ? "still true" : "lines changed"}</span></li>`).join("")}</ul></details>`;
+  if (P.gaps?.length) h += `<h3>What the specs leave open</h3><ul class="list">${P.gaps.map((g) => `<li class="small">${esc(g)}</li>`).join("")}</ul>`;
+  if (P.specs?.length) h += `<details class="code"><summary>Sources</summary><ul class="list">${P.specs.map((x) => `<li class="small"><strong>${esc(x.title)}</strong><div class="muted">${esc(x.role ?? "")}</div></li>`).join("")}</ul></details>`;
   return h;
 }
 
@@ -1000,7 +1047,7 @@ function equivalent(id, to) {
   while (current) {
     if (target.has(current)) return current;
     if (to === "proposed" && DATA.proposed.homes[current] && target.has(DATA.proposed.homes[current])) return DATA.proposed.homes[current];
-    if (to === "map") { const p = DATA.proposed.modules.find((m) => m.id === current); const back = p && [...(p.primary ?? []), ...(p.from ?? [])].find((x) => target.has(x)); if (back) return back; }
+    if (to === "map") { const p = DATA.proposed.modules.find((m) => m.id === current); const back = [...(comparisonPart.get(current)?.code ?? []), ...(p?.primary ?? []), ...(p?.from ?? [])].find((x) => target.has(x)); if (back) return back; }
     current = source.get(current)?.parent ?? null;
   }
   return null;

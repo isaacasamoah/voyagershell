@@ -29,6 +29,7 @@ paths:
 proposal:
   title: 'Proposed architecture after the twelve steps of the 11 November review'
   tab: Proposed architecture
+  summary: 'The same three crates and one owner thread. Every request goes through one pipeline, the script bridge is generated from one list of operations, and each kind of request lives in its own module. None of this is built.'
 
 view:
   title: Voyager Shell atlas

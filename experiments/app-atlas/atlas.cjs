@@ -223,6 +223,43 @@ function collect(revision, app) {
     functions.set(id, { id, module: moduleId, fn: name, at: anchorId, plain: plain ?? null });
     return id;
   };
+  // Extractor ids each part stands for (`aliases`) or holds without showing them (`contains`), so a
+  // document written against the extractor's names (a spec reader's binds, for example) resolves here.
+  const aliasMap = new Map();
+  const containsMap = new Map();
+  const note = (map) => (partId, name) => {
+    if (!partId || partId === name) return;
+    if (!map.has(partId)) map.set(partId, new Set());
+    map.get(partId).add(name);
+  };
+  const addAlias = note(aliasMap);
+  const addContained = note(containsMap);
+  for (const external of layer.externals ?? []) for (const name of [...(external.programs ?? []), ...(external.crates ?? []), ...(external.runtime_modules ?? [])]) addAlias(external.id, name);
+  const containerByPath = (file) => (config.paths ?? []).find((entry) => file.startsWith(entry.prefix))?.container ?? null;
+  const ALIASED = new Set(["artifact", "generator", "agent-tool", "source", "files", "package"]);
+  for (const node of observed.nodes) {
+    if (!ALIASED.has(node.kind) || moduleIds.has(node.id) || containerIds.has(node.id)) continue;
+    if (config.lift?.[node.id]) {
+      addAlias(config.lift[node.id], node.id);
+      continue;
+    }
+    // A tool is where it is offered; an experiment source is where it is compiled in.
+    const included = observed.edges.find((edge) => (edge.kind === "includes" || edge.kind === "offers") && edge.to === node.id);
+    const file = node.file ?? node.evidence?.[0]?.path ?? node.id.slice(node.id.indexOf(":") + 1);
+    addContained(included?.from ?? fileToModule.get(file) ?? containerByPath(file), node.id);
+  }
+  for (const part of [...modules, ...containers]) {
+    if (aliasMap.has(part.id)) part.aliases = [...aliasMap.get(part.id)].sort();
+    if (containsMap.has(part.id)) part.contains = [...containsMap.get(part.id)].sort();
+  }
+  // The extractor's own facts, by its ids, so rules written against them can be checked exactly.
+  const extracted = {
+    nodes: observed.nodes.map((node) => node.id),
+    links: observed.edges.map((edge) => ({ kind: edge.kind, from: edge.from, to: edge.to, at: edge.evidence?.[0] ? `${edge.evidence[0].path}:${edge.evidence[0].line}` : null })),
+  };
+  const reach = {};
+  if (read("Cargo.lock")) for (const node of observed.nodes.filter((item) => item.kind === "crate")) reach[node.id] = lockReach(app.source, commit, node.name);
+
   for (const module of modules) {
     if (module.entry) module.entry.id = addFunction(module.entry.fn, module.id, module.entry.at, module.entry.plain);
     for (const item of module.key) item.id = addFunction(item.fn, module.id, item.at, item.plain);
@@ -368,6 +405,8 @@ function collect(revision, app) {
     reading: layer.reading ?? [],
     history,
     anchors,
+    reach,
+    extracted,
     problems: [...problems, ...anchorProblems.map((anchor) => ({ kind: `anchor-${anchor.status}`, id: `${anchor.path}#${anchor.find}` }))],
   };
 }
@@ -546,6 +585,18 @@ function main(argv) {
     else process.stdout.write(text);
     return;
   }
+  if (args.command === "import") {
+    // An architecture-map/v0 intended file (from the spec reader) becomes an architecture/v1 intended document.
+    const { fromV0 } = require("./import-v0.cjs");
+    const code = readDocument(args.code);
+    const target = app();
+    const read = sourceReader(target.git, code.source.commit);
+    const intended = fromV0(readDocument(args["from-v0"]), readDocument(args.annotations), code, { read, commit: code.source.commit });
+    const text = stringify(intended);
+    if (args.out) fs.writeFileSync(args.out, text);
+    else process.stdout.write(text);
+    return;
+  }
   if (args.command === "check") {
     const { model } = build(revision, app());
     for (const problem of model.problems) process.stdout.write(`${JSON.stringify(problem)}\n`);
@@ -562,7 +613,7 @@ function main(argv) {
     process.stdout.write(`${Object.keys(anchors).length} anchors locked at ${model.meta.short}\n`);
     return;
   }
-  process.stderr.write("Usage: node atlas.cjs build|check|lock [--app DIR] [--source DIR] [--rev REV] [--out DIR]\n       node atlas.cjs render --code FILE [--intended FILE] [--comparison FILE] [--out DIR]\n       node atlas.cjs compare --intended FILE --code FILE [--out FILE]\n");
+  process.stderr.write("Usage: node atlas.cjs build|check|lock [--app DIR] [--source DIR] [--rev REV] [--out DIR]\n       node atlas.cjs render --code FILE [--intended FILE] [--comparison FILE] [--out DIR]\n       node atlas.cjs compare --intended FILE --code FILE [--out FILE]\n       node atlas.cjs import --from-v0 FILE [--annotations FILE] --code FILE [--app DIR] [--out FILE]\n");
   process.exitCode = 2;
 }
 
