@@ -10,47 +10,47 @@
   {
    "pathway": "startup",
    "label": "startup",
-   "seconds": 30.0
+   "ms": 30039
   },
   {
    "pathway": "notes-setup",
    "label": "notes-setup",
-   "seconds": 14.8
+   "ms": 14818
   },
   {
    "pathway": "notes-save",
    "label": "notes-save",
-   "seconds": 28.9
+   "ms": 28914
   },
   {
    "pathway": "notes-save",
    "label": "notes-blur-title",
-   "seconds": 21.4
+   "ms": 21376
   },
   {
    "pathway": "dock-avatar",
    "label": "dock-avatar",
-   "seconds": 5.2
+   "ms": 5216
   },
   {
    "pathway": "avatar-open-chat",
    "label": "avatar-open-chat",
-   "seconds": 3.0
+   "ms": 3009
   },
   {
    "pathway": "ask-by-text",
    "label": "ask-by-text",
-   "seconds": 100.8
+   "ms": 100847
   },
   {
    "pathway": "avatar-open-chat",
    "label": "avatar-float",
-   "seconds": 4.0
+   "ms": 4040
   },
   {
    "pathway": "quit",
    "label": "quit",
-   "seconds": 3.4
+   "ms": 3416
   }
  ],
  "threads": {

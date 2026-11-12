@@ -96,7 +96,7 @@ summary = {
     "id": opts["id"], "date": time.strftime("%Y-%m-%d", time.localtime(info["started"])),
     "plain": opts.get("plain", ""), "binary_sha256": info["binary_sha256"], "binary_note": opts.get("note", ""),
     "session": info["session"], "core_stop": info.get("core_stop"),
-    "windows": [{"pathway": w["pathway"], "label": w["label"], "seconds": round(w["to"] - w["from"], 1)} for w in windows],
+    "windows": [{"pathway": w["pathway"], "label": w["label"], "ms": round((w["to"] - w["from"]) * 1000)} for w in windows],
     "threads": {"ui": pid is not None, "owner_identified": owner is not None},
     "steps": result,
     "findings": opts.get("findings", []),

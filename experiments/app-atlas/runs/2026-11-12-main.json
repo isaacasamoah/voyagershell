@@ -10,87 +10,87 @@
   {
    "pathway": "startup",
    "label": "startup",
-   "seconds": 30.1
+   "ms": 30149
   },
   {
    "pathway": "typing",
    "label": "typing",
-   "seconds": 3.9
+   "ms": 3856
   },
   {
    "pathway": "split-vessel",
    "label": "split-vessel",
-   "seconds": 6.1
+   "ms": 6076
   },
   {
    "pathway": "resize-split",
    "label": "resize-split",
-   "seconds": 4.2
+   "ms": 4236
   },
   {
    "pathway": "move-vessel",
    "label": "move-vessel",
-   "seconds": 4.2
+   "ms": 4242
   },
   {
    "pathway": "portal-setup",
    "label": "portal-setup",
-   "seconds": 6.6
+   "ms": 6586
   },
   {
    "pathway": "portal",
    "label": "portal",
-   "seconds": 10.5
+   "ms": 10535
   },
   {
    "pathway": "portal",
    "label": "switch-fleet",
-   "seconds": 3.2
+   "ms": 3185
   },
   {
    "pathway": "dock-avatar",
    "label": "dock-avatar",
-   "seconds": 5.3
+   "ms": 5251
   },
   {
    "pathway": "avatar-open-chat",
    "label": "avatar-open-chat",
-   "seconds": 3.0
+   "ms": 3042
   },
   {
    "pathway": "ask-by-text",
    "label": "ask-by-text",
-   "seconds": 47.3
+   "ms": 47302
   },
   {
    "pathway": "launch-setup",
    "label": "launch-setup",
-   "seconds": 2.8
+   "ms": 2825
   },
   {
    "pathway": "launch-agent",
    "label": "launch-agent",
-   "seconds": 11.0
+   "ms": 11032
   },
   {
    "pathway": "notes-setup",
    "label": "notes-setup",
-   "seconds": 6.6
+   "ms": 6588
   },
   {
    "pathway": "notes-save",
    "label": "notes-save",
-   "seconds": 7.7
+   "ms": 7663
   },
   {
    "pathway": "avatar-open-chat",
    "label": "avatar-float",
-   "seconds": 4.2
+   "ms": 4196
   },
   {
    "pathway": "quit",
    "label": "quit",
-   "seconds": 3.3
+   "ms": 3330
   }
  ],
  "threads": {
