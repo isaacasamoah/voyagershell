@@ -1,0 +1,270 @@
+{
+ "id": "2026-11-12-main",
+ "source": "bytes recorded by trace/hc_tee.sh during the run, decoded by trace/decode_core.py",
+ "methods": {
+  "doc.get": {
+   "count": 22,
+   "request": {
+    "name": "voyager-layout-v1"
+   },
+   "result": {
+    "value": null,
+    "version": 0
+   }
+  },
+  "doc.set": {
+   "count": 20,
+   "request": {
+    "name": "voyager-layout-v1",
+    "value": {
+     "voyages": [
+      {
+       "id": "voyage-1",
+       "name": "Voyager",
+       "nameOrigin": "deliberate",
+       "primaryVessel": "placement-3",
+       "closedOrder": "0",
+       "fleets": [
+        "{\u2026}"
+       ],
+       "portals": [],
+       "portalLayout": {
+        "root": null,
+        "visible": false,
+        "mode": "overlay",
+        "width": 340
+       },
+       "cwd": "~/voyagershell/.worktrees/experiment-app-atlas"
+      }
+     ],
+     "home": {
+      "id": "home-voyage-5",
+      "name": "Home",
+      "nameOrigin": "deliberate",
+      "closedOrder": "0",
+      "fleets": [
+       {
+        "id": "home-fleet-8",
+        "name": "Home",
+        "vessels": [
+         "\u2026"
+        ],
+        "root": "{\u2026}"
+       }
+      ],
+      "portals": [],
+      "portalLayout": {
+       "root": null,
+       "visible": false,
+       "mode": "overlay",
+       "width": 340
+      },
+      "cwd": "~/voyagershell/.worktrees/experiment-app-atlas"
+     },
+     "contents": [
+      {
+       "id": "content-2",
+       "typeId": "terminal",
+       "cwd": "~/voyagershell/.worktrees/experiment-app-atlas",
+       "backend": null
+      },
+      {
+       "id": "content-6",
+       "typeId": "agents",
+       "cwd": "~/voyagershell/.worktrees/experiment-app-atlas",
+       "backend": null
+      }
+     ],
+     "selectedVoyage": "voyage-1",
+     "selectedFleet": "fleet-4",
+     "context": {
+      "kind": "workspace"
+     },
+     "canvas": {
+      "root": {
+       "kind": "row",
+       "size": {
+        "kind": "fill"
+       },
+       "children": [
+        "{\u2026}",
+        "{\u2026}"
+       ]
+      },
+      "sidebarCollapsed": false,
+      "portalMode": "overlay"
+     },
+     "view": "fleet",
+     "savedLayouts": [],
+     "nextId": "8"
+    },
+    "version": 0
+   },
+   "result": {
+    "version": 1
+   }
+  },
+  "events.subscribe": {
+   "count": 1,
+   "request": {},
+   "result": {
+    "channel": 1,
+    "seq": 0,
+    "terminals": []
+   }
+  },
+  "hello": {
+   "count": 1,
+   "request": {
+    "framed": true,
+    "generation": 1
+   },
+   "result": {
+    "core": {
+     "id": "29191d5e5377fd5093505fb00aac38e1",
+     "name": "<host>"
+    },
+    "features": [
+     "framed",
+     "attach",
+     "\u2026 5 more"
+    ],
+    "framed": true,
+    "generation": 1,
+    "methods": [
+     "hello",
+     "server.status",
+     "\u2026 30 more"
+    ],
+    "version": "0.1.19"
+   }
+  },
+  "terminal.attach": {
+   "count": 5,
+   "request": {
+    "cols": 200,
+    "display": {},
+    "history": 0,
+    "observe": false,
+    "resumed": false,
+    "rows": 120,
+    "terminal": "t1"
+   },
+   "result": {
+    "automatic_input": true,
+    "channel": 2,
+    "resize_notifications": false,
+    "terminal": {
+     "address": "t1",
+     "argv": [
+      "/bin/bash"
+     ],
+     "cols": 200,
+     "created_ms": 1794452013515,
+     "cwd": "~/voyagershell/.worktrees/experiment-app-atlas",
+     "die_with_parent": false,
+     "exit_code": null,
+     "finished_ms": null,
+     "identity": "ghostty",
+     "keep": false,
+     "labels": {
+      "voyager-operation": "voyager-start-workspace-3133705-1794451999605818235-2"
+     },
+     "name": null,
+     "\u2026": "15 more fields"
+    }
+   }
+  },
+  "terminal.list": {
+   "count": 80,
+   "request": {
+    "all": true
+   },
+   "result": {
+    "hidden_finished": 0,
+    "terminals": []
+   }
+  },
+  "terminal.read": {
+   "count": 2,
+   "request": {
+    "lines": 0,
+    "terminal": "t1"
+   },
+   "result": {
+    "complete": true,
+    "how": "screen",
+    "text": "<user>@<host>:~/voyagershell/.worktrees/experiment-app-atlas$ echo hello\nhell\u2026"
+   }
+  },
+  "terminal.run": {
+   "count": 5,
+   "request": {
+    "cwd": "~/voyagershell/.worktrees/experiment-app-atlas",
+    "die_with_parent": false,
+    "keep": false,
+    "labels": {
+     "voyager-operation": "voyager-start-workspace-3133705-1794451999605818235-2"
+    },
+    "no_notify": false,
+    "no_parent": true,
+    "outlive_parent": false,
+    "rm": false,
+    "wait": false
+   },
+   "result": {
+    "address": "t1",
+    "argv": [
+     "/bin/bash"
+    ],
+    "cols": 200,
+    "created_ms": 1794452013515,
+    "cwd": "~/voyagershell/.worktrees/experiment-app-atlas",
+    "die_with_parent": false,
+    "exit_code": null,
+    "finished_ms": null,
+    "identity": "ghostty",
+    "keep": false,
+    "labels": {
+     "voyager-operation": "voyager-start-workspace-3133705-1794451999605818235-2"
+    },
+    "name": null,
+    "\u2026": "15 more fields"
+   }
+  }
+ },
+ "notifications": {},
+ "channels": {
+  "control (0)": {
+   "data_frames_to_core": 135,
+   "data_frames_from_core": 135,
+   "bytes_to_core": 63532,
+   "bytes_from_core": 263293,
+   "credit_frames": 0,
+   "close_frames": 0,
+   "example_to_core": null
+  },
+  "terminal and activity channels": {
+   "count": 6,
+   "data_frames_to_core": 112,
+   "data_frames_from_core": 309,
+   "bytes_from_core": 49111,
+   "credit_frames": 183,
+   "close_frames": 5,
+   "example_frames_to_core": [
+    {
+     "bytes": 4,
+     "first_bytes_hex": "95 00 2c 00"
+    },
+    {
+     "bytes": 4,
+     "first_bytes_hex": "48 00 2c 00"
+    },
+    {
+     "bytes": 4,
+     "first_bytes_hex": "95 00 2c 00"
+    }
+   ]
+  }
+ }
+}
