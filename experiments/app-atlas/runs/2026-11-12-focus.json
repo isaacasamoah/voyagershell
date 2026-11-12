@@ -1,0 +1,1347 @@
+{
+ "id": "2026-11-12-focus",
+ "date": "2026-11-12",
+ "plain": "A focused session: create a Note, type in its body and move focus away twice, dock the avatar, open chat, one text request with a 90 second wait, click the avatar, quit.",
+ "binary_sha256": "8debaeb33c809970faf0aa71465a2e2423f6179c086d409b65e5ba5b5eefe636",
+ "binary_note": "optimized build whose product source equals main e6bd5b1 (copied from its verified build, not rebuilt)",
+ "session": "voyager-atlas-focus3",
+ "core_stop": "{\"stopped\":true}",
+ "windows": [
+  {
+   "pathway": "startup",
+   "label": "startup",
+   "seconds": 30.0
+  },
+  {
+   "pathway": "notes-setup",
+   "label": "notes-setup",
+   "seconds": 14.8
+  },
+  {
+   "pathway": "notes-save",
+   "label": "notes-save",
+   "seconds": 28.9
+  },
+  {
+   "pathway": "notes-save",
+   "label": "notes-blur-title",
+   "seconds": 21.4
+  },
+  {
+   "pathway": "dock-avatar",
+   "label": "dock-avatar",
+   "seconds": 5.2
+  },
+  {
+   "pathway": "avatar-open-chat",
+   "label": "avatar-open-chat",
+   "seconds": 3.0
+  },
+  {
+   "pathway": "ask-by-text",
+   "label": "ask-by-text",
+   "seconds": 100.8
+  },
+  {
+   "pathway": "avatar-open-chat",
+   "label": "avatar-float",
+   "seconds": 4.0
+  },
+  {
+   "pathway": "quit",
+   "label": "quit",
+   "seconds": 3.4
+  }
+ ],
+ "threads": {
+  "ui": true,
+  "owner_identified": true
+ },
+ "steps": {
+  "ask-by-text": {
+   "ask-by-text-1": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "ask-by-text-2": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_desktop::conversation::module::{closure#1}",
+    "hits": 3,
+    "thread": "a background thread, the UI thread",
+    "roles": [
+     "background",
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 1676
+   },
+   "ask-by-text-3": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::conversation_client::Owner>::call",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1706
+   },
+   "ask-by-text-4": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::client::Client>::conversation_focus",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1711
+   },
+   "ask-by-text-5": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::codex::Codex>::open",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1711
+   },
+   "ask-by-text-6": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::administrator::catalog",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1898
+   },
+   "ask-by-text-7": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::codex::protocol::encode",
+    "hits": 3,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1721
+   },
+   "ask-by-text-8": {
+    "checkable": false,
+    "reason": "runs in another program"
+   },
+   "ask-by-text-9": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::codex::protocol::decode",
+    "hits": 32,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1897
+   },
+   "ask-by-text-10": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::administrator::Tools>::call",
+    "hits": 9,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 7065
+   },
+   "ask-by-text-11": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::administrator::Tools>::call::{closure#12}",
+    "hits": 11,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1722
+   },
+   "ask-by-text-12": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::scope::check",
+    "hits": 5,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 1711
+   },
+   "ask-by-text-13": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::workspace::Model>::apply",
+    "hits": 1,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 37194
+   },
+   "ask-by-text-14": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::conversation_client::Owner>::tool_result",
+    "hits": 169,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 33
+   },
+   "ask-by-text-15": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::conversation_client::Owner>::reduce",
+    "hits": 26,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 2001
+   },
+   "ask-by-text-16": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "ask-by-text-17": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "ask-by-text-18": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::client::open_terminal",
+    "hits": 1,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 37399
+   },
+   "ask-by-text-12a": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::scope::check",
+    "hits": 5,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 1711
+   },
+   "ask-by-text-12b": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::administrator::outcome_text",
+    "hits": 2,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 7070
+   },
+   "ask-by-text-12c": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "ask-by-text-14a": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::administrator::Tools>::poll",
+    "hits": 8,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 7078
+   },
+   "ask-by-text-14b": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_app::conversation_client::Owner>::fail",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "ask-by-text-14c": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "ask-by-text-16a": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "ask-by-text-16b": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::conversation_client::Owner>::call",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1706
+   }
+  },
+  "avatar-open-chat": {
+   "avatar-open-chat-1": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::view::AvatarView as gpui::element::Render>::render::{closure#6}",
+    "hits": 114,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 262
+   },
+   "avatar-open-chat-2": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::released",
+    "hits": 2,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 408
+   },
+   "avatar-open-chat-3": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::activate",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 104285
+   },
+   "avatar-open-chat-4": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::avatar_motion::Motion>::trigger",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "avatar-open-chat-5": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::float",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 104286
+   },
+   "avatar-open-chat-6": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::float::{closure#2}",
+    "hits": 5,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 104357
+   },
+   "avatar-open-chat-7": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::position_float::{closure#2}::{closure#0}::{closure#0}",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 104371
+   },
+   "avatar-open-chat-8": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::view::AvatarView as gpui::element::Render>::render",
+    "hits": 64,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 261
+   },
+   "avatar-open-chat-9": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_desktop::avatar::paint::layers",
+    "hits": 54,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 262
+   },
+   "avatar-open-chat-10": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::avatar::Avatar>::restore_workspace::{closure#3}",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "avatar-open-chat-11": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::avatar::Avatar>::restored",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "avatar-open-chat-12": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "avatar-open-chat-13": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_desktop::conversation::module::{closure#2}",
+    "hits": 5,
+    "thread": "a background thread, the UI thread",
+    "roles": [
+     "background",
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 420
+   },
+   "avatar-open-chat-14": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "avatar-open-chat-2a": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::view::AvatarView as gpui::element::Render>::render::{closure#10}",
+    "hits": 186,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 263
+   },
+   "avatar-open-chat-1a": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::view::AvatarView as gpui::element::Render>::render::{closure#3}",
+    "hits": 196,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 255
+   },
+   "avatar-open-chat-1b": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar_motion::Motion>::tick",
+    "hits": 68,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 261
+   },
+   "avatar-open-chat-3a": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::avatar::Binding>::new::{closure#2}",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   }
+  },
+  "dock-avatar": {
+   "dock-avatar-1": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Binding>::module::{closure#5}",
+    "hits": 70,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 113
+   },
+   "dock-avatar-2": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::view::AvatarView as gpui::element::Render>::render::{closure#6}",
+    "hits": 124,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 112
+   },
+   "dock-avatar-3": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::moving",
+    "hits": 13,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 253
+   },
+   "dock-avatar-4": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::view::AvatarView as gpui::element::Render>::render",
+    "hits": 60,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 110
+   },
+   "dock-avatar-5": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::released",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 1715
+   },
+   "dock-avatar-6": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::dock",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 1715
+   },
+   "dock-avatar-7": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::client::Client>::queue_workspace",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1716
+   },
+   "dock-avatar-8": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::workspace::Model>::apply",
+    "hits": 1,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 1716
+   },
+   "dock-avatar-9": {
+    "checkable": false,
+    "reason": "runs inside Herdr Core"
+   },
+   "dock-avatar-10": {
+    "checkable": false,
+    "reason": "inside a long-running loop: the debugger saw the loop start earlier, not each pass",
+    "symbol": "<voyager_app::client::Client>::start_with_launches::{closure#0}"
+   },
+   "dock-avatar-11": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::applied_dock",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 1724
+   },
+   "dock-avatar-12": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "dock-avatar-13": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Binding>::module::{closure#4}",
+    "hits": 26,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 116
+   },
+   "dock-avatar-14": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::view::AvatarView as gpui::element::Render>::render",
+    "hits": 60,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 110
+   },
+   "dock-avatar-15": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_desktop::host::load::{closure#7}::{closure#0}",
+    "hits": 6,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1103
+   },
+   "dock-avatar-16": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::context::capture",
+    "hits": 3,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 1103
+   },
+   "dock-avatar-17": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "dock-avatar-18": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::context::prepare",
+    "hits": 1,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 1722
+   },
+   "dock-avatar-5a": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Binding>::module::{closure#5}::{closure#5}",
+    "hits": 130,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 129
+   },
+   "dock-avatar-4a": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Geometry>::target_at",
+    "hits": 16,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 704
+   },
+   "dock-avatar-4b": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::view::AvatarView as gpui::element::Render>::render",
+    "hits": 60,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 110
+   },
+   "dock-avatar-5b": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::avatar::Avatar>::released",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 1715
+   },
+   "dock-avatar-5c": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::workspace::Model>::apply",
+    "hits": 1,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 1716
+   }
+  },
+  "notes-save": {
+   "notes-save-1": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "notes-save-2": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::notes_input::Body as gpui_shell::component_registry::ComponentMaterializer>::materialize",
+    "hits": 131,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 426
+   },
+   "notes-save-3": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::notes_session::Session>::changed",
+    "hits": 21,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 788
+   },
+   "notes-save-4": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::notes_session::Session>::new::{closure#1}",
+    "hits": 21,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 787
+   },
+   "notes-save-5": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::notes_session::Session>::save",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "notes-save-6": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::notes_session::Session>::save",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "notes-save-7": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_app::client::Client>::content_native_save",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "notes-save-8": {
+    "checkable": false,
+    "reason": "inside a long-running loop: the debugger saw the loop start earlier, not each pass",
+    "symbol": "<voyager_app::client::Client>::start_with_launches::{closure#0}"
+   },
+   "notes-save-9": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "voyager_app::client::load",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "notes-save-10": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "voyager_app::content::admit",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "notes-save-11": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_app::content::Owner>::call",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "notes-save-12": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_app::content::Owner>::call",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "notes-save-13": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "voyager_app::content::finish_write",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "notes-save-14": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_app::content::Owner>::notify",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "notes-save-15": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::notes_draft::Draft>::finish",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "notes-save-16": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::notes_session::Session>::observe",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "notes-save-17": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::notes::Note>::new::{closure#1}",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "notes-save-18": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::notes::Host>::module::{closure#1}",
+    "hits": 131,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 424
+   },
+   "notes-save-19": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "notes-save-b1-1": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<gpui::app::App>::update_window_id::<core::result::Result<(alloc::vec::Vec<async_channel::Receiver<core::result::Result<(), voyager_app::client::CallError>>>, core::option::Option<gpui::app::entity_map::Entity<voyager_desktop::notes_session::Session>>), alloc::string::String>, <voyager_desktop::notes::Host>::watch_close_saves<voyager_desktop::host::Header>::{closure#0}::{closure#0}::{closure#0}>::{closure#0}",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "notes-save-b1-2": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::notes_session::Session>::flush",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "notes-save-b1-3": {
+    "checkable": false,
+    "reason": "inside a long-running loop: the debugger saw the loop start earlier, not each pass",
+    "symbol": "<voyager_app::client::Client>::start_with_launches::{closure#0}"
+   },
+   "notes-save-b2-1": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_app::content::Owner>::call",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "notes-save-b2-2": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::notes_draft::Draft>::load",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "notes-save-b3-1": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_app::client::Client>::content_inner",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "notes-save-b3-2": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_desktop::notes_draft::Draft>::finish",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   }
+  },
+  "quit": {
+   "quit-1": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<gpui::app::Application>::run<voyager_desktop::run::{closure#1}>::{closure#0} as core::ops::function::FnOnce<()>>::call_once",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "quit-2": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<gpui::app::App>::on_action::<voyager_desktop::Quit, voyager_desktop::quit::register::{closure#0}>::{closure#0}",
+    "hits": 2,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 46
+   },
+   "quit-3": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<gpui::app::App as gpui::AppContext>::update_entity::<voyager_desktop::host::Header, (), voyager_desktop::quit::register::{closure#0}::{closure#1}>::{closure#0}",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 46
+   },
+   "quit-4": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_desktop::quit::register::{closure#0}::{closure#2}::{closure#0}::{closure#0}",
+    "hits": 2,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 48
+   },
+   "quit-5": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_desktop::quit::register::{closure#0}::{closure#2}::{closure#0}::{closure#0}",
+    "hits": 2,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 48
+   },
+   "quit-6": {
+    "checkable": false,
+    "reason": "inside a long-running loop: the debugger saw the loop start earlier, not each pass",
+    "symbol": "__rust_begin_short_backtrace::<<voyager_app::conversation_client::Client>::with_audio::{closure#0}, ()>"
+   },
+   "quit-7": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::codex::Codex>::shutdown",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 54
+   },
+   "quit-8": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::conversation_client::Owner>::quit",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 54
+   },
+   "quit-9": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<gpui::app::App>::spawn::<voyager_desktop::quit::register::{closure#0}::{closure#2}, ()>::{closure#0}",
+    "hits": 2,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 47
+   },
+   "quit-10": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "voyager_shell::main",
+    "hits": 0,
+    "reason": "ran elsewhere in this run but not during this step; the optimizer may have inlined this call"
+   },
+   "quit-11": {
+    "checkable": false,
+    "reason": "no symbol to watch"
+   },
+   "quit-12": {
+    "checkable": false,
+    "reason": "runs inside Herdr Core"
+   },
+   "quit-b1-1": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<gpui::app::App>::update_window_id::<bool, <gpui::app::async_context::AsyncWindowContext>::update<bool, <gpui::window::Window>::on_window_should_close<<voyager_desktop::avatar::Binding>::new::{closure#2}>::{closure#0}::{closure#0}>::{closure#0}>::{closure#0}",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "quit-b1-2": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "voyager_desktop::run::{closure#1}::{closure#1}",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   },
+   "quit-b2-1": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<gpui::app::App>::on_action::<voyager_desktop::Quit, voyager_desktop::quit::register::{closure#0}>::{closure#0}",
+    "hits": 2,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 46
+   },
+   "quit-b3-1": {
+    "checkable": false,
+    "reason": "inside a long-running loop: the debugger saw the loop start earlier, not each pass",
+    "symbol": "<voyager_app::client::Client>::start_with_launches::{closure#0}"
+   },
+   "quit-b3-2": {
+    "checkable": true,
+    "seen": false,
+    "symbol": "<voyager_app::core::Core>::quit",
+    "hits": 0,
+    "reason": "never seen running in this run"
+   }
+  },
+  "startup": {
+   "startup-1": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_shell::main",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 581
+   },
+   "startup-2": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_desktop::run",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 581
+   },
+   "startup-3": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::client::Client>::start_with_launches",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 583
+   },
+   "startup-4": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::core::Core>::connect_activity",
+    "hits": 1,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 585
+   },
+   "startup-5": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "__rust_begin_short_backtrace::<<voyager_app::core::Core>::connect_activity::{closure#6}, ()>",
+    "hits": 1,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 1703
+   },
+   "startup-6": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::conversation_client::Client>::with_audio",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": false,
+    "after_ms": 590
+   },
+   "startup-7": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<gpui::app::Application>::run<voyager_desktop::run::{closure#1}>::{closure#0} as core::ops::function::FnOnce<()>>::call_once",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 604
+   },
+   "startup-8": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<gpui::app::Application>::run<voyager_desktop::run::{closure#1}>::{closure#0} as core::ops::function::FnOnce<()>>::call_once",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 604
+   },
+   "startup-9": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_desktop::host::load",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 14669
+   },
+   "startup-10": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "startup-11": {
+    "checkable": false,
+    "reason": "no symbol to watch"
+   },
+   "startup-12": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_desktop::host::load::{closure#9}::{closure#0}",
+    "hits": 2,
+    "thread": "a background thread",
+    "roles": [
+     "background"
+    ],
+    "matches": true,
+    "after_ms": 14741
+   },
+   "startup-13": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::client::Client>::start_with_launches::{closure#0}::{closure#47}",
+    "hits": 2,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 14742
+   },
+   "startup-14": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "startup-15": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::client::open_terminal",
+    "hits": 1,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 14786
+   },
+   "startup-16": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<gpui::app::App as gpui::AppContext>::new::<voyager_desktop::terminal::Pane, voyager_desktop::terminal::register::{closure#0}::{closure#4}>::{closure#0}",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 14877
+   },
+   "startup-17": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<gpui::app::App as gpui::AppContext>::update_entity::<voyager_desktop::terminal::Pane, bool, <voyager_desktop::terminal::Pane>::new::{closure#0}::{closure#0}::{closure#0}>::{closure#0}",
+    "hits": 4,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 14878
+   },
+   "startup-b1-1": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::client::Client>::start_with_launches::{closure#0}",
+    "hits": 1,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 585
+   },
+   "startup-b1-2": {
+    "checkable": false,
+    "reason": "runs in the script engine; not visible to the debugger"
+   },
+   "startup-b2-1": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_desktop::host::Header>::new",
+    "hits": 1,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": true,
+    "after_ms": 14669
+   },
+   "startup-b2-2": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<gpui::app::App>::spawn::<<gpui::app::context::Context<voyager_desktop::host::Header>>::spawn<<voyager_desktop::host::Header>::new::{closure#4}, ()>::{closure#0}, ()>::{closure#0}",
+    "hits": 30,
+    "thread": "the UI thread",
+    "roles": [
+     "ui-thread"
+    ],
+    "matches": false,
+    "after_ms": 14742
+   },
+   "startup-b3-1": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "<voyager_app::client::Client>::start_with_launches::{closure#0}::{closure#47}",
+    "hits": 2,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 14742
+   },
+   "startup-b3-2": {
+    "checkable": true,
+    "seen": true,
+    "symbol": "voyager_app::client::open_terminal::{closure#7}",
+    "hits": 1,
+    "thread": "the app owner thread",
+    "roles": [
+     "owner-thread"
+    ],
+    "matches": true,
+    "after_ms": 14792
+   }
+  }
+ },
+ "findings": [
+  {
+   "pathway": "notes-save",
+   "plain": "Typed body text was not saved. After typing in a Note's body, moving focus to a terminal and then to the Note's title did not save: Session::save and Client::content_native_save never ran, and Title.md kept only its title. Seen in two runs under a private X display; not yet checked on your desktop."
+  },
+  {
+   "pathway": "avatar-open-chat",
+   "plain": "Clicking the avatar opened the floating avatar window instead of the chat; the chat opened from the sidebar Chat button. The private display has no window manager, so the main window was not minimised and the restore steps did not run."
+  }
+ ]
+}
