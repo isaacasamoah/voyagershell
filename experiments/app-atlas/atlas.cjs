@@ -7,6 +7,7 @@ const path = require("node:path");
 const { observe } = require("../architecture-map/observe.cjs");
 const { merges } = require("../architecture-map/history.cjs");
 const { parse, stringify } = require("../architecture-map/yaml.cjs");
+const { toDocuments, compareDocuments, modelFrom } = require("./format.cjs");
 
 const repository = path.resolve(__dirname, "../..");
 const mapConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "../architecture-map/config.json"), "utf8"));
@@ -108,7 +109,7 @@ const CODE_EDGES = new Set(["uses", "imports", "exposes", "embeds", "includes"])
 const BUILD_EDGES = new Set(["generates", "generated_from", "runs"]);
 const RUNTIME_EDGES = new Set(["spawns"]);
 
-function build(revision, layerDir) {
+function collect(revision, layerDir) {
   const commit = git(["rev-parse", revision]).trim();
   const observed = observe(repository, commit, mapConfig).observed;
   const layer = loadLayer(layerDir);
@@ -404,7 +405,7 @@ function buildProposed(layer, modules, moduleIds, edges, features, problems) {
   }
   const homes = {};
   for (const module of modules) homes[module.id] = mapTo(module.id) ?? module.id;
-  return { features: layer.proposed_features ?? [], modules: out, edges: [...edgeMap.values()], rules, homes };
+  return { features: layer.proposed_features ?? [], modules: out, edges: [...edgeMap.values()], rules, homes, interfaces: layer.proposed_interfaces ?? [] };
 }
 
 // Runtime observations: each pathway shows the run in which most of its steps were seen.
@@ -470,6 +471,21 @@ function buildHistory(commit, fileToModule, modules) {
   return { from: mapConfig.history.from, prs };
 }
 
+// Build = read the code, write the architecture documents, then derive the page model from the documents alone.
+function build(revision, layerDir) {
+  const documents = toDocuments(collect(revision, layerDir));
+  documents.comparison = documents.intended ? compareDocuments(documents.intended, documents.code) : null;
+  return { documents, model: modelFrom(documents) };
+}
+
+function writeDocuments(documents, out) {
+  for (const kind of ["code", "intended", "comparison"]) if (documents[kind]) fs.writeFileSync(path.join(out, `architecture.${kind}.yaml`), stringify(documents[kind]));
+}
+
+function readDocument(file) {
+  return file ? parse(fs.readFileSync(file, "utf8")) : null;
+}
+
 function render(model) {
   const template = fs.readFileSync(path.join(__dirname, "view.html"), "utf8");
   const json = JSON.stringify(model).replace(/</g, "\\u003c");
@@ -480,34 +496,52 @@ function main(argv) {
   const args = options(argv);
   const layerDir = path.resolve(args.layer ?? path.join(__dirname, "layer"));
   const revision = args.rev ?? "HEAD";
+  const out = path.resolve(args.out ?? path.join(__dirname, "out"));
   if (args.command === "build") {
-    const out = path.resolve(args.out ?? path.join(__dirname, "out"));
     fs.mkdirSync(out, { recursive: true });
-    const model = build(revision, layerDir);
+    const { documents, model } = build(revision, layerDir);
+    writeDocuments(documents, out);
     fs.writeFileSync(path.join(out, "atlas.json"), `${JSON.stringify(model, null, 1)}\n`);
     fs.writeFileSync(path.join(out, "atlas.html"), render(model));
     process.stdout.write(`${path.join(out, "atlas.html")}\n${model.problems.length} problem(s)\n`);
     return;
   }
+  if (args.command === "render") {
+    // Any producer that writes architecture/v1 documents can be viewed: no source checkout needed.
+    const code = readDocument(args.code);
+    const intended = readDocument(args.intended);
+    const comparison = readDocument(args.comparison) ?? (intended ? compareDocuments(intended, code) : null);
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, "atlas.html"), render(modelFrom({ code, intended, comparison })));
+    process.stdout.write(`${path.join(out, "atlas.html")}\n`);
+    return;
+  }
+  if (args.command === "compare") {
+    const comparison = compareDocuments(readDocument(args.intended), readDocument(args.code));
+    const text = stringify(comparison);
+    if (args.out) fs.writeFileSync(args.out, text);
+    else process.stdout.write(text);
+    return;
+  }
   if (args.command === "check") {
-    const model = build(revision, layerDir);
+    const { model } = build(revision, layerDir);
     for (const problem of model.problems) process.stdout.write(`${JSON.stringify(problem)}\n`);
     process.stdout.write(`${model.meta.counts.anchors} anchors, ${model.problems.length} problem(s) at ${model.meta.short}\n`);
     process.exitCode = model.problems.length ? 1 : 0;
     return;
   }
   if (args.command === "lock") {
-    const model = build(revision, layerDir);
+    const { model } = build(revision, layerDir);
     const anchors = {};
     for (const anchor of Object.values(model.anchors).sort((a, b) => a.id.localeCompare(b.id))) if (anchor.fingerprint) anchors[anchor.id] = anchor.fingerprint;
     fs.writeFileSync(path.join(layerDir, "anchors.lock.yaml"), stringify({ schema: "app-atlas/v0", commit: model.meta.commit, note: "Fingerprints of the source under each anchor when the layer was last reviewed. A changed fingerprint marks the claim for review.", anchors }));
     process.stdout.write(`${Object.keys(anchors).length} anchors locked at ${model.meta.short}\n`);
     return;
   }
-  process.stderr.write("Usage: node atlas.cjs build|check|lock [--rev REV] [--layer DIR] [--out DIR]\n");
+  process.stderr.write("Usage: node atlas.cjs build|check|lock [--rev REV] [--layer DIR] [--out DIR]\n       node atlas.cjs render --code FILE [--intended FILE] [--comparison FILE] [--out DIR]\n       node atlas.cjs compare --intended FILE --code FILE [--out FILE]\n");
   process.exitCode = 2;
 }
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { build, anchorResolver, loadLayer };
+module.exports = { build, collect, anchorResolver, loadLayer };

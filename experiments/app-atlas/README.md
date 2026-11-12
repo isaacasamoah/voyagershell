@@ -8,13 +8,15 @@ One interactive map of VoyagerShell that you open part by part, from concepts do
 node experiments/app-atlas/atlas.cjs build --rev HEAD
 ```
 
-Open `experiments/app-atlas/out/atlas.html`. It is one self-contained file and works offline; only the "Open on GitHub" links need a network.
+Open `experiments/app-atlas/out/atlas.html`. The build also writes `architecture.code.yaml`, `architecture.intended.yaml` and `architecture.comparison.yaml` in the [architecture/v1 format](FORMAT.md); the page is derived from those three files alone. It is one self-contained file and works offline; only the "Open on GitHub" links need a network.
 
 | Command | Result |
 | --- | --- |
 | `build [--rev REV] [--out DIR]` | `atlas.json` (the model) and `atlas.html` (the page). |
 | `check [--rev REV]` | Lists every problem and exits 1 if there is any. |
 | `lock [--rev REV]` | Records a fingerprint of the code under every anchor in `layer/anchors.lock.yaml`. |
+| `render --code FILE [--intended FILE] [--comparison FILE]` | The page from `architecture/v1` documents alone, with no checkout. |
+| `compare --intended FILE --code FILE` | The comparison document. |
 
 Tests: `node --test experiments/app-atlas/atlas-test.cjs`.
 

@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/isaacasamoah/voyagershell/experiments/app-atlas/architecture-v1.schema.json",
+  "title": "architecture/v1",
+  "description": "An application's architecture read from code or intended by a design, or the comparison of the two. See FORMAT.md.",
+  "type": "object",
+  "required": ["schema", "kind"],
+  "properties": {
+    "schema": { "const": "architecture/v1" },
+    "kind": { "enum": ["code", "intended", "comparison"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "enum": ["code", "intended"] } } },
+      "then": {
+        "required": ["source", "levels", "parts", "links"],
+        "properties": {
+          "source": { "type": "object" },
+          "levels": { "const": ["concept", "container", "feature", "module", "function"] },
+          "features": { "type": "array", "items": { "type": "object", "required": ["id", "name"] } },
+          "parts": { "type": "array", "items": { "$ref": "#/definitions/part" } },
+          "links": { "type": "array", "items": { "$ref": "#/definitions/link" } },
+          "interfaces": { "type": "array", "items": { "$ref": "#/definitions/interface" } },
+          "pathways": { "type": "array", "items": { "$ref": "#/definitions/pathway" } },
+          "rules": { "type": "array", "items": { "$ref": "#/definitions/rule" } },
+          "anchors": { "type": "object", "additionalProperties": { "$ref": "#/definitions/anchor" } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "comparison" } } },
+      "then": {
+        "required": ["intended", "code", "summary", "homes", "parts", "links", "today", "interfaces", "stale"],
+        "properties": {
+          "summary": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+          "homes": { "type": "object", "additionalProperties": { "type": "string" } },
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "status", "code"],
+              "properties": {
+                "id": { "type": "string" },
+                "status": { "enum": ["matched", "changed", "moved", "missing", "unplanned"] },
+                "code": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          },
+          "links": { "type": "array", "items": { "type": "object", "required": ["from", "to", "status"], "properties": { "status": { "enum": ["matched", "missing"] } } } },
+          "today": { "type": "array", "items": { "type": "object", "required": ["from", "to", "status", "breaks"], "properties": { "status": { "enum": ["allowed", "breaks-rule"] }, "breaks": { "type": "array", "items": { "type": "string" } } } } },
+          "interfaces": { "type": "array", "items": { "type": "object", "required": ["id", "status"], "properties": { "status": { "enum": ["matched", "changed", "missing"] } } } },
+          "stale": { "type": "array" }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "part": {
+      "type": "object",
+      "required": ["id", "level", "parent"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "level": { "enum": ["concept", "container", "feature", "module", "function"] },
+        "parent": { "type": ["string", "null"] },
+        "name": { "type": "string" },
+        "plain": { "type": ["string", "null"] },
+        "status": { "enum": ["new", "changed", "split", "merged", "moved", "unchanged"] },
+        "binds": { "type": "array", "items": { "type": "string" } },
+        "primary": { "type": "array", "items": { "type": "string" } },
+        "from": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": ["from", "to", "category"],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "category": { "enum": ["code", "runtime", "build", "proposed"] },
+        "kinds": { "type": "array", "items": { "type": "string" } },
+        "count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "shape": {
+      "type": ["object", "null"],
+      "properties": { "plain": { "type": "string" }, "shape": { "type": "string" } }
+    },
+    "interface": {
+      "type": "object",
+      "required": ["id", "name", "from", "to"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "from": { "type": "array", "items": { "type": "string" } },
+        "to": { "type": "array", "items": { "type": "string" } },
+        "mechanism": { "enum": ["call", "channel", "core-rpc", "core-stream", "script-call", "ipc", "process", "file", "render", "build"] },
+        "request": { "$ref": "#/definitions/shape" },
+        "response": { "$ref": "#/definitions/shape" },
+        "replaces": { "type": "string" }
+      }
+    },
+    "pathway": {
+      "type": "object",
+      "required": ["id", "name", "steps"],
+      "properties": { "steps": { "type": "array", "items": { "type": "object", "required": ["id", "module"] } } }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["id", "plain", "from", "to"],
+      "properties": {
+        "from": { "type": "array", "items": { "type": "string" } },
+        "to": { "type": "array", "items": { "type": "string" } },
+        "except_from": { "type": "array", "items": { "type": "string" } },
+        "except_to": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "required": ["path", "status"],
+      "properties": { "status": { "enum": ["current", "unreviewed", "changed", "missing", "missing-file", "ambiguous"] } }
+    }
+  }
+}
