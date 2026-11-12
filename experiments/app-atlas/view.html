@@ -488,7 +488,7 @@ function draw(svg, L, opts = {}) {
 }
 function compactRange(nums) {
   const out = []; let a = nums[0], b = nums[0];
-  for (let i = 1; i <= nums.length; i++) { if (nums[i] === b + 1) b = nums[i]; else { out.push(a === b ? `${a}` : `${a}–${b}`); a = b = nums[i]; } }
+  for (let i = 1; i <= nums.length; i++) { if (nums[i] === b + 1) b = nums[i]; else { out.push(a === b ? `${a}` : `${a}-${b}`); a = b = nums[i]; } }
   return out.join(",");
 }
 
@@ -853,7 +853,7 @@ function init() {
   $("theme").onclick = () => { const r = document.documentElement; const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("atlas-theme", r.dataset.theme); } catch {} };
   try { const t = localStorage.getItem("atlas-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
   $("legend-concepts").innerHTML = DATA.concepts.map((c) => `<span><span class="sw" style="background:var(--c-${c.colour})"></span>${esc(c.name)}</span>`).join("");
-  $("legend-lines").innerHTML = `<span><span class="ln" style="border-color:var(--edge-code)"></span>uses code</span><span><span class="ln" style="border-color:var(--edge-runtime)"></span>runtime hop</span><span><span class="ln" style="border-color:var(--route);border-top-width:3px"></span>selected pathway</span><span><span class="sw" style="background:var(--change)"></span>changed by PR</span><span>keys 1–5 change level · ←/→ step · Esc clears</span>`;
+  $("legend-lines").innerHTML = `<span><span class="ln" style="border-color:var(--edge-code)"></span>uses code</span><span><span class="ln" style="border-color:var(--edge-runtime)"></span>runtime hop</span><span><span class="ln" style="border-color:var(--route);border-top-width:3px"></span>selected pathway</span><span><span class="sw" style="background:var(--change)"></span>changed by PR</span><span>keys 1 to 5 change level · ← and → step · Esc clears</span>`;
   readHash(); if (S.pr) fillCommits();
   render();
 }
