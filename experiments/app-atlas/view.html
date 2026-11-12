@@ -620,9 +620,11 @@ function pathwaysThrough(id) {
   for (const p of DATA.pathways) { const hits = p.steps.map((s, i) => [s, i]).filter(([s]) => isInside(s.module, id)); if (hits.length) out.push(`<li><button class="link" data-path="${esc(p.id)}" data-step="${hits[0][1]}">${esc(p.name)}</button> <span class="muted small">step${hits.length > 1 ? "s" : ""} ${esc(compactRange(hits.map((h) => h[1] + 1)))}</span></li>`); }
   return out.join("");
 }
+// History entries are pull requests or, in repositories that also commit straight to the branch, single commits.
+const prLabel = (p) => (p.pull ? `PR #${p.pull}` : `commit ${String(p.commit).slice(0, 7)}`);
 function prsTouching(id) {
   const rows = [];
-  for (const pr of DATA.history.prs) { let add = 0, del = 0, files = 0; for (const f of pr.files) { const owner = f.module ?? f.container; if (owner && isInside(owner, id)) { add += f.add; del += f.del; files++; } } if (files) rows.push(`<li><button class="link" data-pr="${esc(String(pr.pull ?? pr.commit))}">PR #${esc(pr.pull)}</button> ${esc(pr.title)} <span class="muted small">+${add} −${del}</span></li>`); }
+  for (const pr of DATA.history.prs) { let add = 0, del = 0, files = 0; for (const f of pr.files) { const owner = f.module ?? f.container; if (owner && isInside(owner, id)) { add += f.add; del += f.del; files++; } } if (files) rows.push(`<li><button class="link" data-pr="${esc(String(pr.pull ?? pr.commit))}">${esc(prLabel(pr))}</button> ${esc(pr.title)} <span class="muted small">+${add} −${del}</span></li>`); }
   return rows.join("");
 }
 function inspectNode(id, view) {
@@ -888,8 +890,8 @@ function changedFiles() {
 }
 function inspectChanges() {
   const cf = changedFiles(); const pr = cf.pr;
-  let h = `<div class="kicker"><span>${S.commit ? "commit" : "pull request"}</span></div><h2>${S.commit ? esc(cf.label) : `PR #${esc(pr.pull)}: ${esc(pr.title)}`}</h2>`;
-  h += `<p class="small muted">${S.commit ? `<code>${esc(S.commit.slice(0, 7))}</code> in PR #${esc(pr.pull)}` : `Merged ${esc(pr.date)} · ${pr.commits.length} commits · branch <code>${esc(pr.branch ?? "")}</code>`}</p>`;
+  let h = `<div class="kicker"><span>${S.commit ? "commit" : "pull request"}</span></div><h2>${S.commit ? esc(cf.label) : `${esc(prLabel(pr))}: ${esc(pr.title)}`}</h2>`;
+  h += `<p class="small muted">${S.commit ? `<code>${esc(S.commit.slice(0, 7))}</code> in ${esc(prLabel(pr))}` : pr.commits.length ? `Merged ${esc(pr.date)} · ${pr.commits.length} commits${pr.branch ? ` · branch <code>${esc(pr.branch)}</code>` : ""}` : `${pr.pull ? "Squash-merged" : "Committed"} ${esc(pr.date)}`}</p>`;
   const groups = new Map(); for (const f of cf.files) { const key = f.module ?? f.container ?? "other"; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(f); }
   const rows = [...groups.entries()].sort((a, b) => b[1].reduce((s, f) => s + f.add + f.del, 0) - a[1].reduce((s, f) => s + f.add + f.del, 0));
   h += `<h3>What it touched</h3><ul class="list">${rows.map(([k, fs]) => { const n = node(k); const add = fs.reduce((s, f) => s + f.add, 0), del = fs.reduce((s, f) => s + f.del, 0); return `<li>${n ? linkTo(k) : `<span class="muted">Not on the map (docs, tests, config)</span>`} <span class="muted small">+${add} −${del}</span>${!n || fs.length > 1 ? `<div class="small muted">${fs.slice(0, 8).map((f) => esc(f.path)).join("<br>")}${fs.length > 8 ? `<br>…and ${fs.length - 8} more` : ""}</div>` : ""}</li>`; }).join("")}</ul>`;
@@ -930,7 +932,7 @@ function render() {
   if (S.tab === "about") return renderAbout();
   M = MODELS[S.tab === "proposed" ? "proposed" : "map"];
   const isMap = S.tab === "map";
-  $("pathway-wrap").hidden = !isMap; $("pr-wrap").hidden = !isMap || !DATA.history.prs.length; $("commit-wrap").hidden = !isMap || !S.pr; $("today-wrap").hidden = isMap;
+  $("pathway-wrap").hidden = !isMap; $("pr-wrap").hidden = !isMap || !DATA.history.prs.length; $("commit-wrap").hidden = !isMap || !S.pr || !DATA.history.prs.find((p) => String(p.pull ?? p.commit) === S.pr)?.commits.length; $("today-wrap").hidden = isMap;
   $("pathway").value = S.pathway ?? ""; $("pr").value = S.pr; $("today").checked = S.today;
   renderCrumbs();
   const seq = isMap && S.pathway && S.seq;
@@ -1102,7 +1104,7 @@ function init() {
   $("commit").textContent = `${DATA.meta.short} · ${DATA.meta.date}`;
   $("pathway").innerHTML = `<option value="">None</option>` + pathwayGroups().map(([label, list]) => `<optgroup label="${esc(label)}">${list.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</optgroup>`).join("");
   $("pathway").addEventListener("change", (e) => { S.pathway = e.target.value || null; S.step = 0; S.branch = null; S.sel = null; S._refit = Date.now(); render(); });
-  $("pr").innerHTML = `<option value="">None</option>` + DATA.history.prs.slice().reverse().map((p) => `<option value="${esc(String(p.pull ?? p.commit))}">PR #${esc(p.pull)} · ${esc(p.title.slice(0, 60))}</option>`).join("");
+  $("pr").innerHTML = `<option value="">None</option>` + DATA.history.prs.slice().reverse().map((p) => `<option value="${esc(String(p.pull ?? p.commit))}">${esc(prLabel(p))} · ${esc(p.title.slice(0, 60))}</option>`).join("");
   $("pr").addEventListener("change", (e) => { S.pr = e.target.value; S.commit = ""; fillCommits(); render(); });
   $("commitsel").addEventListener("change", (e) => { S.commit = e.target.value; render(); });
   $("today").addEventListener("change", (e) => { S.today = e.target.checked; render(); });
