@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voyager Shell atlas</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1c1d21; --muted: #5d6270; --faint: #8b90a0; --line: #d9dbe1; --line-soft: #e9eaee;
+  --c-neutral: #6b7280; --c-blue: #2563eb; --c-violet: #7c3aed; --c-amber: #b45309; --c-green: #15803d; --c-rose: #be123c; --c-slate: #475569;
+  --route: #111827; --route-halo: #fde68a; --change: #0e7490; --problem: #dc2626; --proposed: #9333ea;
+  --edge-code: #a3a8b5; --edge-runtime: #0d9488; --edge-build: #a3a8b5;
+  --chip: #eef0f3; --code-bg: #f3f4f6; --hl: #fff4c2;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15161a; --panel: #1d1f24; --ink: #e8e9ec; --muted: #a3a8b5; --faint: #7a7f8c; --line: #343741; --line-soft: #2a2c33;
+    --c-neutral: #9ca3af; --c-blue: #60a5fa; --c-violet: #a78bfa; --c-amber: #f59e0b; --c-green: #4ade80; --c-rose: #fb7185; --c-slate: #94a3b8;
+    --route: #f9fafb; --route-halo: #854d0e; --change: #22d3ee; --problem: #f87171; --proposed: #c084fc;
+    --edge-code: #5b606d; --edge-runtime: #2dd4bf; --edge-build: #5b606d;
+    --chip: #2a2c33; --code-bg: #24262c; --hl: #4a3f12;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15161a; --panel: #1d1f24; --ink: #e8e9ec; --muted: #a3a8b5; --faint: #7a7f8c; --line: #343741; --line-soft: #2a2c33;
+  --c-neutral: #9ca3af; --c-blue: #60a5fa; --c-violet: #a78bfa; --c-amber: #f59e0b; --c-green: #4ade80; --c-rose: #fb7185; --c-slate: #94a3b8;
+  --route: #f9fafb; --route-halo: #854d0e; --change: #22d3ee; --problem: #f87171; --proposed: #c084fc;
+  --edge-code: #5b606d; --edge-runtime: #2dd4bf; --edge-build: #5b606d;
+  --chip: #2a2c33; --code-bg: #24262c; --hl: #4a3f12;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; }
+button, select, input { font: inherit; color: inherit; }
+code, .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.92em; }
+header.top { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+header.top h1 { font-size: 16px; margin: 0; font-weight: 650; }
+.commit { color: var(--muted); font-size: 12.5px; }
+nav.tabs { display: flex; gap: 4px; margin-left: auto; }
+nav.tabs button, .seg button { border: 1px solid var(--line); background: var(--panel); padding: 5px 11px; border-radius: 7px; cursor: pointer; }
+nav.tabs button[aria-selected="true"], .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.iconbtn { border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 4px 9px; cursor: pointer; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.toolbar label { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.toolbar select, .toolbar input[type=search] { border: 1px solid var(--line); background: var(--bg); border-radius: 7px; padding: 4px 8px; max-width: 220px; }
+.toolbar input[type=search] { width: 150px; }
+.seg { display: inline-flex; gap: 0; }
+.seg button { border-radius: 0; margin-left: -1px; padding: 4px 10px; }
+.seg button:first-child { border-radius: 7px 0 0 7px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 7px 7px 0; }
+main { flex: 1; display: flex; min-height: 0; }
+.stage { flex: 1; position: relative; min-width: 0; display: flex; flex-direction: column; }
+#map, #seq, #pmap { flex: 1; width: 100%; min-height: 0; display: block; cursor: grab; touch-action: none; }
+#map.dragging { cursor: grabbing; }
+#map[hidden], #seq[hidden], .toolbar[hidden] { display: none; }
+.zoom { position: absolute; right: 12px; top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.zoom button { width: 32px; height: 32px; border: 1px solid var(--line); background: var(--panel); border-radius: 7px; cursor: pointer; }
+.legend { position: absolute; left: 12px; bottom: 12px; z-index: 2; background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font-size: 11.5px; color: var(--muted); max-width: 520px; }
+.legend summary { cursor: pointer; color: var(--ink); }
+.legend .row { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.ln { display: inline-block; width: 22px; height: 0; border-top: 2px solid; margin-right: 4px; vertical-align: 3px; }
+aside#inspector { width: 430px; max-width: 46vw; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; padding: 14px 18px 40px; }
+aside h2 { font-size: 18px; margin: 2px 0 4px; }
+aside h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 6px; font-weight: 600; }
+aside p { margin: 6px 0; }
+.kicker { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.chip { display: inline-block; background: var(--chip); border-radius: 999px; padding: 1px 8px; font-size: 11.5px; color: var(--muted); }
+.chip.inferred { background: transparent; border: 1px dashed var(--faint); }
+.chip.proposal { background: transparent; border: 1px solid var(--proposed); color: var(--proposed); }
+.chip.warn { background: transparent; border: 1px solid var(--problem); color: var(--problem); }
+.chip.exp { background: transparent; border: 1px solid var(--c-amber); color: var(--c-amber); }
+.box { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; margin: 8px 0; }
+.box.idea { border-color: var(--proposed); }
+.box.fails { border-color: color-mix(in srgb, var(--problem) 60%, var(--line)); }
+.list { list-style: none; padding: 0; margin: 4px 0; }
+.list li { padding: 3px 0; border-bottom: 1px solid var(--line-soft); }
+.list li:last-child { border-bottom: 0; }
+a, .link { color: var(--c-blue); cursor: pointer; text-decoration: none; background: none; border: 0; padding: 0; text-align: left; }
+a:hover, .link:hover { text-decoration: underline; }
+details.code { margin: 6px 0; }
+details.code summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+pre.src { background: var(--code-bg); border-radius: 8px; padding: 8px 0; overflow-x: auto; font-size: 11.5px; line-height: 1.5; margin: 6px 0; }
+pre.src span.l { display: block; padding: 0 10px 0 0; white-space: pre; }
+pre.src span.l.hit { background: var(--hl); }
+pre.src i { display: inline-block; width: 44px; text-align: right; padding-right: 10px; color: var(--faint); font-style: normal; user-select: none; }
+.steps { list-style: none; padding: 0; margin: 6px 0; counter-reset: s; }
+.steps li { display: flex; gap: 8px; padding: 4px 6px; border-radius: 7px; cursor: pointer; align-items: baseline; }
+.steps li:hover { background: var(--chip); }
+.steps li.on { background: var(--route-halo); }
+.steps .n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--route); color: var(--bg); font-size: 11px; display: inline-flex; align-items: center; justify-content: center; font-weight: 650; }
+.steps .t { font-size: 12.5px; }
+.stepnav { display: flex; gap: 6px; align-items: center; margin: 8px 0; }
+.stepnav button { border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 3px 10px; cursor: pointer; }
+.pathbar { display: none; align-items: center; gap: 10px; padding: 6px 12px; border-top: 1px solid var(--line); background: var(--panel); font-size: 12.5px; flex-wrap: wrap; }
+.pathbar.on { display: flex; }
+.stage.has-path .legend { bottom: 58px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.grid2 { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12.5px; }
+.grid2 dt { color: var(--muted); }
+.grid2 dd { margin: 0; }
+.bar { height: 5px; background: var(--line-soft); border-radius: 3px; overflow: hidden; }
+.bar > span { display: block; height: 100%; }
+/* proposals and about */
+#proposals, #about { flex: 1; display: none; min-height: 0; }
+#proposals.on { display: flex; }
+#about.on { display: block; overflow-y: auto; }
+.plist { width: 300px; border-right: 1px solid var(--line); overflow-y: auto; background: var(--panel); padding: 10px; }
+.pcard { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; background: var(--bg); }
+.pcard:hover { border-color: var(--faint); }
+.pcard[aria-current="true"] { border-color: var(--proposed); box-shadow: 0 0 0 1px var(--proposed); }
+.pcard .m { font-size: 11px; color: var(--proposed); font-weight: 650; }
+.pcard .t { font-weight: 600; font-size: 13px; }
+.pcard .s { font-size: 12px; color: var(--muted); }
+.about { max-width: 860px; margin: 0 auto; padding: 20px 20px 60px; }
+.about h2 { font-size: 18px; margin-top: 26px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; border-bottom: 1px solid var(--line-soft); padding: 5px 6px; vertical-align: top; }
+/* svg */
+svg text { fill: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+svg .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.leaf { cursor: pointer; }
+.leaf:focus { outline: none; }
+.leaf:focus-visible rect.body, .leaf.sel rect.body { stroke: var(--ink); stroke-width: 2.5; }
+.dim { opacity: .22; }
+.frame-label { cursor: pointer; }
+.edge { fill: none; }
+.edge.code { stroke: var(--edge-code); }
+.edge.runtime { stroke: var(--edge-runtime); }
+.edge.build { stroke: var(--edge-build); stroke-dasharray: 2 4; }
+.edge.faint { opacity: .25; }
+.edge.hot { opacity: 1; stroke-width: 2.4; }
+.route { fill: none; stroke: var(--route); stroke-width: 2.6; }
+.route.cur { stroke-width: 4; }
+.badge circle { fill: var(--route); }
+.badge text { fill: var(--bg); font-size: 10.5px; font-weight: 700; }
+.badge.cur circle { fill: var(--route); stroke: var(--route-halo); stroke-width: 4; }
+.chg rect { fill: var(--change); }
+.chg text { fill: #fff; font-size: 10px; font-weight: 650; }
+.prob { fill: none; stroke: var(--problem); stroke-width: 2.5; stroke-dasharray: 5 3; }
+.prop rect.body { stroke-dasharray: 6 4; stroke: var(--proposed) !important; stroke-width: 2 !important; }
+@media (max-width: 860px) {
+  main { flex-direction: column; }
+  .stage { min-height: 62vh; }
+  aside#inspector { width: auto; max-width: none; border-left: 0; border-top: 1px solid var(--line); }
+  #proposals.on { flex-direction: column; }
+  .plist { width: auto; max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  nav.tabs { margin-left: 0; }
+  .legend { display: none; }
+  .seg { flex-wrap: wrap; row-gap: 4px; }
+  .seg button { padding: 4px 8px; font-size: 12.5px; }
+  .toolbar { gap: 8px; }
+  header.top h1 { font-size: 15px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Voyager Shell atlas</h1>
+  <span class="commit" id="commit"></span>
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button role="tab" id="tab-map" aria-selected="true">How it works</button>
+    <button role="tab" id="tab-proposals" aria-selected="false">Proposed changes</button>
+    <button role="tab" id="tab-about" aria-selected="false">About this map</button>
+  </nav>
+  <button class="iconbtn" id="theme" title="Switch light or dark" aria-label="Switch light or dark">◐</button>
+</header>
+<div class="toolbar" id="toolbar">
+  <span class="seg" role="group" aria-label="Level" id="levels"></span>
+  <label>Pathway <select id="pathway"><option value="">None</option></select></label>
+  <label>Changes <select id="pr"><option value="">None</option></select></label>
+  <label id="commit-wrap" hidden>Commit <select id="commitsel"></select></label>
+  <label><input type="checkbox" id="showall"> All links</label>
+  <label>Find <input type="search" id="find" list="findlist" placeholder="module or function"></label>
+  <datalist id="findlist"></datalist>
+</div>
+<main>
+  <div class="stage" id="stage">
+    <svg id="map" role="group" aria-label="Architecture map"></svg>
+    <svg id="seq" role="group" aria-label="Pathway sequence" hidden></svg>
+    <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zfit" aria-label="Fit to view">⤢</button></div>
+    <details class="legend" id="legend"><summary>Legend</summary><div class="row" id="legend-concepts"></div><div class="row" id="legend-lines"></div></details>
+    <div class="pathbar" id="pathbar"></div>
+  </div>
+  <aside id="inspector" aria-live="polite"></aside>
+</main>
+<section id="proposals"><div class="plist" id="plist"></div><div class="stage" id="pstage"><svg id="pmap" role="group" aria-label="Proposal map"></svg><div class="zoom"><button id="pzfit" aria-label="Fit to view">⤢</button></div></div><aside id="pinspector" style="width:430px;max-width:46vw;border-left:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:14px 18px 40px"></aside></section>
+<section id="about"><div class="about" id="aboutbody"></div></section>
+<script>
+const DATA = /*ATLAS_DATA*/null;
+const LEVELS = [
+  { n: 1, name: "Concepts", one: "concept" },
+  { n: 2, name: "Crates & packages", one: "crate or package" },
+  { n: 3, name: "Features", one: "feature" },
+  { n: 4, name: "Modules", one: "module" },
+  { n: 5, name: "Functions", one: "function" },
+];
+const LANES = [
+  { id: "os", name: "You / OS" }, { id: "ui-thread", name: "UI thread" }, { id: "script", name: "Script (QuickJS)" },
+  { id: "owner-thread", name: "App owner thread" }, { id: "background", name: "Background thread" }, { id: "core", name: "Herdr Core" }, { id: "program", name: "Program" },
+];
+const VIA = { call: "function call", channel: "message on a channel", "core-rpc": "request to Herdr Core", "core-stream": "stream from Herdr Core", "script-call": "script ↔ Rust host call", render: "render and paint", process: "starts or signals a process", file: "file read or write", ipc: "message to another process" };
+const RUNS = { "ui-thread": "UI thread", "owner-thread": "app owner thread", background: "background thread", script: "script engine", core: "Herdr Core", program: "a program", os: "operating system" };
+const GRID = [["concept:you", "concept:desktop", "concept:app", "concept:core"], [null, "concept:scripts", "concept:contract", "concept:programs"]];
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const $ = (id) => document.getElementById(id);
+
+// ---------- model ----------
+const T = new Map(); // id -> node {id,type,level,parent,children,data,concept}
+const add = (id, type, level, parent, data) => { const n = { id, type, level, parent, children: [], data }; T.set(id, n); if (parent) T.get(parent)?.children.push(n); return n; };
+const featureOrder = new Map(DATA.features.map((f, i) => [f.id, i]));
+const featureById = new Map(DATA.features.map((f) => [f.id, f]));
+for (const c of DATA.concepts) add(c.id, "concept", 1, null, c);
+for (const c of DATA.containers) add(c.id, "container", 2, c.concept, c);
+const slices = [...DATA.slices].sort((a, b) => (featureOrder.get(a.feature) ?? 99) - (featureOrder.get(b.feature) ?? 99));
+for (const s of slices) if (T.has(s.container)) add(s.id, "slice", 3, s.container, { ...s, name: featureById.get(s.feature)?.name ?? "Unassigned" });
+const mods = [...DATA.modules].sort((a, b) => (a.kind === "external") - (b.kind === "external") || String(a.name).localeCompare(String(b.name)));
+for (const m of mods) if (T.has(m.slice)) add(m.id, "module", 4, m.slice, m);
+for (const f of DATA.functions) if (T.has(f.module)) add(f.id, "function", 5, f.module, f);
+for (const n of T.values()) { let c = n; while (c.parent) c = T.get(c.parent); n.concept = c.id; }
+const conceptColour = (id) => `var(--c-${T.get(T.get(id)?.concept)?.data.colour ?? "neutral"})`;
+const sizeOf = (n) => n.type === "module" ? (n.data.size ?? 0) : n.type === "function" ? 0 : n.children.reduce((s, c) => s + sizeOf(c), 0);
+const countModules = (n) => n.type === "module" ? 1 : n.children.reduce((s, c) => s + countModules(c), 0);
+const ancestorAt = (id, L) => { let n = T.get(id); if (!n) return null; while (n.level > L && n.parent) n = T.get(n.parent); return n.id; };
+const anchor = (id) => (id ? DATA.anchors[id] : null);
+const pathwayById = new Map(DATA.pathways.map((p) => [p.id, p]));
+
+// ---------- state ----------
+const S = { tab: "map", level: 2, sel: null, pathway: null, step: 0, branch: null, pr: "", commit: "", showAll: false, seq: false, proposal: null };
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("level")) S.level = Math.min(5, Math.max(1, Number(h.get("level")) || 2));
+  if (h.get("node") && T.has(h.get("node"))) S.sel = h.get("node");
+  if (h.get("path") && pathwayById.has(h.get("path"))) { S.pathway = h.get("path"); S.step = Number(h.get("step") || 0); }
+  if (h.get("pr")) S.pr = h.get("pr");
+  if (h.get("tab")) S.tab = h.get("tab");
+  if (h.get("proposal")) S.proposal = h.get("proposal");
+  if (h.get("seq") === "1") S.seq = true;
+}
+function writeHash() {
+  const h = new URLSearchParams();
+  if (S.tab !== "map") h.set("tab", S.tab);
+  h.set("level", S.level);
+  if (S.sel) h.set("node", S.sel);
+  if (S.pathway) { h.set("path", S.pathway); h.set("step", S.step); if (S.seq) h.set("seq", "1"); }
+  if (S.pr) h.set("pr", S.pr);
+  if (S.proposal) h.set("proposal", S.proposal);
+  history.replaceState(null, "", "#" + h.toString());
+}
+
+// ---------- layout ----------
+const LEAF = { 1: [236, 150], 2: [212, 78], 3: [182, 54], 4: [178, 42], 5: [204, 28] };
+const PAD = { 1: 14, 2: 10, 3: 8, 4: 6 };
+const HEAD = { 1: 30, 2: 24, 3: 20, 4: 18 };
+function isLeaf(n, L) { return n.level === L || !n.children.length || (n.level < L && !n.children.some((c) => c.level <= L)); }
+function visibleChildren(n, extra) { return [...n.children, ...(extra.get(n.id) ?? [])]; }
+function measure(n, L, extra, out) {
+  const kids = visibleChildren(n, extra);
+  if (isLeaf(n, L) && !(extra.get(n.id) ?? []).length) { const [w, h] = LEAF[n.level === L ? L : n.level] ?? LEAF[L]; out.set(n.id, { w, h, leaf: true }); return out.get(n.id); }
+  const sizes = kids.map((c) => ({ c, s: measure(c, L, extra, out) }));
+  const pad = PAD[n.level] ?? 6, head = HEAD[n.level] ?? 18, gap = n.level === 1 ? 12 : 8;
+  const area = sizes.reduce((a, { s }) => a + (s.w + gap) * (s.h + gap), 0);
+  const widest = Math.max(...sizes.map(({ s }) => s.w));
+  const target = Math.max(widest, Math.sqrt(area * (n.level === 1 ? 1.15 : 1.9)));
+  let x = 0, y = 0, rowH = 0, maxW = 0;
+  for (const { c, s } of sizes) {
+    if (x > 0 && x + s.w > target) { x = 0; y += rowH + gap; rowH = 0; }
+    s.rx = x; s.ry = y; x += s.w + gap; rowH = Math.max(rowH, s.h); maxW = Math.max(maxW, x - gap);
+  }
+  const box = { w: maxW + pad * 2, h: y + rowH + pad * 2 + head, leaf: false, kids: sizes.map(({ c }) => c.id), pad, head };
+  out.set(n.id, box);
+  return box;
+}
+function place(id, x, y, out) {
+  const b = out.get(id); b.x = x; b.y = y;
+  if (!b.leaf) for (const k of b.kids) { const kb = out.get(k); place(k, x + b.pad + kb.rx, y + b.head + b.pad + kb.ry, out); }
+}
+function layout(L, extraNodes = []) {
+  const extra = new Map();
+  for (const e of extraNodes) { if (!extra.has(e.parent)) extra.set(e.parent, []); extra.get(e.parent).push(e); T.set(e.id, e); }
+  const out = new Map();
+  for (const c of DATA.concepts) measure(T.get(c.id), L, extra, out);
+  const gapX = 70, gapY = 60;
+  const colW = GRID[0].map((_, i) => Math.max(...GRID.map((r) => (r[i] ? out.get(r[i]).w : 0))));
+  const rowH = GRID.map((r) => Math.max(...r.map((id) => (id ? out.get(id).h : 0))));
+  let y = 0;
+  GRID.forEach((row, ri) => {
+    let x = 0;
+    row.forEach((id, ci) => { if (id) place(id, x + (colW[ci] - out.get(id).w) / 2 * (ri === 0 ? 0 : 0), y, out); x += colW[ci] + gapX; });
+    y += rowH[ri] + gapY;
+  });
+  for (const e of extraNodes) T.delete(e.id);
+  return out;
+}
+
+// ---------- edges ----------
+function levelEdges(L) {
+  const agg = new Map();
+  if (L === 5) return [];
+  for (const e of DATA.edges) {
+    const a = ancestorAt(e.from, L), b = ancestorAt(e.to, L);
+    if (!a || !b || a === b) continue;
+    const k = `${e.category}|${a}|${b}`;
+    const g = agg.get(k) ?? { from: a, to: b, category: e.category, count: 0, kinds: new Set(), src: [] };
+    g.count += e.count; e.kinds.forEach((x) => g.kinds.add(x)); if (g.src.length < 40) g.src.push(e);
+    agg.set(k, g);
+  }
+  return [...agg.values()];
+}
+function sidePoint(b, tx, ty) {
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2, dx = tx - cx, dy = ty - cy;
+  if (Math.abs(dx) * b.h > Math.abs(dy) * b.w) return { x: cx + Math.sign(dx) * b.w / 2, y: cy + (dy * (b.w / 2)) / Math.max(1, Math.abs(dx)) * 0.6, nx: Math.sign(dx), ny: 0 };
+  return { x: cx + (dx * (b.h / 2)) / Math.max(1, Math.abs(dy)) * 0.6, y: cy + Math.sign(dy) * b.h / 2, nx: 0, ny: Math.sign(dy) };
+}
+function curve(a, b, bend = 0) {
+  const p = sidePoint(a, b.x + b.w / 2, b.y + b.h / 2), q = sidePoint(b, a.x + a.w / 2, a.y + a.h / 2);
+  const d = Math.max(40, Math.hypot(q.x - p.x, q.y - p.y) / 3);
+  const ox = bend * (q.y - p.y) * 0.12, oy = -bend * (q.x - p.x) * 0.12;
+  return { d: `M${p.x},${p.y} C${p.x + p.nx * d + ox},${p.y + p.ny * d + oy} ${q.x + q.nx * d + ox},${q.y + q.ny * d + oy} ${q.x},${q.y}`, mx: (p.x + q.x) / 2 + ox, my: (p.y + q.y) / 2 + oy };
+}
+
+// ---------- overlays ----------
+function routeFor(L) {
+  const p = pathwayById.get(S.pathway); if (!p) return null;
+  const steps = activeSteps();
+  const nodes = steps.map((s, i) => ({ i, id: L === 5 ? (s.function && T.has(s.function) ? s.function : ancestorAt(s.module, 4)) : ancestorAt(s.module, L) }));
+  return { steps, nodes };
+}
+function activeSteps() {
+  const p = pathwayById.get(S.pathway); if (!p) return [];
+  if (S.branch === null) return p.steps;
+  const br = p.branches[S.branch]; const at = p.steps.findIndex((s) => s.id === br.from);
+  return [...p.steps.slice(0, at + 1), ...br.steps];
+}
+function changedFiles() {
+  if (!S.pr) return null;
+  const pr = DATA.history.prs.find((p) => String(p.pull ?? p.commit) === S.pr); if (!pr) return null;
+  if (S.commit) return { label: pr.commits.find((c) => c.sha === S.commit)?.subject, files: pr.commits.find((c) => c.sha === S.commit)?.files ?? [], pr };
+  return { label: pr.title, files: pr.files, pr };
+}
+function changeTotals(L) {
+  const cf = changedFiles(); if (!cf) return null;
+  const tot = new Map();
+  for (const f of cf.files) {
+    const owner = f.module && T.has(f.module) ? f.module : f.container && T.has(f.container) ? f.container : null;
+    if (!owner) continue;
+    const id = T.get(owner).level > L ? ancestorAt(owner, L) : owner;
+    const t = tot.get(id) ?? { add: 0, del: 0, files: 0 }; t.add += f.add; t.del += f.del; t.files += 1; tot.set(id, t);
+    let up = T.get(id)?.parent; while (up) { const u = tot.get(up) ?? { add: 0, del: 0, files: 0, inherited: true }; if (u.inherited) { u.add += f.add; u.del += f.del; u.files += 1; } tot.set(up, u); up = T.get(up).parent; }
+  }
+  return tot;
+}
+
+// ---------- drawing ----------
+function wrap(text, max) { const out = []; let line = ""; for (const w of String(text ?? "").split(/\s+/)) { if ((line + " " + w).trim().length > max) { if (line) out.push(line); line = w; } else line = (line + " " + w).trim(); } if (line) out.push(line); return out; }
+function shortName(n) {
+  if (n.proposed) return n.data.name;
+  if (n.type === "module") { const d = n.data; if (d.kind === "external") return d.name; if (d.kind === "host-module") return d.name; if (d.kind === "binary") return `${d.name} (program)`; if (!d.id.includes("::") && d.id.startsWith("rs:")) return "lib.rs (crate root)"; return d.name; }
+  if (n.type === "function") return n.data.fn;
+  return n.data.name ?? n.id;
+}
+function fullName(n) {
+  if (!n) return "";
+  if (n.type === "module" && n.id.startsWith("rs:")) return n.id.slice(3).replace(/^voyager_/, "") || shortName(n);
+  if (n.type === "module" && n.id.startsWith("ts:")) return n.id.slice(3);
+  if (n.type === "function") return `${n.data.fn}`;
+  return shortName(n);
+}
+function leafSvg(n, b, L, opts) {
+  const col = conceptColour(n.id), d = n.data;
+  const prop = n.proposed ? " prop" : "";
+  let s = `<g class="leaf${prop}${opts.dim ? " dim" : ""}${S.sel === n.id ? " sel" : ""}" data-id="${esc(n.id)}" tabindex="0" role="button" aria-label="${esc(LEVELS[n.level - 1]?.one + ": " + shortName(n))}">`;
+  const fill = n.proposed ? "var(--panel)" : `color-mix(in srgb, ${col} ${n.level === 1 ? 14 : 10}%, var(--panel))`;
+  s += `<rect class="body" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="${n.level <= 2 ? 10 : 7}" fill="${fill}" stroke="${col}" stroke-width="${n.level <= 2 ? 1.6 : 1.2}"/>`;
+  if (n.level <= 3 || n.proposed) s += `<rect x="${b.x}" y="${b.y + 6}" width="4" height="${b.h - 12}" rx="2" fill="${col}"/>`;
+  const tx = b.x + 12;
+  if (n.level === 1 && !n.proposed) {
+    s += `<text x="${tx}" y="${b.y + 26}" font-size="17" font-weight="700">${esc(d.name)}</text>`;
+    const pl = wrap(d.plain, 31); pl.slice(0, 6).forEach((l, i) => (s += `<text x="${tx}" y="${b.y + 48 + i * 16}" font-size="12.5" style="fill:var(--muted)">${esc(l)}${i === 5 && pl.length > 6 ? "…" : ""}</text>`));
+  } else if (n.level === 2 && !n.proposed) {
+    s += `<text x="${tx}" y="${b.y + 23}" font-size="14.5" font-weight="650">${esc(d.name)}</text>`;
+    const mcount = countModules(n), lines = sizeOf(n);
+    const sub = d.kind === "crate" || d.kind === "package" || d.kind === "generated" ? `${d.kind === "generated" ? "generated" : d.kind} · ${mcount} module${mcount === 1 ? "" : "s"}${lines ? ` · ${lines.toLocaleString()} lines` : ""}` : d.kind;
+    s += `<text x="${tx}" y="${b.y + 42}" font-size="11.5" style="fill:var(--muted)">${esc(sub)}</text>`;
+    const pl = wrap(d.plain ?? "", 30)[0]; if (pl) s += `<text x="${tx}" y="${b.y + 61}" font-size="11.5" style="fill:var(--muted)">${esc(pl)}${(d.plain ?? "").length > pl.length ? "…" : ""}</text>`;
+  } else if (n.level === 3 && !n.proposed) {
+    s += `<text x="${tx}" y="${b.y + 21}" font-size="12.5" font-weight="650">${esc(d.name)}</text>`;
+    const mcount = countModules(n), lines = sizeOf(n);
+    s += `<text x="${tx}" y="${b.y + 38}" font-size="11" style="fill:var(--muted)">${mcount} module${mcount === 1 ? "" : "s"}${lines ? ` · ${lines.toLocaleString()} lines` : ""}</text>`;
+  } else if (n.level === 4 || n.proposed) {
+    const name = shortName(n);
+    s += `<text x="${b.x + 9}" y="${b.y + 16}" font-size="12" class="mono" font-weight="600">${esc(name.length > 22 ? name.slice(0, 21) + "…" : name)}</text>`;
+    if (n.proposed) s += `<text x="${b.x + 9}" y="${b.y + 31}" font-size="10.5" style="fill:var(--proposed)">proposed</text>`;
+    else if (d.size) { const w = Math.min(b.w - 18, Math.max(3, Math.sqrt(d.size) * 2.2)); s += `<rect x="${b.x + 9}" y="${b.y + 26}" width="${w}" height="5" rx="2" fill="${col}" opacity=".55"/><text x="${b.x + 13 + w}" y="${b.y + 32}" font-size="9.5" style="fill:var(--muted)">${d.size.toLocaleString()}</text>`; }
+    else s += `<text x="${b.x + 9}" y="${b.y + 32}" font-size="10" style="fill:var(--muted)">${esc(d.kind === "external" ? "outside this repo" : d.inline ? "inline module" : d.kind === "host-module" ? "host module" : "")}</text>`;
+    if (d.experiment) s += `<text x="${b.x + b.w - 8}" y="${b.y + 14}" font-size="9.5" text-anchor="end" style="fill:var(--c-amber)">experiment</text>`;
+  } else {
+    const name = shortName(n);
+    s += `<text x="${b.x + 8}" y="${b.y + 17}" font-size="11" class="mono">${esc(name.length > 27 ? name.slice(0, 26) + "…" : name)}</text>`;
+  }
+  s += `</g>`;
+  return s;
+}
+function frameSvg(n, b, opts) {
+  const col = conceptColour(n.id);
+  const fill = `color-mix(in srgb, ${col} ${n.level === 1 ? 5 : n.level === 2 ? 6 : 7}%, var(--bg))`;
+  let s = `<g class="frame${opts.dim ? " dim" : ""}"><rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="${n.level === 1 ? 14 : 9}" fill="${fill}" stroke="${col}" stroke-opacity="${n.level === 1 ? 0.55 : 0.35}" stroke-width="${S.sel === n.id ? 2.5 : 1.2}"/>`;
+  const label = n.type === "slice" ? n.data.name : n.type === "module" ? shortName(n) : n.data.name;
+  const fs = n.level === 1 ? 14 : n.level === 2 ? 12.5 : 11.5;
+  s += `<text class="frame-label${n.type === "module" ? " mono" : ""}" data-id="${esc(n.id)}" x="${b.x + 10}" y="${b.y + (HEAD[n.level] ?? 18) - 7}" font-size="${fs}" font-weight="${n.level <= 2 ? 700 : 600}" style="fill:${col}">${esc(label)}${n.level === 2 && n.data.kind && n.data.kind !== "crate" ? `<tspan font-weight="400" style="fill:var(--muted)"> · ${esc(n.data.kind)}</tspan>` : ""}</text></g>`;
+  return s;
+}
+function draw(svg, L, opts = {}) {
+  const extraNodes = opts.extra ?? [];
+  const pos = layout(L, extraNodes);
+  for (const e of extraNodes) T.set(e.id, e);
+  const route = opts.route ? routeFor(L) : null;
+  const changes = opts.changes ? changeTotals(L) : null;
+  const routeSet = new Set(route ? route.nodes.map((r) => r.id) : []);
+  const focusSet = new Set(opts.highlight ?? []);
+  const focusing = route || changes || focusSet.size;
+  const isHot = (id) => (route && routeSet.has(id)) || (changes && changes.has(id)) || focusSet.has(id);
+  const hotUp = new Set();
+  for (const id of [...routeSet, ...(changes ? changes.keys() : []), ...focusSet]) { let u = id; while (u) { hotUp.add(u); u = T.get(u)?.parent; } }
+  let frames = "", leaves = "", edges = "", marks = "";
+  const order = [...pos.entries()].sort((a, b) => (T.get(a[0])?.level ?? 0) - (T.get(b[0])?.level ?? 0));
+  for (const [id, b] of order) {
+    const n = T.get(id); if (!n) continue;
+    if (b.leaf) leaves += leafSvg(n, b, L, { dim: focusing && !isHot(id) && !n.proposed });
+    else frames += frameSvg(n, b, { dim: focusing && !hotUp.has(id) });
+  }
+  // dependency edges
+  const sel = S.sel && pos.has(S.sel) ? S.sel : null;
+  const selLeafIds = sel ? new Set([sel, ...[...pos.keys()].filter((k) => { let u = T.get(k); while (u) { if (u.id === sel) return true; u = T.get(u.parent); } return false; })]) : null;
+  const showEdges = !route && (L <= 2 || S.showAll || sel);
+  if (showEdges && !opts.noEdges) {
+    for (const e of levelEdges(L)) {
+      const a = pos.get(e.from), b = pos.get(e.to); if (!a || !b) continue;
+      const touches = selLeafIds && (selLeafIds.has(e.from) || selLeafIds.has(e.to));
+      if (L >= 3 && !S.showAll && !touches) continue;
+      const w = Math.min(5, 0.8 + Math.log2(1 + e.count) * 0.6);
+      const c = curve(a, b, e.category === "runtime" ? 0.6 : 0);
+      const faint = (selLeafIds && !touches) || (focusing && !(isHot(e.from) && isHot(e.to)));
+      edges += `<path class="edge ${e.category}${faint ? " faint" : ""}${touches ? " hot" : ""}" d="${c.d}" stroke-width="${w}" marker-end="url(#arrow-${e.category})"><title>${esc(shortName(T.get(e.from)))} → ${esc(shortName(T.get(e.to)))}: ${e.count} ${e.category === "code" ? "code reference" : e.category === "runtime" ? "runtime hop" : "build link"}${e.count === 1 ? "" : "s"}</title></path>`;
+    }
+  }
+  // pathway route
+  if (route) {
+    const seen = new Map();
+    for (let i = 1; i < route.nodes.length; i++) {
+      const a = pos.get(route.nodes[i - 1].id), b = pos.get(route.nodes[i].id); if (!a || !b || route.nodes[i - 1].id === route.nodes[i].id) continue;
+      const key = [route.nodes[i - 1].id, route.nodes[i].id].sort().join("|"); const k = seen.get(key) ?? 0; seen.set(key, k + 1);
+      const bend = (k % 2 ? -1 : 1) * (0.5 + 0.5 * Math.floor(k / 2)) * (route.nodes[i - 1].id < route.nodes[i].id ? 1 : -1);
+      const c = curve(a, b, bend);
+      edges += `<path class="route${i === S.step ? " cur" : ""}" d="${c.d}" marker-end="url(#arrow-route)"><title>Step ${i + 1}: ${esc(VIA[route.steps[i].via] ?? route.steps[i].via ?? "")}</title></path>`;
+    }
+    const byNode = new Map();
+    route.nodes.forEach((r) => { if (!byNode.has(r.id)) byNode.set(r.id, []); byNode.get(r.id).push(r.i); });
+    for (const [id, list] of byNode) {
+      const b = pos.get(id); if (!b) continue;
+      const label = compactRange(list.map((i) => i + 1));
+      const cur = list.includes(S.step);
+      const w = Math.max(20, label.length * 6.5 + 10);
+      marks += `<g class="badge${cur ? " cur" : ""}" data-step="${list[0]}"><rect x="${b.x + b.w - w + 6}" y="${b.y - 9}" width="${w}" height="20" rx="10" style="fill:var(--route);${cur ? "stroke:var(--route-halo);stroke-width:4" : ""}"/><text x="${b.x + b.w - w / 2 + 6}" y="${b.y + 5}" text-anchor="middle">${esc(label)}</text></g>`;
+    }
+  }
+  if (changes) {
+    for (const [id, t] of changes) {
+      const b = pos.get(id); if (!b || !b.leaf) continue;
+      const label = `+${t.add} −${t.del}`; const w = label.length * 6 + 12;
+      marks += `<g class="chg"><rect x="${b.x + 6}" y="${b.y + b.h - 9}" width="${w}" height="17" rx="8"/><text x="${b.x + 6 + w / 2}" y="${b.y + b.h + 3}" text-anchor="middle">${label}</text></g>`;
+    }
+  }
+  for (const id of opts.problems ?? []) { const b = pos.get(ancestorAt(id, L) ?? id); if (b) marks += `<rect class="prob" x="${b.x - 4}" y="${b.y - 4}" width="${b.w + 8}" height="${b.h + 8}" rx="11"/>`; }
+  for (const e of extraNodes) T.delete(e.id);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const b of pos.values()) { minX = Math.min(minX, b.x); minY = Math.min(minY, b.y); maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h); }
+  const defs = `<defs>${["code", "runtime", "build", "route"].map((k) => `<marker id="arrow-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="${k === "route" ? 5 : 6}" markerHeight="${k === "route" ? 5 : 6}" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:${k === "route" ? "var(--route)" : k === "runtime" ? "var(--edge-runtime)" : "var(--edge-code)"}"/></marker>`).join("")}</defs>`;
+  svg.innerHTML = `${defs}<g class="vp">${frames}${edges}${leaves}${marks}</g>`;
+  svg._bounds = { x: minX - 30, y: minY - 30, w: maxX - minX + 60, h: maxY - minY + 60 };
+  svg._pos = pos;
+  return pos;
+}
+function compactRange(nums) {
+  const out = []; let a = nums[0], b = nums[0];
+  for (let i = 1; i <= nums.length; i++) { if (nums[i] === b + 1) b = nums[i]; else { out.push(a === b ? `${a}` : `${a}–${b}`); a = b = nums[i]; } }
+  return out.join(",");
+}
+
+// ---------- pan and zoom ----------
+function viewport(svg) {
+  const vb = { ...svg._bounds }; svg._vb = vb;
+  const apply = () => svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  svg._apply = apply;
+  if (svg._wired) { apply(); return; }
+  svg._wired = true;
+  let drag = null;
+  svg.addEventListener("pointerdown", (e) => { if (e.target.closest(".leaf,.frame-label,.badge")) return; drag = { x: e.clientX, y: e.clientY, vx: svg._vb.x, vy: svg._vb.y }; svg.classList.add("dragging"); svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener("pointermove", (e) => { if (!drag) return; const r = svg.getBoundingClientRect(); const k = Math.max(svg._vb.w / r.width, svg._vb.h / r.height); svg._vb.x = drag.vx - (e.clientX - drag.x) * k; svg._vb.y = drag.vy - (e.clientY - drag.y) * k; svg._apply(); });
+  const end = () => { drag = null; svg.classList.remove("dragging"); };
+  svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end);
+  svg.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(svg, e.deltaY > 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, { passive: false });
+  apply();
+}
+function zoomAt(svg, f, cx, cy) {
+  const r = svg.getBoundingClientRect(), vb = svg._vb;
+  const k = Math.max(vb.w / r.width, vb.h / r.height);
+  const px = cx === undefined ? vb.x + vb.w / 2 : vb.x + (cx - r.left) * k - (r.width * k - vb.w) / 2;
+  const py = cy === undefined ? vb.y + vb.h / 2 : vb.y + (cy - r.top) * k - (r.height * k - vb.h) / 2;
+  vb.x = px - (px - vb.x) * f; vb.y = py - (py - vb.y) * f; vb.w *= f; vb.h *= f; svg._apply();
+}
+const MIN_SCALE = { 1: 0, 2: 0.7, 3: 0.72, 4: 0.72, 5: 0.75 };
+function fit(svg, box, minScale = 0) {
+  const b = box ?? svg._bounds; const pad = box ? 60 : 0;
+  const r = svg.getBoundingClientRect();
+  let vb = { x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 };
+  const scale = Math.min(r.width / vb.w, r.height / vb.h);
+  if (r.width && r.width < 900) minScale *= r.width / 900;
+  const maxScale = 1.25;
+  if (r.width && scale > maxScale) {
+    const w = r.width / maxScale, h = r.height / maxScale;
+    vb = { x: vb.x + vb.w / 2 - w / 2, y: vb.y + vb.h / 2 - h / 2, w, h };
+  } else if (minScale && r.width && scale < minScale) {
+    const w = r.width / minScale, h = r.height / minScale;
+    const cx = box ? vb.x + vb.w / 2 : vb.x + w / 2, cy = box ? vb.y + vb.h / 2 : vb.y + h / 2;
+    vb = { x: cx - w / 2, y: cy - h / 2, w, h };
+  }
+  Object.assign(svg._vb, vb); svg._apply();
+}
+function boxOf(pos, ids) {
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  for (const id of ids) { const b = pos.get(id); if (!b) continue; x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.w); y2 = Math.max(y2, b.y + b.h); }
+  return x1 === Infinity ? null : { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+function ensureVisible(svg, id) {
+  const b = svg._pos?.get(id); if (!b || !svg._vb) return;
+  const vb = svg._vb;
+  if (b.x >= vb.x && b.y >= vb.y && b.x + b.w <= vb.x + vb.w && b.y + b.h <= vb.y + vb.h) return;
+  vb.x = b.x + b.w / 2 - vb.w / 2; vb.y = b.y + b.h / 2 - vb.h / 2; svg._apply();
+}
+
+// ---------- inspector ----------
+function codeBlock(id, label) {
+  const a = anchor(id); if (!a) return "";
+  const url = `${DATA.meta.repository}/blob/${DATA.meta.commit}/${a.path}${a.line ? `#L${a.line}` : ""}`;
+  const status = a.status !== "current" && a.status !== "unreviewed" ? ` <span class="chip warn">${esc(a.status === "changed" ? "code changed since reviewed" : a.status === "ambiguous" ? "anchor matches several lines" : "anchor not found")}</span>` : "";
+  const ex = a.excerpt ? `<pre class="src">${a.excerpt.lines.map((l, i) => `<span class="l${a.excerpt.start + i === a.line ? " hit" : ""}"><i>${a.excerpt.start + i}</i>${esc(l)}</span>`).join("")}</pre>` : "";
+  return `<details class="code"><summary>${esc(label ?? "Show the code")} · <code>${esc(a.path)}${a.line ? ":" + a.line : ""}</code>${status}</summary>${ex}<a href="${esc(url)}" target="_blank" rel="noopener" class="small">Open on GitHub at ${esc(DATA.meta.short)}</a></details>`;
+}
+function tag(d) { return d?.inferred ? ` <span class="chip inferred" title="Judgement from reading the code, not stated in code or docs">inferred</span>` : ""; }
+function kicker(n) {
+  const crumbs = []; let u = n; while (u) { crumbs.unshift(u); u = T.get(u.parent); }
+  return `<div class="kicker"><span class="dot" style="background:${conceptColour(n.id)}"></span>${crumbs.map((c) => (c === n ? `<span>${esc(LEVELS[c.level - 1].one)}</span>` : `<button class="link" data-go="${esc(c.id)}">${esc(shortName(c))}</button> ›`)).join(" ")}</div>`;
+}
+function edgesOf(id, L) {
+  const ins = [], outs = [];
+  for (const e of levelEdges(L)) { if (e.from === id) outs.push(e); if (e.to === id) ins.push(e); }
+  const fmt = (list, dir) => list.sort((a, b) => b.count - a.count).slice(0, 12).map((e) => { const o = T.get(dir === "out" ? e.to : e.from); return `<li><span class="dot" style="background:${conceptColour(o.id)}"></span> <button class="link" data-go="${esc(o.id)}">${esc(fullName(o))}</button> <span class="muted small">${e.category === "code" ? `${e.count} code reference${e.count === 1 ? "" : "s"}` : e.category === "runtime" ? `runtime: ${[...e.kinds].map((k) => VIA[k] ?? k).join(", ")}` : "build"}</span></li>`; }).join("");
+  return { ins: fmt(ins, "in"), outs: fmt(outs, "out"), nIn: ins.length, nOut: outs.length };
+}
+function pathwaysThrough(n) {
+  const out = [];
+  for (const p of DATA.pathways) { const hits = p.steps.map((s, i) => [s, i]).filter(([s]) => { let u = T.get(s.function) ?? T.get(s.module); while (u) { if (u.id === n.id) return true; u = T.get(u.parent); } return false; }); if (hits.length) out.push(`<li><button class="link" data-path="${esc(p.id)}" data-step="${hits[0][1]}">${esc(p.name)}</button> <span class="muted small">step${hits.length > 1 ? "s" : ""} ${esc(compactRange(hits.map((h) => h[1] + 1)))}</span></li>`); }
+  return out.join("");
+}
+function prsTouching(n) {
+  const rows = [];
+  for (const pr of DATA.history.prs) {
+    let add = 0, del = 0, files = 0;
+    for (const f of pr.files) { const owner = f.module ?? f.container; let u = T.get(owner); let hit = false; while (u) { if (u.id === n.id) { hit = true; break; } u = T.get(u.parent); } if (hit) { add += f.add; del += f.del; files++; } }
+    if (files) rows.push(`<li><button class="link" data-pr="${esc(String(pr.pull ?? pr.commit))}">PR #${esc(pr.pull)}</button> ${esc(pr.title)} <span class="muted small">+${add} −${del}</span></li>`);
+  }
+  return rows.join("");
+}
+function inspectNode(id) {
+  const n = T.get(id); if (!n) return startHere();
+  const d = n.data; let h = kicker(n);
+  h += `<h2>${esc(n.type === "slice" ? `${d.name} in ${shortName(T.get(n.parent))}` : n.type === "module" ? fullName(n) : shortName(n))}</h2>`;
+  if (n.type === "concept") {
+    h += `<p>${esc(d.plain)}</p>`;
+    if (d.scope) h += `<h3>What's here</h3><p>${esc(d.scope)}</p>${codeBlock(d.scopeAt, "Show the source")}`;
+    h += `<ul class="list">${n.children.map((c) => `<li><button class="link" data-go="${esc(c.id)}">${esc(c.data.name)}</button> <span class="muted small">${esc(c.data.kind)}${countModules(c) ? ` · ${countModules(c)} modules` : ""}</span></li>`).join("")}</ul>`;
+    if (d.entry) h += `<h3>Where it starts</h3><p>${esc(d.entry)}</p>${codeBlock(d.entryAt)}`;
+    if (d.why) h += `<h3>Why it's separate${tag(d)}</h3><p>${esc(d.why)}</p>`;
+  } else if (n.type === "container") {
+    if (d.plain) h += `<p>${esc(d.plain)}</p>`;
+    h += `<p class="small muted">${esc(d.kind)} · ${countModules(n)} modules${sizeOf(n) ? ` · ${sizeOf(n).toLocaleString()} lines` : ""}</p>`;
+    if (d.scope) h += `<h3>What's here</h3>${layered(d.scope, 2)}${codeBlock(d.scopeAt, "Show the root file")}`;
+    h += `<h3>Features inside</h3><ul class="list">${n.children.map((c) => `<li><button class="link" data-go="${esc(c.id)}">${esc(c.data.name)}</button> <span class="muted small">${countModules(c)} module${countModules(c) === 1 ? "" : "s"} · ${sizeOf(c).toLocaleString()} lines</span></li>`).join("")}</ul>`;
+    if (d.entry) h += `<h3>Where it starts</h3>${layered(d.entry, 2)}${codeBlock(d.entryAt)}`;
+    if (d.why) h += `<h3>Why it's separate${tag(d)}</h3>${layered(d.why, 2)}`;
+  } else if (n.type === "slice") {
+    const f = featureById.get(d.feature);
+    h += `<p>${esc(f?.plain ?? "")}</p><h3>Modules</h3><ul class="list">${n.children.map((c) => `<li><button class="link" data-go="${esc(c.id)}">${esc(fullName(c))}</button> <span class="muted small">${c.data.size ? c.data.size.toLocaleString() + " lines" : ""}</span><div class="small muted">${esc(c.data.plain ?? "")}</div></li>`).join("")}</ul>`;
+    const elsewhere = [...T.values()].filter((x) => x.type === "slice" && x.data.feature === d.feature && x.id !== n.id);
+    if (elsewhere.length) h += `<h3>The same feature elsewhere</h3><ul class="list">${elsewhere.map((x) => `<li><span class="dot" style="background:${conceptColour(x.id)}"></span> <button class="link" data-go="${esc(x.id)}">${esc(shortName(T.get(x.parent)))}</button> <span class="muted small">${countModules(x)} modules</span></li>`).join("")}</ul>`;
+  } else if (n.type === "module") {
+    const chips = [d.experiment ? `<span class="chip exp">compiled from experiments/</span>` : "", d.kind === "external" ? `<span class="chip">outside this repository</span>` : "", d.inline ? `<span class="chip">inline module</span>` : ""].join(" ");
+    if (chips.trim()) h += `<p>${chips}</p>`;
+    if (d.plain) h += `<p>${esc(d.plain)}</p>`;
+    if (d.file) h += `<p class="small muted"><code>${esc(d.file)}</code>${d.size ? ` · ${d.size.toLocaleString()} lines` : ""}</p>`;
+    if (d.holds) h += `<h3>What it holds</h3>${layered(d.holds, 2)}`;
+    if (d.entry) h += `<h3>Where it starts</h3><p><code>${esc(d.entry.fn)}</code>: ${esc(d.entry.plain)}</p>${codeBlock(d.entry.at)}`;
+    if (d.key?.length) h += `<h3>Other key functions</h3>${d.key.map((k) => `<div class="box"><code>${esc(k.fn)}</code><div class="small">${esc(k.plain)}</div>${codeBlock(k.at)}</div>`).join("")}`;
+    if (d.sections?.length) h += `<h3>Inside the file</h3>${d.sections.map((k) => `<div class="box"><strong class="small">${esc(k.name)}</strong><div class="small">${esc(k.plain)}</div>${codeBlock(k.at)}</div>`).join("")}`;
+    if (d.talks_to) h += `<h3>Talks to at runtime</h3><p>${esc(d.talks_to)}</p>`;
+    if (d.why) h += `<h3>Why it's shaped this way${tag(d)}</h3>${layered(d.why, 2)}`;
+    if (d.note) h += `<h3>Worth knowing</h3>${layered(d.note, 2)}`;
+  } else if (n.type === "function") {
+    h += `<p>${esc(d.plain ?? "")}</p>${codeBlock(d.at)}`;
+  }
+  if (n.type !== "function") {
+    const L = n.level, e = edgesOf(id, L);
+    if (e.nOut || e.nIn) h += `<h3>Connections at this level</h3>${e.nOut ? `<p class="small muted">Depends on or calls</p><ul class="list">${e.outs}</ul>` : ""}${e.nIn ? `<p class="small muted">Used or called by</p><ul class="list">${e.ins}</ul>` : ""}`;
+  }
+  const pw = pathwaysThrough(n); if (pw) h += `<h3>Pathways through here</h3><ul class="list">${pw}</ul>`;
+  const pr = n.type !== "function" ? prsTouching(n) : ""; if (pr) h += `<h3>Changed by</h3><ul class="list">${pr}</ul>`;
+  if (n.level < 5 && n.children.length) h += `<p><button class="iconbtn" data-open="${esc(id)}">Open: show its ${esc(LEVELS[n.level].name.toLowerCase())}</button></p>`;
+  return h;
+}
+function startHere() {
+  let h = `<h2>Start here</h2><p class="muted">This map is generated from the code at <code>${esc(DATA.meta.short)}</code> plus a small hand-written layer. Every claim links to the source lines behind it.</p>`;
+  h += `<h3>How to read it</h3><ul class="list">${DATA.reading.map((r) => `<li class="small">${esc(r)}</li>`).join("")}</ul>`;
+  h += `<h3>The pieces</h3><ul class="list">${DATA.concepts.map((c) => `<li><span class="dot" style="background:var(--c-${c.colour})"></span> <button class="link" data-go="${esc(c.id)}">${esc(c.name)}</button><div class="small muted">${esc(c.plain)}</div></li>`).join("")}</ul>`;
+  h += `<h3>Pathways</h3><ul class="list">${DATA.pathways.map((p) => `<li><button class="link" data-path="${esc(p.id)}" data-step="0">${esc(p.name)}</button><div class="small muted">${esc(p.trigger)}</div></li>`).join("")}</ul>`;
+  if (DATA.entryPoints?.length) h += `<h3>Where execution enters, in start-up order</h3><ol class="steps">${DATA.entryPoints.map((e, i) => `<li style="cursor:default"><span class="n">${i + 1}</span><span class="t"><strong>${esc(e.who)}</strong>: <code>${esc(e.fn)}</code><br>${esc(e.plain)}${codeBlock(e.at)}</span></li>`).join("")}</ol>`;
+  h += `<h3>Words this app uses</h3><dl class="grid2">${DATA.glossary.map((g) => `<dt>${esc(g.term)}</dt><dd>${esc(g.plain)}</dd>`).join("")}</dl>`;
+  return h;
+}
+function inspectPathway() {
+  const p = pathwayById.get(S.pathway); const steps = activeSteps(); const s = steps[S.step]; if (!s) return startHere();
+  let h = `<div class="kicker"><span>pathway</span>${S.branch !== null ? ` · <span class="chip">${esc(p.branches[S.branch].name)}</span>` : ""}</div><h2>${esc(p.name)}</h2>${layered(p.summary, 2, "The whole journey in brief")}`;
+  h += `<div class="stepnav"><button data-stepmove="-1" ${S.step === 0 ? "disabled" : ""}>← Back</button><span class="small muted">Step ${S.step + 1} of ${steps.length}</span><button data-stepmove="1" ${S.step === steps.length - 1 ? "disabled" : ""}>Next →</button><button data-clearpath>Close</button></div>`;
+  const mod = T.get(s.module);
+  h += `<div class="box" style="border-color:var(--route)"><div class="kicker"><span class="dot" style="background:${conceptColour(s.module)}"></span><span>${esc(T.get(T.get(s.module)?.concept)?.data.name ?? "")}</span> · <span class="chip">${esc(RUNS[s.runs_on] ?? s.runs_on ?? "")}</span>${s.via ? ` <span class="chip">arrives by ${esc(VIA[s.via] ?? s.via)}</span>` : ""}</div>`;
+  { const parts = sentences(s.says); h += `<p><strong>${S.step + 1}. ${esc(parts[0] ?? "")}</strong></p>`; if (parts.length > 1) h += `<p class="small">${esc(parts.slice(1).join(" "))}</p>`; }
+  if (s.fn) h += `<p class="small"><code>${esc(s.fn)}</code> in <button class="link" data-go="${esc(s.module)}">${esc(mod ? fullName(mod) : s.module)}</button></p>`;
+  if (s.carries) h += `<p class="small"><span class="muted">Carries:</span> ${esc(s.carries)}</p>`;
+  h += `${codeBlock(s.at)}</div>`;
+  if (s.fails) h += `<div class="box fails"><span class="small"><strong>If it fails or is refused:</strong> ${esc(s.fails)}</span></div>`;
+  for (const b of (p.better ?? []).filter((b) => b.step === s.id)) h += `<div class="box idea"><span class="chip proposal">idea</span>${b.inferred ? ` <span class="chip inferred">inferred</span>` : ""}<p class="small"><strong>${esc(b.idea)}</strong> ${esc(b.why)}</p></div>`;
+  h += `<h3>All steps</h3><ol class="steps">${steps.map((x, i) => `<li class="${i === S.step ? "on" : ""}" data-step="${i}"><span class="n">${i + 1}</span><span class="t">${esc(firstSentence(x.says))}</span></li>`).join("")}</ol>`;
+  if (p.branches?.length) h += `<h3>Other ways it can go</h3><ul class="list">${S.branch !== null ? `<li><button class="link" data-branch="">Main path</button></li>` : ""}${p.branches.map((b, i) => `<li><button class="link" data-branch="${i}">${esc(b.name)}</button> <span class="muted small">from step ${p.steps.findIndex((x) => x.id === b.from) + 1}</span></li>`).join("")}</ul>`;
+  const others = (p.better ?? []).filter((b) => !steps.some((x) => x.id === b.step) || b.step !== s.id);
+  if (others.length) h += `<h3>Ideas for this pathway <span class="chip proposal">proposal</span></h3><ul class="list">${others.map((b) => { const i = steps.findIndex((x) => x.id === b.step); return `<li class="small">${i >= 0 ? `<button class="link" data-step="${i}">Step ${i + 1}</button>` : `<span class="muted">Another branch</span>`}: ${esc(b.idea)} <span class="muted">${esc(b.why ?? "")}</span></li>`; }).join("")}</ul>`;
+  if (p.open_questions?.length) h += `<h3>Not established from source</h3><ul class="list">${p.open_questions.map((q) => `<li class="small">${esc(q)}</li>`).join("")}</ul>`;
+  return h;
+}
+function sentences(t) { return String(t ?? "").match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g)?.map((x) => x.trim()).filter(Boolean) ?? []; }
+function layered(t, n = 1, label = "More detail") {
+  const all = sentences(t); if (all.length <= n) return `<p>${esc(t)}</p>`;
+  return `<p>${esc(all.slice(0, n).join(" "))}</p><details class="code"><summary>${esc(label)}</summary><p>${esc(all.slice(n).join(" "))}</p></details>`;
+}
+function firstSentence(t) { const m = /^(.+?[.!?])(\s|$)/.exec(t ?? ""); return m ? m[1] : t ?? ""; }
+function inspectChanges() {
+  const cf = changedFiles(); const pr = cf.pr;
+  let h = `<div class="kicker"><span>${S.commit ? "commit" : "pull request"}</span></div><h2>${S.commit ? esc(cf.label) : `PR #${esc(pr.pull)}: ${esc(pr.title)}`}</h2>`;
+  h += `<p class="small muted">${S.commit ? `<code>${esc(S.commit.slice(0, 7))}</code> in PR #${esc(pr.pull)}` : `Merged ${esc(pr.date)} · ${pr.commits.length} commits · branch <code>${esc(pr.branch ?? "")}</code>`}</p>`;
+  const groups = new Map();
+  for (const f of cf.files) { const key = f.module ?? f.container ?? "other"; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(f); }
+  const rows = [...groups.entries()].sort((a, b) => b[1].reduce((s, f) => s + f.add + f.del, 0) - a[1].reduce((s, f) => s + f.add + f.del, 0));
+  h += `<h3>What it touched</h3><ul class="list">${rows.map(([k, fs]) => { const n = T.get(k); const add = fs.reduce((s, f) => s + f.add, 0), del = fs.reduce((s, f) => s + f.del, 0); return `<li>${n ? `<span class="dot" style="background:${conceptColour(k)}"></span> <button class="link" data-go="${esc(k)}">${esc(fullName(n))}</button>` : `<span class="muted">Not on the map (docs, tests, config)</span>`} <span class="muted small">+${add} −${del}</span>${!n || fs.length > 1 ? `<div class="small muted">${fs.slice(0, 8).map((f) => esc(f.path)).join("<br>")}${fs.length > 8 ? `<br>…and ${fs.length - 8} more` : ""}</div>` : ""}</li>`; }).join("")}</ul>`;
+  if (!S.commit && pr.commits.length) h += `<h3>Commits</h3><ul class="list">${pr.commits.slice(-40).reverse().map((c) => `<li class="small"><button class="link" data-commit="${esc(c.sha)}">${esc(c.subject)}</button> <span class="muted">${esc(c.date)}</span></li>`).join("")}${pr.commits.length > 40 ? `<li class="small muted">Showing the latest 40 of ${pr.commits.length}; pick others from the Commit list.</li>` : ""}</ul>`;
+  return h;
+}
+
+// ---------- sequence view ----------
+function drawSequence() {
+  const svg = $("seq"); const steps = activeSteps(); if (!steps.length) return;
+  const laneW = 196, top = 50, rowH = 62, left = 20;
+  const used = LANES.filter((l) => steps.some((s) => (s.runs_on ?? "os") === l.id) || l.id === "os");
+  const x = (lane) => left + used.findIndex((l) => l.id === lane) * laneW + laneW / 2;
+  let h = `<defs><marker id="sq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--route)"/></marker></defs><g class="vp">`;
+  used.forEach((l, i) => { const cx = left + i * laneW + laneW / 2; h += `<text x="${cx}" y="24" text-anchor="middle" font-size="12.5" font-weight="650">${esc(l.name)}</text><line x1="${cx}" y1="34" x2="${cx}" y2="${top + steps.length * rowH}" stroke="var(--line)" stroke-dasharray="3 4"/>`; });
+  steps.forEach((s, i) => {
+    const cx = x(s.runs_on ?? "os"), cy = top + i * rowH + 20;
+    if (i > 0) { const px = x(steps[i - 1].runs_on ?? "os"), py = top + (i - 1) * rowH + 20; h += `<path d="M${px},${py + 16} C${px},${cy - 10} ${cx},${py + 30} ${cx},${cy - 16}" fill="none" stroke="var(--route)" stroke-width="${i === S.step ? 3 : 1.6}" marker-end="url(#sq-arrow)"/><text x="${(px + cx) / 2 + 6}" y="${(py + cy) / 2 + 4}" font-size="10" style="fill:var(--muted)">${esc(VIA[s.via] ?? s.via ?? "")}</text>`; }
+    const label = s.fn ?? s.module; const w = Math.min(laneW - 10, Math.max(90, label.length * 6.6 + 36));
+    h += `<g class="leaf${i === S.step ? " sel" : ""}" data-step="${i}" tabindex="0" role="button" aria-label="Step ${i + 1}: ${esc(label)}"><rect class="body" x="${cx - w / 2}" y="${cy - 16}" width="${w}" height="32" rx="8" fill="color-mix(in srgb, ${conceptColour(s.module)} 14%, var(--panel))" stroke="${conceptColour(s.module)}"/><circle cx="${cx - w / 2 + 14}" cy="${cy}" r="9" style="fill:var(--route)"/><text x="${cx - w / 2 + 14}" y="${cy + 4}" text-anchor="middle" font-size="10" font-weight="700" style="fill:var(--bg)">${i + 1}</text><text x="${cx - w / 2 + 28}" y="${cy + 4}" font-size="11.5" class="mono">${esc(label.length > 23 ? label.slice(0, 22) + "…" : label)}</text><title>${esc(s.says)}</title></g>`;
+  });
+  h += `</g>`;
+  svg.innerHTML = h;
+  svg._bounds = { x: 0, y: 0, w: left * 2 + used.length * laneW, h: top + steps.length * rowH + 20 };
+  viewport(svg);
+  const r = svg.getBoundingClientRect(); const k = Math.min(1.1, r.width / svg._bounds.w);
+  const vb = svg._vb; vb.w = r.width / k; vb.h = r.height / k; vb.x = (svg._bounds.w - vb.w) / 2;
+  const cy = top + S.step * rowH + 20; vb.y = Math.max(0, Math.min(cy - vb.h / 2, svg._bounds.h - vb.h + 20)); svg._apply();
+}
+
+// ---------- rendering the map tab ----------
+function render() {
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.id === `tab-${S.tab}`)));
+  $("toolbar").hidden = S.tab !== "map";
+  document.querySelector("main").style.display = S.tab === "map" ? "flex" : "none";
+  $("proposals").classList.toggle("on", S.tab === "proposals");
+  $("about").classList.toggle("on", S.tab === "about");
+  if (S.tab === "proposals") return renderProposals();
+  if (S.tab === "about") return renderAbout();
+  $("levels").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.level) === S.level)));
+  $("pathway").value = S.pathway ?? "";
+  $("pr").value = S.pr;
+  $("commit-wrap").hidden = !S.pr;
+  const seq = S.pathway && S.seq;
+  $("map").toggleAttribute("hidden", Boolean(seq)); $("seq").toggleAttribute("hidden", !seq);
+  const svg = $("map");
+  const prev = svg._vb ? { ...svg._vb } : null; const prevLevel = svg._level;
+  draw(svg, S.level, { route: Boolean(S.pathway), changes: Boolean(S.pr) });
+  if (seq) drawSequence();
+  const routeNow = S.pathway ? routeFor(S.level) : null;
+  if (!svg._wired || prevLevel !== S.level || !prev || S._fitRoute) {
+    viewport(svg); svg._level = S.level;
+    const routeBox = routeNow ? boxOf(svg._pos, routeNow.nodes.map((r) => r.id)) : null;
+    if (S._fitTo && svg._pos.get(S._fitTo)) { const b = svg._pos.get(S._fitTo); fit(svg, { x: b.x, y: b.y, w: b.w, h: b.h }, MIN_SCALE[S.level]); }
+    else if (routeBox) fit(svg, routeBox, MIN_SCALE[S.level]);
+    else fit(svg, null, MIN_SCALE[S.level]);
+    S._fitTo = null; S._fitRoute = false;
+  } else { svg._vb = prev; svg._apply(); }
+  if (routeNow && routeNow.nodes[S.step]) ensureVisible(svg, routeNow.nodes[S.step].id);
+  $("stage").classList.toggle("has-path", Boolean(S.pathway));
+  const bar = $("pathbar");
+  bar.classList.toggle("on", Boolean(S.pathway));
+  if (S.pathway) { const steps = activeSteps(); bar.innerHTML = `<strong>${esc(pathwayById.get(S.pathway).name)}</strong><span class="muted">step ${S.step + 1}/${steps.length}</span><button class="iconbtn" data-stepmove="-1">←</button><button class="iconbtn" data-stepmove="1">→</button><span class="seg"><button aria-pressed="${!S.seq}" data-seq="0">On the map</button><button aria-pressed="${S.seq}" data-seq="1">Sequence and threads</button></span><span class="muted small">${esc(firstSentence(steps[S.step]?.says))}</span>`; }
+  $("inspector").innerHTML = S.pathway ? inspectPathway() + (S.sel ? `<hr style="border:0;border-top:1px solid var(--line);margin:18px 0">` + inspectNode(S.sel) : "") : S.pr ? inspectChanges() + (S.sel ? `<hr style="border:0;border-top:1px solid var(--line);margin:18px 0">` + inspectNode(S.sel) : "") : S.sel ? inspectNode(S.sel) : startHere();
+  writeHash();
+}
+
+// ---------- proposals tab ----------
+function renderProposals() {
+  const list = DATA.proposals;
+  if (!S.proposal && list.length) S.proposal = list[0].id;
+  $("plist").innerHTML = `<p class="small muted" style="margin:2px 2px 10px">These are proposals from the architecture review, not how the app works today. Pick one to see the problem on today's map and what would change.</p>` + list.map((p) => `<div class="pcard" tabindex="0" role="button" data-proposal="${esc(p.id)}" aria-current="${p.id === S.proposal}"><div class="m">${esc(p.step ?? "")}${p.decision ? ` · decision ${esc(p.decision)}` : ""}</div><div class="t">${esc(p.title)}</div><div class="s">${esc(p.plain)}</div></div>`).join("");
+  const p = list.find((x) => x.id === S.proposal);
+  const svg = $("pmap");
+  if (!p) { svg.innerHTML = ""; $("pinspector").innerHTML = ""; writeHash(); return; }
+  const L = p.level ?? 4;
+  const extra = (p.adds ?? []).map((a, i) => ({ id: `prop:${p.id}:${i}`, type: "module", level: Math.min(L, 4), parent: slicesFor(a), children: [], data: { name: a.name, plain: a.plain, kind: "proposed" }, proposed: true, concept: T.get(a.container)?.concept }));
+  for (const e of extra) { let c = T.get(e.parent); while (c?.parent) c = T.get(c.parent); e.concept = c?.id; }
+  const pos = draw(svg, L, { extra: extra.filter((e) => e.parent), problems: p.today_nodes ?? [], highlight: [...(p.today_nodes ?? []).map((id) => ancestorAt(id, L))], noEdges: true });
+  viewport(svg);
+  const focusBox = boxOf(pos, [...(p.today_nodes ?? []).map((id) => ancestorAt(id, L)), ...extra.map((e) => e.id)]);
+  fit(svg, focusBox, 0.5);
+  let h = `<div class="kicker"><span class="chip proposal">proposal</span><span>${esc(p.step ?? "")}</span>${p.decision ? `<span>awaiting decision ${esc(p.decision)}</span>` : ""}</div><h2>${esc(p.title)}</h2><p>${esc(p.plain)}</p>`;
+  const countBox = (c) => `<p><strong style="font-size:20px">${c.total.toLocaleString()}</strong> <span class="small muted">lines${c.text ? ` contain <code>${esc(c.text)}</code>` : ""}${c.files.length > 1 ? ` across ${c.files.length} files` : c.files[0] ? ` in <code>${esc(c.files[0].path)}</code>` : ""}, counted at this commit</span></p>${c.files.length > 1 ? `<div class="small muted">${c.files.map((f) => `${esc(f.path)}: ${f.count}`).join(" · ")}</div>` : ""}`;
+  h += `<h3>What you can see today</h3><p>${esc(p.today)}</p>${(p.evidence ?? []).map((e) => `<div class="box"><div class="small">${esc(e.plain)}</div>${e.count ? countBox(e.count) : codeBlock(e.at)}</div>`).join("")}`;
+  if (p.today_nodes?.length) h += `<p class="small muted">Marked on the map with a red dashed outline: ${p.today_nodes.map((id) => `<button class="link" data-gomap="${esc(id)}">${esc(T.get(id) ? fullName(T.get(id)) : id)}</button>`).join(", ")}.</p>`;
+  h += `<h3>What would change</h3><p>${esc(p.change)}</p>`;
+  if (p.adds?.length) h += `<ul class="list">${p.adds.map((a) => `<li><code>${esc(a.name)}</code> <span class="small muted">${esc(a.plain)}</span></li>`).join("")}</ul>`;
+  h += `<h3>Why</h3><p>${esc(p.why)}</p>`;
+  if (p.cost) h += `<h3>What it costs</h3><p>${esc(p.cost)}</p>`;
+  if (p.pathways?.length) h += `<h3>Pathways that get simpler</h3><ul class="list">${p.pathways.map((x) => `<li><button class="link" data-path="${esc(x.pathway)}" data-step="${Math.max(0, (pathwayById.get(x.pathway)?.steps.findIndex((s) => s.id === x.step) ?? 0))}">${esc(pathwayById.get(x.pathway)?.name ?? x.pathway)}</button><div class="small">${esc(x.how)}</div></li>`).join("")}</ul>`;
+  if (p.depends?.length) h += `<p class="small muted">Comes after: ${p.depends.map((d) => esc(list.find((x) => x.id === d)?.title ?? d)).join(", ")}.</p>`;
+  $("pinspector").innerHTML = h;
+  writeHash();
+}
+function slicesFor(a) {
+  const id = `fs:${a.container}|${a.feature}`;
+  if (T.has(id)) return id;
+  const any = [...T.values()].find((n) => n.type === "slice" && n.parent === a.container);
+  return any?.id ?? null;
+}
+
+// ---------- about tab ----------
+function renderAbout() {
+  const m = DATA.meta; const statusCount = {};
+  for (const a of Object.values(DATA.anchors)) statusCount[a.status] = (statusCount[a.status] ?? 0) + 1;
+  let h = `<h2 style="margin-top:0">About this map</h2><p>Generated from <code>${esc(m.commit)}</code> (${esc(m.date)}) of <a href="${esc(m.repository)}" target="_blank" rel="noopener">${esc(m.repository.replace("https://", ""))}</a>.</p>`;
+  h += `<h2>What is generated and what is written by hand</h2><table><tr><th>Part</th><th>Source</th><th>How it stays true</th></tr>
+  <tr><td>Crates, modules, scripts, imports and module links (${m.counts.modules} modules, ${m.counts.edges} links)</td><td>The architecture-map extractor (<code>experiments/architecture-map</code>, rules ${esc(m.observedGenerator.rules)})</td><td>Regenerated from the commit every build.</td></tr>
+  <tr><td>Pull requests and commits</td><td>Git history since <code>${esc(DATA.history.from)}</code></td><td>Regenerated every build.</td></tr>
+  <tr><td>Concepts, features, module descriptions, entry points, reasons, pathways and proposals</td><td><code>experiments/app-atlas/layer/*.yaml</code></td><td>Every claim points at a source line by its text. The build re-finds each line; a line that disappears or changes is flagged.</td></tr></table>`;
+  h += `<h2>Source anchors</h2><p>${Object.keys(DATA.anchors).length} anchors: ${Object.entries(statusCount).map(([k, v]) => `${v} ${esc(k)}`).join(", ")}.${m.locked ? "" : " No review lock recorded yet, so changed-since-review cannot be shown."}</p>`;
+  if (DATA.problems.length) h += `<table><tr><th>Problem</th><th>Where</th></tr>${DATA.problems.map((p) => `<tr><td>${esc(p.kind)}</td><td><code>${esc(p.id)}</code>${p.file ? ` (${esc(p.file)})` : ""}</td></tr>`).join("")}</table>`;
+  else h += `<p>No problems: every anchor resolved to exactly one line, every module has a feature.</p>`;
+  h += `<h2>Limits</h2><ul>
+  <li>Function-level links come only from the traced pathways. There is no full call graph.</li>
+  <li>Pathways were traced by reading source, not by running the app. They show what the code says, not measured behaviour.</li>
+  <li>Module links are a lower bound: the extractor reads Rust with patterns, so macros, glob imports and trait calls can be missed.</li>
+  <li>Feature assignment and every "why" are judgements. Items marked inferred are the writer's reading, not a statement in the code or docs.</li>
+  <li>Herdr Core and the programs are outside this repository and are shown only where Voyager touches them.</li></ul>`;
+  h += `<h2>Rebuild</h2><pre class="src"><span class="l">  node experiments/app-atlas/atlas.cjs build --rev ${esc(m.short)}</span><span class="l">  node experiments/app-atlas/atlas.cjs check --rev HEAD</span></pre>`;
+  $("aboutbody").innerHTML = h;
+  writeHash();
+}
+
+// ---------- events ----------
+function selectNode(id, { open = false, focusMap = false } = {}) {
+  if (!T.has(id)) return;
+  S.tab = "map";
+  const n = T.get(id);
+  if (open) { S.level = Math.min(5, n.level + 1); S._fitTo = id; S.sel = id; svgReset(); }
+  else { if (n.level > S.level && focusMap) { S.level = n.level; svgReset(); S._fitTo = id; } S.sel = id; }
+  render();
+}
+function svgReset() { $("map")._level = null; }
+function setPathway(id, step = 0) { S.tab = "map"; S.pathway = id || null; S.step = step; S.branch = null; S._fitRoute = true; render(); }
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-go],[data-open],[data-path],[data-step],[data-stepmove],[data-clearpath],[data-branch],[data-pr],[data-commit],[data-seq],[data-proposal],[data-gomap],.leaf,.frame-label");
+  if (!t) return;
+  const ds = t.dataset;
+  if (ds.open) return selectNode(ds.open, { open: true });
+  if (ds.gomap) return selectNode(ds.gomap, { focusMap: true });
+  if (ds.go) return selectNode(ds.go, { focusMap: true });
+  if (ds.path !== undefined) return setPathway(ds.path, Number(ds.step || 0));
+  if (ds.stepmove) { const n = activeSteps().length; S.step = Math.min(n - 1, Math.max(0, S.step + Number(ds.stepmove))); return render(); }
+  if (ds.clearpath !== undefined) { S.pathway = null; S.seq = false; return render(); }
+  if (ds.branch !== undefined) { S.branch = ds.branch === "" ? null : Number(ds.branch); S.step = Math.min(S.step, activeSteps().length - 1); return render(); }
+  if (ds.pr) { S.tab = "map"; S.pr = ds.pr; S.commit = ""; fillCommits(); return render(); }
+  if (ds.commit) { S.commit = ds.commit; $("commitsel").value = ds.commit; return render(); }
+  if (ds.seq !== undefined) { S.seq = ds.seq === "1"; return render(); }
+  if (ds.proposal) { S.proposal = ds.proposal; return render(); }
+  if (ds.step !== undefined && (S.pathway)) { S.step = Number(ds.step); return render(); }
+  if (ds.id) { if (t.classList.contains("leaf") && e.detail >= 2) return selectNode(ds.id, { open: true }); S.sel = ds.id; return render(); }
+});
+document.addEventListener("dblclick", (e) => { const t = e.target.closest(".leaf"); if (t?.dataset.id && T.get(t.dataset.id)?.children.length) selectNode(t.dataset.id, { open: true }); });
+document.addEventListener("keydown", (e) => {
+  const t = e.target.closest?.(".leaf,.pcard");
+  if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); if (t.dataset.proposal) { S.proposal = t.dataset.proposal; return render(); } if (t.dataset.step !== undefined && S.pathway) { S.step = Number(t.dataset.step); return render(); } if (e.shiftKey && T.get(t.dataset.id)?.children.length) return selectNode(t.dataset.id, { open: true }); S.sel = t.dataset.id; render(); document.querySelector(`.leaf[data-id="${CSS.escape(t.dataset.id)}"]`)?.focus(); return; }
+  if (e.target.matches("input,select,textarea")) return;
+  if (S.pathway && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); const n = activeSteps().length; S.step = Math.min(n - 1, Math.max(0, S.step + (e.key === "ArrowRight" ? 1 : -1))); return render(); }
+  if (e.key === "Escape") { if (S.pathway) { S.pathway = null; S.seq = false; } else if (S.pr) { S.pr = ""; S.commit = ""; } else S.sel = null; return render(); }
+  if (e.key === "/") { e.preventDefault(); $("find").focus(); }
+  if (/^[1-5]$/.test(e.key) && S.tab === "map") { S.level = Number(e.key); svgReset(); render(); }
+});
+function fillCommits() {
+  const pr = DATA.history.prs.find((p) => String(p.pull ?? p.commit) === S.pr);
+  $("commitsel").innerHTML = `<option value="">All ${pr?.commits.length ?? 0} commits together</option>` + (pr?.commits ?? []).slice().reverse().map((c) => `<option value="${esc(c.sha)}">${esc(c.date)} · ${esc(c.subject.slice(0, 70))}</option>`).join("");
+  $("commitsel").value = S.commit;
+}
+function init() {
+  $("commit").textContent = `${DATA.meta.short} · ${DATA.meta.date}`;
+  $("levels").innerHTML = LEVELS.map((l) => `<button data-level="${l.n}" aria-pressed="false" title="Key ${l.n}">${esc(l.name)}</button>`).join("");
+  $("levels").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; S.level = Number(b.dataset.level); svgReset(); render(); });
+  $("pathway").innerHTML = `<option value="">None</option>` + DATA.pathways.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+  $("pathway").addEventListener("change", (e) => setPathway(e.target.value, 0));
+  $("pr").innerHTML = `<option value="">None</option>` + DATA.history.prs.slice().reverse().map((p) => `<option value="${esc(String(p.pull ?? p.commit))}">PR #${esc(p.pull)} · ${esc(p.title.slice(0, 60))}</option>`).join("");
+  $("pr").addEventListener("change", (e) => { S.pr = e.target.value; S.commit = ""; fillCommits(); render(); });
+  $("commitsel").addEventListener("change", (e) => { S.commit = e.target.value; render(); });
+  $("showall").addEventListener("change", (e) => { S.showAll = e.target.checked; render(); });
+  const names = []; for (const n of T.values()) if (n.type === "module" || n.type === "function") names.push(`<option value="${esc(n.type === "function" ? n.data.fn : shortName(n))}" label="${esc(n.type)} · ${esc(n.id)}">`);
+  $("findlist").innerHTML = names.join("");
+  $("find").addEventListener("change", (e) => { const q = e.target.value.trim(); const n = [...T.values()].find((x) => (x.type === "function" ? x.data.fn : shortName(x)) === q) ?? [...T.values()].find((x) => x.type !== "slice" && shortName(x).toLowerCase().includes(q.toLowerCase())); if (n) { S.level = n.level; svgReset(); S._fitTo = n.id; S.sel = n.id; render(); } });
+  const active = () => ($("map").hasAttribute("hidden") ? $("seq") : $("map"));
+  $("zin").onclick = () => zoomAt(active(), 1 / 1.3);
+  $("zout").onclick = () => zoomAt(active(), 1.3);
+  $("zfit").onclick = () => fit(active());
+  $("pzfit").onclick = () => fit($("pmap"));
+  for (const t of ["map", "proposals", "about"]) $(`tab-${t}`).onclick = () => { S.tab = t; if (t === "map") svgReset(); render(); };
+  $("theme").onclick = () => { const r = document.documentElement; const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("atlas-theme", r.dataset.theme); } catch {} };
+  try { const t = localStorage.getItem("atlas-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+  $("legend-concepts").innerHTML = DATA.concepts.map((c) => `<span><span class="sw" style="background:var(--c-${c.colour})"></span>${esc(c.name)}</span>`).join("");
+  $("legend-lines").innerHTML = `<span><span class="ln" style="border-color:var(--edge-code)"></span>uses code</span><span><span class="ln" style="border-color:var(--edge-runtime)"></span>runtime hop</span><span><span class="ln" style="border-color:var(--route);border-top-width:3px"></span>selected pathway</span><span><span class="sw" style="background:var(--change)"></span>changed by PR</span><span>keys 1–5 change level · ←/→ step · Esc clears</span>`;
+  readHash(); if (S.pr) fillCommits();
+  render();
+}
+init();
+</script>
+</body>
+</html>
