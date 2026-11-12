@@ -127,7 +127,17 @@ impl Owned {
     pub fn stop(&mut self) -> Result<()> {
         if self.child.try_wait()?.is_none() {
             self.identity.verify()?;
-            self.child.kill()?;
+            let pid = rustix::process::Pid::from_raw(i32::try_from(self.identity.pid)?)
+                .context("Invalid owned PID")?;
+            rustix::process::kill_process(pid, rustix::process::Signal::TERM)?;
+            if let Err(error) = until_cleanup("owned child graceful exit", || {
+                Ok(self.child.try_wait()?.map(|_| ()))
+            }) {
+                self.identity.verify()?;
+                self.child.kill()?;
+                self.child.wait()?;
+                bail!("Owned child required forced termination: {error:#}");
+            }
         }
         self.child.wait()?;
         Ok(())
@@ -366,4 +376,54 @@ pub fn doctor(binary: &Path, expected: &str) -> Result<Value> {
     Ok(
         json!({"schema":1,"surface":"owned Linux X11","binary":binary,"sha256":hash,"tools":tools,"limits":["No physical touchpad, IME, real compositor latency or actual Codex proof"]}),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    fn children() -> Result<BTreeSet<u32>> {
+        let mut result = BTreeSet::new();
+        for task in fs::read_dir("/proc/self/task")? {
+            let path = task?.path().join("children");
+            if let Ok(text) = fs::read_to_string(path) {
+                for pid in text.split_whitespace() {
+                    result.insert(pid.parse()?);
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    #[test]
+    fn failed_spawn_record_does_not_leave_a_child() -> Result<()> {
+        let path =
+            std::env::temp_dir().join(format!("vv-log-failure-{}-{}", std::process::id(), stamp()));
+        let system = System::new(path)?;
+        fs::create_dir(system.evidence.join("actions.jsonl"))?;
+        let before = children()?;
+        let result = system.spawn(Path::new("/bin/sleep"), &["30"], "spawn.log");
+        let after = children()?;
+        let leaked: Vec<_> = after.difference(&before).copied().collect();
+        for &pid in &leaked {
+            let identity = Identity::read(pid)?;
+            ensure!(
+                identity.executable == fs::canonicalize("/bin/sleep")?,
+                "Unexpected test child"
+            );
+            identity.verify()?;
+            let pid =
+                rustix::process::Pid::from_raw(i32::try_from(pid)?).context("Invalid test PID")?;
+            rustix::process::kill_process(pid, rustix::process::Signal::TERM)?;
+            rustix::process::waitpid(Some(pid), rustix::process::WaitOptions::empty())?;
+        }
+        ensure!(result.is_err(), "Recording failure was not reported");
+        ensure!(leaked.is_empty(), "Failed logging leaked child: {leaked:?}");
+        ensure!(
+            system.evidence.join("spawn.log").exists(),
+            "Failure evidence disappeared"
+        );
+        Ok(())
+    }
 }

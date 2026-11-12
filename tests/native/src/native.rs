@@ -358,6 +358,21 @@ impl Native {
         {
             errors.push(format!("display: {error:#}"));
         }
+        if let Some(number) = self
+            .system
+            .env
+            .get("DISPLAY")
+            .and_then(|display| display.strip_prefix(':'))
+        {
+            for path in [
+                format!("/tmp/.X{number}-lock"),
+                format!("/tmp/.X11-unix/X{number}"),
+            ] {
+                if Path::new(&path).exists() {
+                    errors.push(format!("Display residue remains: {path}"));
+                }
+            }
+        }
         errors
     }
 }
