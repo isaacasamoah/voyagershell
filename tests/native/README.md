@@ -1,82 +1,46 @@
-# Native proving fixture
-
-The repository's `prove.py` is the single entry. Select one route explicitly:
-
-- `--foundation` runs current native product journeys with this launcher and these helpers.
-- `--reference` runs the retained Electron fixture.
-- `--native-mod-host` uses this shared launcher with the historical native-content working directory and its retained header/Notes journeys.
-- `--native-avatar` runs the original avatar experiment's own historical driver.
-
-Root help lists the choices. Route help lists that driver's options:
-
-```sh
-python prove.py --help
-python prove.py --foundation --help
-python prove.py --reference --help
-python -m unittest discover -s tests/native -p test_routes.py
-```
-
-The route/path checks do not launch an app, model, Core or desktop-input session.
-Compile or inspect input scripts without importing them: the native input script
-opens a desktop session when executed. Native journeys still require the actual
-candidate binary, a unique session/profile/evidence path and serialized input.
-
-The migrated helper source retains binary/profile/session, process/window and
-input-target identity checks. Foundation app cwd is the repository root; legacy
-native-content cwd remains experiments/native-content. Binary resolution retains
-the existing caller-relative --binary behavior, so use an explicit binary path.
-Moving source does not reaccept an old journey or prove the migrated native path.
-Keep historical failures and separately gated product behavior in their existing
-records. Root coordinates the next actual native verification.
-
-`--foundation --journey feedback-ux` checks the reviewed rename, sidebar/chat,
-voice-control placement and Portal-menu changes. `rename-typing` runs only its
-rename comparison. Both use the same launcher, pointer and cleanup helpers.
-Rename typing sends ordinary keys without Ctrl+A or a per-character delay.
-The recorder reuses the actual Mutter capture stream and measured crop, writes
-a bounded video, and records its decoded frame count. Its resampled 30 fps video
-supports visual review; it does not measure input-to-paint latency. Preserve the
-recorded monitor scale and window origin for a matched comparison. A capture on
-another scaled monitor is not a pixel-matched result.
-
-Use `--foundation --review --launch --compositor` with the same explicit binary,
-session, evidence and desktop environment to leave a review app open. This mode
-captures the window and closes its input helper. It retains the app and its
-processes, records no passed journey, and marks `reviewOnly` in its receipt.
-
-`--foundation --journey session-quit` uses a fresh dedicated session and profile.
-It checks warm close/restore, normal Ctrl+Q detach, and deliberate reopening of
-that same profile and Core session. The journey verifies the original Core and
-shell PID/start identities, retained layout and fresh terminal output after
-reopening. On the successful path it explicitly exits its fixture shell, verifies
-no live fixture terminals remain, and stops only the dedicated Core. A failed or
-uncertain journey records its last observations without replaying an effect.
-It does not exercise private-provider conversation or voice.
-
-The `notes-configuration` native journey still checks the former heading and
-cold-Quit behavior. Its runtime acceptance is pending an update for the current
-Notes and detach requirements. Passing route checks only confirms routing and
-fixture source checks; it does not accept that journey.
-
-The `terminal-scrolling` journey covers primary-screen history, alternate-screen
-arrow fallback, program mouse reporting and same-program reattachment. It uses
-the ordinary compositor input path, or `--isolated-x11 XVFB_PID` for a separately
-started, same-user Xvfb display. The isolated adapter verifies the exact Xvfb
-process/display and keeps the launcher's candidate input guards. Its measured
-terminal rectangle requires the recorded 1450 by 940 viewport. Set
-`VOYAGER_SCROLL_ISOLATED_X11=1` only for that isolated route. This path does not
-establish physical touchpad behavior or native IME. `VOYAGER_SCROLL_AGENT=1` adds
-one real installed-Codex response and captures actual wheel navigation and typing.
-Fixture cleanup explicitly ends only its verified dedicated Core after app Quit;
-that cleanup is separate from the application's detach policy.
-
-## Rust verification environment
+# Native verification environment
 
 This is the first Rust slice of the maintained native fixture. It verifies terminal
 scrolling on an owned Linux X11 display. The accepted application remains unchanged.
-The existing Python dispatcher remains the single public entry point. `--rust`
-selects the explicit migration candidate; unsupported journeys fail rather than
-falling back. The other Python journeys are retained, not claimed as migrated.
+Invoke `voyager-verification` directly. New verification extends this environment,
+including its shared actions and evidence contract. A single command wrapping
+unrelated rigs would not meet that requirement. Unsupported capabilities remain
+explicit gaps until implemented and independently verified. The Python drivers
+are retained for explicit historical reproduction and migration comparison only.
+
+## Environment scope and maintenance
+
+The environment is a maintained development product. Its intended coverage includes
+readiness, isolation, shared actions/observations, evidence, repair, cleanup,
+functional journeys, boundary failures, platform behavior, resource measurements,
+formal properties and ETC/ORTH/DRY review. Plan these together before adding more
+journeys. Implement small complete slices of that design, not private rigs.
+The active worktree SPEC.md owns the comprehensive initiative design; it is local
+and remains unaccepted as a complete implementation.
+
+| Capability | Implemented status |
+| --- | --- |
+| Owned X11 scrolling, input/capture/identity, evidence and cleanup | Implemented for the fixed measured viewport; see evidence limits below. |
+| Finite reporting gate and regression controls | Implemented for the actual Rust gate, not app/OS behavior. |
+| ETC/ORTH/DRY checks | Required independent review criteria; not an automatic architecture score. |
+| Versioned request/result contract and independent receipt conformance | Planned. Pilot receipts are evidence, not a certified acceptance validator. |
+| Workspace/Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
+| Compositor/drag/IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
+| Configurable architecture YAML and typed Jev review | Separate later work. |
+
+A fixture failure preserves its run, enters diagnosis, receives a demonstrated
+repair, then retests the affected app behavior. Missing capability opens bounded
+extension work here; it never licenses a private runner or a success claim.
+Supporting unit tests and diagnostics remain valid, but cannot replace the named
+native journey. Independent evidence inspection and negative controls are required.
+Instructions and the legacy refusal gate do not prevent arbitrary shell execution;
+there is no claimed CI gate certifying every acceptance receipt today.
+
+The environment must use the app's existing Core/API and authority boundaries.
+It owns its test resources without becoming a second runtime supervisor. Reuse
+resource coordination and the desktop queue. Do not import pstack agent-launch or
+autonomous-merge authority. Keep one owner for each action, capability definition,
+success rule and evidence schema; generate derived views where practical.
 
 ### Build and inspect
 
@@ -85,7 +49,7 @@ From the selected checkout:
 ```sh
 python3 desktop/prepare-sdk.py
 CARGO_BUILD_JOBS=1 cargo build --manifest-path tests/native/Cargo.toml --locked --offline
-python3 prove.py --foundation --rust --check-lifecycle
+tests/native/target/debug/voyager-verification check-lifecycle
 ```
 
 The offline build uses dependencies already available on this development machine.
@@ -100,9 +64,9 @@ paired replay, not current foundation acceptance.
 ```sh
 candidate=/home/isaac/the-workshop/.worktrees/experiment-pstack-replay/experiments/pstack-replay/current/artifacts/voyager-shell-current
 expected=eae291d9f8c772371de788884efc2469841cb8c817bfa57c95bcdc17e1f7f62d
-python3 prove.py --foundation --rust --doctor --binary "$candidate" --sha256 "$expected"
+tests/native/target/debug/voyager-verification doctor --binary "$candidate" --sha256 "$expected"
 run_parent=$(mktemp -d /var/tmp/voyager-verification-XXXXXX)
-python3 prove.py --foundation --rust --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --evidence "$run_parent/scrolling"
+tests/native/target/debug/voyager-verification run --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --evidence "$run_parent/scrolling"
 ```
 
 For another candidate, take the expected hash from its reviewed build receipt.
@@ -174,7 +138,7 @@ Reconsider a code verifier when the next concrete property needs one.
 | --- | --- | --- |
 | Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `scrolling.rs` describes the journey; `native.rs` handles the platform/app window; `system.rs` owns process/recording/Core primitives. |
 | Orthogonality | Product code does not depend on the fixture; the reporting gate is independent of I/O. Core owns programs. | Standalone development crate; pure `lifecycle.rs`; platform dependencies remain outside the app. |
-| DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One dispatcher, event list, reporting gate, recorder, input/capture adapter and shutdown path for the migrated journey. |
+| DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, event list, reporting gate, recorder, input/capture adapter and shutdown path for the migrated journey. |
 
 These are review criteria, not an automated universal quality score. The retained
 legacy platform helpers are a migration gap. Do not add a private runner for a new
@@ -182,7 +146,7 @@ feature. Extend this fixture, or record the missing capability and its bounded
 migration. Retire an old implementation only after equivalent real-surface checks
 pass. Do not change old assertions to make migration easier.
 
-Count this entire authored verification crate, the dispatcher and one-off checks
+Count this entire authored verification crate, the retained dispatcher and one-off checks
 in acceptance inventories. A Rust implementation is still proving code; calling
 it development infrastructure does not exempt it from CONSTRAINTS.md. Full
 acceptance stays open when the test-size gate fails. YAML architecture rules and
@@ -204,3 +168,78 @@ socket protocol with no start behavior. Herdr App guidance was inspected at
 `1581a587919dddd6f1efd5f78eb542c4b2b02cb5`. Upstream approval policies remain upstream.
 
 The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
+
+## Retained Python journey reference
+
+These are retained pre-migration drivers, not the native environment default.
+Execution requires `--legacy-reproduction`; read-only help remains available.
+This reference preserves earlier journey details and limitations for parity work.
+Select one route explicitly:
+
+- `--foundation` reproduces retained native product journeys with this launcher and these helpers.
+- `--reference` runs the retained Electron fixture.
+- `--native-mod-host` uses this shared launcher with the historical native-content working directory and its retained header/Notes journeys.
+- `--native-avatar` runs the original avatar experiment's own historical driver.
+
+Root help lists the choices. Route help lists that driver's options:
+
+```sh
+python prove.py --help
+python prove.py --foundation --help
+python prove.py --reference --help
+python -m unittest discover -s tests/native -p test_routes.py
+```
+
+The route/path checks do not launch an app, model, Core or desktop-input session.
+Compile or inspect input scripts without importing them: the native input script
+opens a desktop session when executed. Native journeys still require the actual
+candidate binary, a unique session/profile/evidence path and serialized input.
+
+The migrated helper source retains binary/profile/session, process/window and
+input-target identity checks. Foundation app cwd is the repository root; legacy
+native-content cwd remains experiments/native-content. Binary resolution retains
+the existing caller-relative --binary behavior, so use an explicit binary path.
+Moving source does not reaccept an old journey or prove the migrated native path.
+Keep historical failures and separately gated product behavior in their existing
+records. Root coordinates the next actual native verification.
+
+`--foundation --journey feedback-ux` checks the reviewed rename, sidebar/chat,
+voice-control placement and Portal-menu changes. `rename-typing` runs only its
+rename comparison. Both use the same launcher, pointer and cleanup helpers.
+Rename typing sends ordinary keys without Ctrl+A or a per-character delay.
+The recorder reuses the actual Mutter capture stream and measured crop, writes
+a bounded video, and records its decoded frame count. Its resampled 30 fps video
+supports visual review; it does not measure input-to-paint latency. Preserve the
+recorded monitor scale and window origin for a matched comparison. A capture on
+another scaled monitor is not a pixel-matched result.
+
+Use `--legacy-reproduction --foundation --review --launch --compositor` with the same explicit binary,
+session, evidence and desktop environment to leave a review app open. This mode
+captures the window and closes its input helper. It retains the app and its
+processes, records no passed journey, and marks `reviewOnly` in its receipt.
+
+`--foundation --journey session-quit` uses a fresh dedicated session and profile.
+It checks warm close/restore, normal Ctrl+Q detach, and deliberate reopening of
+that same profile and Core session. The journey verifies the original Core and
+shell PID/start identities, retained layout and fresh terminal output after
+reopening. On the successful path it explicitly exits its fixture shell, verifies
+no live fixture terminals remain, and stops only the dedicated Core. A failed or
+uncertain journey records its last observations without replaying an effect.
+It does not exercise private-provider conversation or voice.
+
+The `notes-configuration` native journey still checks the former heading and
+cold-Quit behavior. Its runtime acceptance is pending an update for the current
+Notes and detach requirements. Passing route checks only confirms routing and
+fixture source checks; it does not accept that journey.
+
+The `terminal-scrolling` journey covers primary-screen history, alternate-screen
+arrow fallback, program mouse reporting and same-program reattachment. It uses
+the ordinary compositor input path, or `--isolated-x11 XVFB_PID` for a separately
+started, same-user Xvfb display. The isolated adapter verifies the exact Xvfb
+process/display and keeps the launcher's candidate input guards. Its measured
+terminal rectangle requires the recorded 1450 by 940 viewport. Set
+`VOYAGER_SCROLL_ISOLATED_X11=1` only for that isolated route. This path does not
+establish physical touchpad behavior or native IME. `VOYAGER_SCROLL_AGENT=1` adds
+one real installed-Codex response and captures actual wheel navigation and typing.
+Fixture cleanup explicitly ends only its verified dedicated Core after app Quit;
+that cleanup is separate from the application's detach policy.

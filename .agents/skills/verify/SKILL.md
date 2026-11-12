@@ -7,8 +7,9 @@ description: Verify VoyagerShell native behavior through its maintained fixture,
 
 Read CONSTRAINTS.md, CONTRIBUTING.md and tests/native/README.md. Functionality,
 easy change, orthogonality and one authoritative definition per rule all matter.
-Use the existing prove.py entry point. Never create a feature-private runner or
-drive the human's app. Keep native observations, finite checks and quality review
+Use the native Rust environment directly. Missing capability means extend this
+environment and keep the requested behavior unverified. Never create a private
+runner, inline proving program or Python acceptance script, or drive the human's app. Keep native observations, finite checks and quality review
 as separate evidence. Missing proof is not a pass.
 
 ## Launch
@@ -32,7 +33,7 @@ Run this read-only check first and after anything surprising:
 ```sh
 candidate=/home/isaac/the-workshop/.worktrees/experiment-pstack-replay/experiments/pstack-replay/current/artifacts/voyager-shell-current
 expected=eae291d9f8c772371de788884efc2469841cb8c817bfa57c95bcdc17e1f7f62d
-python3 prove.py --foundation --rust --doctor --binary "$candidate" --sha256 "$expected"
+tests/native/target/debug/voyager-verification doctor --binary "$candidate" --sha256 "$expected"
 ```
 
 Doctor establishes the candidate hash and tool availability. Launch readiness
@@ -46,13 +47,14 @@ Read features/README.md and the selected feature file. For scrolling:
 
 ```sh
 run_parent=$(mktemp -d /var/tmp/voyager-verification-XXXXXX)
-python3 prove.py --foundation --rust --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --evidence "$run_parent/scrolling"
+tests/native/target/debug/voyager-verification run --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --evidence "$run_parent/scrolling"
 ```
 
 Exit 0 is a named runtime pass, 1 is observed failure, and 2 is inconclusive or
 unavailable. Unsupported journeys and actual-Codex requests are refused. There is
-no implicit legacy fallback. Other surfaces retain their existing explicit route;
-they have not migrated into this Rust acceptance claim.
+no implicit legacy fallback. Existing Python drivers require --legacy-reproduction
+for selected historical reproduction/parity work; they do not extend native
+coverage. Read the capability gaps in the owner README before claiming completion.
 
 ## Evidence
 
@@ -66,7 +68,8 @@ tests/native/README.md; retain the independent review and source identity.
 On a failure, preserve the original directory. Distinguish setup/driver failure
 from an observed product defect. Repair a confirmed fixture problem in this common
 source, prove the repair with an independent negative control, then rerun the
-affected app behavior. Never replay an uncertain effect or weaken an assertion.
+affected app behavior. Record a bounded unresolved result and next action if the
+repair cannot be completed; do not silently substitute a custom rig. Never replay an uncertain effect or weaken an assertion.
 
 ## Cleanup
 

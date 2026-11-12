@@ -31,7 +31,7 @@ From the selected checkout:
 ```sh
 python3 desktop/prepare-sdk.py
 CARGO_BUILD_JOBS=1 cargo build --manifest-path tests/native/Cargo.toml --locked --offline
-python3 prove.py --foundation --rust --check-lifecycle
+tests/native/target/debug/voyager-verification check-lifecycle
 ```
 
 The result names the source fingerprint and reachable state count. A failed check
