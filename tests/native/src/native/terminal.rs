@@ -2,7 +2,7 @@ use super::{Defect, Native, Wheel, pid, placed};
 use crate::inspection::{Target, Unseen, region};
 use crate::system::{Identity, PATIENCE, settle, until};
 use crate::x11::{Key, Pixels};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::Serialize;
 use serde_json::json;
 use std::time::Duration;
@@ -122,24 +122,31 @@ impl Terminal {
     }
 
     pub fn same_program(&self, native: &Native) -> Result<()> {
-        let survived = || -> Result<()> {
-            self.shell.verify()?;
-            let reported = native
-                .system
-                .rpc("terminal.get", json!({"terminal":self.address}))?;
-            ensure!(
-                pid(&reported)? == self.shell.pid,
-                "Core reports another program for the terminal"
-            );
-            Ok(())
-        };
-        survived().map_err(|error| {
+        let gone = |reason: String| {
             Defect(format!(
-                "the shell of {} did not survive: {error:#}",
+                "the shell of {} did not survive: {reason}",
                 self.target()
             ))
-        })?;
-        native.same_core()
+        };
+        self.shell
+            .verify()
+            .map_err(|error| gone(format!("{error:#}")))?;
+        let reported = native
+            .system
+            .rpc("terminal.get", json!({"terminal":self.address}))?;
+        if reported["pid"].as_u64() != Some(u64::from(self.shell.pid)) {
+            return Err(gone("Core reports another program for the terminal".into()).into());
+        }
+        native
+            .core
+            .as_ref()
+            .context("Missing Core identity")?
+            .verify()?;
+        ensure!(
+            native.system.rpc("server.status", json!({}))?["core"]["id"] == native.core_id,
+            "Core identity changed"
+        );
+        Ok(())
     }
 }
 
@@ -177,6 +184,42 @@ mod tests {
         ensure!(
             matches!(native.diagnose(&error), Cause::Product(detail) if detail.contains("placement-3")),
             "A shell that died was blamed on the fixture: {error:#}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_core_that_does_not_answer_is_not_a_dead_shell() -> Result<()> {
+        let mut native = native()?;
+        let idle = |native: &Native, log: &str| {
+            native
+                .system
+                .spawn(Path::new("/usr/bin/tail"), &["-f", "/dev/null"], &[], log)
+        };
+        let shell = idle(&native, "shell.log")?;
+        let terminal = Terminal {
+            address: CoreTerminalId("t1".into()),
+            placement: PlacementId("placement-3".into()),
+            shell: shell.identity.clone(),
+        };
+        let error = terminal
+            .same_program(&native)
+            .expect_err("A terminal that Core does not answer for counted as the same program");
+        ensure!(
+            error.downcast_ref::<Defect>().is_none(),
+            "A Core that did not answer was reported as a shell that died: {error:#}"
+        );
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Fixture(_)),
+            "A Core that did not answer was blamed on the product while Core was not known to be gone"
+        );
+        let mut core = idle(&native, "core.log")?;
+        core.child.kill()?;
+        core.child.wait()?;
+        native.core = Some(core.identity.clone());
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Product(detail) if detail.contains("Core exited")),
+            "A Core that exited was not blamed on the product"
         );
         Ok(())
     }

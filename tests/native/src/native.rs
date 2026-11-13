@@ -427,18 +427,6 @@ impl Native {
         self.adopted.push((name, identity));
     }
 
-    pub fn same_core(&self) -> Result<()> {
-        self.core
-            .as_ref()
-            .context("Missing Core identity")?
-            .verify()?;
-        ensure!(
-            self.system.rpc("server.status", json!({}))?["core"]["id"] == self.core_id,
-            "Core identity changed"
-        );
-        Ok(())
-    }
-
     pub fn close(&mut self) -> Result<()> {
         self.press(Key::Char('q').ctrl())?;
         let viewer = self.viewer.as_mut().context("Missing viewer")?;

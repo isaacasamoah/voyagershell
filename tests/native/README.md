@@ -324,6 +324,11 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 | Owned display exited or stopped answering, a host tool is missing, failed or ran out of time, the sandbox refused, or an unrelated verifier error | `inconclusive` |
 | Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
 
+`Terminal::same_program` reports a defect only when the shell's process is
+gone or Core names another program for the terminal. A Core request that
+fails there is diagnosed like any other error, so it is a product failure
+only when Core has exited.
+
 `Acknowledge` is a real event. It fires only when at least one recorded action
 (an input the display answered, or a host command) completed successfully after
 dispatch, and a match is rejected without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only
