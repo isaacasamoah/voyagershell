@@ -2,7 +2,6 @@ const path = require("node:path");
 const { analyse, call } = require("./rust.cjs");
 
 function observePackages(snapshot, graph, config) {
-  graph.packages = [];
   for (const root of config.packageRoots) {
     for (const manifest of snapshot.files(`${root}/**/mod.json`)) {
       const directory = path.posix.dirname(manifest);
@@ -39,7 +38,6 @@ function observePackages(snapshot, graph, config) {
 }
 
 function observeGenerators(snapshot, graph, config) {
-  graph.artifacts = [];
   if (!snapshot.has("package.json")) return;
   const lines = snapshot.read("package.json").split("\n");
   const scripts = JSON.parse(snapshot.read("package.json")).scripts ?? {};
@@ -241,13 +239,7 @@ function observeTypeScript(snapshot, graph, config) {
     readFile: ts.sys.readFile,
   };
   for (const file of files) {
-    const container =
-      (graph.packages ?? []).find((pack) =>
-        file.startsWith(`${pack.directory}/`),
-      )?.id ??
-      (graph.artifacts ?? []).find(([output]) =>
-        file.startsWith(`${output}/`),
-      )?.[1];
+    const container = graph.ownerOf(file) ?? undefined;
     graph.node(`ts:${file}`, {
       kind: "script",
       name: path.posix.basename(file),
@@ -309,9 +301,7 @@ function observeTypeScript(snapshot, graph, config) {
           path.posix.dirname(
             path.posix.join(path.posix.dirname(file), specifier),
           );
-      const container = (graph.artifacts ?? []).find(([output]) =>
-        target.startsWith(`${output}/`),
-      )?.[1];
+      const container = graph.artifactOf(target) ?? undefined;
       const to = files.includes(target) ? `ts:${target}` : container;
       if (!to) {
         graph.count("import", "unresolved");
@@ -333,7 +323,7 @@ function observeTypeScript(snapshot, graph, config) {
       graph.count("import", "facts");
     }
   }
-  for (const pack of graph.packages ?? []) {
+  for (const pack of graph.packages) {
     const entry =
       pack.entry && `${pack.directory}/${pack.entry.replace(/\.js$/, ".ts")}`;
     const node = graph.nodes.get(pack.id);

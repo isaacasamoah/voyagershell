@@ -13,11 +13,13 @@ const defaults = require("./config.json");
 
 const SCHEMA = "architecture-map/v0";
 const EXTRACTOR_FILES = [
+  "nodes.cjs",
   "observe-project.cjs",
   "observe-rust.cjs",
   "observe.cjs",
   "rust.cjs",
   "snapshot.cjs",
+  "tokens.cjs",
 ];
 
 function toolVersion() {
