@@ -16,8 +16,7 @@ readiness, isolation, shared actions/observations, evidence, repair, cleanup,
 functional journeys, boundary failures, platform behavior, resource measurements,
 formal properties and ETC/ORTH/DRY review. Plan these together before adding more
 journeys. Implement small complete slices of that design, not private rigs.
-The active worktree SPEC.md owns the comprehensive initiative design; it is local
-and remains unaccepted as a complete implementation.
+The environment is not yet accepted as a complete implementation of that design.
 
 | Capability | Implemented status |
 | --- | --- |
@@ -307,11 +306,11 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 | Observation when the journey stopped | Verdict |
 | --- | --- |
 | Candidate exited or was killed, or is stopped | `failed`, blamed on the product |
-| A bound shell died or Core reports another program for its terminal (`Terminal::same_program`), or the candidate quit with a failure status (`Native::close`) | `failed`, blamed on the product |
 | Core exited while the candidate ran | `failed`, blamed on the product |
+| A bound shell died or Core reports another program for its terminal (`Terminal::same_program`), or the candidate quit with a failure status (`Native::close`) | `failed`, blamed on the product |
 | Timeout while the display still answers | `failed`, a hang, blamed on the product |
-| A case returned no expectation, or an observed value could not be recorded | `inconclusive`, blamed on the fixture |
 | A case's expectation did not hold | `failed`, and `firstFailingCheck` names the case, the expectation and the observed values |
+| A case returned no expectation, or an observed value could not be recorded | `inconclusive`, blamed on the fixture |
 | `drive` returned without running a declared case although no case failed | `inconclusive` |
 | Owned display exited or stopped answering, a host tool is missing, failed or ran out of time, the sandbox refused, or an unrelated verifier error | `inconclusive` |
 | Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
