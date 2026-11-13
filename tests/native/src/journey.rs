@@ -1,4 +1,5 @@
 mod scrolling;
+mod workspace;
 
 use crate::native::{Native, Sidebar};
 use crate::system::save;
@@ -34,7 +35,11 @@ macro_rules! cases {
 pub(crate) use cases;
 
 macro_rules! journeys {
-    ($($variant:ident => $name:literal in $module:ident, sidebar: $sidebar:expr);+ $(;)?) => {
+    ($(
+        $variant:ident => $name:literal in $module:ident,
+        sidebar: $sidebar:expr,
+        window: $window:expr
+    );+ $(;)?) => {
         #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
         pub enum Journey {
             $(#[serde(rename = $name)] $variant),+
@@ -67,6 +72,12 @@ macro_rules! journeys {
                 }
             }
 
+            pub fn window(self) -> Option<(u16, u16)> {
+                match self {
+                    $(Journey::$variant => $window),+
+                }
+            }
+
             pub fn drive(self, native: &mut Native, outcomes: &mut Outcomes) -> Result<()> {
                 match self {
                     $(Journey::$variant => {
@@ -79,7 +90,8 @@ macro_rules! journeys {
 }
 
 journeys! {
-    TerminalScrolling => "terminal-scrolling" in scrolling, sidebar: None;
+    TerminalScrolling => "terminal-scrolling" in scrolling, sidebar: None, window: None;
+    Workspace => "workspace" in workspace, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {
@@ -105,7 +117,7 @@ impl Journey {
         Self::ALL
             .iter()
             .map(|journey| {
-                json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
+                json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"smallestWindow":journey.window(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
             })
             .collect()
     }

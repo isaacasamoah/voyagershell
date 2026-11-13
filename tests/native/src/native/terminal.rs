@@ -161,28 +161,55 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn first(native: &mut Native) -> Result<Self> {
-        let (address, placement) = until("bound terminal", || {
+        let placement = until("a placed first terminal", || {
             let Some(layout) = native.document()? else {
                 return Ok(None);
             };
-            Ok(layout.contents.first().and_then(|content| {
-                Some((
-                    content.backend.clone()?,
-                    placement_of(&layout, &content.id)?.clone(),
-                ))
-            }))
+            Ok(layout
+                .contents
+                .first()
+                .and_then(|content| placement_of(&layout, &content.id).cloned()))
+        })?;
+        let terminal = Self::attach(native, &placement, "shell".into())?;
+        native.identify(Some(&terminal))?;
+        Ok(terminal)
+    }
+
+    pub fn bind(native: &mut Native, placement: &PlacementId) -> Result<Self> {
+        Self::attach(native, placement, format!("shell {}", placement.0))
+    }
+
+    fn attach(native: &mut Native, placement: &PlacementId, name: String) -> Result<Self> {
+        let address = until("the Vessel's bound terminal", || {
+            let Some(layout) = native.document()? else {
+                return Ok(None);
+            };
+            let content = placed(&layout)
+                .find(|placed| &placed.id == placement)
+                .and_then(|placed| {
+                    layout
+                        .contents
+                        .iter()
+                        .find(|content| content.id == placed.content)
+                });
+            Ok(content.and_then(|content| content.backend.clone()))
         })?;
         let shell = Identity::read(pid(&native
             .system
             .rpc("terminal.get", json!({"terminal":address}))?)?)?;
-        native.adopt("shell".into(), shell.clone());
-        let terminal = Self {
+        native.system.record(
+            json!({"event":"bind","terminal":address,"placement":placement,"shell":shell}),
+        )?;
+        native.adopt(name, shell.clone());
+        Ok(Self {
             address,
-            placement,
+            placement: placement.clone(),
             shell,
-        };
-        native.identify(Some(&terminal))?;
-        Ok(terminal)
+        })
+    }
+
+    pub fn placement(&self) -> &PlacementId {
+        &self.placement
     }
 
     pub fn target(&self) -> Target {

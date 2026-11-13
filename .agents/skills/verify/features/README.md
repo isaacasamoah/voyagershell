@@ -8,9 +8,9 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 <!-- features:begin -->
 | Feature | Behavior | Performance | Visual | Debug | Native journeys | Python journeys | Platforms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Voyages | python-only | none | python-only | python-only | - | workspace, placement, demo-feedback | linux |
-| Fleets | python-only | none | python-only | python-only | - | workspace, layouts, arrangement | linux |
-| Vessels | python-only | none | python-only | python-only | - | workspace, arrangement, terminal-agent | linux |
+| Voyages | covered | none | python-only | covered | workspace | workspace, placement, demo-feedback | linux |
+| Fleets | covered | none | python-only | covered | workspace | workspace, layouts, arrangement | linux |
+| Vessels | covered | none | python-only | covered | workspace | workspace, arrangement, terminal-agent | linux |
 | Portals | python-only | none | python-only | python-only | - | placement, portal-terminal, portal-close | linux |
 | Split / resize / maximize | python-only | none | none | python-only | - | split-resize, pane-maximize, workspace-ux | linux |
 | Terminal I/O | python-only | none | python-only | python-only | - | terminal, terminal-grid, portal-terminal | linux |

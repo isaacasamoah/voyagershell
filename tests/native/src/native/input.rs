@@ -31,12 +31,43 @@ impl Aim {
 
 impl Native {
     pub fn click(&self, target: &Target) -> Result<()> {
+        self.clicks(target, 1)
+    }
+
+    pub fn double_click(&self, target: &Target) -> Result<()> {
+        self.clicks(target, 2)
+    }
+
+    fn clicks(&self, target: &Target, count: u8) -> Result<()> {
         let aim = self.reach(target)?;
         let x11 = self.x11()?;
         self.system.act(
-            json!({"input":"click","button":1,"target":target,"aim":aim}),
-            || x11.click(1),
+            json!({"input":"click","button":1,"count":count,"target":target,"aim":aim}),
+            || (0..count).try_for_each(|_| x11.click(1)),
         )
+    }
+
+    pub fn hover(&self, target: &Target) -> Result<()> {
+        self.reach(target).map(drop)
+    }
+
+    pub fn drag(&self, from: &Target, onto: &Target) -> Result<()> {
+        let end = self.spot(onto)?;
+        let start = self.spot(from)?;
+        let source = self.on_screen(from, start)?;
+        let destination = self.on_screen(onto, end)?;
+        let x11 = self.x11()?;
+        self.system.act(
+            json!({"input":"drag","button":1,"from":from,"onto":onto,"start":start,"end":end}),
+            || {
+                x11.move_to(source.0, source.1)?;
+                x11.hold(1)?;
+                let glided = x11.glide(source, destination);
+                x11.release(1)?;
+                glided
+            },
+        )?;
+        self.pointer()
     }
 
     pub fn wheel(&self, target: &Target, direction: Wheel, clicks: usize) -> Result<()> {

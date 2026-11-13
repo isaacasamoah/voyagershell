@@ -5,8 +5,8 @@ use std::fmt;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
-use voyager_contract::PlacementId;
 use voyager_contract::inspection::{Element, Frame, Rect, Role};
+use voyager_contract::{FleetId, PlacementId, RenameTarget, VoyageId};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Target {
@@ -17,6 +17,7 @@ pub struct Target {
 impl Target {
     pub const AVATAR: Self = Self::single(Role::Avatar);
     pub const SIDEBAR_TOGGLE: Self = Self::single(Role::SidebarToggle);
+    pub const CREATE_VOYAGE: Self = Self::single(Role::CreateVoyage);
 
     const fn single(role: Role) -> Self {
         Self {
@@ -25,11 +26,48 @@ impl Target {
         }
     }
 
-    pub fn terminal(placement: &PlacementId) -> Self {
+    fn keyed(role: Role, key: &str) -> Self {
         Self {
-            role: Role::Terminal,
-            key: placement.0.clone(),
+            role,
+            key: key.to_owned(),
         }
+    }
+
+    pub fn terminal(placement: &PlacementId) -> Self {
+        Self::keyed(Role::Terminal, &placement.0)
+    }
+
+    pub fn split_right(placement: &PlacementId) -> Self {
+        Self::keyed(Role::SplitRight, &placement.0)
+    }
+
+    pub fn create_fleet(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::CreateFleet, &voyage.0)
+    }
+
+    pub fn worker(launch: &str) -> Self {
+        Self::keyed(Role::CreateWorker, launch)
+    }
+
+    pub fn name(subject: &RenameTarget) -> Self {
+        match subject {
+            RenameTarget::Voyage { id } => Self::keyed(Role::VoyageName, &id.0),
+            RenameTarget::Fleet { id } => Self::keyed(Role::FleetName, &id.0),
+            RenameTarget::Vessel { id } => Self::keyed(Role::VesselName, &id.0),
+            RenameTarget::Portal { id } => Self::keyed(Role::PortalName, &id.0),
+        }
+    }
+
+    pub fn editor(subject: &RenameTarget) -> Self {
+        let (RenameTarget::Voyage { id: VoyageId(id) }
+        | RenameTarget::Fleet { id: FleetId(id) }
+        | RenameTarget::Vessel {
+            id: PlacementId(id),
+        }
+        | RenameTarget::Portal {
+            id: PlacementId(id),
+        }) = subject;
+        Self::keyed(Role::NameEditor, id)
     }
 
     pub fn find<'a>(&self, frame: &'a Frame) -> Option<&'a Element> {
@@ -198,6 +236,29 @@ mod tests {
         let terminal = Target::terminal(&PlacementId("placement-3".into()));
         assert!(terminal.find(&frame).is_none());
         assert_eq!(terminal.to_string(), "terminal \"placement-3\"");
+    }
+
+    #[test]
+    fn a_name_and_its_editor_share_the_renamed_id() {
+        let fleet = RenameTarget::Fleet {
+            id: FleetId("fleet-4".into()),
+        };
+        assert_eq!(Target::name(&fleet).to_string(), "fleet-name \"fleet-4\"");
+        assert_eq!(
+            Target::editor(&fleet).to_string(),
+            "name-editor \"fleet-4\""
+        );
+        let vessel = RenameTarget::Vessel {
+            id: PlacementId("placement-9".into()),
+        };
+        assert_eq!(
+            Target::name(&vessel).to_string(),
+            "vessel-name \"placement-9\""
+        );
+        assert_eq!(
+            Target::editor(&vessel).to_string(),
+            "name-editor \"placement-9\""
+        );
     }
 
     #[test]
