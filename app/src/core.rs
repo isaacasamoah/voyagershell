@@ -36,6 +36,7 @@ struct TerminalList {
 
 const VIEW_LIMIT: usize = 1024 * 1024;
 const TOTAL_LIMIT: usize = 16 * 1024 * 1024;
+const VIEWER_LIMIT: usize = 64;
 pub const MAX_INPUT_BYTES: usize = 65536;
 
 #[derive(Clone, Debug)]
@@ -69,10 +70,25 @@ impl Default for Stream {
     }
 }
 
+impl Stream {
+    fn occupied(&self) -> bool {
+        !self.closed || !self.bytes.is_empty()
+    }
+}
+
 #[derive(Default)]
 struct Streams {
     buffers: HashMap<u32, Stream>,
     total: usize,
+}
+
+impl Streams {
+    fn occupied(&self) -> usize {
+        self.buffers
+            .values()
+            .filter(|stream| stream.occupied())
+            .count()
+    }
 }
 
 #[derive(Clone)]
@@ -463,7 +479,6 @@ impl Core {
                             break;
                         };
                         if channel == 0
-                            || streams.buffers.len() >= 64
                             || streams.buffers.insert(channel, Stream::default()).is_some()
                         {
                             break;
@@ -751,6 +766,20 @@ impl Core {
             return Err(Error::Rejected {
                 kind: "invalid_terminal_geometry".into(),
                 message: "Terminal dimensions are unavailable; no attachment was sent".into(),
+            });
+        }
+        if self
+            .streams
+            .lock()
+            .map_err(|error| Error::Uncertain(error.to_string()))?
+            .occupied()
+            >= VIEWER_LIMIT
+        {
+            return Err(Error::Rejected {
+                kind: "viewer_limit".into(),
+                message: format!(
+                    "{VIEWER_LIMIT} terminal viewers are attached; no attachment was sent"
+                ),
             });
         }
         let before = self.activity_seed_start(&terminal.address);

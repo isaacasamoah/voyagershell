@@ -192,6 +192,18 @@ current view does not render Kitty graphics and does not acknowledge them as
 displayed. Core owns focus reports; Voyager sends the FOCUS frame once per
 focus transition.
 
+One Core connection has 64 viewer slots. A stream holds a slot while it is
+open or still has unread output. Core opens each stream with 256 KiB of credit,
+so 64 slots bound uncredited output to 64 x 256 KiB = 16 MiB, the aggregate
+limit. When Core closes a stream for an ended program and the pane has read its
+output, the slot is free. The ended entry remains so that the pane still
+reports the ended terminal. Hidden terminals keep their slots. Attachment checks
+the occupied slots before it sends anything to Core. At 64 it returns the known
+refusal `viewer_limit`, and the connection and its other viewers continue.
+Attachments are sequential and every other stream change frees slots, so the
+check also bounds the reply. Output beyond either byte limit is a Core protocol
+violation and still ends the connection.
+
 The grid candidate retains Ghostty's cell graphemes, colors, styles and cursor
 state. Its measured monospace cell size and painted pane bounds determine the
 local grid. A deferred resize queues Core RESIZE and display FACTS on the same
