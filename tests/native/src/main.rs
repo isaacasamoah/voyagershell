@@ -386,6 +386,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/probe.rs", include_bytes!("probe.rs")),
     ("src/proof.rs", include_bytes!("proof.rs")),
     ("src/sandbox.rs", include_bytes!("sandbox.rs")),
+    ("src/scratch.rs", include_bytes!("scratch.rs")),
     ("src/system.rs", include_bytes!("system.rs")),
     ("src/x11.rs", include_bytes!("x11.rs")),
     ("Cargo.toml", include_bytes!("../Cargo.toml")),

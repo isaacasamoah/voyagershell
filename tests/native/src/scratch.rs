@@ -1,4 +1,4 @@
-use crate::system::{stamp, until};
+use crate::system::stamp;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -111,12 +111,10 @@ mod tests {
         let foreign = named("foreign");
         fs::create_dir(&foreign)?;
         sweep();
-        let removed = until("abandoned folder removal", || {
-            Ok((!abandoned.exists()).then_some(()))
-        });
+        let removed = !abandoned.exists();
         let kept = (live.path().exists(), foreign.exists());
         fs::remove_dir(&foreign)?;
-        removed?;
+        ensure!(removed, "Abandoned folder kept: {}", abandoned.display());
         ensure!(
             kept == (true, true),
             "Live and lockless folders kept: {kept:?}"
