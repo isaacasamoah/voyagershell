@@ -73,6 +73,7 @@ jobs:
         with:
           cache-bin: false
           save-if: ${{ env.SAVE_CACHES }}
+      - run: python3 -m unittest discover -s .claude/hooks -p 'test_*.py'
       - run: python3 desktop/prepare-sdk.py
       - run: npm ci --ignore-scripts
       - run: npm run format:check
