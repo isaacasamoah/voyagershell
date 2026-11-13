@@ -107,6 +107,16 @@ function violations(rule, facts) {
         at: `${edge.evidence[0].path}:${edge.evidence[0].line}`,
       }));
   }
+  if (rule.check === "forbid_unresolved") {
+    return facts.unresolved
+      .filter((item) => rule.kinds.includes(item.kind))
+      .map((item) => ({
+        id: `${rule.id}: ${item.id}`,
+        at: item.evidence
+          ? `${item.evidence.path}:${item.evidence.line}`
+          : null,
+      }));
+  }
   if (rule.check === "forbid_reach") {
     const to = matcher(rule.to);
     const reached = lockReach(facts.lock, rule.from);
@@ -161,6 +171,7 @@ function gate({
   const observation = observe(repository, tree);
   const facts = {
     edges: observation.observed.edges,
+    unresolved: observation.observed.unresolved,
     sizes: observation.sizes,
     lock: observation.lock,
   };
