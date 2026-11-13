@@ -2,7 +2,7 @@
 id = "voyages"
 name = "Voyages"
 path = "Create a Voyage from the header, switch between Voyages and rename one."
-sources = ["desktop/mods/header/creation.ts", "desktop/mods/header/navigation-view.ts", "desktop/mods/header/voyage-colours.ts", "app/src/content/rename.rs", "app/src/scope.rs"]
+sources = ["desktop/mods/header/main.*", "desktop/mods/header/navigation-view.*", "desktop/mods/header/voyage-colours.ts", "app/src/workspace.rs", "app/src/content/rename.rs", "app/src/scope.rs"]
 journeys = ["workspace"]
 platforms = ["linux"]
 python = ["workspace", "placement", "demo-feedback"]
@@ -14,28 +14,54 @@ debug = "covered"
 [[feature]]
 id = "fleets"
 name = "Fleets"
-path = "Group Vessels into a Fleet inside a Voyage and arrange the Fleet."
-sources = ["app/src/panels.rs", "desktop/src/arrangement.rs", "docs/arrangement.md"]
+path = "Create a Fleet from the Fleet strip, switch between Fleets and rename one."
+sources = ["desktop/mods/header/main.*", "desktop/mods/header/navigation-view.*", "desktop/mods/header/creation.*", "app/src/workspace.rs"]
 journeys = ["workspace"]
 platforms = ["linux"]
-python = ["workspace", "layouts", "arrangement"]
+python = ["workspace"]
 behavior = "covered"
 performance = "none"
-visual = "python-only"
+visual = "none"
 debug = "covered"
+
+[[feature]]
+id = "fleet-arrangement"
+name = "Fleet arrangement"
+path = "Drag the Vessels of a Fleet into a new arrangement and keep it."
+sources = ["app/src/panels.rs", "desktop/src/arrangement.rs", "docs/arrangement.md"]
+journeys = []
+platforms = ["linux"]
+python = ["layouts", "arrangement"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
 
 [[feature]]
 id = "vessels"
 name = "Vessels"
-path = "Launch a terminal or agent Vessel and see it in the arrangement."
-sources = ["app/src/launch.rs", "app/src/terminal_lifecycle.rs", "desktop/mods/header/agents.ts", "desktop/mods/header/processes.ts"]
+path = "Split a terminal Vessel beside another through the chooser, see its shell run and rename it."
+sources = ["desktop/mods/header/main.*", "desktop/mods/header/panel-view.*", "desktop/mods/header/creation.*", "app/src/workspace.rs", "app/src/launch.rs", "app/src/terminal_lifecycle.rs"]
 journeys = ["workspace"]
 platforms = ["linux"]
-python = ["workspace", "arrangement", "terminal-agent"]
+python = ["workspace"]
 behavior = "covered"
 performance = "none"
-visual = "python-only"
+visual = "none"
 debug = "covered"
+
+[[feature]]
+id = "agent-vessels"
+name = "Agent Vessels"
+path = "Launch an agent Vessel and see it and its processes in the arrangement."
+sources = ["app/src/launch.rs", "desktop/mods/header/agents.ts", "desktop/mods/header/processes.ts"]
+journeys = []
+platforms = ["linux"]
+python = ["arrangement", "terminal-agent"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
 
 [[feature]]
 id = "portals"

@@ -9,8 +9,10 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Feature | Behavior | Performance | Visual | Debug | Native journeys | Python journeys | Platforms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Voyages | covered | none | python-only | covered | workspace | workspace, placement, demo-feedback | linux |
-| Fleets | covered | none | python-only | covered | workspace | workspace, layouts, arrangement | linux |
-| Vessels | covered | none | python-only | covered | workspace | workspace, arrangement, terminal-agent | linux |
+| Fleets | covered | none | none | covered | workspace | workspace | linux |
+| Fleet arrangement | python-only | none | python-only | python-only | - | layouts, arrangement | linux |
+| Vessels | covered | none | none | covered | workspace | workspace | linux |
+| Agent Vessels | python-only | none | python-only | python-only | - | arrangement, terminal-agent | linux |
 | Portals | python-only | none | python-only | python-only | - | placement, portal-terminal, portal-close | linux |
 | Split / resize / maximize | python-only | none | none | python-only | - | split-resize, pane-maximize, workspace-ux | linux |
 | Terminal I/O | python-only | none | python-only | python-only | - | terminal, terminal-grid, portal-terminal | linux |
@@ -27,11 +29,16 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Scripts live edit | python-only | python-only | python-only | python-only | - | canvas-stack | linux |
 <!-- features:end -->
 
-Recipes: [terminal-scrolling.md](terminal-scrolling.md).
+Recipes: [terminal-scrolling.md](terminal-scrolling.md) and
+[workspace.md](workspace.md).
 
-This seed deliberately claims one proven feature. Workspace arrangement, Notes,
-conversation, voice, actual Codex, the real compositor and performance journeys
-remain in the existing Python fixture and are not migrated or re-proved here.
-Preserve them. Add a mapped feature only with source entry points, prerequisites,
-actual actions and observable success. No fixture-private design or hidden pass
-criterion belongs in another feature's script.
+The table claims native coverage for four features. `terminal-scrolling`
+proves Terminal scroll. `workspace` proves Voyages, Fleets and Vessels, and
+only the actions that its recipe lists: create, switch and rename a Voyage or
+a Fleet, and split and rename a terminal Vessel. Fleet arrangement, agent
+Vessels, Notes, conversation, voice, actual Codex, the real compositor and
+performance journeys remain in the existing Python fixture and are not
+migrated or re-proved here. Preserve them. Add a mapped feature only with
+source entry points, prerequisites, actual actions and observable success. No
+fixture-private design or hidden pass criterion belongs in another feature's
+script.
