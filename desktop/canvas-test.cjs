@@ -352,7 +352,6 @@ test("inspection markers name each control by its role and id and report the tex
     target: (_id, _scope, child) => child,
     contextMenu: (_id, child) => child,
     closedFleetItems: () => [],
-    portalControls: element,
   });
   const fleet = { kind: "fleet", id: "fleet-7" };
   const draft = {};

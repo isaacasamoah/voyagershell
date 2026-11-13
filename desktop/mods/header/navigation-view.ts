@@ -447,7 +447,7 @@ export function renderFleets(
         ),
       )
       .child(div().flex_1())
-      .children(voyage ? [workspace.portalControls(voyage)] : []);
+      .children(voyage ? [portalControls(workspace, voyage)] : []);
   if (!voyage) return strip;
   const tabs = div()
     .id("fleet-tabs")
@@ -574,7 +574,7 @@ export function renderFleets(
       workspace.closedFleetItems(voyage),
     ),
   );
-  return strip.child(tabs).child(workspace.portalControls(voyage));
+  return strip.child(tabs).child(portalControls(workspace, voyage));
 }
 
 export function renderContext(
@@ -644,4 +644,77 @@ export function renderContext(
   if (workspace.status || workspace.worktrees?.status)
     region.child(workspace.statusView());
   return region;
+}
+
+export function portalControls(
+  workspace: Workspace,
+  voyage: Voyage,
+): NativeElement {
+  const column = voyage.portalLayout;
+  if (!column) return div();
+  const controls = div().flex().items_center().gap(4).flex_shrink_0();
+  if (workspace.layout && workspace.compactPortalContext())
+    controls.child(
+      div()
+        .w(44)
+        .h(40)
+        .flex_shrink_0()
+        .child(
+          workspace.target(
+            "hidden-portal-avatar",
+            workspace.layout.context,
+            div(),
+            true,
+          ),
+        ),
+    );
+  const label = column.visible ? "Hide Portals" : "Show Portals";
+  const trigger = Button.new("toggle-portals")
+    .accessibility_label(label)
+    .tooltip(`${label} · Ctrl+Alt+P / ⌘⌥P`)
+    .w(32)
+    .h(26)
+    .p(3)
+    .text_size(11)
+    .child(column.visible ? "›" : "‹")
+    .on_click((_event, cx) => workspace.togglePortals(voyage, cx));
+  controls.child(
+    workspace.creationControl(
+      `portal-choices-${voyage.id}`,
+      {
+        kind: "panel",
+        owner: { kind: "portals", voyage: voyage.id },
+        insertion: { kind: "empty" },
+      },
+      trigger,
+      false,
+    ),
+  );
+  if (column.visible)
+    controls.child(
+      Button.new("portal-presentation")
+        .accessibility_label(
+          column.mode === "overlay" ? "Embed Portals" : "Overlay Portals",
+        )
+        .tooltip(
+          `${column.mode === "overlay" ? "Embed Portals" : "Overlay Portals"} · Ctrl+Alt+Shift+P / ⌘⌥⇧P`,
+        )
+        .w(26)
+        .h(26)
+        .p(4)
+        .child(
+          svg(column.mode === "overlay" ? "embed.svg" : "overlay.svg").size(14),
+        )
+        .on_click((_event, cx) =>
+          workspace.run(
+            {
+              operation: "set-portal-presentation",
+              voyage: voyage.id,
+              mode: column.mode === "overlay" ? "make-room" : "overlay",
+            },
+            cx,
+          ),
+        ),
+    );
+  return controls;
 }
