@@ -1,16 +1,17 @@
 use super::{Core, Stream, Streams, TOTAL_LIMIT, VIEW_LIMIT, pending::Replies};
 use crate::{activity::Activity, wire::Frame};
 use serde_json::Value;
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicU64, Ordering},
-    mpsc::SyncSender,
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex, mpsc::SyncSender},
 };
+
+pub(super) type Attaches = Arc<Mutex<HashSet<u64>>>;
 
 pub(super) struct Reader {
     pub(super) streams: Arc<Mutex<Streams>>,
     pub(super) replies: Replies,
-    pub(super) attaching: Arc<AtomicU64>,
+    pub(super) attaches: Attaches,
     pub(super) activity: Arc<Mutex<Activity>>,
     pub(super) control: SyncSender<Frame>,
 }
@@ -52,29 +53,43 @@ impl Reader {
         let Some(id) = message.get("id").and_then(Value::as_u64) else {
             return Ok(());
         };
+        let attach = self
+            .attaches
+            .lock()
+            .map_err(|_| "internal lock failed".to_string())?
+            .remove(&id);
+        let channel = attach
+            .then(|| Core::response(message.clone(), id).ok())
+            .flatten()
+            .and_then(|result| result.get("channel").and_then(Value::as_u64))
+            .and_then(|channel| u32::try_from(channel).ok());
         let mut replies = self
             .replies
             .lock()
             .map_err(|_| "internal lock failed".to_string())?;
-        let Some(reply) = replies.remove(&id) else {
-            return Ok(());
-        };
-        if id == self.attaching.load(Ordering::Acquire)
-            && Core::response(message.clone(), id).is_ok()
-            && let Some(channel) = message
-                .pointer("/result/channel")
-                .and_then(Value::as_u64)
-                .and_then(|id| u32::try_from(id).ok())
-        {
-            let mut streams = self
-                .streams
-                .lock()
-                .map_err(|_| "internal lock failed".to_string())?;
-            if channel == 0 || streams.buffers.insert(channel, Stream::default()).is_some() {
-                return Err("Core attached an invalid channel".into());
+        let reply = replies.remove(&id);
+        match (channel, &reply) {
+            (Some(channel), Some(_)) => {
+                let mut streams = self
+                    .streams
+                    .lock()
+                    .map_err(|_| "internal lock failed".to_string())?;
+                if channel == 0 || streams.buffers.insert(channel, Stream::default()).is_some() {
+                    return Err("Core attached an invalid channel".into());
+                }
             }
+            (Some(channel), None) if channel != 0 => {
+                let _ = self.control.try_send(Frame {
+                    channel,
+                    kind: 2,
+                    payload: Vec::new(),
+                });
+            }
+            _ => {}
         }
-        let _ = reply.try_send(message);
+        if let Some(reply) = reply {
+            let _ = reply.try_send(message);
+        }
         Ok(())
     }
 
@@ -83,12 +98,13 @@ impl Reader {
             .streams
             .lock()
             .map_err(|_| "internal lock failed".to_string())?;
-        if streams.total + frame.payload.len() > TOTAL_LIMIT {
-            return Err("buffered output exceeded 16 MiB".into());
-        }
+        let total = streams.total;
         let Some(buffer) = streams.buffers.get_mut(&frame.channel) else {
             return Ok(());
         };
+        if total + frame.payload.len() > TOTAL_LIMIT {
+            return Err("buffered output exceeded 16 MiB".into());
+        }
         if buffer.closed {
             return Err("Core sent output after close".into());
         }

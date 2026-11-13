@@ -1,9 +1,8 @@
-use super::{Stream, Streams, TOTAL_LIMIT, Viewer, reader::Reader};
+use super::{Lease, Stream, Streams, TOTAL_LIMIT, Viewer, reader::Reader};
 use crate::wire::Frame;
 use serde_json::json;
 use std::sync::{
     Arc, Mutex,
-    atomic::AtomicU64,
     mpsc::{self, Receiver, SyncSender},
 };
 
@@ -22,12 +21,14 @@ fn streams(entries: &[(u32, &[u8], bool)]) -> Arc<Mutex<Streams>> {
 fn viewer(channel: u32, streams: &Arc<Mutex<Streams>>, control: &SyncSender<Frame>) -> Viewer {
     let (input, _) = mpsc::sync_channel(1);
     Viewer {
-        channel,
+        lease: Arc::new(Lease {
+            channel,
+            streams: streams.clone(),
+            control: control.clone(),
+            link: Arc::default(),
+        }),
         initial_size: (80, 24),
-        streams: streams.clone(),
         input,
-        control: control.clone(),
-        link: Arc::default(),
         input_open: Arc::new(Mutex::new(true)),
     }
 }
@@ -36,7 +37,7 @@ fn reader(streams: &Arc<Mutex<Streams>>, control: &SyncSender<Frame>, attach: u6
     Reader {
         streams: streams.clone(),
         replies: Default::default(),
-        attaching: Arc::new(AtomicU64::new(attach)),
+        attaches: Arc::new(Mutex::new([attach].into())),
         activity: Default::default(),
         control: control.clone(),
     }

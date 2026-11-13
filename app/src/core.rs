@@ -17,7 +17,6 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         Arc, Mutex, OnceLock,
-        atomic::{AtomicU64, Ordering},
         mpsc::{self, SyncSender},
     },
     thread,
@@ -30,7 +29,7 @@ pub(crate) use pending::Pending;
 #[path = "core_reader.rs"]
 mod reader;
 use pending::Replies;
-use reader::Reader;
+use reader::{Attaches, Reader};
 
 #[derive(Deserialize)]
 struct TerminalList {
@@ -126,14 +125,63 @@ fn enqueue(
     })
 }
 
-#[derive(Clone)]
-pub struct Viewer {
+struct Lease {
     channel: u32,
-    initial_size: (u16, u16),
     streams: Arc<Mutex<Streams>>,
-    input: SyncSender<Frame>,
     control: SyncSender<Frame>,
     link: Arc<OnceLock<String>>,
+}
+
+impl Lease {
+    fn close_frame(&self) -> Frame {
+        Frame {
+            channel: self.channel,
+            kind: 2,
+            payload: Vec::new(),
+        }
+    }
+
+    fn close(&self) -> Result<(), Error> {
+        enqueue(
+            &self.link,
+            &self.control,
+            self.close_frame(),
+            "frame was not queued",
+        )?;
+        self.release();
+        Ok(())
+    }
+
+    fn release(&self) -> bool {
+        let Ok(mut streams) = self.streams.lock() else {
+            return false;
+        };
+        let Some(buffer) = streams.buffers.remove(&self.channel) else {
+            return false;
+        };
+        streams.total -= buffer.bytes.len();
+        true
+    }
+}
+
+impl Drop for Lease {
+    fn drop(&mut self) {
+        if self.release() {
+            let _ = enqueue(
+                &self.link,
+                &self.control,
+                self.close_frame(),
+                "frame was not queued",
+            );
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Viewer {
+    lease: Arc<Lease>,
+    initial_size: (u16, u16),
+    input: SyncSender<Frame>,
     input_open: Arc<Mutex<bool>>,
 }
 
@@ -149,12 +197,13 @@ impl Viewer {
             ));
         }
         let streams = self
+            .lease
             .streams
             .lock()
             .map_err(|error| Error::Uncertain(error.to_string()))?;
         if streams
             .buffers
-            .get(&self.channel)
+            .get(&self.lease.channel)
             .is_none_or(|stream| stream.closed)
         {
             return Err(Error::Rejected {
@@ -166,17 +215,19 @@ impl Viewer {
     }
 
     pub fn same_channel(&self, other: &Self) -> bool {
-        self.channel == other.channel && Arc::ptr_eq(&self.streams, &other.streams)
+        self.lease.channel == other.lease.channel
+            && Arc::ptr_eq(&self.lease.streams, &other.lease.streams)
     }
 
     pub fn take(&self, limit: usize) -> Result<Vec<u8>, Error> {
         let mut streams = self
+            .lease
             .streams
             .lock()
             .map_err(|e| Error::Uncertain(e.to_string()))?;
         let buffer = streams
             .buffers
-            .get_mut(&self.channel)
+            .get_mut(&self.lease.channel)
             .ok_or_else(|| Error::Uncertain("Viewer is closed".into()))?;
         let count = limit.min(65536).min(buffer.bytes.len());
         let bytes = buffer.bytes.drain(..count).collect();
@@ -188,16 +239,17 @@ impl Viewer {
     }
 
     pub fn credit(&self, bytes: u32) -> Result<(), Error> {
-        self.send(&self.control, 1, bytes.to_le_bytes().to_vec())
+        self.send(&self.lease.control, 1, bytes.to_le_bytes().to_vec())
     }
 
     pub async fn ready(&self) -> Result<(), Error> {
         let ready = self
+            .lease
             .streams
             .lock()
             .map_err(|e| Error::Uncertain(e.to_string()))?
             .buffers
-            .get(&self.channel)
+            .get(&self.lease.channel)
             .ok_or_else(|| Error::Uncertain("Viewer is closed".into()))?
             .ready
             .clone();
@@ -236,14 +288,14 @@ impl Viewer {
     }
 
     pub fn focus(&self, focused: bool) -> Result<(), Error> {
-        self.send(&self.control, 4, vec![u8::from(focused)])
+        self.send(&self.lease.control, 4, vec![u8::from(focused)])
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> Result<(), Error> {
         let mut payload = Vec::with_capacity(4);
         payload.extend_from_slice(&cols.to_le_bytes());
         payload.extend_from_slice(&rows.to_le_bytes());
-        self.send(&self.control, 3, payload)
+        self.send(&self.lease.control, 3, payload)
     }
 
     pub fn display(
@@ -255,7 +307,7 @@ impl Viewer {
         cursor: Option<String>,
     ) -> Result<(), Error> {
         self.send(
-            &self.control,
+            &self.lease.control,
             5,
             serde_json::to_vec(
                 &json!({ "cell": [width, height], "fg": fg, "bg": bg, "cursor": cursor }),
@@ -265,39 +317,32 @@ impl Viewer {
     }
 
     pub fn close(&self) -> Result<(), Error> {
-        self.send(&self.control, 2, Vec::new())?;
-        let mut streams = self
-            .streams
-            .lock()
-            .map_err(|e| Error::Uncertain(e.to_string()))?;
-        if let Some(buffer) = streams.buffers.remove(&self.channel) {
-            streams.total -= buffer.bytes.len();
-        }
-        Ok(())
+        self.lease.close()
     }
 
     pub fn connected(&self) -> bool {
-        self.link.get().is_none()
+        self.lease.link.get().is_none()
     }
 
     pub fn finished(&self) -> Result<bool, Error> {
         let streams = self
+            .lease
             .streams
             .lock()
             .map_err(|e| Error::Uncertain(e.to_string()))?;
         let stream = streams
             .buffers
-            .get(&self.channel)
+            .get(&self.lease.channel)
             .ok_or_else(|| Error::Uncertain("Viewer is closed".into()))?;
         Ok(stream.closed && stream.bytes.is_empty())
     }
 
     fn send(&self, queue: &SyncSender<Frame>, kind: u8, payload: Vec<u8>) -> Result<(), Error> {
         enqueue(
-            &self.link,
+            &self.lease.link,
             queue,
             Frame {
-                channel: self.channel,
+                channel: self.lease.channel,
                 kind,
                 payload,
             },
@@ -313,7 +358,7 @@ pub struct Core {
     input: SyncSender<Frame>,
     replies: Replies,
     streams: Arc<Mutex<Streams>>,
-    attaching: Arc<AtomicU64>,
+    attaches: Attaches,
     link: Arc<OnceLock<String>>,
     input_open: Arc<Mutex<bool>>,
     sequence: u64,
@@ -433,7 +478,7 @@ impl Core {
         let (data, inputs) = mpsc::sync_channel::<Frame>(64);
         let replies = Replies::default();
         let streams = Arc::new(Mutex::new(Streams::default()));
-        let attaching = Arc::new(AtomicU64::new(0));
+        let attaches = Attaches::default();
         let link: Arc<OnceLock<String>> = Arc::default();
         let writer_link = link.clone();
         let writer_streams = streams.clone();
@@ -477,7 +522,7 @@ impl Core {
         let reader = Reader {
             streams: streams.clone(),
             replies: replies.clone(),
-            attaching: attaching.clone(),
+            attaches: attaches.clone(),
             activity: activity.clone(),
             control: control.clone(),
         };
@@ -505,7 +550,7 @@ impl Core {
             input: data,
             replies,
             streams,
-            attaching,
+            attaches,
             link,
             input_open: Arc::new(Mutex::new(true)),
             sequence: 1,
@@ -945,11 +990,15 @@ impl Core {
                 message: "Core request exceeds 1 MiB".into(),
             });
         }
-        let pending = Pending::register(id, method, &self.replies, &self.attaching, &self.link)?;
-        if method == "terminal.attach" {
-            self.attaching.store(id, Ordering::Release);
+        let pending = Pending::register(id, method, &self.replies, &self.link)?;
+        let attach = method == "terminal.attach";
+        if attach {
+            self.attaches
+                .lock()
+                .map_err(|error| Error::Uncertain(error.to_string()))?
+                .insert(id);
         }
-        enqueue(
+        let queued = enqueue(
             &self.link,
             &self.control,
             Frame {
@@ -958,7 +1007,14 @@ impl Core {
                 payload: bytes,
             },
             "request was not queued",
-        )?;
+        );
+        if attach
+            && queued.is_err()
+            && let Ok(mut attaches) = self.attaches.lock()
+        {
+            attaches.remove(&id);
+        }
+        queued?;
         Ok(pending)
     }
 
@@ -1081,12 +1137,14 @@ impl Core {
             return Err(Error::Uncertain("Attached channel is unavailable".into()));
         }
         Ok(Viewer {
-            channel,
+            lease: Arc::new(Lease {
+                channel,
+                streams: self.streams.clone(),
+                control: self.control.clone(),
+                link: self.link.clone(),
+            }),
             initial_size,
-            streams: self.streams.clone(),
             input: self.input.clone(),
-            control: self.control.clone(),
-            link: self.link.clone(),
             input_open: self.input_open.clone(),
         })
     }
@@ -1132,7 +1190,7 @@ mod slot_tests;
 
 #[cfg(test)]
 mod resize_tests {
-    use super::{Streams, Viewer};
+    use super::{Lease, Streams, Viewer};
     use std::sync::{Arc, Mutex, mpsc};
 
     #[test]
@@ -1140,12 +1198,14 @@ mod resize_tests {
         let (control, received) = mpsc::sync_channel(2);
         let (input, _) = mpsc::sync_channel(1);
         let viewer = Viewer {
-            channel: 7,
+            lease: Arc::new(Lease {
+                channel: 7,
+                streams: Arc::new(Mutex::new(Streams::default())),
+                control,
+                link: Arc::default(),
+            }),
             initial_size: (80, 24),
-            streams: Arc::new(Mutex::new(Streams::default())),
             input,
-            control,
-            link: Arc::default(),
             input_open: Arc::new(Mutex::new(true)),
         };
         viewer.resize(120, 38).unwrap();
