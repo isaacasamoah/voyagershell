@@ -301,6 +301,25 @@ the `Xft.dpi: 192` resource, so the candidate drew at scale 1 in a 1450 by 940
 window. It now draws at scale 2, in a 2900 by 1880 window. A reset during
 cleanup also left Xvfb deaf to SIGTERM in 1 of 30 runs.
 
+`Owned::stop` in `src/system.rs` stops a process that the driver owns. It
+sends SIGTERM and waits up to 12 s for the exit. While it waits, it sends
+SIGTERM again every second. An X server checks its exit flag and then sleeps
+in its poll. A signal that lands between the two only sets the flag, and the
+server sleeps on until its next timer, which is up to 600 s away once the last
+client has left. Under a debugger, an Xvfb that took SIGTERM at that point was
+still asleep in `ep_poll` 5 s later, and a second SIGTERM ended it within
+0.04 s. Before the driver repeated the signal, Xvfb outlived the 12 s wait in
+2 of 744 runs, both on a loaded machine, and both runs ended `inconclusive`.
+Nobody has inspected such a run while it hung, so the cause of those two is
+not proved.
+
+A stop that needed more than one signal is a `repeated-stop` event in
+`actions.jsonl`, with the process and the number of signals. If the process is
+still alive at the deadline, the driver reads its state, the kernel function
+that it sleeps in and its system call from `/proc`, kills it, records all of
+that as a `forced-stop` event and reports a cleanup error. A cleanup error
+still prevents a pass.
+
 `--window WIDTHxHEIGHT` resizes the candidate's window in device pixels, and
 `--sidebar open|collapsed` sets the sidebar with its own toggle. Both apply
 again after reattachment and do nothing when the window already matches.

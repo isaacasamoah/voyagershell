@@ -1,5 +1,5 @@
 use crate::sandbox;
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -173,25 +173,66 @@ pub struct Owned {
     pub identity: Identity,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Stopped {
+    Exited { signals: u32 },
+    Killed { signals: u32, stuck: String },
+}
+
+const RESIGNAL: Duration = Duration::from_secs(1);
+
 impl Owned {
-    pub fn stop(&mut self) -> Result<()> {
+    pub fn stop(&mut self) -> Result<Stopped> {
+        self.stop_within(PATIENCE)
+    }
+
+    pub fn stop_within(&mut self, patience: Duration) -> Result<Stopped> {
+        let mut signals = 0;
         if self.child.try_wait()?.is_none() {
             self.identity.verify()?;
             let pid = rustix::process::Pid::from_raw(i32::try_from(self.identity.pid)?)
                 .context("Invalid owned PID")?;
-            rustix::process::kill_process(pid, rustix::process::Signal::TERM)?;
-            if let Err(error) = until_cleanup("owned child graceful exit", || {
-                Ok(self.child.try_wait()?.map(|_| ()))
-            }) {
+            let mut signalled: Option<Instant> = None;
+            let exited = poll(patience, Duration::from_millis(80), false, || {
+                if self.child.try_wait()?.is_some() {
+                    return Ok(Some(()));
+                }
+                if signalled.is_none_or(|at| at.elapsed() >= RESIGNAL) {
+                    rustix::process::kill_process(pid, rustix::process::Signal::TERM)?;
+                    signalled = Some(Instant::now());
+                    signals += 1;
+                }
+                Ok(None)
+            })?;
+            if exited.is_none() {
                 self.identity.verify()?;
+                let stuck = stuck(self.identity.pid);
                 self.child.kill()?;
                 self.child.wait()?;
-                bail!("Owned child required forced termination: {error:#}");
+                return Ok(Stopped::Killed { signals, stuck });
             }
         }
         self.child.wait()?;
-        Ok(())
+        Ok(Stopped::Exited { signals })
     }
+}
+
+fn stuck(pid: u32) -> String {
+    let read = |file: &str| {
+        fs::read_to_string(format!("/proc/{pid}/{file}"))
+            .unwrap_or_else(|error| format!("unreadable: {error}"))
+    };
+    let stat = read("stat");
+    let state = stat
+        .rsplit_once(')')
+        .and_then(|(_, fields)| fields.split_whitespace().next())
+        .unwrap_or("unknown");
+    let syscall = read("syscall");
+    format!(
+        "state {state}, waiting in {}, system call {}",
+        read("wchan").trim(),
+        syscall.split_whitespace().next().unwrap_or("unknown")
+    )
 }
 
 impl Owned {
@@ -563,7 +604,7 @@ pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::cell::Cell;
     use std::collections::BTreeSet;
@@ -625,6 +666,53 @@ mod tests {
         ensure!(
             value.is_none() && took >= deadline,
             "A value that was gone at the deadline was returned: {value:?}"
+        );
+        Ok(())
+    }
+
+    pub(crate) fn deaf(name: &str, trap: &str) -> Result<Owned> {
+        let evidence =
+            std::env::temp_dir().join(format!("vv-{name}-{}-{}", std::process::id(), stamp()));
+        fs::create_dir(&evidence)?;
+        let ready = evidence.join("ready");
+        let script = format!("trap '{trap}' TERM; : > \"$0\"; while :; do sleep 0.02; done");
+        let system = System::with_env(evidence, "voyager-verify-test".into(), BTreeMap::new());
+        let child = system.spawn(
+            Path::new("/usr/bin/bash"),
+            &["-c", &script, ready.to_str().context("Non-UTF8 path")?],
+            &[],
+            "child.log",
+        )?;
+        until("the child's signal trap", || {
+            Ok(ready.exists().then_some(()))
+        })?;
+        Ok(child)
+    }
+
+    #[test]
+    fn a_child_that_lost_the_first_signal_exits_on_the_next_one() -> Result<()> {
+        let mut child = deaf("resignal", "trap - TERM")?;
+        let start = Instant::now();
+        let stopped = child.stop_within(Duration::from_secs(4))?;
+        ensure!(
+            stopped == Stopped::Exited { signals: 2 } && start.elapsed() >= RESIGNAL,
+            "A child that needed a second SIGTERM ended as {stopped:?} after {:?}",
+            start.elapsed()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_child_that_ignores_every_signal_is_killed_at_the_deadline() -> Result<()> {
+        let mut child = deaf("ignore", "")?;
+        let stopped = child.stop_within(Duration::from_millis(400))?;
+        ensure!(
+            matches!(&stopped, Stopped::Killed { signals: 1, stuck } if stuck.starts_with("state ")),
+            "A child that ignores SIGTERM ended as {stopped:?}"
+        );
+        ensure!(
+            child.child.try_wait()?.is_some(),
+            "A killed child was left running"
         );
         Ok(())
     }

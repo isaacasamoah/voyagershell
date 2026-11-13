@@ -96,6 +96,9 @@ run passes, the journey cannot detect that defect. Report a fixture defect.
 The run stops its recorded viewer, asks only its dedicated Core to stop through
 the existing Core API, checks recorded program exits, then stops its owned Xvfb.
 Inspect cleanupErrors and evidenceRetained. A cleanup error prevents a pass.
+In actions.jsonl, a `repeated-stop` event names a process that needed a second
+SIGTERM, and a `forced-stop` event says where a process that had to be killed
+was stuck.
 Raw evidence and the run's home folder remain. When the run ends for any reason,
 a kill of the verifier included, the kernel kills every process in its
 namespace. Do not kill by process name, edit global configuration or delete a

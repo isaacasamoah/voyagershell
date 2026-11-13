@@ -7,8 +7,8 @@ pub use terminal::Terminal;
 use crate::inspection::{self, Target, Unseen, drawn_for};
 use crate::sandbox;
 use crate::system::{
-    Identity, Owned, PATIENCE, Pinned, System, TimedOut, digest, interrupted, poll, save, settle,
-    stamp, until, until_cleanup,
+    Identity, Owned, PATIENCE, Pinned, Stopped, System, TimedOut, digest, interrupted, poll, save,
+    settle, stamp, until, until_cleanup,
 };
 use crate::x11::{Display, Geometry, Key, Pixels, Window};
 use anyhow::{Context, Result, ensure};
@@ -595,13 +595,11 @@ impl Native {
         let mut errors = Vec::new();
         if let Some(mut viewer) = self.viewer.take() {
             let stopped = if candidate_faulted {
-                viewer.abandon()
+                viewer.abandon().map(|()| Stopped::Exited { signals: 0 })
             } else {
                 viewer.stop()
             };
-            if let Err(error) = stopped {
-                errors.push(format!("viewer: {error:#}"));
-            }
+            errors.extend(self.retired("viewer", stopped));
         }
         if self.system.socket().exists() {
             let stopped = (|| -> Result<()> {
@@ -633,10 +631,9 @@ impl Native {
             }
         }
         self.x11 = None;
-        if let Some(mut display) = self.display.take()
-            && let Err(error) = display.stop()
-        {
-            errors.push(format!("display: {error:#}"));
+        if let Some(mut display) = self.display.take() {
+            let stopped = display.stop();
+            errors.extend(self.retired("display", stopped));
         }
         if let Some(number) = self
             .system
@@ -654,6 +651,27 @@ impl Native {
             }
         }
         errors
+    }
+}
+
+impl Native {
+    fn retired(&self, process: &str, stopped: Result<Stopped>) -> Option<String> {
+        let (event, error) = match stopped {
+            Err(error) => return Some(format!("{process}: {error:#}")),
+            Ok(Stopped::Exited { signals: 0 | 1 }) => return None,
+            Ok(Stopped::Exited { signals }) => (
+                json!({"event":"repeated-stop","process":process,"signals":signals}),
+                None,
+            ),
+            Ok(Stopped::Killed { signals, stuck }) => (
+                json!({"event":"forced-stop","process":process,"signals":signals,"stuck":stuck}),
+                Some(format!(
+                    "{process}: Owned child required forced termination after {signals} SIGTERM signals ({stuck})"
+                )),
+            ),
+        };
+        let recorded = self.system.record(event);
+        error.or(recorded.err().map(|error| format!("{process}: {error:#}")))
     }
 }
 
@@ -874,6 +892,68 @@ pub(crate) mod tests {
         ensure!(
             !native.withdraw_fault(),
             "A withdrawn fault counts as fired"
+        );
+        Ok(())
+    }
+
+    fn ledger(native: &Native) -> Result<Vec<Value>> {
+        let text = fs::read_to_string(native.system.evidence.join("actions.jsonl"))?;
+        Ok(text
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<_, _>>()?)
+    }
+
+    #[test]
+    fn a_stop_that_needed_more_than_one_signal_is_recorded() -> Result<()> {
+        let native = native()?;
+        ensure!(
+            native
+                .retired("display", Ok(Stopped::Exited { signals: 1 }))
+                .is_none()
+                && !native.system.evidence.join("actions.jsonl").exists(),
+            "A stop on the first signal was recorded or failed the cleanup"
+        );
+        ensure!(
+            native
+                .retired("display", Ok(Stopped::Exited { signals: 2 }))
+                .is_none(),
+            "A stop on the second signal failed the cleanup"
+        );
+        let stuck = "state S, waiting in ep_poll, system call 232";
+        let killed = Stopped::Killed {
+            signals: 12,
+            stuck: stuck.into(),
+        };
+        let forced = native
+            .retired("display", Ok(killed))
+            .context("A forced stop left the cleanup clean")?;
+        ensure!(
+            forced
+                == format!(
+                    "display: Owned child required forced termination after 12 SIGTERM signals ({stuck})"
+                ),
+            "A forced stop is reported as: {forced}"
+        );
+        assert_eq!(
+            ledger(&native)?,
+            [
+                json!({"event":"repeated-stop","process":"display","signals":2}),
+                json!({"event":"forced-stop","process":"display","signals":12,"stuck":stuck}),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cleanup_stops_a_display_that_lost_its_first_signal() -> Result<()> {
+        let mut native = native()?;
+        native.display = Some(crate::system::tests::deaf("display", "trap - TERM")?);
+        let errors = native.cleanup(false);
+        ensure!(errors.is_empty(), "The cleanup failed: {errors:?}");
+        assert_eq!(
+            ledger(&native)?,
+            [json!({"event":"repeated-stop","process":"display","signals":2})]
         );
         Ok(())
     }
