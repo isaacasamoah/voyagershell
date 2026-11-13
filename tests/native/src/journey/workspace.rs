@@ -6,6 +6,7 @@ use crate::x11::Key;
 use anyhow::Result;
 use serde::Serialize;
 use std::path::Path;
+use voyager_contract::inspection::Role;
 use voyager_contract::{
     Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Vessel, VoyageId,
 };
@@ -28,6 +29,10 @@ cases! {
 
 pub const CONTROL: Case = Case::RenameFleetEnter;
 
+const FLEET_NAME: &str = "Native Fleet";
+const VOYAGE_NAME: &str = "Keyboard Voyage";
+const VESSEL_NAME: &str = "+";
+
 #[derive(PartialEq)]
 struct Start {
     voyage: VoyageId,
@@ -43,7 +48,6 @@ struct Created<Id> {
 enum Open {
     DoubleClick,
     ClickThenF2,
-    TabRoundTrip,
 }
 
 enum Finish<'a> {
@@ -317,45 +321,61 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
 
     cases.check(native, Case::RenameFleetEnter, |native| {
         let open = Open::DoubleClick;
-        typed(rename(
-            native,
-            &first_fleet,
-            open,
-            "Native Fleet",
-            Finish::Enter,
-        )?)
+        let renamed = rename(native, &first_fleet, open, FLEET_NAME, Finish::Enter)?;
+        typed(Verdict::new(), renamed)
     })?;
 
     cases.check(native, Case::RenameVoyageBlur, |native| {
         let finish = Finish::Blur(&first.target());
-        typed(rename(
-            native,
-            &first_voyage,
-            Open::DoubleClick,
-            "Blur Voyage",
-            finish,
-        )?)
+        let open = Open::DoubleClick;
+        let renamed = rename(native, &first_voyage, open, "Blur Voyage", finish)?;
+        typed(Verdict::new(), renamed)
     })?;
 
     cases.check(native, Case::RenameVesselF2, |native| {
-        typed(rename(
-            native,
-            &new_vessel,
-            Open::ClickThenF2,
-            "+",
-            Finish::Enter,
-        )?)
+        let open = Open::ClickThenF2;
+        let renamed = rename(native, &new_vessel, open, VESSEL_NAME, Finish::Enter)?;
+        typed(Verdict::new(), renamed)
     })?;
 
     cases.check(native, Case::RenameKeyboard, |native| {
-        let open = Open::TabRoundTrip;
-        typed(rename(
-            native,
-            &first_voyage,
-            open,
-            "Keyboard Voyage",
-            Finish::Enter,
-        )?)
+        let next_voyage = RenameTarget::Voyage {
+            id: other.id.clone(),
+        };
+        let before = saved_name(native, &first_voyage)?;
+        native.click(&Target::name(&first_voyage))?;
+        at_rest(native)?;
+        native.press(Key::Tab)?;
+        native.press(Key::F2)?;
+        let forward = editors(native, &other.id.0)?;
+        let verdict = Verdict::new()
+            .expect(
+                "Tab moved the keyboard from the first Voyage's name to the next Voyage's name",
+                forward == [other.id.0.as_str()],
+            )
+            .observed("editors after Tab and F2", &forward)?;
+        if !verdict.passed() {
+            return Ok(verdict);
+        }
+        native.press(Key::Escape)?;
+        let next = Target::name(&next_voyage);
+        native.observe(&format!("{next} in place of its editor"), |seen| {
+            (seen.shows(&next) && editing(seen).is_empty()).then_some(())
+        })?;
+        native.press(Key::Tab.shift())?;
+        native.press(Key::F2)?;
+        let back = editors(native, &start.voyage.0)?;
+        let verdict = verdict
+            .expect(
+                "Shift+Tab moved the keyboard back to the first Voyage's name",
+                back == [start.voyage.0.as_str()],
+            )
+            .observed("editors after Shift+Tab and F2", &back)?;
+        if !verdict.passed() {
+            return Ok(verdict);
+        }
+        let renamed = edit(native, &first_voyage, before, VOYAGE_NAME, Finish::Enter)?;
+        typed(verdict, renamed)
     })?;
 
     cases.check(native, Case::RenameEscape, |native| {
@@ -422,25 +442,35 @@ fn rename(
     text: &str,
     finish: Finish,
 ) -> Result<Renamed> {
-    let (name, editor) = (Target::name(subject), Target::editor(subject));
-    let before = native.observe(&format!("{name} with its saved name"), |seen| {
-        seen.shows(&name)
-            .then(|| name_of(seen.document, subject))
-            .flatten()
-    })?;
+    let name = Target::name(subject);
+    let before = saved_name(native, subject)?;
     match open {
         Open::DoubleClick => native.double_click(&name)?,
         Open::ClickThenF2 => {
             native.click(&name)?;
             native.press(Key::F2)?;
         }
-        Open::TabRoundTrip => {
-            native.click(&name)?;
-            native.press(Key::Tab)?;
-            native.press(Key::Tab.shift())?;
-            native.press(Key::F2)?;
-        }
     }
+    edit(native, subject, before, text, finish)
+}
+
+fn saved_name(native: &Native, subject: &RenameTarget) -> Result<String> {
+    let name = Target::name(subject);
+    native.observe(&format!("{name} with its saved name"), |seen| {
+        seen.shows(&name)
+            .then(|| name_of(seen.document, subject))
+            .flatten()
+    })
+}
+
+fn edit(
+    native: &Native,
+    subject: &RenameTarget,
+    before: String,
+    text: &str,
+    finish: Finish,
+) -> Result<Renamed> {
+    let (name, editor) = (Target::name(subject), Target::editor(subject));
     native.observe(&format!("{editor} in place of {name}"), |seen| {
         (seen.shows(&editor) && !seen.shows(&name)).then_some(())
     })?;
@@ -484,6 +514,22 @@ fn rename(
     Ok(renamed)
 }
 
+fn editors(native: &Native, wanted: &str) -> Result<Vec<String>> {
+    native.settle(
+        "the open name editors holding still",
+        |seen| Some(editing(seen)),
+        |open| *open == [wanted],
+    )
+}
+
+fn editing(seen: &Seen) -> Vec<String> {
+    let editors = seen.frame.elements.iter();
+    editors
+        .filter(|element| element.role == Role::NameEditor)
+        .map(|element| element.key.clone())
+        .collect()
+}
+
 fn bind(
     native: &mut Native,
     verdict: &Verdict,
@@ -495,22 +541,32 @@ fn bind(
     }
 }
 
-fn typed(renamed: Renamed) -> Result<Verdict> {
+fn typed(verdict: Verdict, renamed: Renamed) -> Result<Verdict> {
     let saved = renamed.typed.clone();
-    judged(renamed, "the saved name is the typed text", &saved)
+    judged(verdict, renamed, "the saved name is the typed text", &saved)
 }
 
 fn kept(renamed: Renamed) -> Result<Verdict> {
     let saved = renamed.before.clone();
-    judged(renamed, "the saved name is unchanged", &saved)
+    judged(
+        Verdict::new(),
+        renamed,
+        "the saved name is unchanged",
+        &saved,
+    )
 }
 
-fn judged(renamed: Renamed, saving: &'static str, saved: &str) -> Result<Verdict> {
+fn judged(
+    verdict: Verdict,
+    renamed: Renamed,
+    saving: &'static str,
+    saved: &str,
+) -> Result<Verdict> {
     let drawn = matches!(
         (&renamed.label, &renamed.after),
         (Some(label), Some(after)) if titled(label, after)
     );
-    Verdict::new()
+    verdict
         .expect(
             "the editor held the typed draft before the finishing input",
             renamed.draft == renamed.typed,

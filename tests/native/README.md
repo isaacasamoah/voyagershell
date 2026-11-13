@@ -291,8 +291,8 @@ A value from an unprepared frame, or from a frame that no longer shows the
 control, never counts. If no value counts when the deadline passes, the
 journey ends `failed`, blamed on the product, and the error names what never
 held still. The `workspace` journey uses `Native::settle` for the draft of
-the rename editor, for the text of a name after a rename and for the controls
-that a relaunch draws.
+the rename editor, for the text of a name after a rename, for the editor that
+F2 opens and for the controls that a relaunch draws.
 
 A launch ends with `observe`. The header sends no workspace action while a
 workspace request is in progress, so a click on the sidebar toggle during the
