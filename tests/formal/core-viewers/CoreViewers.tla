@@ -1,7 +1,7 @@
 ---------------------------- MODULE CoreViewers ----------------------------
 EXTENDS Naturals, Sequences, FiniteSets
 
-CONSTANTS Channels, ViewerLimit, Credit, ViewLimit, ControlCapacity, Requests, AttachTimeouts
+CONSTANTS Channels, ViewerLimit, Credit, ViewLimit, ControlCapacity, Requests
 
 TotalLimit == ViewerLimit * Credit
 
@@ -40,6 +40,11 @@ Enqueue(frame) ==
     /\ Len(control) < ControlCapacity
     /\ control' = Append(control, frame)
 
+TryEnqueue(frame) ==
+    control' = IF link = Up /\ Len(control) < ControlCapacity
+               THEN Append(control, frame)
+               ELSE control
+
 Init ==
     /\ link = Up
     /\ core = [c \in Channels |-> "none"]
@@ -69,7 +74,6 @@ Attach ==
                    held, pending, attached, used>>
 
 TimeOut ==
-    /\ AttachTimeouts
     /\ waiting # None
     /\ waiting' = None
     /\ UNCHANGED <<link, core, window, pipe, control, present, bytes, closed,
@@ -106,9 +110,15 @@ InstallFails ==
        \/ link # Up
        \/ closed[attached]
        \/ \E old \in held : old # attached /\ Len(control) >= ControlCapacity
+    /\ IF attached \in present
+       THEN /\ present' = present \ {attached}
+            /\ total' = total - bytes[attached]
+            /\ bytes' = [bytes EXCEPT ![attached] = 0]
+            /\ TryEnqueue([kind |-> "close", ch |-> attached, n |-> 0])
+       ELSE UNCHANGED <<present, total, bytes, control>>
     /\ attached' = None
-    /\ UNCHANGED <<link, core, window, pipe, control, present, bytes, closed,
-                   total, held, pending, waiting, issued, used>>
+    /\ UNCHANGED <<link, core, window, pipe, closed, held, pending, waiting,
+                   issued, used>>
 
 Take(c) ==
     /\ c \in held
@@ -168,24 +178,25 @@ TerminalEnds(c) ==
 
 ReadReply(frame) ==
     IF frame.n # waiting
-    THEN UNCHANGED <<link, present, bytes, closed, total, waiting, attached>>
+    THEN /\ TryEnqueue([kind |-> "close", ch |-> frame.ch, n |-> 0])
+         /\ UNCHANGED <<link, present, bytes, closed, total, waiting, attached>>
     ELSE IF frame.ch \in present
     THEN /\ link' = "Core attached an invalid channel"
-         /\ UNCHANGED <<present, bytes, closed, total, waiting, attached>>
+         /\ UNCHANGED <<control, present, bytes, closed, total, waiting, attached>>
     ELSE /\ present' = present \cup {frame.ch}
          /\ bytes' = [bytes EXCEPT ![frame.ch] = 0]
          /\ closed' = [closed EXCEPT ![frame.ch] = FALSE]
          /\ waiting' = None
          /\ attached' = frame.ch
-         /\ UNCHANGED <<link, total>>
+         /\ UNCHANGED <<control, link, total>>
 
 ReadData(frame) ==
-    /\ UNCHANGED <<present, closed, waiting, attached>>
-    /\ IF total + frame.n > TotalLimit
+    /\ UNCHANGED <<control, present, closed, waiting, attached>>
+    /\ IF frame.ch \notin present
+       THEN UNCHANGED <<link, bytes, total>>
+       ELSE IF total + frame.n > TotalLimit
        THEN /\ link' = "buffered output exceeded 16 MiB"
             /\ UNCHANGED <<bytes, total>>
-       ELSE IF frame.ch \notin present
-       THEN UNCHANGED <<link, bytes, total>>
        ELSE IF closed[frame.ch]
        THEN /\ link' = "Core sent output after close"
             /\ UNCHANGED <<bytes, total>>
@@ -200,7 +211,7 @@ ReadEnd(frame) ==
     /\ closed' = IF frame.ch \in present
                  THEN [closed EXCEPT ![frame.ch] = TRUE]
                  ELSE closed
-    /\ UNCHANGED <<link, present, bytes, total, waiting, attached>>
+    /\ UNCHANGED <<control, link, present, bytes, total, waiting, attached>>
 
 Read ==
     /\ link = Up
@@ -210,7 +221,7 @@ Read ==
        /\ CASE frame.kind = "reply" -> ReadReply(frame)
             [] frame.kind = "data" -> ReadData(frame)
             [] frame.kind = "end" -> ReadEnd(frame)
-    /\ UNCHANGED <<core, window, control, held, pending, issued, used>>
+    /\ UNCHANGED <<core, window, held, pending, issued, used>>
 
 Next ==
     \/ Attach
