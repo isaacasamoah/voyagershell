@@ -306,7 +306,7 @@ result, or its wanted value requires that result. A frame from before the
 input cannot show a control that the input creates, so the wait goes on, and
 every frame value that the case judges comes from the glance that showed the
 result. `create-fleet` and `create-voyage` want the new tab, row and Vessel
-drawn, and they read the dock from that glance.
+drawn under their saved names, and they read the dock from that glance.
 Before this rule, `create-fleet` waited only for the new Fleet in the document
 and judged the frame of the first glance that held. On a correct candidate, 2
 of 20 runs on a loaded machine then failed `the new Fleet's tab and Vessel are
