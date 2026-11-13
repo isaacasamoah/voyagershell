@@ -3,7 +3,7 @@ const path = require("node:path");
 const { analyse, modules, call, statementEnd, depthAt } = require("./rust.cjs");
 const { relative, literal } = require("./snapshot.cjs");
 
-function observeCargo(snapshot, graph, config) {
+function observeCargo(snapshot, graph) {
   if (!snapshot.has("Cargo.toml")) return [];
   const metadata = JSON.parse(
     execFileSync(

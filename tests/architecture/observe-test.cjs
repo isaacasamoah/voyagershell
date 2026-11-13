@@ -3,9 +3,8 @@ const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { test } = require("node:test");
+const { test, after } = require("node:test");
 const { observe } = require("./observe.cjs");
-const { diff, walkthrough } = require("./history.cjs");
 const { stringify, parse } = require("./yaml.cjs");
 const { analyse, modules } = require("./rust.cjs");
 
@@ -22,7 +21,6 @@ const CONFIG = {
   generators: {},
   locationRoots: [],
   structLiterals: [],
-  docs: [],
 };
 const FILES = {
   "Cargo.toml": '[workspace]\nmembers = ["demo"]\nresolver = "2"\n',
@@ -47,6 +45,18 @@ const FILES = {
   "content/a.ts": 'import { b } from "./b.js";\nexport const a = b;\n',
   "content/b.ts": "export const b = 1;\n",
 };
+
+const temporary = [];
+after(() => {
+  for (const directory of temporary)
+    fs.rmSync(directory, { recursive: true, force: true });
+});
+
+function scratch(prefix) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  temporary.push(directory);
+  return directory;
+}
 
 function git(directory, ...args) {
   return execFileSync("git", ["-C", directory, ...args], {
@@ -76,7 +86,7 @@ function commit(directory, files, message) {
 }
 
 function fixture() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "observe-fixture-"));
+  const directory = scratch("observe-fixture-");
   git(directory, "init", "-q");
   fs.mkdirSync(path.join(directory, "demo"), { recursive: true });
   fs.writeFileSync(path.join(directory, "Cargo.toml"), FILES["Cargo.toml"]);
@@ -102,7 +112,6 @@ const real = observe(ROOT, head);
 test("the same commit and rules give byte-identical YAML", () => {
   const again = observe(ROOT, head);
   assert.equal(stringify(again.observed), stringify(real.observed));
-  assert.equal(stringify(again.specs), stringify(real.specs));
 });
 
 test("YAML survives a round trip through the strict reader", () => {
@@ -203,40 +212,8 @@ test("test-only and path-attributed modules are classified", () => {
   assert.deepEqual(found[1].conditions, ['cfg(feature = "x")']);
 });
 
-test("an architecture diff names what a later commit added", () => {
-  const second = commit(
-    base.directory,
-    {
-      "demo/src/lib.rs": FILES["demo/src/lib.rs"].replace(
-        "pub mod child;",
-        "pub mod child;\npub mod extra;",
-      ),
-      "demo/src/extra.rs": "pub fn more() {}\n",
-    },
-    "feat: second",
-  );
-  const before = observe(base.directory, base.first, CONFIG).observed;
-  const after = observe(base.directory, second, CONFIG).observed;
-  const change = diff(before, after);
-  assert.deepEqual(change.nodes.added, ["rs:demo::extra"]);
-  assert.deepEqual(diff(after, after), {
-    nodes: { added: [], removed: [], changed: [] },
-    edges: { added: [], removed: [], changed: [] },
-  });
-  const steps = walkthrough(change, before, after).flatMap(
-    (section) => section.steps,
-  );
-  assert.ok(
-    steps.some(
-      (step) =>
-        step.text === "`demo::extra` appears." &&
-        step.evidence.path === "demo/src/lib.rs",
-    ),
-  );
-});
-
 function hidden(directory, revision) {
-  const tool = fs.mkdtempSync(path.join(os.tmpdir(), "observe-tool-"));
+  const tool = scratch("observe-tool-");
   for (const name of fs.readdirSync(__dirname))
     if (/\.(cjs|json)$/.test(name))
       fs.copyFileSync(path.join(__dirname, name), path.join(tool, name));

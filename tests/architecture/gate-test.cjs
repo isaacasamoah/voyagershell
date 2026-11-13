@@ -3,7 +3,7 @@ const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { test } = require("node:test");
+const { test, after } = require("node:test");
 
 const ROOT = path.resolve(__dirname, "../..");
 const GATE = path.join(__dirname, "gate.cjs");
@@ -12,10 +12,20 @@ const ENV = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith("HC_")),
 );
 
+const temporary = [];
+after(() => {
+  for (const directory of temporary)
+    fs.rmSync(directory, { recursive: true, force: true });
+});
+
+function folder(prefix) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  temporary.push(directory);
+  return directory;
+}
+
 function scratch() {
-  const directory = fs.mkdtempSync(
-    path.join(os.tmpdir(), "architecture-gate-"),
-  );
+  const directory = folder("architecture-gate-");
   const files = execFileSync(
     "git",
     ["-C", ROOT, "ls-files", "-co", "--exclude-standard", "-z"],
@@ -51,10 +61,7 @@ function without(pattern) {
     .readFileSync(KNOWN, "utf8")
     .split("\n  - id: ")
     .filter((entry) => !pattern.test(entry));
-  const file = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "architecture-known-")),
-    "known.yaml",
-  );
+  const file = path.join(folder("architecture-known-"), "known.yaml");
   fs.writeFileSync(file, kept.join("\n  - id: "));
   return file;
 }
@@ -162,10 +169,7 @@ test("fixing a known violation without removing its entry fails as stale", () =>
 });
 
 test("a known entry without an owner is refused", () => {
-  const file = path.join(
-    fs.mkdtempSync(path.join(os.tmpdir(), "architecture-known-")),
-    "known.yaml",
-  );
+  const file = path.join(folder("architecture-known-"), "known.yaml");
   fs.writeFileSync(file, "known:\n  - id: x\n    reason: y\n");
   const result = run(scratch(), ["--known", file]);
   assert.notStrictEqual(result.status, 0);

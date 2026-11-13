@@ -149,4 +149,4 @@ function literal(text) {
   return match[1] ?? match[2];
 }
 
-module.exports = { glob, digest, Snapshot, Graph, relative, literal };
+module.exports = { digest, Snapshot, Graph, relative, literal };
