@@ -99,6 +99,171 @@ test("a new #[path] include of experiments source fails", () => {
   );
 });
 
+const LIBRARY = ["app/src/lib.rs", "rs:voyager_app"];
+const BINARY_ROOTS = [
+  ["desktop/src/main.rs", "bin:voyager-shell"],
+  ["contract/src/bin/export.rs", "bin:export"],
+  ["desktop/src/bin/export-script-types.rs", "bin:export-script-types"],
+];
+const BRACKETS = [
+  ["(", ")"],
+  ["[", "]"],
+  ["{", "}"],
+];
+const EMBEDS = [
+  ["include_str!", "AGENTS.md", "# planted\n"],
+  ["include_bytes!", "data.bin", "bytes"],
+];
+
+function reaching(file, planted) {
+  return path.posix.join(
+    path.posix.relative(path.posix.dirname(file), "."),
+    "experiments/planted",
+    planted,
+  );
+}
+
+function plant(directory, file, planted, text, line) {
+  fs.mkdirSync(path.join(directory, "experiments/planted"), {
+    recursive: true,
+  });
+  if (planted)
+    fs.writeFileSync(
+      path.join(directory, "experiments/planted", planted),
+      text,
+    );
+  edit(directory, file, (source) => `${source}\n${line}\n`);
+}
+
+for (const [file, owner] of [LIBRARY, ...BINARY_ROOTS]) {
+  for (const [open, close] of file === LIBRARY[0]
+    ? BRACKETS
+    : BRACKETS.slice(0, 1)) {
+    for (const [macro, planted, text] of EMBEDS)
+      test(`${macro}${open}${close} of experiments source in ${file} fails`, () => {
+        const directory = scratch();
+        plant(
+          directory,
+          file,
+          planted,
+          text,
+          `const PLANTED: &[u8] = ${macro}${open}"${reaching(file, planted)}"${close};`,
+        );
+        expectFailure(
+          run(directory),
+          `NEW no-experiment-includes: embeds(${owner},files:experiments/planted)`,
+        );
+      });
+    test(`include!${open}${close} of experiments source in ${file} fails`, () => {
+      const directory = scratch();
+      plant(
+        directory,
+        file,
+        "part.rs",
+        "pub fn planted() {}\n",
+        `include!${open}"${reaching(file, "part.rs")}"${close};`,
+      );
+      expectFailure(
+        run(directory),
+        `NEW no-experiment-includes: includes(${owner},source:experiments/planted/part.rs)`,
+      );
+    });
+  }
+}
+
+for (const [file, owner] of BINARY_ROOTS)
+  test(`a #[path] module of experiments source in ${file} fails`, () => {
+    const directory = scratch();
+    plant(
+      directory,
+      file,
+      "part.rs",
+      "pub fn planted() {}\n",
+      `#[path = "${reaching(file, "part.rs")}"]\nmod planted;`,
+    );
+    expectFailure(
+      run(directory),
+      `NEW no-experiment-includes: includes(${owner},source:experiments/planted/part.rs)`,
+    );
+  });
+
+test("include_str! and include! of a product file still pass", () => {
+  const directory = scratch();
+  fs.writeFileSync(path.join(directory, "app/planted.md"), "# planted\n");
+  fs.writeFileSync(path.join(directory, "app/planted.rs"), "fn planted() {}\n");
+  edit(
+    directory,
+    "app/src/lib.rs",
+    (source) =>
+      `${source}\nconst PLANTED: &str = include_str!("../planted.md");\ninclude!("../planted.rs");\n`,
+  );
+  const result = run(directory);
+  assert.strictEqual(result.status, 0, result.out + result.err);
+});
+
+const UNRESOLVED = [
+  [
+    "a computed path",
+    (directory) => {
+      fs.mkdirSync(path.join(directory, "experiments/planted"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(directory, "experiments/planted/AGENTS.md"),
+        "# planted\n",
+      );
+      return 'include_str!(concat!("../../experiments/", "planted/AGENTS.md"))';
+    },
+  ],
+  [
+    "a symlink the snapshot drops",
+    (directory) => {
+      fs.mkdirSync(path.join(directory, "experiments/planted"), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(directory, "experiments/planted/AGENTS.md"),
+        "# planted\n",
+      );
+      fs.symlinkSync(
+        "../experiments/planted/AGENTS.md",
+        path.join(directory, "app/planted-link.md"),
+      );
+      return 'include_str!("../planted-link.md")';
+    },
+  ],
+  [
+    "a file git ignores",
+    (directory) => {
+      fs.appendFileSync(
+        path.join(directory, ".gitignore"),
+        "\napp/ignored.md\n",
+      );
+      fs.writeFileSync(path.join(directory, "app/ignored.md"), "# ignored\n");
+      return 'include_str!("../ignored.md")';
+    },
+  ],
+];
+
+for (const [name, prepare] of UNRESOLVED)
+  for (const macro of ["include_str!", "include_bytes!", "include!"]) {
+    test(`${macro} of ${name} fails the gate`, () => {
+      const directory = scratch();
+      const expression = prepare(directory).replace("include_str!", macro);
+      edit(
+        directory,
+        "app/src/lib.rs",
+        (source) => `${source}\n${expression};\n`,
+      );
+      const token =
+        macro === "include!" ? "include!(" : "include_str!/include_bytes!(";
+      expectFailure(
+        run(directory),
+        `NEW no-unresolved-includes: ${token}@rs:voyager_app(`,
+      );
+    });
+  }
+
 test("the contract crate reaching gpui fails", () => {
   const directory = scratch();
   edit(directory, "Cargo.lock", (text) =>
