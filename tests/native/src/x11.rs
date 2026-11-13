@@ -23,8 +23,6 @@ pub type Window = u32;
 
 const ANSWER: Duration = Duration::from_secs(5);
 const KEY_PACE: Duration = Duration::from_millis(1);
-const GLIDE_PACE: Duration = Duration::from_millis(8);
-const GLIDE_STEPS: i32 = 8;
 const BACKSPACE: u32 = 0xff08;
 const TAB: u32 = 0xff09;
 const RETURN: u32 = 0xff0d;
@@ -308,17 +306,6 @@ impl Display {
 
     pub fn release(&self, button: u8) -> Result<()> {
         self.fake(BUTTON_RELEASE_EVENT, button, 0, 0)
-    }
-
-    pub fn glide(&self, from: (i16, i16), to: (i16, i16)) -> Result<()> {
-        let along = |from: i16, to: i16, step: i32| {
-            (i32::from(from) + (i32::from(to) - i32::from(from)) * step / GLIDE_STEPS) as i16
-        };
-        for step in 1..=GLIDE_STEPS {
-            self.move_to(along(from.0, to.0, step), along(from.1, to.1, step))?;
-            sleep(GLIDE_PACE);
-        }
-        Ok(())
     }
 
     pub fn chord(&self, chord: Chord) -> Result<()> {

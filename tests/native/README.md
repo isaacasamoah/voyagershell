@@ -288,8 +288,11 @@ that report. The driver does not guess it from the drawn terminals.
 
 Pointer input is a click, a double-click, a hover, a wheel or a drag. A drag
 aims at its destination before it presses, because the avatar follows the
-pointer once it is held. The button is released even when a step of the drag
-fails.
+pointer once it is held. A drag is one press at the source, one move to the
+destination and one release, with no pause. The avatar starts to float on the
+first move of more than 7 logical pixels with the button held, and it docks
+where the button is released (`moving` and `released` in
+`desktop/src/avatar.rs`). The button is released even when the move fails.
 
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
 `Chord` adds a modifier to a key. `Terminal` in `src/native/terminal.rs` binds

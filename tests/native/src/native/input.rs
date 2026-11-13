@@ -62,9 +62,9 @@ impl Native {
             || {
                 x11.move_to(source.0, source.1)?;
                 x11.hold(1)?;
-                let glided = x11.glide(source, destination);
+                let moved = x11.move_to(destination.0, destination.1);
                 x11.release(1)?;
-                glided
+                moved
             },
         )?;
         self.pointer()
