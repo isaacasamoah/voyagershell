@@ -11,7 +11,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
-    Arc, OnceLock,
+    Arc, Mutex, OnceLock,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::thread::sleep;
@@ -206,6 +206,7 @@ pub struct System {
     pub env: BTreeMap<String, String>,
     acknowledged: AtomicUsize,
     dispatch_mark: AtomicUsize,
+    watched: Mutex<BTreeMap<String, Value>>,
 }
 
 impl System {
@@ -252,6 +253,7 @@ impl System {
             env,
             acknowledged: AtomicUsize::new(0),
             dispatch_mark: AtomicUsize::new(0),
+            watched: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -376,6 +378,31 @@ impl System {
     }
 
     pub fn rpc(&self, method: &str, params: Value) -> Result<Value> {
+        let request = self.request(method, params)?;
+        self.record(json!({"event":"Core-intent","request":request}))?;
+        let reply = self.exchange(&request)?;
+        self.record(json!({"event":"Core-observation","reply":reply}))?;
+        answer(&request, reply)
+    }
+
+    pub fn watch(&self, method: &str, params: Value) -> Result<Value> {
+        let subject = format!("{method} {params}");
+        let request = self.request(method, params)?;
+        let reply = self.exchange(&request)?;
+        let seen = json!([reply["result"], reply["error"]]);
+        let changed = self
+            .watched
+            .lock()
+            .expect("the watch record is never held across a panic")
+            .insert(subject, seen.clone())
+            != Some(seen);
+        if changed {
+            self.record(json!({"event":"Core-observation","request":request,"reply":reply}))?;
+        }
+        answer(&request, reply)
+    }
+
+    fn request(&self, method: &str, params: Value) -> Result<Value> {
         ensure!(
             fs::metadata(self.socket())?.file_type().is_socket(),
             "Dedicated Core is absent"
@@ -392,9 +419,10 @@ impl System {
             ),
             "Unsupported verification Core operation"
         );
-        let id = stamp() as u64;
-        let request = json!({"jsonrpc":"2.0","id":id,"method":method,"params":params});
-        self.record(json!({"event":"Core-intent","request":request}))?;
+        Ok(json!({"jsonrpc":"2.0","id":stamp() as u64,"method":method,"params":params}))
+    }
+
+    fn exchange(&self, request: &Value) -> Result<Value> {
         let mut stream = UnixStream::connect(self.socket())?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
         stream.set_write_timeout(Some(Duration::from_secs(5)))?;
@@ -404,17 +432,21 @@ impl System {
             .take(8 * 1024 * 1024)
             .read_until(b'\n', &mut bytes)?;
         ensure!(bytes.ends_with(b"\n"), "Incomplete or oversized Core reply");
-        let value: Value = serde_json::from_slice(&bytes)?;
-        self.record(json!({"event":"Core-observation","reply":value}))?;
-        ensure!(
-            value["id"] == id && value["jsonrpc"] == "2.0",
-            "Core reply identity disagrees"
-        );
-        value
-            .get("result")
-            .cloned()
-            .context(format!("Core refused {method}: {value}"))
+        Ok(serde_json::from_slice(&bytes)?)
     }
+}
+
+fn answer(request: &Value, reply: Value) -> Result<Value> {
+    ensure!(
+        reply["id"] == request["id"] && reply["jsonrpc"] == "2.0",
+        "Core reply identity disagrees"
+    );
+    reply.get("result").cloned().with_context(|| {
+        format!(
+            "Core refused {}: {reply}",
+            request["method"].as_str().unwrap_or_default()
+        )
+    })
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

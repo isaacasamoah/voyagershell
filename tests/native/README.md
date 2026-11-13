@@ -1,7 +1,8 @@
 # Native verification environment
 
-This is the first Rust slice of the maintained native fixture. It verifies terminal
-scrolling on an owned Linux X11 display. The accepted application remains unchanged.
+This is the Rust slice of the maintained native fixture. It runs the journeys in
+its journey registry on an owned Linux X11 display. Terminal scrolling is the only
+journey so far. The app changes only to mark controls for inspection.
 Invoke `voyager-verification` directly. New verification extends this environment,
 including its shared actions and evidence contract. A single command wrapping
 unrelated rigs would not meet that requirement. Unsupported capabilities remain
@@ -22,6 +23,7 @@ and remains unaccepted as a complete implementation.
 | --- | --- |
 | Owned X11 scrolling, input/capture/identity, evidence and cleanup | Implemented at any window size. Input aims at the controls that the app reports through `--inspect`; see Locating controls below. |
 | Hermetic runs | Implemented with bubblewrap. Each run and each `doctor` checks it with a canary. See Hermetic runs below. |
+| Journey registry, verdicts for each case and one negative control for each journey | Implemented. See Journeys and Negative controls below. |
 | Finite reporting gate and regression controls | Implemented for the actual Rust gate, not app/OS behavior. |
 | ETC/ORTH/DRY checks | Required independent review criteria; not an automatic architecture score. |
 | Versioned request/result contract and independent receipt conformance | Planned. Pilot receipts are evidence, not a certified acceptance validator. |
@@ -50,6 +52,74 @@ journeys, tier status and the retained Python journeys. `voyager-verification fe
 validates it and prints the coverage table. `features --write` regenerates the table in
 `.agents/skills/verify/features/README.md`, `features --check` fails when it is stale and
 `features --changed GIT_RANGE` lists the features and journeys a diff touches.
+
+### Journeys
+
+`journeys!` in `src/journey.rs` is the one list of native journeys. Each row
+names the journey, its module under `src/journey/` and the sidebar state that
+the journey needs. The module declares its cases with `cases!`, the case that
+its negative control must fail (`CONTROL`) and its `drive` function. The
+`--journey` choices, the plan that crosses into the sandbox, the name in
+`checks.json`, the number of cases and the registry validation all read this
+list. `voyager-verification journeys` prints it as JSON.
+
+To add a journey:
+
+1. Add one row to `journeys!` and write the module.
+2. Add the module's file to `SOURCES` in `src/main.rs`. A test fails when a
+   file under `src/` is missing from that list.
+3. Add the control patch. See Negative controls below.
+4. Name the journey in the `journeys` list of each feature that it covers in
+   `features.toml`. A journey that no feature names fails `features`.
+
+A journey that needs one sidebar state gets that state on every launch. `run`
+refuses a `--sidebar` value that contradicts it.
+
+A case runs inside `cases.check` and returns a `Verdict`. A `Verdict` holds
+named expectations, each of which held or did not, and the values that the
+case observed. A `Verdict` without an expectation does not pass.
+`observations.json` lists every declared case with one status:
+
+| Status | Meaning |
+| --- | --- |
+| `passed` | Every expectation held. |
+| `failed` | An expectation did not hold. |
+| `interrupted` | The case ended in an error. `diagnose` blames the product or the fixture. |
+| `skipped` | The case did not run, because an earlier case failed or was interrupted. |
+
+Cases build on each other, so a later case would start from a state that the
+failed case left unknown. A failed or interrupted case therefore ends the
+journey.
+
+After each case the driver saves `observations.json` and a capture of the whole
+window, named `case-CASE-STAMP.png`. Cases run in their declared order, and a
+case that runs out of order ends the run as a fixture error. If `drive` returns
+without running a declared case although no case failed, the run is
+inconclusive.
+
+### Negative controls
+
+Each journey has a patch at `tests/native/controls/JOURNEY.patch`. The patch
+breaks the product in one small way. The journey's control case must fail on a
+candidate that was built with the patch. `voyager-verification journeys` prints
+the control case and the patch of each journey. A unit test fails when a patch
+no longer applies to the current tree. The verifier never applies a patch.
+
+To run a control, use a checkout that you can discard:
+
+1. Apply the patch: `git apply tests/native/controls/terminal-scrolling.patch`.
+2. Build the candidate with the release command in Build and inspect below.
+3. Run the journey against that candidate with a new evidence directory.
+4. Confirm that the run exits 1 and that `firstFailingCheck.check` in
+   `checks.json` is the control case.
+5. Revert the patch with `git apply -R` and build again before any other run.
+
+The `terminal-scrolling` patch makes the terminal ignore an upward wheel in
+ordinary shell history. `normal-history` then fails on the expectation
+`wheel up shows earlier history`.
+
+`--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
+candidate that crashes or hangs. They work with every journey.
 
 ### Build and inspect
 
@@ -157,18 +227,49 @@ latency.
 The driver starts the candidate with `--inspect inspection-N.json` in the
 evidence folder, a new file for each launch, and parses each frame with the
 `Frame` type from the `voyager-contract` crate (see
-[the inspection endpoint](../../docs/inspection.md)). `locate(role, key)` waits
-for that element and converts its bounds to device pixels with `window.scale`
-and the window's origin on the screen. `wait_for` polls the frame every 10 ms
-until a predicate holds, so it can wait for an element or for its absence. A
-frame drawn for another window size is ignored. When the deadline passes, the
-journey ends `failed`, blamed on the product, and the error names the missing
-role and key. The app marks `terminal` only once the terminal view is attached,
-so the driver clicks and types only after that element appears.
+[the inspection endpoint](../../docs/inspection.md)). A journey names a control
+with a `Target` from `src/inspection.rs`. A `Target` pairs a role with the key
+that the app gives that role, and its constructors take the id types of the
+contract. No input method takes a coordinate.
+
+Before a pointer input, the driver waits for the target's element and converts
+its bounds to device pixels with `window.scale` and the window's origin on the
+screen. The driver aims at the centre of the element. If the avatar's reported
+bounds cover that centre, the driver aims at the centre of the largest part of
+the element that the avatar leaves clear, because a click on the avatar
+activates the avatar and never reaches the control. After the pointer moves,
+the driver reads the frame again and aims again if the element no longer
+contains the pointer. A frame that lists the target under `ambiguous` ends the
+run as a fixture error. A frame drawn for another window size is ignored. The
+frame is polled every 10 ms. When the deadline passes, the journey ends
+`failed`, blamed on the product, and the error names the missing role and key.
+The app marks `terminal` only once the terminal view is attached, so the
+driver clicks and types only after that element appears.
+
+`observe` in `src/native.rs` is the one way to wait for an outcome. Every
+80 ms it reads the layout document (`doc.get`, parsed as the `Layout` type of
+the contract) and the latest frame. It returns the value of its check once
+three things are true: the check gives a value, every drawn Vessel or Portal
+whose content is a terminal has its `terminal` element, and the value has not
+changed for 150 ms. When the deadline passes, the journey ends `failed`,
+blamed on the product. A document that does not parse as `Layout` is a fixture
+error. Rebuild the verifier from the candidate's checkout.
+
+A launch ends with `observe`. The app sends no workspace action while it
+prepares the workspace, so a click on the sidebar toggle before the first
+terminal attaches is lost. In 5 of 10 runs at `--window 1180x820 --sidebar
+collapsed`, a driver that clicked the toggle as soon as the toggle was drawn
+never saw the sidebar collapse.
+
+Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
+`Chord` adds a modifier to a key. `Terminal` in `src/native/terminal.rs` binds
+one terminal Vessel by its placement. It owns the terminal's Core address and
+shell identity, its captures and its wheel input, so a journey without a
+terminal does not wait for one.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and
-capture (`GetImage`). A capture is the `terminal` element's area, with the
-avatar's reported bounds blanked. After an input the journey polls until the
+capture (`GetImage`). A terminal capture is the `terminal` element's area, with
+the avatar's reported bounds blanked. After an input the journey polls until the
 expected state holds and has not changed for 150 ms, or until 4 s pass. It
 records the last observation either way, and the case decides pass or fail. No
 step waits a fixed time for the app. Key events are 1 ms apart, as with the
@@ -195,7 +296,8 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 | Candidate exited or was killed, or is stopped | `failed`, blamed on the product |
 | Core exited while the candidate ran | `failed`, blamed on the product |
 | Timeout while the display still answers | `failed`, a hang, blamed on the product |
-| A case's observation disagreed | `failed` |
+| A case's expectation did not hold | `failed`, and `firstFailingCheck` names the case, the expectation and the observed values |
+| `drive` returned without running a declared case although no case failed | `inconclusive` |
 | Owned display exited or stopped answering, a host tool is missing or failed, the sandbox refused, or an unrelated verifier error | `inconclusive` |
 | Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
 
@@ -220,8 +322,12 @@ runtime pass. Preserve an incomplete or failed directory; a new run needs a new
 directory. There is no replay of failed input commands. Observation polling is
 read-only. Each input intent and command acknowledgement is recorded separately.
 
-`actions.jsonl` preserves commands, input intents and acknowledgements, located
-elements with their frame sequence, Core requests/replies and capture hashes.
+`actions.jsonl` preserves commands, input intents and acknowledgements, the
+start of each case, Core requests and replies, and capture hashes. A pointer
+intent carries its target, the element's region, the aim point and the frame
+sequence that the driver aimed from. A read that the driver repeats while it
+waits (`doc.get`, `terminal.read`) is recorded only when its reply differs
+from the previous reply, so the ledger shows inputs and changes.
 `inspection-N.json` holds the last frame of each launch. `observations.json` holds the observed cases. Screenshots have unique names.
 `doctor.json`, `launch.json`, `identity.json`, native/display logs and `checks.json`
 retain candidate and environment identities. `sandbox.json` records the session
@@ -266,9 +372,9 @@ Reconsider a code verifier when the next concrete property needs one.
 
 | Principle | Required review | Present ownership |
 | --- | --- | --- |
-| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `scrolling.rs` describes the journey; `native.rs` handles the app window; `x11.rs` owns the display connection; `inspection.rs` reads frames; `system.rs` owns process/recording/polling/Core primitives. |
+| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `journey.rs` owns the journey registry and case verdicts; `journey/scrolling.rs` describes the journey; `native.rs` handles the app window; `native/input.rs` owns pointer and key input; `native/terminal.rs` owns a bound terminal; `x11.rs` owns the display connection; `inspection.rs` reads frames and names controls; `system.rs` owns process/recording/polling/Core primitives. |
 | Orthogonality | Product code does not depend on the fixture; the reporting gate is independent of I/O. Core owns programs. | Standalone development crate; pure `lifecycle.rs`; platform dependencies remain outside the app. |
-| DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, event list, reporting gate, recorder, polling loop, input/capture adapter, locator and shutdown path for the migrated journey. The frame type is the app's own. |
+| DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, journey list, event list, reporting gate, recorder, polling loop, input/capture adapter, locator and shutdown path for the migrated journeys. The frame and layout types are the app's own. |
 
 These are review criteria, not an automated universal quality score. The retained
 legacy platform helpers are a migration gap. Do not add a private runner for a new

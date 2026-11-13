@@ -1,0 +1,469 @@
+mod scrolling;
+
+use crate::native::{Native, Sidebar};
+use crate::system::save;
+use anyhow::{Result, bail, ensure};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value, json};
+use std::marker::PhantomData;
+use std::path::PathBuf;
+
+pub trait Case: Copy + 'static {
+    const NAMES: &'static [&'static str];
+    fn name(self) -> &'static str;
+}
+
+macro_rules! cases {
+    ($($variant:ident => $name:literal),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum Case {
+            $($variant),+
+        }
+
+        impl crate::journey::Case for Case {
+            const NAMES: &'static [&'static str] = &[$($name),+];
+
+            fn name(self) -> &'static str {
+                match self {
+                    $(Case::$variant => $name),+
+                }
+            }
+        }
+    };
+}
+pub(crate) use cases;
+
+macro_rules! journeys {
+    ($($variant:ident => $name:literal in $module:ident, sidebar: $sidebar:expr);+ $(;)?) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+        pub enum Journey {
+            $(#[serde(rename = $name)] $variant),+
+        }
+
+        impl Journey {
+            pub const ALL: &'static [Journey] = &[$(Journey::$variant),+];
+
+            pub fn name(self) -> &'static str {
+                match self {
+                    $(Journey::$variant => $name),+
+                }
+            }
+
+            pub fn cases(self) -> &'static [&'static str] {
+                match self {
+                    $(Journey::$variant => <$module::Case as Case>::NAMES),+
+                }
+            }
+
+            pub fn control(self) -> &'static str {
+                match self {
+                    $(Journey::$variant => $module::CONTROL.name()),+
+                }
+            }
+
+            pub fn sidebar(self) -> Option<Sidebar> {
+                match self {
+                    $(Journey::$variant => $sidebar),+
+                }
+            }
+
+            pub fn drive(self, native: &mut Native, outcomes: &mut Outcomes) -> Result<()> {
+                match self {
+                    $(Journey::$variant => {
+                        $module::drive(native, &mut Cases::<$module::Case>::over(outcomes))
+                    }),+
+                }
+            }
+        }
+    };
+}
+
+journeys! {
+    TerminalScrolling => "terminal-scrolling" in scrolling, sidebar: None;
+}
+
+impl Journey {
+    pub fn names() -> Vec<&'static str> {
+        Self::ALL.iter().map(|journey| journey.name()).collect()
+    }
+
+    pub fn parse(name: &str) -> Result<Self> {
+        match Self::ALL.iter().find(|journey| journey.name() == name) {
+            Some(journey) => Ok(*journey),
+            None => bail!(
+                "Journey {name} has not migrated to Rust; the native journeys are {}",
+                Self::names().join(", ")
+            ),
+        }
+    }
+
+    pub fn control_patch(self) -> String {
+        format!("tests/native/controls/{}.patch", self.name())
+    }
+
+    pub fn listing() -> Value {
+        Self::ALL
+            .iter()
+            .map(|journey| {
+                json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
+            })
+            .collect()
+    }
+}
+
+#[derive(Default, Serialize)]
+pub struct Verdict {
+    expectations: Vec<Expectation>,
+    observed: Map<String, Value>,
+}
+
+#[derive(Serialize)]
+struct Expectation {
+    expected: &'static str,
+    held: bool,
+}
+
+impl Verdict {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn expect(mut self, expected: &'static str, held: bool) -> Self {
+        self.expectations.push(Expectation { expected, held });
+        self
+    }
+
+    pub fn observed(mut self, name: &'static str, value: impl Serialize) -> Self {
+        let value = serde_json::to_value(value)
+            .unwrap_or_else(|error| json!({"unrecorded":error.to_string()}));
+        self.observed.insert(name.into(), value);
+        self
+    }
+
+    pub fn passed(&self) -> bool {
+        !self.expectations.is_empty() && self.expectations.iter().all(|item| item.held)
+    }
+
+    pub fn first_unmet(&self) -> Option<&'static str> {
+        self.expectations
+            .iter()
+            .find(|item| !item.held)
+            .map(|item| item.expected)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum Status {
+    Passed,
+    Failed,
+    Interrupted,
+    Skipped,
+}
+
+#[derive(Serialize)]
+struct Outcome {
+    case: &'static str,
+    status: Status,
+    #[serde(flatten)]
+    verdict: Verdict,
+}
+
+pub struct Outcomes {
+    journey: Journey,
+    cases: Vec<Outcome>,
+    path: PathBuf,
+}
+
+impl Outcomes {
+    pub fn new(journey: Journey, path: PathBuf) -> Self {
+        let cases = journey
+            .cases()
+            .iter()
+            .map(|case| Outcome {
+                case,
+                status: Status::Skipped,
+                verdict: Verdict::new(),
+            })
+            .collect();
+        Self {
+            journey,
+            cases,
+            path,
+        }
+    }
+
+    pub fn journey(&self) -> Journey {
+        self.journey
+    }
+
+    pub fn passed(&self) -> bool {
+        self.cases.iter().all(|case| case.status == Status::Passed)
+    }
+
+    pub fn unrun(&self) -> Option<&'static str> {
+        let ended = |case: &Outcome| matches!(case.status, Status::Failed | Status::Interrupted);
+        if self.cases.iter().any(ended) {
+            return None;
+        }
+        self.next().map(|index| self.cases[index].case)
+    }
+
+    pub fn interrupted(&self) -> Option<&'static str> {
+        self.cases
+            .iter()
+            .find(|case| case.status == Status::Interrupted)
+            .map(|case| case.case)
+    }
+
+    pub fn first_failure(&self) -> Option<Value> {
+        let failed = self
+            .cases
+            .iter()
+            .find(|case| case.status == Status::Failed)?;
+        let unmet = failed
+            .verdict
+            .first_unmet()
+            .unwrap_or("the case stated no expectation");
+        Some(
+            json!({"check":failed.case,"blame":"product","detail":format!("The product did not meet the expectation: {unmet}"),"observed":failed.verdict.observed}),
+        )
+    }
+
+    pub fn save(&self, error: Option<&str>) -> Result<()> {
+        save(&self.path, &json!({"cases":self.cases,"error":error}))
+    }
+
+    fn next(&self) -> Option<usize> {
+        self.cases
+            .iter()
+            .position(|outcome| outcome.status == Status::Skipped)
+    }
+
+    fn open(&self, case: &'static str) -> Result<Option<usize>> {
+        ensure!(
+            self.interrupted().is_none(),
+            "Case {case} ran after an interrupted case"
+        );
+        if self.cases.iter().any(|case| case.status == Status::Failed) {
+            return Ok(None);
+        }
+        match self.next() {
+            Some(index) if self.cases[index].case == case => Ok(Some(index)),
+            Some(index) => bail!(
+                "Case {case} ran out of the declared order; {} comes next",
+                self.cases[index].case
+            ),
+            None => bail!("Case {case} ran after every declared case had run"),
+        }
+    }
+
+    fn close(&mut self, index: usize, verdict: Option<Verdict>) {
+        let outcome = &mut self.cases[index];
+        match verdict {
+            Some(verdict) => {
+                outcome.status = if verdict.passed() {
+                    Status::Passed
+                } else {
+                    Status::Failed
+                };
+                outcome.verdict = verdict;
+            }
+            None => outcome.status = Status::Interrupted,
+        }
+    }
+}
+
+pub struct Cases<'a, C: Case> {
+    outcomes: &'a mut Outcomes,
+    case: PhantomData<C>,
+}
+
+impl<'a, C: Case> Cases<'a, C> {
+    fn over(outcomes: &'a mut Outcomes) -> Self {
+        Self {
+            outcomes,
+            case: PhantomData,
+        }
+    }
+
+    pub fn check(
+        &mut self,
+        native: &mut Native,
+        case: C,
+        run: impl FnOnce(&mut Native) -> Result<Verdict>,
+    ) -> Result<()> {
+        let name = case.name();
+        let Some(index) = self.outcomes.open(name)? else {
+            return Ok(());
+        };
+        native.system.record(json!({"event":"case","case":name}))?;
+        let finished = match run(native) {
+            Ok(verdict) => {
+                self.outcomes.close(index, Some(verdict));
+                Ok(())
+            }
+            Err(error) => {
+                self.outcomes.close(index, None);
+                Err(error)
+            }
+        };
+        let saved = self.outcomes.save(None);
+        finished?;
+        saved?;
+        native.keep_window(&format!("case-{name}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+    use std::path::Path;
+    use std::process::Command;
+
+    const JOURNEY: Journey = Journey::TerminalScrolling;
+
+    fn outcomes() -> Outcomes {
+        Outcomes::new(JOURNEY, PathBuf::from("unsaved"))
+    }
+
+    fn judge(outcomes: &mut Outcomes, case: &'static str, verdict: Option<Verdict>) -> Result<()> {
+        if let Some(index) = outcomes.open(case)? {
+            outcomes.close(index, verdict);
+        }
+        Ok(())
+    }
+
+    fn held() -> Option<Verdict> {
+        Some(Verdict::new().expect("it held", true))
+    }
+
+    fn statuses(outcomes: &Outcomes) -> Vec<String> {
+        let saved = serde_json::to_value(&outcomes.cases).expect("serializable outcomes");
+        saved
+            .as_array()
+            .expect("a list of cases")
+            .iter()
+            .map(|case| {
+                format!(
+                    "{}:{}",
+                    case["case"].as_str().unwrap(),
+                    case["status"].as_str().unwrap()
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn journey_names_and_case_names_are_unique() {
+        let names: BTreeSet<_> = Journey::names().into_iter().collect();
+        assert_eq!(names.len(), Journey::ALL.len());
+        for journey in Journey::ALL {
+            let cases: BTreeSet<_> = journey.cases().iter().collect();
+            assert_eq!(cases.len(), journey.cases().len(), "{}", journey.name());
+            assert_eq!(Journey::parse(journey.name()).unwrap(), *journey);
+        }
+        let refusal = Journey::parse("imaginary").unwrap_err().to_string();
+        assert!(refusal.contains("imaginary") && refusal.contains(JOURNEY.name()));
+    }
+
+    #[test]
+    fn every_journey_has_a_control_patch_that_still_applies() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for journey in Journey::ALL {
+            let patch = journey.control_patch();
+            let check = Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(["apply", "--check", &patch])
+                .output()
+                .expect("git runs");
+            assert!(
+                check.status.success(),
+                "{patch} no longer applies: {}",
+                String::from_utf8_lossy(&check.stderr)
+            );
+        }
+    }
+
+    #[test]
+    fn a_verdict_without_expectations_does_not_pass() {
+        assert!(!Verdict::new().passed());
+        assert!(!Verdict::new().observed("seen", 1).passed());
+        assert!(Verdict::new().expect("it held", true).passed());
+    }
+
+    #[test]
+    fn a_journey_passes_only_when_every_declared_case_passed_in_order() -> Result<()> {
+        let mut outcomes = outcomes();
+        assert!(!outcomes.passed() && outcomes.first_failure().is_none());
+        let [first, second, rest @ ..] = JOURNEY.cases() else {
+            bail!("The journey declares fewer than two cases");
+        };
+        assert_eq!(outcomes.unrun(), Some(*first));
+        assert!(judge(&mut outcomes, second, held()).is_err());
+        judge(&mut outcomes, first, held())?;
+        assert!(judge(&mut outcomes, first, held()).is_err());
+        judge(&mut outcomes, second, held())?;
+        assert!(!outcomes.passed());
+        for case in rest {
+            assert_eq!(outcomes.unrun(), Some(*case));
+            judge(&mut outcomes, case, held())?;
+        }
+        assert!(outcomes.passed() && outcomes.unrun().is_none());
+        assert!(judge(&mut outcomes, first, held()).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn a_failed_case_is_named_with_what_it_observed_and_ends_the_journey() -> Result<()> {
+        let mut outcomes = outcomes();
+        let [first, second, ..] = JOURNEY.cases() else {
+            bail!("The journey declares fewer than two cases");
+        };
+        let verdict = Verdict::new()
+            .expect("it held", true)
+            .expect("the name is the typed text", false)
+            .observed("after", "NATIVE FLEET");
+        judge(&mut outcomes, first, Some(verdict))?;
+        judge(&mut outcomes, second, held())?;
+        assert_eq!(
+            statuses(&outcomes)[..2],
+            [format!("{first}:failed"), format!("{second}:skipped")]
+        );
+        assert!(outcomes.unrun().is_none());
+        let failure = outcomes.first_failure().expect("a failed case");
+        assert_eq!(failure["check"], *first);
+        assert_eq!(failure["blame"], "product");
+        assert!(
+            failure["detail"]
+                .as_str()
+                .is_some_and(|detail| detail.ends_with("the name is the typed text"))
+        );
+        assert_eq!(failure["observed"]["after"], "NATIVE FLEET");
+        assert!(!outcomes.passed());
+        Ok(())
+    }
+
+    #[test]
+    fn cases_after_an_interruption_stay_listed_as_skipped() -> Result<()> {
+        let mut outcomes = outcomes();
+        let [first, second, third, ..] = JOURNEY.cases() else {
+            bail!("The journey declares fewer than three cases");
+        };
+        judge(&mut outcomes, first, held())?;
+        judge(&mut outcomes, second, None)?;
+        assert_eq!(outcomes.interrupted(), Some(*second));
+        assert!(judge(&mut outcomes, third, held()).is_err());
+        assert!(outcomes.unrun().is_none());
+        let listed = statuses(&outcomes);
+        assert_eq!(listed.len(), JOURNEY.cases().len());
+        assert_eq!(
+            listed[..2],
+            [format!("{first}:passed"), format!("{second}:interrupted")]
+        );
+        assert!(listed[2..].iter().all(|case| case.ends_with(":skipped")));
+        Ok(())
+    }
+}

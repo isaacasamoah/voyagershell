@@ -1,0 +1,13 @@
+diff --git a/desktop/src/terminal_screen.rs b/desktop/src/terminal_screen.rs
+index 4c6a915..ea48e46 100644
+--- a/desktop/src/terminal_screen.rs
++++ b/desktop/src/terminal_screen.rs
+@@ -143,7 +143,7 @@ impl Screen {
+ 
+     pub(super) fn scroll(&mut self, lines: isize) {
+         self.terminal
+-            .scroll_viewport(libghostty_vt::terminal::ScrollViewport::Delta(lines));
++            .scroll_viewport(libghostty_vt::terminal::ScrollViewport::Delta(lines.max(0)));
+         self.content_dirty = true;
+     }
+ 

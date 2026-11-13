@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Verify VoyagerShell native behavior through its maintained fixture, preserving candidate identity, raw evidence and owned cleanup. Use for native feature changes and fixture diagnosis; the first Rust journey covers Linux X11 terminal scrolling only.
+description: Verify VoyagerShell native behavior through its maintained fixture, preserving candidate identity, raw evidence and owned cleanup. Use for native feature changes and fixture diagnosis; `voyager-verification journeys` lists the Rust journeys, which cover Linux X11 only.
 ---
 
 # Verify VoyagerShell
@@ -51,7 +51,9 @@ socket requests. A changed verifier source fingerprint requires a rebuild.
 
 ## Drive
 
-Read features/README.md and the selected feature file. For scrolling:
+Read features/README.md and the selected feature file. `voyager-verification
+journeys` prints each native journey with its cases, the sidebar state it needs
+and its negative control. For scrolling:
 
 ```sh
 run_parent=$(mktemp -d /var/tmp/voyager-verification-XXXXXX)
@@ -68,7 +70,9 @@ coverage. Read the capability gaps in the owner README before claiming completio
 
 Inspect checks.json, doctor.json, containment.json, sandbox.json,
 observations.json, actions.jsonl, the process identities and screenshots.
-Inspect both wheel directions and normal history.
+observations.json lists every declared case with its status, its expectations
+and the values it observed. For scrolling, inspect both wheel directions and
+normal history.
 Verify the candidate and verifier fingerprints. The action ledger distinguishes
 an intent, acknowledgement and later observation. Do not infer rendered behavior
 from a service reply alone. Review ETC, ORTH and DRY against the owning criteria in
@@ -79,6 +83,13 @@ from an observed product defect. Repair a confirmed fixture problem in this comm
 source, prove the repair with an independent negative control, then rerun the
 affected app behavior. Record a bounded unresolved result and next action if the
 repair cannot be completed; do not silently substitute a custom rig. Never replay an uncertain effect or weaken an assertion.
+
+## Negative control
+
+Each journey has a control patch in tests/native/controls/. A candidate built
+with the patch must fail the journey's control case. Follow Negative controls
+in tests/native/README.md, in a checkout that you can discard. If the control
+run passes, the journey cannot detect that defect. Report a fixture defect.
 
 ## Cleanup
 

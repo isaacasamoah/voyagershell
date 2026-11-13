@@ -1,27 +1,34 @@
-use crate::inspection::{self, Unseen, centre, drawn_for, find, named, region};
+mod input;
+mod terminal;
+
+pub use input::Wheel;
+pub use terminal::Terminal;
+
+use crate::inspection::{self, Target, Unseen, drawn_for};
 use crate::sandbox;
 use crate::system::{
-    Identity, Owned, PATIENCE, Pinned, System, TimedOut, digest, interrupted, poll, save, settle,
-    stamp, until, until_cleanup,
+    Identity, Owned, PATIENCE, Pinned, System, TimedOut, digest, interrupted, poll, save, stamp,
+    until, until_cleanup,
 };
-use crate::x11::{Display, Geometry, Pixels, Window};
+use crate::x11::{Display, Geometry, Key, Pixels, Window};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use voyager_contract::inspection::{Frame, Role};
+use voyager_contract::{Layout, Vessel};
 
-const EXPECTATION: Duration = Duration::from_secs(4);
 const QUIET: Duration = Duration::from_millis(150);
-const WHEEL_CLICKS: usize = 6;
+const GLANCE: Duration = Duration::from_millis(80);
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
-pub struct Layout {
+pub struct Surface {
     pub window: Option<(u16, u16)>,
     pub sidebar: Option<Sidebar>,
 }
@@ -33,7 +40,16 @@ pub enum Sidebar {
     Collapsed,
 }
 
-impl Layout {
+impl fmt::Display for Sidebar {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Sidebar::Open => "open",
+            Sidebar::Collapsed => "collapsed",
+        })
+    }
+}
+
+impl Surface {
     pub fn parse(window: Option<&str>, sidebar: Option<&str>) -> Result<Self> {
         let window = window
             .map(|text| -> Result<(u16, u16)> {
@@ -51,43 +67,98 @@ impl Layout {
             .transpose()?;
         Ok(Self { window, sidebar })
     }
+
+    pub fn with_sidebar(mut self, required: Option<Sidebar>) -> Result<Self> {
+        if let Some(required) = required {
+            ensure!(
+                self.sidebar.is_none_or(|chosen| chosen == required),
+                "The journey needs the sidebar {required}"
+            );
+            self.sidebar = Some(required);
+        }
+        Ok(self)
+    }
+}
+
+pub struct Seen<'a> {
+    pub document: &'a Layout,
+    pub frame: &'a Frame,
+}
+
+impl Seen<'_> {
+    pub fn shows(&self, target: &Target) -> bool {
+        target.find(self.frame).is_some()
+    }
+
+    fn prepared(&self) -> bool {
+        let terminal = |placement: &str| {
+            placed(self.document)
+                .find(|placed| placed.id.0 == placement)
+                .is_some_and(|placed| {
+                    self.document.contents.iter().any(|content| {
+                        content.id == placed.content && content.type_id == "terminal"
+                    })
+                })
+        };
+        let drawn = |role: Role, key: &str| {
+            self.frame
+                .elements
+                .iter()
+                .any(|element| element.role == role && element.key == key)
+        };
+        self.frame
+            .elements
+            .iter()
+            .filter(|element| matches!(element.role, Role::VesselName | Role::PortalName))
+            .all(|name| !terminal(&name.key) || drawn(Role::Terminal, &name.key))
+    }
+}
+
+fn placed(layout: &Layout) -> impl Iterator<Item = &Vessel> {
+    layout
+        .voyages
+        .iter()
+        .chain(&layout.home)
+        .flat_map(|voyage| {
+            voyage
+                .fleets
+                .iter()
+                .flat_map(|fleet| &fleet.vessels)
+                .chain(&voyage.portals)
+        })
 }
 
 pub struct Native {
     pub system: System,
     pub candidate: Pinned,
     pub hc: Pinned,
-    layout: Layout,
+    surface: Surface,
     display: Option<Owned>,
     x11: Option<Display>,
     viewer: Option<Owned>,
     core: Option<Identity>,
-    shell: Option<Identity>,
-    pub address: String,
-    placement: String,
+    core_id: Value,
+    adopted: Vec<(String, Identity)>,
     window: Window,
     launches: u32,
-    core_id: Value,
     fault_fired: Arc<AtomicBool>,
 }
 
 impl Native {
-    pub fn new(system: System, candidate: Pinned, hc: Pinned, layout: Layout) -> Self {
+    pub fn new(system: System, candidate: Pinned, hc: Pinned, surface: Surface) -> Self {
         Self {
             system,
             candidate,
             hc,
-            layout,
+            surface,
             display: None,
             x11: None,
             viewer: None,
             core: None,
-            shell: None,
-            address: String::new(),
-            placement: String::new(),
+            core_id: Value::Null,
+            adopted: Vec::new(),
             window: 0,
             launches: 0,
-            core_id: Value::Null,
             fault_fired: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -122,7 +193,7 @@ impl Native {
         })?);
         self.system
             .execute("xrdb", &["-merge"], Some("Xft.dpi: 192\n"))?;
-        self.launch()?;
+        self.start()?;
         until("dedicated Core socket", || {
             Ok(self.system.socket().exists().then_some(()))
         })?;
@@ -130,30 +201,19 @@ impl Native {
         self.core = Some(Identity::read(pid(&core)?)?);
         self.core_id = core["core"]["id"].clone();
         ensure!(!self.core_id.is_null(), "Missing Core identity");
-        (self.address, self.placement) = until("bound terminal", || {
-            let doc = self
-                .system
-                .rpc("doc.get", json!({"name":"voyager-layout-v1"}))?;
-            let content = &doc["value"]["contents"][0];
-            Ok(content["backend"]
-                .as_str()
-                .zip(content["id"].as_str())
-                .and_then(|(backend, id)| {
-                    Some((backend.to_owned(), placement_of(&doc["value"], id)?))
-                }))
-        })?;
-        let shell = self
-            .system
-            .rpc("terminal.get", json!({"terminal":self.address}))?;
-        self.shell = Some(Identity::read(pid(&shell)?)?);
         save(
             self.system.evidence.join("identity.json"),
-            &json!({"core":self.core,"coreId":self.core_id,"shell":self.shell,"terminal":self.address,"placement":self.placement}),
+            &json!({"core":self.core,"coreId":self.core_id}),
         )?;
-        self.focus()
+        self.present()
     }
 
     pub fn launch(&mut self) -> Result<()> {
+        self.start()?;
+        self.present()
+    }
+
+    fn start(&mut self) -> Result<()> {
         ensure!(
             self.viewer.is_none(),
             "Existing viewer must close before reattachment"
@@ -188,9 +248,17 @@ impl Native {
         self.verify()?;
         save(
             self.system.evidence.join("launch.json"),
-            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.layout}),
-        )?;
-        Ok(())
+            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.surface}),
+        )
+    }
+
+    fn present(&self) -> Result<()> {
+        self.arrange()?;
+        let x11 = self.x11()?;
+        self.system
+            .act(json!({"input":"focus","window":self.window}), || {
+                x11.focus(self.window)
+            })
     }
 
     pub fn inspection(&self) -> PathBuf {
@@ -222,7 +290,7 @@ impl Native {
         Ok(())
     }
 
-    pub fn wait_for<T>(
+    fn wait_for<T>(
         &self,
         expected: &str,
         within: Duration,
@@ -239,19 +307,9 @@ impl Native {
         .ok_or_else(|| Unseen(expected.into()).into())
     }
 
-    pub fn locate(&self, role: Role, key: &str) -> Result<Geometry> {
-        let located = self.wait_for(&named(role, key), PATIENCE, |frame| {
-            find(frame, role, key).map(|element| (region(frame, &element.bounds), frame.sequence))
-        })?;
-        self.system.record(
-            json!({"event":"locate","role":role,"key":key,"region":located.0,"sequence":located.1}),
-        )?;
-        Ok(located.0)
-    }
-
     fn arrange(&self) -> Result<()> {
         let x11 = self.x11()?;
-        if let Some((width, height)) = self.layout.window {
+        if let Some((width, height)) = self.surface.window {
             let current = x11.geometry(self.window)?;
             if (current.width, current.height) != (width, height) {
                 self.system.act(
@@ -266,112 +324,71 @@ impl Native {
                 .iter()
                 .any(|element| element.role == Role::VoyageName)
         };
-        let drawn = self.wait_for(&named(Role::Terminal, &self.placement), PATIENCE, |frame| {
-            find(frame, Role::Terminal, &self.placement).map(|_| open(frame))
+        let toggle = Target::SIDEBAR_TOGGLE;
+        let drawn = self.observe("the prepared workspace", |seen| {
+            seen.shows(&toggle).then(|| open(seen.frame))
         })?;
-        if let Some(sidebar) = self.layout.sidebar
+        if let Some(sidebar) = self.surface.sidebar
             && drawn != (sidebar == Sidebar::Open)
         {
-            let toggle = self.locate(Role::SidebarToggle, "")?;
-            self.click(toggle)?;
-            self.wait_for(&format!("the sidebar {sidebar:?}"), PATIENCE, |frame| {
-                (open(frame) == (sidebar == Sidebar::Open)).then_some(())
+            self.click(&toggle)?;
+            self.observe(&format!("the sidebar {sidebar}"), |seen| {
+                (open(seen.frame) == (sidebar == Sidebar::Open)).then_some(())
             })?;
         }
         Ok(())
     }
 
-    fn point(&self, target: Geometry) -> Result<()> {
+    pub fn observe<T: PartialEq>(
+        &self,
+        expected: &str,
+        mut check: impl FnMut(&Seen) -> Option<T>,
+    ) -> Result<T> {
         let x11 = self.x11()?;
-        let window = x11.geometry(self.window)?;
-        let (x, y) = centre(target);
-        let (x, y) = (window.x + x, window.y + y);
-        self.system
-            .act(json!({"input":"move","at":[x,y]}), || x11.move_to(x, y))?;
-        self.pointer()
-    }
-
-    fn click(&self, target: Geometry) -> Result<()> {
-        self.point(target)?;
-        let x11 = self.x11()?;
-        self.system
-            .act(json!({"input":"click","button":1}), || x11.click(1))
-    }
-
-    pub fn focus(&self) -> Result<()> {
-        self.verify()?;
-        self.arrange()?;
-        let x11 = self.x11()?;
-        self.system
-            .act(json!({"input":"focus","window":self.window}), || {
-                x11.focus(self.window)
-            })?;
-        self.click(self.locate(Role::Terminal, &self.placement)?)
-    }
-
-    fn keyboard(&self) -> Result<()> {
-        self.verify()?;
-        ensure!(
-            self.x11()?.focused()? == self.window,
-            "Keyboard focus left the owned candidate"
-        );
-        Ok(())
-    }
-
-    fn pointer(&self) -> Result<()> {
-        self.verify()?;
-        let under = self.x11()?.under_pointer()?;
-        ensure!(
-            under == self.window,
-            "Pointer left the owned candidate: {under}"
-        );
-        Ok(())
-    }
-
-    pub fn type_text(&self, text: &str) -> Result<()> {
-        self.keyboard()?;
-        let x11 = self.x11()?;
-        self.system
-            .act(json!({"input":"type","text":text}), || x11.type_text(text))
-    }
-
-    pub fn key(&self, chord: &str) -> Result<()> {
-        self.keyboard()?;
-        let x11 = self.x11()?;
-        self.system
-            .act(json!({"input":"key","chord":chord}), || x11.chord(chord))
-    }
-
-    pub fn line(&self, text: &str) -> Result<()> {
-        self.type_text(text)?;
-        self.key("Return")
-    }
-
-    pub fn wheel(&self, up: bool) -> Result<()> {
-        self.point(self.locate(Role::Terminal, &self.placement)?)?;
-        let x11 = self.x11()?;
-        let button = if up { 4 } else { 5 };
-        self.system.act(
-            json!({"input":"wheel","button":button,"clicks":WHEEL_CLICKS}),
-            || (0..WHEEL_CLICKS).try_for_each(|_| x11.click(button)),
-        )
-    }
-
-    pub fn look(&self) -> Result<Pixels> {
-        let (terminal, avatar) =
-            self.wait_for(&named(Role::Terminal, &self.placement), PATIENCE, |frame| {
-                let terminal = find(frame, Role::Terminal, &self.placement)?;
-                let avatar = find(frame, Role::Avatar, "");
-                Some((
-                    region(frame, &terminal.bounds),
-                    avatar.map(|avatar| region(frame, &avatar.bounds)),
-                ))
-            })?;
-        let mut pixels = self.x11()?.capture(self.window, terminal)?;
-        if let Some(avatar) = avatar {
-            pixels.mask(avatar);
+        let path = self.inspection();
+        let mut held: Option<(T, Instant)> = None;
+        let mut preparing = false;
+        let steady = poll(PATIENCE, GLANCE, true, || {
+            let window = x11.geometry(self.window)?;
+            let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
+            let document = self.document()?;
+            let (Some(frame), Some(document)) = (&frame, &document) else {
+                return Ok(None);
+            };
+            let seen = Seen { document, frame };
+            let value = check(&seen);
+            preparing = value.is_some() && !seen.prepared();
+            let Some(value) = value.filter(|_| !preparing) else {
+                held = None;
+                return Ok(None);
+            };
+            let since = match held.take() {
+                Some((previous, since)) if previous == value => since,
+                _ => Instant::now(),
+            };
+            let steady = since.elapsed() >= QUIET;
+            held = Some((value, since));
+            Ok(steady.then_some(()))
+        })?;
+        match (steady, held) {
+            (Some(()), Some((value, _))) => Ok(value),
+            _ if preparing => {
+                Err(Unseen(format!("{expected} with every drawn terminal attached")).into())
+            }
+            _ => Err(Unseen(expected.into()).into()),
         }
-        Ok(pixels)
+    }
+
+    pub fn document(&self) -> Result<Option<Layout>> {
+        let reply = self
+            .system
+            .watch("doc.get", json!({"name":"voyager-layout-v1"}))?;
+        match &reply["value"] {
+            Value::Null => Ok(None),
+            value => serde_json::from_value(value.clone()).map(Some).context(
+                "The layout document is not the contract Layout this verifier was built with",
+            ),
+        }
     }
 
     pub fn keep(&self, name: &str, look: &Pixels) -> Result<()> {
@@ -382,42 +399,26 @@ impl Native {
         )
     }
 
-    pub fn settled(&self, name: &str, expected: impl Fn(&Pixels) -> bool) -> Result<Pixels> {
-        let look = settle(EXPECTATION, QUIET, || self.look(), expected)?;
-        self.keep(name, &look)?;
-        Ok(look)
+    pub fn keep_window(&self, name: &str) -> Result<()> {
+        let x11 = self.x11()?;
+        let window = x11.geometry(self.window)?;
+        let whole = Geometry {
+            x: 0,
+            y: 0,
+            ..window
+        };
+        self.keep(name, &x11.capture(self.window, whole)?)
     }
 
-    pub fn settled_with<T: PartialEq>(
-        &self,
-        name: &str,
-        mut observe: impl FnMut() -> Result<T>,
-        expected: impl Fn(&T, &Pixels) -> bool,
-    ) -> Result<(T, Pixels)> {
-        let (value, look) = settle(
-            EXPECTATION,
-            QUIET,
-            || Ok((observe()?, self.look()?)),
-            |(value, look)| expected(value, look),
-        )?;
-        self.keep(name, &look)?;
-        Ok((value, look))
+    pub fn adopt(&mut self, name: String, identity: Identity) {
+        self.adopted.push((name, identity));
     }
 
-    pub fn same_program(&self) -> Result<()> {
+    pub fn same_core(&self) -> Result<()> {
         self.core
             .as_ref()
             .context("Missing Core identity")?
             .verify()?;
-        let shell = self.shell.as_ref().context("Missing shell identity")?;
-        shell.verify()?;
-        ensure!(
-            pid(&self
-                .system
-                .rpc("terminal.get", json!({"terminal":self.address}))?)?
-                == shell.pid,
-            "Terminal shell changed"
-        );
         ensure!(
             self.system.rpc("server.status", json!({}))?["core"]["id"] == self.core_id,
             "Core identity changed"
@@ -426,7 +427,7 @@ impl Native {
     }
 
     pub fn close(&mut self) -> Result<()> {
-        self.key("ctrl+q")?;
+        self.press(Key::Char('q').ctrl())?;
         let viewer = self.viewer.as_mut().context("Missing viewer")?;
         until("owned viewer exit", || {
             Ok(viewer.child.try_wait()?.map(|_| ()))
@@ -497,13 +498,16 @@ impl Native {
         };
         owned("candidate", self.viewer.as_mut());
         owned("display", self.display.as_mut());
-        for (name, identity) in [("core", &self.core), ("shell", &self.shell)] {
-            if let Some(identity) = identity {
-                report.insert(
-                    name.into(),
-                    json!({"identity":identity,"alive":identity.verify().is_ok(),"state":process_state(identity.pid).map(String::from)}),
-                );
-            }
+        let core = self.core.iter().map(|identity| ("core", identity));
+        let adopted = self
+            .adopted
+            .iter()
+            .map(|(name, identity)| (name.as_str(), identity));
+        for (name, identity) in core.chain(adopted) {
+            report.insert(
+                name.into(),
+                json!({"identity":identity,"alive":identity.verify().is_ok(),"state":process_state(identity.pid).map(String::from)}),
+            );
         }
         Value::Object(report)
     }
@@ -566,7 +570,8 @@ impl Native {
                 errors.push(format!("Core: {error:#}"));
             }
         }
-        for identity in [&self.core, &self.shell].into_iter().flatten() {
+        let adopted = self.adopted.iter().map(|(_, identity)| identity);
+        for identity in self.core.iter().chain(adopted) {
             if let Err(error) = until_cleanup("owned program exit", || {
                 Ok((!Path::new(&format!("/proc/{}", identity.pid)).exists()).then_some(()))
             }) {
@@ -662,17 +667,6 @@ fn process_state(pid: u32) -> Option<char> {
     stat.rsplit_once(')')?.1.trim().chars().next()
 }
 
-fn placement_of(value: &Value, content: &str) -> Option<String> {
-    match value {
-        Value::Object(map) if map.get("content").and_then(Value::as_str) == Some(content) => {
-            map.get("id").and_then(Value::as_str).map(str::to_owned)
-        }
-        Value::Object(map) => map.values().find_map(|item| placement_of(item, content)),
-        Value::Array(items) => items.iter().find_map(|item| placement_of(item, content)),
-        _ => None,
-    }
-}
-
 pub fn pid(value: &Value) -> Result<u32> {
     u32::try_from(value["pid"].as_u64().context("Missing process PID")?).context("Invalid PID")
 }
@@ -707,7 +701,7 @@ mod tests {
             system,
             pinned.clone(),
             pinned,
-            Layout::default(),
+            Surface::default(),
         ))
     }
 
@@ -746,13 +740,101 @@ mod tests {
     }
 
     #[test]
-    fn the_terminal_placement_is_found_by_its_content() {
-        let layout = json!({"voyages":[{"fleets":[{"vessels":[{"content":"content-6","id":"placement-7"},{"content":"content-2","id":"placement-3"}]}]}]});
-        assert_eq!(
-            placement_of(&layout, "content-2").as_deref(),
-            Some("placement-3")
+    fn a_workspace_is_prepared_once_every_drawn_terminal_is_attached() -> Result<()> {
+        let document: Layout = serde_json::from_value(json!({
+            "voyages": [{
+                "id": "voyage-1",
+                "name": "Voyager",
+                "fleets": [{
+                    "id": "fleet-4",
+                    "name": "Fleet 1",
+                    "root": null,
+                    "vessels": [
+                        {"id": "placement-3", "content": "content-2", "name": "Terminal 1"},
+                        {"id": "placement-7", "content": "content-6", "name": "Agents 1"},
+                        {"id": "placement-9", "content": "content-8", "name": "Terminal 2"}
+                    ]
+                }],
+                "portals": []
+            }],
+            "contents": [
+                {"id": "content-2", "typeId": "terminal", "cwd": "/", "backend": "t1"},
+                {"id": "content-6", "typeId": "agents", "cwd": "/", "backend": null},
+                {"id": "content-8", "typeId": "terminal", "cwd": "/", "backend": null}
+            ],
+            "selectedVoyage": "voyage-1",
+            "selectedFleet": "fleet-4",
+            "context": {"kind": "workspace"},
+            "nextId": "10"
+        }))?;
+        let frame = |drawn: &[(&str, &str)]| -> Result<Frame> {
+            let elements: Vec<_> = drawn
+                .iter()
+                .map(|(role, key)| {
+                    json!({"role":role,"key":key,"bounds":{"x":0.0,"y":0.0,"width":1.0,"height":1.0}})
+                })
+                .collect();
+            Ok(serde_json::from_value(json!({
+                "sequence": 1,
+                "window": {"width": 725.0, "height": 470.0, "scale": 2.0},
+                "dock": {"kind": "workspace"},
+                "elements": elements,
+                "ambiguous": []
+            }))?)
+        };
+        let prepared = |drawn: &[(&str, &str)]| -> Result<bool> {
+            Ok(Seen {
+                document: &document,
+                frame: &frame(drawn)?,
+            }
+            .prepared())
+        };
+        let names = [
+            ("vessel-name", "placement-3"),
+            ("vessel-name", "placement-7"),
+        ];
+        ensure!(
+            !prepared(&names)?,
+            "A drawn terminal Vessel without its terminal counted as prepared"
         );
-        assert_eq!(placement_of(&layout, "content-9"), None);
+        let attached = [names[0], names[1], ("terminal", "placement-3")];
+        ensure!(
+            prepared(&attached)?,
+            "An attached terminal beside an Agents Vessel did not count as prepared"
+        );
+        let second = [attached[0], attached[2], ("vessel-name", "placement-9")];
+        ensure!(
+            !prepared(&second)?,
+            "A second drawn terminal Vessel was not waited for"
+        );
+        ensure!(prepared(&[])?, "A frame without Vessels was not prepared");
+        Ok(())
+    }
+
+    #[test]
+    fn a_journey_fixes_its_sidebar_and_refuses_the_other_one() -> Result<()> {
+        let unset = Surface::parse(None, None)?;
+        ensure!(
+            unset.with_sidebar(None)?.sidebar.is_none(),
+            "A sidebar was chosen without a requirement"
+        );
+        ensure!(
+            unset.with_sidebar(Some(Sidebar::Open))?.sidebar == Some(Sidebar::Open),
+            "The required sidebar was not applied"
+        );
+        let collapsed = Surface::parse(Some("1180x820"), Some("collapsed"))?;
+        ensure!(
+            collapsed.with_sidebar(Some(Sidebar::Collapsed)).is_ok(),
+            "A matching sidebar was refused"
+        );
+        let refusal = collapsed
+            .with_sidebar(Some(Sidebar::Open))
+            .expect_err("A contradicting sidebar was accepted");
+        ensure!(
+            refusal.to_string() == "The journey needs the sidebar open",
+            "The refusal does not name the required sidebar: {refusal}"
+        );
+        Ok(())
     }
 
     #[test]

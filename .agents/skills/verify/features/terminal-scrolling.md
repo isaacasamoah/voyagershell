@@ -15,7 +15,7 @@ down, exit the probe, close the viewer and reopen the same isolated profile.
 ## Driving it with the maintained fixture
 
 Follow the exact doctor and run commands in ../SKILL.md. The Rust journey in
-tests/native/src/scrolling.rs owns the recipe. Terminal product behavior is owned
+tests/native/src/journey/scrolling.rs owns the recipe. Terminal product behavior is owned
 by desktop/src/terminal.rs, terminal_screen.rs and terminal_view.rs in the selected
 candidate. The retained fixed replay also uses terminal_scroll.rs. Source identity
 and hash come from the candidate receipt, not the current checkout's file list.
@@ -25,6 +25,12 @@ events, then 100 after downward events. The automated check requires movement in
 both directions and changed captures; it does not rely solely on probe state.
 Normal history must move and return to the same captured region. Core and shell
 identity must survive viewer reattachment. Inspect all direction captures.
+
+## Negative control
+
+tests/native/controls/terminal-scrolling.patch makes the terminal ignore an
+upward wheel in ordinary shell history. A candidate built with it must fail
+`normal-history` on the expectation `wheel up shows earlier history`.
 
 ## Gotchas
 
