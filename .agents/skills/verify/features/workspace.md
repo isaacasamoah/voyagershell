@@ -56,10 +56,17 @@ the next case needs.
 | `rename-empty-refused` | Double-click the Vessel's name, press BackSpace, press Return | The editor is empty before Return, the saved name is unchanged, and the drawn name is the saved name |
 | `relaunch-restores` | Press Ctrl+Q, launch the same profile | The candidate quits with a success status. The layout document and its version are equal before and after. Core and the shells of all four Vessels are the same processes. The Fleet, the Voyage and the Vessel that the journey renamed are saved as `Native Fleet`, `Keyboard Voyage` and `+`, and the window draws those names. The avatar is docked where the document says. The window draws every Voyage row, every Fleet tab of the selected Voyage, and the name and the terminal of every Vessel of the selected Fleet |
 
-A creation case waits only until the new Voyage or Fleet exists in the layout
-document. Whether it is selected and whether it is drawn are separate
-expectations, so a Fleet that is created but not selected fails on `the new
-Fleet is selected` and not on a timeout.
+The app saves a change before it draws it, so a frame from before an input
+can stand beside the document from after it. `create-fleet` and
+`create-voyage` therefore wait for a frame that draws what the input creates.
+A frame from before the input cannot draw a control with the new id. A
+creation case waits until one frame draws the new tab, row and Vessel, and it
+reads the dock from that frame.
+
+Each of these is still a separate expectation. If the frame never draws the
+result, the wait ends at its 12 s deadline with the value that held, and the
+case fails by name. A Fleet that is created but not selected fails on `the
+new Fleet is selected`.
 
 `create-voyage` moves the shell of the second Vessel, so three folders
 differ when the Voyage is created. The focused terminal is in
@@ -88,7 +95,9 @@ A frame does not report keyboard focus, so `rename-keyboard` reads focus from
 the editor that F2 opens. The first Voyage's name and the next Voyage's name
 are neighbours in the Tab order. The case presses Escape between its two
 halves, because Escape closes the editor and returns the keyboard to the name
-that the editor belonged to.
+that the editor belonged to. The case sends Tab and F2 straight after its
+click on the first Voyage's name. That click selects a Voyage that is already
+selected, so it draws nothing that a wait could name.
 
 `relaunch-restores` compares the three renamed names with the text that the
 journey typed, and not with the document that it read before Ctrl+Q. A name

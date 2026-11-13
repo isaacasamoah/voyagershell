@@ -171,12 +171,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let before = at_rest(native)?.document;
         native.click(&Target::create_fleet(&start.voyage))?;
         native.click(&Target::worker("terminal"))?;
-        let (after, dock, drawn) =
-            native.observe("a new Fleet in the layout document", |seen| {
+        let (after, dock, drawn) = native.settle(
+            "a new Fleet in the layout document",
+            |seen| {
                 let born = born(fleets(&before), fleets(seen.document), |fleet| &fleet.id);
                 let drawn = born.iter().all(|fleet| tabbed(seen, fleet));
                 (!born.is_empty()).then(|| (seen.document.clone(), seen.frame.dock.clone(), drawn))
-            })?;
+            },
+            |(_, _, drawn)| *drawn,
+        )?;
         let born = born(fleets(&before), fleets(&after), |fleet| &fleet.id);
         let verdict = Verdict::new()
             .expect("exactly one Fleet was created", born.len() == 1)
@@ -237,8 +240,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         shell.enter(native, sandbox::SECOND_PROJECT)?;
         let before = at_rest(native)?.document;
         native.click(&Target::CREATE_VOYAGE)?;
-        let (after, dock, drawn) =
-            native.observe("a new Voyage in the layout document", |seen| {
+        let (after, dock, drawn) = native.settle(
+            "a new Voyage in the layout document",
+            |seen| {
                 let born = born(voyages(&before), voyages(seen.document), |voyage| {
                     &voyage.id
                 });
@@ -250,7 +254,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                         && voyage.fleets.iter().all(|fleet| tabbed(seen, fleet))
                 });
                 (!born.is_empty()).then(|| (seen.document.clone(), seen.frame.dock.clone(), drawn))
-            })?;
+            },
+            |(_, _, drawn)| *drawn,
+        )?;
         let born = born(voyages(&before), voyages(&after), |voyage| &voyage.id);
         let folder = Path::new(sandbox::SECOND_PROJECT)
             .file_name()
@@ -366,7 +372,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         };
         let before = saved_name(native, &first_voyage)?;
         native.click(&Target::name(&first_voyage))?;
-        at_rest(native)?;
         native.press(Key::Tab)?;
         native.press(Key::F2)?;
         let forward = editors(native, &other.id.0)?;

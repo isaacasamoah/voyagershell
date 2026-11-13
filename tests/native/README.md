@@ -293,7 +293,25 @@ control, never counts. If no value counts when the deadline passes, the
 journey ends `failed`, blamed on the product, and the error names what never
 held still. The `workspace` journey uses `Native::settle` for the draft of
 the rename editor, for the text of a name after a rename, for the editor that
-F2 opens and for the controls that a relaunch draws.
+F2 opens, for what a creation draws and for the controls that a relaunch
+draws.
+
+A glance pairs the layout document with the latest frame, and nothing says
+which document a frame drew. The app saves a change before it draws it. Until
+that draw is published, a glance holds the new document beside a frame from
+before the input, and that frame is still `prepared`. On a loaded machine
+this lasts longer than 150 ms. A wait after an input therefore names what the
+input must draw. Its check gives a value only from a frame that shows that
+result, or its wanted value requires that result. A frame from before the
+input cannot show a control that the input creates, so the wait goes on, and
+every frame value that the case judges comes from the glance that showed the
+result. `create-fleet` and `create-voyage` want the new tab, row and Vessel
+drawn, and they read the dock from that glance.
+Before this rule, `create-fleet` waited only for the new Fleet in the document
+and judged the frame of the first glance that held. On a correct candidate, 2
+of 20 runs on a loaded machine then failed `the new Fleet's tab and Vessel are
+drawn`, on a frame from before the click. A candidate that publishes every
+frame 700 ms late fails the same way on a quiet machine.
 
 A launch ends with `observe`. The header sends no workspace action while a
 workspace request is in progress, so a click on the sidebar toggle during the
