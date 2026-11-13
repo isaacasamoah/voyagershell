@@ -222,6 +222,10 @@ impl Outcomes {
         save(&self.path, &json!({"cases":self.cases,"error":error}))
     }
 
+    fn failed(&self) -> bool {
+        self.cases.iter().any(|case| case.status == Status::Failed)
+    }
+
     fn next(&self) -> Option<usize> {
         self.cases
             .iter()
@@ -233,7 +237,7 @@ impl Outcomes {
             self.interrupted().is_none(),
             "Case {case} ran after an interrupted case"
         );
-        if self.cases.iter().any(|case| case.status == Status::Failed) {
+        if self.failed() {
             return Ok(None);
         }
         match self.next() {
@@ -296,8 +300,12 @@ impl<'a, C: Case> Cases<'a, C> {
         };
         let saved = self.outcomes.save(None);
         finished?;
-        saved?;
-        native.keep_window(&format!("case-{name}"))
+        match saved.and_then(|()| native.keep_window(&format!("case-{name}"))) {
+            Err(error) if self.outcomes.failed() => native
+                .system
+                .record(json!({"event":"unkept","case":name,"error":format!("{error:#}")})),
+            kept => kept,
+        }
     }
 }
 
@@ -465,6 +473,38 @@ mod tests {
         );
         assert_eq!(failure["observed"]["after"], "NATIVE FLEET");
         assert!(!outcomes.passed());
+        Ok(())
+    }
+
+    #[test]
+    fn evidence_that_cannot_be_kept_after_a_failed_case_leaves_the_failure_standing() -> Result<()>
+    {
+        let mut native = crate::native::tests::native()?;
+        let case = scrolling::Case::NormalHistory;
+        let mut check = |name: &str, held: bool| {
+            let mut outcomes = Outcomes::new(JOURNEY, native.system.evidence.join(name));
+            let verdict = Verdict::new().expect("wheel up shows earlier history", held);
+            let checked = Cases::over(&mut outcomes).check(&mut native, case, |_| Ok(verdict));
+            (checked, outcomes)
+        };
+        let (checked, outcomes) = check("failed.json", false);
+        checked?;
+        let failure = outcomes.first_failure().expect("a failed case");
+        assert_eq!(failure["check"], case.name());
+        assert_eq!(failure["blame"], "product");
+        let (checked, outcomes) = check("passed.json", true);
+        let unkept = checked.expect_err("A passed case lost its capture without an error");
+        assert!(format!("{unkept:#}").contains("Missing display connection"));
+        assert_eq!(statuses(&outcomes)[0], format!("{}:passed", case.name()));
+        let ledger = std::fs::read_to_string(native.system.evidence.join("actions.jsonl"))?;
+        let unkept: Vec<_> = ledger
+            .lines()
+            .filter(|line| line.contains(r#""event":"unkept""#))
+            .collect();
+        assert!(
+            matches!(unkept[..], [line] if line.contains("Missing display connection")),
+            "Only the failed case records the capture that it could not keep: {unkept:?}"
+        );
         Ok(())
     }
 

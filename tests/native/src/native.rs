@@ -711,11 +711,11 @@ pub fn quote(value: &Path) -> Result<String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    pub(super) fn native() -> Result<Native> {
+    pub(crate) fn native() -> Result<Native> {
         let evidence =
             std::env::temp_dir().join(format!("vv-diagnose-{}-{}", std::process::id(), stamp()));
         fs::create_dir(&evidence)?;

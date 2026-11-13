@@ -93,7 +93,10 @@ failed case left unknown. A failed or interrupted case therefore ends the
 journey.
 
 After each case the driver saves `observations.json` and a capture of the whole
-window, named `case-CASE-STAMP.png`. Cases run in their declared order, and a
+window, named `case-CASE-STAMP.png`. If the save or the capture fails after a
+case that failed, the driver records the error in `actions.jsonl` as an
+`unkept` event and the failure stands. After a case that passed, the same
+error ends the run as a fixture error. Cases run in their declared order, and a
 case that runs out of order ends the run as a fixture error. If `drive` returns
 without running a declared case although no case failed, the run is
 inconclusive.
@@ -319,6 +322,7 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 | A bound shell died or Core reports another program for its terminal (`Terminal::same_program`), or the candidate quit with a failure status (`Native::close`) | `failed`, blamed on the product |
 | Timeout while the display still answers | `failed`, a hang, blamed on the product |
 | A case's expectation did not hold | `failed`, and `firstFailingCheck` names the case, the expectation and the observed values |
+| The save or the capture after a failed case failed | `failed`. The failed case stands, and `actions.jsonl` holds the error as an `unkept` event |
 | A case returned no expectation, or an observed value could not be recorded | `inconclusive`, blamed on the fixture |
 | `drive` returned without running a declared case although no case failed | `inconclusive` |
 | Owned display exited or stopped answering, a host tool is missing, failed or ran out of time, the sandbox refused, or an unrelated verifier error | `inconclusive` |
