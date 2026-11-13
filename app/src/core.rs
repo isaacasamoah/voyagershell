@@ -16,8 +16,8 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     process::{Child, Command, Stdio},
     sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
         mpsc::{self, SyncSender},
     },
     thread,
@@ -91,6 +91,38 @@ impl Streams {
     }
 }
 
+fn lost(link: &OnceLock<String>, reason: String) {
+    let report = format!("Core bridge disconnected: {reason}");
+    if link.set(reason).is_ok() {
+        eprintln!("{report}");
+    }
+}
+
+fn disconnected(reason: &str, unsent: &str) -> Error {
+    Error::Rejected {
+        kind: "disconnected".into(),
+        message: format!("Core connection ended ({reason}); {unsent}"),
+    }
+}
+
+fn enqueue(
+    link: &OnceLock<String>,
+    queue: &SyncSender<Frame>,
+    frame: Frame,
+    unsent: &str,
+) -> Result<(), Error> {
+    if let Some(reason) = link.get() {
+        return Err(disconnected(reason, unsent));
+    }
+    queue.try_send(frame).map_err(|_| match link.get() {
+        Some(reason) => disconnected(reason, unsent),
+        None => Error::Rejected {
+            kind: "busy".into(),
+            message: format!("Core output queue is full; {unsent}"),
+        },
+    })
+}
+
 #[derive(Clone)]
 pub struct Viewer {
     channel: u32,
@@ -98,7 +130,7 @@ pub struct Viewer {
     streams: Arc<Mutex<Streams>>,
     input: SyncSender<Frame>,
     control: SyncSender<Frame>,
-    connected: Arc<AtomicBool>,
+    link: Arc<OnceLock<String>>,
     input_open: Arc<Mutex<bool>>,
 }
 
@@ -242,7 +274,7 @@ impl Viewer {
     }
 
     pub fn connected(&self) -> bool {
-        self.connected.load(Ordering::Acquire)
+        self.link.get().is_none()
     }
 
     pub fn finished(&self) -> Result<bool, Error> {
@@ -258,16 +290,16 @@ impl Viewer {
     }
 
     fn send(&self, queue: &SyncSender<Frame>, kind: u8, payload: Vec<u8>) -> Result<(), Error> {
-        queue
-            .try_send(Frame {
+        enqueue(
+            &self.link,
+            queue,
+            Frame {
                 channel: self.channel,
                 kind,
                 payload,
-            })
-            .map_err(|_| Error::Rejected {
-                kind: "busy".into(),
-                message: "Core output queue is unavailable; frame was not queued".into(),
-            })
+            },
+            "frame was not queued",
+        )
     }
 }
 
@@ -279,7 +311,7 @@ pub struct Core {
     replies: Replies,
     streams: Arc<Mutex<Streams>>,
     attaching: Arc<AtomicU64>,
-    connected: Arc<AtomicBool>,
+    link: Arc<OnceLock<String>>,
     input_open: Arc<Mutex<bool>>,
     sequence: u64,
     activity: Arc<Mutex<Activity>>,
@@ -399,31 +431,34 @@ impl Core {
         let replies = Replies::default();
         let streams = Arc::new(Mutex::new(Streams::default()));
         let attaching = Arc::new(AtomicU64::new(0));
-        let connected = Arc::new(AtomicBool::new(true));
-        let writer_alive = connected.clone();
+        let link: Arc<OnceLock<String>> = Arc::default();
+        let writer_link = link.clone();
         let writer_streams = streams.clone();
         let writer_activity = activity.clone();
         let writer_replies = replies.clone();
         thread::spawn(move || {
-            while writer_alive.load(Ordering::Acquire) {
+            let reason = loop {
+                if let Some(reason) = writer_link.get() {
+                    break reason.clone();
+                }
                 let frame = match controls.try_recv() {
                     Ok(frame) => frame,
                     Err(_) => match inputs.recv_timeout(Duration::from_millis(5)) {
                         Ok(frame) => frame,
                         Err(mpsc::RecvTimeoutError::Timeout) => continue,
-                        Err(_) => break,
+                        Err(_) => break "Core input queue closed".into(),
                     },
                 };
-                if Self::write_frame(&frame, &mut input).is_err() {
-                    break;
+                if let Err(error) = Self::write_frame(&frame, &mut input) {
+                    break format!("write failed: {:?}", error.kind());
                 }
                 if let Ok(frame) = inputs.try_recv()
-                    && Self::write_frame(&frame, &mut input).is_err()
+                    && let Err(error) = Self::write_frame(&frame, &mut input)
                 {
-                    break;
+                    break format!("write failed: {:?}", error.kind());
                 }
-            }
-            writer_alive.store(false, Ordering::Release);
+            };
+            lost(&writer_link, reason);
             if let Ok(mut replies) = writer_replies.lock() {
                 replies.clear();
             }
@@ -439,13 +474,17 @@ impl Core {
         let reader_streams = streams.clone();
         let reader_replies = replies.clone();
         let reader_attaching = attaching.clone();
-        let reader_alive = connected.clone();
+        let reader_link = link.clone();
         let reader_activity = activity.clone();
         let reader_control = control.clone();
         thread::spawn(move || {
-            while reader_alive.load(Ordering::Acquire) {
-                let Ok(frame) = Frame::read_from(&mut output) else {
-                    break;
+            let reason = loop {
+                if let Some(reason) = reader_link.get() {
+                    break reason.clone();
+                }
+                let frame = match Frame::read_from(&mut output) {
+                    Ok(frame) => frame,
+                    Err(error) => break format!("read failed: {:?}", error.kind()),
                 };
                 let terminal_channel = reader_streams
                     .lock()
@@ -457,13 +496,13 @@ impl Core {
                 }
                 if frame.channel == 0 && frame.kind == 0 {
                     let Ok(message) = serde_json::from_slice::<Value>(&frame.payload) else {
-                        break;
+                        break "Core sent an invalid reply".into();
                     };
                     let Some(id) = message.get("id").and_then(Value::as_u64) else {
                         continue;
                     };
                     let Ok(mut replies) = reader_replies.lock() else {
-                        break;
+                        break "internal lock failed".into();
                     };
                     let Some(reply) = replies.remove(&id) else {
                         continue;
@@ -476,12 +515,12 @@ impl Core {
                             .and_then(|id| u32::try_from(id).ok())
                     {
                         let Ok(mut streams) = reader_streams.lock() else {
-                            break;
+                            break "internal lock failed".into();
                         };
                         if channel == 0
                             || streams.buffers.insert(channel, Stream::default()).is_some()
                         {
-                            break;
+                            break "Core attached an invalid channel".into();
                         }
                     }
                     let _ = reply.try_send(message);
@@ -494,16 +533,19 @@ impl Core {
                         );
                     }
                     let Ok(mut streams) = reader_streams.lock() else {
-                        break;
+                        break "internal lock failed".into();
                     };
                     if streams.total + frame.payload.len() > TOTAL_LIMIT {
-                        break;
+                        break "buffered output exceeded 16 MiB".into();
                     }
                     let Some(buffer) = streams.buffers.get_mut(&frame.channel) else {
                         continue;
                     };
-                    if buffer.closed || buffer.bytes.len() + frame.payload.len() > VIEW_LIMIT {
-                        break;
+                    if buffer.closed {
+                        break "Core sent output after close".into();
+                    }
+                    if buffer.bytes.len() + frame.payload.len() > VIEW_LIMIT {
+                        break "viewer output exceeded 1 MiB".into();
                     }
                     let count = frame.payload.len();
                     buffer.bytes.extend(frame.payload);
@@ -517,8 +559,8 @@ impl Core {
                     buffer.closed = true;
                     let _ = buffer.wake.try_send(());
                 }
-            }
-            reader_alive.store(false, Ordering::Release);
+            };
+            lost(&reader_link, reason);
             if let Ok(mut replies) = reader_replies.lock() {
                 replies.clear();
             }
@@ -539,7 +581,7 @@ impl Core {
             replies,
             streams,
             attaching,
-            connected,
+            link,
             input_open: Arc::new(Mutex::new(true)),
             sequence: 1,
             activity,
@@ -610,7 +652,7 @@ impl Core {
     }
 
     pub(crate) fn refresh_activity(&mut self) {
-        if !self.activity_supported || !self.connected.load(Ordering::Acquire) {
+        if !self.activity_supported || self.link.get().is_some() {
             if let Ok(mut activity) = self.activity.lock() {
                 activity.fail("Activity subscription is unavailable");
             }
@@ -931,7 +973,7 @@ impl Core {
                 "Core did not confirm session shutdown".into(),
             ));
         }
-        self.connected.store(false, Ordering::Release);
+        let _ = self.link.set("Voyager stopped the Core session".into());
         if self.child.try_wait()?.is_none() {
             self.child.kill()?;
         }
@@ -978,21 +1020,20 @@ impl Core {
                 message: "Core request exceeds 1 MiB".into(),
             });
         }
-        let pending =
-            Pending::register(id, method, &self.replies, &self.attaching, &self.connected)?;
+        let pending = Pending::register(id, method, &self.replies, &self.attaching, &self.link)?;
         if method == "terminal.attach" {
             self.attaching.store(id, Ordering::Release);
         }
-        self.control
-            .try_send(Frame {
+        enqueue(
+            &self.link,
+            &self.control,
+            Frame {
                 channel: 0,
                 kind: 0,
                 payload: bytes,
-            })
-            .map_err(|_| Error::Rejected {
-                kind: "busy".into(),
-                message: "Core control queue unavailable; request was not queued".into(),
-            })?;
+            },
+            "request was not queued",
+        )?;
         Ok(pending)
     }
 
@@ -1120,13 +1161,13 @@ impl Core {
             streams: self.streams.clone(),
             input: self.input.clone(),
             control: self.control.clone(),
-            connected: self.connected.clone(),
+            link: self.link.clone(),
             input_open: self.input_open.clone(),
         })
     }
 
     pub fn close(mut self) -> Result<(), Error> {
-        self.connected.store(false, Ordering::Release);
+        let _ = self.link.set("Voyager closed the Core connection".into());
         if self.child.try_wait()?.is_none() {
             self.child.kill()?;
         }
@@ -1137,7 +1178,7 @@ impl Core {
 
 impl Drop for Core {
     fn drop(&mut self) {
-        self.connected.store(false, Ordering::Release);
+        let _ = self.link.set("Voyager closed the Core connection".into());
         if let Ok(mut replies) = self.replies.lock() {
             replies.clear();
         }
@@ -1293,7 +1334,7 @@ mod adapter_tests {
             replies,
             streams: Arc::new(Mutex::new(streams)),
             attaching: Arc::default(),
-            connected: Arc::new(AtomicBool::new(true)),
+            link: Arc::default(),
             input_open: Arc::new(Mutex::new(true)),
             sequence: 1,
             activity: Arc::default(),
@@ -1412,7 +1453,7 @@ mod adapter_tests {
                 replies,
                 streams: Arc::default(),
                 attaching: Arc::default(),
-                connected: Arc::new(AtomicBool::new(true)),
+                link: Arc::default(),
                 input_open: Arc::new(Mutex::new(true)),
                 sequence: 1,
                 activity: Arc::default(),
@@ -1489,7 +1530,7 @@ mod adapter_tests {
 #[cfg(test)]
 mod resize_tests {
     use super::{Streams, Viewer};
-    use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
+    use std::sync::{Arc, Mutex, mpsc};
 
     #[test]
     fn viewer_queues_core_size_and_display_facts_on_its_channel() {
@@ -1501,7 +1542,7 @@ mod resize_tests {
             streams: Arc::new(Mutex::new(Streams::default())),
             input,
             control,
-            connected: Arc::new(AtomicBool::new(true)),
+            link: Arc::default(),
             input_open: Arc::new(Mutex::new(true)),
         };
         viewer.resize(120, 38).unwrap();

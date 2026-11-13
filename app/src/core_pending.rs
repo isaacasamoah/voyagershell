@@ -1,12 +1,12 @@
-use super::{Core, Error};
+use super::{Core, Error, disconnected};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::{
     collections::HashMap,
     marker::PhantomData,
     sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
         mpsc::{self, Receiver, SyncSender},
     },
     time::{Duration, Instant},
@@ -31,17 +31,19 @@ impl<R: DeserializeOwned> Pending<R> {
         method: &'static str,
         replies: &Replies,
         attaching: &Arc<AtomicU64>,
-        connected: &AtomicBool,
+        link: &OnceLock<String>,
     ) -> Result<Self, Error> {
         let (sender, receiver) = mpsc::sync_channel(1);
         let mut waiting = replies
             .lock()
             .map_err(|error| Error::Uncertain(error.to_string()))?;
-        if !connected.load(Ordering::Acquire) || waiting.len() >= 9 {
+        if let Some(reason) = link.get() {
+            return Err(disconnected(reason, "nothing was queued"));
+        }
+        if waiting.len() >= 9 {
             return Err(Error::Rejected {
                 kind: "busy".into(),
-                message: "Core connection unavailable or request limit reached; nothing was queued"
-                    .into(),
+                message: "Core request limit reached; nothing was queued".into(),
             });
         }
         waiting.insert(id, sender);
@@ -94,11 +96,11 @@ mod tests {
     fn pending_results_are_bounded_and_cleanup_only_their_own_identity() {
         let replies = Replies::default();
         let attaching = Arc::default();
-        let connected = AtomicBool::new(true);
+        let link = OnceLock::new();
         let register =
-            |id| Pending::<Value>::register(id, "terminal.send", &replies, &attaching, &connected);
+            |id| Pending::<Value>::register(id, "terminal.send", &replies, &attaching, &link);
         let mut pending = (1..=9).map(|id| register(id).unwrap()).collect::<Vec<_>>();
-        assert!(matches!(register(10), Err(Error::Rejected { .. })));
+        assert!(matches!(register(10), Err(Error::Rejected { kind, .. }) if kind == "busy"));
         drop(pending.remove(0));
         assert!(!replies.lock().unwrap().contains_key(&1));
         assert_eq!(replies.lock().unwrap().len(), 8);
@@ -114,7 +116,9 @@ mod tests {
         let abandoned = pending.remove(0);
         replies.lock().unwrap().clear();
         assert!(matches!(abandoned.wait(), Err(Error::Uncertain(_))));
-        connected.store(false, Ordering::Release);
-        assert!(matches!(register(11), Err(Error::Rejected { .. })));
+        link.set("read failed".into()).unwrap();
+        assert!(
+            matches!(register(11), Err(Error::Rejected { kind, .. }) if kind == "disconnected")
+        );
     }
 }
