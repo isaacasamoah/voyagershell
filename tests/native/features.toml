@@ -8,7 +8,7 @@ platforms = ["linux"]
 python = ["workspace", "placement", "demo-feedback"]
 behavior = "covered"
 performance = "none"
-visual = "python-only"
+visual = "none"
 debug = "covered"
 
 [[feature]]

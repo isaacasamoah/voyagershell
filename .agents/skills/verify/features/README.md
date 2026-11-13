@@ -8,7 +8,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 <!-- features:begin -->
 | Feature | Behavior | Performance | Visual | Debug | Native journeys | Python journeys | Platforms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Voyages | covered | none | python-only | covered | workspace | workspace, placement, demo-feedback | linux |
+| Voyages | covered | none | none | covered | workspace | workspace, placement, demo-feedback | linux |
 | Fleets | covered | none | none | covered | workspace | workspace | linux |
 | Fleet arrangement | python-only | none | python-only | python-only | - | layouts, arrangement | linux |
 | Vessels | covered | none | none | covered | workspace | workspace | linux |
