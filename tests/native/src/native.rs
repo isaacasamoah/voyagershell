@@ -875,24 +875,45 @@ pub fn quote(value: &Path) -> Result<String> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::scratch::Scratch;
     use std::collections::BTreeMap;
+    use std::ops::{Deref, DerefMut};
 
-    pub(crate) fn native() -> Result<Native> {
-        let evidence =
-            std::env::temp_dir().join(format!("vv-diagnose-{}-{}", std::process::id(), stamp()));
-        fs::create_dir(&evidence)?;
-        let system = System::with_env(evidence, "voyager-verify-test".into(), BTreeMap::new());
-        let sleep = fs::canonicalize("/bin/sleep")?;
-        let pinned = Pinned::check(&sleep, &digest(&sleep)?)?;
-        Ok(Native::new(
-            system,
-            pinned.clone(),
-            pinned,
-            Surface::default(),
-        ))
+    pub(crate) struct TestNative {
+        native: Native,
+        _scratch: Scratch,
     }
 
-    pub(crate) fn stopped() -> Result<Native> {
+    impl Deref for TestNative {
+        type Target = Native;
+
+        fn deref(&self) -> &Native {
+            &self.native
+        }
+    }
+
+    impl DerefMut for TestNative {
+        fn deref_mut(&mut self) -> &mut Native {
+            &mut self.native
+        }
+    }
+
+    pub(crate) fn native() -> Result<TestNative> {
+        let scratch = Scratch::new("diagnose")?;
+        let system = System::with_env(
+            scratch.path().to_owned(),
+            "voyager-verify-test".into(),
+            BTreeMap::new(),
+        );
+        let sleep = fs::canonicalize("/bin/sleep")?;
+        let pinned = Pinned::check(&sleep, &digest(&sleep)?)?;
+        Ok(TestNative {
+            native: Native::new(system, pinned.clone(), pinned, Surface::default()),
+            _scratch: scratch,
+        })
+    }
+
+    pub(crate) fn stopped() -> Result<TestNative> {
         let mut native = native()?;
         let viewer = native.system.spawn(
             Path::new("/usr/bin/tail"),
@@ -1069,8 +1090,9 @@ pub(crate) mod tests {
 
     #[test]
     fn cleanup_stops_a_display_that_lost_its_first_signal() -> Result<()> {
+        let display = Scratch::new("display")?;
         let mut native = native()?;
-        native.display = Some(crate::system::tests::deaf("display", "trap - TERM")?);
+        native.display = Some(crate::system::tests::deaf(&display, "trap - TERM")?);
         let errors = native.cleanup(false);
         ensure!(errors.is_empty(), "The cleanup failed: {errors:?}");
         assert_eq!(

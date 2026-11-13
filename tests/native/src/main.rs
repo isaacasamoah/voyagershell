@@ -7,6 +7,8 @@ mod native;
 mod probe;
 mod proof;
 mod sandbox;
+#[cfg(test)]
+mod scratch;
 mod system;
 mod x11;
 
