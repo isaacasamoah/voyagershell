@@ -1,11 +1,10 @@
-use super::Native;
+use super::{GLANCE, Native};
 use crate::inspection::{Target, Unseen, clear_of, contains, region};
-use crate::system::PATIENCE;
+use crate::system::{PATIENCE, poll};
 use crate::x11::{Chord, Geometry};
 use anyhow::{Result, anyhow, ensure};
 use serde::Serialize;
 use serde_json::json;
-use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -100,22 +99,23 @@ impl Native {
 
     fn reach(&self, target: &Target) -> Result<Aim> {
         let x11 = self.x11()?;
-        let deadline = Instant::now() + PATIENCE;
-        loop {
+        poll(PATIENCE, GLANCE, true, || {
             let aim = self.spot(target)?;
             let (x, y) = self.on_screen(target, aim)?;
             self.system.act(
                 json!({"input":"move","target":target,"aim":aim,"at":[x,y]}),
                 || x11.move_to(x, y),
             )?;
-            if self.spot(target)?.still_under(aim.at) {
+            let found = self.spot(target)?;
+            if found.still_under(aim.at) {
                 self.pointer()?;
-                return Ok(aim);
+                return Ok(Some(aim));
             }
-            if Instant::now() >= deadline {
-                return Err(Unseen(format!("{target} holding still under the pointer")).into());
-            }
-        }
+            self.system
+                .record(json!({"event":"re-aim","target":target,"aimed":aim,"found":found}))?;
+            Ok(None)
+        })?
+        .ok_or_else(|| Unseen(format!("{target} holding still under the pointer")).into())
     }
 
     fn on_screen(&self, target: &Target, aim: Aim) -> Result<(i16, i16)> {
