@@ -570,6 +570,47 @@ function observeRust(snapshot, graph, crates) {
   }
 }
 
+function observeScripts(snapshot, graph) {
+  const ts = require(
+    require.resolve("typescript", {
+      paths: [snapshot.repository, __dirname, process.cwd()],
+    }),
+  );
+  const files = ["desktop/mods", "content"]
+    .flatMap((root) => snapshot.files(`${root}/**/*.ts`))
+    .filter((file) => !file.endsWith(".d.ts"));
+  const scanned = new Set(files);
+  for (const file of files) graph.node(`ts:${file}`, { kind: "script", file });
+  for (const file of files) {
+    const text = snapshot.read(file);
+    for (const imported of ts.preProcessFile(text, true, true).importedFiles) {
+      if (!imported.fileName.startsWith(".")) continue;
+      const base = relative(file, imported.fileName).replace(/\.js$/, "");
+      const target = [`${base}.ts`, `${base}/index.ts`].find((candidate) =>
+        scanned.has(candidate),
+      );
+      if (!target) continue;
+      const line = text.slice(0, imported.pos).split("\n").length;
+      graph.edge(
+        "imports",
+        `ts:${file}`,
+        `ts:${target}`,
+        graph.evidence(file, line),
+      );
+    }
+  }
+}
+
+function observeSizes(snapshot) {
+  const sizes = {};
+  for (const file of snapshot.blobs.keys()) {
+    if (!/\.(rs|ts|js|cjs)$/.test(file)) continue;
+    const text = snapshot.read(file);
+    sizes[file] = text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
+  }
+  return sizes;
+}
+
 function readPath(bare, start) {
   const results = [];
   const walk = (position, prefix) => {
@@ -612,6 +653,7 @@ function observe(repository, revision) {
     const graph = new Graph(snapshot);
     const crates = observeCargo(snapshot, graph);
     observeRust(snapshot, graph, crates);
+    observeScripts(snapshot, graph);
     for (const edge of graph.edges.values()) {
       for (const end of [edge.from, edge.to]) {
         if (!graph.nodes.has(end))
@@ -638,6 +680,7 @@ function observe(repository, revision) {
       nodes: order(graph.nodes.values()).map(tidy),
       edges: order(graph.edges.values()).map(tidy),
       unresolved: order(graph.unresolved.values()),
+      sizes: observeSizes(snapshot),
       lock: snapshot.has("Cargo.lock") ? snapshot.read("Cargo.lock") : "",
     };
   } finally {

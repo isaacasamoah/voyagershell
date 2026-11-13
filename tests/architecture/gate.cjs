@@ -43,12 +43,16 @@ function topModule(id) {
   return parts.length < 2 ? null : `rs:${parts[0]}::${parts[1]}`;
 }
 
-function cycles(edges) {
+const UNIT = { uses: topModule, imports: (id) => id };
+
+function cycles(edges, kind) {
+  const unit = UNIT[kind];
+  if (!unit) throw new Error(`No cycle unit for edge kind ${kind}`);
   const graph = new Map();
   for (const edge of edges) {
-    if (edge.kind !== "uses") continue;
-    const from = topModule(edge.from);
-    const to = topModule(edge.to);
+    if (edge.kind !== kind) continue;
+    const from = unit(edge.from);
+    const to = unit(edge.to);
     if (!from || !to || from === to) continue;
     if (!graph.has(from)) graph.set(from, new Set());
     graph.get(from).add(to);
@@ -119,10 +123,30 @@ function violations(rule, facts) {
     }));
   }
   if (rule.check === "acyclic") {
-    return cycles(facts.edges).map((members) => ({
+    return cycles(facts.edges, rule.kind).map((members) => ({
       id: `${rule.id}: ${members.join(" <-> ")}`,
       at: null,
     }));
+  }
+  if (rule.check === "max_lines") {
+    const inside = matcher(rule.roots);
+    const outside = matcher(rule.exclude);
+    return Object.entries(facts.sizes)
+      .filter(
+        ([file, count]) =>
+          count > rule.limit &&
+          inside(file) &&
+          !outside(file) &&
+          !(
+            file.endsWith(".js") && file.replace(/\.js$/, ".ts") in facts.sizes
+          ),
+      )
+      .map(([file, count]) => ({
+        id: `${rule.id}: ${file}`,
+        at: file,
+        count,
+        limit: rule.limit,
+      }));
   }
   throw new Error(`Rule ${rule.id} has unknown check ${rule.check}`);
 }
@@ -144,19 +168,42 @@ function gate({
       );
   const found = new Map();
   for (const rule of ruleList)
-    for (const item of violations(rule, facts)) found.set(item.id, item.at);
-  const accepted = new Set(entries.map((entry) => entry.id));
-  const fresh = [...found.keys()].filter((id) => !accepted.has(id)).sort();
-  const stale = [...accepted].filter((id) => !found.has(id)).sort();
+    for (const item of violations(rule, facts)) found.set(item.id, item);
+  const recorded = new Map(entries.map((entry) => [entry.id, entry]));
+  const fresh = [];
+  const stale = [];
+  for (const [id, item] of [...found].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    const entry = recorded.get(id);
+    const where = item.at ? ` (${item.at})` : "";
+    if (!entry) {
+      fresh.push(
+        item.count === undefined
+          ? `NEW ${id}${where}`
+          : `NEW ${id} has ${item.count} lines, over the limit of ${item.limit}`,
+      );
+    } else if (item.count !== undefined) {
+      if (typeof entry.limit !== "number")
+        throw new Error(`Known size violation needs a numeric limit: ${id}`);
+      if (item.count > entry.limit)
+        fresh.push(
+          `NEW ${id} has ${item.count} lines, over its recorded limit of ${entry.limit}`,
+        );
+      else if (item.count < entry.limit)
+        stale.push(
+          `STALE ${id} has ${item.count} lines, lower its recorded limit from ${entry.limit} to ${item.count} in known-violations.yaml`,
+        );
+    }
+  }
+  for (const id of [...recorded.keys()].sort())
+    if (!found.has(id))
+      stale.push(
+        `STALE ${id} (no longer found, remove it from known-violations.yaml)`,
+      );
   const lines = [
-    `architecture gate: ${ruleList.length} rules, ${found.size} violations, ${found.size - fresh.length} known`,
+    `architecture gate: ${ruleList.length} rules, ${found.size} violations, ${[...found.keys()].filter((id) => recorded.has(id)).length} known`,
+    ...fresh,
+    ...stale,
   ];
-  for (const id of fresh)
-    lines.push(`NEW ${id}${found.get(id) ? ` (${found.get(id)})` : ""}`);
-  for (const id of stale)
-    lines.push(
-      `STALE ${id} (no longer found, remove it from known-violations.yaml)`,
-    );
   lines.push(fresh.length || stale.length ? "FAIL" : "PASS");
   return {
     report: `${lines.join("\n")}\n`,
