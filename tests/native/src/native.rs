@@ -1,18 +1,19 @@
+use crate::sandbox;
 use crate::system::{
-    Identity, Owned, System, digest, interrupted, save, stamp, until, until_cleanup,
+    Identity, Owned, Pinned, System, digest, interrupted, save, stamp, until, until_cleanup,
 };
 use anyhow::{Context, Result, ensure};
 use image::GenericImageView;
 use serde_json::{Value, json};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
 pub struct Native {
     pub system: System,
-    pub binary: PathBuf,
-    pub expected: String,
+    pub candidate: Pinned,
+    pub hc: Pinned,
     display: Option<Owned>,
     viewer: Option<Owned>,
     core: Option<Identity>,
@@ -23,11 +24,11 @@ pub struct Native {
 }
 
 impl Native {
-    pub fn new(system: System, binary: PathBuf, expected: String) -> Self {
+    pub fn new(system: System, candidate: Pinned, hc: Pinned) -> Self {
         Self {
             system,
-            binary,
-            expected,
+            candidate,
+            hc,
             display: None,
             viewer: None,
             core: None,
@@ -39,18 +40,13 @@ impl Native {
     }
 
     pub fn prepare(&mut self) -> Result<()> {
-        let number = (200..1000)
-            .find(|n| {
-                !Path::new(&format!("/tmp/.X{n}-lock")).exists()
-                    && !Path::new(&format!("/tmp/.X11-unix/X{n}")).exists()
-            })
-            .context("No unused isolated display")?;
-        let display = format!(":{number}");
-        self.system.env.insert("DISPLAY".into(), display.clone());
+        self.system
+            .env
+            .insert("DISPLAY".into(), sandbox::DISPLAY.into());
         self.display = Some(self.system.spawn(
             Path::new("Xvfb"),
             &[
-                &display,
+                sandbox::DISPLAY,
                 "-screen",
                 "0",
                 "3000x2000x24",
@@ -106,13 +102,11 @@ impl Native {
             self.viewer.is_none(),
             "Existing viewer must close before reattachment"
         );
-        ensure!(
-            digest(&self.binary)? == self.expected,
-            "Candidate changed before launch"
-        );
+        self.candidate.verify()?;
+        self.hc.verify()?;
         let profile = self.system.evidence.join("profile");
         let viewer = self.system.spawn(
-            &self.binary,
+            &self.candidate.path,
             &[
                 "--profile",
                 profile.to_str().context("Invalid profile path")?,
@@ -152,7 +146,7 @@ impl Native {
         self.verify()?;
         save(
             self.system.evidence.join("launch.json"),
-            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.binary,"sha256":self.expected,"display":self.system.env["DISPLAY"]}),
+            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"display":self.system.env["DISPLAY"]}),
         )?;
         Ok(())
     }

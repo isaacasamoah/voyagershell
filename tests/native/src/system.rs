@@ -1,5 +1,6 @@
+use crate::sandbox;
 use anyhow::{Context, Result, bail, ensure};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -152,66 +153,41 @@ impl Drop for Owned {
 
 pub struct System {
     pub evidence: PathBuf,
-    pub scratch: PathBuf,
     pub session: String,
     pub env: BTreeMap<String, String>,
 }
 
 impl System {
-    pub fn new(evidence: PathBuf) -> Result<Self> {
-        ensure!(evidence.is_absolute(), "Evidence path must be absolute");
-        fs::create_dir(&evidence)
-            .context("Evidence must be a new directory with an existing parent")?;
-        fs::set_permissions(&evidence, fs::Permissions::from_mode(0o700))?;
-        let scratch = PathBuf::from(format!(
-            "/tmp/vv-{}-{:08x}",
-            std::process::id(),
-            stamp() as u32
-        ));
-        fs::create_dir(&scratch)?;
-        fs::set_permissions(&scratch, fs::Permissions::from_mode(0o700))?;
-        let mut env: BTreeMap<_, _> = std::env::vars()
-            .filter(|(key, _)| {
-                !key.starts_with("HC_")
-                    && !key.starts_with("VOYAGER_")
-                    && !["DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"].contains(&key.as_str())
-            })
-            .collect();
-        for (key, folder) in [
-            ("XDG_RUNTIME_DIR", "r"),
-            ("XDG_STATE_HOME", "s"),
-            ("XDG_CONFIG_HOME", "c"),
-            ("XDG_DATA_HOME", "d"),
-        ] {
-            fs::create_dir(scratch.join(folder))?;
-            fs::set_permissions(scratch.join(folder), fs::Permissions::from_mode(0o700))?;
-            env.insert(key.into(), scratch.join(folder).display().to_string());
-        }
-        let session = format!(
-            "voyager-verify-{}-{:08x}",
-            std::process::id(),
-            stamp() as u32
-        );
-        env.insert("HC_SESSION".into(), session.clone());
-        env.insert(
-            "HC_SOCKET".into(),
-            scratch
-                .join("r/herdr-core")
-                .join(format!("{session}.sock"))
-                .display()
-                .to_string(),
-        );
+    pub fn new(evidence: PathBuf, session: String) -> Result<Self> {
         ensure!(
-            env["HC_SOCKET"].len() + 20 <= 107,
+            Path::new(sandbox::RUNTIME).is_dir(),
+            "The driver runs only inside the verification sandbox"
+        );
+        let mut system = Self {
+            evidence,
+            session,
+            env: sandbox::ENVIRONMENT
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect(),
+        };
+        let socket = sandbox::text(&system.socket())?;
+        ensure!(
+            socket.len() + 20 <= 107,
             "Private Core socket namespace is too long"
         );
-        env.insert("LIBGL_ALWAYS_SOFTWARE".into(), "1".into());
-        Ok(Self {
-            evidence,
-            scratch,
-            session,
-            env,
-        })
+        for (key, value) in [
+            (
+                "DBUS_SESSION_BUS_ADDRESS",
+                std::env::var("DBUS_SESSION_BUS_ADDRESS")
+                    .context("Missing private D-Bus session")?,
+            ),
+            ("HC_SESSION", system.session.clone()),
+            ("HC_SOCKET", socket),
+        ] {
+            system.env.insert(key.into(), value);
+        }
+        Ok(system)
     }
 
     pub fn record(&self, value: Value) -> Result<()> {
@@ -294,8 +270,8 @@ impl System {
     }
 
     pub fn socket(&self) -> PathBuf {
-        self.scratch
-            .join("r/herdr-core")
+        Path::new(sandbox::RUNTIME)
+            .join("herdr-core")
             .join(format!("{}.sock", self.session))
     }
 
@@ -336,45 +312,69 @@ impl System {
     }
 }
 
-pub fn doctor(binary: &Path, expected: &str) -> Result<Value> {
-    ensure!(
-        expected.len() == 64 && expected.bytes().all(|b| b.is_ascii_hexdigit()),
-        "Expected SHA256 must contain 64 hexadecimal digits"
-    );
-    let binary = fs::canonicalize(binary)?;
-    ensure!(
-        fs::metadata(&binary)?.permissions().mode() & 0o111 != 0,
-        "Candidate is not executable"
-    );
-    let hash = digest(&binary)?;
-    ensure!(
-        hash == expected.to_ascii_lowercase(),
-        "Candidate SHA256 disagrees with expected artifact"
-    );
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Pinned {
+    pub path: PathBuf,
+    pub sha256: String,
+}
+
+impl Pinned {
+    pub fn check(path: &Path, expected: &str) -> Result<Self> {
+        ensure!(
+            expected.len() == 64 && expected.bytes().all(|b| b.is_ascii_hexdigit()),
+            "Expected SHA256 must contain 64 hexadecimal digits"
+        );
+        let pinned = Self {
+            path: fs::canonicalize(path)?,
+            sha256: expected.to_ascii_lowercase(),
+        };
+        ensure!(executable(&pinned.path), "Artifact is not executable");
+        pinned.verify()?;
+        Ok(pinned)
+    }
+
+    pub fn verify(&self) -> Result<()> {
+        ensure!(
+            digest(&self.path)? == self.sha256,
+            "SHA256 disagrees with the expected artifact: {}",
+            self.path.display()
+        );
+        Ok(())
+    }
+}
+
+fn executable(path: &Path) -> bool {
+    fs::metadata(path).is_ok_and(|found| found.is_file() && found.permissions().mode() & 0o111 != 0)
+}
+
+pub fn installed(name: &str) -> Result<PathBuf> {
+    std::env::split_paths(&std::env::var_os("PATH").context("Missing PATH")?)
+        .map(|folder| folder.join(name))
+        .find(|path| executable(path))
+        .with_context(|| format!("Required tool is missing: {name}"))
+}
+
+pub const LIMITS: [&str; 1] =
+    ["No physical touchpad, IME, real compositor latency or actual Codex proof"];
+
+pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
     let mut tools = BTreeMap::new();
     for name in [
+        "bwrap",
         "timeout",
         "dbus-run-session",
         "Xvfb",
         "xdotool",
         "import",
         "xrdb",
-        "hc",
+        "bash",
     ] {
-        let path = std::env::split_paths(&std::env::var_os("PATH").context("Missing PATH")?)
-            .map(|folder| folder.join(name))
-            .find(|p| {
-                fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-            });
-        match path {
-            Some(path) => {
-                tools.insert(name, fs::canonicalize(path)?);
-            }
-            None => bail!("Required tool is missing: {name}"),
-        }
+        let path = Path::new("/usr/bin").join(name);
+        ensure!(executable(&path), "Required tool is missing: {name}");
+        tools.insert(name, fs::canonicalize(path)?);
     }
     Ok(
-        json!({"schema":1,"surface":"owned Linux X11","binary":binary,"sha256":hash,"tools":tools,"limits":["No physical touchpad, IME, real compositor latency or actual Codex proof"]}),
+        json!({"schema":2,"surface":"owned Linux X11 in a private namespace","binary":candidate.path,"sha256":candidate.sha256,"hc":core.path,"hcSha256":core.sha256,"tools":tools,"limits":LIMITS}),
     )
 }
 
@@ -382,6 +382,19 @@ pub fn doctor(binary: &Path, expected: &str) -> Result<Value> {
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn pinned_artifact_refuses_another_hash() -> Result<()> {
+        let tool = fs::canonicalize("/bin/sleep")?;
+        let hash = digest(&tool)?;
+        Pinned::check(&tool, &hash)?;
+        let other = hash.replace(|digit: char| digit != '0', "0");
+        ensure!(
+            Pinned::check(&tool, &other).is_err(),
+            "A different artifact was accepted"
+        );
+        Ok(())
+    }
 
     fn children() -> Result<BTreeSet<u32>> {
         let mut result = BTreeSet::new();
@@ -398,21 +411,25 @@ mod tests {
 
     #[test]
     fn failed_spawn_record_does_not_leave_a_child() -> Result<()> {
-        let path =
+        let evidence =
             std::env::temp_dir().join(format!("vv-log-failure-{}-{}", std::process::id(), stamp()));
-        let system = System::new(path)?;
+        fs::create_dir(&evidence)?;
+        let system = System {
+            evidence,
+            session: "voyager-verify-test".into(),
+            env: BTreeMap::new(),
+        };
         fs::create_dir(system.evidence.join("actions.jsonl"))?;
         let before = children()?;
         let result = system.spawn(Path::new("/bin/sleep"), &["30"], "spawn.log");
         let after = children()?;
-        let leaked: Vec<_> = after.difference(&before).copied().collect();
+        let sleep = fs::canonicalize("/bin/sleep")?;
+        let leaked: Vec<_> = after
+            .difference(&before)
+            .copied()
+            .filter(|pid| Identity::read(*pid).is_ok_and(|child| child.executable == sleep))
+            .collect();
         for &pid in &leaked {
-            let identity = Identity::read(pid)?;
-            ensure!(
-                identity.executable == fs::canonicalize("/bin/sleep")?,
-                "Unexpected test child"
-            );
-            identity.verify()?;
             let pid =
                 rustix::process::Pid::from_raw(i32::try_from(pid)?).context("Invalid test PID")?;
             rustix::process::kill_process(pid, rustix::process::Signal::TERM)?;
