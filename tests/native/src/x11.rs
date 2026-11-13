@@ -216,6 +216,16 @@ impl Display {
         })
     }
 
+    pub fn place(&self, window: Window, x: i16, y: i16) -> Result<()> {
+        self.connection
+            .configure_window(
+                window,
+                &ConfigureWindowAux::new().x(i32::from(x)).y(i32::from(y)),
+            )?
+            .check()?;
+        Ok(())
+    }
+
     pub fn resize(&self, window: Window, width: u16, height: u16) -> Result<()> {
         self.connection
             .configure_window(
@@ -299,17 +309,18 @@ impl Display {
         })
     }
 
-    pub fn screen(&self) -> Result<Pixels> {
+    pub fn extent(&self) -> Result<Geometry> {
         let size = self.connection.get_geometry(self.root)?.reply()?;
-        self.capture(
-            self.root,
-            Geometry {
-                x: 0,
-                y: 0,
-                width: size.width,
-                height: size.height,
-            },
-        )
+        Ok(Geometry {
+            x: 0,
+            y: 0,
+            width: size.width,
+            height: size.height,
+        })
+    }
+
+    pub fn screen(&self) -> Result<Pixels> {
+        self.capture(self.root, self.extent()?)
     }
 
     fn code(&self, symbol: u32) -> Result<(u8, bool)> {

@@ -103,8 +103,7 @@ impl Native {
         let deadline = Instant::now() + PATIENCE;
         loop {
             let aim = self.spot(target)?;
-            let window = x11.geometry(self.window)?;
-            let (x, y) = (window.x + aim.at.0, window.y + aim.at.1);
+            let (x, y) = self.on_screen(target, aim)?;
             self.system.act(
                 json!({"input":"move","target":target,"aim":aim,"at":[x,y]}),
                 || x11.move_to(x, y),
@@ -117,6 +116,17 @@ impl Native {
                 return Err(Unseen(format!("{target} holding still under the pointer")).into());
             }
         }
+    }
+
+    fn on_screen(&self, target: &Target, aim: Aim) -> Result<(i16, i16)> {
+        let x11 = self.x11()?;
+        let window = x11.geometry(self.window)?;
+        let point = (window.x + aim.at.0, window.y + aim.at.1);
+        ensure!(
+            contains(x11.extent()?, point),
+            "{target} is drawn outside the owned display, at {point:?}"
+        );
+        Ok(point)
     }
 
     fn keyboard(&self) -> Result<()> {

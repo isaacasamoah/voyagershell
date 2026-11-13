@@ -285,6 +285,11 @@ cleanup also left Xvfb deaf to SIGTERM in 1 of 30 runs.
 `--sidebar open|collapsed` sets the sidebar with its own toggle. Both apply
 again after reattachment and do nothing when the window already matches.
 
+Each launch moves the candidate's window to the origin of the display. The
+app opens its 2900 by 1880 window at 362, 260, which puts the right 262 and
+the bottom 140 device pixels outside the 3000 by 2000 screen, and the pointer
+cannot leave the screen. An aim point outside the display is a fixture error.
+
 The result is `checks.json`. Exit 0 means the named runtime journey passed;
 exit 1 means an observed behavior failed; exit 2 means verification was
 inconclusive or unavailable.

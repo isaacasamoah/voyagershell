@@ -309,14 +309,20 @@ impl Native {
 
     fn arrange(&self) -> Result<()> {
         let x11 = self.x11()?;
-        if let Some((width, height)) = self.surface.window {
-            let current = x11.geometry(self.window)?;
-            if (current.width, current.height) != (width, height) {
-                self.system.act(
-                    json!({"input":"resize","window":self.window,"size":[width,height]}),
-                    || x11.resize(self.window, width, height),
-                )?;
-            }
+        let current = x11.geometry(self.window)?;
+        if (current.x, current.y) != (0, 0) {
+            self.system.act(
+                json!({"input":"place","window":self.window,"at":[0,0]}),
+                || x11.place(self.window, 0, 0),
+            )?;
+        }
+        if let Some((width, height)) = self.surface.window
+            && (current.width, current.height) != (width, height)
+        {
+            self.system.act(
+                json!({"input":"resize","window":self.window,"size":[width,height]}),
+                || x11.resize(self.window, width, height),
+            )?;
         }
         let open = |frame: &Frame| {
             frame
