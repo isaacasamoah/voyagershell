@@ -9,6 +9,7 @@ use std::process::{Child, Command, Stdio};
 
 pub const HOME: &str = "/voyager/home";
 pub const PROJECT: &str = "/voyager/home/project";
+pub const SECOND_PROJECT: &str = "/voyager/home/second-project";
 pub const RUNTIME: &str = "/voyager/runtime";
 pub const CORE: &str = "/voyager/bin/hc";
 pub const DISPLAY: &str = ":99";
@@ -112,6 +113,7 @@ pub fn prepare(evidence: &Path) -> Result<()> {
         project.join("README.md"),
         "# Verification fixture project\n",
     )?;
+    fs::create_dir(evidence.join("home/second-project"))?;
     Ok(())
 }
 

@@ -226,6 +226,19 @@ impl Terminal {
         native.press(Key::Return)
     }
 
+    pub fn enter(&self, native: &Native, folder: &str) -> Result<()> {
+        self.line(native, &format!("cd {folder}"))?;
+        until(
+            &format!("the shell of {} in {folder}", self.target()),
+            || {
+                let reported = native
+                    .system
+                    .watch("terminal.get", json!({"terminal":self.address}))?;
+                Ok((reported["foreground"]["cwd"] == folder).then_some(()))
+            },
+        )
+    }
+
     pub fn shows(&self, native: &Native, text: &str) -> Result<()> {
         if self.printed(native, text)? {
             return Ok(());

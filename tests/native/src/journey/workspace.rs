@@ -234,6 +234,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
 
     let made = cases.make(native, Case::CreateVoyage, |native| {
+        shell.enter(native, sandbox::SECOND_PROJECT)?;
         let before = at_rest(native)?.document;
         native.click(&Target::CREATE_VOYAGE)?;
         let (after, dock, drawn) =
@@ -251,16 +252,16 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 (!born.is_empty()).then(|| (seen.document.clone(), seen.frame.dock.clone(), drawn))
             })?;
         let born = born(voyages(&before), voyages(&after), |voyage| &voyage.id);
-        let folder = Path::new(sandbox::PROJECT)
+        let folder = Path::new(sandbox::SECOND_PROJECT)
             .file_name()
             .and_then(|name| name.to_str());
         let verdict = Verdict::new()
             .expect("exactly one Voyage was created", born.len() == 1)
             .expect(
-                "the new Voyage is open in the fixture's project folder and named after it",
+                "the new Voyage is open in the folder of the focused terminal and named after it",
                 born.iter().all(|voyage| {
                     !voyage.closed
-                        && voyage.cwd.as_deref() == Some(sandbox::PROJECT)
+                        && voyage.cwd.as_deref() == Some(sandbox::SECOND_PROJECT)
                         && Some(voyage.name.as_str()) == folder
                 }),
             )
@@ -284,7 +285,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 after.context == docked && dock == docked,
             )
             .observed("voyages", &born)?
-            .observed("folder", sandbox::PROJECT)?
+            .observed("folder", sandbox::SECOND_PROJECT)?
             .observed("selected", &after.selected_voyage)?
             .observed("context", &after.context)?
             .observed("dock", &dock)?;

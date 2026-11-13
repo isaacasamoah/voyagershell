@@ -193,6 +193,7 @@ The sandbox root is an empty tmpfs. It holds only these paths:
 | `/voyager/bin/hc` | The hashed `hc`, read-only. It is the only `hc` on `PATH`. |
 | `/voyager/home` | `home/` in the evidence directory. It is `HOME`. |
 | `/voyager/home/project` | The fixture project. It is the app's working directory, so it becomes the Voyage. |
+| `/voyager/home/second-project` | An empty second folder. The `workspace` journey moves one shell into it before it creates a Voyage. |
 | The verifier, the candidate and the `--assets` folder | Read-only, at their host paths. |
 | The evidence directory | Writable, at its host path. |
 
@@ -319,9 +320,11 @@ terminal does not wait for one. `Terminal::first` reads the layout document
 (`doc.get`, parsed as the `Layout` type of the contract). A document that does
 not parse as `Layout` is a fixture error. Rebuild the verifier from the
 candidate's checkout. `line` clicks its own terminal before it types, so the
-text cannot reach another control that holds the keyboard. `Terminal::bind`
-binds the terminal of another Vessel. Every bound shell is adopted, so cleanup
-waits for its exit and `processes.json` lists it. The `workspace` journey binds
+text cannot reach another control that holds the keyboard. `enter` types `cd`
+with a folder and waits until Core reports that folder for the shell.
+`Terminal::bind` binds the terminal of another Vessel. Every bound shell is
+adopted, so cleanup waits for its exit and `processes.json` lists it. The
+`workspace` journey binds
 the shell of every Vessel that it creates.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and
