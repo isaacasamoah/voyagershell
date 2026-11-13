@@ -17,7 +17,6 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         Arc, Mutex, OnceLock,
-        atomic::{AtomicU64, Ordering},
         mpsc::{self, SyncSender},
     },
     thread,
@@ -27,7 +26,14 @@ use std::{
 #[path = "core_pending.rs"]
 mod pending;
 pub(crate) use pending::Pending;
+#[path = "core_reader.rs"]
+mod reader;
+#[path = "core_viewer.rs"]
+mod viewer;
 use pending::Replies;
+use reader::{Attaches, Reader};
+use viewer::Lease;
+pub use viewer::{Viewer, WeakViewer};
 
 #[derive(Deserialize)]
 struct TerminalList {
@@ -123,186 +129,6 @@ fn enqueue(
     })
 }
 
-#[derive(Clone)]
-pub struct Viewer {
-    channel: u32,
-    initial_size: (u16, u16),
-    streams: Arc<Mutex<Streams>>,
-    input: SyncSender<Frame>,
-    control: SyncSender<Frame>,
-    link: Arc<OnceLock<String>>,
-    input_open: Arc<Mutex<bool>>,
-}
-
-impl Viewer {
-    pub fn initial_size(&self) -> (u16, u16) {
-        self.initial_size
-    }
-
-    pub fn ensure_open(&self) -> Result<(), Error> {
-        if !self.connected() {
-            return Err(Error::Uncertain(
-                "Core connection is unavailable; no attachment was repeated".into(),
-            ));
-        }
-        let streams = self
-            .streams
-            .lock()
-            .map_err(|error| Error::Uncertain(error.to_string()))?;
-        if streams
-            .buffers
-            .get(&self.channel)
-            .is_none_or(|stream| stream.closed)
-        {
-            return Err(Error::Rejected {
-                kind: "viewer_expired".into(),
-                message: "The original request attached a viewer that has since closed; no attachment was repeated".into(),
-            });
-        }
-        Ok(())
-    }
-
-    pub fn same_channel(&self, other: &Self) -> bool {
-        self.channel == other.channel && Arc::ptr_eq(&self.streams, &other.streams)
-    }
-
-    pub fn take(&self, limit: usize) -> Result<Vec<u8>, Error> {
-        let mut streams = self
-            .streams
-            .lock()
-            .map_err(|e| Error::Uncertain(e.to_string()))?;
-        let buffer = streams
-            .buffers
-            .get_mut(&self.channel)
-            .ok_or_else(|| Error::Uncertain("Viewer is closed".into()))?;
-        let count = limit.min(65536).min(buffer.bytes.len());
-        let bytes = buffer.bytes.drain(..count).collect();
-        if !buffer.bytes.is_empty() {
-            let _ = buffer.wake.try_send(());
-        }
-        streams.total -= count;
-        Ok(bytes)
-    }
-
-    pub fn credit(&self, bytes: u32) -> Result<(), Error> {
-        self.send(&self.control, 1, bytes.to_le_bytes().to_vec())
-    }
-
-    pub async fn ready(&self) -> Result<(), Error> {
-        let ready = self
-            .streams
-            .lock()
-            .map_err(|e| Error::Uncertain(e.to_string()))?
-            .buffers
-            .get(&self.channel)
-            .ok_or_else(|| Error::Uncertain("Viewer is closed".into()))?
-            .ready
-            .clone();
-        ready
-            .recv()
-            .await
-            .map_err(|_| Error::Uncertain("Viewer is closed".into()))
-    }
-
-    pub fn input(&self, bytes: Vec<u8>) -> Result<(), Error> {
-        let open = self
-            .input_open
-            .lock()
-            .map_err(|error| Error::Uncertain(error.to_string()))?;
-        if !*open {
-            return Err(Error::Rejected {
-                kind: "quitting".into(),
-                message: "Voyager is quitting; no terminal input was queued".into(),
-            });
-        }
-        self.input_frame(bytes)
-    }
-
-    pub fn protocol_reply(&self, bytes: Vec<u8>) -> Result<(), Error> {
-        self.input_frame(bytes)
-    }
-
-    fn input_frame(&self, bytes: Vec<u8>) -> Result<(), Error> {
-        if bytes.len() > MAX_INPUT_BYTES {
-            return Err(Error::Rejected {
-                kind: "too_large".into(),
-                message: "Terminal input exceeds 64 KiB".into(),
-            });
-        }
-        self.send(&self.input, 0, bytes)
-    }
-
-    pub fn focus(&self, focused: bool) -> Result<(), Error> {
-        self.send(&self.control, 4, vec![u8::from(focused)])
-    }
-
-    pub fn resize(&self, cols: u16, rows: u16) -> Result<(), Error> {
-        let mut payload = Vec::with_capacity(4);
-        payload.extend_from_slice(&cols.to_le_bytes());
-        payload.extend_from_slice(&rows.to_le_bytes());
-        self.send(&self.control, 3, payload)
-    }
-
-    pub fn display(
-        &self,
-        width: u32,
-        height: u32,
-        fg: String,
-        bg: String,
-        cursor: Option<String>,
-    ) -> Result<(), Error> {
-        self.send(
-            &self.control,
-            5,
-            serde_json::to_vec(
-                &json!({ "cell": [width, height], "fg": fg, "bg": bg, "cursor": cursor }),
-            )
-            .map_err(|error| Error::Uncertain(error.to_string()))?,
-        )
-    }
-
-    pub fn close(&self) -> Result<(), Error> {
-        self.send(&self.control, 2, Vec::new())?;
-        let mut streams = self
-            .streams
-            .lock()
-            .map_err(|e| Error::Uncertain(e.to_string()))?;
-        if let Some(buffer) = streams.buffers.remove(&self.channel) {
-            streams.total -= buffer.bytes.len();
-        }
-        Ok(())
-    }
-
-    pub fn connected(&self) -> bool {
-        self.link.get().is_none()
-    }
-
-    pub fn finished(&self) -> Result<bool, Error> {
-        let streams = self
-            .streams
-            .lock()
-            .map_err(|e| Error::Uncertain(e.to_string()))?;
-        let stream = streams
-            .buffers
-            .get(&self.channel)
-            .ok_or_else(|| Error::Uncertain("Viewer is closed".into()))?;
-        Ok(stream.closed && stream.bytes.is_empty())
-    }
-
-    fn send(&self, queue: &SyncSender<Frame>, kind: u8, payload: Vec<u8>) -> Result<(), Error> {
-        enqueue(
-            &self.link,
-            queue,
-            Frame {
-                channel: self.channel,
-                kind,
-                payload,
-            },
-            "frame was not queued",
-        )
-    }
-}
-
 pub struct Core {
     child: Child,
     identity: String,
@@ -310,7 +136,7 @@ pub struct Core {
     input: SyncSender<Frame>,
     replies: Replies,
     streams: Arc<Mutex<Streams>>,
-    attaching: Arc<AtomicU64>,
+    attaches: Attaches,
     link: Arc<OnceLock<String>>,
     input_open: Arc<Mutex<bool>>,
     sequence: u64,
@@ -430,7 +256,7 @@ impl Core {
         let (data, inputs) = mpsc::sync_channel::<Frame>(64);
         let replies = Replies::default();
         let streams = Arc::new(Mutex::new(Streams::default()));
-        let attaching = Arc::new(AtomicU64::new(0));
+        let attaches = Attaches::default();
         let link: Arc<OnceLock<String>> = Arc::default();
         let writer_link = link.clone();
         let writer_streams = streams.clone();
@@ -471,12 +297,14 @@ impl Core {
                 }
             }
         });
-        let reader_streams = streams.clone();
-        let reader_replies = replies.clone();
-        let reader_attaching = attaching.clone();
+        let reader = Reader {
+            streams: streams.clone(),
+            replies: replies.clone(),
+            attaches: attaches.clone(),
+            activity: activity.clone(),
+            control: control.clone(),
+        };
         let reader_link = link.clone();
-        let reader_activity = activity.clone();
-        let reader_control = control.clone();
         thread::spawn(move || {
             let reason = loop {
                 if let Some(reason) = reader_link.get() {
@@ -486,92 +314,12 @@ impl Core {
                     Ok(frame) => frame,
                     Err(error) => break format!("read failed: {:?}", error.kind()),
                 };
-                let terminal_channel = reader_streams
-                    .lock()
-                    .is_ok_and(|streams| streams.buffers.contains_key(&frame.channel));
-                if !terminal_channel
-                    && Self::activity_frame(&reader_activity, &reader_control, &frame)
-                {
-                    continue;
-                }
-                if frame.channel == 0 && frame.kind == 0 {
-                    let Ok(message) = serde_json::from_slice::<Value>(&frame.payload) else {
-                        break "Core sent an invalid reply".into();
-                    };
-                    let Some(id) = message.get("id").and_then(Value::as_u64) else {
-                        continue;
-                    };
-                    let Ok(mut replies) = reader_replies.lock() else {
-                        break "internal lock failed".into();
-                    };
-                    let Some(reply) = replies.remove(&id) else {
-                        continue;
-                    };
-                    if id == reader_attaching.load(Ordering::Acquire)
-                        && Self::response(message.clone(), id).is_ok()
-                        && let Some(channel) = message
-                            .pointer("/result/channel")
-                            .and_then(Value::as_u64)
-                            .and_then(|id| u32::try_from(id).ok())
-                    {
-                        let Ok(mut streams) = reader_streams.lock() else {
-                            break "internal lock failed".into();
-                        };
-                        if channel == 0
-                            || streams.buffers.insert(channel, Stream::default()).is_some()
-                        {
-                            break "Core attached an invalid channel".into();
-                        }
-                    }
-                    let _ = reply.try_send(message);
-                } else if frame.channel != 0 && frame.kind == 0 {
-                    if terminal_channel {
-                        crate::typing_trace::transport(
-                            "output_frame_received",
-                            frame.channel,
-                            frame.payload.len(),
-                        );
-                    }
-                    let Ok(mut streams) = reader_streams.lock() else {
-                        break "internal lock failed".into();
-                    };
-                    if streams.total + frame.payload.len() > TOTAL_LIMIT {
-                        break "buffered output exceeded 16 MiB".into();
-                    }
-                    let Some(buffer) = streams.buffers.get_mut(&frame.channel) else {
-                        continue;
-                    };
-                    if buffer.closed {
-                        break "Core sent output after close".into();
-                    }
-                    if buffer.bytes.len() + frame.payload.len() > VIEW_LIMIT {
-                        break "viewer output exceeded 1 MiB".into();
-                    }
-                    let count = frame.payload.len();
-                    buffer.bytes.extend(frame.payload);
-                    let _ = buffer.wake.try_send(());
-                    streams.total += count;
-                } else if frame.channel != 0
-                    && frame.kind == 2
-                    && let Ok(mut streams) = reader_streams.lock()
-                    && let Some(buffer) = streams.buffers.get_mut(&frame.channel)
-                {
-                    buffer.closed = true;
-                    let _ = buffer.wake.try_send(());
+                if let Err(reason) = reader.receive(frame) {
+                    break reason;
                 }
             };
             lost(&reader_link, reason);
-            if let Ok(mut replies) = reader_replies.lock() {
-                replies.clear();
-            }
-            if let Ok(mut activity) = reader_activity.lock() {
-                activity.fail("Core is disconnected");
-            }
-            if let Ok(streams) = reader_streams.lock() {
-                for stream in streams.buffers.values() {
-                    let _ = stream.wake.try_send(());
-                }
-            }
+            reader.fail();
         });
         Ok(Self {
             child,
@@ -580,7 +328,7 @@ impl Core {
             input: data,
             replies,
             streams,
-            attaching,
+            attaches,
             link,
             input_open: Arc::new(Mutex::new(true)),
             sequence: 1,
@@ -1020,11 +768,15 @@ impl Core {
                 message: "Core request exceeds 1 MiB".into(),
             });
         }
-        let pending = Pending::register(id, method, &self.replies, &self.attaching, &self.link)?;
-        if method == "terminal.attach" {
-            self.attaching.store(id, Ordering::Release);
+        let pending = Pending::register(id, method, &self.replies, &self.link)?;
+        let attach = method == "terminal.attach";
+        if attach {
+            self.attaches
+                .lock()
+                .map_err(|error| Error::Uncertain(error.to_string()))?
+                .insert(id);
         }
-        enqueue(
+        let queued = enqueue(
             &self.link,
             &self.control,
             Frame {
@@ -1033,7 +785,14 @@ impl Core {
                 payload: bytes,
             },
             "request was not queued",
-        )?;
+        );
+        if attach
+            && queued.is_err()
+            && let Ok(mut attaches) = self.attaches.lock()
+        {
+            attaches.remove(&id);
+        }
+        queued?;
         Ok(pending)
     }
 
@@ -1156,12 +915,14 @@ impl Core {
             return Err(Error::Uncertain("Attached channel is unavailable".into()));
         }
         Ok(Viewer {
-            channel,
+            lease: Arc::new(Lease {
+                channel,
+                streams: self.streams.clone(),
+                control: self.control.clone(),
+                link: self.link.clone(),
+            }),
             initial_size,
-            streams: self.streams.clone(),
             input: self.input.clone(),
-            control: self.control.clone(),
-            link: self.link.clone(),
             input_open: self.input_open.clone(),
         })
     }
@@ -1202,8 +963,12 @@ impl Drop for Core {
 mod adapter_tests;
 
 #[cfg(test)]
+#[path = "core_slot_tests.rs"]
+mod slot_tests;
+
+#[cfg(test)]
 mod resize_tests {
-    use super::{Streams, Viewer};
+    use super::{Lease, Streams, Viewer};
     use std::sync::{Arc, Mutex, mpsc};
 
     #[test]
@@ -1211,12 +976,14 @@ mod resize_tests {
         let (control, received) = mpsc::sync_channel(2);
         let (input, _) = mpsc::sync_channel(1);
         let viewer = Viewer {
-            channel: 7,
+            lease: Arc::new(Lease {
+                channel: 7,
+                streams: Arc::new(Mutex::new(Streams::default())),
+                control,
+                link: Arc::default(),
+            }),
             initial_size: (80, 24),
-            streams: Arc::new(Mutex::new(Streams::default())),
             input,
-            control,
-            link: Arc::default(),
             input_open: Arc::new(Mutex::new(true)),
         };
         viewer.resize(120, 38).unwrap();

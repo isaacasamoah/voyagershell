@@ -1,6 +1,6 @@
 use crate::{
     activity::Activity,
-    core::{Core, Error, Viewer},
+    core::{Core, Error, Viewer, WeakViewer},
     workspace::Model,
 };
 use std::{
@@ -355,7 +355,7 @@ impl Client {
             let mut created_contents = Vec::<CreatedTerminal>::new();
             let mut reopened = false;
             let mut live_bindings = Vec::<CoreTerminalId>::new();
-            let mut terminal_requests: VecDeque<(TerminalRequest, Result<Viewer, Error>)> =
+            let mut terminal_requests: VecDeque<(TerminalRequest, Result<WeakViewer, Error>)> =
                 VecDeque::new();
             let mut process_requests: VecDeque<(
                 Context,
@@ -1467,7 +1467,7 @@ impl Client {
                             .find(|(prior, _)| prior.request_id == request_id);
                         let result = if let Some((prior, outcome)) = previous {
                             if prior == &request {
-                                outcome.clone()
+                                outcome.clone().and_then(|viewer| viewer.upgrade())
                             } else {
                                 Err(rejected(
                                     "Terminal request identity was reused with different content"
@@ -1548,7 +1548,7 @@ impl Client {
                         }
                         if previous.is_none() {
                             settle_created_content(&mut created_contents, &content, &result);
-                            terminal_requests.push_back((request, result.clone()));
+                            terminal_requests.push_back((request, result.clone().map(Into::into)));
                             if terminal_requests.len() > 32 {
                                 terminal_requests.pop_front();
                             }

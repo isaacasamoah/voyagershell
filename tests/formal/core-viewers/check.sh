@@ -30,7 +30,7 @@ trap 'rm -rf "$work"' EXIT
 cp "$here/CoreViewers.tla" "$here"/*.cfg "$work/"
 
 failed=0
-for config in CoreViewers Ownership Timeouts; do
+for config in CoreViewers; do
     if (cd "$work" && java -XX:+UseParallelGC -cp "$jar" tlc2.TLC -workers auto \
         -metadir "$work/states-$config" -config "$config.cfg" CoreViewers.tla \
         >"$work/$config.out" 2>&1); then

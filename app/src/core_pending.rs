@@ -6,7 +6,6 @@ use std::{
     marker::PhantomData,
     sync::{
         Arc, Mutex, OnceLock,
-        atomic::{AtomicU64, Ordering},
         mpsc::{self, Receiver, SyncSender},
     },
     time::{Duration, Instant},
@@ -19,7 +18,6 @@ pub(crate) struct Pending<R> {
     method: &'static str,
     receiver: Receiver<Value>,
     replies: Replies,
-    attaching: Arc<AtomicU64>,
     dispatched: Instant,
     trace: bool,
     result: PhantomData<R>,
@@ -30,7 +28,6 @@ impl<R: DeserializeOwned> Pending<R> {
         id: u64,
         method: &'static str,
         replies: &Replies,
-        attaching: &Arc<AtomicU64>,
         link: &OnceLock<String>,
     ) -> Result<Self, Error> {
         let (sender, receiver) = mpsc::sync_channel(1);
@@ -52,7 +49,6 @@ impl<R: DeserializeOwned> Pending<R> {
             method,
             receiver,
             replies: replies.clone(),
-            attaching: attaching.clone(),
             dispatched: Instant::now(),
             trace: std::env::var_os("VOYAGER_TRACE_TOOLS").is_some(),
             result: PhantomData,
@@ -61,8 +57,13 @@ impl<R: DeserializeOwned> Pending<R> {
 
     pub(crate) fn wait(self) -> Result<R, Error> {
         let remaining = Duration::from_secs(20).saturating_sub(self.dispatched.elapsed());
-        let response = self.receiver.recv_timeout(remaining).map_err(|_| {
-            Error::Uncertain("Core result unconfirmed; no request was repeated".into())
+        let response = self.receiver.recv_timeout(remaining).or_else(|_| {
+            if let Ok(mut replies) = self.replies.lock() {
+                replies.remove(&self.id);
+            }
+            self.receiver.try_recv().map_err(|_| {
+                Error::Uncertain("Core result unconfirmed; no request was repeated".into())
+            })
         });
         if self.trace {
             eprintln!(
@@ -82,9 +83,6 @@ impl<R> Drop for Pending<R> {
         if let Ok(mut replies) = self.replies.lock() {
             replies.remove(&self.id);
         }
-        let _ = self
-            .attaching
-            .compare_exchange(self.id, 0, Ordering::AcqRel, Ordering::Acquire);
     }
 }
 
@@ -95,10 +93,8 @@ mod tests {
     #[test]
     fn pending_results_are_bounded_and_cleanup_only_their_own_identity() {
         let replies = Replies::default();
-        let attaching = Arc::default();
         let link = OnceLock::new();
-        let register =
-            |id| Pending::<Value>::register(id, "terminal.send", &replies, &attaching, &link);
+        let register = |id| Pending::<Value>::register(id, "terminal.send", &replies, &link);
         let mut pending = (1..=9).map(|id| register(id).unwrap()).collect::<Vec<_>>();
         assert!(matches!(register(10), Err(Error::Rejected { kind, .. }) if kind == "busy"));
         drop(pending.remove(0));

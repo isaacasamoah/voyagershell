@@ -974,10 +974,9 @@ mod tests {
             )
             .unwrap();
         install_viewer(&viewers, &content.0, second.clone()).unwrap();
-        let repeated = client
+        let result = client
             .terminal(content.clone(), request, first_layout.version)
-            .unwrap();
-        let result = install_viewer(&viewers, &content.0, repeated);
+            .and_then(|repeated| install_viewer(&viewers, &content.0, repeated));
         let retained = viewers
             .lock()
             .unwrap()
