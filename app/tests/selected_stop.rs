@@ -178,7 +178,7 @@ fn delayed_process_send_does_not_hold_workspace_inspection() {
         let bound = inspect();
         let address = bound.layout.contents[0].backend.clone().unwrap();
         let mut observer = Core::connect(&session).unwrap();
-        viewer.input(b"printf '\\033]7501;state=idle:app=voyager-proof\\033\\\\'; read -r proposal; sleep 10\n".to_vec()).unwrap();
+        viewer.input(b"printf '\\033]7501;state=idle:app=voyager-proof\\033\\\\'; read -r proposal; sleep 10\r".to_vec()).unwrap();
         let deadline = Instant::now() + Duration::from_secs(8);
         let target = loop {
             let terminal = observer.terminal_get(&address.0).unwrap();
