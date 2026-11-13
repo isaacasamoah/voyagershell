@@ -69,6 +69,18 @@ class Allowed(unittest.TestCase):
         self.allowed("grep -rn cargo app/src")
         self.allowed("cargo build --release --locked")
         self.allowed("hc ls", {})
+        self.allowed(
+            "grep -o '[^\" ]*/voyager-shell --profile [^ ]* --session voyager-live' transcript.jsonl | sort"
+        )
+        self.allowed("ls -la /var/tmp/build/voyager-shell /var/tmp/hc")
+        self.allowed("echo 'run cargo test then hc ls'")
+        self.allowed("pgrep -af 'voyager-shell --profile'")
+
+    def test_launch_forms_still_refused(self):
+        self.assertIsNotNone(guard.check('cd /p && "$VOYAGER_REPO/target/release/voyager-shell" --profile /x', LIVE))
+        self.assertIsNotNone(guard.check("timeout 30 ~/.local/bin/hc server stop", {}))
+        self.assertIsNotNone(guard.check("for t in t1 t2; do hc get $t; done", LIVE))
+        self.assertIsNotNone(guard.check("x=$(hc ls)", LIVE))
         self.allowed("tests/native/target/debug/voyager-verification run --journey terminal-scrolling")
 
 
