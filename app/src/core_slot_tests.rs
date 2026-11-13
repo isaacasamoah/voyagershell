@@ -87,6 +87,21 @@ fn a_new_viewer_refused_because_the_old_close_failed_frees_its_slot() {
 }
 
 #[test]
+fn a_cached_receipt_does_not_keep_a_refused_viewer_alive() {
+    let streams = streams(&[(7, b"crashed on startup", true)]);
+    let (control, sent) = mpsc::sync_channel(4);
+    let attached = viewer(7, &streams, &control);
+    let receipt = attached.downgrade();
+    assert!(receipt.upgrade().is_ok());
+    drop(attached);
+    assert_eq!(streams.lock().unwrap().occupied(), 0);
+    assert_eq!(closes(&sent), [7]);
+    assert!(
+        matches!(receipt.upgrade(), Err(super::Error::Rejected { kind, .. }) if kind == "viewer_expired")
+    );
+}
+
+#[test]
 fn output_on_an_unknown_channel_is_dropped_even_when_the_buffer_is_full() {
     let streams = streams(&[(7, b"", false)]);
     streams.lock().unwrap().total = TOTAL_LIMIT;

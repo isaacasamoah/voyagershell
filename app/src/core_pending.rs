@@ -57,8 +57,13 @@ impl<R: DeserializeOwned> Pending<R> {
 
     pub(crate) fn wait(self) -> Result<R, Error> {
         let remaining = Duration::from_secs(20).saturating_sub(self.dispatched.elapsed());
-        let response = self.receiver.recv_timeout(remaining).map_err(|_| {
-            Error::Uncertain("Core result unconfirmed; no request was repeated".into())
+        let response = self.receiver.recv_timeout(remaining).or_else(|_| {
+            if let Ok(mut replies) = self.replies.lock() {
+                replies.remove(&self.id);
+            }
+            self.receiver.try_recv().map_err(|_| {
+                Error::Uncertain("Core result unconfirmed; no request was repeated".into())
+            })
         });
         if self.trace {
             eprintln!(

@@ -16,7 +16,7 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     process::{Child, Command, Stdio},
     sync::{
-        Arc, Mutex, OnceLock,
+        Arc, Mutex, OnceLock, Weak,
         mpsc::{self, SyncSender},
     },
     thread,
@@ -185,7 +185,39 @@ pub struct Viewer {
     input_open: Arc<Mutex<bool>>,
 }
 
+#[derive(Clone)]
+pub struct WeakViewer {
+    lease: Weak<Lease>,
+    initial_size: (u16, u16),
+    input: SyncSender<Frame>,
+    input_open: Arc<Mutex<bool>>,
+}
+
+impl WeakViewer {
+    pub fn upgrade(&self) -> Result<Viewer, Error> {
+        let lease = self.lease.upgrade().ok_or_else(|| Error::Rejected {
+            kind: "viewer_expired".into(),
+            message: "The original request attached a viewer that has since closed; no attachment was repeated".into(),
+        })?;
+        Ok(Viewer {
+            lease,
+            initial_size: self.initial_size,
+            input: self.input.clone(),
+            input_open: self.input_open.clone(),
+        })
+    }
+}
+
 impl Viewer {
+    pub fn downgrade(&self) -> WeakViewer {
+        WeakViewer {
+            lease: Arc::downgrade(&self.lease),
+            initial_size: self.initial_size,
+            input: self.input.clone(),
+            input_open: self.input_open.clone(),
+        }
+    }
+
     pub fn initial_size(&self) -> (u16, u16) {
         self.initial_size
     }
