@@ -1,6 +1,7 @@
 import { div } from "gpui-kit";
 import { Popover } from "gpui-base";
 import { menuButton, menuSurface } from "./menu.js";
+import { Marker } from "voyager_native";
 import { launches } from "voyager_workspace";
 import { descriptions } from "voyager_content_view";
 import {
@@ -169,6 +170,7 @@ export class CreationPicker {
               `create-worker-${entry.id}`,
               `Create ${entry.name} ${entity}`,
             )
+              .child(Marker.new("create-worker", entry.id))
               .child(entry.name)
               .on_click((_event, cx) => {
                 if (this.current !== opening) return;
@@ -192,6 +194,7 @@ export class CreationPicker {
       if (this.notes)
         content.child(
           menuButton("create-notes-vessel", `Create Notes ${entity}`)
+            .child(Marker.new("create-notes"))
             .child("Notes")
             .on_click((_event, cx) => {
               if (this.current !== opening) return;
@@ -202,6 +205,7 @@ export class CreationPicker {
       if (this.agents)
         content.child(
           menuButton("create-agents-vessel", `Create Agents ${entity}`)
+            .child(Marker.new("create-agents"))
             .child("Agents")
             .on_click((_event, cx) => {
               if (this.current !== opening) return;

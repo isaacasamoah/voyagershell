@@ -390,6 +390,7 @@ impl Render for AvatarView {
             cx,
         );
         let avatar = self.avatar.read(cx);
+        crate::inspect::stage(&avatar.scope, window, cx);
         if self.diagnostics_enabled && self.diagnostic_count < 24 {
             let signature = (
                 avatar.scope.clone(),
@@ -438,6 +439,7 @@ impl Render for AvatarView {
             .left(position.x)
             .top(position.y)
             .size(px(s))
+            .child(crate::inspect::avatar())
             .track_focus(&self.focus)
             .tab_stop(true)
             .role(gpui::Role::Button)

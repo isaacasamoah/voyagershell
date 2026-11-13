@@ -14,12 +14,14 @@ ROUTES = {
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Choose one proving route. Add --help after a route for its driver options.",
+        description="Historical reproduction only. Choose one explicit legacy route.",
+        epilog="Use tests/native/target/debug/voyager-verification for native verification. See tests/native/README.md.",
         add_help=False,
     )
     routes = parser.add_mutually_exclusive_group(required=True)
     for option in ROUTES:
         routes.add_argument(option, dest="route", action="store_const", const=option)
+    parser.add_argument("--legacy-reproduction", action="store_true")
     arguments = sys.argv[1:]
     if not any(option in arguments for option in ROUTES) and any(
         option in arguments for option in ("-h", "--help")
@@ -28,6 +30,10 @@ def main():
         return
     selected, remaining = parser.parse_known_args(arguments)
     root = Path(__file__).resolve().parent
+    if not selected.legacy_reproduction and not any(
+        option in remaining for option in ("-h", "--help")
+    ):
+        parser.error("Use voyager-verification. Historical drivers require --legacy-reproduction; they do not extend native environment coverage.")
     folder, module = ROUTES[selected.route]
     directory = root / folder
     sys.path.insert(0, str(directory))

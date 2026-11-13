@@ -22,6 +22,14 @@ function element() {
   return node;
 }
 
+function markers(node) {
+  return node.calls
+    .flatMap(([name, value]) =>
+      name === "child" ? [value] : name === "children" ? value : [],
+    )
+    .flatMap((child) => (Array.isArray(child?.marker) ? [child.marker] : []));
+}
+
 function menuModule(Button) {
   const exports = {};
   new Function(
@@ -126,6 +134,8 @@ test("worker creation keeps its opening target and revision across a delayed cat
         Popover: { new: element },
       };
     if (name === "./menu.js") return menuModule(Button);
+    if (name === "voyager_native")
+      return { Marker: { new: (role, key = "") => ({ marker: [role, key] }) } };
     if (name === "voyager_workspace")
       return {
         launches: () =>
@@ -244,7 +254,10 @@ test("worker creation keeps its opening target and revision across a delayed cat
     buttons
       .get("create-worker-codex")
       .calls.filter(([name]) => name === "child"),
-    [["child", "Codex"]],
+    [
+      ["child", { marker: ["create-worker", "codex"] }],
+      ["child", "Codex"],
+    ],
   );
   const choose = buttons
     .get("create-worker-codex")
@@ -274,6 +287,67 @@ test("worker creation keeps its opening target and revision across a delayed cat
   assert.equal(picker.current, null);
   assert.equal(actions.length, 1);
   assert.deepEqual(dismissed, [[destination, cx]]);
+  Object.assign(picker, {
+    current: { id: "original", version: "7", destination },
+    notes: true,
+    agents: true,
+  });
+  buttons.clear();
+  picker.render("original", destination, "7", create);
+  assert.deepEqual(markers(buttons.get("create-notes-vessel")), [
+    ["create-notes", ""],
+  ]);
+  assert.deepEqual(markers(buttons.get("create-agents-vessel")), [
+    ["create-agents", ""],
+  ]);
+  picker.current = null;
+  buttons.clear();
+  picker.render("original", destination, "7", create);
+  assert.equal(buttons.size, 0);
+});
+
+test("inspection markers name each control by its role and id, never its label", () => {
+  const Button = { new: element };
+  const Workspace = new Function(
+    "View",
+    "div",
+    "Button",
+    "projection",
+    "svg",
+    "CreationPicker",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(
+    class {},
+    element,
+    Button,
+    () => ({}),
+    element,
+    class {
+      render(_id, _destination, _version, _create, trigger) {
+        return trigger;
+      }
+    },
+  );
+  const view = Object.assign(new Workspace(), {
+    sidebar: true,
+    names: new Map(),
+  });
+  for (const kind of ["voyage", "fleet", "vessel", "portal"])
+    assert.deepEqual(
+      markers(view.action("A label", null, false, { kind, id: `${kind}-7` })),
+      [[`${kind}-name`, `${kind}-7`]],
+    );
+  assert.deepEqual(
+    markers(view.action("Refresh", { operation: "inspect" })),
+    [],
+  );
+  assert.deepEqual(markers(view.sidebarToggle()), [["sidebar-toggle", ""]]);
+  const group = { owner: { kind: "fleet", id: "fleet-1" } };
+  for (const side of ["right", "bottom"])
+    assert.deepEqual(
+      markers(view.splitControl({ id: "placement-3" }, group, side)),
+      [[`split-${side}`, "placement-3"]],
+    );
 });
 
 test("the actual canvas composes a retained right column through native presentation", () => {
