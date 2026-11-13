@@ -34,6 +34,7 @@ import {
   renderSidebar,
   renderFleets,
   renderContext,
+  renderNameEditor,
 } from "./navigation-view.js";
 import { WorkspaceMenu } from "./menu.js";
 import { VoyageClose } from "./voyage-close.js";
@@ -1177,11 +1178,7 @@ export default class Workspace extends View {
     const voyage = rename?.kind === "voyage";
     const placement = rename?.kind === "vessel" || rename?.kind === "portal";
     if (rename && this.editing && key === JSON.stringify(this.editing.target))
-      return div()
-        .min_w(60)
-        .h(32)
-        .on_mouse_down_out(() => this.focus.focus())
-        .child(Name.new(this.editing.state));
+      return renderNameEditor(this, this.editing.state, rename.id);
     const button = Button.new(`navigation-${key}-${JSON.stringify(action)}`)
       .justify_start()
       .line_height(1.618034)

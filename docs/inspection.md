@@ -112,9 +112,17 @@ union all come from that list.
 | `sidebar-toggle` | Empty | The sidebar toggle | `Workspace.sidebarToggle` |
 | `create-notes`, `create-agents` | Empty | The Notes and Agents entries of the creation menu | `CreationPicker.render` in `creation.ts` |
 | `create-worker` | Launch entry id | A terminal or agent entry of the creation menu | `CreationPicker.render` |
+| `create-voyage` | Empty | The Create Voyage button in the sidebar heading, or in the rail when the sidebar is collapsed | `renderSidebar` in `navigation-view.ts` |
+| `create-fleet` | Voyage id | The Create Fleet button after the Voyage's Fleet tabs | `renderFleets` in `navigation-view.ts` |
+| `name-editor` | Id of the Voyage, Fleet or placement being renamed | The rename editor that replaces a name control | `renderNameEditor` in `navigation-view.ts` |
 | `avatar` | Empty | The avatar in the workspace window | `AvatarView::render` |
 
-A name control leaves the frame while its rename editor replaces it.
+A name control leaves the frame while its rename editor replaces it, and
+`name-editor` with the same key takes its place. The editor takes keyboard
+focus when it opens. Enter or a loss of focus saves the name, and Escape
+cancels the edit. A frame does not report focus. The sidebar button and the
+rail button share the `create-voyage` role, because the app draws only one of
+them at a time.
 
 ## Mark a control
 

@@ -307,7 +307,14 @@ test("worker creation keeps its opening target and revision across a delayed cat
 });
 
 test("inspection markers name each control by its role and id, never its label", () => {
-  const Button = { new: element };
+  const buttons = new Map();
+  const Button = {
+    new(id) {
+      const node = element();
+      buttons.set(id, node);
+      return node;
+    },
+  };
   const Workspace = new Function(
     "View",
     "div",
@@ -315,6 +322,11 @@ test("inspection markers name each control by its role and id, never its label",
     "projection",
     "svg",
     "CreationPicker",
+    "Name",
+    "Brand",
+    "Speech",
+    "MeasureHeight",
+    "speech_in_primary",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(
     class {},
@@ -327,11 +339,45 @@ test("inspection markers name each control by its role and id, never its label",
         return trigger;
       }
     },
+    { new: element },
+    { new: element },
+    { new: element },
+    { new: element },
+    () => false,
   );
   const view = Object.assign(new Workspace(), {
     sidebar: true,
     names: new Map(),
+    chat: { toggleView: element, render: element },
+    target: (_id, _scope, child) => child,
+    contextMenu: (_id, child) => child,
+    closedFleetItems: () => [],
+    portalControls: element,
   });
+  const fleet = { kind: "fleet", id: "fleet-7" };
+  view.editing = { target: fleet, state: {} };
+  assert.deepEqual(markers(view.action("A label", null, false, fleet)), [
+    ["name-editor", "fleet-7"],
+  ]);
+  view.editing = null;
+  const layout = { voyages: [], context: { kind: "workspace" }, view: "fleet" };
+  view.sidebarRegion(layout);
+  assert.deepEqual(markers(buttons.get("create-voyage")), [
+    ["create-voyage", ""],
+  ]);
+  assert.equal(buttons.has("rail-create-voyage"), false);
+  buttons.clear();
+  view.sidebar = false;
+  view.sidebarRegion(layout);
+  assert.deepEqual(markers(buttons.get("rail-create-voyage")), [
+    ["create-voyage", ""],
+  ]);
+  assert.equal(buttons.has("create-voyage"), false);
+  view.sidebar = true;
+  view.fleetRegion(layout, { id: "voyage-7", fleets: [] }, undefined);
+  assert.deepEqual(markers(buttons.get("create-fleet-tab")), [
+    ["create-fleet", "voyage-7"],
+  ]);
   for (const kind of ["voyage", "fleet", "vessel", "portal"])
     assert.deepEqual(
       markers(view.action("A label", null, false, { kind, id: `${kind}-7` })),

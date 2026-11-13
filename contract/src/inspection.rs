@@ -64,6 +64,9 @@ roles! {
     CreateNotes => "create-notes",
     CreateAgents => "create-agents",
     CreateWorker => "create-worker",
+    CreateVoyage => "create-voyage",
+    CreateFleet => "create-fleet",
+    NameEditor => "name-editor",
     Avatar => "avatar",
 }
 
