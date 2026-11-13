@@ -1,5 +1,3 @@
-# Ordinary checks from CONTRIBUTING.md on every pull request and push to main.
-# Native app journeys need a display and stay local; this workflow does not run them.
 name: checks
 
 on:
@@ -18,8 +16,6 @@ concurrency:
 env:
   RUST_TOOLCHAIN: 1.99.1
   ZIG_VERSION: 0.17.0
-  # Herdr Core runtime that the tests are verified against. The sha256 comes
-  # from https://releases.herdr.dev/core/0.1.19/manifest.json (linux-x86_64).
   HC_VERSION: 0.1.19
   HC_SHA256: 4adcfb423d52f24c5cc4a1e2cd2fcad1f62d28bb77876ac472c29082a3eaa424
   CARGO_INCREMENTAL: "0"
