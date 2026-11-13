@@ -178,6 +178,24 @@ fn delayed_process_send_does_not_hold_workspace_inspection() {
         let bound = inspect();
         let address = bound.layout.contents[0].backend.clone().unwrap();
         let mut observer = Core::connect(&session).unwrap();
+        let ready_deadline = Instant::now() + Duration::from_secs(30);
+        let mut screen = String::new();
+        let mut unchanged = Instant::now();
+        loop {
+            let text = observer.terminal_read(&address.0, 0).unwrap().text;
+            if text != screen {
+                screen = text;
+                unchanged = Instant::now();
+            } else if !screen.trim().is_empty() && unchanged.elapsed() >= Duration::from_millis(300)
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < ready_deadline,
+                "Shell prompt did not settle"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
         viewer.input(b"printf '\\033]7501;state=idle:app=voyager-proof\\033\\\\'; read -r proposal; sleep 10\r".to_vec()).unwrap();
         let deadline = Instant::now() + Duration::from_secs(8);
         let target = loop {
