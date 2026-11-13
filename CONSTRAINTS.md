@@ -53,8 +53,9 @@ Run `cargo fmt --check`, `cargo test --locked` and
 `cargo clippy --locked --all-targets -- -D warnings` for Rust changes. Run
 `npm run format:check` and `npm test` for
 desktop changes. Build and run the selected candidate for native behavior.
-The existing CI runs the ordinary Rust and desktop checks, not live microphone
-or native desktop acceptance. Formatting and Clippy provide checks independent
+The checks workflow (.github/workflows/checks.yml) runs the ordinary Rust and
+desktop checks on every pull request and push to main. It does not run live
+microphone or native desktop acceptance, which stay local. Formatting and Clippy provide checks independent
 of the tests written for a feature.
 
 At review, inspect `git diff BASE...HEAD` for new suppression comments, skipped
