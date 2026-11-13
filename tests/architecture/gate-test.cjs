@@ -3,7 +3,7 @@ const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { test, after } = require("node:test");
+const { test, after, afterEach } = require("node:test");
 
 const ROOT = path.resolve(__dirname, "../..");
 const GATE = path.join(__dirname, "gate.cjs");
@@ -12,14 +12,33 @@ const ENV = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith("HC_")),
 );
 
+const RUNS = "architecture-gate-test-";
+
+function running(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+
+for (const name of fs.readdirSync(os.tmpdir()))
+  if (name.startsWith(RUNS) && !running(Number(name.slice(RUNS.length))))
+    fs.rmSync(path.join(os.tmpdir(), name), { recursive: true, force: true });
+
+const RUN = path.join(os.tmpdir(), `${RUNS}${process.pid}`);
+fs.mkdirSync(RUN, { recursive: true });
+after(() => fs.rmSync(RUN, { recursive: true, force: true }));
+
 const temporary = [];
-after(() => {
-  for (const directory of temporary)
+afterEach(() => {
+  for (const directory of temporary.splice(0))
     fs.rmSync(directory, { recursive: true, force: true });
 });
 
 function folder(prefix) {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const directory = fs.mkdtempSync(path.join(RUN, prefix));
   temporary.push(directory);
   return directory;
 }
