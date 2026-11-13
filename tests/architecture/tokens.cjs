@@ -3,15 +3,13 @@ const { call, scan, ENDS_BLOCK, ENDS_STATEMENT } = require("./rust.cjs");
 const { relative, literal } = require("./snapshot.cjs");
 const { container, hostModuleNode, environmentNode } = require("./nodes.cjs");
 
-const UNRESOLVED_PROGRAM = "The program comes from a runtime value";
-
 function spawnsProgram(site, { graph }) {
   const direct = literal(site.text);
   const fallback = /var_os\s*\(\s*"([A-Z0-9_]+)"\s*\)[\s\S]*?"([^"]+)"/.exec(
     site.text,
   );
   const program = direct ?? fallback?.[2];
-  if (!program) return UNRESOLVED_PROGRAM;
+  if (!program) return "The program comes from a runtime value";
   const name = path.posix.basename(program);
   graph.node(`program:${name}`, {
     kind: "program",
@@ -27,8 +25,7 @@ function spawnsProgram(site, { graph }) {
   if (fallback) environmentNode(graph, fallback[1]);
 }
 
-function builderCalls(site, chain, start) {
-  const { analysis } = site;
+function builderCalls(analysis, chain, start) {
   const functions = [];
   let declarations;
   const builder = /\.\s*(async_function|function|declarations)\s*\(\s*/g;
@@ -80,7 +77,11 @@ function exposesHostModule(site, { graph, constant }) {
       analysis.bare.length,
       ENDS_STATEMENT,
     ).index;
-    const found = builderCalls(site, analysis.masked.slice(start, end), start);
+    const found = builderCalls(
+      analysis,
+      analysis.masked.slice(start, end),
+      start,
+    );
     functions.push(...found.functions);
     if (found.declarations !== undefined)
       declarations = constant(file, site.ownerId, found.declarations);
