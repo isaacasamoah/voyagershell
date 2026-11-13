@@ -1,4 +1,5 @@
 mod diagnosis;
+mod features;
 mod lifecycle;
 mod native;
 mod probe;
@@ -33,7 +34,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe\nrun --journey terminal-scrolling --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls."
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\nrun --journey terminal-scrolling --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls."
         );
         return Ok(0);
     }
@@ -46,6 +47,9 @@ fn entry() -> Result<i32> {
         ensure!(args.len() == 2, "Probe needs state path and mode");
         probe::run(&PathBuf::from(&args[0]), &args[1])?;
         return Ok(0);
+    }
+    if command == "features" {
+        return features::run(&args);
     }
     if command == "internal-canary" {
         ensure!(args.len() == 1, "Canary needs the host resources");
