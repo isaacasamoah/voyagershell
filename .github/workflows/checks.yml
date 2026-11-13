@@ -84,4 +84,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo fmt --check --manifest-path tests/native/Cargo.toml
       - run: cargo clippy --all-targets --locked --manifest-path tests/native/Cargo.toml -- -D warnings
+      - name: Sandbox tools for the native crate tests
+        run: |
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: cargo test --locked --manifest-path tests/native/Cargo.toml
