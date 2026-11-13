@@ -409,34 +409,15 @@ impl Native {
         expected: &str,
         check: impl FnMut(&Seen) -> Option<T>,
     ) -> Result<T> {
-        let (held, preparing) = self.watch(check)?;
-        held.ok_or_else(|| {
-            let prepared = if preparing {
-                " with the workspace prepared"
-            } else {
-                ""
-            };
-            Unseen(format!("{expected}{prepared}")).into()
-        })
+        self.settle(expected, check, |_| true)
     }
 
-    pub fn settle<T: Clone + PartialEq>(
+    pub fn settle<T: PartialEq>(
         &self,
+        expected: &str,
         mut read: impl FnMut(&Seen) -> Option<T>,
         wanted: impl Fn(&T) -> bool,
-    ) -> Result<Option<T>> {
-        let mut last = None;
-        self.watch(|seen| {
-            last = read(seen).or(last.take());
-            last.clone().filter(&wanted)
-        })?;
-        Ok(last)
-    }
-
-    fn watch<T: PartialEq>(
-        &self,
-        mut check: impl FnMut(&Seen) -> Option<T>,
-    ) -> Result<(Option<T>, bool)> {
+    ) -> Result<T> {
         let x11 = self.x11()?;
         let path = self.inspection();
         let mut preparing = false;
@@ -447,13 +428,20 @@ impl Native {
                 let window = x11.geometry(self.window)?;
                 let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
                 let saved = self.document()?;
-                let seen = glance(frame.as_ref(), saved.as_ref(), &mut check);
+                let seen = glance(frame.as_ref(), saved.as_ref(), &mut read);
                 preparing = matches!(seen, Glance::Preparing);
                 Ok(seen.ready())
             },
-            |_| true,
+            wanted,
         )?;
-        Ok((held, preparing))
+        held.ok_or_else(|| {
+            let prepared = if preparing {
+                " with the workspace prepared"
+            } else {
+                ""
+            };
+            Unseen(format!("{expected}{prepared}")).into()
+        })
     }
 
     pub fn document(&self) -> Result<Option<(u64, Layout)>> {

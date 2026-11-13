@@ -282,12 +282,17 @@ document, no value or an unprepared workspace gives no value. Every value is
 wanted, so `observe` returns the first value that counts. When the deadline
 passes, the journey ends `failed`, blamed on the product.
 
-`Native::settle` waits the same way for a value that a case will judge. It
-returns once the value is the wanted one and has held for 150 ms. When the
-deadline passes it returns the last value that it read, so the case states a
-named expectation about that value and `firstFailingCheck` shows what the app
-drew. The `workspace` journey uses it for the draft of the rename editor, for
-the text of a name after a rename and for the controls that a relaunch draws.
+`Native::settle` reads the same way for a value that a case will judge, and
+`observe` is `Native::settle` with every value wanted. It returns the value
+once the value is the wanted one and counts. When the deadline passes it
+returns the value that counts at that moment, so the case states a named
+expectation about that value and `firstFailingCheck` shows what the app drew.
+A value from an unprepared frame, or from a frame that no longer shows the
+control, never counts. If no value counts when the deadline passes, the
+journey ends `failed`, blamed on the product, and the error names what never
+held still. The `workspace` journey uses `Native::settle` for the draft of
+the rename editor, for the text of a name after a rename and for the controls
+that a relaunch draws.
 
 A launch ends with `observe`. The header sends no workspace action while a
 workspace request is in progress, so a click on the sidebar toggle during the

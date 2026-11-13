@@ -56,7 +56,7 @@ enum Finish<'a> {
 struct Renamed {
     before: String,
     typed: String,
-    draft: Option<String>,
+    draft: String,
     after: Option<String>,
     label: Option<String>,
 }
@@ -75,7 +75,7 @@ struct Saved {
     document: Layout,
 }
 
-#[derive(Clone, PartialEq, Serialize)]
+#[derive(PartialEq, Serialize)]
 struct Restored {
     dock: Context,
     docked: bool,
@@ -388,6 +388,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         }
         native.launch()?;
         let restored = native.settle(
+            "the relaunched window holding still",
             |seen| Some(restored(seen)),
             |restored| restored.docked && restored.missing.is_empty(),
         )?;
@@ -402,13 +403,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .expect(
                 "the avatar is docked where the document says",
-                restored.as_ref().is_some_and(|restored| restored.docked),
+                restored.docked,
             )
             .expect(
                 "the relaunched window draws every Fleet tab and every Vessel of the selected Fleet",
-                restored
-                    .as_ref()
-                    .is_some_and(|restored| restored.missing.is_empty() && !restored.drawn.is_empty()),
+                restored.missing.is_empty() && !restored.drawn.is_empty(),
             )
             .observed("before", &before)?
             .observed("after", &after)?
@@ -451,6 +450,7 @@ fn rename(
         native.type_text(text)?;
     }
     let draft = native.settle(
+        &format!("{editor} holding one draft"),
         |seen| seen.label(&editor).map(str::to_owned),
         |draft| draft == text,
     )?;
@@ -461,7 +461,7 @@ fn rename(
         after: None,
         label: None,
     };
-    if renamed.draft.as_deref() != Some(text) {
+    if renamed.draft != text {
         return Ok(renamed);
     }
     match finish {
@@ -474,10 +474,12 @@ fn rename(
             .then(|| name_of(seen.document, subject))
             .flatten()
     })?;
-    renamed.label = native.settle(
+    let label = native.settle(
+        &format!("{name} holding one label"),
         |seen| seen.label(&name).map(str::to_owned),
         |label| titled(label, &after),
     )?;
+    renamed.label = Some(label);
     renamed.after = Some(after);
     Ok(renamed)
 }
@@ -511,7 +513,7 @@ fn judged(renamed: Renamed, saving: &'static str, saved: &str) -> Result<Verdict
     Verdict::new()
         .expect(
             "the editor held the typed draft before the finishing input",
-            renamed.draft.as_deref() == Some(renamed.typed.as_str()),
+            renamed.draft == renamed.typed,
         )
         .expect(saving, renamed.after.as_deref() == Some(saved))
         .expect("the drawn name is the saved name", drawn)
