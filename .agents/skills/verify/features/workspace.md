@@ -44,18 +44,18 @@ the next case needs.
 | Case | Input | Passes when |
 | --- | --- | --- |
 | `split-vessel` | Hover the Vessel's name, click `split-right`, click `create-worker` `terminal`, type `echo SPLIT-$((6*7))` into the new terminal | Exactly one Vessel is new, and the Fleet holds the first Vessel unchanged and the new Vessel. The Fleet's saved arrangement is one horizontal split with the first Vessel first and the new Vessel second. The frame draws the new Vessel's terminal to the right of the first Vessel's terminal, in the same row. The new Vessel's shell prints `SPLIT-42` |
-| `dock-vessel` | Drag `avatar` onto the new Vessel's name | The document's context and the frame's `dock` are the new Vessel |
-| `create-fleet` | Click `create-fleet`, click `create-worker` `terminal` | Exactly one Fleet is new, it is named `Fleet 2`, it holds one Vessel, it is selected, its tab and its Vessel are drawn, its tab shows `Fleet 2`, and the dock is unchanged |
-| `switch-fleet` | Click the first Fleet's name, the new Fleet's name, then the first again | Each click selects that Fleet and the dock is unchanged at every step |
-| `create-voyage` | Type `cd /voyager/home/second-project` into the new Vessel's terminal, wait until Core reports that folder for its shell, click `create-voyage` | Exactly one Voyage is new, it is open in `/voyager/home/second-project` and named `second-project`, it holds one Fleet with one Vessel, it is selected, it is drawn with its Fleet tab and its Vessel, its row shows `second-project`, its Fleet's tab shows that Fleet's saved name, and the dock is unchanged |
-| `switch-voyage` | Click the first Voyage's name, the new Voyage's name, then the first again | Each click selects that Voyage, the dock is unchanged, and the first Voyage shows its first Fleet again |
+| `dock-vessel` | Drag `avatar` onto the new Vessel's name | The document's context and the frame's `dock` are the new Vessel, and the frame draws the avatar wholly inside that Vessel's terminal |
+| `create-fleet` | Click `create-fleet`, click `create-worker` `terminal` | Exactly one Fleet is new, it is named `Fleet 2`, it holds one Vessel, it is selected, its tab and its Vessel are drawn, its tab shows `Fleet 2`, and the dock is unchanged, with the avatar drawn as in `switch-fleet` |
+| `switch-fleet` | Click the first Fleet's name, the new Fleet's name, then the first again | Each click selects that Fleet. At every step the dock is unchanged and the avatar is drawn inside the docked Vessel's terminal, or, while another Fleet is shown, in a slot that overlaps no drawn terminal |
+| `create-voyage` | Type `cd /voyager/home/second-project` into the new Vessel's terminal, wait until Core reports that folder for its shell, click `create-voyage` | Exactly one Voyage is new, it is open in `/voyager/home/second-project` and named `second-project`, it holds one Fleet with one Vessel, it is selected, it is drawn with its Fleet tab and its Vessel, its row shows `second-project`, its Fleet's tab shows that Fleet's saved name, and the dock is unchanged, with the avatar drawn as in `switch-fleet` |
+| `switch-voyage` | Click the first Voyage's name, the new Voyage's name, then the first again | Each click selects that Voyage, the dock is unchanged with the avatar drawn as in `switch-fleet`, and the first Voyage shows its first Fleet again |
 | `rename-fleet-enter` | Double-click the Fleet's name, type, press Return | The editor holds the typed text before Return, the saved name is the typed text, and the drawn name is the saved name |
 | `rename-voyage-blur` | Double-click the Voyage's name, type, click the first terminal | The same three, with the click as the finishing input |
 | `rename-vessel-f2` | Click the Vessel's name, press F2, type `+`, press Return | The same three. The saved name is `+` and the title ends in `+` |
 | `rename-keyboard` | Click the first Voyage's name, press Tab and F2, press Escape, press Shift+Tab and F2, type, press Return | F2 after Tab opens the editor of the next Voyage's name and no other. F2 after Shift+Tab opens the editor of the first Voyage's name and no other. Then the same three |
 | `rename-escape-cancels` | Double-click the Fleet's name, type, press Escape | The editor holds the typed text before Escape, the saved name is unchanged, and the drawn name is the saved name |
 | `rename-empty-refused` | Double-click the Vessel's name, press BackSpace, press Return | The editor is empty before Return, the saved name is unchanged, and the drawn name is the saved name |
-| `relaunch-restores` | Press Ctrl+Q, launch the same profile | The candidate quits with a success status. The layout document and its version are equal before and after. Core and the shells of all four Vessels are the same processes. The Fleet, the Voyage and the Vessel that the journey renamed are saved as `Native Fleet`, `Keyboard Voyage` and `+`. The avatar is docked where the document says. The window draws every Voyage row, every Fleet tab of the selected Voyage, and the name and the terminal of every Vessel of the selected Fleet. Every Voyage row, every Fleet tab and the renamed Vessel's title shows its saved name |
+| `relaunch-restores` | Press Ctrl+Q, launch the same profile | Before Ctrl+Q, the saved document holds exactly the Voyages, Fleets and Vessels that the journey created, beside the Home Voyage as it was at the start, and the window draws exactly their Voyage rows, the selected Voyage's Fleet tabs and the selected Fleet's Vessels (name and terminal), with none missing and none extra. The candidate quits with a success status. The layout document and its version are equal before and after. Core and the shells of all four Vessels are the same processes. The Fleet, the Voyage and the Vessel that the journey renamed are saved as `Native Fleet`, `Keyboard Voyage` and `+`. The avatar is docked where the document says. The window draws every Voyage row, every Fleet tab of the selected Voyage, and the name and the terminal of every Vessel of the selected Fleet. Every Voyage row, every Fleet tab and the renamed Vessel's title shows its saved name. After the relaunch the window again draws exactly those rows, tabs and Vessels, and the avatar is drawn on its dock |
 
 The app saves a change before it draws it, so a frame from before an input
 can stand beside the document from after it. `split-vessel`, `create-fleet`
@@ -88,9 +88,12 @@ selects its whole value when it opens.
 
 The drawn name is the `label` of the name control in the frame. A Vessel's
 title shows its program and folder before its name, as in `bash ·
-second-project · +`, so the journey compares the last part of the title with
-the saved name. A draft or a label counts only after prepared frames have
-shown it unchanged for 150 ms. If the editor or the name leaves the frame
+second-project · +`, so the journey compares the last part of a Vessel's title
+with the saved name. A Fleet tab and a Voyage row show the name alone, so the
+journey compares the whole label with the saved name, and a tab labelled
+`Fleet 1 · Fleet 2` does not count as `Fleet 2`. A draft or a label counts
+only after prepared frames have shown it unchanged for 150 ms. If the editor
+or the name leaves the frame
 before that, the case ends as an error that names the control, and the
 journey is `failed`.
 
@@ -108,6 +111,22 @@ that a late save changed after `rename-escape-cancels` passed therefore fails
 here. It also compares the label of every Voyage row and every Fleet tab with
 the saved name, so a created Fleet or Voyage that is drawn under another name
 fails here as well as in its creation case.
+
+The frame's `dock` is where the app says it docked. Every dock check also
+needs the avatar element drawn there. With the dock on a Vessel that is drawn,
+the avatar's bounds must lie wholly inside that Vessel's terminal. With the
+dock on a Vessel in another Fleet or Voyage, the avatar must be drawn and
+overlap no drawn terminal. The avatar animates between landings, so each
+step is read until the value holds for 150 ms and the avatar is on its dock.
+
+The journey keeps its own model of what it created: the first Voyage, Fleet and
+Vessel, the split Vessel, the created Fleet and its Vessel, and the created
+Voyage with its Fleet and Vessel. Before Ctrl+Q and again after the relaunch
+it compares the saved document with the model, and the keys of the drawn
+`voyage-name`, `fleet-name`, `vessel-name` and `terminal` elements with the
+keys that the model and the document's selection predict. Both lists go into
+the evidence. The comparison sorts ids, so it ignores order. A Vessel, Fleet or
+Voyage that appears late fails here even though its creation case passed.
 
 The journey binds the shell of every Vessel that it creates, so cleanup waits
 for all four shells to exit. A creation case binds the new shell only after
@@ -173,6 +192,15 @@ These gaps are open. Nobody has approved them.
   and `demo-feedback` journeys also keep captures and compare none.
 - `rename-keyboard` proves one Tab step and one Shift+Tab step, between two
   Voyage names. It does not walk the Fleet tabs or the Vessel titles.
+- While the docked Vessel is in a Fleet or Voyage that is not shown, the app
+  draws the avatar in a sidebar slot that the frame does not report. The
+  journey then proves only that the avatar is drawn and covers no drawn
+  terminal. An avatar drawn elsewhere outside every terminal passes.
+- A Vessel title is compared by its last part, so a title whose program or
+  folder part is wrong passes.
+- The model of what the journey created includes the Home Voyage as it was
+  when the journey started. The sidebar does not draw Home, so nothing checks
+  how Home is drawn.
 
 ## Gotchas
 
