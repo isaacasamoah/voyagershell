@@ -1,3 +1,4 @@
+mod diagnosis;
 mod lifecycle;
 mod native;
 mod probe;
@@ -7,14 +8,16 @@ mod scrolling;
 mod system;
 
 use anyhow::{Context, Result, bail, ensure};
-use lifecycle::{Event, Run};
+use lifecycle::{Event, Phase, Run};
+use native::{Cause, Fault, Native};
 use sandbox::{Observation, Resource, Sandbox};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value, json};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::Duration;
-use system::Pinned;
+use system::{Pinned, System};
 
 fn main() {
     match entry() {
@@ -30,7 +33,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe\nrun --journey terminal-scrolling --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls."
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe\nrun --journey terminal-scrolling --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls."
         );
         return Ok(0);
     }
@@ -59,7 +62,7 @@ fn entry() -> Result<i32> {
         ensure!(args.is_empty(), "Unexpected lifecycle options");
         println!(
             "{}",
-            json!({"check":"finite-lifecycle","verificationSource":source,"states":proof::check()?,"bounds":"All reachable values of the finite Run type and all ten Event values; no external OS model"})
+            json!({"check":"finite-lifecycle","verificationSource":source,"states":proof::check()?,"bounds":"All reachable values of the finite Run type and all eleven Event values; no external OS model"})
         );
         return Ok(0);
     }
@@ -74,6 +77,7 @@ fn entry() -> Result<i32> {
         "--hc-sha256",
         "--assets",
         "--evidence",
+        "--fault",
     ];
     ensure!(args.len().is_multiple_of(2), "Every option needs a value");
     for pair in args.as_chunks::<2>().0 {
@@ -145,7 +149,7 @@ fn entry() -> Result<i32> {
         std::process::id(),
         system::stamp() as u32
     );
-    let plan = json!({"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host});
+    let plan = json!({"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?});
     let command = confine(
         Some(&evidence),
         &[
@@ -186,39 +190,78 @@ struct Plan {
     evidence: PathBuf,
     session: String,
     host: Vec<Resource>,
+    fault: Option<Fault>,
+}
+
+fn journey(
+    native: &mut Native,
+    gate: &mut Run,
+    cases: &mut Vec<Value>,
+    host: Vec<Resource>,
+    fault: Option<&Fault>,
+) -> Result<()> {
+    let containment = sandbox::observe(host)?;
+    system::save(
+        native.system.evidence.join("containment.json"),
+        &containment,
+    )?;
+    sandbox::sealed(&containment)?;
+    native.prepare()?;
+    gate.step(Event::Ready)?;
+    gate.step(Event::Dispatch)?;
+    native.system.mark_dispatch();
+    if let Some(fault) = fault {
+        native.inject(fault)?;
+    }
+    scrolling::drive(native, cases)?;
+    acknowledge(gate, &native.system)?;
+    gate.step(
+        if cases.len() == 4 && cases.iter().all(|case| case["passed"] == true) {
+            Event::Match
+        } else {
+            Event::Mismatch
+        },
+    )
+}
+
+fn acknowledge(gate: &mut Run, system: &System) -> Result<()> {
+    if gate.phase == Phase::Dispatched && system.acknowledged_since_dispatch() {
+        gate.step(Event::Acknowledge)?;
+    }
+    Ok(())
 }
 
 fn drive(plan: Plan) -> Result<i32> {
     system::listen_for_cancel()?;
-    let system = system::System::new(plan.evidence, plan.session)?;
-    let mut native = native::Native::new(system, plan.candidate, plan.hc);
+    let system = System::new(plan.evidence, plan.session)?;
+    let mut native = Native::new(system, plan.candidate, plan.hc);
     let mut gate = Run::default();
     let mut cases = Vec::new();
-    let result = (|| -> Result<()> {
-        let containment = sandbox::observe(plan.host)?;
-        system::save(
-            native.system.evidence.join("containment.json"),
-            &containment,
-        )?;
-        sandbox::sealed(&containment)?;
-        native.prepare()?;
-        gate.step(Event::Ready)?;
-        gate.step(Event::Dispatch)?;
-        scrolling::drive(&mut native, &mut cases)?;
-        gate.step(Event::Acknowledge)?;
-        gate.step(
-            if cases.len() == 4 && cases.iter().all(|case| case["passed"] == true) {
-                Event::Match
-            } else {
-                Event::Mismatch
-            },
-        )?;
-        Ok(())
-    })();
-    let error = result.err().map(|error| format!("{error:#}"));
-    if error.is_some() {
-        gate.step(Event::Unavailable)?;
+    let result = journey(
+        &mut native,
+        &mut gate,
+        &mut cases,
+        plan.host,
+        plan.fault.as_ref(),
+    );
+    let cause = result.err().map(|error| native.diagnose(&error));
+    acknowledge(&mut gate, &native.system)?;
+    let product_fault = matches!(cause, Some(Cause::Product(_)));
+    match &cause {
+        Some(Cause::Product(_)) if gate.step(Event::Crash).is_ok() => {}
+        Some(_) => gate.step(Event::Unavailable)?,
+        None => {}
     }
+    let behaved =
+        cause.is_none() && cases.len() == 4 && cases.iter().all(|case| case["passed"] == true);
+    let snapshot_gaps = if behaved {
+        Vec::new()
+    } else {
+        diagnosis::snapshot(&mut native)
+    };
+    let error = cause.as_ref().map(|cause| match cause {
+        Cause::Product(detail) | Cause::Fixture(detail) => detail.clone(),
+    });
     let observations = native.system.evidence.join("observations.json");
     let recording = system::save(&observations, &json!({"cases":cases,"error":error}));
     if recording.is_ok() {
@@ -226,21 +269,41 @@ fn drive(plan: Plan) -> Result<i32> {
     } else {
         gate.step(Event::Unavailable)?;
     }
-    let cleanup_errors = native.cleanup();
+    let cleanup_errors = native.cleanup(product_fault);
     gate.step(if cleanup_errors.is_empty() {
         Event::Clean
     } else {
         Event::CleanupFailed
     })?;
-    if native.candidate.verify().is_err() || native.hc.verify().is_err() {
+    let identity_changed = native.candidate.verify().is_err() || native.hc.verify().is_err();
+    if identity_changed {
         gate.step(Event::Unavailable)?;
     }
     gate.step(Event::Finish)?;
     let evidence_retained = observations.is_file();
-    let report = json!({"schema":2,"journey":"terminal-scrolling","runtimeResult":gate.verdict(),"lifecycle":gate,"error":error,"recordingError":recording.err().map(|e|e.to_string()),"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":native.candidate.path,"sha256":native.candidate.sha256,"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
+    let recording_error = recording.err().map(|e| e.to_string());
+    let verdict = gate.verdict();
+    let first_failure = diagnosis::Findings {
+        cause: cause.as_ref(),
+        cases: &cases,
+        recording_error: recording_error.as_deref(),
+        cleanup_errors: &cleanup_errors,
+        identity_changed,
+    }
+    .first_failing_check();
+    let bundle = native.system.evidence.join("bundle");
+    let bundled = verdict != "passed";
+    if bundled {
+        fs::create_dir_all(&bundle)?;
+        system::save(
+            bundle.join("summary.json"),
+            &json!({"runtimeResult":verdict,"firstFailingCheck":first_failure,"snapshotGaps":snapshot_gaps,"files":{"candidateLog":"../native.log","displayLog":"../display.log","actions":"../actions.jsonl","observations":"../observations.json","processes":"processes.json","coreDocument":"core-doc.json","coreTerminals":"core-terminals.json","coreLogs":"core/","captures":"captures/","finalScreen":"final-screen.png","ledgerTail":"actions-tail.jsonl"}}),
+        )?;
+    }
+    let report = json!({"schema":3,"journey":"terminal-scrolling","runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":native.candidate.path,"sha256":native.candidate.sha256,"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
     system::save(native.system.evidence.join("checks.json"), &report)?;
     println!("{}", serde_json::to_string_pretty(&report)?);
-    match gate.verdict() {
+    match verdict {
         "passed" => Ok(0),
         "failed" => Ok(1),
         "inconclusive" => Ok(2),
@@ -248,8 +311,9 @@ fn drive(plan: Plan) -> Result<i32> {
     }
 }
 
-const SOURCES: [(&str, &[u8]); 10] = [
+const SOURCES: [(&str, &[u8]); 11] = [
     ("src/main.rs", include_bytes!("main.rs")),
+    ("src/diagnosis.rs", include_bytes!("diagnosis.rs")),
     ("src/lifecycle.rs", include_bytes!("lifecycle.rs")),
     ("src/proof.rs", include_bytes!("proof.rs")),
     ("src/system.rs", include_bytes!("system.rs")),

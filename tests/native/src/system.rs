@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
     Arc, OnceLock,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -38,6 +38,17 @@ pub fn save(path: impl AsRef<Path>, value: &impl Serialize) -> Result<()> {
 pub fn digest(path: &Path) -> Result<String> {
     Ok(format!("{:x}", Sha256::digest(fs::read(path)?)))
 }
+
+#[derive(Debug)]
+pub struct TimedOut(pub String);
+
+impl std::fmt::Display for TimedOut {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Timed out observing {}", self.0)
+    }
+}
+
+impl std::error::Error for TimedOut {}
 
 pub fn until<T>(name: &str, mut observe: impl FnMut() -> Result<Option<T>>) -> Result<T> {
     wait(name, &mut observe, true)
@@ -77,7 +88,9 @@ fn wait<T>(
         if let Some(value) = observe()? {
             return Ok(value);
         }
-        ensure!(Instant::now() < deadline, "Timed out observing {name}");
+        if Instant::now() >= deadline {
+            return Err(TimedOut(name.into()).into());
+        }
         sleep(Duration::from_millis(80));
     }
 }
@@ -145,6 +158,17 @@ impl Owned {
     }
 }
 
+impl Owned {
+    pub fn abandon(&mut self) -> Result<()> {
+        if self.child.try_wait()?.is_none() {
+            self.identity.verify()?;
+            self.child.kill()?;
+        }
+        self.child.wait()?;
+        Ok(())
+    }
+}
+
 impl Drop for Owned {
     fn drop(&mut self) {
         let _ = self.stop();
@@ -155,6 +179,8 @@ pub struct System {
     pub evidence: PathBuf,
     pub session: String,
     pub env: BTreeMap<String, String>,
+    acknowledged: AtomicUsize,
+    dispatch_mark: AtomicUsize,
 }
 
 impl System {
@@ -163,14 +189,14 @@ impl System {
             Path::new(sandbox::RUNTIME).is_dir(),
             "The driver runs only inside the verification sandbox"
         );
-        let mut system = Self {
+        let mut system = Self::with_env(
             evidence,
             session,
-            env: sandbox::ENVIRONMENT
+            sandbox::ENVIRONMENT
                 .iter()
                 .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
                 .collect(),
-        };
+        );
         let socket = sandbox::text(&system.socket())?;
         ensure!(
             socket.len() + 20 <= 107,
@@ -188,6 +214,29 @@ impl System {
             system.env.insert(key.into(), value);
         }
         Ok(system)
+    }
+
+    pub(crate) fn with_env(
+        evidence: PathBuf,
+        session: String,
+        env: BTreeMap<String, String>,
+    ) -> Self {
+        Self {
+            evidence,
+            session,
+            env,
+            acknowledged: AtomicUsize::new(0),
+            dispatch_mark: AtomicUsize::new(0),
+        }
+    }
+
+    pub fn mark_dispatch(&self) {
+        self.dispatch_mark
+            .store(self.acknowledged.load(Ordering::SeqCst), Ordering::SeqCst);
+    }
+
+    pub fn acknowledged_since_dispatch(&self) -> bool {
+        self.acknowledged.load(Ordering::SeqCst) > self.dispatch_mark.load(Ordering::SeqCst)
     }
 
     pub fn record(&self, value: Value) -> Result<()> {
@@ -237,15 +286,25 @@ impl System {
         let output = child.wait_with_output()?;
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         self.record(json!({"id":id,"event":"acknowledgement","status":output.status.code(),"stdout":stdout,"stderr":String::from_utf8_lossy(&output.stderr)}))?;
+        if matches!(output.status.code(), Some(124 | 137)) {
+            return Err(TimedOut(format!("{program} {}", arguments.join(" "))).into());
+        }
         ensure!(
             output.status.success(),
             "{program} failed with {}",
             output.status
         );
+        self.acknowledged.fetch_add(1, Ordering::SeqCst);
         Ok(stdout.trim().into())
     }
 
-    pub fn spawn(&self, program: &Path, arguments: &[&str], log: &str) -> Result<Owned> {
+    pub fn spawn(
+        &self,
+        program: &Path,
+        arguments: &[&str],
+        extra_env: &[(&str, &str)],
+        log: &str,
+    ) -> Result<Owned> {
         let output = OpenOptions::new()
             .create(true)
             .append(true)
@@ -253,6 +312,7 @@ impl System {
         let mut child = self
             .command(program.to_str().context("Non-UTF8 program path")?)
             .args(arguments)
+            .envs(extra_env.iter().copied())
             .stdout(output.try_clone()?)
             .stderr(output)
             .spawn()?;
@@ -283,7 +343,12 @@ impl System {
         ensure!(
             matches!(
                 method,
-                "server.status" | "doc.get" | "terminal.get" | "terminal.read" | "server.stop"
+                "server.status"
+                    | "doc.get"
+                    | "terminal.get"
+                    | "terminal.list"
+                    | "terminal.read"
+                    | "server.stop"
             ),
             "Unsupported verification Core operation"
         );
@@ -414,14 +479,10 @@ mod tests {
         let evidence =
             std::env::temp_dir().join(format!("vv-log-failure-{}-{}", std::process::id(), stamp()));
         fs::create_dir(&evidence)?;
-        let system = System {
-            evidence,
-            session: "voyager-verify-test".into(),
-            env: BTreeMap::new(),
-        };
+        let system = System::with_env(evidence, "voyager-verify-test".into(), BTreeMap::new());
         fs::create_dir(system.evidence.join("actions.jsonl"))?;
         let before = children()?;
-        let result = system.spawn(Path::new("/bin/sleep"), &["30"], "spawn.log");
+        let result = system.spawn(Path::new("/bin/sleep"), &["30"], &[], "spawn.log");
         let after = children()?;
         let sleep = fs::canonicalize("/bin/sleep")?;
         let leaked: Vec<_> = after
