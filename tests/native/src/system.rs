@@ -321,9 +321,11 @@ impl System {
                     drop(child.stdin.take());
                 }
                 let output = child.wait_with_output()?;
-                if matches!(output.status.code(), Some(124 | 137)) {
-                    return Err(TimedOut(format!("{program} {}", arguments.join(" "))).into());
-                }
+                ensure!(
+                    !matches!(output.status.code(), Some(124 | 137)),
+                    "The host tool {program} {} did not finish within 8 s",
+                    arguments.join(" ")
+                );
                 ensure!(
                     output.status.success(),
                     "{program} failed with {}: {}",

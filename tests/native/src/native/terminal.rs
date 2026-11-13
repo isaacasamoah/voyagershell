@@ -1,4 +1,4 @@
-use super::{Native, QUIET, Wheel, pid, placed};
+use super::{Defect, Native, QUIET, Wheel, pid, placed};
 use crate::inspection::{Target, region};
 use crate::system::{Identity, PATIENCE, settle, until};
 use crate::x11::{Key, Pixels};
@@ -121,14 +121,23 @@ impl Terminal {
     }
 
     pub fn same_program(&self, native: &Native) -> Result<()> {
-        self.shell.verify()?;
-        ensure!(
-            pid(&native
+        let survived = || -> Result<()> {
+            self.shell.verify()?;
+            let reported = native
                 .system
-                .rpc("terminal.get", json!({"terminal":self.address}))?)?
-                == self.shell.pid,
-            "Terminal shell changed"
-        );
+                .rpc("terminal.get", json!({"terminal":self.address}))?;
+            ensure!(
+                pid(&reported)? == self.shell.pid,
+                "Core reports another program for the terminal"
+            );
+            Ok(())
+        };
+        survived().map_err(|error| {
+            Defect(format!(
+                "the shell of {} did not survive: {error:#}",
+                self.target()
+            ))
+        })?;
         native.same_core()
     }
 }
@@ -142,6 +151,34 @@ fn placement_of<'a>(layout: &'a Layout, content: &ContentId) -> Option<&'a Place
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::{Cause, tests::native};
+    use std::path::Path;
+
+    #[test]
+    fn a_shell_that_died_is_a_product_failure() -> Result<()> {
+        let mut native = native()?;
+        let mut shell = native.system.spawn(
+            Path::new("/usr/bin/tail"),
+            &["-f", "/dev/null"],
+            &[],
+            "shell.log",
+        )?;
+        shell.child.kill()?;
+        shell.child.wait()?;
+        let terminal = Terminal {
+            address: CoreTerminalId("t1".into()),
+            placement: PlacementId("placement-3".into()),
+            shell: shell.identity.clone(),
+        };
+        let error = terminal
+            .same_program(&native)
+            .expect_err("A shell that died counted as the same program");
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Product(detail) if detail.contains("placement-3")),
+            "A shell that died was blamed on the fixture: {error:#}"
+        );
+        Ok(())
+    }
 
     #[test]
     fn the_terminal_placement_is_found_by_its_content() {

@@ -451,17 +451,27 @@ impl Native {
     pub fn close(&mut self) -> Result<()> {
         self.press(Key::Char('q').ctrl())?;
         let viewer = self.viewer.as_mut().context("Missing viewer")?;
-        until("owned viewer exit", || {
-            Ok(viewer.child.try_wait()?.map(|_| ()))
-        })?;
+        let status = until("owned viewer exit", || Ok(viewer.child.try_wait()?))?;
         self.viewer = None;
+        if !status.success() {
+            return Err(Defect(format!(
+                "the candidate did not quit cleanly: {}",
+                describe(status)
+            ))
+            .into());
+        }
         Ok(())
     }
 
     pub fn diagnose(&mut self, error: &anyhow::Error) -> Cause {
         let unseen = error.downcast_ref::<Unseen>().is_some();
         let timed_out = unseen || error.downcast_ref::<TimedOut>().is_some();
-        let attempts = if timed_out { 1 } else { EXIT_GRACE_POLLS };
+        let defect = error.downcast_ref::<Defect>();
+        let attempts = if timed_out || defect.is_some() {
+            1
+        } else {
+            EXIT_GRACE_POLLS
+        };
         for attempt in 0..attempts {
             if let Some(viewer) = self.viewer.as_mut()
                 && let Some(status) = exited(viewer)
@@ -476,6 +486,9 @@ impl Native {
             && let Some(status) = exited(display)
         {
             return Cause::Fixture(format!("owned display exited: {status}"));
+        }
+        if let Some(Defect(detail)) = defect {
+            return Cause::Product(detail.clone());
         }
         if let Some(viewer) = &self.viewer
             && process_state(viewer.identity.pid) == Some('T')
@@ -630,6 +643,17 @@ pub enum Cause {
     Fixture(String),
 }
 
+#[derive(Debug)]
+pub struct Defect(pub String);
+
+impl fmt::Display for Defect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Defect {}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum Action {
     Kill,
@@ -712,7 +736,7 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    fn native() -> Result<Native> {
+    pub(super) fn native() -> Result<Native> {
         let evidence =
             std::env::temp_dir().join(format!("vv-diagnose-{}-{}", std::process::id(), stamp()));
         fs::create_dir(&evidence)?;
@@ -819,6 +843,35 @@ mod tests {
         );
         assert!(held.see(Glance::Ready(2), at(710)));
         assert_eq!(held.value.map(|(value, _)| value), Some(2));
+    }
+
+    #[test]
+    fn a_defect_the_driver_saw_is_a_product_failure() -> Result<()> {
+        let mut native = native()?;
+        let error = anyhow::Error::from(Defect("the candidate did not quit cleanly".into()));
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Product(detail) if detail.contains("quit cleanly")),
+            "A defect that the driver observed was blamed on the fixture"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_host_tool_that_hangs_is_a_fixture_fault() -> Result<()> {
+        let mut native = native()?;
+        let error = native
+            .system
+            .execute("timeout", &["0.1s", "sleep", "5"], None)
+            .expect_err("A tool that ran out of time succeeded");
+        ensure!(
+            error.downcast_ref::<TimedOut>().is_none(),
+            "A hung host tool reads as a candidate that stopped responding"
+        );
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Fixture(detail) if detail.contains("timeout")),
+            "A hung host tool was blamed on the product"
+        );
+        Ok(())
     }
 
     #[test]

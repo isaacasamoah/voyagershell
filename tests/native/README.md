@@ -307,14 +307,15 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 | Observation when the journey stopped | Verdict |
 | --- | --- |
 | Candidate exited or was killed, or is stopped | `failed`, blamed on the product |
+| A bound shell died or Core reports another program for its terminal (`Terminal::same_program`), or the candidate quit with a failure status (`Native::close`) | `failed`, blamed on the product |
 | Core exited while the candidate ran | `failed`, blamed on the product |
 | Timeout while the display still answers | `failed`, a hang, blamed on the product |
+| A case returned no expectation, or an observed value could not be recorded | `inconclusive`, blamed on the fixture |
 | A case's expectation did not hold | `failed`, and `firstFailingCheck` names the case, the expectation and the observed values |
 | `drive` returned without running a declared case although no case failed | `inconclusive` |
-| Owned display exited or stopped answering, a host tool is missing or failed, the sandbox refused, or an unrelated verifier error | `inconclusive` |
+| Owned display exited or stopped answering, a host tool is missing, failed or ran out of time, the sandbox refused, or an unrelated verifier error | `inconclusive` |
 | Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
 
-| A case returned no expectation, or an observed value could not be recorded | `inconclusive`, blamed on the fixture |
 `Acknowledge` is a real event. It fires only when at least one recorded action
 (an input the display answered, or a host command) completed successfully after
 dispatch, and a match is rejected without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only
