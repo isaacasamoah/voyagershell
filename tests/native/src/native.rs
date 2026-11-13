@@ -215,11 +215,27 @@ impl Native {
         self.core = Some(Identity::read(pid(&core)?)?);
         self.core_id = core["core"]["id"].clone();
         ensure!(!self.core_id.is_null(), "Missing Core identity");
+        self.identify(None)?;
+        self.present()
+    }
+
+    fn identify(&self, first: Option<&Terminal>) -> Result<()> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Identities<'a> {
+            core: &'a Option<Identity>,
+            core_id: &'a Value,
+            #[serde(flatten)]
+            first: Option<&'a Terminal>,
+        }
         save(
             self.system.evidence.join("identity.json"),
-            &json!({"core":self.core,"coreId":self.core_id}),
-        )?;
-        self.present()
+            &Identities {
+                core: &self.core,
+                core_id: &self.core_id,
+                first,
+            },
+        )
     }
 
     pub fn launch(&mut self) -> Result<()> {

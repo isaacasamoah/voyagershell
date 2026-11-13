@@ -269,7 +269,11 @@ Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
 `Chord` adds a modifier to a key. `Terminal` in `src/native/terminal.rs` binds
 one terminal Vessel by its placement. It owns the terminal's Core address and
 shell identity, its captures and its wheel input, so a journey without a
-terminal does not wait for one.
+terminal does not wait for one. `Terminal::first` reads the layout document
+(`doc.get`, parsed as the `Layout` type of the contract). A document that does
+not parse as `Layout` is a fixture error. Rebuild the verifier from the
+candidate's checkout. `line` clicks its own terminal before it types, so the
+text cannot reach another control that holds the keyboard.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and
 capture (`GetImage`). A terminal capture is the `terminal` element's area, with

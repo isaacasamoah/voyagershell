@@ -1,8 +1,9 @@
 use super::{Native, QUIET, Wheel, pid, placed};
 use crate::inspection::{Target, region};
-use crate::system::{Identity, PATIENCE, save, settle, until};
+use crate::system::{Identity, PATIENCE, settle, until};
 use crate::x11::{Key, Pixels};
 use anyhow::{Result, ensure};
+use serde::Serialize;
 use serde_json::json;
 use std::time::Duration;
 use voyager_contract::{ContentId, CoreTerminalId, Layout, PlacementId};
@@ -10,7 +11,9 @@ use voyager_contract::{ContentId, CoreTerminalId, Layout, PlacementId};
 const EXPECTATION: Duration = Duration::from_secs(4);
 const WHEEL_CLICKS: usize = 6;
 
+#[derive(Serialize)]
 pub struct Terminal {
+    #[serde(rename = "terminal")]
     address: CoreTerminalId,
     placement: PlacementId,
     shell: Identity,
@@ -32,16 +35,14 @@ impl Terminal {
         let shell = Identity::read(pid(&native
             .system
             .rpc("terminal.get", json!({"terminal":address}))?)?)?;
-        save(
-            native.system.evidence.join("identity.json"),
-            &json!({"core":native.core,"coreId":native.core_id,"shell":shell,"terminal":address,"placement":placement}),
-        )?;
         native.adopt("shell".into(), shell.clone());
-        Ok(Self {
+        let terminal = Self {
             address,
             placement,
             shell,
-        })
+        };
+        native.identify(Some(&terminal))?;
+        Ok(terminal)
     }
 
     pub fn target(&self) -> Target {
@@ -53,6 +54,7 @@ impl Terminal {
     }
 
     pub fn line(&self, native: &Native, text: &str) -> Result<()> {
+        self.focus(native)?;
         native.type_text(text)?;
         native.press(Key::Return)
     }
