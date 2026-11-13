@@ -1,9 +1,10 @@
 const assert = require("node:assert");
 const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
-const { test, after, afterEach } = require("node:test");
+const { test, before, after, afterEach } = require("node:test");
 
 const ROOT = path.resolve(__dirname, "../..");
 const GATE = path.join(__dirname, "gate.cjs");
@@ -13,23 +14,51 @@ const ENV = Object.fromEntries(
 );
 
 const RUNS = "architecture-gate-test-";
+const ALIVE = "alive.sock";
 
-function running(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
+function abandoned(directory) {
+  return new Promise((resolve) => {
+    const probe = net.connect(path.join(directory, ALIVE));
+    probe.once("connect", () => {
+      probe.destroy();
+      resolve(false);
+    });
+    probe.once("error", (error) => resolve(error.code === "ECONNREFUSED"));
+  });
 }
 
-for (const name of fs.readdirSync(os.tmpdir()))
-  if (name.startsWith(RUNS) && !running(Number(name.slice(RUNS.length))))
-    fs.rmSync(path.join(os.tmpdir(), name), { recursive: true, force: true });
+const RUN = fs.mkdtempSync(path.join(os.tmpdir(), RUNS));
+ENV.TMPDIR = RUN;
+const alive = net.createServer().listen(path.join(RUN, ALIVE));
+alive.unref();
+after(() => {
+  alive.close();
+  fs.rmSync(RUN, { recursive: true, force: true });
+});
 
-const RUN = path.join(os.tmpdir(), `${RUNS}${process.pid}`);
-fs.mkdirSync(RUN, { recursive: true });
-after(() => fs.rmSync(RUN, { recursive: true, force: true }));
+before(async () => {
+  for (const entry of fs.readdirSync(os.tmpdir(), { withFileTypes: true })) {
+    const directory = path.join(os.tmpdir(), entry.name);
+    if (
+      !entry.name.startsWith(RUNS) ||
+      !entry.isDirectory() ||
+      directory === RUN ||
+      !(await abandoned(directory))
+    )
+      continue;
+    try {
+      for (const name of fs.readdirSync(directory))
+        if (name !== ALIVE)
+          fs.rmSync(path.join(directory, name), {
+            recursive: true,
+            force: true,
+          });
+      fs.rmSync(directory, { recursive: true, force: true });
+    } catch (error) {
+      console.error(`Skipped stale ${directory}: ${error.message}`);
+    }
+  }
+});
 
 const temporary = [];
 afterEach(() => {
