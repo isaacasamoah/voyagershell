@@ -107,6 +107,7 @@ union all come from that list.
 | `fleet-name` | Fleet id | The Fleet's tab | `Workspace.action` |
 | `vessel-name` | Placement id | The Vessel's title | `Workspace.action` |
 | `portal-name` | Placement id | The Portal's title | `Workspace.action` |
+| `terminal` | Placement id of the Vessel or Portal | The terminal view, once it is attached and accepts input | `renderPanel` in `panel-view.ts` |
 | `split-right`, `split-bottom` | Placement id of the Vessel or Portal to split | The split buttons | `Workspace.splitControl` |
 | `sidebar-toggle` | Empty | The sidebar toggle | `Workspace.sidebarToggle` |
 | `create-notes`, `create-agents` | Empty | The Notes and Agents entries of the creation menu | `CreationPicker.render` in `creation.ts` |
