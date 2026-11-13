@@ -27,7 +27,10 @@ use std::{
 #[path = "core_pending.rs"]
 mod pending;
 pub(crate) use pending::Pending;
+#[path = "core_reader.rs"]
+mod reader;
 use pending::Replies;
+use reader::Reader;
 
 #[derive(Deserialize)]
 struct TerminalList {
@@ -471,12 +474,14 @@ impl Core {
                 }
             }
         });
-        let reader_streams = streams.clone();
-        let reader_replies = replies.clone();
-        let reader_attaching = attaching.clone();
+        let reader = Reader {
+            streams: streams.clone(),
+            replies: replies.clone(),
+            attaching: attaching.clone(),
+            activity: activity.clone(),
+            control: control.clone(),
+        };
         let reader_link = link.clone();
-        let reader_activity = activity.clone();
-        let reader_control = control.clone();
         thread::spawn(move || {
             let reason = loop {
                 if let Some(reason) = reader_link.get() {
@@ -486,92 +491,12 @@ impl Core {
                     Ok(frame) => frame,
                     Err(error) => break format!("read failed: {:?}", error.kind()),
                 };
-                let terminal_channel = reader_streams
-                    .lock()
-                    .is_ok_and(|streams| streams.buffers.contains_key(&frame.channel));
-                if !terminal_channel
-                    && Self::activity_frame(&reader_activity, &reader_control, &frame)
-                {
-                    continue;
-                }
-                if frame.channel == 0 && frame.kind == 0 {
-                    let Ok(message) = serde_json::from_slice::<Value>(&frame.payload) else {
-                        break "Core sent an invalid reply".into();
-                    };
-                    let Some(id) = message.get("id").and_then(Value::as_u64) else {
-                        continue;
-                    };
-                    let Ok(mut replies) = reader_replies.lock() else {
-                        break "internal lock failed".into();
-                    };
-                    let Some(reply) = replies.remove(&id) else {
-                        continue;
-                    };
-                    if id == reader_attaching.load(Ordering::Acquire)
-                        && Self::response(message.clone(), id).is_ok()
-                        && let Some(channel) = message
-                            .pointer("/result/channel")
-                            .and_then(Value::as_u64)
-                            .and_then(|id| u32::try_from(id).ok())
-                    {
-                        let Ok(mut streams) = reader_streams.lock() else {
-                            break "internal lock failed".into();
-                        };
-                        if channel == 0
-                            || streams.buffers.insert(channel, Stream::default()).is_some()
-                        {
-                            break "Core attached an invalid channel".into();
-                        }
-                    }
-                    let _ = reply.try_send(message);
-                } else if frame.channel != 0 && frame.kind == 0 {
-                    if terminal_channel {
-                        crate::typing_trace::transport(
-                            "output_frame_received",
-                            frame.channel,
-                            frame.payload.len(),
-                        );
-                    }
-                    let Ok(mut streams) = reader_streams.lock() else {
-                        break "internal lock failed".into();
-                    };
-                    if streams.total + frame.payload.len() > TOTAL_LIMIT {
-                        break "buffered output exceeded 16 MiB".into();
-                    }
-                    let Some(buffer) = streams.buffers.get_mut(&frame.channel) else {
-                        continue;
-                    };
-                    if buffer.closed {
-                        break "Core sent output after close".into();
-                    }
-                    if buffer.bytes.len() + frame.payload.len() > VIEW_LIMIT {
-                        break "viewer output exceeded 1 MiB".into();
-                    }
-                    let count = frame.payload.len();
-                    buffer.bytes.extend(frame.payload);
-                    let _ = buffer.wake.try_send(());
-                    streams.total += count;
-                } else if frame.channel != 0
-                    && frame.kind == 2
-                    && let Ok(mut streams) = reader_streams.lock()
-                    && let Some(buffer) = streams.buffers.get_mut(&frame.channel)
-                {
-                    buffer.closed = true;
-                    let _ = buffer.wake.try_send(());
+                if let Err(reason) = reader.receive(frame) {
+                    break reason;
                 }
             };
             lost(&reader_link, reason);
-            if let Ok(mut replies) = reader_replies.lock() {
-                replies.clear();
-            }
-            if let Ok(mut activity) = reader_activity.lock() {
-                activity.fail("Core is disconnected");
-            }
-            if let Ok(streams) = reader_streams.lock() {
-                for stream in streams.buffers.values() {
-                    let _ = stream.wake.try_send(());
-                }
-            }
+            reader.fail();
         });
         Ok(Self {
             child,
