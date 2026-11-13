@@ -170,7 +170,7 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 or `import`) completed successfully after dispatch, and a match is rejected
 without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only
 control that sends SIGKILL or SIGSTOP to the identity-checked candidate after that
-delay. `checks.json` records the fault.
+delay. `checks.json` records the fault, and a fault that never fires before the journey ends makes the run inconclusive. Liveness reads the candidate's own process state, so a zombie counts as exited, and the candidate gets a one second grace to finish dying before an error is blamed on the fixture. `--assets` is required. Before launch, `doctor` and `run` refuse an assets folder that is not the `assets` folder next to the path the candidate was built for, or that lacks a frame file the candidate names.
 
 A `failed` or `inconclusive` run also writes `bundle/` in the evidence folder:
 `summary.json` (the first failing check and which side to blame), `processes.json`

@@ -422,6 +422,42 @@ pub fn installed(name: &str) -> Result<PathBuf> {
 pub const LIMITS: [&str; 1] =
     ["No physical touchpad, IME, real compositor latency or actual Codex proof"];
 
+const ASSET_FILES: [&str; 4] = [
+    "idle.png",
+    "stretch-frames/frame-1-uncrossing.png",
+    "stretch-frames/frame-2-stretched.png",
+    "stretch-frames/frame-3-peak-stretch.png",
+];
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty()
+        && haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+}
+
+pub fn check_assets(candidate: &Path, assets: &Path) -> Result<()> {
+    let binary = fs::read(candidate)?;
+    let built_for = assets
+        .parent()
+        .and_then(Path::to_str)
+        .context("Assets folder has no parent")?;
+    ensure!(
+        assets.file_name().is_some_and(|name| name == "assets")
+            && contains(&binary, built_for.as_bytes()),
+        "Candidate was not built to read assets from {}",
+        assets.display()
+    );
+    for file in ASSET_FILES {
+        let name = file.rsplit('/').next().unwrap_or(file);
+        ensure!(
+            !contains(&binary, name.as_bytes()) || assets.join(file).is_file(),
+            "Candidate assets folder lacks {file}"
+        );
+    }
+    Ok(())
+}
+
 pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
     let mut tools = BTreeMap::new();
     for name in [
@@ -447,6 +483,36 @@ pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn assets_must_match_what_the_candidate_was_built_for() -> Result<()> {
+        let root =
+            std::env::temp_dir().join(format!("vv-assets-{}-{}", std::process::id(), stamp()));
+        let (right, wrong) = (root.join("desktop/assets"), root.join("other/assets"));
+        for folder in [&right, &wrong] {
+            fs::create_dir_all(folder.join("stretch-frames"))?;
+        }
+        let candidate = root.join("candidate");
+        fs::write(
+            &candidate,
+            format!(
+                "{}\0idle.png\0frame-1-uncrossing.png",
+                root.join("desktop").display()
+            ),
+        )?;
+        ensure!(
+            check_assets(&candidate, &wrong).is_err(),
+            "Wrong folder accepted"
+        );
+        ensure!(
+            check_assets(&candidate, &right).is_err(),
+            "Missing files accepted"
+        );
+        for file in ["idle.png", "stretch-frames/frame-1-uncrossing.png"] {
+            fs::write(right.join(file), b"")?;
+        }
+        check_assets(&candidate, &right)
+    }
 
     #[test]
     fn pinned_artifact_refuses_another_hash() -> Result<()> {

@@ -111,6 +111,11 @@ fn entry() -> Result<i32> {
         .map(std::fs::canonicalize)
         .transpose()
         .context("Candidate assets")?;
+    system::check_assets(
+        &candidate.path,
+        assets.as_deref().context("Missing --assets")?,
+    )
+    .context("Candidate assets")?;
     let mut readiness = system::doctor(&candidate, &hc)?;
     readiness["verificationSource"] = json!(source);
     readiness["verifierSha256"] = json!(system::digest(&verifier)?);
@@ -218,6 +223,10 @@ fn journey(
         native.inject(fault)?;
     }
     scrolling::drive(native, cases)?;
+    ensure!(
+        fault.is_none() || native.fault_fired(),
+        "The injected fault never fired before the journey ended"
+    );
     acknowledge(gate, &native.system)?;
     gate.step(
         if cases.len() == 4 && cases.iter().all(|case| case["passed"] == true) {

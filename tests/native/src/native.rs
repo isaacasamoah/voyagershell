@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -23,6 +25,7 @@ pub struct Native {
     pub address: String,
     window: String,
     core_id: Value,
+    fault_fired: Arc<AtomicBool>,
 }
 
 impl Native {
@@ -38,6 +41,7 @@ impl Native {
             address: String::new(),
             window: String::new(),
             core_id: Value::Null,
+            fault_fired: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -317,18 +321,22 @@ impl Native {
     }
 
     pub fn diagnose(&mut self, error: &anyhow::Error) -> Cause {
-        if let Some(viewer) = self.viewer.as_mut()
-            && let Ok(Some(status)) = viewer.child.try_wait()
-        {
-            return Cause::Product(format!(
-                "candidate exited unexpectedly: {}",
-                describe(status)
-            ));
+        let timed_out = error.downcast_ref::<TimedOut>().is_some();
+        let attempts = if timed_out { 1 } else { EXIT_GRACE_POLLS };
+        for attempt in 0..attempts {
+            if let Some(viewer) = self.viewer.as_mut()
+                && let Some(status) = exited(viewer)
+            {
+                return Cause::Product(format!("candidate exited unexpectedly: {status}"));
+            }
+            if attempt + 1 < attempts {
+                sleep(Duration::from_millis(100));
+            }
         }
         if let Some(display) = self.display.as_mut()
-            && let Ok(Some(status)) = display.child.try_wait()
+            && let Some(status) = exited(display)
         {
-            return Cause::Fixture(format!("owned display exited: {}", describe(status)));
+            return Cause::Fixture(format!("owned display exited: {status}"));
         }
         if let Some(viewer) = &self.viewer
             && process_state(viewer.identity.pid) == Some('T')
@@ -340,7 +348,7 @@ impl Native {
         {
             return Cause::Product("Core exited while the candidate was running".into());
         }
-        if error.downcast_ref::<TimedOut>().is_some() {
+        if timed_out {
             return match self.system.execute("xdotool", &["getmouselocation"], None) {
                 Ok(_) => Cause::Product(format!("candidate stopped responding: {error:#}")),
                 Err(_) => Cause::Fixture(format!("owned display is unresponsive: {error:#}")),
@@ -353,12 +361,11 @@ impl Native {
         let mut report = serde_json::Map::new();
         let mut owned = |name: &str, process: Option<&mut Owned>| {
             if let Some(process) = process {
-                let state = match process.child.try_wait() {
-                    Ok(Some(status)) => json!({"exited":describe(status)}),
-                    Ok(None) => {
+                let state = match exited(process) {
+                    Some(status) => json!({"exited":status}),
+                    None => {
                         json!({"running":process_state(process.identity.pid).map(String::from)})
                     }
-                    Err(error) => json!({"unknown":error.to_string()}),
                 };
                 report.insert(
                     name.into(),
@@ -387,15 +394,21 @@ impl Native {
             .identity
             .clone();
         let (delay, signal) = (fault.after, fault.signal());
+        let fired = self.fault_fired.clone();
         std::thread::spawn(move || {
             sleep(Duration::from_secs(delay));
             if identity.verify().is_ok()
                 && let Some(pid) = rustix::process::Pid::from_raw(identity.pid as i32)
             {
                 let _ = rustix::process::kill_process(pid, signal);
+                fired.store(true, Ordering::SeqCst);
             }
         });
         Ok(())
+    }
+
+    pub fn fault_fired(&self) -> bool {
+        self.fault_fired.load(Ordering::SeqCst)
     }
 
     pub fn cleanup(&mut self, candidate_faulted: bool) -> Vec<String> {
@@ -497,6 +510,18 @@ impl Fault {
             Action::Kill => rustix::process::Signal::KILL,
             Action::Stop => rustix::process::Signal::STOP,
         }
+    }
+}
+
+const EXIT_GRACE_POLLS: usize = 10;
+
+fn exited(process: &mut Owned) -> Option<String> {
+    if let Ok(Some(status)) = process.child.try_wait() {
+        return Some(describe(status));
+    }
+    match process_state(process.identity.pid) {
+        Some('Z') | None => process.child.wait().ok().map(describe),
+        _ => None,
     }
 }
 
