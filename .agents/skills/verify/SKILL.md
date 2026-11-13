@@ -31,8 +31,8 @@ live desktop or existing profile. The checked viewport is 1450 by 940.
 Run this read-only check first and after anything surprising:
 
 ```sh
-candidate=/home/isaac/the-workshop/.worktrees/experiment-pstack-replay/experiments/pstack-replay/current/artifacts/voyager-shell-current
-expected=eae291d9f8c772371de788884efc2469841cb8c817bfa57c95bcdc17e1f7f62d
+candidate="$PWD/target/release/voyager-shell"
+expected=$(sha256sum "$candidate" | cut -d" " -f1)
 tests/native/target/debug/voyager-verification doctor --binary "$candidate" --sha256 "$expected"
 ```
 

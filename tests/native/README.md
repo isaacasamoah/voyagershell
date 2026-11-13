@@ -57,19 +57,18 @@ It does not establish fresh-machine installation. The crate needs no GPUI linkag
 or second SDK checkout. The parent Cargo patch warnings concern unused SDK crates;
 do not alter or remove the shared SDK configuration to hide them.
 
-The commands below exercise a retained, immutable experiment candidate with a known
-build receipt. Its source was the current-skills scrolling fix from the earlier
-paired replay, not current foundation acceptance.
+The commands below exercise the release build in this checkout. Build it first
+with `cargo build --release --locked -p voyager-desktop --bin voyager-shell`.
 
 ```sh
-candidate=/home/isaac/the-workshop/.worktrees/experiment-pstack-replay/experiments/pstack-replay/current/artifacts/voyager-shell-current
-expected=eae291d9f8c772371de788884efc2469841cb8c817bfa57c95bcdc17e1f7f62d
+candidate="$PWD/target/release/voyager-shell"
+expected=$(sha256sum "$candidate" | cut -d" " -f1)
 tests/native/target/debug/voyager-verification doctor --binary "$candidate" --sha256 "$expected"
 run_parent=$(mktemp -d /var/tmp/voyager-verification-XXXXXX)
 tests/native/target/debug/voyager-verification run --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --evidence "$run_parent/scrolling"
 ```
 
-For another candidate, take the expected hash from its reviewed build receipt.
+For a retained candidate, take the expected hash from its reviewed build receipt.
 Computing a hash from an arbitrary file alone does not establish build provenance.
 Doctor checks the executable hash and installed tool paths without launching an
 app. Actual readiness additionally requires the owned display, exact window title
