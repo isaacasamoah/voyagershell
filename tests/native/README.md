@@ -123,7 +123,8 @@ ordinary shell history. `normal-history` then fails on the expectation
 `wheel up shows earlier history`.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
-candidate that crashes or hangs. They work with every journey.
+candidate that crashes or hangs. They work with every journey, before and
+after a journey launches the candidate again.
 
 ### Build and inspect
 
@@ -317,7 +318,7 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 
 | Observation when the journey stopped | Verdict |
 | --- | --- |
-| Candidate exited or was killed, or is stopped | `failed`, blamed on the product |
+| Candidate exited or was killed, or is stopped, during a case or when the last case ends | `failed`, blamed on the product |
 | Core exited while the candidate ran | `failed`, blamed on the product |
 | A bound shell died or Core reports another program for its terminal (`Terminal::same_program`), or the candidate quit with a failure status (`Native::close`) | `failed`, blamed on the product |
 | Timeout while the display still answers | `failed`, a hang, blamed on the product |
@@ -343,8 +344,17 @@ only when Core has exited.
 `Acknowledge` is a real event. It fires only when at least one recorded action
 (an input the display answered, or a host command) completed successfully after
 dispatch, and a match is rejected without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only
-control that sends SIGKILL or SIGSTOP to the identity-checked candidate after that
-delay. `checks.json` records the fault, and a fault that never fires before the journey ends makes the run inconclusive. Liveness reads the candidate's own process state, so a zombie counts as exited, and the candidate gets a one second grace to finish dying before an error is blamed on the fixture. `--assets` is required. Before launch, `doctor` and `run` refuse an assets folder that is not the `assets` folder next to the path the candidate was built for, or that lacks a frame file the candidate names.
+control that sends SIGKILL or SIGSTOP after that delay to the candidate that is
+running then. Each launch records its candidate's identity for the fault, and
+the fault checks that identity before it sends the signal. If no candidate is
+running when the delay ends, because the journey closed it and has not launched
+it again, the fault goes to the next candidate that the journey launches.
+When the last case ends, the driver withdraws a fault that has not fired, so
+the fault cannot reach the candidate during diagnosis or cleanup. The journey
+then ends in an error if its candidate has exited or is stopped. A fault that
+fires after the last case therefore ends the run `failed`, blamed on the
+product, and a run whose fault fired cannot pass.
+`checks.json` records the fault, and a fault that never fires before the journey ends makes the run inconclusive. Liveness reads the candidate's own process state, so a zombie counts as exited, and the candidate gets a one second grace to finish dying before an error is blamed on the fixture. `--assets` is required. Before launch, `doctor` and `run` refuse an assets folder that is not the `assets` folder next to the path the candidate was built for, or that lacks a frame file the candidate names.
 
 A `failed` or `inconclusive` run also writes `bundle/` in the evidence folder:
 `summary.json` (the first failing check and which side to blame), `processes.json`

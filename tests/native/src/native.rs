@@ -17,8 +17,7 @@ use serde_json::{Value, json};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use voyager_contract::inspection::{Frame, Role};
@@ -142,7 +141,21 @@ pub struct Native {
     adopted: Vec<(String, Identity)>,
     window: Window,
     launches: u32,
-    fault_fired: Arc<AtomicBool>,
+    aim: Arc<Mutex<Aim>>,
+}
+
+#[derive(Default)]
+struct Aim {
+    candidate: Option<Identity>,
+    injection: Injection,
+}
+
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
+enum Injection {
+    #[default]
+    Waiting,
+    Fired,
+    Withdrawn,
 }
 
 impl Native {
@@ -160,7 +173,7 @@ impl Native {
             adopted: Vec::new(),
             window: 0,
             launches: 0,
-            fault_fired: Arc::new(AtomicBool::new(false)),
+            aim: Arc::default(),
         }
     }
 
@@ -253,7 +266,7 @@ impl Native {
             &[("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")],
             "native.log",
         )?;
-        self.viewer = Some(viewer);
+        self.attach(viewer);
         let title = self.title();
         self.window = until("unique candidate window", || {
             let viewer = self.viewer.as_ref().context("Missing viewer")?;
@@ -267,6 +280,14 @@ impl Native {
             self.system.evidence.join("launch.json"),
             &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.surface}),
         )
+    }
+
+    fn attach(&mut self, viewer: Owned) {
+        self.aim
+            .lock()
+            .expect("the fault's aim is never held across a panic")
+            .candidate = Some(viewer.identity.clone());
+        self.viewer = Some(viewer);
     }
 
     fn present(&self) -> Result<()> {
@@ -532,29 +553,42 @@ impl Native {
         Value::Object(report)
     }
 
-    pub fn inject(&self, fault: &Fault) -> Result<()> {
-        let identity = self
-            .viewer
-            .as_ref()
-            .context("Missing viewer")?
-            .identity
-            .clone();
+    pub fn inject(&self, fault: &Fault) {
         let (delay, signal) = (fault.after, fault.signal());
-        let fired = self.fault_fired.clone();
+        let aim = self.aim.clone();
         std::thread::spawn(move || {
             sleep(Duration::from_secs(delay));
-            if identity.verify().is_ok()
-                && let Some(pid) = rustix::process::Pid::from_raw(identity.pid as i32)
-            {
-                let _ = rustix::process::kill_process(pid, signal);
-                fired.store(true, Ordering::SeqCst);
+            loop {
+                {
+                    let mut aim = aim
+                        .lock()
+                        .expect("the fault's aim is never held across a panic");
+                    if aim.injection == Injection::Withdrawn {
+                        return;
+                    }
+                    if let Some(identity) = &aim.candidate
+                        && identity.verify().is_ok()
+                        && let Some(pid) = rustix::process::Pid::from_raw(identity.pid as i32)
+                        && rustix::process::kill_process(pid, signal).is_ok()
+                    {
+                        aim.injection = Injection::Fired;
+                        return;
+                    }
+                }
+                sleep(FAULT_RETRY);
             }
         });
-        Ok(())
     }
 
-    pub fn fault_fired(&self) -> bool {
-        self.fault_fired.load(Ordering::SeqCst)
+    pub fn withdraw_fault(&self) -> bool {
+        let mut aim = self
+            .aim
+            .lock()
+            .expect("the fault's aim is never held across a panic");
+        if aim.injection == Injection::Waiting {
+            aim.injection = Injection::Withdrawn;
+        }
+        aim.injection == Injection::Fired
     }
 
     pub fn cleanup(&mut self, candidate_faulted: bool) -> Vec<String> {
@@ -673,6 +707,7 @@ impl Fault {
 }
 
 const EXIT_GRACE_POLLS: usize = 10;
+const FAULT_RETRY: Duration = Duration::from_millis(10);
 
 fn exited(process: &mut Owned) -> Option<String> {
     if let Ok(Some(status)) = process.child.try_wait() {
@@ -769,6 +804,76 @@ pub(crate) mod tests {
         ensure!(
             matches!(&cause, Cause::Product(detail) if detail.contains("signal 9")),
             "A killed candidate was not blamed on the product"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_fault_goes_to_the_candidate_that_runs_when_it_fires() -> Result<()> {
+        let mut native = native()?;
+        let idle = |native: &Native| {
+            native.system.spawn(
+                Path::new("/usr/bin/tail"),
+                &["-f", "/dev/null"],
+                &[],
+                "viewer.log",
+            )
+        };
+        let first = idle(&native)?;
+        native.attach(first);
+        native
+            .viewer
+            .take()
+            .context("the first candidate")?
+            .abandon()?;
+        native.inject(&Fault {
+            action: Action::Kill,
+            after: 0,
+        });
+        let relaunched = idle(&native)?;
+        native.attach(relaunched);
+        let relaunched = native.viewer.as_mut().context("the relaunched candidate")?;
+        let ended = until("the relaunched candidate's end", || Ok(exited(relaunched)))?;
+        ensure!(
+            ended == "signal 9",
+            "The fault did not kill the candidate that was running: {ended}"
+        );
+        ensure!(
+            native.withdraw_fault(),
+            "A fault that killed the candidate does not count as fired"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_withdrawn_fault_never_fires() -> Result<()> {
+        let mut native = native()?;
+        native.inject(&Fault {
+            action: Action::Kill,
+            after: 0,
+        });
+        ensure!(
+            !native.withdraw_fault(),
+            "A fault fired although no candidate was running"
+        );
+        let later = native.system.spawn(
+            Path::new("/usr/bin/tail"),
+            &["-f", "/dev/null"],
+            &[],
+            "viewer.log",
+        )?;
+        native.attach(later);
+        let later = native.viewer.as_mut().context("the later candidate")?;
+        let ended = poll(crate::system::QUIET * 2, FAULT_RETRY, false, || {
+            Ok(exited(later))
+        })?;
+        ensure!(
+            ended.is_none(),
+            "A withdrawn fault reached a later candidate: {ended:?}"
+        );
+        ensure!(
+            !native.withdraw_fault(),
+            "A withdrawn fault counts as fired"
         );
         Ok(())
     }

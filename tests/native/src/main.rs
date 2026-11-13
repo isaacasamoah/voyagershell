@@ -237,11 +237,16 @@ fn journey(
     gate.step(Event::Dispatch)?;
     native.system.mark_dispatch();
     if let Some(fault) = fault {
-        native.inject(fault)?;
+        native.inject(fault);
     }
     driven.drive(native, outcomes)?;
+    let fired = fault.is_none() || native.withdraw_fault();
     ensure!(
-        fault.is_none() || native.fault_fired(),
+        !native.halted(),
+        "The candidate was not running when the journey ended"
+    );
+    ensure!(
+        fired,
         "The injected fault never fired before the journey ended"
     );
     if let Some(case) = outcomes.unrun() {
