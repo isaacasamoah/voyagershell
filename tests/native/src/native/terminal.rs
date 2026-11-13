@@ -1,5 +1,5 @@
-use super::{Defect, Native, QUIET, Wheel, pid, placed};
-use crate::inspection::{Target, region};
+use super::{Defect, Native, Wheel, pid, placed};
+use crate::inspection::{Target, Unseen, region};
 use crate::system::{Identity, PATIENCE, settle, until};
 use crate::x11::{Key, Pixels};
 use anyhow::{Result, ensure};
@@ -9,6 +9,7 @@ use std::time::Duration;
 use voyager_contract::{ContentId, CoreTerminalId, Layout, PlacementId};
 
 const EXPECTATION: Duration = Duration::from_secs(4);
+const LOOK: Duration = Duration::from_millis(10);
 const WHEEL_CLICKS: usize = 6;
 
 #[derive(Serialize)]
@@ -98,8 +99,7 @@ impl Terminal {
         name: &str,
         expected: impl Fn(&Pixels) -> bool,
     ) -> Result<Pixels> {
-        let look = settle(EXPECTATION, QUIET, || self.look(native), expected)?;
-        native.keep(name, &look)?;
+        let ((), look) = self.settled_with(native, name, || Ok(()), |(), look| expected(look))?;
         Ok(look)
     }
 
@@ -112,10 +112,11 @@ impl Terminal {
     ) -> Result<(T, Pixels)> {
         let (value, look) = settle(
             EXPECTATION,
-            QUIET,
-            || Ok((observe()?, self.look(native)?)),
+            LOOK,
+            || Ok(Some((observe()?, self.look(native)?))),
             |(value, look)| expected(value, look),
-        )?;
+        )?
+        .ok_or_else(|| Unseen(format!("{} holding still", self.target())))?;
         native.keep(name, &look)?;
         Ok((value, look))
     }

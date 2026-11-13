@@ -7,8 +7,8 @@ pub use terminal::Terminal;
 use crate::inspection::{self, Target, Unseen, drawn_for};
 use crate::sandbox;
 use crate::system::{
-    Identity, Owned, PATIENCE, Pinned, System, TimedOut, digest, interrupted, poll, save, stamp,
-    until, until_cleanup,
+    Identity, Owned, PATIENCE, Pinned, System, TimedOut, digest, interrupted, poll, save, settle,
+    stamp, until, until_cleanup,
 };
 use crate::x11::{Display, Geometry, Key, Pixels, Window};
 use anyhow::{Context, Result, ensure};
@@ -20,11 +20,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use voyager_contract::inspection::{Frame, Role};
 use voyager_contract::{Layout, Vessel};
 
-const QUIET: Duration = Duration::from_millis(150);
 const GLANCE: Duration = Duration::from_millis(80);
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
@@ -96,6 +95,15 @@ enum Glance<T> {
     Ready(T),
 }
 
+impl<T> Glance<T> {
+    fn ready(self) -> Option<T> {
+        match self {
+            Glance::Ready(value) => Some(value),
+            Glance::Absent | Glance::Preparing => None,
+        }
+    }
+}
+
 fn glance<T>(frame: Option<&Frame>, check: impl FnOnce(&Seen) -> Option<T>) -> Glance<T> {
     let Some(frame) = frame else {
         return Glance::Absent;
@@ -104,27 +112,6 @@ fn glance<T>(frame: Option<&Frame>, check: impl FnOnce(&Seen) -> Option<T>) -> G
         None => Glance::Absent,
         Some(_) if !frame.prepared => Glance::Preparing,
         Some(value) => Glance::Ready(value),
-    }
-}
-
-struct Held<T> {
-    value: Option<(T, Instant)>,
-    preparing: bool,
-}
-
-impl<T: PartialEq> Held<T> {
-    fn see(&mut self, glance: Glance<T>, now: Instant) -> bool {
-        self.preparing = matches!(glance, Glance::Preparing);
-        let Glance::Ready(value) = glance else {
-            self.value = None;
-            return false;
-        };
-        let since = match self.value.take() {
-            Some((previous, since)) if previous == value => since,
-            _ => now,
-        };
-        self.value = Some((value, since));
-        now.duration_since(since) >= QUIET
     }
 }
 
@@ -382,23 +369,27 @@ impl Native {
     ) -> Result<T> {
         let x11 = self.x11()?;
         let path = self.inspection();
-        let mut held = Held {
-            value: None,
-            preparing: false,
-        };
-        let steady = poll(PATIENCE, GLANCE, true, || {
-            let window = x11.geometry(self.window)?;
-            let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
-            let seen = glance(frame.as_ref(), &mut check);
-            Ok(held.see(seen, Instant::now()).then_some(()))
-        })?;
-        match (steady, held.value) {
-            (Some(()), Some((value, _))) => Ok(value),
-            _ if held.preparing => {
-                Err(Unseen(format!("{expected} with the workspace prepared")).into())
-            }
-            _ => Err(Unseen(expected.into()).into()),
-        }
+        let mut preparing = false;
+        let held = settle(
+            PATIENCE,
+            GLANCE,
+            || {
+                let window = x11.geometry(self.window)?;
+                let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
+                let seen = glance(frame.as_ref(), &mut check);
+                preparing = matches!(seen, Glance::Preparing);
+                Ok(seen.ready())
+            },
+            |_| true,
+        )?;
+        held.ok_or_else(|| {
+            let prepared = if preparing {
+                " with the workspace prepared"
+            } else {
+                ""
+            };
+            Unseen(format!("{expected}{prepared}")).into()
+        })
     }
 
     pub fn document(&self) -> Result<Option<Layout>> {
@@ -816,33 +807,13 @@ mod tests {
             matches!(seen(None, Some(7)), Glance::Absent),
             "An outcome counted without a frame"
         );
+        ensure!(
+            seen(Some(&prepared), Some(7)).ready() == Some(7)
+                && seen(Some(&preparing), Some(7)).ready().is_none()
+                && seen(Some(&prepared), None).ready().is_none(),
+            "Only an outcome in a prepared workspace is a value that can hold"
+        );
         Ok(())
-    }
-
-    #[test]
-    fn an_outcome_counts_once_it_held_through_every_glance_of_the_quiet_window() {
-        let start = Instant::now();
-        let at = |milliseconds: u64| start + Duration::from_millis(milliseconds);
-        let mut held = Held {
-            value: None,
-            preparing: false,
-        };
-        assert!(!held.see(Glance::Ready(1), at(0)));
-        assert!(!held.see(Glance::Ready(1), at(80)));
-        assert!(held.see(Glance::Ready(1), at(160)));
-        assert!(!held.see(Glance::Ready(2), at(240)), "a changed outcome");
-        assert!(!held.see(Glance::Absent, at(320)));
-        assert!(
-            !held.see(Glance::Ready(2), at(400)),
-            "an outcome kept its age across a glance without it"
-        );
-        assert!(!held.see(Glance::Preparing, at(480)) && held.preparing);
-        assert!(
-            !held.see(Glance::Ready(2), at(560)) && !held.preparing,
-            "an outcome kept its age across a preparing workspace"
-        );
-        assert!(held.see(Glance::Ready(2), at(710)));
-        assert_eq!(held.value.map(|(value, _)| value), Some(2));
     }
 
     #[test]

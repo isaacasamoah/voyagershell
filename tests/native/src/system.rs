@@ -62,24 +62,35 @@ pub fn until_cleanup<T>(name: &str, observe: impl FnMut() -> Result<Option<T>>) 
         .ok_or_else(|| TimedOut(name.into()).into())
 }
 
+pub const QUIET: Duration = Duration::from_millis(150);
+
+struct Held<T>(Option<(T, Instant)>);
+
+impl<T: PartialEq> Held<T> {
+    fn see(&mut self, value: Option<T>, now: Instant) -> bool {
+        let since = match (self.0.take(), &value) {
+            (Some((previous, since)), Some(value)) if previous == *value => since,
+            _ => now,
+        };
+        self.0 = value.map(|value| (value, since));
+        self.0.is_some() && now.duration_since(since) >= QUIET
+    }
+}
+
 pub fn settle<T: PartialEq>(
     within: Duration,
-    quiet: Duration,
-    mut observe: impl FnMut() -> Result<T>,
-    expected: impl Fn(&T) -> bool,
-) -> Result<T> {
-    let mut last: Option<(T, Instant)> = None;
-    poll(within, Duration::from_millis(10), true, || {
-        let value = observe()?;
-        let since = match last.take() {
-            Some((previous, since)) if previous == value => since,
-            _ => Instant::now(),
-        };
-        let done = expected(&value) && since.elapsed() >= quiet;
-        last = Some((value, since));
-        Ok(done.then_some(()))
+    every: Duration,
+    mut read: impl FnMut() -> Result<Option<T>>,
+    wanted: impl Fn(&T) -> bool,
+) -> Result<Option<T>> {
+    let mut held = Held(None);
+    let mut still = false;
+    poll(within, every, true, || {
+        still = held.see(read()?, Instant::now());
+        let settled = still && held.0.as_ref().is_some_and(|(value, _)| wanted(value));
+        Ok(settled.then_some(()))
     })?;
-    Ok(last.context("Nothing was observed")?.0)
+    Ok(held.0.filter(|_| still).map(|(value, _)| value))
 }
 
 static CANCELLED: OnceLock<Arc<AtomicBool>> = OnceLock::new();
@@ -554,7 +565,69 @@ pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn a_value_holds_only_through_unbroken_glances_of_the_quiet_window() {
+        let start = Instant::now();
+        let at = |milliseconds: u64| start + Duration::from_millis(milliseconds);
+        let mut held = Held(None);
+        assert!(!held.see(Some(1), at(0)));
+        assert!(!held.see(Some(1), at(80)));
+        assert!(held.see(Some(1), at(160)));
+        assert!(!held.see(Some(2), at(240)), "a changed value");
+        assert!(!held.see(None, at(320)), "a glance without the value");
+        assert!(
+            !held.see(Some(2), at(400)),
+            "a value kept its age across a glance without it"
+        );
+        assert!(held.see(Some(2), at(550)));
+        assert!(
+            !held.see(None, at(630)) && held.0.is_none(),
+            "a value outlived the glance that lost it"
+        );
+    }
+
+    fn settled(read: impl Fn(u32) -> Option<u32>, wanted: u32) -> Result<(Option<u32>, Duration)> {
+        let (start, glances) = (Instant::now(), Cell::new(0));
+        let value = settle(
+            Duration::from_millis(400),
+            Duration::from_millis(10),
+            || {
+                glances.set(glances.get() + 1);
+                Ok(read(glances.get()))
+            },
+            |value| *value == wanted,
+        )?;
+        Ok((value, start.elapsed()))
+    }
+
+    #[test]
+    fn settle_returns_a_value_only_after_it_held() -> Result<()> {
+        let deadline = Duration::from_millis(400);
+        let (value, took) = settled(|_| Some(7), 7)?;
+        ensure!(
+            value == Some(7) && took >= QUIET,
+            "A wanted value was not returned once it held: {value:?} after {took:?}"
+        );
+        let (value, took) = settled(|_| Some(3), 7)?;
+        ensure!(
+            value == Some(3) && took >= deadline,
+            "A value that held was not returned at the deadline: {value:?} after {took:?}"
+        );
+        let (value, took) = settled(Some, 7)?;
+        ensure!(
+            value.is_none() && took >= deadline,
+            "A value that never stopped changing was returned: {value:?}"
+        );
+        let (value, took) = settled(|glance| (glance == 1).then_some(7), 7)?;
+        ensure!(
+            value.is_none() && took >= deadline,
+            "A value that was gone at the deadline was returned: {value:?}"
+        );
+        Ok(())
+    }
 
     #[test]
     fn assets_must_match_what_the_candidate_was_built_for() -> Result<()> {

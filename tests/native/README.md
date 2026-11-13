@@ -248,12 +248,18 @@ frame is polled every 10 ms. When the deadline passes, the journey ends
 The app marks `terminal` only once the terminal view is attached, so the
 driver clicks and types only after that element appears.
 
+`settle` in `src/system.rs` is the one rule for waiting. It reads a value
+again and again. A value counts only after every read has returned it
+unchanged for 150 ms, and a read that returns no value starts the 150 ms
+again. `settle` returns a value that counts as soon as that value is the
+wanted one. When the deadline passes, it returns the value that counts at
+that moment, wanted or not, and it returns nothing when no value counts.
+
 `observe` in `src/native.rs` is the one way to wait for an outcome. Every
-80 ms it reads the latest frame. It returns the value of its check once three
-things are true: the check gives a value, the frame reports `prepared`, and
-the value has not changed for 150 ms. A glance that has no frame, no value or
-an unprepared workspace starts the 150 ms again. When the deadline passes, the
-journey ends `failed`, blamed on the product.
+80 ms it reads the latest frame and gives `settle` the value of its check. A
+glance that has no frame, no value or an unprepared workspace gives no value.
+Every value is wanted, so `observe` returns the first value that counts. When
+the deadline passes, the journey ends `failed`, blamed on the product.
 
 A launch ends with `observe`. The header sends no workspace action while a
 workspace request is in progress, so a click on the sidebar toggle during the
@@ -276,9 +282,12 @@ text cannot reach another control that holds the keyboard.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and
 capture (`GetImage`). A terminal capture is the `terminal` element's area, with
-the avatar's reported bounds blanked. After an input the journey polls until the
-expected state holds and has not changed for 150 ms, or until 4 s pass. It
-records the last observation either way, and the case decides pass or fail. No
+the avatar's reported bounds blanked. After an input, `Terminal::settled` gives
+`settle` a capture every 10 ms for up to 4 s. It returns the capture once the
+capture is the expected one and has not changed for 150 ms. After 4 s it
+returns the capture that has not changed for 150 ms, and the case decides pass
+or fail. A terminal that never holds still for 150 ms ends the journey
+`failed`, blamed on the product. No
 step waits a fixed time for the app. Key events are 1 ms apart, as with the
 earlier `xdotool --delay 1`: typed back to back, 2 of 10 runs lost characters.
 
