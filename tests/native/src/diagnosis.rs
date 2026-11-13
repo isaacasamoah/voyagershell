@@ -1,6 +1,7 @@
 use crate::native::{Cause, Native};
 use crate::system::save;
-use anyhow::Result;
+use crate::x11::Display;
+use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
@@ -37,16 +38,22 @@ pub fn snapshot(native: &mut Native) -> Vec<String> {
             .unwrap_or_else(|error| json!({"unavailable":format!("{error:#}")}));
         keep(file, save(bundle.join(file), &reply));
     }
-    let screen = bundle.join("final-screen.png");
-    if let Some(path) = screen.to_str() {
-        keep(
-            "final-screen",
-            native
-                .system
-                .execute("import", &["-window", "root", path], None)
-                .map(drop),
-        );
-    }
+    keep(
+        "final-screen",
+        native
+            .system
+            .env
+            .get("DISPLAY")
+            .context("No owned display")
+            .and_then(|display| Display::connect(display)?.screen())
+            .and_then(|screen| Ok(screen.image()?.save(bundle.join("final-screen.png"))?)),
+    );
+    keep(
+        "inspection",
+        fs::copy(native.inspection(), bundle.join("inspection.json"))
+            .map(drop)
+            .map_err(Into::into),
+    );
     keep("captures", copy_captures(&native.system.evidence, &bundle));
     keep("ledger", ledger_tail(&native.system.evidence, &bundle));
     keep(

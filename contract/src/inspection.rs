@@ -57,6 +57,7 @@ roles! {
     FleetName => "fleet-name",
     VesselName => "vessel-name",
     PortalName => "portal-name",
+    Terminal => "terminal",
     SplitRight => "split-right",
     SplitBottom => "split-bottom",
     SidebarToggle => "sidebar-toggle",

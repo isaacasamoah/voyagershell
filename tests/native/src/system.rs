@@ -50,12 +50,36 @@ impl std::fmt::Display for TimedOut {
 
 impl std::error::Error for TimedOut {}
 
-pub fn until<T>(name: &str, mut observe: impl FnMut() -> Result<Option<T>>) -> Result<T> {
-    wait(name, &mut observe, true)
+pub const PATIENCE: Duration = Duration::from_secs(12);
+
+pub fn until<T>(name: &str, observe: impl FnMut() -> Result<Option<T>>) -> Result<T> {
+    poll(PATIENCE, Duration::from_millis(80), true, observe)?
+        .ok_or_else(|| TimedOut(name.into()).into())
 }
 
-pub fn until_cleanup<T>(name: &str, mut observe: impl FnMut() -> Result<Option<T>>) -> Result<T> {
-    wait(name, &mut observe, false)
+pub fn until_cleanup<T>(name: &str, observe: impl FnMut() -> Result<Option<T>>) -> Result<T> {
+    poll(PATIENCE, Duration::from_millis(80), false, observe)?
+        .ok_or_else(|| TimedOut(name.into()).into())
+}
+
+pub fn settle<T: PartialEq>(
+    within: Duration,
+    quiet: Duration,
+    mut observe: impl FnMut() -> Result<T>,
+    expected: impl Fn(&T) -> bool,
+) -> Result<T> {
+    let mut last: Option<(T, Instant)> = None;
+    poll(within, Duration::from_millis(10), true, || {
+        let value = observe()?;
+        let since = match last.take() {
+            Some((previous, since)) if previous == value => since,
+            _ => Instant::now(),
+        };
+        let done = expected(&value) && since.elapsed() >= quiet;
+        last = Some((value, since));
+        Ok(done.then_some(()))
+    })?;
+    Ok(last.context("Nothing was observed")?.0)
 }
 
 static CANCELLED: OnceLock<Arc<AtomicBool>> = OnceLock::new();
@@ -77,21 +101,22 @@ pub fn interrupted() -> bool {
         .is_some_and(|flag| flag.load(Ordering::Relaxed))
 }
 
-fn wait<T>(
-    name: &str,
-    observe: &mut impl FnMut() -> Result<Option<T>>,
+pub fn poll<T>(
+    within: Duration,
+    every: Duration,
     cancellable: bool,
-) -> Result<T> {
-    let deadline = Instant::now() + Duration::from_secs(12);
+    mut observe: impl FnMut() -> Result<Option<T>>,
+) -> Result<Option<T>> {
+    let deadline = Instant::now() + within;
     loop {
         ensure!(!cancellable || !interrupted(), "Verification cancelled");
         if let Some(value) = observe()? {
-            return Ok(value);
+            return Ok(Some(value));
         }
         if Instant::now() >= deadline {
-            return Err(TimedOut(name.into()).into());
+            return Ok(None);
         }
-        sleep(Duration::from_millis(80));
+        sleep(every);
     }
 }
 
@@ -256,46 +281,56 @@ impl System {
         command
     }
 
+    pub fn act<T>(&self, intent: Value, perform: impl FnOnce() -> Result<T>) -> Result<T> {
+        let id = stamp();
+        self.record(json!({"id":id,"event":"intent","action":intent}))?;
+        let outcome = perform();
+        self.record(json!({"id":id,"event":"acknowledgement","error":outcome.as_ref().err().map(|error| format!("{error:#}"))}))?;
+        if outcome.is_ok() {
+            self.acknowledged.fetch_add(1, Ordering::SeqCst);
+        }
+        outcome
+    }
+
     pub fn execute(
         &self,
         program: &str,
         arguments: &[&str],
         input: Option<&str>,
     ) -> Result<String> {
-        let id = stamp();
-        self.record(
-            json!({"id":id,"event":"intent","program":program,"arguments":arguments,"input":input}),
-        )?;
-        let mut child = self
-            .command("timeout")
-            .args(["--kill-after=2s", "8s", program])
-            .args(arguments)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        if let Some(input) = input {
-            child
-                .stdin
-                .take()
-                .context("Missing command input")?
-                .write_all(input.as_bytes())?;
-        } else {
-            drop(child.stdin.take());
-        }
-        let output = child.wait_with_output()?;
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        self.record(json!({"id":id,"event":"acknowledgement","status":output.status.code(),"stdout":stdout,"stderr":String::from_utf8_lossy(&output.stderr)}))?;
-        if matches!(output.status.code(), Some(124 | 137)) {
-            return Err(TimedOut(format!("{program} {}", arguments.join(" "))).into());
-        }
-        ensure!(
-            output.status.success(),
-            "{program} failed with {}",
-            output.status
-        );
-        self.acknowledged.fetch_add(1, Ordering::SeqCst);
-        Ok(stdout.trim().into())
+        self.act(
+            json!({"program":program,"arguments":arguments,"input":input}),
+            || {
+                let mut child = self
+                    .command("timeout")
+                    .args(["--kill-after=2s", "8s", program])
+                    .args(arguments)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()?;
+                if let Some(input) = input {
+                    child
+                        .stdin
+                        .take()
+                        .context("Missing command input")?
+                        .write_all(input.as_bytes())?;
+                } else {
+                    drop(child.stdin.take());
+                }
+                let output = child.wait_with_output()?;
+                if matches!(output.status.code(), Some(124 | 137)) {
+                    return Err(TimedOut(format!("{program} {}", arguments.join(" "))).into());
+                }
+                ensure!(
+                    output.status.success(),
+                    "{program} failed with {}: {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
+                Ok(String::from_utf8_lossy(&output.stdout).trim().into())
+            },
+        )
     }
 
     pub fn spawn(
@@ -316,7 +351,12 @@ impl System {
             .stdout(output.try_clone()?)
             .stderr(output)
             .spawn()?;
-        let identity = match Identity::read(child.id()) {
+        let own = std::env::current_exe()?;
+        let executed = until_cleanup("spawned program image", || {
+            let identity = Identity::read(child.id())?;
+            Ok((identity.executable != own).then_some(identity))
+        });
+        let identity = match executed {
             Ok(identity) => identity,
             Err(error) => {
                 child.kill()?;
@@ -465,8 +505,6 @@ pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
         "timeout",
         "dbus-run-session",
         "Xvfb",
-        "xdotool",
-        "import",
         "xrdb",
         "bash",
     ] {
