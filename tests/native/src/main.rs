@@ -1,5 +1,6 @@
 mod diagnosis;
 mod features;
+mod inspection;
 mod lifecycle;
 mod native;
 mod probe;
@@ -7,10 +8,11 @@ mod proof;
 mod sandbox;
 mod scrolling;
 mod system;
+mod x11;
 
 use anyhow::{Context, Result, bail, ensure};
 use lifecycle::{Event, Phase, Run};
-use native::{Cause, Fault, Native};
+use native::{Cause, Fault, Layout, Native};
 use sandbox::{Observation, Resource, Sandbox};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -34,7 +36,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\nrun --journey terminal-scrolling --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls."
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\nrun --journey terminal-scrolling --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS] [--window WIDTHxHEIGHT] [--sidebar open|collapsed]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls."
         );
         return Ok(0);
     }
@@ -82,6 +84,8 @@ fn entry() -> Result<i32> {
         "--assets",
         "--evidence",
         "--fault",
+        "--window",
+        "--sidebar",
     ];
     ensure!(args.len().is_multiple_of(2), "Every option needs a value");
     for pair in args.as_chunks::<2>().0 {
@@ -158,7 +162,11 @@ fn entry() -> Result<i32> {
         std::process::id(),
         system::stamp() as u32
     );
-    let plan = json!({"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?});
+    let layout = Layout::parse(
+        get("--window").ok().as_deref(),
+        get("--sidebar").ok().as_deref(),
+    )?;
+    let plan = json!({"layout":layout,"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?});
     let command = confine(
         Some(&evidence),
         &[
@@ -200,6 +208,7 @@ struct Plan {
     session: String,
     host: Vec<Resource>,
     fault: Option<Fault>,
+    layout: Layout,
 }
 
 fn journey(
@@ -247,7 +256,7 @@ fn acknowledge(gate: &mut Run, system: &System) -> Result<()> {
 fn drive(plan: Plan) -> Result<i32> {
     system::listen_for_cancel()?;
     let system = System::new(plan.evidence, plan.session)?;
-    let mut native = Native::new(system, plan.candidate, plan.hc);
+    let mut native = Native::new(system, plan.candidate, plan.hc, plan.layout);
     let mut gate = Run::default();
     let mut cases = Vec::new();
     let result = journey(
@@ -310,10 +319,10 @@ fn drive(plan: Plan) -> Result<i32> {
         fs::create_dir_all(&bundle)?;
         system::save(
             bundle.join("summary.json"),
-            &json!({"runtimeResult":verdict,"firstFailingCheck":first_failure,"snapshotGaps":snapshot_gaps,"files":{"candidateLog":"../native.log","displayLog":"../display.log","actions":"../actions.jsonl","observations":"../observations.json","processes":"processes.json","coreDocument":"core-doc.json","coreTerminals":"core-terminals.json","coreLogs":"core/","captures":"captures/","finalScreen":"final-screen.png","ledgerTail":"actions-tail.jsonl"}}),
+            &json!({"runtimeResult":verdict,"firstFailingCheck":first_failure,"snapshotGaps":snapshot_gaps,"files":{"candidateLog":"../native.log","displayLog":"../display.log","actions":"../actions.jsonl","observations":"../observations.json","processes":"processes.json","coreDocument":"core-doc.json","coreTerminals":"core-terminals.json","coreLogs":"core/","inspection":"inspection.json","captures":"captures/","finalScreen":"final-screen.png","ledgerTail":"actions-tail.jsonl"}}),
         )?;
     }
-    let report = json!({"schema":3,"journey":"terminal-scrolling","runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":native.candidate.path,"sha256":native.candidate.sha256,"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
+    let report = json!({"schema":3,"journey":"terminal-scrolling","runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"layout":plan.layout,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":native.candidate.path,"sha256":native.candidate.sha256,"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
     system::save(native.system.evidence.join("checks.json"), &report)?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     match verdict {
@@ -324,7 +333,7 @@ fn drive(plan: Plan) -> Result<i32> {
     }
 }
 
-const SOURCES: [(&str, &[u8]); 11] = [
+const SOURCES: [(&str, &[u8]); 13] = [
     ("src/main.rs", include_bytes!("main.rs")),
     ("src/diagnosis.rs", include_bytes!("diagnosis.rs")),
     ("src/lifecycle.rs", include_bytes!("lifecycle.rs")),
@@ -334,6 +343,8 @@ const SOURCES: [(&str, &[u8]); 11] = [
     ("src/native.rs", include_bytes!("native.rs")),
     ("src/probe.rs", include_bytes!("probe.rs")),
     ("src/scrolling.rs", include_bytes!("scrolling.rs")),
+    ("src/inspection.rs", include_bytes!("inspection.rs")),
+    ("src/x11.rs", include_bytes!("x11.rs")),
     ("Cargo.toml", include_bytes!("../Cargo.toml")),
     ("Cargo.lock", include_bytes!("../Cargo.lock")),
 ];

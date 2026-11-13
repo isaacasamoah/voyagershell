@@ -20,7 +20,7 @@ and remains unaccepted as a complete implementation.
 
 | Capability | Implemented status |
 | --- | --- |
-| Owned X11 scrolling, input/capture/identity, evidence and cleanup | Implemented for the fixed measured viewport; see evidence limits below. |
+| Owned X11 scrolling, input/capture/identity, evidence and cleanup | Implemented at any window size. Input aims at the controls that the app reports through `--inspect`; see Locating controls below. |
 | Hermetic runs | Implemented with bubblewrap. Each run and each `doctor` checks it with a canary. See Hermetic runs below. |
 | Finite reporting gate and regression controls | Implemented for the actual Rust gate, not app/OS behavior. |
 | ETC/ORTH/DRY checks | Required independent review criteria; not an automatic architecture score. |
@@ -140,16 +140,49 @@ host's. A different host package set can still change a result.
 ### One implementation and one result contract
 
 Rust owns the migrated journey, probe, input, capture, identity, recording and
-cleanup. It calls installed native tools, not a Python driver. Every run creates
+cleanup. It starts Xvfb and runs `xrdb` once, and calls no Python driver. Every run creates
 its own sandbox, D-Bus session, Xvfb, home folder, app profile and Core session.
 Core remains the terminal/process owner. Existing-only JSON-RPC observation uses
 the dedicated Unix socket and never starts or reconnects a lost Core. Shutdown
 uses that same Core API after checking its recorded identity.
 
-The input target must remain the recorded viewer and session. The first adapter
-requires the checked 1450 by 940 viewport on a 3000 by 2000 Xvfb at DPI 192.
-It refuses other geometry. This coordinate-bound adapter is deliberately narrow;
-it is not proof of a general accessibility adapter or physical input latency.
+The input target must remain the recorded viewer and session. Before each input
+the driver checks that the window belongs to the candidate's PID and carries the
+session's title, that keyboard focus is on that window, and that the pointer is
+over it. It is not proof of a general accessibility adapter or physical input
+latency.
+
+#### Locating controls
+
+The driver starts the candidate with `--inspect inspection-N.json` in the
+evidence folder, a new file for each launch, and parses each frame with the
+`Frame` type from the `voyager-contract` crate (see
+[the inspection endpoint](../../docs/inspection.md)). `locate(role, key)` waits
+for that element and converts its bounds to device pixels with `window.scale`
+and the window's origin on the screen. `wait_for` polls the frame every 10 ms
+until a predicate holds, so it can wait for an element or for its absence. A
+frame drawn for another window size is ignored. When the deadline passes, the
+journey ends `failed`, blamed on the product, and the error names the missing
+role and key. The app marks `terminal` only once the terminal view is attached,
+so the driver clicks and types only after that element appears.
+
+One `x11rb` connection to the owned display carries all input (XTEST) and
+capture (`GetImage`). A capture is the `terminal` element's area, with the
+avatar's reported bounds blanked. After an input the journey polls until the
+expected state holds and has not changed for 150 ms, or until 4 s pass. It
+records the last observation either way, and the case decides pass or fail. No
+step waits a fixed time for the app. Key events are 1 ms apart, as with the
+earlier `xdotool --delay 1`: typed back to back, 2 of 10 runs lost characters.
+
+Xvfb runs with `-noreset`. By default it resets when its last client
+disconnects. While the driver ran one process per action, that reset discarded
+the `Xft.dpi: 192` resource, so the candidate drew at scale 1 in a 1450 by 940
+window. It now draws at scale 2, in a 2900 by 1880 window. A reset during
+cleanup also left Xvfb deaf to SIGTERM in 1 of 30 runs.
+
+`--window WIDTHxHEIGHT` resizes the candidate's window in device pixels, and
+`--sidebar open|collapsed` sets the sidebar with its own toggle. Both apply
+again after reattachment and do nothing when the window already matches.
 
 The result is `checks.json`. Exit 0 means the named runtime journey passed;
 exit 1 means an observed behavior failed; exit 2 means verification was
@@ -166,9 +199,9 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 | Owned display exited or stopped answering, a host tool is missing or failed, the sandbox refused, or an unrelated verifier error | `inconclusive` |
 | Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
 
-`Acknowledge` is a real event. It fires only when at least one command (`xdotool`
-or `import`) completed successfully after dispatch, and a match is rejected
-without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only
+`Acknowledge` is a real event. It fires only when at least one recorded action
+(an input the display answered, or a host command) completed successfully after
+dispatch, and a match is rejected without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only
 control that sends SIGKILL or SIGSTOP to the identity-checked candidate after that
 delay. `checks.json` records the fault, and a fault that never fires before the journey ends makes the run inconclusive. Liveness reads the candidate's own process state, so a zombie counts as exited, and the candidate gets a one second grace to finish dying before an error is blamed on the fixture. `--assets` is required. Before launch, `doctor` and `run` refuse an assets folder that is not the `assets` folder next to the path the candidate was built for, or that lacks a frame file the candidate names.
 
@@ -176,7 +209,8 @@ A `failed` or `inconclusive` run also writes `bundle/` in the evidence folder:
 `summary.json` (the first failing check and which side to blame), `processes.json`
 (exit code or signal and state of the candidate, display, Core and shell),
 `core-doc.json` and `core-terminals.json` (read-only `doc.get` and `terminal.list`
-at failure time), `final-screen.png`, the last four captures, `actions-tail.jsonl`
+at failure time), `inspection.json` (the candidate's latest inspection frame),
+`final-screen.png`, the last four captures, `actions-tail.jsonl`
 (the last 60 ledger lines) and `core/` (Core's logs). The candidate runs with
 `RUST_LOG=debug` and `RUST_BACKTRACE=full`; its stdout and stderr go to `native.log`,
 and the display's to `display.log`. The current candidate writes nothing to
@@ -186,8 +220,9 @@ runtime pass. Preserve an incomplete or failed directory; a new run needs a new
 directory. There is no replay of failed input commands. Observation polling is
 read-only. Each input intent and command acknowledgement is recorded separately.
 
-`actions.jsonl` preserves commands, input intents, Core requests/replies and capture
-hashes. `observations.json` holds the observed cases. Screenshots have unique names.
+`actions.jsonl` preserves commands, input intents and acknowledgements, located
+elements with their frame sequence, Core requests/replies and capture hashes.
+`inspection-N.json` holds the last frame of each launch. `observations.json` holds the observed cases. Screenshots have unique names.
 `doctor.json`, `launch.json`, `identity.json`, native/display logs and `checks.json`
 retain candidate and environment identities. `sandbox.json` records the session
 name and the complete bubblewrap command. `containment.json` holds the canary
@@ -231,9 +266,9 @@ Reconsider a code verifier when the next concrete property needs one.
 
 | Principle | Required review | Present ownership |
 | --- | --- | --- |
-| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `scrolling.rs` describes the journey; `native.rs` handles the platform/app window; `system.rs` owns process/recording/Core primitives. |
+| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `scrolling.rs` describes the journey; `native.rs` handles the app window; `x11.rs` owns the display connection; `inspection.rs` reads frames; `system.rs` owns process/recording/polling/Core primitives. |
 | Orthogonality | Product code does not depend on the fixture; the reporting gate is independent of I/O. Core owns programs. | Standalone development crate; pure `lifecycle.rs`; platform dependencies remain outside the app. |
-| DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, event list, reporting gate, recorder, input/capture adapter and shutdown path for the migrated journey. |
+| DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, event list, reporting gate, recorder, polling loop, input/capture adapter, locator and shutdown path for the migrated journey. The frame type is the app's own. |
 
 These are review criteria, not an automated universal quality score. The retained
 legacy platform helpers are a migration gap. Do not add a private runner for a new
