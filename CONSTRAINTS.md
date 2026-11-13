@@ -1,30 +1,12 @@
 # Build constraints
 
 Isaac requested this trial on 24 October 2026. Apply it to the next voice-handoff
-build and the small git-graph trial. The accepted docking change is the baseline;
-its existing test volume is not evidence that it meets the new rule.
+build and the small git-graph trial.
 
-## Minimal, effective tests
+## Effective tests
 
-The total lines of authored tests and proving code used for acceptance must not
-exceed the lines of the production code they test. Count fixture setup, simulated providers, native drivers and
-shared helpers as tests. Count a shared helper once in the combined inventory.
-Do not hide test code in temporary files, generated strings or another directory.
-Include one-off verification scripts in the total even when they live outside
-the repository. Report maintained and one-off subtotals separately.
-
-Use physical lines in normally formatted source. Record the exact test files and
-the production functions or modules they exercise in each review. Use `wc -l`
-for complete files and `sed -n 'START,ENDp' FILE | wc -l` for named function ranges.
-Keep those inputs and counts in the review evidence so another reviewer can
-repeat them. Report both the complete totals and the change's additions and
-deletions. A whole-file ownership count is a useful inventory, not proof that
-all of that file is tested. Do not inflate the denominator with unrelated code.
-
-The size rule is a review gate. Do not pad production code, compress test lines,
-remove necessary assertions or weaken the required journeys to meet it. If
-minimal effective tests still exceed the tested code, report the actual counts
-and conflict. Do not silently waive the rule or call the work complete.
+On 13 November 2026 Isaac removed the earlier limit on test and proving-code
+lines. Shared verification code is maintained as its own product.
 
 Every changed behavior needs a test that first fails for the missing behavior,
 or a known-different comparison where a deterministic regression is unsuitable.
@@ -81,6 +63,6 @@ secrets and changes that weaken this file. Explain any legitimate removal and
 prove its replacement behavior. Do not add exceptions to make a failing build
 pass. Keep private evidence and account data outside Git.
 
-The test-size and shared-fixture rules are initially enforced by recorded review,
-not by a claimed CI coverage measure. A later automated check must preserve the
-same scope and must not mistake file ownership for exercised behavior.
+The shared-fixture rule is enforced by recorded review, not by a claimed CI
+coverage measure. A later automated check must preserve the same scope and must
+not mistake file ownership for exercised behavior.
