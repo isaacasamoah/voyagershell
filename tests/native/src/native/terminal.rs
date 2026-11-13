@@ -170,16 +170,12 @@ impl Terminal {
                 .first()
                 .and_then(|content| placement_of(&layout, &content.id).cloned()))
         })?;
-        let terminal = Self::attach(native, &placement, "shell".into())?;
+        let terminal = Self::bind(native, &placement)?;
         native.identify(Some(&terminal))?;
         Ok(terminal)
     }
 
     pub fn bind(native: &mut Native, placement: &PlacementId) -> Result<Self> {
-        Self::attach(native, placement, format!("shell {}", placement.0))
-    }
-
-    fn attach(native: &mut Native, placement: &PlacementId, name: String) -> Result<Self> {
         let address = until("the Vessel's bound terminal", || {
             let Some((_, layout)) = native.document()? else {
                 return Ok(None);
@@ -200,7 +196,7 @@ impl Terminal {
         native.system.record(
             json!({"event":"bind","terminal":address,"placement":placement,"shell":shell}),
         )?;
-        native.adopt(name, shell.clone());
+        native.adopt(format!("shell {}", placement.0), shell.clone());
         Ok(Self {
             address,
             placement: placement.clone(),

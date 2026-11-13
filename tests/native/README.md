@@ -322,9 +322,9 @@ not parse as `Layout` is a fixture error. Rebuild the verifier from the
 candidate's checkout. `line` clicks its own terminal before it types, so the
 text cannot reach another control that holds the keyboard. `enter` types `cd`
 with a folder and waits until Core reports that folder for the shell.
-`Terminal::bind` binds the terminal of another Vessel. Every bound shell is
-adopted, so cleanup waits for its exit and `processes.json` lists it. The
-`workspace` journey binds
+`Terminal::bind` binds the terminal of one Vessel, and `Terminal::first` binds
+the first one. Every bound shell is adopted, so cleanup waits for its exit and
+`processes.json` lists it as `shell PLACEMENT`. The `workspace` journey binds
 the shell of every Vessel that it creates.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and

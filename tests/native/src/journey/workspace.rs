@@ -1,6 +1,6 @@
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Seen, Terminal, voyages};
+use crate::native::{Native, Seen, Terminal, fleets, vessels, voyages};
 use crate::sandbox;
 use crate::x11::Key;
 use anyhow::Result;
@@ -736,14 +736,6 @@ fn born<'a, T, I: PartialEq + 'a>(
 ) -> Vec<&'a T> {
     let known: Vec<&I> = before.map(&id).collect();
     after.filter(|item| !known.contains(&id(item))).collect()
-}
-
-fn fleets(layout: &Layout) -> impl Iterator<Item = &Fleet> {
-    voyages(layout).flat_map(|voyage| &voyage.fleets)
-}
-
-fn vessels(layout: &Layout) -> impl Iterator<Item = &Vessel> {
-    fleets(layout).flat_map(|fleet| &fleet.vessels)
 }
 
 fn fleet<'a>(layout: &'a Layout, id: &FleetId) -> Option<&'a Fleet> {

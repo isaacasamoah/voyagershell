@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use voyager_contract::inspection::{Frame, Role};
-use voyager_contract::{Layout, Vessel, Voyage};
+use voyager_contract::{Fleet, Layout, Vessel, Voyage};
 
 const GLANCE: Duration = Duration::from_millis(80);
 
@@ -139,14 +139,16 @@ pub fn voyages(layout: &Layout) -> impl Iterator<Item = &Voyage> {
     layout.voyages.iter().chain(&layout.home)
 }
 
+pub fn fleets(layout: &Layout) -> impl Iterator<Item = &Fleet> {
+    voyages(layout).flat_map(|voyage| &voyage.fleets)
+}
+
+pub fn vessels(layout: &Layout) -> impl Iterator<Item = &Vessel> {
+    fleets(layout).flat_map(|fleet| &fleet.vessels)
+}
+
 fn placed(layout: &Layout) -> impl Iterator<Item = &Vessel> {
-    voyages(layout).flat_map(|voyage| {
-        voyage
-            .fleets
-            .iter()
-            .flat_map(|fleet| &fleet.vessels)
-            .chain(&voyage.portals)
-    })
+    vessels(layout).chain(voyages(layout).flat_map(|voyage| &voyage.portals))
 }
 
 pub struct Native {
