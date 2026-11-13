@@ -204,6 +204,18 @@ test("a new file over the limit fails", () => {
   );
 });
 
+test("a new architecture tool file over the limit fails", () => {
+  const directory = scratch();
+  fs.writeFileSync(
+    path.join(directory, "tests/architecture/planted.cjs"),
+    "const planted = 1;\n".repeat(1001),
+  );
+  expectFailure(
+    run(directory),
+    "NEW file-size: tests/architecture/planted.cjs has 1001 lines, over the limit of 1000",
+  );
+});
+
 test("a file at the limit passes", () => {
   const directory = scratch();
   fs.writeFileSync(
