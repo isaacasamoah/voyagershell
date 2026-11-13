@@ -11,6 +11,7 @@ pub fn check() -> Result<usize> {
                 state.phase == Phase::Finished
                     && state.observed
                     && state.dispatched
+                    && state.acknowledged
                     && state.evidence
                     && state.clean
                     && !state.cleanup_failed
@@ -37,6 +38,9 @@ pub fn check() -> Result<usize> {
                 "Finished run accepted another event"
             );
             ensure!(!state.evidence || next.evidence, "Evidence was erased");
+            if matches!(event, Event::Crash | Event::Mismatch) {
+                ensure!(next.failed, "{event:?} did not record a failure");
+            }
             if event == Event::Acknowledge {
                 ensure!(
                     next.observed == state.observed,

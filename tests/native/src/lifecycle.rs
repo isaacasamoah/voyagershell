@@ -25,6 +25,7 @@ events!(
     Acknowledge,
     Match,
     Mismatch,
+    Crash,
     Unavailable,
     Evidence,
     Clean,
@@ -36,6 +37,7 @@ events!(
 pub struct Run {
     pub phase: Phase,
     pub dispatched: bool,
+    pub acknowledged: bool,
     pub observed: bool,
     pub failed: bool,
     pub unavailable: bool,
@@ -69,14 +71,28 @@ impl Run {
                     self.phase == Phase::Dispatched,
                     "Acknowledgement has no dispatch"
                 );
+                self.acknowledged = true;
             }
             Event::Match | Event::Mismatch => {
                 ensure!(
                     self.phase == Phase::Dispatched,
                     "Observation has no dispatch"
                 );
+                ensure!(
+                    event == Event::Mismatch || self.acknowledged,
+                    "A match needs an acknowledged command"
+                );
                 self.observed = true;
                 self.failed = event == Event::Mismatch;
+                self.phase = Phase::Observed;
+            }
+            Event::Crash => {
+                ensure!(
+                    matches!(self.phase, Phase::Setup | Phase::Ready | Phase::Dispatched),
+                    "Crash has nothing running to stop"
+                );
+                self.observed = true;
+                self.failed = true;
                 self.phase = Phase::Observed;
             }
             Event::Unavailable => self.unavailable = true,
@@ -104,7 +120,7 @@ impl Run {
             "inconclusive"
         } else if self.failed {
             "failed"
-        } else if self.observed {
+        } else if self.observed && self.acknowledged {
             "passed"
         } else {
             "inconclusive"

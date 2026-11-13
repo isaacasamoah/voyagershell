@@ -1,123 +1,142 @@
 # VoyagerShell
 
-VoyagerShell is a canvas for agents and humans to collaborate.
+VoyagerShell is a canvas for agents and humans to collaborate. It is a Linux
+desktop app for terminals, coding agents and Markdown notes. Drag the Voyager
+avatar onto a panel, a tab or a whole space, and that is what it can see and
+change.
 
-## Docking and collaboration
+![A VoyagerShell workspace with a terminal, a Notes Portal and the Voyager avatar docked to the note](docs/images/workspace.png)
 
-VoyagerShell introduces a new human-to-agent collaboration primitive called docking.
+There are no releases yet. Build from source.
 
-The avatar lets you choose the context you share with your assistant. Work with
-the whole workspace, or dock to a Voyage (space), Fleet (tab), Vessel (panel), or
-Portal (a panel that persists across a space's tabs).
+## Docking
 
-Docking selects the context for your request. Your authority stays the same
-wherever you dock. A worker does not gain your rank or permissions by sharing
-that context. An accepted request keeps the context captured when you sent it.
-Changing keyboard focus does not silently retarget it.
+The workspace has four kinds of place. A **Voyage** is a space for one project.
+A **Fleet** is a tab in a Voyage. A **Vessel** is a panel in a Fleet. A
+**Portal** is a panel that stays on screen across every Fleet in its Voyage.
 
-The current private assistant uses Codex and is separate from agents running in
-terminal panels. Broader delegated authority is still design and experimental
-work.
+The **Voyager avatar** is the assistant you dock. Drag it onto any of those
+places to dock it there. The status bar shows the dock, such as **Voyager / Design notes.md** for
+a Portal in the Voyage named Voyager. **Overwatch** means the whole workspace.
+For example, dock on the terminal where a test failed and ask why it failed.
 
-## How it works
+Docking sets what the Voyager avatar can see and change. It never moves your
+keyboard focus or limits your own clicks. A request keeps the context it was
+sent with, so docking somewhere else never changes a request already sent.
 
-[Herdr Core](https://github.com/herdrdev/herdr-core) owns terminal programs and
-screens. Voyager connects through a typed Core adapter. The Rust application owns
-workspace state, content data, explicit context and application policy.
+## What you can do
 
-JavaScript and TypeScript define content and interface layouts through the
-supported host. Rust and GPUI provide native rendering and registered
-terminal, editor and interface components. This lets people and agents change
-content, look and feel while keeping rendering local and native. Responsive
-interaction and performance as work grows are architectural aims. Whole-app
-performance still needs verification.
-
-| Directory              | Responsibility                                                                            |
-| ---------------------- | ----------------------------------------------------------------------------------------- |
-| [contract/](contract/) | Shared Rust commands, identities and results, with generated script types and validators. |
-| [app/](app/)           | Workspace, content, context and policy owners, plus Core and provider adapters.           |
-| [desktop/](desktop/)   | GPUI views, native terminal and editors, avatar presentation and interface composition.   |
-| [content/](content/)   | Shipped content presentation, currently Notes, using the Rust content owner.              |
-
-A Vessel places content inside a tab. A Portal keeps content visible across a
-space's tabs. Both use the same content model. Content identity, saved data and
-an optional Core backend stay separate from the placement. Hiding a view does
-not stop its program.
-
-The extensible design allows content backed by a Core program and presented
-through JavaScript/TypeScript and supported native Rust components. Main currently
-supports Terminal and Notes content. Terminal panels render shells and terminal
-agents, with local history scrolling and wheel input for full-screen programs.
-Notes supports Markdown editing and preview in either placement. You can edit
-interface scripts and themes in a personal profile. For supported live edits, a
-broken script leaves the previous usable view in place. Arbitrary program-window
-embedding and browser, game or dashboard renderers remain unimplemented.
-
-Workspace operations share a typed contract used by views and supported agent
-tools. The Rust application checks each action before applying it. A schema, panel
-placement or Fleet membership grants no authority.
-
-## What we're focusing on next
-
-We plan to develop richer docking interactions, improve human-agent collaboration
-and make the interface more intuitive. This work is planned, not shipped.
+- **Run terminals and coding agents in panels.** Shells, Codex and Claude Code
+  run in [Herdr Core](https://github.com/herdrdev/herdr-core), so they keep
+  running after you quit the app.
+- **Arrange your work.** Add Voyages, Fleets, Vessels and Portals. Split,
+  resize and maximize any panel.
+- **Keep notes beside the work.** Notes edits and previews Markdown and saves
+  each note as a file in the project's `notes/` folder.
+- **Ask the Voyager avatar.** It runs on Codex. It can arrange panels, read and type
+  into terminals, read and write notes, and create Git worktrees, only where you
+  dock it. It does not edit your code. Coding agents in panels do that.
+- **Change the interface while it runs.** The interface is TypeScript compiled
+  to JavaScript. The app copies that JavaScript into your profile. Edit a file
+  there and the view reloads. A broken edit shows its error and keeps the last
+  working view.
+- **Quit and pick up where you left off.** Your programs keep running in Herdr
+  Core after **Ctrl+Q**. Reopen the app and your layout, notes and live
+  terminals come back. After a reboot, terminals reopen as new shells.
 
 ## Build and run
 
-The verified native target is Linux/X11. Wayland is included in the build;
-equivalent behavior on Wayland, macOS and Windows is not established.
+VoyagerShell runs on Linux. It is tested on X11 and also builds for Wayland.
+macOS and Windows are not supported.
 
-You need Git, Python 3, Node.js 24, a current Rust/Cargo toolchain and Zig 0.17.x
-on PATH or selected through `ZIG`. Linux needs a working Vulkan driver and the
-GPUI platform's native development libraries, including X11/Wayland, font,
-`xkbcommon` and `xkbcommon-x11` linker libraries. Package names depend on your
-distribution. See the pinned [terminal library build guide](https://github.com/Uzaaft/libghostty-rs/tree/83634421c232385f9fd7c61f454961341453d661#building)
-for its Zig requirement.
+You need Git, Python 3, Node.js 24, Rust, Zig 0.17, a working Vulkan driver,
+and the GPUI native libraries for X11 or Wayland. Install
+[Herdr Core](https://github.com/herdrdev/herdr-core) so that `hc` is on
+`PATH`. VoyagerShell's Core API is generated from Core 0.1.16, and CI tests
+against Core 0.1.21. Install Codex to use the Voyager avatar, and Claude Code for a
+Claude panel. Shells and Notes need neither.
 
-Install Herdr Core separately with `hc` on PATH. Voyager's generated Core API is
-pinned to 0.1.16; its terminal scrolling has been verified with runtime 0.1.19.
-Other Core releases need compatibility verification. Codex and a configured
-account are needed for private chat or a Codex terminal agent, not ordinary shells
-and Notes.
-
-From the repository root:
+Build from the repository root:
 
 ```sh
 python3 desktop/prepare-sdk.py
 npm ci --ignore-scripts
 cargo build --release --locked -p voyager-desktop --bin voyager-shell
-./target/release/voyager-shell --profile "$HOME/.local/share/voyagershell-dev" --session voyager-dev
 ```
 
-The [SDK preparer](desktop/patches/README.md) checks pinned source and reviewed
-patches and writes local Cargo overrides. Choose a fresh absolute profile path
-and unique Core session for an independent trial. The profile stores personal
-scripts, configuration and content. Quitting the viewer leaves Core programs
-running. Confirmed Close Voyage is a separate action that saves Notes and stops
-that Voyage's verified programs.
+Start the app from the project you want to work in. The first Voyage opens in
+that directory, and Notes saves files there:
 
-## Development and limits
+```sh
+cd ~/your-project
+/path/to/voyagershell/target/release/voyager-shell \
+	--profile "$HOME/.local/share/voyagershell" \
+	--session voyager-main
+```
 
-[CONTRIBUTING.md](CONTRIBUTING.md) covers development and required checks.
-[CONSTRAINTS.md](CONSTRAINTS.md) defines proving and review requirements. Changes
-go through pull requests. Complete application acceptance, broader input coverage,
-voice integration and increasing-load performance remain open.
+Both flags are required. `--profile` is an absolute path to the folder that
+holds your interface scripts, theme and settings. `--session` names your Herdr
+Core session. It starts with `voyager-` and uses lowercase letters, digits and
+hyphens.
 
-- [Learn VoyagerShell by running it](docs/README.md), a tutorial for agents and
-  new contributors
-- [Workspace and script authoring](docs/workspace.md#script-authoring-and-checking)
-- [Terminal input and lifecycle](docs/terminal.md)
-- [Notes and content ownership](docs/content.md)
-- [Private conversation and providers](docs/conversation.md)
-- [Inspection endpoint](docs/inspection.md), which reports where controls are when
-  the app starts with `--inspect`
-- [Native verification environment](tests/native/README.md), invoked directly as `voyager-verification`; retained Python drivers require `--legacy-reproduction`
-- [Retained experiments and Electron UX reference](experiments/README.md)
+Quit with **Ctrl+Q**. Closing the window leaves the Voyager avatar floating on the
+desktop.
 
-Experiments remain separate from the native product. Authority and animation
-trials do not establish accepted capabilities on main.
+To learn the app by using it, follow the tutorial,
+[Learn VoyagerShell by running it](docs/README.md). It walks through every
+part of the workspace and traces one click through the code.
+
+## How it works
+
+```mermaid
+flowchart LR
+	UI["Interface scripts<br/>TypeScript"] -->|"typed operations"| App["VoyagerShell<br/>Rust"]
+	Agent["Voyager avatar<br/>Codex"] -->|"docked tool calls"| App
+	App -->|"workspace document and programs"| Core["Herdr Core"]
+	App -->|"layout and terminal output"| View["Native views<br/>GPUI and libghostty"]
+	UI --> View
+```
+
+Herdr Core owns programs, terminals and the saved workspace document.
+VoyagerShell's Rust application owns placement, content and the dock. Your
+clicks and the Voyager avatar's tool calls run the same Rust operations. The
+app also checks each of its tool calls against where it is docked. One contract,
+written in Rust, generates the TypeScript types and validators that the
+interface uses.
+
+| Directory              | Contents                                                                  |
+| ---------------------- | ------------------------------------------------------------------------- |
+| [contract/](contract/) | Shared operations, identities and results, with generated types.          |
+| [app/](app/)           | Workspace, content and dock owners, plus the Core and Codex connectors.   |
+| [desktop/](desktop/)   | Native views, the terminal, the Voyager avatar and the interface scripts. |
+| [content/](content/)   | Content packages that ship with the app, such as Notes.                   |
+| [tests/](tests/)       | The native verification environment and the architecture checks.          |
+
+## Documentation
+
+- [Learn VoyagerShell by running it](docs/README.md) is the hands-on tutorial.
+
+Design notes for contributors:
+
+- [Workspace](docs/workspace.md) covers placement, layouts and script
+  authoring.
+- [Terminal](docs/terminal.md) covers input, scrolling and program lifetime.
+- [Agent launch](docs/agent-launch.md) covers `launches.json`, which adds
+  agents beyond Codex and Claude Code.
+- [Notes and content](docs/content.md) covers content types and their data.
+- [Private conversation](docs/conversation.md) covers the Voyager avatar's conversation and its
+  tools.
+- [Avatar](docs/avatar.md) covers docking and motion.
+- [Inspection](docs/inspection.md) covers the `--inspect` report of where
+  controls are on screen.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for the checks every change passes and
+[CONSTRAINTS.md](CONSTRAINTS.md) for the review rules. Agents start with
+[AGENTS.md](AGENTS.md). Every pull request runs the checks in GitHub Actions.
 
 ## License
 
 [MIT](LICENSE). Herdr Core is an external dependency. Upstream components and
-artwork retain their respective licenses and attribution.
+artwork keep their own licenses and attribution.

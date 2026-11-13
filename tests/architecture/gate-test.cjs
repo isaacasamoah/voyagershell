@@ -68,7 +68,7 @@ function expectFailure(result, ...named) {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /8 violations, 8 known\n.*PASS\n$/s);
+  assert.match(result.out, /18 violations, 18 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -170,4 +170,84 @@ test("a known entry without an owner is refused", () => {
   const result = run(scratch(), ["--known", file]);
   assert.notStrictEqual(result.status, 0);
   assert.match(result.err, /needs id, owner and reason/);
+});
+
+function lines(directory, file) {
+  return (
+    fs.readFileSync(path.join(directory, file), "utf8").split("\n").length - 1
+  );
+}
+
+test("growing a known large file by one line fails", () => {
+  const directory = scratch();
+  const before = lines(directory, "app/src/client.rs");
+  edit(directory, "app/src/client.rs", (text) => `${text}\n`);
+  expectFailure(
+    run(directory),
+    `NEW file-size: app/src/client.rs has ${before + 1} lines, over its recorded limit of ${before}`,
+  );
+});
+
+test("a new file over the limit fails", () => {
+  const directory = scratch();
+  fs.writeFileSync(
+    path.join(directory, "app/src/planted.rs"),
+    "fn planted() {}\n".repeat(1001),
+  );
+  expectFailure(
+    run(directory),
+    "NEW file-size: app/src/planted.rs has 1001 lines, over the limit of 1000",
+  );
+});
+
+test("a file at the limit passes", () => {
+  const directory = scratch();
+  fs.writeFileSync(
+    path.join(directory, "app/src/planted.rs"),
+    "fn planted() {}\n".repeat(1000),
+  );
+  const result = run(directory);
+  assert.strictEqual(result.status, 0, result.out + result.err);
+});
+
+test("shrinking a known large file tells you to lower its recorded limit", () => {
+  const directory = scratch();
+  const before = lines(directory, "app/src/client.rs");
+  edit(directory, "app/src/client.rs", (text) =>
+    text.replace(/\n[^\n]*\n$/, "\n"),
+  );
+  expectFailure(
+    run(directory),
+    `STALE file-size: app/src/client.rs has ${before - 1} lines, lower its recorded limit from ${before} to ${before - 1} in known-violations.yaml`,
+  );
+});
+
+test("a large file that is not recorded fails", () => {
+  expectFailure(
+    run(scratch(), ["--known", without(/file-size: app\/src\/client\.rs/)]),
+    "NEW file-size: app/src/client.rs has",
+  );
+});
+
+test("a new TypeScript import cycle fails", () => {
+  const directory = scratch();
+  fs.writeFileSync(
+    path.join(directory, "desktop/mods/header/planted-a.ts"),
+    'import { b } from "./planted-b.js";\nexport const a = b;\n',
+  );
+  fs.writeFileSync(
+    path.join(directory, "desktop/mods/header/planted-b.ts"),
+    'import { a } from "./planted-a.js";\nexport const b = a;\n',
+  );
+  expectFailure(
+    run(directory),
+    "NEW no-script-cycles: ts:desktop/mods/header/planted-a.ts <-> ts:desktop/mods/header/planted-b.ts",
+  );
+});
+
+test("the recorded header cycle that is not recorded fails", () => {
+  expectFailure(
+    run(scratch(), ["--known", without(/no-script-cycles/)]),
+    "NEW no-script-cycles: ts:desktop/mods/header/main.ts",
+  );
 });

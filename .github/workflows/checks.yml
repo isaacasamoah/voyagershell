@@ -16,8 +16,8 @@ concurrency:
 env:
   RUST_TOOLCHAIN: 1.99.1
   ZIG_VERSION: 0.17.0
-  HC_VERSION: 0.1.19
-  HC_SHA256: 4adcfb423d52f24c5cc4a1e2cd2fcad1f62d28bb77876ac472c29082a3eaa424
+  HC_VERSION: 0.1.21
+  HC_SHA256: 78424755c10a40dde38a0bdb55c20ac19706e9ae05ed68fc2acf1fcff0d941c1
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE_DEV_DEBUG: "1"
   CARGO_PROFILE_TEST_DEBUG: "1"
@@ -83,3 +83,10 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo test --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo fmt --check --manifest-path tests/native/Cargo.toml
+      - run: cargo clippy --all-targets --locked --manifest-path tests/native/Cargo.toml -- -D warnings
+      - name: Sandbox tools for the native crate tests
+        run: |
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: cargo test --locked --manifest-path tests/native/Cargo.toml
