@@ -11,10 +11,11 @@ use std::{
 
 use anyhow::Context as _;
 use gpui::{
-    AnyElement, App, AppContext as _, Bounds, ElementId, Global, GlobalElementId,
-    InspectorElementId, IntoElement, LayoutId, Pixels, Position, Style, Window, WindowId, px,
-    relative,
+    AnyElement, App, AppContext as _, Bounds, ElementId, Entity, Global, GlobalElementId,
+    InspectorElementId, IntoElement, LayoutId, Pixels, Position, Style, WeakEntity, Window,
+    WindowId, px, relative,
 };
+use gpui_base::input::InputState;
 use gpui_shell::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentDescriptor,
     ComponentMaterializer, ComponentPayload, ComponentRegistry, ConstructorDescriptor,
@@ -37,11 +38,25 @@ impl Global for Inspection {}
 struct Ledger {
     window: WindowId,
     stage: Option<(Viewport, Context)>,
-    slots: BTreeMap<u64, Element>,
+    slots: BTreeMap<u64, Drawn>,
     opened: u64,
     sequence: u64,
     changed: bool,
     changes: async_channel::Sender<()>,
+}
+
+#[derive(PartialEq)]
+enum Drawn {
+    Control {
+        element: Element,
+        draft: Option<WeakEntity<InputState>>,
+    },
+    Prepared,
+}
+
+fn drafted(draft: &WeakEntity<InputState>, cx: &App) -> Option<String> {
+    let draft = draft.upgrade()?;
+    Some(draft.read(cx).value().to_string())
 }
 
 impl Ledger {
@@ -50,15 +65,34 @@ impl Ledger {
         let _ = self.changes.try_send(());
     }
 
-    fn place(&mut self, slot: u64, element: Option<Element>) {
-        if self.slots.get(&slot) == element.as_ref() {
+    fn place(&mut self, slot: u64, drawn: Option<Drawn>) {
+        if self.slots.get(&slot) == drawn.as_ref() {
             return;
         }
-        match element {
-            Some(element) => self.slots.insert(slot, element),
+        match drawn {
+            Some(drawn) => self.slots.insert(slot, drawn),
             None => self.slots.remove(&slot),
         };
         self.touch();
+    }
+
+    fn redraft(&mut self, cx: &App) {
+        let mut changed = false;
+        for drawn in self.slots.values_mut() {
+            if let Drawn::Control {
+                element,
+                draft: Some(draft),
+            } = drawn
+                && let Some(text) = drafted(draft, cx)
+                && element.label.as_deref() != Some(text.as_str())
+            {
+                element.label = Some(text);
+                changed = true;
+            }
+        }
+        if changed {
+            self.touch();
+        }
     }
 
     fn frame(&mut self) -> Option<Frame> {
@@ -68,11 +102,15 @@ impl Ledger {
         }
         self.sequence += 1;
         let mut identities: BTreeMap<_, Vec<_>> = BTreeMap::new();
-        for element in self.slots.values() {
-            identities
-                .entry((element.role, element.key.as_str()))
-                .or_default()
-                .push(element);
+        let mut prepared = false;
+        for drawn in self.slots.values() {
+            match drawn {
+                Drawn::Control { element, .. } => identities
+                    .entry((element.role, element.key.as_str()))
+                    .or_default()
+                    .push(element),
+                Drawn::Prepared => prepared = true,
+            }
         }
         let (elements, ambiguous): (Vec<_>, Vec<_>) =
             identities.into_values().partition(|drawn| drawn.len() == 1);
@@ -81,6 +119,7 @@ impl Ledger {
             sequence: self.sequence,
             window,
             dock,
+            prepared,
             elements: listed(elements),
             ambiguous: listed(ambiguous),
         })
@@ -100,8 +139,22 @@ impl Drop for Slot {
 
 struct Marker {
     id: ElementId,
-    role: Role,
-    key: String,
+    mark: Mark,
+}
+
+enum Mark {
+    Control {
+        role: Role,
+        key: String,
+        shown: Shown,
+    },
+    Prepared(bool),
+}
+
+enum Shown {
+    Nothing,
+    Text(String),
+    Draft(WeakEntity<InputState>),
 }
 
 impl IntoElement for Marker {
@@ -158,17 +211,31 @@ impl gpui::Element for Marker {
         if ledger.borrow().window != window.window_handle().window_id() {
             return;
         }
-        let drawn = bounds.intersect(&window.content_mask().bounds);
-        let element = (!drawn.is_empty()).then(|| Element {
-            role: self.role,
-            key: self.key.clone(),
-            bounds: Rect {
-                x: drawn.origin.x.into(),
-                y: drawn.origin.y.into(),
-                width: drawn.size.width.into(),
-                height: drawn.size.height.into(),
-            },
-        });
+        let drawn = match &self.mark {
+            Mark::Prepared(prepared) => prepared.then_some(Drawn::Prepared),
+            Mark::Control { role, key, shown } => {
+                let visible = bounds.intersect(&window.content_mask().bounds);
+                let (label, draft) = match shown {
+                    Shown::Nothing => (None, None),
+                    Shown::Text(text) => (Some(text.clone()), None),
+                    Shown::Draft(draft) => (drafted(draft, cx), Some(draft.clone())),
+                };
+                (!visible.is_empty()).then(|| Drawn::Control {
+                    element: Element {
+                        role: *role,
+                        key: key.clone(),
+                        label,
+                        bounds: Rect {
+                            x: visible.origin.x.into(),
+                            y: visible.origin.y.into(),
+                            width: visible.size.width.into(),
+                            height: visible.size.height.into(),
+                        },
+                    },
+                    draft,
+                })
+            }
+        };
         window.with_element_state(id, |slot: Option<Slot>, _| {
             let slot = slot.unwrap_or_else(|| {
                 let mut opening = ledger.borrow_mut();
@@ -178,7 +245,7 @@ impl gpui::Element for Marker {
                     id: opening.opened,
                 }
             });
-            ledger.borrow_mut().place(slot.id, element);
+            ledger.borrow_mut().place(slot.id, drawn);
             ((), slot)
         });
     }
@@ -199,8 +266,11 @@ impl gpui::Element for Marker {
 pub fn avatar() -> impl IntoElement {
     Marker {
         id: "inspect-avatar".into(),
-        role: Role::Avatar,
-        key: String::new(),
+        mark: Mark::Control {
+            role: Role::Avatar,
+            key: String::new(),
+            shown: Shown::Nothing,
+        },
     }
 }
 
@@ -225,6 +295,7 @@ pub fn stage(dock: &Context, window: &Window, cx: &App) {
         ledger.stage = stage;
         ledger.touch();
     }
+    ledger.redraft(cx);
 }
 
 pub fn install(path: Option<PathBuf>, window: &Window, cx: &mut App) {
@@ -270,17 +341,36 @@ fn write(path: &Path, frame: &Frame) -> std::io::Result<()> {
 
 struct Component;
 
+enum Marked {
+    Control(Role, String, Option<String>),
+    Editor(String, ComponentArgument),
+    Prepared(bool),
+}
+
 impl ComponentMaterializer for Component {
     fn materialize(&self, request: MaterializeRequest<'_>) -> anyhow::Result<AnyElement> {
-        let (role, key) = request
+        let marked = request
             .payload()
-            .downcast_ref::<(Role, String)>()
-            .context("Marker requires a role")?
-            .clone();
+            .downcast_ref::<Marked>()
+            .context("Marker requires a role")?;
+        let mark = match marked {
+            Marked::Control(role, key, label) => Mark::Control {
+                role: *role,
+                key: key.clone(),
+                shown: label.clone().map_or(Shown::Nothing, Shown::Text),
+            },
+            Marked::Editor(key, state) => Mark::Control {
+                role: Role::NameEditor,
+                key: key.clone(),
+                shown: Shown::Draft(
+                    request.with_state::<Entity<InputState>, _>(state, Entity::downgrade)?,
+                ),
+            },
+            Marked::Prepared(prepared) => Mark::Prepared(*prepared),
+        };
         Ok(Marker {
             id: request.element_id().clone(),
-            role,
-            key,
+            mark,
         }
         .into_any_element())
     }
@@ -297,20 +387,59 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                         "key",
                         ArgumentSchema::Optional(Box::new(ArgumentSchema::String)),
                     ),
+                    ArgumentDescriptor::new(
+                        "label",
+                        ArgumentSchema::Optional(Box::new(ArgumentSchema::String)),
+                    ),
                 ],
                 |args| match args {
                     [
                         ComponentArgument::Enum(role),
                         ComponentArgument::Optional(key),
+                        ComponentArgument::Optional(label),
                     ] => {
                         let role = Role::parse(role).ok_or("Marker requires a known role")?;
-                        let key = match key.as_deref() {
-                            Some(ComponentArgument::String(key)) => key.clone(),
-                            _ => String::new(),
-                        };
-                        Ok(ComponentPayload::new((role, key)))
+                        let text =
+                            |argument: &Option<Box<ComponentArgument>>| match argument.as_deref() {
+                                Some(ComponentArgument::String(text)) => Some(text.clone()),
+                                _ => None,
+                            };
+                        Ok(ComponentPayload::new(Marked::Control(
+                            role,
+                            text(key).unwrap_or_default(),
+                            text(label),
+                        )))
                     }
-                    _ => Err("Marker requires a role and an optional key".into()),
+                    _ => {
+                        Err("Marker requires a role, an optional key and an optional label".into())
+                    }
+                },
+            ),
+            ConstructorDescriptor::new(
+                "EditorMarker",
+                vec![
+                    ArgumentDescriptor::new("key", ArgumentSchema::String),
+                    ArgumentDescriptor::new("state", ArgumentSchema::Entity("NameState")),
+                ],
+                |args| match args {
+                    [
+                        ComponentArgument::String(key),
+                        state @ ComponentArgument::Entity { .. },
+                    ] => Ok(ComponentPayload::new(Marked::Editor(
+                        key.clone(),
+                        state.clone(),
+                    ))),
+                    _ => Err("EditorMarker requires an id and NameState".into()),
+                },
+            ),
+            ConstructorDescriptor::new(
+                "Prepared",
+                vec![ArgumentDescriptor::new("prepared", ArgumentSchema::Boolean)],
+                |args| match args {
+                    [ComponentArgument::Boolean(prepared)] => {
+                        Ok(ComponentPayload::new(Marked::Prepared(*prepared)))
+                    }
+                    _ => Err("Prepared requires true or false".into()),
                 },
             ),
         ]),

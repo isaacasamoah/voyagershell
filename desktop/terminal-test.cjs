@@ -1055,6 +1055,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     },
   };
   let occluders = 0;
+  const prepared = [];
   const layers = [];
   let animationNotice = null;
   const layer = {
@@ -1086,6 +1087,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "speech_in_primary",
     "MeasureHeight",
     "Occluding",
+    "Prepared",
     source,
   )(
     class {},
@@ -1129,6 +1131,12 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     {
       new() {
         occluders += 1;
+        return div();
+      },
+    },
+    {
+      new(ready) {
+        prepared.push(ready);
         return div();
       },
     },
@@ -1357,7 +1365,9 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     [],
     "Activity must not request Inspect or prepare content",
   );
-  const goThere = nodes.find((node) => node.calls.child?.[0] === "Go there");
+  const goThere = nodes.find(
+    (node) => node.calls.children?.[0].at(-1) === "Go there",
+  );
   assert.ok(goThere);
   goThere.calls.on_click[0]({ click_count: 1 }, {});
   assert.deepEqual(actions, [{ operation: "reveal-panel", id: "vessel" }]);
@@ -1381,9 +1391,15 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     2,
     "A caught-up layout notice must not prepare again",
   );
+  assert.equal(prepared.at(-1), true);
   view.busy = true;
   ownerRevision = "11";
   view.render({});
+  assert.equal(
+    prepared.at(-1),
+    false,
+    "A pending workspace request is drawn as not prepared",
+  );
   assert.equal(view.refreshRequested, true);
   assert.equal(view.workspaceNotice.revision, "10");
   view.version = "11";

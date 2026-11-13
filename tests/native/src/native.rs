@@ -81,7 +81,6 @@ impl Surface {
 }
 
 pub struct Seen<'a> {
-    pub document: &'a Layout,
     pub frame: &'a Frame,
 }
 
@@ -89,28 +88,43 @@ impl Seen<'_> {
     pub fn shows(&self, target: &Target) -> bool {
         target.find(self.frame).is_some()
     }
+}
 
-    fn prepared(&self) -> bool {
-        let terminal = |placement: &str| {
-            placed(self.document)
-                .find(|placed| placed.id.0 == placement)
-                .is_some_and(|placed| {
-                    self.document.contents.iter().any(|content| {
-                        content.id == placed.content && content.type_id == "terminal"
-                    })
-                })
+enum Glance<T> {
+    Absent,
+    Preparing,
+    Ready(T),
+}
+
+fn glance<T>(frame: Option<&Frame>, check: impl FnOnce(&Seen) -> Option<T>) -> Glance<T> {
+    let Some(frame) = frame else {
+        return Glance::Absent;
+    };
+    match check(&Seen { frame }) {
+        None => Glance::Absent,
+        Some(_) if !frame.prepared => Glance::Preparing,
+        Some(value) => Glance::Ready(value),
+    }
+}
+
+struct Held<T> {
+    value: Option<(T, Instant)>,
+    preparing: bool,
+}
+
+impl<T: PartialEq> Held<T> {
+    fn see(&mut self, glance: Glance<T>, now: Instant) -> bool {
+        self.preparing = matches!(glance, Glance::Preparing);
+        let Glance::Ready(value) = glance else {
+            self.value = None;
+            return false;
         };
-        let drawn = |role: Role, key: &str| {
-            self.frame
-                .elements
-                .iter()
-                .any(|element| element.role == role && element.key == key)
+        let since = match self.value.take() {
+            Some((previous, since)) if previous == value => since,
+            _ => now,
         };
-        self.frame
-            .elements
-            .iter()
-            .filter(|element| matches!(element.role, Role::VesselName | Role::PortalName))
-            .all(|name| !terminal(&name.key) || drawn(Role::Terminal, &name.key))
+        self.value = Some((value, since));
+        now.duration_since(since) >= QUIET
     }
 }
 
@@ -352,34 +366,20 @@ impl Native {
     ) -> Result<T> {
         let x11 = self.x11()?;
         let path = self.inspection();
-        let mut held: Option<(T, Instant)> = None;
-        let mut preparing = false;
+        let mut held = Held {
+            value: None,
+            preparing: false,
+        };
         let steady = poll(PATIENCE, GLANCE, true, || {
             let window = x11.geometry(self.window)?;
             let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
-            let document = self.document()?;
-            let (Some(frame), Some(document)) = (&frame, &document) else {
-                return Ok(None);
-            };
-            let seen = Seen { document, frame };
-            let value = check(&seen);
-            preparing = value.is_some() && !seen.prepared();
-            let Some(value) = value.filter(|_| !preparing) else {
-                held = None;
-                return Ok(None);
-            };
-            let since = match held.take() {
-                Some((previous, since)) if previous == value => since,
-                _ => Instant::now(),
-            };
-            let steady = since.elapsed() >= QUIET;
-            held = Some((value, since));
-            Ok(steady.then_some(()))
+            let seen = glance(frame.as_ref(), &mut check);
+            Ok(held.see(seen, Instant::now()).then_some(()))
         })?;
-        match (steady, held) {
+        match (steady, held.value) {
             (Some(()), Some((value, _))) => Ok(value),
-            _ if preparing => {
-                Err(Unseen(format!("{expected} with every drawn terminal attached")).into())
+            _ if held.preparing => {
+                Err(Unseen(format!("{expected} with the workspace prepared")).into())
             }
             _ => Err(Unseen(expected.into()).into()),
         }
@@ -745,76 +745,64 @@ mod tests {
         Ok(())
     }
 
+    fn frame(prepared: bool) -> Result<Frame> {
+        Ok(serde_json::from_value(json!({
+            "sequence": 1,
+            "window": {"width": 725.0, "height": 470.0, "scale": 2.0},
+            "dock": {"kind": "workspace"},
+            "prepared": prepared,
+            "elements": [],
+            "ambiguous": []
+        }))?)
+    }
+
     #[test]
-    fn a_workspace_is_prepared_once_every_drawn_terminal_is_attached() -> Result<()> {
-        let document: Layout = serde_json::from_value(json!({
-            "voyages": [{
-                "id": "voyage-1",
-                "name": "Voyager",
-                "fleets": [{
-                    "id": "fleet-4",
-                    "name": "Fleet 1",
-                    "root": null,
-                    "vessels": [
-                        {"id": "placement-3", "content": "content-2", "name": "Terminal 1"},
-                        {"id": "placement-7", "content": "content-6", "name": "Agents 1"},
-                        {"id": "placement-9", "content": "content-8", "name": "Terminal 2"}
-                    ]
-                }],
-                "portals": []
-            }],
-            "contents": [
-                {"id": "content-2", "typeId": "terminal", "cwd": "/", "backend": "t1"},
-                {"id": "content-6", "typeId": "agents", "cwd": "/", "backend": null},
-                {"id": "content-8", "typeId": "terminal", "cwd": "/", "backend": null}
-            ],
-            "selectedVoyage": "voyage-1",
-            "selectedFleet": "fleet-4",
-            "context": {"kind": "workspace"},
-            "nextId": "10"
-        }))?;
-        let frame = |drawn: &[(&str, &str)]| -> Result<Frame> {
-            let elements: Vec<_> = drawn
-                .iter()
-                .map(|(role, key)| {
-                    json!({"role":role,"key":key,"bounds":{"x":0.0,"y":0.0,"width":1.0,"height":1.0}})
-                })
-                .collect();
-            Ok(serde_json::from_value(json!({
-                "sequence": 1,
-                "window": {"width": 725.0, "height": 470.0, "scale": 2.0},
-                "dock": {"kind": "workspace"},
-                "elements": elements,
-                "ambiguous": []
-            }))?)
-        };
-        let prepared = |drawn: &[(&str, &str)]| -> Result<bool> {
-            Ok(Seen {
-                document: &document,
-                frame: &frame(drawn)?,
-            }
-            .prepared())
-        };
-        let names = [
-            ("vessel-name", "placement-3"),
-            ("vessel-name", "placement-7"),
-        ];
+    fn an_outcome_seen_while_the_workspace_prepares_does_not_count() -> Result<()> {
+        let (preparing, prepared) = (frame(false)?, frame(true)?);
+        let seen = |frame: Option<&Frame>, outcome: Option<u8>| glance(frame, |_| outcome);
         ensure!(
-            !prepared(&names)?,
-            "A drawn terminal Vessel without its terminal counted as prepared"
+            matches!(seen(Some(&preparing), Some(7)), Glance::Preparing),
+            "An outcome counted while the header reported a pending workspace request"
         );
-        let attached = [names[0], names[1], ("terminal", "placement-3")];
         ensure!(
-            prepared(&attached)?,
-            "An attached terminal beside an Agents Vessel did not count as prepared"
+            matches!(seen(Some(&prepared), Some(7)), Glance::Ready(7)),
+            "An outcome in a prepared workspace did not count"
         );
-        let second = [attached[0], attached[2], ("vessel-name", "placement-9")];
         ensure!(
-            !prepared(&second)?,
-            "A second drawn terminal Vessel was not waited for"
+            matches!(seen(Some(&prepared), None), Glance::Absent),
+            "A missing outcome counted"
         );
-        ensure!(prepared(&[])?, "A frame without Vessels was not prepared");
+        ensure!(
+            matches!(seen(None, Some(7)), Glance::Absent),
+            "An outcome counted without a frame"
+        );
         Ok(())
+    }
+
+    #[test]
+    fn an_outcome_counts_once_it_held_through_every_glance_of_the_quiet_window() {
+        let start = Instant::now();
+        let at = |milliseconds: u64| start + Duration::from_millis(milliseconds);
+        let mut held = Held {
+            value: None,
+            preparing: false,
+        };
+        assert!(!held.see(Glance::Ready(1), at(0)));
+        assert!(!held.see(Glance::Ready(1), at(80)));
+        assert!(held.see(Glance::Ready(1), at(160)));
+        assert!(!held.see(Glance::Ready(2), at(240)), "a changed outcome");
+        assert!(!held.see(Glance::Absent, at(320)));
+        assert!(
+            !held.see(Glance::Ready(2), at(400)),
+            "an outcome kept its age across a glance without it"
+        );
+        assert!(!held.see(Glance::Preparing, at(480)) && held.preparing);
+        assert!(
+            !held.see(Glance::Ready(2), at(560)) && !held.preparing,
+            "an outcome kept its age across a preparing workspace"
+        );
+        assert!(held.see(Glance::Ready(2), at(710)));
+        assert_eq!(held.value.map(|(value, _)| value), Some(2));
     }
 
     #[test]

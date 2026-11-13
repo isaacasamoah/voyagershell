@@ -24,7 +24,7 @@ import {
 } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture, Status } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
-import { Occluding, Marker } from "voyager_native";
+import { Occluding, Marker, Prepared } from "voyager_native";
 import { Chat } from "./chat.js";
 import { composeCanvas } from "./canvas.js";
 import { inspectProcesses } from "./processes.js";
@@ -35,6 +35,7 @@ import {
   renderFleets,
   renderContext,
   renderNameEditor,
+  renderName,
 } from "./navigation-view.js";
 import { WorkspaceMenu } from "./menu.js";
 import { VoyageClose } from "./voyage-close.js";
@@ -1207,12 +1208,7 @@ export default class Workspace extends View {
           this.run(action, cx);
         }
       })
-      .children(rename ? [Marker.new(`${rename.kind}-name`, rename.id)] : [])
-      .child(
-        voyage
-          ? div().flex_1().min_w(0).truncate().child(displayLabel)
-          : displayLabel,
-      );
+      .children(renderName(rename, displayLabel));
     if (voyage) button.flex_1().min_w(0).px(0);
     if (["create-fleet", "inspect"].includes(action?.operation || ""))
       button.on_mouse_down("left", (_event, cx) => cx.stop_propagation());
@@ -1858,7 +1854,8 @@ export default class Workspace extends View {
       .h_full()
       .text_size(13)
       .bg(colors.background)
-      .text_color(colors.foreground);
+      .text_color(colors.foreground)
+      .child(Prepared.new(!this.busy));
     const layout = this.layout;
     if (!layout?.canvas || (!layout.voyages.length && !layout.home))
       return shell

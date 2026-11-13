@@ -247,19 +247,20 @@ The app marks `terminal` only once the terminal view is attached, so the
 driver clicks and types only after that element appears.
 
 `observe` in `src/native.rs` is the one way to wait for an outcome. Every
-80 ms it reads the layout document (`doc.get`, parsed as the `Layout` type of
-the contract) and the latest frame. It returns the value of its check once
-three things are true: the check gives a value, every drawn Vessel or Portal
-whose content is a terminal has its `terminal` element, and the value has not
-changed for 150 ms. When the deadline passes, the journey ends `failed`,
-blamed on the product. A document that does not parse as `Layout` is a fixture
-error. Rebuild the verifier from the candidate's checkout.
+80 ms it reads the latest frame. It returns the value of its check once three
+things are true: the check gives a value, the frame reports `prepared`, and
+the value has not changed for 150 ms. A glance that has no frame, no value or
+an unprepared workspace starts the 150 ms again. When the deadline passes, the
+journey ends `failed`, blamed on the product.
 
-A launch ends with `observe`. The app sends no workspace action while it
-prepares the workspace, so a click on the sidebar toggle before the first
-terminal attaches is lost. In 5 of 10 runs at `--window 1180x820 --sidebar
+A launch ends with `observe`. The header sends no workspace action while a
+workspace request is in progress, so a click on the sidebar toggle during the
+first preparation is lost. In 5 of 10 runs at `--window 1180x820 --sidebar
 collapsed`, a driver that clicked the toggle as soon as the toggle was drawn
-never saw the sidebar collapse.
+never saw the sidebar collapse. The header reports that state itself, as
+`prepared` in each frame (see
+[the inspection endpoint](../../docs/inspection.md)), and the driver waits for
+that report. The driver does not guess it from the drawn terminals.
 
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
 `Chord` adds a modifier to a key. `Terminal` in `src/native/terminal.rs` binds

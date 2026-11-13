@@ -154,6 +154,7 @@ mod tests {
         Element {
             role: Role::SidebarToggle,
             key: String::new(),
+            label: None,
             bounds: Rect {
                 x: 6.5,
                 y: 3.0,
@@ -172,6 +173,7 @@ mod tests {
                 scale,
             },
             dock: Dock::Workspace,
+            prepared: true,
             elements: vec![toggle()],
             ambiguous: Vec::new(),
         }

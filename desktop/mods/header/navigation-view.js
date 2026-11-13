@@ -1,6 +1,6 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { Name, MeasureHeight, Marker } from "voyager_native";
+import { Name, MeasureHeight, Marker, EditorMarker } from "voyager_native";
 import { Brand, dock_target_visible, speech_in_primary } from "voyager_avatar";
 import { Speech } from "voyager_conversation";
 import { projection } from "voyager_header";
@@ -11,7 +11,15 @@ export function renderNameEditor(workspace, state, id) {
     .h(32)
     .on_mouse_down_out(() => workspace.focus.focus())
     .child(Name.new(state))
-    .child(Marker.new("name-editor", id));
+    .child(EditorMarker.new(id, state));
+}
+export function renderName(rename, label) {
+  return [
+    ...(rename ? [Marker.new(`${rename.kind}-name`, rename.id, label)] : []),
+    rename?.kind === "voyage"
+      ? div().flex_1().min_w(0).truncate().child(label)
+      : label,
+  ];
 }
 export function renderSidebar(workspace, layout, voyage) {
   const colors = projection();

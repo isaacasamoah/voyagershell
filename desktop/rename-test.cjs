@@ -120,9 +120,16 @@ test("terminal headings show their description while rename keeps the actual nam
     target,
     "bash · project",
   );
-  assert.equal(terminal.child, "bash · project");
+  assert.equal(terminal.children.at(-1), "bash · project");
+  assert.deepEqual(
+    [...terminal.children[0].marker],
+    ["vessel-name", "vessel-1", "bash · project"],
+  );
   assert.equal(terminal.accessibility_label, "Terminal");
-  assert.equal(view.action("Build", null, false, target).child, "Build");
+  assert.equal(
+    view.action("Build", null, false, target).children.at(-1),
+    "Build",
+  );
   terminal.on_click({ click_count: 2 }, cx);
   assert.equal(view.editing.state.text, "Terminal");
 });

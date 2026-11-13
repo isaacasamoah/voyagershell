@@ -6,6 +6,7 @@ pub struct Frame {
     pub sequence: u64,
     pub window: Window,
     pub dock: Context,
+    pub prepared: bool,
     pub elements: Vec<Element>,
     pub ambiguous: Vec<Element>,
 }
@@ -21,6 +22,8 @@ pub struct Window {
 pub struct Element {
     pub role: Role,
     pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     pub bounds: Rect,
 }
 

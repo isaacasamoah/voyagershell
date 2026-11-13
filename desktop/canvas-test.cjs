@@ -306,7 +306,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
   assert.equal(buttons.size, 0);
 });
 
-test("inspection markers name each control by its role and id, never its label", () => {
+test("inspection markers name each control by its role and id and report the text it shows", () => {
   const buttons = new Map();
   const Button = {
     new(id) {
@@ -355,10 +355,11 @@ test("inspection markers name each control by its role and id, never its label",
     portalControls: element,
   });
   const fleet = { kind: "fleet", id: "fleet-7" };
-  view.editing = { target: fleet, state: {} };
-  assert.deepEqual(markers(view.action("A label", null, false, fleet)), [
-    ["name-editor", "fleet-7"],
-  ]);
+  const draft = {};
+  view.editing = { target: fleet, state: draft };
+  const [editor] = markers(view.action("A label", null, false, fleet));
+  assert.deepEqual(editor.slice(0, 2), ["name-editor", "fleet-7"]);
+  assert.equal(editor[2], draft);
   view.editing = null;
   const layout = { voyages: [], context: { kind: "workspace" }, view: "fleet" };
   view.sidebarRegion(layout);
@@ -381,8 +382,22 @@ test("inspection markers name each control by its role and id, never its label",
   for (const kind of ["voyage", "fleet", "vessel", "portal"])
     assert.deepEqual(
       markers(view.action("A label", null, false, { kind, id: `${kind}-7` })),
-      [[`${kind}-name`, `${kind}-7`]],
+      [[`${kind}-name`, `${kind}-7`, "A label"]],
     );
+  const heading = view.action(
+    "Terminal",
+    null,
+    false,
+    { kind: "vessel", id: "vessel-7" },
+    "bash · project",
+  );
+  assert.deepEqual(markers(heading), [
+    ["vessel-name", "vessel-7", "bash · project"],
+  ]);
+  assert.equal(
+    heading.calls.find(([name]) => name === "children")[1].at(-1),
+    "bash · project",
+  );
   assert.deepEqual(
     markers(view.action("Refresh", { operation: "inspect" })),
     [],
