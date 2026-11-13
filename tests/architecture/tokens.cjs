@@ -1,7 +1,12 @@
 const path = require("node:path");
 const { call, scan, ENDS_BLOCK, ENDS_STATEMENT } = require("./rust.cjs");
 const { relative, literal } = require("./snapshot.cjs");
-const { container, hostModuleNode, environmentNode } = require("./nodes.cjs");
+const {
+  container,
+  sourceNode,
+  hostModuleNode,
+  environmentNode,
+} = require("./nodes.cjs");
 
 function spawnsProgram(site, { graph }) {
   const direct = literal(site.text);
@@ -145,6 +150,18 @@ function embedsFile(site, { snapshot, graph }) {
   edge.files = [...new Set([...(edge.files ?? []), target])].sort();
 }
 
+function includesSource(site, { snapshot, graph }) {
+  const value = literal(site.text);
+  const target = value && relative(site.file, value);
+  if (!target || !snapshot.has(target))
+    return "The included path is not a literal file in the commit";
+  const source = sourceNode(graph, target);
+  graph.edge("includes", site.from, source.id, site.evidence, {
+    basis: "parsed",
+    extract_by: "rust:include",
+  });
+}
+
 function generatedFrom(site, { graph }) {
   const value = /"([^"]+)"/.exec(site.text)?.[1];
   const target = value && path.posix.join(site.entry.info.directory, value);
@@ -219,6 +236,10 @@ function namesStructLiteral(rule) {
   };
 }
 
+function macroCall(name) {
+  return new RegExp(`\\b${name}\\s*!\\s*[(\\[{]`, "g");
+}
+
 function tokenHandlers(config) {
   return [
     {
@@ -238,12 +259,17 @@ function tokenHandlers(config) {
     },
     {
       token: "include_str!/include_bytes!(",
-      pattern: /\binclude_(?:str|bytes)\s*!\s*\(/g,
+      pattern: macroCall("include_(?:str|bytes)"),
       resolve: embedsFile,
     },
     {
+      token: "include!(",
+      pattern: macroCall("include"),
+      resolve: includesSource,
+    },
+    {
       token: "import_types!(",
-      pattern: /\bimport_types\s*!\s*\(/g,
+      pattern: macroCall("import_types"),
       resolve: generatedFrom,
     },
     {
