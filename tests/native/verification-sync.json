@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "lastVerifiedCommit": "3910a6a686a0f3f5dbf8f6a43a12c9db793fd039",
+  "lastVerifiedCommit": "285c1c25d1525ee0780dab89140514352f077b85",
   "covered": [
     {
       "path": "tests/native/src/lifecycle.rs",
@@ -18,11 +18,11 @@
     {
       "path": "tests/native/src/main.rs",
       "items": [
-        "entry: actual gate calls"
+        "drive: actual gate calls"
       ]
     }
   ],
-  "sourceFingerprint": "d52a5c185029bc2e4cd9bd094c110fc1e6b100477c0e407811c0f04eec380048",
+  "sourceFingerprint": "22be93cc93e2fd2de795f09d4acb8de42f833c1a1094856133126289824cbadd",
   "domain": {
     "representableStatesMaximum": 640,
     "reachableStates": 124,
