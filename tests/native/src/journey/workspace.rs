@@ -1,12 +1,13 @@
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
-use crate::native::{Native, Seen, Terminal};
+use crate::native::{Native, Seen, Terminal, voyages};
+use crate::sandbox;
 use crate::x11::Key;
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use serde::Serialize;
 use std::path::Path;
 use voyager_contract::{
-    Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Vessel, Voyage, VoyageId,
+    Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Vessel, VoyageId,
 };
 
 cases! {
@@ -34,24 +35,9 @@ struct Start {
     vessel: Vessel,
 }
 
-#[derive(Default)]
-struct Made {
-    shell: Option<Terminal>,
-    fleet: Option<FleetId>,
-    voyage: Option<VoyageId>,
-}
-
-impl Made {
-    fn vessel(&self) -> Result<&PlacementId> {
-        let shell = self.shell.as_ref();
-        Ok(shell.context("No earlier case made a Vessel")?.placement())
-    }
-
-    fn docked(&self) -> Result<Context> {
-        Ok(Context::Vessel {
-            id: self.vessel()?.clone(),
-        })
-    }
+struct Created<Id> {
+    id: Id,
+    shell: Terminal,
 }
 
 enum Open {
@@ -70,7 +56,9 @@ enum Finish<'a> {
 struct Renamed {
     before: String,
     typed: String,
-    after: String,
+    draft: Option<String>,
+    after: Option<String>,
+    label: Option<String>,
 }
 
 #[derive(PartialEq, Serialize)]
@@ -81,15 +69,28 @@ struct Step {
     fleet: Option<FleetId>,
 }
 
+#[derive(PartialEq, Serialize)]
+struct Saved {
+    version: u64,
+    document: Layout,
+}
+
+#[derive(Clone, PartialEq, Serialize)]
+struct Restored {
+    dock: Context,
+    docked: bool,
+    drawn: Vec<String>,
+    missing: Vec<String>,
+}
+
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let first = Terminal::first(native)?;
     let start = native.observe("one Voyage with one Fleet and one Vessel", |seen| {
         start(seen.document)
     })?;
-    let mut made = Made::default();
 
-    cases.check(native, Case::SplitVessel, |native| {
-        let before = at_rest(native)?;
+    let split = cases.make(native, Case::SplitVessel, |native| {
+        let before = at_rest(native)?.document;
         native.hover(&Target::name(&vessel(&start.vessel.id)))?;
         native.click(&Target::split_right(&start.vessel.id))?;
         native.click(&Target::worker("terminal"))?;
@@ -113,53 +114,58 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     && born.iter().all(|vessel| beside.contains(vessel)),
             )
             .observed("vessels", beside)?;
-        if let [new] = born[..] {
-            let shell = Terminal::bind(native, &new.id)?;
-            shell.focus(native)?;
-            shell.line(native, "echo SPLIT-$((6*7))")?;
-            shell.shows(native, "SPLIT-42")?;
-            made.shell = Some(shell);
-        }
-        Ok(verdict)
+        let Some(shell) = bind(native, &verdict, born.first().copied())? else {
+            return Ok((verdict, None));
+        };
+        shell.line(native, "echo SPLIT-$((6*7))")?;
+        let printed = shell.printed(native, "SPLIT-42")?;
+        let verdict = verdict.expect("the new Vessel's shell printed SPLIT-42", printed);
+        Ok((verdict, Some(shell)))
     })?;
+    let Some(shell) = split else {
+        return Ok(());
+    };
+    let docked = Context::Vessel {
+        id: shell.placement().clone(),
+    };
 
     cases.check(native, Case::DockVessel, |native| {
-        let want = made.docked()?;
-        let before = at_rest(native)?.context;
-        native.drag(&Target::AVATAR, &Target::name(&vessel(made.vessel()?)))?;
+        let before = at_rest(native)?.document.context;
+        native.drag(&Target::AVATAR, &Target::name(&vessel(shell.placement())))?;
         let context = native.observe("the document and the frame on one new dock", |seen| {
-            (seen.document.context != before && seen.dock() == &seen.document.context)
+            (seen.document.context != before && seen.frame.dock == seen.document.context)
                 .then(|| seen.document.context.clone())
         })?;
         Verdict::new()
-            .expect("the avatar docked to the new Vessel", context == want)
+            .expect("the avatar docked to the new Vessel", context == docked)
             .observed("before", &before)?
             .observed("context", &context)
     })?;
 
-    cases.check(native, Case::CreateFleet, |native| {
-        let docked = made.docked()?;
-        let before = at_rest(native)?;
+    let made = cases.make(native, Case::CreateFleet, |native| {
+        let before = at_rest(native)?.document;
         native.click(&Target::create_fleet(&start.voyage))?;
         native.click(&Target::worker("terminal"))?;
-        let (after, dock) = native.observe("a new Fleet with its Vessel drawn", |seen| {
-            let born = born(fleets(&before), fleets(seen.document), |fleet| &fleet.id);
-            (!born.is_empty() && born.iter().all(|fleet| shown(seen, fleet)))
-                .then(|| (seen.document.clone(), seen.dock().clone()))
-        })?;
+        let (after, dock, drawn) =
+            native.observe("a new Fleet in the layout document", |seen| {
+                let born = born(fleets(&before), fleets(seen.document), |fleet| &fleet.id);
+                let drawn = born.iter().all(|fleet| tabbed(seen, fleet));
+                (!born.is_empty()).then(|| (seen.document.clone(), seen.frame.dock.clone(), drawn))
+            })?;
         let born = born(fleets(&before), fleets(&after), |fleet| &fleet.id);
-        let new = born.first().copied();
-        made.fleet = new.map(|fleet| fleet.id.clone());
-        Verdict::new()
+        let verdict = Verdict::new()
             .expect("exactly one Fleet was created", born.len() == 1)
             .expect(
                 "the new Fleet is named Fleet 2 and holds one Vessel",
-                new.is_some_and(|fleet| fleet.name == "Fleet 2" && fleet.vessels.len() == 1),
+                born.iter()
+                    .all(|fleet| fleet.name == "Fleet 2" && fleet.vessels.len() == 1),
             )
             .expect(
                 "the new Fleet is selected",
-                after.selected_fleet == made.fleet,
+                born.iter()
+                    .all(|fleet| after.selected_fleet.as_ref() == Some(&fleet.id)),
             )
+            .expect("the new Fleet's tab and Vessel are drawn", drawn)
             .expect(
                 "the dock stayed on the Vessel",
                 after.context == docked && dock == docked,
@@ -167,17 +173,22 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("fleets", &born)?
             .observed("selected", &after.selected_fleet)?
             .observed("context", &after.context)?
-            .observed("dock", &dock)
+            .observed("dock", &dock)?;
+        let placed = born.first().and_then(|fleet| fleet.vessels.first());
+        let shell = bind(native, &verdict, placed)?;
+        let made = shell.zip(born.first()).map(|(shell, fleet)| Created {
+            id: fleet.id.clone(),
+            shell,
+        });
+        Ok((verdict, made))
     })?;
+    let Some(second) = made else {
+        return Ok(());
+    };
 
     cases.check(native, Case::SwitchFleet, |native| {
-        let docked = made.docked()?;
-        let new = made
-            .fleet
-            .as_ref()
-            .context("No earlier case made a Fleet")?;
         let mut steps = Vec::new();
-        for id in [&start.fleet, new, &start.fleet] {
+        for id in [&start.fleet, &second.id, &start.fleet] {
             native.click(&Target::name(&RenameTarget::Fleet { id: id.clone() }))?;
             steps.push(
                 native.observe(&format!("Fleet {} selected and drawn", id.0), |seen| {
@@ -197,57 +208,79 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("steps", &steps)
     })?;
 
-    cases.check(native, Case::CreateVoyage, |native| {
-        let docked = made.docked()?;
-        let before = at_rest(native)?;
+    let made = cases.make(native, Case::CreateVoyage, |native| {
+        let before = at_rest(native)?.document;
         native.click(&Target::CREATE_VOYAGE)?;
-        let (after, dock) = native.observe("a new Voyage with its Vessel drawn", |seen| {
-            let born = born(
-                before.voyages.iter(),
-                seen.document.voyages.iter(),
-                |voyage| &voyage.id,
-            );
-            let drawn = |voyage: &&Voyage| voyage.fleets.iter().all(|fleet| shown(seen, fleet));
-            (!born.is_empty() && born.iter().all(drawn))
-                .then(|| (seen.document.clone(), seen.dock().clone()))
-        })?;
-        let born = born(before.voyages.iter(), after.voyages.iter(), |voyage| {
-            &voyage.id
-        });
-        let new = born.first().copied();
-        made.voyage = new.map(|voyage| voyage.id.clone());
-        let folder = new
-            .and_then(|voyage| voyage.cwd.as_deref())
-            .and_then(|cwd| Path::new(cwd).file_name())
+        let (after, dock, drawn) =
+            native.observe("a new Voyage in the layout document", |seen| {
+                let born = born(voyages(&before), voyages(seen.document), |voyage| {
+                    &voyage.id
+                });
+                let drawn = born.iter().all(|voyage| {
+                    let name = RenameTarget::Voyage {
+                        id: voyage.id.clone(),
+                    };
+                    seen.shows(&Target::name(&name))
+                        && voyage.fleets.iter().all(|fleet| tabbed(seen, fleet))
+                });
+                (!born.is_empty()).then(|| (seen.document.clone(), seen.frame.dock.clone(), drawn))
+            })?;
+        let born = born(voyages(&before), voyages(&after), |voyage| &voyage.id);
+        let folder = Path::new(sandbox::PROJECT)
+            .file_name()
             .and_then(|name| name.to_str());
-        Verdict::new()
+        let verdict = Verdict::new()
             .expect("exactly one Voyage was created", born.len() == 1)
             .expect(
-                "the new Voyage is open and named after its working folder",
-                new.is_some_and(|voyage| !voyage.closed && Some(voyage.name.as_str()) == folder),
+                "the new Voyage is open in the fixture's project folder and named after it",
+                born.iter().all(|voyage| {
+                    !voyage.closed
+                        && voyage.cwd.as_deref() == Some(sandbox::PROJECT)
+                        && Some(voyage.name.as_str()) == folder
+                }),
+            )
+            .expect(
+                "the new Voyage holds one Fleet with one Vessel",
+                born.iter().all(
+                    |voyage| matches!(&voyage.fleets[..], [fleet] if fleet.vessels.len() == 1),
+                ),
             )
             .expect(
                 "the new Voyage is selected",
-                after.selected_voyage == made.voyage,
+                born.iter()
+                    .all(|voyage| after.selected_voyage.as_ref() == Some(&voyage.id)),
+            )
+            .expect(
+                "the new Voyage, its Fleet tab and its Vessel are drawn",
+                drawn,
             )
             .expect(
                 "the dock stayed on the Vessel",
                 after.context == docked && dock == docked,
             )
             .observed("voyages", &born)?
+            .observed("folder", sandbox::PROJECT)?
             .observed("selected", &after.selected_voyage)?
             .observed("context", &after.context)?
-            .observed("dock", &dock)
+            .observed("dock", &dock)?;
+        let placed = born
+            .first()
+            .and_then(|voyage| voyage.fleets.first())
+            .and_then(|fleet| fleet.vessels.first());
+        let shell = bind(native, &verdict, placed)?;
+        let made = shell.zip(born.first()).map(|(shell, voyage)| Created {
+            id: voyage.id.clone(),
+            shell,
+        });
+        Ok((verdict, made))
     })?;
+    let Some(other) = made else {
+        return Ok(());
+    };
 
     cases.check(native, Case::SwitchVoyage, |native| {
-        let docked = made.docked()?;
-        let new = made
-            .voyage
-            .as_ref()
-            .context("No earlier case made a Voyage")?;
         let mut steps = Vec::new();
-        for id in [&start.voyage, new, &start.voyage] {
+        for id in [&start.voyage, &other.id, &start.voyage] {
             native.click(&Target::name(&RenameTarget::Voyage { id: id.clone() }))?;
             steps.push(
                 native.observe(&format!("Voyage {} selected and drawn", id.0), |seen| {
@@ -274,106 +307,112 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("steps", &steps)
     })?;
 
+    let first_fleet = RenameTarget::Fleet {
+        id: start.fleet.clone(),
+    };
+    let first_voyage = RenameTarget::Voyage {
+        id: start.voyage.clone(),
+    };
+    let new_vessel = vessel(shell.placement());
+
     cases.check(native, Case::RenameFleetEnter, |native| {
-        let fleet = RenameTarget::Fleet {
-            id: start.fleet.clone(),
-        };
-        let renamed = rename(
+        let open = Open::DoubleClick;
+        typed(rename(
             native,
-            &fleet,
-            Open::DoubleClick,
+            &first_fleet,
+            open,
             "Native Fleet",
             Finish::Enter,
-        )?;
-        typed(renamed)
+        )?)
     })?;
 
     cases.check(native, Case::RenameVoyageBlur, |native| {
-        let voyage = RenameTarget::Voyage {
-            id: start.voyage.clone(),
-        };
-        let renamed = rename(
+        let finish = Finish::Blur(&first.target());
+        typed(rename(
             native,
-            &voyage,
+            &first_voyage,
             Open::DoubleClick,
             "Blur Voyage",
-            Finish::Blur(&first.target()),
-        )?;
-        typed(renamed)
+            finish,
+        )?)
     })?;
 
     cases.check(native, Case::RenameVesselF2, |native| {
-        let renamed = rename(
+        typed(rename(
             native,
-            &vessel(made.vessel()?),
+            &new_vessel,
             Open::ClickThenF2,
             "+",
             Finish::Enter,
-        )?;
-        typed(renamed)
+        )?)
     })?;
 
     cases.check(native, Case::RenameKeyboard, |native| {
-        let voyage = RenameTarget::Voyage {
-            id: start.voyage.clone(),
-        };
-        let renamed = rename(
+        let open = Open::TabRoundTrip;
+        typed(rename(
             native,
-            &voyage,
-            Open::TabRoundTrip,
+            &first_voyage,
+            open,
             "Keyboard Voyage",
             Finish::Enter,
-        )?;
-        typed(renamed)
+        )?)
     })?;
 
     cases.check(native, Case::RenameEscape, |native| {
-        let fleet = RenameTarget::Fleet {
-            id: start.fleet.clone(),
-        };
-        let renamed = rename(
+        let open = Open::DoubleClick;
+        kept(rename(
             native,
-            &fleet,
-            Open::DoubleClick,
+            &first_fleet,
+            open,
             "Discarded",
             Finish::Escape,
-        )?;
-        kept(renamed)
+        )?)
     })?;
 
     cases.check(native, Case::RenameEmpty, |native| {
-        let renamed = rename(
+        kept(rename(
             native,
-            &vessel(made.vessel()?),
+            &new_vessel,
             Open::DoubleClick,
             "",
             Finish::Enter,
-        )?;
-        kept(renamed)
+        )?)
     })?;
 
     cases.check(native, Case::Relaunch, |native| {
-        let shell = made
-            .shell
-            .as_ref()
-            .context("No earlier case made a Vessel")?;
+        let shells = [&first, &shell, &second.shell, &other.shell];
         let before = at_rest(native)?;
         native.close()?;
-        first.same_program(native)?;
-        shell.same_program(native)?;
+        for shell in shells {
+            shell.same_program(native)?;
+        }
         native.launch()?;
-        let after = native.observe("the avatar docked where the document says", |seen| {
-            (seen.dock() == &seen.document.context).then(|| seen.document.clone())
-        })?;
-        first.same_program(native)?;
-        shell.same_program(native)?;
+        let restored = native.settle(
+            |seen| Some(restored(seen)),
+            |restored| restored.docked && restored.missing.is_empty(),
+        )?;
+        for shell in shells {
+            shell.same_program(native)?;
+        }
+        let after = at_rest(native)?;
         Verdict::new()
             .expect(
-                "the layout document is the same after the relaunch",
+                "the layout document and its version are the same after the relaunch",
                 after == before,
             )
+            .expect(
+                "the avatar is docked where the document says",
+                restored.as_ref().is_some_and(|restored| restored.docked),
+            )
+            .expect(
+                "the relaunched window draws every Fleet tab and every Vessel of the selected Fleet",
+                restored
+                    .as_ref()
+                    .is_some_and(|restored| restored.missing.is_empty() && !restored.drawn.is_empty()),
+            )
             .observed("before", &before)?
-            .observed("after", &after)
+            .observed("after", &after)?
+            .observed("restored", &restored)
     })
 }
 
@@ -411,6 +450,20 @@ fn rename(
     } else {
         native.type_text(text)?;
     }
+    let draft = native.settle(
+        |seen| seen.label(&editor).map(str::to_owned),
+        |draft| draft == text,
+    )?;
+    let mut renamed = Renamed {
+        before,
+        typed: text.into(),
+        draft,
+        after: None,
+        label: None,
+    };
+    if renamed.draft.as_deref() != Some(text) {
+        return Ok(renamed);
+    }
     match finish {
         Finish::Enter => native.press(Key::Return)?,
         Finish::Escape => native.press(Key::Escape)?,
@@ -421,33 +474,94 @@ fn rename(
             .then(|| name_of(seen.document, subject))
             .flatten()
     })?;
-    Ok(Renamed {
-        before,
-        typed: text.into(),
-        after,
-    })
+    renamed.label = native.settle(
+        |seen| seen.label(&name).map(str::to_owned),
+        |label| titled(label, &after),
+    )?;
+    renamed.after = Some(after);
+    Ok(renamed)
+}
+
+fn bind(
+    native: &mut Native,
+    verdict: &Verdict,
+    placed: Option<&Vessel>,
+) -> Result<Option<Terminal>> {
+    match placed {
+        Some(placed) if verdict.passed() => Terminal::bind(native, &placed.id).map(Some),
+        _ => Ok(None),
+    }
 }
 
 fn typed(renamed: Renamed) -> Result<Verdict> {
-    Verdict::new()
-        .expect(
-            "the saved name is the typed text",
-            renamed.after == renamed.typed,
-        )
-        .observed("rename", &renamed)
+    let saved = renamed.typed.clone();
+    judged(renamed, "the saved name is the typed text", &saved)
 }
 
 fn kept(renamed: Renamed) -> Result<Verdict> {
+    let saved = renamed.before.clone();
+    judged(renamed, "the saved name is unchanged", &saved)
+}
+
+fn judged(renamed: Renamed, saving: &'static str, saved: &str) -> Result<Verdict> {
+    let drawn = matches!(
+        (&renamed.label, &renamed.after),
+        (Some(label), Some(after)) if titled(label, after)
+    );
     Verdict::new()
         .expect(
-            "the saved name is unchanged",
-            renamed.after == renamed.before,
+            "the editor held the typed draft before the finishing input",
+            renamed.draft.as_deref() == Some(renamed.typed.as_str()),
         )
+        .expect(saving, renamed.after.as_deref() == Some(saved))
+        .expect("the drawn name is the saved name", drawn)
         .observed("rename", &renamed)
 }
 
-fn at_rest(native: &Native) -> Result<Layout> {
-    native.observe("the workspace at rest", |seen| Some(seen.document.clone()))
+fn titled(label: &str, name: &str) -> bool {
+    label.rsplit(" · ").next() == Some(name)
+}
+
+fn at_rest(native: &Native) -> Result<Saved> {
+    native.observe("the workspace at rest", |seen| {
+        Some(Saved {
+            version: seen.version,
+            document: seen.document.clone(),
+        })
+    })
+}
+
+fn restored(seen: &Seen) -> Restored {
+    let layout = seen.document;
+    let tabs = voyages(layout)
+        .filter(|voyage| layout.selected_voyage.as_ref() == Some(&voyage.id))
+        .flat_map(|voyage| &voyage.fleets)
+        .map(|fleet| {
+            Target::name(&RenameTarget::Fleet {
+                id: fleet.id.clone(),
+            })
+        });
+    let selected = layout
+        .selected_fleet
+        .as_ref()
+        .and_then(|id| fleet(layout, id));
+    let panes = selected
+        .into_iter()
+        .flat_map(|fleet| &fleet.vessels)
+        .flat_map(|placed| {
+            [
+                Target::name(&vessel(&placed.id)),
+                Target::terminal(&placed.id),
+            ]
+        });
+    let (drawn, missing) = tabs.chain(panes).partition(|target| seen.shows(target));
+    let listed = |targets: Vec<Target>| targets.iter().map(Target::to_string).collect();
+    Restored {
+        dock: seen.frame.dock.clone(),
+        docked: seen.frame.dock == layout.context,
+        drawn: listed(drawn),
+        missing: listed(missing),
+    }
 }
 
 fn start(layout: &Layout) -> Option<Start> {
@@ -474,7 +588,7 @@ fn step(seen: &Seen, selected: &str) -> Step {
     Step {
         selected: selected.to_owned(),
         context: seen.document.context.clone(),
-        dock: seen.dock().clone(),
+        dock: seen.frame.dock.clone(),
         fleet: seen.document.selected_fleet.clone(),
     }
 }
@@ -484,6 +598,13 @@ fn shown(seen: &Seen, fleet: &Fleet) -> bool {
         .vessels
         .iter()
         .all(|placed| seen.shows(&Target::name(&vessel(&placed.id))))
+}
+
+fn tabbed(seen: &Seen, fleet: &Fleet) -> bool {
+    let tab = RenameTarget::Fleet {
+        id: fleet.id.clone(),
+    };
+    seen.shows(&Target::name(&tab)) && shown(seen, fleet)
 }
 
 fn born<'a, T, I: PartialEq + 'a>(
@@ -496,11 +617,7 @@ fn born<'a, T, I: PartialEq + 'a>(
 }
 
 fn fleets(layout: &Layout) -> impl Iterator<Item = &Fleet> {
-    layout
-        .voyages
-        .iter()
-        .chain(&layout.home)
-        .flat_map(|voyage| &voyage.fleets)
+    voyages(layout).flat_map(|voyage| &voyage.fleets)
 }
 
 fn vessels(layout: &Layout) -> impl Iterator<Item = &Vessel> {
@@ -517,20 +634,97 @@ fn vessel(id: &PlacementId) -> RenameTarget {
 
 fn name_of(layout: &Layout, subject: &RenameTarget) -> Option<String> {
     match subject {
-        RenameTarget::Voyage { id } => layout
-            .voyages
-            .iter()
+        RenameTarget::Voyage { id } => voyages(layout)
             .find(|voyage| &voyage.id == id)
             .map(|voyage| voyage.name.clone()),
         RenameTarget::Fleet { id } => fleet(layout, id).map(|fleet| fleet.name.clone()),
         RenameTarget::Vessel { id } => vessels(layout)
             .find(|vessel| &vessel.id == id)
             .map(|vessel| vessel.name.clone()),
-        RenameTarget::Portal { id } => layout
-            .voyages
-            .iter()
+        RenameTarget::Portal { id } => voyages(layout)
             .flat_map(|voyage| &voyage.portals)
             .find(|portal| &portal.id == id)
             .map(|portal| portal.name.clone()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use voyager_contract::inspection::Frame;
+
+    #[test]
+    fn a_relaunch_names_each_tab_and_vessel_that_the_window_does_not_draw() -> Result<()> {
+        let vessel = |id: &str| json!({"id": id, "content": "content-1", "name": "Terminal"});
+        let fleet = |id: &str, vessels: &[&str]| {
+            let vessels: Vec<_> = vessels.iter().map(|id| vessel(id)).collect();
+            json!({"id": id, "name": "Fleet", "root": null, "vessels": vessels})
+        };
+        let voyage = |id: &str, fleets: Vec<serde_json::Value>| json!({"id": id, "name": "Voyage", "fleets": fleets, "portals": []});
+        let document: Layout = serde_json::from_value(json!({
+            "voyages": [
+                voyage("voyage-1", vec![
+                    fleet("fleet-4", &["placement-3", "placement-10"]),
+                    fleet("fleet-13", &["placement-12"]),
+                ]),
+                voyage("voyage-14", vec![fleet("fleet-17", &["placement-16"])]),
+            ],
+            "contents": [],
+            "selectedVoyage": "voyage-1",
+            "selectedFleet": "fleet-4",
+            "context": {"kind": "vessel", "id": "placement-10"},
+            "nextId": "18"
+        }))?;
+        let drawn = |drawn: &[(&str, &str)]| -> Result<Restored> {
+            let elements: Vec<_> = drawn
+                .iter()
+                .map(|(role, key)| {
+                    json!({"role":role,"key":key,"bounds":{"x":0.0,"y":0.0,"width":1.0,"height":1.0}})
+                })
+                .collect();
+            let frame: Frame = serde_json::from_value(json!({
+                "sequence": 1,
+                "window": {"width": 725.0, "height": 470.0, "scale": 2.0},
+                "dock": {"kind": "vessel", "id": "placement-10"},
+                "prepared": true,
+                "elements": elements,
+                "ambiguous": []
+            }))?;
+            Ok(restored(&Seen {
+                document: &document,
+                version: 27,
+                frame: &frame,
+            }))
+        };
+        let whole = [
+            ("fleet-name", "fleet-4"),
+            ("fleet-name", "fleet-13"),
+            ("vessel-name", "placement-3"),
+            ("terminal", "placement-3"),
+            ("vessel-name", "placement-10"),
+            ("terminal", "placement-10"),
+        ];
+        let all = drawn(&whole)?;
+        assert!(all.missing.is_empty() && all.drawn.len() == 6);
+        assert!(all.docked && all.dock == document.context);
+        let partial = drawn(&whole[..4])?;
+        assert_eq!(
+            partial.missing,
+            ["vessel-name \"placement-10\"", "terminal \"placement-10\""]
+        );
+        let empty = drawn(&[("fleet-name", "fleet-17"), ("vessel-name", "placement-16")])?;
+        assert!(empty.drawn.is_empty() && empty.missing.len() == 6 && empty.docked);
+        Ok(())
+    }
+
+    #[test]
+    fn a_title_names_its_control_when_the_name_is_its_last_part() {
+        assert!(titled("Native Fleet", "Native Fleet"));
+        assert!(titled("bash · project · +", "+"));
+        assert!(titled("bash · project", "project"));
+        assert!(!titled("Fleet 1", "Native Fleet"));
+        assert!(!titled("bash · project · Terminal 2", "+"));
+        assert!(!titled("Native Fleet 2", "Native Fleet"));
     }
 }

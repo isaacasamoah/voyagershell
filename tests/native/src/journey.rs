@@ -301,29 +301,45 @@ impl<'a, C: Case> Cases<'a, C> {
         case: C,
         run: impl FnOnce(&mut Native) -> Result<Verdict>,
     ) -> Result<()> {
+        self.make(native, case, |native| Ok((run(native)?, Some(()))))
+            .map(drop)
+    }
+
+    pub fn make<T>(
+        &mut self,
+        native: &mut Native,
+        case: C,
+        run: impl FnOnce(&mut Native) -> Result<(Verdict, Option<T>)>,
+    ) -> Result<Option<T>> {
         let name = case.name();
         let Some(index) = self.outcomes.open(name)? else {
-            return Ok(());
+            return Ok(None);
         };
         native.system.record(json!({"event":"case","case":name}))?;
-        let judged = run(native).and_then(|verdict| {
+        let judged = run(native).and_then(|(verdict, made)| {
             ensure!(
                 verdict.passed() || !native.halted(),
                 "The candidate was not running when the case {name} judged it"
             );
-            Ok(verdict)
+            Ok((verdict, made))
         });
         let finished = match judged {
-            Ok(verdict) => self.outcomes.close(index, Some(verdict)),
+            Ok((verdict, made)) => {
+                let passed = verdict.passed();
+                self.outcomes
+                    .close(index, Some(verdict))
+                    .map(|()| made.filter(|_| passed))
+            }
             Err(error) => self.outcomes.close(index, None).and(Err(error)),
         };
         let saved = self.outcomes.save(None);
-        finished?;
+        let made = finished?;
         match saved.and_then(|()| native.keep_window(&format!("case-{name}"))) {
             Err(error) if self.outcomes.failed() => native
                 .system
-                .record(json!({"event":"unkept","case":name,"error":format!("{error:#}")})),
-            kept => kept,
+                .record(json!({"event":"unkept","case":name,"error":format!("{error:#}")}))
+                .map(|()| made),
+            kept => kept.map(|()| made),
         }
     }
 }

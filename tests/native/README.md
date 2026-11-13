@@ -81,10 +81,13 @@ sidebar open and a window of at least 1180 by 1000 device pixels. At 1180 by
 820 the sidebar has room for one Voyage row, so the name of a second Voyage
 is never drawn.
 
-A case runs inside `cases.check` and returns a `Verdict`. A `Verdict` holds
-named expectations, each of which held or did not, and the values that the
-case observed. A case that returns a `Verdict` without an expectation judged
-nothing, so it ends the run as a fixture error. A value that cannot be
+A case runs inside `cases.check` and returns a `Verdict`. A case that creates
+something a later case needs runs inside `cases.make` and also returns the
+thing that it made. `make` hands that thing to the journey only when the case
+passed, so a later case never starts from a creation that failed. A `Verdict`
+holds named expectations, each of which held or did not, and the values that
+the case observed. A case that returns a `Verdict` without an expectation
+judged nothing, so it ends the run as a fixture error. A value that cannot be
 recorded also ends the run as a fixture error.
 `observations.json` lists every declared case with one status:
 
@@ -271,11 +274,20 @@ again. `settle` returns a value that counts as soon as that value is the
 wanted one. When the deadline passes, it returns the value that counts at
 that moment, wanted or not, and it returns nothing when no value counts.
 
-`observe` in `src/native.rs` is the one way to wait for an outcome. Every
-80 ms it reads the latest frame and gives `settle` the value of its check. A
-glance that has no frame, no value or an unprepared workspace gives no value.
-Every value is wanted, so `observe` returns the first value that counts. When
-the deadline passes, the journey ends `failed`, blamed on the product.
+`observe` in `src/native.rs` is the one way to wait for an outcome that must
+happen. Every 80 ms it reads the layout document (`doc.get`, parsed as the
+`Layout` type of the contract, with its version) and the latest frame, and
+gives `settle` the value of its check. A glance that has no frame, no
+document, no value or an unprepared workspace gives no value. Every value is
+wanted, so `observe` returns the first value that counts. When the deadline
+passes, the journey ends `failed`, blamed on the product.
+
+`Native::settle` waits the same way for a value that a case will judge. It
+returns once the value is the wanted one and has held for 150 ms. When the
+deadline passes it returns the last value that it read, so the case states a
+named expectation about that value and `firstFailingCheck` shows what the app
+drew. The `workspace` journey uses it for the draft of the rename editor, for
+the text of a name after a rename and for the controls that a relaunch draws.
 
 A launch ends with `observe`. The header sends no workspace action while a
 workspace request is in progress, so a click on the sidebar toggle during the
@@ -302,7 +314,10 @@ terminal does not wait for one. `Terminal::first` reads the layout document
 (`doc.get`, parsed as the `Layout` type of the contract). A document that does
 not parse as `Layout` is a fixture error. Rebuild the verifier from the
 candidate's checkout. `line` clicks its own terminal before it types, so the
-text cannot reach another control that holds the keyboard.
+text cannot reach another control that holds the keyboard. `Terminal::bind`
+binds the terminal of another Vessel. Every bound shell is adopted, so cleanup
+waits for its exit and `processes.json` lists it. The `workspace` journey binds
+the shell of every Vessel that it creates.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and
 capture (`GetImage`). A terminal capture is the `terminal` element's area, with

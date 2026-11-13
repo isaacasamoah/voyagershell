@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use voyager_contract::inspection::{Frame, Role};
-use voyager_contract::{Context as Dock, Layout, Vessel};
+use voyager_contract::{Layout, Vessel, Voyage};
 
 const GLANCE: Duration = Duration::from_millis(80);
 
@@ -86,6 +86,7 @@ impl Surface {
 
 pub struct Seen<'a> {
     pub document: &'a Layout,
+    pub version: u64,
     pub frame: &'a Frame,
 }
 
@@ -94,8 +95,8 @@ impl Seen<'_> {
         target.find(self.frame).is_some()
     }
 
-    pub fn dock(&self) -> &Dock {
-        &self.frame.dock
+    pub fn label(&self, target: &Target) -> Option<&str> {
+        target.find(self.frame)?.label.as_deref()
     }
 }
 
@@ -116,31 +117,36 @@ impl<T> Glance<T> {
 
 fn glance<T>(
     frame: Option<&Frame>,
-    document: Option<&Layout>,
+    saved: Option<&(u64, Layout)>,
     check: impl FnOnce(&Seen) -> Option<T>,
 ) -> Glance<T> {
-    let (Some(frame), Some(document)) = (frame, document) else {
+    let (Some(frame), Some((version, document))) = (frame, saved) else {
         return Glance::Absent;
     };
-    match check(&Seen { document, frame }) {
+    let seen = Seen {
+        document,
+        version: *version,
+        frame,
+    };
+    match check(&seen) {
         None => Glance::Absent,
         Some(_) if !frame.prepared => Glance::Preparing,
         Some(value) => Glance::Ready(value),
     }
 }
 
+pub fn voyages(layout: &Layout) -> impl Iterator<Item = &Voyage> {
+    layout.voyages.iter().chain(&layout.home)
+}
+
 fn placed(layout: &Layout) -> impl Iterator<Item = &Vessel> {
-    layout
-        .voyages
-        .iter()
-        .chain(&layout.home)
-        .flat_map(|voyage| {
-            voyage
-                .fleets
-                .iter()
-                .flat_map(|fleet| &fleet.vessels)
-                .chain(&voyage.portals)
-        })
+    voyages(layout).flat_map(|voyage| {
+        voyage
+            .fleets
+            .iter()
+            .flat_map(|fleet| &fleet.vessels)
+            .chain(&voyage.portals)
+    })
 }
 
 pub struct Native {
@@ -401,24 +407,9 @@ impl Native {
     pub fn observe<T: PartialEq>(
         &self,
         expected: &str,
-        mut check: impl FnMut(&Seen) -> Option<T>,
+        check: impl FnMut(&Seen) -> Option<T>,
     ) -> Result<T> {
-        let x11 = self.x11()?;
-        let path = self.inspection();
-        let mut preparing = false;
-        let held = settle(
-            PATIENCE,
-            GLANCE,
-            || {
-                let window = x11.geometry(self.window)?;
-                let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
-                let document = self.document()?;
-                let seen = glance(frame.as_ref(), document.as_ref(), &mut check);
-                preparing = matches!(seen, Glance::Preparing);
-                Ok(seen.ready())
-            },
-            |_| true,
-        )?;
+        let (held, preparing) = self.watch(check)?;
         held.ok_or_else(|| {
             let prepared = if preparing {
                 " with the workspace prepared"
@@ -429,16 +420,56 @@ impl Native {
         })
     }
 
-    pub fn document(&self) -> Result<Option<Layout>> {
+    pub fn settle<T: Clone + PartialEq>(
+        &self,
+        mut read: impl FnMut(&Seen) -> Option<T>,
+        wanted: impl Fn(&T) -> bool,
+    ) -> Result<Option<T>> {
+        let mut last = None;
+        self.watch(|seen| {
+            last = read(seen).or(last.take());
+            last.clone().filter(&wanted)
+        })?;
+        Ok(last)
+    }
+
+    fn watch<T: PartialEq>(
+        &self,
+        mut check: impl FnMut(&Seen) -> Option<T>,
+    ) -> Result<(Option<T>, bool)> {
+        let x11 = self.x11()?;
+        let path = self.inspection();
+        let mut preparing = false;
+        let held = settle(
+            PATIENCE,
+            GLANCE,
+            || {
+                let window = x11.geometry(self.window)?;
+                let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
+                let saved = self.document()?;
+                let seen = glance(frame.as_ref(), saved.as_ref(), &mut check);
+                preparing = matches!(seen, Glance::Preparing);
+                Ok(seen.ready())
+            },
+            |_| true,
+        )?;
+        Ok((held, preparing))
+    }
+
+    pub fn document(&self) -> Result<Option<(u64, Layout)>> {
         let reply = self
             .system
             .watch("doc.get", json!({"name":"voyager-layout-v1"}))?;
-        match &reply["value"] {
-            Value::Null => Ok(None),
-            value => serde_json::from_value(value.clone()).map(Some).context(
-                "The layout document is not the contract Layout this verifier was built with",
-            ),
+        if reply["value"].is_null() {
+            return Ok(None);
         }
+        let layout = serde_json::from_value(reply["value"].clone()).context(
+            "The layout document is not the contract Layout this verifier was built with",
+        )?;
+        let version = reply["version"]
+            .as_u64()
+            .context("The layout document has no version")?;
+        Ok(Some((version, layout)))
     }
 
     pub fn keep(&self, name: &str, look: &Pixels) -> Result<()> {
@@ -1025,7 +1056,7 @@ pub(crate) mod tests {
     #[test]
     fn an_outcome_seen_while_the_workspace_prepares_does_not_count() -> Result<()> {
         let (preparing, prepared) = (frame(false)?, frame(true)?);
-        let document: Layout = serde_json::from_value(json!({
+        let layout: Layout = serde_json::from_value(json!({
             "voyages": [],
             "contents": [],
             "selectedVoyage": null,
@@ -1033,8 +1064,9 @@ pub(crate) mod tests {
             "context": {"kind": "workspace"},
             "nextId": "1"
         }))?;
-        let seen = |frame: Option<&Frame>, document: Option<&Layout>, outcome: Option<u8>| {
-            glance(frame, document, |_| outcome)
+        let document = (3, layout);
+        let seen = |frame: Option<&Frame>, saved: Option<&(u64, Layout)>, outcome: Option<u8>| {
+            glance(frame, saved, |seen| outcome.filter(|_| seen.version == 3))
         };
         ensure!(
             matches!(
