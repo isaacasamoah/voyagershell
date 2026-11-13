@@ -31,16 +31,6 @@
       "group": "Administrator agent tools"
     }
   ],
-  "docs": [
-    "AGENTS.md",
-    "CONSTRAINTS.md",
-    "CONTRIBUTING.md",
-    "README.md",
-    "docs/*.md",
-    "content/*/AGENTS.md",
-    "desktop/mods/*/AGENTS.md",
-    "experiments/README.md"
-  ],
   "history": {
     "branch": "main",
     "from": "a949a7b"

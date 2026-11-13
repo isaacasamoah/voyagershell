@@ -1,7 +1,7 @@
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const { digest, glob, Snapshot, Graph } = require("./snapshot.cjs");
+const { digest, Snapshot, Graph } = require("./snapshot.cjs");
 const { observeCargo, observeRust } = require("./observe-rust.cjs");
 const {
   observePackages,
@@ -9,17 +9,17 @@ const {
   observeScopes,
   observeTypeScript,
 } = require("./observe-project.cjs");
-const { indexDocuments } = require("./documents.cjs");
 const defaults = require("./config.json");
 
 const SCHEMA = "architecture-map/v0";
 const EXTRACTOR_FILES = [
-  "documents.cjs",
+  "nodes.cjs",
   "observe-project.cjs",
   "observe-rust.cjs",
   "observe.cjs",
   "rust.cjs",
   "snapshot.cjs",
+  "tokens.cjs",
 ];
 
 function toolVersion() {
@@ -42,11 +42,11 @@ function observeSizes(snapshot) {
   return sizes;
 }
 
-function observe(repository, revision, config = defaults, options = {}) {
+function observe(repository, revision, config = defaults) {
   const snapshot = new Snapshot(repository, revision);
   try {
     const graph = new Graph(snapshot);
-    const crates = observeCargo(snapshot, graph, config);
+    const crates = observeCargo(snapshot, graph);
     observePackages(snapshot, graph, config);
     observeGenerators(snapshot, graph, config);
     observeRust(snapshot, graph, config, crates);
@@ -62,12 +62,6 @@ function observe(repository, revision, config = defaults, options = {}) {
           });
       }
     }
-    const documents = indexDocuments(
-      snapshot,
-      graph,
-      config,
-      options.specs ?? [],
-    );
     const order = (list) =>
       [...list].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const tidy = (item) => {
@@ -113,22 +107,8 @@ function observe(repository, revision, config = defaults, options = {}) {
       edges: order(graph.edges.values()).map(tidy),
       unresolved: order(graph.unresolved.values()),
     };
-    const specs = {
-      schema: SCHEMA,
-      layer: "spec-index",
-      provenance: {
-        source: { kind: "git", commit: snapshot.commit },
-        generator: observed.provenance.generator,
-      },
-      documents: documents.map(({ text, ...rest }) => rest),
-    };
     return {
       observed,
-      specs,
-      texts: Object.fromEntries(
-        documents.map((item) => [item.path, item.text]),
-      ),
-      snapshot: { commit: snapshot.commit, blobs: snapshot.blobs },
       sizes: observeSizes(snapshot),
       lock: snapshot.has("Cargo.lock") ? snapshot.read("Cargo.lock") : "",
     };
@@ -158,4 +138,4 @@ function lockReach(text, from) {
   return [...seen].sort();
 }
 
-module.exports = { observe, lockReach, glob, digest, Snapshot };
+module.exports = { observe, lockReach, digest };

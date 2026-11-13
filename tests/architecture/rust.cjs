@@ -207,27 +207,26 @@ function call(analysis, open) {
   return { text: analysis.masked.slice(open + 1, close), close };
 }
 
-function statementEnd(analysis, position) {
-  let depth = 0;
-  for (let index = position; index < analysis.bare.length; index += 1) {
-    const char = analysis.bare[index];
-    if ("([{".includes(char)) depth += 1;
-    else if (")]}".includes(char)) {
-      depth -= 1;
-      if (depth < 0) return index;
-    } else if (char === ";" && depth === 0) return index;
-  }
-  return analysis.bare.length;
-}
-
-function depthAt(analysis, from, to) {
+function scan(analysis, from, to, stop) {
   let depth = 0;
   for (let index = from; index < to; index += 1) {
     const char = analysis.bare[index];
     if ("([{".includes(char)) depth += 1;
     else if (")]}".includes(char)) depth -= 1;
+    if (stop?.(char, depth)) return { index, depth };
   }
-  return depth;
+  return { index: to, depth };
 }
 
-module.exports = { analyse, modules, call, statementEnd, depthAt };
+const ENDS_STATEMENT = (char, depth) =>
+  depth < 0 || (char === ";" && depth === 0);
+const ENDS_BLOCK = (_char, depth) => depth < 0;
+
+module.exports = {
+  analyse,
+  modules,
+  call,
+  scan,
+  ENDS_STATEMENT,
+  ENDS_BLOCK,
+};

@@ -86,6 +86,24 @@ class Graph {
     this.unresolved = new Map();
     this.coverage = new Map();
     this.cited = new Set();
+    this.packages = [];
+    this.artifacts = [];
+  }
+  packageOf(file) {
+    return (
+      this.packages.find((pack) => file.startsWith(`${pack.directory}/`))?.id ??
+      null
+    );
+  }
+  artifactOf(file) {
+    return (
+      this.artifacts.find(
+        ([output]) => file === output || file.startsWith(`${output}/`),
+      )?.[1] ?? null
+    );
+  }
+  ownerOf(file) {
+    return this.packageOf(file) ?? this.artifactOf(file);
   }
   evidence(file, line) {
     this.cited.add(file);
@@ -149,4 +167,4 @@ function literal(text) {
   return match[1] ?? match[2];
 }
 
-module.exports = { glob, digest, Snapshot, Graph, relative, literal };
+module.exports = { digest, Snapshot, Graph, relative, literal };
