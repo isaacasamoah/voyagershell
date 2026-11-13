@@ -3,8 +3,10 @@
 ## Sub-features
 
 Ordinary shell history moves locally in both directions. An alternate-screen
-program receives cursor input; a mouse-reporting program receives its wheel
-protocol. Closing and reopening the viewer preserves the Core shell and history.
+program that did not ask for mouse reports receives cursor keys and no wheel
+reports. A program that asked for SGR mouse reports receives wheel reports and
+no cursor keys. Closing and reopening the viewer preserves the Core shell and
+history.
 
 ## How to get to it (user POV)
 
@@ -23,6 +25,10 @@ and hash come from the candidate receipt, not the current checkout's file list.
 The expected full-screen probe positions are 100, then 82 after six upward wheel
 events, then 100 after downward events. The automated check requires movement in
 both directions and changed captures; it does not rely solely on probe state.
+The probe counts the cursor keys and the wheel reports that move it, as `keys`
+and `wheel` in its state file. The `arrows` case expects cursor keys only, and
+the `mouse` case expects wheel reports only. A wheel report is an SGR report
+for button 64 or 65. The journey proves no other mouse protocol.
 Normal history must move and return to the same captured region. Core and shell
 identity must survive viewer reattachment. Inspect all direction captures.
 

@@ -439,7 +439,7 @@ Herdr Core was inspected at its 0.1.19 source revision
 socket protocol with no start behavior. Herdr App guidance was inspected at
 `1581a587919dddd6f1efd5f78eb542c4b2b02cb5`. Upstream approval policies remain upstream.
 
-The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
+The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The probe counts the wheel reports and the cursor keys that move it, and it writes both counts to its state file. The `arrows` case expects cursor keys and no wheel reports, and the `mouse` case expects wheel reports and no cursor keys. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
 
 ## Retained Python journey reference
 

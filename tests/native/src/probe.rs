@@ -32,6 +32,7 @@ pub fn run(path: &Path, mode: &str) -> Result<()> {
         }
     )?;
     let mut position: i32 = 100;
+    let (mut wheel, mut keys) = (0_u32, 0_u32);
     let mut pending = Vec::new();
     loop {
         write!(stdout(), "\x1b[H\x1b[2J")?;
@@ -41,7 +42,7 @@ pub fn run(path: &Path, mode: &str) -> Result<()> {
         stdout().flush()?;
         save(
             path,
-            &json!({"position":position,"pid":std::process::id(),"mode":mode}),
+            &json!({"position":position,"pid":std::process::id(),"mode":mode,"wheel":wheel,"keys":keys}),
         )?;
         let mut bytes = [0; 512];
         let count = stdin().read(&mut bytes)?;
@@ -49,26 +50,12 @@ pub fn run(path: &Path, mode: &str) -> Result<()> {
             break;
         }
         pending.extend_from_slice(&bytes[..count]);
-        while pending.len() >= 3 {
-            let (length, up) = if pending.starts_with(b"\x1b[<") {
-                let Some(end) = pending.iter().position(|b| *b == b'M') else {
-                    break;
-                };
-                let Some(up) = wheel_button(&pending[3..end]) else {
-                    pending.drain(..=end);
-                    continue;
-                };
-                (end + 1, up)
-            } else if pending.starts_with(b"\x1b[A") || pending.starts_with(b"\x1bOA") {
-                (3, true)
-            } else if pending.starts_with(b"\x1b[B") || pending.starts_with(b"\x1bOB") {
-                (3, false)
-            } else {
-                pending.remove(0);
-                continue;
-            };
+        while let Some((input, up)) = movement(&mut pending) {
+            match input {
+                Input::Wheel => wheel += 1,
+                Input::Key => keys += 1,
+            }
             position = (position + if up { -1 } else { 1 }).clamp(0, 200);
-            pending.drain(..length);
         }
         ensure!(pending.len() < 1024, "Unrecognized probe input");
     }
@@ -76,6 +63,39 @@ pub fn run(path: &Path, mode: &str) -> Result<()> {
         path,
         &json!({"position":position,"pid":std::process::id(),"ended":true}),
     )
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum Input {
+    Wheel,
+    Key,
+}
+
+fn movement(pending: &mut Vec<u8>) -> Option<(Input, bool)> {
+    while pending.len() >= 3 {
+        if pending.starts_with(b"\x1b[<") {
+            let end = pending.iter().position(|byte| *byte == b'M')?;
+            let up = wheel_button(&pending[3..end]);
+            pending.drain(..=end);
+            if let Some(up) = up {
+                return Some((Input::Wheel, up));
+            }
+        } else if let Some(up) = cursor_key(&pending[..3]) {
+            pending.drain(..3);
+            return Some((Input::Key, up));
+        } else {
+            pending.remove(0);
+        }
+    }
+    None
+}
+
+fn cursor_key(sequence: &[u8]) -> Option<bool> {
+    match sequence {
+        b"\x1b[A" | b"\x1bOA" => Some(true),
+        b"\x1b[B" | b"\x1bOB" => Some(false),
+        _ => None,
+    }
 }
 
 fn wheel_button(payload: &[u8]) -> Option<bool> {
@@ -96,7 +116,26 @@ fn wheel_button(payload: &[u8]) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::wheel_button;
+    use super::{Input, movement, wheel_button};
+
+    #[test]
+    fn each_movement_is_counted_as_the_input_that_caused_it() {
+        let mut pending = b"\x1b[<64;3;2M\x1b[A\x1bOBx\x1b[<0;3;2M\x1b[<65;1;1M\x1b[<64;9".to_vec();
+        let moved: Vec<_> = std::iter::from_fn(|| movement(&mut pending)).collect();
+        assert_eq!(
+            moved,
+            [
+                (Input::Wheel, true),
+                (Input::Key, true),
+                (Input::Key, false),
+                (Input::Wheel, false),
+            ]
+        );
+        assert_eq!(
+            pending, b"\x1b[<64;9",
+            "an unfinished report waits for its end"
+        );
+    }
 
     #[test]
     fn only_valid_wheel_reports_move_the_probe() {

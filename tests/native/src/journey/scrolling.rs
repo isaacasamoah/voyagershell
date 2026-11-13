@@ -20,6 +20,12 @@ fn position(value: &Value) -> Result<i64> {
         .context("Missing observed position")
 }
 
+fn received(value: &Value, input: &str) -> Result<u64> {
+    value[input]
+        .as_u64()
+        .with_context(|| format!("Missing count of {input} that moved the probe"))
+}
+
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let terminal = Terminal::first(native)?;
     terminal.focus(native)?;
@@ -37,7 +43,21 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect("wheel down returns to the live screen", live == restored))
     })?;
     let executable = std::env::current_exe()?;
-    for case in [Case::Arrows, Case::Mouse] {
+    let encodings = [
+        (
+            Case::Arrows,
+            "keys",
+            "wheel",
+            "the program received cursor keys and no wheel reports",
+        ),
+        (
+            Case::Mouse,
+            "wheel",
+            "keys",
+            "the program received wheel reports and no cursor keys",
+        ),
+    ];
+    for (case, sent, withheld, encoded) in encodings {
         cases.check(native, case, |native| {
             let mode = case.name();
             let path = native.system.evidence.join(format!("{mode}-state.json"));
@@ -90,6 +110,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 )
                 .expect("the screen changed on wheel up", before != upper)
                 .expect("the screen changed on wheel down", upper != lower)
+                .expect(
+                    encoded,
+                    received(&down, sent)? > 0 && received(&down, withheld)? == 0,
+                )
                 .observed("initial", &initial)?
                 .observed("up", &up)?
                 .observed("down", &down)?
