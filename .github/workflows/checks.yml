@@ -78,6 +78,7 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run contract:check
+      - run: npm run architecture:check
       - run: cargo fmt --all --check
       - run: cargo test --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
