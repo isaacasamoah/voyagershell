@@ -1,12 +1,16 @@
 use crate::sandbox;
 use crate::system::{
-    Identity, Owned, Pinned, System, digest, interrupted, save, stamp, until, until_cleanup,
+    Identity, Owned, Pinned, System, TimedOut, digest, interrupted, save, stamp, until,
+    until_cleanup,
 };
 use anyhow::{Context, Result, ensure};
 use image::GenericImageView;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -21,6 +25,7 @@ pub struct Native {
     pub address: String,
     window: String,
     core_id: Value,
+    fault_fired: Arc<AtomicBool>,
 }
 
 impl Native {
@@ -36,6 +41,7 @@ impl Native {
             address: String::new(),
             window: String::new(),
             core_id: Value::Null,
+            fault_fired: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -55,6 +61,7 @@ impl Native {
                 "-nolisten",
                 "tcp",
             ],
+            &[],
             "display.log",
         )?);
         until("owned Xvfb", || {
@@ -113,6 +120,7 @@ impl Native {
                 "--session",
                 &self.system.session,
             ],
+            &[("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")],
             "native.log",
         )?;
         self.viewer = Some(viewer);
@@ -312,12 +320,108 @@ impl Native {
         Ok(())
     }
 
-    pub fn cleanup(&mut self) -> Vec<String> {
-        let mut errors = Vec::new();
-        if let Some(mut viewer) = self.viewer.take()
-            && let Err(error) = viewer.stop()
+    pub fn diagnose(&mut self, error: &anyhow::Error) -> Cause {
+        let timed_out = error.downcast_ref::<TimedOut>().is_some();
+        let attempts = if timed_out { 1 } else { EXIT_GRACE_POLLS };
+        for attempt in 0..attempts {
+            if let Some(viewer) = self.viewer.as_mut()
+                && let Some(status) = exited(viewer)
+            {
+                return Cause::Product(format!("candidate exited unexpectedly: {status}"));
+            }
+            if attempt + 1 < attempts {
+                sleep(Duration::from_millis(100));
+            }
+        }
+        if let Some(display) = self.display.as_mut()
+            && let Some(status) = exited(display)
         {
-            errors.push(format!("viewer: {error:#}"));
+            return Cause::Fixture(format!("owned display exited: {status}"));
+        }
+        if let Some(viewer) = &self.viewer
+            && process_state(viewer.identity.pid) == Some('T')
+        {
+            return Cause::Product("candidate is stopped and cannot respond".into());
+        }
+        if let Some(core) = &self.core
+            && core.verify().is_err()
+        {
+            return Cause::Product("Core exited while the candidate was running".into());
+        }
+        if timed_out {
+            return match self.system.execute("xdotool", &["getmouselocation"], None) {
+                Ok(_) => Cause::Product(format!("candidate stopped responding: {error:#}")),
+                Err(_) => Cause::Fixture(format!("owned display is unresponsive: {error:#}")),
+            };
+        }
+        Cause::Fixture(format!("{error:#}"))
+    }
+
+    pub fn processes(&mut self) -> Value {
+        let mut report = serde_json::Map::new();
+        let mut owned = |name: &str, process: Option<&mut Owned>| {
+            if let Some(process) = process {
+                let state = match exited(process) {
+                    Some(status) => json!({"exited":status}),
+                    None => {
+                        json!({"running":process_state(process.identity.pid).map(String::from)})
+                    }
+                };
+                report.insert(
+                    name.into(),
+                    json!({"identity":process.identity,"state":state}),
+                );
+            }
+        };
+        owned("candidate", self.viewer.as_mut());
+        owned("display", self.display.as_mut());
+        for (name, identity) in [("core", &self.core), ("shell", &self.shell)] {
+            if let Some(identity) = identity {
+                report.insert(
+                    name.into(),
+                    json!({"identity":identity,"alive":identity.verify().is_ok(),"state":process_state(identity.pid).map(String::from)}),
+                );
+            }
+        }
+        Value::Object(report)
+    }
+
+    pub fn inject(&self, fault: &Fault) -> Result<()> {
+        let identity = self
+            .viewer
+            .as_ref()
+            .context("Missing viewer")?
+            .identity
+            .clone();
+        let (delay, signal) = (fault.after, fault.signal());
+        let fired = self.fault_fired.clone();
+        std::thread::spawn(move || {
+            sleep(Duration::from_secs(delay));
+            if identity.verify().is_ok()
+                && let Some(pid) = rustix::process::Pid::from_raw(identity.pid as i32)
+            {
+                let _ = rustix::process::kill_process(pid, signal);
+                fired.store(true, Ordering::SeqCst);
+            }
+        });
+        Ok(())
+    }
+
+    pub fn fault_fired(&self) -> bool {
+        self.fault_fired.load(Ordering::SeqCst)
+    }
+
+    pub fn cleanup(&mut self, candidate_faulted: bool) -> Vec<String> {
+        let mut errors = Vec::new();
+        if let Some(mut viewer) = self.viewer.take() {
+            let stopped = if candidate_faulted {
+                viewer.abandon()
+            } else {
+                viewer.stop()
+            };
+            if let Err(error) = stopped {
+                errors.push(format!("viewer: {error:#}"));
+            }
         }
         if self.system.socket().exists() {
             let stopped = (|| -> Result<()> {
@@ -371,6 +475,70 @@ impl Native {
     }
 }
 
+pub enum Cause {
+    Product(String),
+    Fixture(String),
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub enum Action {
+    Kill,
+    Stop,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct Fault {
+    pub action: Action,
+    pub after: u64,
+}
+
+impl Fault {
+    pub fn parse(text: &str) -> Result<Self> {
+        let (action, seconds) = text.split_once(':').context("Fault is ACTION:SECONDS")?;
+        Ok(Self {
+            action: match action {
+                "kill" => Action::Kill,
+                "stop" => Action::Stop,
+                _ => anyhow::bail!("Fault action is kill or stop"),
+            },
+            after: seconds.parse().context("Fault seconds")?,
+        })
+    }
+
+    fn signal(&self) -> rustix::process::Signal {
+        match self.action {
+            Action::Kill => rustix::process::Signal::KILL,
+            Action::Stop => rustix::process::Signal::STOP,
+        }
+    }
+}
+
+const EXIT_GRACE_POLLS: usize = 10;
+
+fn exited(process: &mut Owned) -> Option<String> {
+    if let Ok(Some(status)) = process.child.try_wait() {
+        return Some(describe(status));
+    }
+    match process_state(process.identity.pid) {
+        Some('Z') | None => process.child.wait().ok().map(describe),
+        _ => None,
+    }
+}
+
+fn describe(status: std::process::ExitStatus) -> String {
+    use std::os::unix::process::ExitStatusExt;
+    match (status.code(), status.signal()) {
+        (Some(code), _) => format!("exit code {code}"),
+        (None, Some(signal)) => format!("signal {signal}"),
+        _ => status.to_string(),
+    }
+}
+
+fn process_state(pid: u32) -> Option<char> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    stat.rsplit_once(')')?.1.trim().chars().next()
+}
+
 pub fn pid(value: &Value) -> Result<u32> {
     u32::try_from(value["pid"].as_u64().context("Missing process PID")?).context("Invalid PID")
 }
@@ -387,4 +555,65 @@ pub fn quote(value: &Path) -> Result<String> {
             .context("Non-UTF8 shell path")?
             .replace('\'', "'\\''")
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn native() -> Result<Native> {
+        let evidence =
+            std::env::temp_dir().join(format!("vv-diagnose-{}-{}", std::process::id(), stamp()));
+        fs::create_dir(&evidence)?;
+        let system = System::with_env(evidence, "voyager-verify-test".into(), BTreeMap::new());
+        let sleep = fs::canonicalize("/bin/sleep")?;
+        let pinned = Pinned::check(&sleep, &digest(&sleep)?)?;
+        Ok(Native::new(system, pinned.clone(), pinned))
+    }
+
+    #[test]
+    fn a_killed_candidate_is_a_product_failure() -> Result<()> {
+        let mut native = native()?;
+        let mut viewer = native.system.spawn(
+            Path::new("/usr/bin/tail"),
+            &["-f", "/dev/null"],
+            &[],
+            "viewer.log",
+        )?;
+        viewer.child.kill()?;
+        viewer.child.wait()?;
+        native.viewer = Some(viewer);
+        let cause = native.diagnose(&anyhow::anyhow!("window vanished"));
+        ensure!(
+            matches!(&cause, Cause::Product(detail) if detail.contains("signal 9")),
+            "A killed candidate was not blamed on the product"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_missing_host_tool_is_a_fixture_fault() -> Result<()> {
+        let mut native = native()?;
+        let error = native
+            .system
+            .execute("voyager-missing-tool", &[], None)
+            .expect_err("A missing tool ran");
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Fixture(_)),
+            "A missing tool was blamed on the product"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_timeout_on_an_unresponsive_display_is_a_fixture_fault() -> Result<()> {
+        let mut native = native()?;
+        let error = anyhow::Error::from(TimedOut("anything".into()));
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Fixture(_)),
+            "A dead display was blamed on the product"
+        );
+        Ok(())
+    }
 }

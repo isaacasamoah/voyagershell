@@ -153,7 +153,34 @@ it is not proof of a general accessibility adapter or physical input latency.
 
 The result is `checks.json`. Exit 0 means the named runtime journey passed;
 exit 1 means an observed behavior failed; exit 2 means verification was
-inconclusive or unavailable. A failed cleanup or evidence write cannot become a
+inconclusive or unavailable.
+
+An error inside the journey is blamed after the fact (`diagnose` in `src/native.rs`):
+
+| Observation when the journey stopped | Verdict |
+| --- | --- |
+| Candidate exited or was killed, or is stopped | `failed`, blamed on the product |
+| Core exited while the candidate ran | `failed`, blamed on the product |
+| Timeout while the display still answers | `failed`, a hang, blamed on the product |
+| A case's observation disagreed | `failed` |
+| Owned display exited or stopped answering, a host tool is missing or failed, the sandbox refused, or an unrelated verifier error | `inconclusive` |
+| Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
+
+`Acknowledge` is a real event. It fires only when at least one command (`xdotool`
+or `import`) completed successfully after dispatch, and a match is rejected
+without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only
+control that sends SIGKILL or SIGSTOP to the identity-checked candidate after that
+delay. `checks.json` records the fault, and a fault that never fires before the journey ends makes the run inconclusive. Liveness reads the candidate's own process state, so a zombie counts as exited, and the candidate gets a one second grace to finish dying before an error is blamed on the fixture. `--assets` is required. Before launch, `doctor` and `run` refuse an assets folder that is not the `assets` folder next to the path the candidate was built for, or that lacks a frame file the candidate names.
+
+A `failed` or `inconclusive` run also writes `bundle/` in the evidence folder:
+`summary.json` (the first failing check and which side to blame), `processes.json`
+(exit code or signal and state of the candidate, display, Core and shell),
+`core-doc.json` and `core-terminals.json` (read-only `doc.get` and `terminal.list`
+at failure time), `final-screen.png`, the last four captures, `actions-tail.jsonl`
+(the last 60 ledger lines) and `core/` (Core's logs). The candidate runs with
+`RUST_LOG=debug` and `RUST_BACKTRACE=full`; its stdout and stderr go to `native.log`,
+and the display's to `display.log`. The current candidate writes nothing to
+`native.log` at that level, so an empty file is expected for a clean start. A failed cleanup or evidence write cannot become a
 pass. Quality review remains a separate required result, never inferred from a
 runtime pass. Preserve an incomplete or failed directory; a new run needs a new
 directory. There is no replay of failed input commands. Observation polling is
@@ -183,14 +210,14 @@ permission to replay.
 
 `src/proof.rs` explores the actual `Run::step` and `Run::verdict` functions in
 `src/lifecycle.rs`, not a separately translated model. The event macro defines
-both the enum and its exhaustive list. The finite state includes phase and seven
-Boolean facts, so there are at most 640 representable states; 124 are reachable.
-All ten events are considered from every reachable state, including cycles.
+both the enum and its exhaustive list. The finite state includes phase and eight
+Boolean facts, so there are at most 1280 representable states; 212 are reachable.
+All eleven events are considered from every reachable state, including cycles.
 
 The independent properties are: a pass requires Finished, an actual observation,
-dispatch, evidence and successful cleanup, with neither unavailable nor failure;
+dispatch, an acknowledged command, evidence and successful cleanup, with neither unavailable nor failure;
 dispatch cannot occur twice; Finished accepts no further events; rejected events
-leave state unchanged; acknowledgement cannot create observation; recorded
+leave state unchanged; acknowledgement cannot create observation; a crash or mismatch always records failure; recorded
 evidence cannot be erased. The trace on failure is a shortest discovered path.
 
 This checks the whole-journey reporting gate. It does not model each key event,
