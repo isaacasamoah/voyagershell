@@ -6,9 +6,10 @@ use crate::x11::Key;
 use anyhow::Result;
 use serde::Serialize;
 use std::path::Path;
-use voyager_contract::inspection::Role;
+use voyager_contract::inspection::{Rect, Role};
 use voyager_contract::{
-    Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Vessel, Voyage, VoyageId,
+    Axis, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split, Vessel, Voyage,
+    VoyageId,
 };
 
 cases! {
@@ -131,17 +132,28 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         native.hover(&Target::name(&vessel(&start.vessel.id)))?;
         native.click(&Target::split_right(&start.vessel.id))?;
         native.click(&Target::worker("terminal"))?;
-        let after = native.observe("a new Vessel with its terminal drawn", |seen| {
-            let born = born(vessels(&before), vessels(seen.document), |vessel| {
-                &vessel.id
-            });
-            let drawn = |vessel: &&Vessel| seen.shows(&Target::terminal(&vessel.id));
-            (!born.is_empty() && born.iter().all(drawn)).then(|| seen.document.clone())
-        })?;
+        let (after, old, new) = native.settle(
+            "the first Vessel's terminal and a new Vessel's terminal drawn",
+            |seen| {
+                let born = born(vessels(&before), vessels(seen.document), |vessel| {
+                    &vessel.id
+                });
+                let pane = |id: &PlacementId| Some(Target::terminal(id).find(seen.frame)?.bounds);
+                let old = pane(&start.vessel.id)?;
+                let new: Vec<Rect> = born
+                    .iter()
+                    .map(|vessel| pane(&vessel.id))
+                    .collect::<Option<_>>()?;
+                (!new.is_empty()).then(|| (seen.document.clone(), old, new))
+            },
+            |(_, old, new)| new.iter().all(|new| right_of(new, old)),
+        )?;
         let born = born(vessels(&before), vessels(&after), |vessel| &vessel.id);
-        let beside = fleet(&after, &start.fleet)
+        let split = fleet(&after, &start.fleet);
+        let beside = split
             .map(|fleet| fleet.vessels.as_slice())
             .unwrap_or_default();
+        let root = split.and_then(|fleet| fleet.root.as_ref());
         let verdict = Verdict::new()
             .expect("exactly one Vessel was created", born.len() == 1)
             .expect(
@@ -150,7 +162,20 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     && beside.contains(&start.vessel)
                     && born.iter().all(|vessel| beside.contains(vessel)),
             )
-            .observed("vessels", beside)?;
+            .expect(
+                "the saved arrangement puts the new Vessel to the right of the first",
+                born.iter().all(|vessel| {
+                    root.is_some_and(|root| beside_right(root, &start.vessel.id, &vessel.id))
+                }),
+            )
+            .expect(
+                "the new Vessel's terminal is drawn to the right of the first, in the same row",
+                new.iter().all(|new| right_of(new, &old)),
+            )
+            .observed("vessels", beside)?
+            .observed("arrangement", root)?
+            .observed("first terminal", old)?
+            .observed("new terminals", &new)?;
         let Some(shell) = bind(native, &verdict, born.first().copied())? else {
             return Ok((verdict, None));
         };
@@ -739,6 +764,29 @@ fn controls(fleet: &Fleet) -> impl Iterator<Item = Target> {
         .chain(titles.map(|placed| Target::name(&vessel(&placed.id))))
 }
 
+fn beside_right(root: &Split, left: &PlacementId, right: &PlacementId) -> bool {
+    let Split::Branch {
+        axis: Axis::Horizontal,
+        first,
+        second,
+        ..
+    } = root
+    else {
+        return false;
+    };
+    let holds = |half: &Split, id: &PlacementId| {
+        *half
+            == Split::Leaf {
+                placement: id.clone(),
+            }
+    };
+    holds(first, left) && holds(second, right)
+}
+
+fn right_of(new: &Rect, old: &Rect) -> bool {
+    new.x >= old.x + old.width && new.y < old.y + old.height && old.y < new.y + new.height
+}
+
 fn start(layout: &Layout) -> Option<Start> {
     let [voyage] = &layout.voyages[..] else {
         return None;
@@ -998,6 +1046,70 @@ mod tests {
             "a frame from before the creation draws none of it"
         );
         Ok(())
+    }
+
+    #[test]
+    fn a_split_to_the_right_is_saved_as_the_second_half_of_a_horizontal_branch() -> Result<()> {
+        let (old, new) = (
+            PlacementId("placement-3".into()),
+            PlacementId("placement-10".into()),
+        );
+        let branch = |axis: &str, first: &str, second: &str| -> Result<Split> {
+            Ok(serde_json::from_value(json!({
+                "kind": "branch",
+                "axis": axis,
+                "first": {"kind": "leaf", "placement": first},
+                "second": {"kind": "leaf", "placement": second}
+            }))?)
+        };
+        assert!(beside_right(
+            &branch("horizontal", "placement-3", "placement-10")?,
+            &old,
+            &new
+        ));
+        assert!(
+            !beside_right(
+                &branch("vertical", "placement-3", "placement-10")?,
+                &old,
+                &new
+            ),
+            "a split that stacks the new Vessel below"
+        );
+        assert!(
+            !beside_right(
+                &branch("horizontal", "placement-10", "placement-3")?,
+                &old,
+                &new
+            ),
+            "a split that puts the new Vessel on the left"
+        );
+        assert!(!beside_right(
+            &Split::Leaf {
+                placement: new.clone()
+            },
+            &old,
+            &new
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn a_pane_is_right_of_another_only_in_the_same_row() {
+        let pane = |x: f32, y: f32| Rect {
+            x,
+            y,
+            width: 600.0,
+            height: 800.0,
+        };
+        let old = pane(250.0, 79.0);
+        assert!(right_of(&pane(850.0, 79.0), &old));
+        assert!(!right_of(&pane(250.0, 879.0), &old), "stacked below");
+        assert!(
+            !right_of(&pane(850.0, 879.0), &old),
+            "below and to the right"
+        );
+        assert!(!right_of(&old, &pane(850.0, 79.0)), "to the left");
+        assert!(!right_of(&pane(550.0, 79.0), &old), "overlapping");
     }
 
     #[test]
