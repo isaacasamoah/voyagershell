@@ -158,7 +158,12 @@ function gate({
   known = path.join(HERE, "known-violations.yaml"),
 }) {
   const tree = revision ?? workingTree(repository);
-  const facts = observe(repository, tree);
+  const observation = observe(repository, tree);
+  const facts = {
+    edges: observation.observed.edges,
+    sizes: observation.sizes,
+    lock: observation.lock,
+  };
   const ruleList = parse(fs.readFileSync(rules, "utf8")).rules;
   const entries = parse(fs.readFileSync(known, "utf8")).known ?? [];
   for (const entry of entries)

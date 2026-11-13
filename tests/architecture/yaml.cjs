@@ -1,3 +1,79 @@
+const PLAIN = /^[A-Za-z_][\w./-]*$/;
+const RESERVED = new Set([
+  "true",
+  "false",
+  "null",
+  "yes",
+  "no",
+  "on",
+  "off",
+  "y",
+  "n",
+  "~",
+]);
+
+function scalar(value) {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
+  const text = String(value);
+  if (/[\u0000-\u001f\u007f]/.test(text)) return JSON.stringify(text);
+  if (PLAIN.test(text) && !RESERVED.has(text.toLowerCase())) return text;
+  return `'${text.replace(/'/g, "''")}'`;
+}
+
+function isScalar(value) {
+  return value === null || value === undefined || typeof value !== "object";
+}
+
+function flow(value) {
+  if (Array.isArray(value)) {
+    if (!value.every(isScalar)) return null;
+    return `[${value.map(scalar).join(", ")}]`;
+  }
+  const keys = Object.keys(value);
+  if (keys.length > 4 || !keys.every((key) => isScalar(value[key])))
+    return null;
+  return `{${keys.map((key) => `${scalar(key)}: ${scalar(value[key])}`).join(", ")}}`;
+}
+
+function inline(value, room) {
+  if (isScalar(value)) return scalar(value);
+  if (Array.isArray(value) && value.length === 0) return "[]";
+  if (!Array.isArray(value) && Object.keys(value).length === 0) return "{}";
+  const text = flow(value);
+  return text !== null && text.length <= room ? text : null;
+}
+
+function emit(value, indent = 0) {
+  const pad = " ".repeat(indent);
+  const lines = [];
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const text = inline(item, 200);
+      if (text !== null) {
+        lines.push(`${pad}- ${text}`);
+        continue;
+      }
+      const body = emit(item, indent + 2).split("\n");
+      lines.push(`${pad}- ${body[0].slice(indent + 2)}`, ...body.slice(1));
+    }
+    return lines.join("\n");
+  }
+  for (const key of Object.keys(value)) {
+    const item = value[key];
+    if (item === undefined) continue;
+    const text = inline(item, 200);
+    if (text !== null) lines.push(`${pad}${scalar(key)}: ${text}`);
+    else lines.push(`${pad}${scalar(key)}:`, emit(item, indent + 2));
+  }
+  return lines.join("\n");
+}
+
+function stringify(value) {
+  return `${emit(value)}\n`;
+}
+
 function stripComment(line) {
   let quote = null;
   for (let index = 0; index < line.length; index += 1) {
@@ -205,4 +281,4 @@ function parse(source) {
   return result;
 }
 
-module.exports = { parse };
+module.exports = { stringify, parse };

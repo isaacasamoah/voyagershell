@@ -1,0 +1,38 @@
+{
+  "repository": "https://github.com/isaacasamoah/voyagershell",
+  "packageRoots": ["content", "desktop/mods"],
+  "typescript": {
+    "tsconfig": "desktop/tsconfig.json",
+    "roots": ["content", "desktop/mods", "contract/generated"]
+  },
+  "scriptScopes": {
+    "file": "desktop/script-types.json",
+    "packages": {
+      "header": "desktop/mods/header",
+      "notes": "content/notes"
+    }
+  },
+  "generators": {
+    "app/core-schema.cjs": ["app/core-schema.json"],
+    "contract/build.cjs": ["contract/generated"],
+    "desktop/typecheck.cjs": [
+      "desktop/script-types.json",
+      "desktop/mods/header",
+      "content/notes"
+    ]
+  },
+  "locationRoots": ["profile"],
+  "structLiterals": [
+    {
+      "type": "ToolDefinition",
+      "field": "name",
+      "kind": "agent-tool",
+      "edge": "offers",
+      "group": "Administrator agent tools"
+    }
+  ],
+  "history": {
+    "branch": "main",
+    "from": "a949a7b"
+  }
+}

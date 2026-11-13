@@ -201,4 +201,32 @@ function modules(analysis) {
   return found;
 }
 
-module.exports = { analyse, modules };
+function call(analysis, open) {
+  const close = analysis.partner.get(open);
+  if (close === undefined) return null;
+  return { text: analysis.masked.slice(open + 1, close), close };
+}
+
+function scan(analysis, from, to, stop) {
+  let depth = 0;
+  for (let index = from; index < to; index += 1) {
+    const char = analysis.bare[index];
+    if ("([{".includes(char)) depth += 1;
+    else if (")]}".includes(char)) depth -= 1;
+    if (stop?.(char, depth)) return { index, depth };
+  }
+  return { index: to, depth };
+}
+
+const ENDS_STATEMENT = (char, depth) =>
+  depth < 0 || (char === ";" && depth === 0);
+const ENDS_BLOCK = (_char, depth) => depth < 0;
+
+module.exports = {
+  analyse,
+  modules,
+  call,
+  scan,
+  ENDS_STATEMENT,
+  ENDS_BLOCK,
+};
