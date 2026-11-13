@@ -1,8 +1,309 @@
-# Native proving fixture
+# Native verification environment
 
-The repository's `prove.py` is the single entry. Select one route explicitly:
+This is the first Rust slice of the maintained native fixture. It verifies terminal
+scrolling on an owned Linux X11 display. The accepted application remains unchanged.
+Invoke `voyager-verification` directly. New verification extends this environment,
+including its shared actions and evidence contract. A single command wrapping
+unrelated rigs would not meet that requirement. Unsupported capabilities remain
+explicit gaps until implemented and independently verified. The Python drivers
+are retained for explicit historical reproduction and migration comparison only.
 
-- `--foundation` runs current native product journeys with this launcher and these helpers.
+## Environment scope and maintenance
+
+The environment is a maintained development product. Its intended coverage includes
+readiness, isolation, shared actions/observations, evidence, repair, cleanup,
+functional journeys, boundary failures, platform behavior, resource measurements,
+formal properties and ETC/ORTH/DRY review. Plan these together before adding more
+journeys. Implement small complete slices of that design, not private rigs.
+The active worktree SPEC.md owns the comprehensive initiative design; it is local
+and remains unaccepted as a complete implementation.
+
+| Capability | Implemented status |
+| --- | --- |
+| Owned X11 scrolling, input/capture/identity, evidence and cleanup | Implemented at any window size. Input aims at the controls that the app reports through `--inspect`; see Locating controls below. |
+| Hermetic runs | Implemented with bubblewrap. Each run and each `doctor` checks it with a canary. See Hermetic runs below. |
+| Finite reporting gate and regression controls | Implemented for the actual Rust gate, not app/OS behavior. |
+| ETC/ORTH/DRY checks | Required independent review criteria; not an automatic architecture score. |
+| Versioned request/result contract and independent receipt conformance | Planned. Pilot receipts are evidence, not a certified acceptance validator. |
+| Workspace/Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
+| Compositor/drag/IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
+| Configurable architecture YAML and typed Jev review | Separate later work. |
+
+A fixture failure preserves its run, enters diagnosis, receives a demonstrated
+repair, then retests the affected app behavior. Missing capability opens bounded
+extension work here; it never licenses a private runner or a success claim.
+Supporting unit tests and diagnostics remain valid, but cannot replace the named
+native journey. Independent evidence inspection and negative controls are required.
+Instructions and the legacy refusal gate do not prevent arbitrary shell execution;
+there is no claimed CI gate certifying every acceptance receipt today.
+
+The environment must use the app's existing Core/API and authority boundaries.
+It owns its test resources without becoming a second runtime supervisor. Reuse
+resource coordination and the desktop queue. Do not import pstack agent-launch or
+autonomous-merge authority. Keep one owner for each action, capability definition,
+success rule and evidence schema; generate derived views where practical.
+
+### Feature registry
+
+`tests/native/features.toml` is the one record per user feature: source globs, native
+journeys, tier status and the retained Python journeys. `voyager-verification features`
+validates it and prints the coverage table. `features --write` regenerates the table in
+`.agents/skills/verify/features/README.md`, `features --check` fails when it is stale and
+`features --changed GIT_RANGE` lists the features and journeys a diff touches.
+
+### Build and inspect
+
+From the selected checkout:
+
+```sh
+python3 desktop/prepare-sdk.py
+CARGO_BUILD_JOBS=1 cargo build --manifest-path tests/native/Cargo.toml --locked --offline
+tests/native/target/debug/voyager-verification check-lifecycle
+```
+
+The offline build uses dependencies already available on this development machine.
+It does not establish fresh-machine installation. The crate needs no GPUI linkage
+or second SDK checkout. The parent Cargo patch warnings concern unused SDK crates;
+do not alter or remove the shared SDK configuration to hide them.
+
+The commands below exercise the release build in this checkout. Build it first
+with `cargo build --release --locked -p voyager-desktop --bin voyager-shell`.
+
+```sh
+candidate="$PWD/target/release/voyager-shell"
+expected=$(sha256sum "$candidate" | cut -d" " -f1)
+core=$(sha256sum "$(command -v hc)" | cut -d" " -f1)
+tests/native/target/debug/voyager-verification doctor --binary "$candidate" --sha256 "$expected" --hc-sha256 "$core" --assets "$PWD/desktop/assets"
+run_parent=$(mktemp -d /var/tmp/voyager-verification-XXXXXX)
+tests/native/target/debug/voyager-verification run --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --hc-sha256 "$core" --assets "$PWD/desktop/assets" --evidence "$run_parent/scrolling"
+```
+
+For a retained candidate, take the expected hash from its reviewed build receipt.
+Take the `hc` hash from the Core release you intend to test. Computing a hash
+from an arbitrary file alone does not establish build provenance. Doctor checks
+both hashes, the installed tool paths and the sandbox canary without launching
+an app. Actual readiness additionally requires the owned display, exact window
+title and PID, measured viewport, Core identity and bound shell established by
+the run.
+
+### Hermetic runs
+
+`run` and `doctor` start bubblewrap (`/usr/bin/bwrap`) with an empty environment
+before any other process. The journey driver, its D-Bus session, Xvfb, the
+candidate, Core and each shell run inside one user, mount, PID, network, IPC and
+UTS namespace. `src/sandbox.rs` owns the namespace, the environment table and
+the canary. The host needs bubblewrap and unprivileged user namespaces.
+
+The sandbox root is an empty tmpfs. It holds only these paths:
+
+| Path in the sandbox | Source |
+| --- | --- |
+| `/usr`, `/etc` and the `/bin`, `/sbin`, `/lib` and `/lib64` links | The host's, read-only. |
+| `/proc`, `/dev` and `/tmp` | New and private. |
+| `/voyager/runtime` | A private tmpfs. It is `XDG_RUNTIME_DIR` and holds the Core socket. |
+| `/voyager/bin/hc` | The hashed `hc`, read-only. It is the only `hc` on `PATH`. |
+| `/voyager/home` | `home/` in the evidence directory. It is `HOME`. |
+| `/voyager/home/project` | The fixture project. It is the app's working directory, so it becomes the Voyage. |
+| The verifier, the candidate and the `--assets` folder | Read-only, at their host paths. |
+| The evidence directory | Writable, at its host path. |
+
+The environment is the `ENVIRONMENT` table in `src/sandbox.rs`, plus the private
+`DBUS_SESSION_BUS_ADDRESS`, `DISPLAY`, `HC_SESSION` and `HC_SOCKET` that the
+driver sets. No variable comes from the caller. The table forces Mesa software
+rendering. On a host with a vendor GPU driver, Xvfb otherwise loads that
+driver's EGL library and crashes, because the sandbox has no GPU devices. The
+network namespace has loopback only. It also hides the host's abstract sockets,
+which include the real X server.
+
+The candidate reads its avatar artwork from the `desktop/assets` folder of the
+checkout that built it. Name that folder with `--assets`. Without it the app
+does not start.
+
+`hc` comes from the caller's `PATH` and must match `--hc-sha256`. `doctor.json`
+records its path and hash. The verifier refuses a different binary before it
+starts anything, and the driver checks the bound copy again before each launch.
+
+Before the driver starts Xvfb, a canary inside the sandbox looks for the host
+session. It looks for the home folder, `/run/user/<uid>`, each socket in that
+folder (the session bus and the Wayland socket are two of them) and the X11
+sockets. The canary compares device and inode numbers, so it opens no connection
+to the real session. `containment.json` holds one result for each resource.
+`absent` means that the path does not exist in the sandbox. `replaced` means
+that a different object is at that path, for example an empty parent folder of
+the candidate. `reached` means that the sandbox can see the host object, and it
+makes the run inconclusive. `doctor` runs the same canary and prints the results
+under `containment`.
+
+The sandbox does not virtualize the kernel, and `/usr` and `/etc` are the
+host's. A different host package set can still change a result.
+
+### One implementation and one result contract
+
+Rust owns the migrated journey, probe, input, capture, identity, recording and
+cleanup. It starts Xvfb and runs `xrdb` once, and calls no Python driver. Every run creates
+its own sandbox, D-Bus session, Xvfb, home folder, app profile and Core session.
+Core remains the terminal/process owner. Existing-only JSON-RPC observation uses
+the dedicated Unix socket and never starts or reconnects a lost Core. Shutdown
+uses that same Core API after checking its recorded identity.
+
+The input target must remain the recorded viewer and session. Before each input
+the driver checks that the window belongs to the candidate's PID and carries the
+session's title, that keyboard focus is on that window, and that the pointer is
+over it. It is not proof of a general accessibility adapter or physical input
+latency.
+
+#### Locating controls
+
+The driver starts the candidate with `--inspect inspection-N.json` in the
+evidence folder, a new file for each launch, and parses each frame with the
+`Frame` type from the `voyager-contract` crate (see
+[the inspection endpoint](../../docs/inspection.md)). `locate(role, key)` waits
+for that element and converts its bounds to device pixels with `window.scale`
+and the window's origin on the screen. `wait_for` polls the frame every 10 ms
+until a predicate holds, so it can wait for an element or for its absence. A
+frame drawn for another window size is ignored. When the deadline passes, the
+journey ends `failed`, blamed on the product, and the error names the missing
+role and key. The app marks `terminal` only once the terminal view is attached,
+so the driver clicks and types only after that element appears.
+
+One `x11rb` connection to the owned display carries all input (XTEST) and
+capture (`GetImage`). A capture is the `terminal` element's area, with the
+avatar's reported bounds blanked. After an input the journey polls until the
+expected state holds and has not changed for 150 ms, or until 4 s pass. It
+records the last observation either way, and the case decides pass or fail. No
+step waits a fixed time for the app. Key events are 1 ms apart, as with the
+earlier `xdotool --delay 1`: typed back to back, 2 of 10 runs lost characters.
+
+Xvfb runs with `-noreset`. By default it resets when its last client
+disconnects. While the driver ran one process per action, that reset discarded
+the `Xft.dpi: 192` resource, so the candidate drew at scale 1 in a 1450 by 940
+window. It now draws at scale 2, in a 2900 by 1880 window. A reset during
+cleanup also left Xvfb deaf to SIGTERM in 1 of 30 runs.
+
+`--window WIDTHxHEIGHT` resizes the candidate's window in device pixels, and
+`--sidebar open|collapsed` sets the sidebar with its own toggle. Both apply
+again after reattachment and do nothing when the window already matches.
+
+The result is `checks.json`. Exit 0 means the named runtime journey passed;
+exit 1 means an observed behavior failed; exit 2 means verification was
+inconclusive or unavailable.
+
+An error inside the journey is blamed after the fact (`diagnose` in `src/native.rs`):
+
+| Observation when the journey stopped | Verdict |
+| --- | --- |
+| Candidate exited or was killed, or is stopped | `failed`, blamed on the product |
+| Core exited while the candidate ran | `failed`, blamed on the product |
+| Timeout while the display still answers | `failed`, a hang, blamed on the product |
+| A case's observation disagreed | `failed` |
+| Owned display exited or stopped answering, a host tool is missing or failed, the sandbox refused, or an unrelated verifier error | `inconclusive` |
+| Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
+
+`Acknowledge` is a real event. It fires only when at least one recorded action
+(an input the display answered, or a host command) completed successfully after
+dispatch, and a match is rejected without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only
+control that sends SIGKILL or SIGSTOP to the identity-checked candidate after that
+delay. `checks.json` records the fault, and a fault that never fires before the journey ends makes the run inconclusive. Liveness reads the candidate's own process state, so a zombie counts as exited, and the candidate gets a one second grace to finish dying before an error is blamed on the fixture. `--assets` is required. Before launch, `doctor` and `run` refuse an assets folder that is not the `assets` folder next to the path the candidate was built for, or that lacks a frame file the candidate names.
+
+A `failed` or `inconclusive` run also writes `bundle/` in the evidence folder:
+`summary.json` (the first failing check and which side to blame), `processes.json`
+(exit code or signal and state of the candidate, display, Core and shell),
+`core-doc.json` and `core-terminals.json` (read-only `doc.get` and `terminal.list`
+at failure time), `inspection.json` (the candidate's latest inspection frame),
+`final-screen.png`, the last four captures, `actions-tail.jsonl`
+(the last 60 ledger lines) and `core/` (Core's logs). The candidate runs with
+`RUST_LOG=debug` and `RUST_BACKTRACE=full`; its stdout and stderr go to `native.log`,
+and the display's to `display.log`. The current candidate writes nothing to
+`native.log` at that level, so an empty file is expected for a clean start. A failed cleanup or evidence write cannot become a
+pass. Quality review remains a separate required result, never inferred from a
+runtime pass. Preserve an incomplete or failed directory; a new run needs a new
+directory. There is no replay of failed input commands. Observation polling is
+read-only. Each input intent and command acknowledgement is recorded separately.
+
+`actions.jsonl` preserves commands, input intents and acknowledgements, located
+elements with their frame sequence, Core requests/replies and capture hashes.
+`inspection-N.json` holds the last frame of each launch. `observations.json` holds the observed cases. Screenshots have unique names.
+`doctor.json`, `launch.json`, `identity.json`, native/display logs and `checks.json`
+retain candidate and environment identities. `sandbox.json` records the session
+name and the complete bubblewrap command. `containment.json` holds the canary
+results. The verifier records its own binary and source fingerprints. Changed
+Rust source requires a rebuild before a run.
+Evidence is outside Git and survives resource cleanup. `home/` keeps what the
+app, Core and the shell wrote under `HOME`, and the fixture project. The runtime
+folder and `/tmp` are tmpfs and end with the namespace.
+
+When the driver finishes, bubblewrap exits and the kernel kills every process
+left in the PID namespace. On SIGINT or SIGTERM, `run` kills the namespace,
+returns after its last process is gone and exits 2. If `run` itself is killed,
+SIGKILL included, bubblewrap dies with it and the kernel kills the namespace.
+In that case a process can take a moment to disappear after `run` is gone. A
+run that ends early leaves its evidence directory without `checks.json`. Treat
+it as inconclusive and start a new run in a new directory. A timeout is not
+permission to replay.
+
+### Finite verification
+
+`src/proof.rs` explores the actual `Run::step` and `Run::verdict` functions in
+`src/lifecycle.rs`, not a separately translated model. The event macro defines
+both the enum and its exhaustive list. The finite state includes phase and eight
+Boolean facts, so there are at most 1280 representable states; 212 are reachable.
+All eleven events are considered from every reachable state, including cycles.
+
+The independent properties are: a pass requires Finished, an actual observation,
+dispatch, an acknowledged command, evidence and successful cleanup, with neither unavailable nor failure;
+dispatch cannot occur twice; Finished accepts no further events; rejected events
+leave state unchanged; acknowledgement cannot create observation; a crash or mismatch always records failure; recorded
+evidence cannot be erased. The trace on failure is a shortest discovered path.
+
+This checks the whole-journey reporting gate. It does not model each key event,
+the scheduler, external process behavior, the correctness of the observations or
+Voyager's full state machine. The native journey and independent review are
+separate evidence. Kani is not installed or used. Its separate toolchain and
+unsupported concurrency do not earn their cost for this small closed state space.
+Reconsider a code verifier when the next concrete property needs one.
+
+### ETC, orthogonality and DRY
+
+| Principle | Required review | Present ownership |
+| --- | --- | --- |
+| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `scrolling.rs` describes the journey; `native.rs` handles the app window; `x11.rs` owns the display connection; `inspection.rs` reads frames; `system.rs` owns process/recording/polling/Core primitives. |
+| Orthogonality | Product code does not depend on the fixture; the reporting gate is independent of I/O. Core owns programs. | Standalone development crate; pure `lifecycle.rs`; platform dependencies remain outside the app. |
+| DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, event list, reporting gate, recorder, polling loop, input/capture adapter, locator and shutdown path for the migrated journey. The frame type is the app's own. |
+
+These are review criteria, not an automated universal quality score. The retained
+legacy platform helpers are a migration gap. Do not add a private runner for a new
+feature. Extend this fixture, or record the missing capability and its bounded
+migration. Retire an old implementation only after equivalent real-surface checks
+pass. Do not change old assertions to make migration easier.
+
+This crate is maintained as its own product with its own tests. Architecture
+rules live in `tests/architecture/`.
+
+### Inspected sources
+
+The pstack generators and Codex mapping were inspected in Michael Denyer's port
+at `bc09365fe61c725c486ba95157fc4048bf8a0b99`, version 0.9.135, with its retained MIT
+notice and declared upstream pstack revision. They guided the project skills,
+real-surface proof, negative control, maintenance and evidence requirements.
+No global plugin hook or workflow policy was activated.
+
+Herdr Core was inspected at its 0.1.19 source revision
+`06793ede1bedb1fed8d22d3cae476d3eb239edf0`: AGENTS.md, README.md,
+`crates/herdr-core/src/client.rs`, `cli.rs` and `server.rs`. In particular,
+`hc connect` can autostart; the adapter instead uses the published plain JSON-RPC
+socket protocol with no start behavior. Herdr App guidance was inspected at
+`1581a587919dddd6f1efd5f78eb542c4b2b02cb5`. Upstream approval policies remain upstream.
+
+The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
+
+## Retained Python journey reference
+
+These are retained pre-migration drivers, not the native environment default.
+Execution requires `--legacy-reproduction`; read-only help remains available.
+This reference preserves earlier journey details and limitations for parity work.
+Select one route explicitly:
+
+- `--foundation` reproduces retained native product journeys with this launcher and these helpers.
 - `--reference` runs the retained Electron fixture.
 - `--native-mod-host` uses this shared launcher with the historical native-content working directory and its retained header/Notes journeys.
 - `--native-avatar` runs the original avatar experiment's own historical driver.
@@ -39,7 +340,7 @@ supports visual review; it does not measure input-to-paint latency. Preserve the
 recorded monitor scale and window origin for a matched comparison. A capture on
 another scaled monitor is not a pixel-matched result.
 
-Use `--foundation --review --launch --compositor` with the same explicit binary,
+Use `--legacy-reproduction --foundation --review --launch --compositor` with the same explicit binary,
 session, evidence and desktop environment to leave a review app open. This mode
 captures the window and closes its input helper. It retains the app and its
 processes, records no passed journey, and marks `reviewOnly` in its receipt.

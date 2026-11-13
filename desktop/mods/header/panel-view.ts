@@ -1,6 +1,6 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { Terminal } from "voyager_native";
+import { Marker, Terminal } from "voyager_native";
 import { agentsView } from "./agents.js";
 import { Notes } from "voyager_content_view";
 import { projection } from "voyager_header";
@@ -248,6 +248,11 @@ export function renderPanel(
           div()
             .flex_1()
             .min_h(0)
+            .children(
+              content.typeId === "terminal" && terminal
+                ? [Marker.new("terminal", placement.id)]
+                : [],
+            )
             .child(
               content.typeId === "agents"
                 ? agentsView(

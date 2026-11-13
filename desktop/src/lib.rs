@@ -7,6 +7,7 @@ mod canvas_test;
 mod content_budget;
 mod conversation;
 mod host;
+mod inspect;
 mod measure;
 mod notes;
 mod notes_draft;
@@ -50,7 +51,7 @@ fn seed(path: &Path, data: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn run(profile: PathBuf, session: String) -> Result<()> {
+pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Result<()> {
     let package = profile.join("mods/header");
     let theme = profile.join("themes/voyager.json");
     seed(
@@ -275,6 +276,7 @@ pub fn run(profile: PathBuf, session: String) -> Result<()> {
                 ..Default::default()
             };
             if let Err(error) = cx.open_window(options, |window, cx| {
+                inspect::install(inspect, window, cx);
                 #[cfg(feature = "frame-profiler")]
                 if let Ok(id) = usize::try_from(window.window_handle().window_id().as_u64()) {
                     typing_trace::record("workspace_window_id", id);
@@ -332,6 +334,7 @@ fn native_registry(viewers: terminal::Viewers) -> Result<gpui_shell::FrozenCompo
     arrangement::register(&mut registry).context("Arrangement registration")?;
     split::register(&mut registry).context("Split registration")?;
     occluding::register(&mut registry).context("Native overlay registration")?;
+    inspect::register(&mut registry).context("Inspection registration")?;
     terminal::register(&mut registry, viewers).context("Terminal registration")?;
     registry.freeze().context("Native registry")
 }

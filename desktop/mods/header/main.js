@@ -24,7 +24,7 @@ import {
 } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture, Status } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
-import { Occluding } from "voyager_native";
+import { Occluding, Marker } from "voyager_native";
 import { Chat } from "./chat.js";
 import { composeCanvas } from "./canvas.js";
 import { inspectProcesses } from "./processes.js";
@@ -1176,11 +1176,7 @@ export default class Workspace extends View {
     const fleet = rename?.kind === "fleet";
     const voyage = rename?.kind === "voyage";
     const placement = rename?.kind === "vessel" || rename?.kind === "portal";
-    if (
-      rename &&
-      this.editing &&
-      JSON.stringify(rename) === JSON.stringify(this.editing.target)
-    )
+    if (rename && this.editing && key === JSON.stringify(this.editing.target))
       return div()
         .min_w(60)
         .h(32)
@@ -1214,6 +1210,7 @@ export default class Workspace extends View {
           this.run(action, cx);
         }
       })
+      .children(rename ? [Marker.new(`${rename.kind}-name`, rename.id)] : [])
       .child(
         voyage
           ? div().flex_1().min_w(0).truncate().child(displayLabel)
@@ -1361,6 +1358,7 @@ export default class Workspace extends View {
   }
   sidebarToggle() {
     return Button.new("toggle-sidebar")
+      .child(Marker.new("sidebar-toggle"))
       .accessibility_label(this.sidebar ? "Collapse sidebar" : "Expand sidebar")
       .tooltip(this.sidebar ? "Collapse sidebar" : "Expand sidebar")
       .w(32)
@@ -1528,6 +1526,7 @@ export default class Workspace extends View {
         insertion: { kind: "beside", id: panel.id, side },
       },
       Button.new(id)
+        .child(Marker.new(`split-${side}`, panel.id))
         .accessibility_label(`Split ${entity} ${side}`)
         .tooltip(
           side === "right" ? "Split side by side" : "Split above and below",

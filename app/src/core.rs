@@ -16,8 +16,8 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     process::{Child, Command, Stdio},
     sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
         mpsc::{self, SyncSender},
     },
     thread,
@@ -36,6 +36,7 @@ struct TerminalList {
 
 const VIEW_LIMIT: usize = 1024 * 1024;
 const TOTAL_LIMIT: usize = 16 * 1024 * 1024;
+const VIEWER_LIMIT: usize = 64;
 pub const MAX_INPUT_BYTES: usize = 65536;
 
 #[derive(Clone, Debug)]
@@ -69,10 +70,57 @@ impl Default for Stream {
     }
 }
 
+impl Stream {
+    fn occupied(&self) -> bool {
+        !self.closed || !self.bytes.is_empty()
+    }
+}
+
 #[derive(Default)]
 struct Streams {
     buffers: HashMap<u32, Stream>,
     total: usize,
+}
+
+impl Streams {
+    fn occupied(&self) -> usize {
+        self.buffers
+            .values()
+            .filter(|stream| stream.occupied())
+            .count()
+    }
+}
+
+fn lost(link: &OnceLock<String>, reason: String) {
+    let report = format!("Core bridge disconnected: {reason}");
+    if link.set(reason).is_ok() {
+        eprintln!("{report}");
+    }
+}
+
+fn disconnected(reason: &str, unsent: &str) -> Error {
+    Error::Rejected {
+        kind: "disconnected".into(),
+        message: format!("Core connection ended ({reason}); {unsent}"),
+    }
+}
+
+fn enqueue(
+    link: &OnceLock<String>,
+    queue: &SyncSender<Frame>,
+    frame: Frame,
+    unsent: &str,
+) -> Result<(), Error> {
+    if let Some(reason) = link.get() {
+        return Err(disconnected(reason, unsent));
+    }
+    queue.try_send(frame).map_err(|_| match link.get() {
+        Some(reason) => disconnected(reason, unsent),
+        None => Error::Rejected {
+            kind: "busy".into(),
+            message: format!("Core output queue is full; {unsent}"),
+        },
+    })
 }
 
 #[derive(Clone)]
@@ -82,7 +130,7 @@ pub struct Viewer {
     streams: Arc<Mutex<Streams>>,
     input: SyncSender<Frame>,
     control: SyncSender<Frame>,
-    connected: Arc<AtomicBool>,
+    link: Arc<OnceLock<String>>,
     input_open: Arc<Mutex<bool>>,
 }
 
@@ -226,7 +274,7 @@ impl Viewer {
     }
 
     pub fn connected(&self) -> bool {
-        self.connected.load(Ordering::Acquire)
+        self.link.get().is_none()
     }
 
     pub fn finished(&self) -> Result<bool, Error> {
@@ -242,16 +290,16 @@ impl Viewer {
     }
 
     fn send(&self, queue: &SyncSender<Frame>, kind: u8, payload: Vec<u8>) -> Result<(), Error> {
-        queue
-            .try_send(Frame {
+        enqueue(
+            &self.link,
+            queue,
+            Frame {
                 channel: self.channel,
                 kind,
                 payload,
-            })
-            .map_err(|_| Error::Rejected {
-                kind: "busy".into(),
-                message: "Core output queue is unavailable; frame was not queued".into(),
-            })
+            },
+            "frame was not queued",
+        )
     }
 }
 
@@ -263,7 +311,7 @@ pub struct Core {
     replies: Replies,
     streams: Arc<Mutex<Streams>>,
     attaching: Arc<AtomicU64>,
-    connected: Arc<AtomicBool>,
+    link: Arc<OnceLock<String>>,
     input_open: Arc<Mutex<bool>>,
     sequence: u64,
     activity: Arc<Mutex<Activity>>,
@@ -383,31 +431,34 @@ impl Core {
         let replies = Replies::default();
         let streams = Arc::new(Mutex::new(Streams::default()));
         let attaching = Arc::new(AtomicU64::new(0));
-        let connected = Arc::new(AtomicBool::new(true));
-        let writer_alive = connected.clone();
+        let link: Arc<OnceLock<String>> = Arc::default();
+        let writer_link = link.clone();
         let writer_streams = streams.clone();
         let writer_activity = activity.clone();
         let writer_replies = replies.clone();
         thread::spawn(move || {
-            while writer_alive.load(Ordering::Acquire) {
+            let reason = loop {
+                if let Some(reason) = writer_link.get() {
+                    break reason.clone();
+                }
                 let frame = match controls.try_recv() {
                     Ok(frame) => frame,
                     Err(_) => match inputs.recv_timeout(Duration::from_millis(5)) {
                         Ok(frame) => frame,
                         Err(mpsc::RecvTimeoutError::Timeout) => continue,
-                        Err(_) => break,
+                        Err(_) => break "Core input queue closed".into(),
                     },
                 };
-                if Self::write_frame(&frame, &mut input).is_err() {
-                    break;
+                if let Err(error) = Self::write_frame(&frame, &mut input) {
+                    break format!("write failed: {:?}", error.kind());
                 }
                 if let Ok(frame) = inputs.try_recv()
-                    && Self::write_frame(&frame, &mut input).is_err()
+                    && let Err(error) = Self::write_frame(&frame, &mut input)
                 {
-                    break;
+                    break format!("write failed: {:?}", error.kind());
                 }
-            }
-            writer_alive.store(false, Ordering::Release);
+            };
+            lost(&writer_link, reason);
             if let Ok(mut replies) = writer_replies.lock() {
                 replies.clear();
             }
@@ -423,13 +474,17 @@ impl Core {
         let reader_streams = streams.clone();
         let reader_replies = replies.clone();
         let reader_attaching = attaching.clone();
-        let reader_alive = connected.clone();
+        let reader_link = link.clone();
         let reader_activity = activity.clone();
         let reader_control = control.clone();
         thread::spawn(move || {
-            while reader_alive.load(Ordering::Acquire) {
-                let Ok(frame) = Frame::read_from(&mut output) else {
-                    break;
+            let reason = loop {
+                if let Some(reason) = reader_link.get() {
+                    break reason.clone();
+                }
+                let frame = match Frame::read_from(&mut output) {
+                    Ok(frame) => frame,
+                    Err(error) => break format!("read failed: {:?}", error.kind()),
                 };
                 let terminal_channel = reader_streams
                     .lock()
@@ -441,13 +496,13 @@ impl Core {
                 }
                 if frame.channel == 0 && frame.kind == 0 {
                     let Ok(message) = serde_json::from_slice::<Value>(&frame.payload) else {
-                        break;
+                        break "Core sent an invalid reply".into();
                     };
                     let Some(id) = message.get("id").and_then(Value::as_u64) else {
                         continue;
                     };
                     let Ok(mut replies) = reader_replies.lock() else {
-                        break;
+                        break "internal lock failed".into();
                     };
                     let Some(reply) = replies.remove(&id) else {
                         continue;
@@ -460,13 +515,12 @@ impl Core {
                             .and_then(|id| u32::try_from(id).ok())
                     {
                         let Ok(mut streams) = reader_streams.lock() else {
-                            break;
+                            break "internal lock failed".into();
                         };
                         if channel == 0
-                            || streams.buffers.len() >= 64
                             || streams.buffers.insert(channel, Stream::default()).is_some()
                         {
-                            break;
+                            break "Core attached an invalid channel".into();
                         }
                     }
                     let _ = reply.try_send(message);
@@ -479,16 +533,19 @@ impl Core {
                         );
                     }
                     let Ok(mut streams) = reader_streams.lock() else {
-                        break;
+                        break "internal lock failed".into();
                     };
                     if streams.total + frame.payload.len() > TOTAL_LIMIT {
-                        break;
+                        break "buffered output exceeded 16 MiB".into();
                     }
                     let Some(buffer) = streams.buffers.get_mut(&frame.channel) else {
                         continue;
                     };
-                    if buffer.closed || buffer.bytes.len() + frame.payload.len() > VIEW_LIMIT {
-                        break;
+                    if buffer.closed {
+                        break "Core sent output after close".into();
+                    }
+                    if buffer.bytes.len() + frame.payload.len() > VIEW_LIMIT {
+                        break "viewer output exceeded 1 MiB".into();
                     }
                     let count = frame.payload.len();
                     buffer.bytes.extend(frame.payload);
@@ -502,8 +559,8 @@ impl Core {
                     buffer.closed = true;
                     let _ = buffer.wake.try_send(());
                 }
-            }
-            reader_alive.store(false, Ordering::Release);
+            };
+            lost(&reader_link, reason);
             if let Ok(mut replies) = reader_replies.lock() {
                 replies.clear();
             }
@@ -524,7 +581,7 @@ impl Core {
             replies,
             streams,
             attaching,
-            connected,
+            link,
             input_open: Arc::new(Mutex::new(true)),
             sequence: 1,
             activity,
@@ -595,7 +652,7 @@ impl Core {
     }
 
     pub(crate) fn refresh_activity(&mut self) {
-        if !self.activity_supported || !self.connected.load(Ordering::Acquire) {
+        if !self.activity_supported || self.link.get().is_some() {
             if let Ok(mut activity) = self.activity.lock() {
                 activity.fail("Activity subscription is unavailable");
             }
@@ -753,6 +810,20 @@ impl Core {
                 message: "Terminal dimensions are unavailable; no attachment was sent".into(),
             });
         }
+        if self
+            .streams
+            .lock()
+            .map_err(|error| Error::Uncertain(error.to_string()))?
+            .occupied()
+            >= VIEWER_LIMIT
+        {
+            return Err(Error::Rejected {
+                kind: "viewer_limit".into(),
+                message: format!(
+                    "{VIEWER_LIMIT} terminal viewers are attached; no attachment was sent"
+                ),
+            });
+        }
         let before = self.activity_seed_start(&terminal.address);
         let result: AttachResult = self.call(
             "terminal.attach",
@@ -902,7 +973,7 @@ impl Core {
                 "Core did not confirm session shutdown".into(),
             ));
         }
-        self.connected.store(false, Ordering::Release);
+        let _ = self.link.set("Voyager stopped the Core session".into());
         if self.child.try_wait()?.is_none() {
             self.child.kill()?;
         }
@@ -949,21 +1020,20 @@ impl Core {
                 message: "Core request exceeds 1 MiB".into(),
             });
         }
-        let pending =
-            Pending::register(id, method, &self.replies, &self.attaching, &self.connected)?;
+        let pending = Pending::register(id, method, &self.replies, &self.attaching, &self.link)?;
         if method == "terminal.attach" {
             self.attaching.store(id, Ordering::Release);
         }
-        self.control
-            .try_send(Frame {
+        enqueue(
+            &self.link,
+            &self.control,
+            Frame {
                 channel: 0,
                 kind: 0,
                 payload: bytes,
-            })
-            .map_err(|_| Error::Rejected {
-                kind: "busy".into(),
-                message: "Core control queue unavailable; request was not queued".into(),
-            })?;
+            },
+            "request was not queued",
+        )?;
         Ok(pending)
     }
 
@@ -1091,13 +1161,13 @@ impl Core {
             streams: self.streams.clone(),
             input: self.input.clone(),
             control: self.control.clone(),
-            connected: self.connected.clone(),
+            link: self.link.clone(),
             input_open: self.input_open.clone(),
         })
     }
 
     pub fn close(mut self) -> Result<(), Error> {
-        self.connected.store(false, Ordering::Release);
+        let _ = self.link.set("Voyager closed the Core connection".into());
         if self.child.try_wait()?.is_none() {
             self.child.kill()?;
         }
@@ -1108,7 +1178,7 @@ impl Core {
 
 impl Drop for Core {
     fn drop(&mut self) {
-        self.connected.store(false, Ordering::Release);
+        let _ = self.link.set("Voyager closed the Core connection".into());
         if let Ok(mut replies) = self.replies.lock() {
             replies.clear();
         }
@@ -1128,339 +1198,13 @@ impl Drop for Core {
 }
 
 #[cfg(test)]
-mod adapter_tests {
-    use super::*;
-
-    #[test]
-    fn reported_activity_frames_credit_close_and_control_are_separate() {
-        let activity = Arc::new(Mutex::new(Activity::default()));
-        let (control, receive) = mpsc::sync_channel(4);
-        {
-            let mut facts = activity.lock().unwrap();
-            facts.bind(["t1"]);
-            facts.begin();
-        }
-        let mut payload = serde_json::to_vec(&json!({"jsonrpc":"2.0","method":"event","params":{"seq":1,"type":"status","terminal":"t1","data":{"status":{"state":"working"},"reported":true}}})).unwrap();
-        payload.push(b'\n');
-        let frame = Frame {
-            channel: 7,
-            kind: 0,
-            payload,
-        };
-        let mut wire = Vec::new();
-        frame.write_to(&mut wire).unwrap();
-        let actual = Frame::read_from(&mut wire.as_slice()).unwrap();
-        assert!(Core::activity_frame(&activity, &control, &actual));
-        assert!(receive.try_recv().is_err());
-        let credit = activity
-            .lock()
-            .unwrap()
-            .install(json!({"seq":0,"channel":7,"terminals":[]}))
-            .unwrap();
-        Core::activity_flow(&activity, &control, credit);
-        let returned = receive.try_recv().unwrap();
-        assert_eq!((returned.channel, returned.kind), (7, 1));
-        assert_eq!(
-            returned.payload,
-            (actual.payload.len() as u32).to_le_bytes()
-        );
-        assert_eq!(
-            activity.lock().unwrap().get("t1").state,
-            voyager_contract::activity::ActivityState::Working
-        );
-        assert!(!Core::activity_frame(
-            &activity,
-            &control,
-            &Frame {
-                channel: 0,
-                kind: 0,
-                payload: Vec::new()
-            }
-        ));
-        assert!(Core::activity_frame(
-            &activity,
-            &control,
-            &Frame {
-                channel: 7,
-                kind: 2,
-                payload: Vec::new()
-            }
-        ));
-        assert_eq!(receive.try_recv().unwrap().kind, 2);
-        assert_eq!(
-            activity.lock().unwrap().get("t1").state,
-            voyager_contract::activity::ActivityState::Unknown
-        );
-    }
-
-    #[test]
-    fn quit_fences_cloned_viewer_input_without_closing_output_or_control() {
-        let (control, requests) = mpsc::sync_channel::<Frame>(2);
-        let (input, queued) = mpsc::sync_channel(2);
-        let replies = Replies::default();
-        let responses = replies.clone();
-        let attached: AttachResult = serde_json::from_value(json!({
-            "channel": 7,
-            "terminal": {
-                "address": "t1",
-                "argv": [],
-                "cwd": "/tmp",
-                "cols": 80,
-                "rows": 24,
-                "state": "live",
-                "created_ms": 0,
-                "labels": {},
-                "screen": "exact"
-            }
-        }))
-        .unwrap();
-        let mut wrong_terminal = serde_json::to_value(&attached.terminal).unwrap();
-        wrong_terminal["address"] = "wrong".into();
-        let mut invalid_attachment = serde_json::to_value(&attached).unwrap();
-        invalid_attachment["terminal"]["rows"] = 0.into();
-        let worker = thread::spawn(move || {
-            for (method, result) in [
-                ("terminal.get", wrong_terminal),
-                ("terminal.attach", invalid_attachment),
-            ] {
-                let request = requests.recv().unwrap();
-                let value: Value = serde_json::from_slice(&request.payload).unwrap();
-                assert_eq!(value["method"], method);
-                let id = value["id"].as_u64().unwrap();
-                responses
-                    .lock()
-                    .unwrap()
-                    .remove(&id)
-                    .unwrap()
-                    .send(json!({"jsonrpc":"2.0","id":id,"result":result}))
-                    .unwrap();
-            }
-            let request = requests.recv().unwrap();
-            let value: Value = serde_json::from_slice(&request.payload).unwrap();
-            assert_eq!(value["method"], "server.status");
-            let id = value["id"].as_u64().unwrap();
-            responses.lock().unwrap().remove(&id).unwrap().send(json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":"fixture refusal","data":{"kind":"blocked"}}})).unwrap();
-            requests.recv().unwrap()
-        });
-        let child = Command::new(env::current_exe().unwrap())
-            .arg("--list")
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
-        let mut streams = Streams::default();
-        streams.buffers.insert(
-            7,
-            Stream {
-                bytes: VecDeque::from([42]),
-                ..Default::default()
-            },
-        );
-        streams.total = 1;
-        let mut core = Core {
-            child,
-            identity: "static-core".into(),
-            control,
-            input,
-            replies,
-            streams: Arc::new(Mutex::new(streams)),
-            attaching: Arc::default(),
-            connected: Arc::new(AtomicBool::new(true)),
-            input_open: Arc::new(Mutex::new(true)),
-            sequence: 1,
-            activity: Arc::default(),
-            activity_supported: false,
-        };
-        assert!(matches!(
-            core.terminal_get("expected"),
-            Err(Error::Uncertain(_))
-        ));
-        assert!(matches!(
-            core.terminal_attach(&attached.terminal),
-            Err(Error::Uncertain(_))
-        ));
-        let viewer = core.viewer(&attached).unwrap();
-        let cloned = viewer.clone();
-        viewer.input(b"before".to_vec()).unwrap();
-        let activity = core.activity.clone();
-        let paused_metadata = activity.lock().unwrap();
-        let closing = thread::spawn(move || {
-            let result = core.quit();
-            (core, result)
-        });
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while *viewer.input_open.lock().unwrap() && Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(1));
-        }
-        let gate_closed = !*viewer.input_open.lock().unwrap();
-        let refused = cloned.input(b"after".to_vec());
-        drop(paused_metadata);
-        let (core, quit) = closing.join().unwrap();
-        let before = queued.recv().unwrap();
-        let empty = queued.try_recv().is_err();
-        viewer.protocol_reply(b"reply".to_vec()).unwrap();
-        let protocol = queued.recv().unwrap();
-        viewer.credit(1).unwrap();
-        let output = cloned.take(1).unwrap();
-        let close = core.close();
-        let credit = worker.join().unwrap();
-        assert!(close.is_ok());
-        assert!(
-            gate_closed,
-            "Quit waited for metadata before closing input admission"
-        );
-        assert!(matches!(quit, Err(Error::Rejected {kind, ..}) if kind == "blocked"));
-        assert!(matches!(refused, Err(Error::Rejected {kind, ..}) if kind == "quitting"));
-        assert_eq!(before.payload, b"before");
-        assert!(empty);
-        assert_eq!(
-            (protocol.channel, protocol.kind, protocol.payload),
-            (7, 0, b"reply".to_vec())
-        );
-        assert_eq!((credit.channel, credit.kind), (7, 1));
-        assert_eq!(output, [42]);
-    }
-
-    #[test]
-    fn protocol_envelopes_preserve_refusals_and_uncertainty() {
-        let valid = json!({"jsonrpc":"2.0","id":2,"result":{"value":null},"extra":true});
-        assert_eq!(Core::response(valid, 2).unwrap(), json!({"value":null}));
-        let refused = json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"stale","data":{"kind":"conflict","hint":"inspect"}}});
-        assert!(
-            matches!(Core::response(refused, 2), Err(Error::Rejected { kind, .. }) if kind == "conflict")
-        );
-        let unknown = json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"unknown outcome","data":{"kind":"future_error"}}});
-        assert!(
-            matches!(Core::response(unknown, 2), Err(Error::Uncertain(message)) if message.contains("future_error"))
-        );
-        for value in [
-            json!({"jsonrpc":"2.0","id":2,"error":null}),
-            json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000}}),
-            json!({"jsonrpc":"2.0","id":2,"result":{},"error":{"code":-32000,"message":"bad","data":{"kind":"conflict"}}}),
-            json!({"jsonrpc":"2.0","id":3,"result":{}}),
-            json!({"jsonrpc":"1.0","id":2,"result":{}}),
-            json!({"jsonrpc":"2.0","id":2}),
-        ] {
-            assert!(matches!(Core::response(value, 2), Err(Error::Uncertain(_))));
-        }
-    }
-
-    #[test]
-    fn dispatched_request_never_treats_malformed_or_lost_reply_as_refusal() {
-        for reply in [
-            Some(json!({"jsonrpc":"2.0","id":2,"error":null})),
-            Some(
-                json!({"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"stale","data":{"kind":"conflict"}}}),
-            ),
-            None,
-        ] {
-            let expected_refusal = reply
-                .as_ref()
-                .is_some_and(|value| value.pointer("/error/data/kind") == Some(&json!("conflict")));
-            let (control, requests) = mpsc::sync_channel::<Frame>(1);
-            let (input, _) = mpsc::sync_channel(1);
-            let replies = Replies::default();
-            let responses = replies.clone();
-            let worker = thread::spawn(move || {
-                let frame = requests.recv().unwrap();
-                assert_eq!((frame.channel, frame.kind), (0, 0));
-                let message: Value = serde_json::from_slice(&frame.payload).unwrap();
-                assert_eq!(message["method"], "doc.set");
-                let send = responses.lock().unwrap().remove(&2).unwrap();
-                if let Some(reply) = reply {
-                    send.send(reply).unwrap();
-                }
-            });
-            let child = Command::new(env::current_exe().unwrap())
-                .arg("--list")
-                .stdout(Stdio::null())
-                .spawn()
-                .unwrap();
-            let mut core = Core {
-                child,
-                identity: "test-core".into(),
-                control,
-                input,
-                replies,
-                streams: Arc::default(),
-                attaching: Arc::default(),
-                connected: Arc::new(AtomicBool::new(true)),
-                input_open: Arc::new(Mutex::new(true)),
-                sequence: 1,
-                activity: Arc::default(),
-                activity_supported: false,
-            };
-            let result = core.rpc("doc.set", json!({}));
-            worker.join().unwrap();
-            assert!(if expected_refusal {
-                matches!(result, Err(Error::Rejected { .. }))
-            } else {
-                matches!(result, Err(Error::Uncertain(_)))
-            });
-        }
-    }
-
-    #[test]
-    fn hello_requires_consumed_capabilities_not_exact_version_or_extra_fields() {
-        let mut hello = json!({"jsonrpc":"2.0","id":1,"result":{"framed":true,"generation":1,"version":"future-compatible","core":{"id":"stable","name":"test"},"methods":Core::REQUIRED_METHODS,"features":["framed","attach","shell","future"],"extra":true}});
-        hello["result"]["methods"]
-            .as_array_mut()
-            .unwrap()
-            .push("future.method".into());
-        assert_eq!(Core::validate_hello(hello.clone()).unwrap(), "stable");
-        hello["result"]["generation"] = 2.into();
-        assert!(Core::validate_hello(hello.clone()).is_err());
-        hello["result"]["generation"] = 1.into();
-        hello["result"]["features"] = json!(["framed"]);
-        assert!(Core::validate_hello(hello.clone()).is_err());
-        hello["result"]["features"] = json!(["framed", "attach", "shell"]);
-        hello["result"]["methods"] = json!(["hello"]);
-        assert!(Core::validate_hello(hello).is_err());
-    }
-
-    #[test]
-    fn typed_hello_keeps_the_existing_handshake() {
-        let params = Core::hello_params();
-        assert_eq!(
-            serde_json::to_value(params).unwrap(),
-            json!({"framed":true,"generation":1})
-        );
-    }
-
-    #[test]
-    fn terminal_list_accepts_observed_minimal_result() {
-        let result: TerminalList = serde_json::from_value(json!({"terminals":[]})).unwrap();
-        assert!(result.terminals.is_empty());
-        assert!(serde_json::from_value::<TerminalList>(json!({})).is_err());
-        assert!(matches!(
-            Core::decode::<Terminal>("terminal.get", json!({})),
-            Err(Error::Uncertain(_))
-        ));
-    }
-
-    #[test]
-    fn typed_document_preserves_null_and_nested_values() {
-        for value in [Value::Null, json!({"nested": [1, {"name": "Voyage"}]})] {
-            let params = DocSetParams {
-                name: "voyager-layout-v1".into(),
-                on: None,
-                value: value.clone(),
-                version: 9,
-            };
-            let encoded = serde_json::to_value(params).unwrap();
-            assert_eq!(encoded["value"], value);
-            assert_eq!(encoded["version"], 9);
-            let result: DocGetResult =
-                serde_json::from_value(json!({"value":value,"version":9})).unwrap();
-            assert_eq!(result.value, value);
-            assert_eq!(result.version, 9);
-        }
-    }
-}
+#[path = "core_adapter_tests.rs"]
+mod adapter_tests;
 
 #[cfg(test)]
 mod resize_tests {
     use super::{Streams, Viewer};
-    use std::sync::{Arc, Mutex, atomic::AtomicBool, mpsc};
+    use std::sync::{Arc, Mutex, mpsc};
 
     #[test]
     fn viewer_queues_core_size_and_display_facts_on_its_channel() {
@@ -1472,7 +1216,7 @@ mod resize_tests {
             streams: Arc::new(Mutex::new(Streams::default())),
             input,
             control,
-            connected: Arc::new(AtomicBool::new(true)),
+            link: Arc::default(),
             input_open: Arc::new(Mutex::new(true)),
         };
         viewer.resize(120, 38).unwrap();

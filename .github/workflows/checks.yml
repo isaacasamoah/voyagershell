@@ -1,0 +1,92 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  RUST_TOOLCHAIN: 1.99.1
+  ZIG_VERSION: 0.17.0
+  HC_VERSION: 0.1.21
+  HC_SHA256: 78424755c10a40dde38a0bdb55c20ac19706e9ae05ed68fc2acf1fcff0d941c1
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "1"
+  CARGO_PROFILE_TEST_DEBUG: "1"
+  SAVE_CACHES: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy, rustfmt
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Native build libraries
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config clang libclang-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev libx11-dev \
+            libx11-xcb-dev libwayland-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libasound2-dev libvulkan-dev mesa-vulkan-drivers \
+            libfontconfig-dev libfreetype-dev
+      - name: Install Herdr Core ${{ env.HC_VERSION }}
+        run: |
+          set -euo pipefail
+          url="https://releases.herdr.dev/core/${HC_VERSION}/herdr-core-linux-x86_64.tar.gz"
+          curl -fsSL "$url" -o "$RUNNER_TEMP/hc.tar.gz"
+          echo "${HC_SHA256}  $RUNNER_TEMP/hc.tar.gz" | sha256sum --check -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$RUNNER_TEMP/hc.tar.gz" -C "$RUNNER_TEMP" herdr-core
+          install -m 755 "$RUNNER_TEMP/herdr-core" "$HOME/.local/bin/herdr-core"
+          ln -sf herdr-core "$HOME/.local/bin/hc"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/hc" --version
+      - name: Restore prepared SDK
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/voyagershell
+          key: sdk-${{ runner.os }}-${{ hashFiles('desktop/prepare-sdk.py', 'desktop/patches/**') }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          cache-bin: false
+          save-if: ${{ env.SAVE_CACHES }}
+      - run: python3 -m unittest discover -s .claude/hooks -p 'test_*.py'
+      - run: python3 desktop/prepare-sdk.py
+      - run: npm ci --ignore-scripts
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run contract:check
+      - run: npm run architecture:check
+      - run: cargo fmt --all --check
+      - run: cargo test --workspace --locked
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo fmt --check --manifest-path tests/native/Cargo.toml
+      - run: cargo clippy --all-targets --locked --manifest-path tests/native/Cargo.toml -- -D warnings
+      - name: Sandbox tools for the native crate tests
+        run: |
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: cargo test --locked --manifest-path tests/native/Cargo.toml
