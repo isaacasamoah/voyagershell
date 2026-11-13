@@ -21,6 +21,7 @@ and remains unaccepted as a complete implementation.
 | Capability | Implemented status |
 | --- | --- |
 | Owned X11 scrolling, input/capture/identity, evidence and cleanup | Implemented for the fixed measured viewport; see evidence limits below. |
+| Hermetic runs | Implemented with bubblewrap. Each run and each `doctor` checks it with a canary. See Hermetic runs below. |
 | Finite reporting gate and regression controls | Implemented for the actual Rust gate, not app/OS behavior. |
 | ETC/ORTH/DRY checks | Required independent review criteria; not an automatic architecture score. |
 | Versioned request/result contract and independent receipt conformance | Planned. Pilot receipts are evidence, not a certified acceptance validator. |
@@ -63,22 +64,76 @@ with `cargo build --release --locked -p voyager-desktop --bin voyager-shell`.
 ```sh
 candidate="$PWD/target/release/voyager-shell"
 expected=$(sha256sum "$candidate" | cut -d" " -f1)
-tests/native/target/debug/voyager-verification doctor --binary "$candidate" --sha256 "$expected"
+core=$(sha256sum "$(command -v hc)" | cut -d" " -f1)
+tests/native/target/debug/voyager-verification doctor --binary "$candidate" --sha256 "$expected" --hc-sha256 "$core" --assets "$PWD/desktop/assets"
 run_parent=$(mktemp -d /var/tmp/voyager-verification-XXXXXX)
-tests/native/target/debug/voyager-verification run --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --evidence "$run_parent/scrolling"
+tests/native/target/debug/voyager-verification run --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --hc-sha256 "$core" --assets "$PWD/desktop/assets" --evidence "$run_parent/scrolling"
 ```
 
 For a retained candidate, take the expected hash from its reviewed build receipt.
-Computing a hash from an arbitrary file alone does not establish build provenance.
-Doctor checks the executable hash and installed tool paths without launching an
-app. Actual readiness additionally requires the owned display, exact window title
-and PID, measured viewport, Core identity and bound shell established by the run.
+Take the `hc` hash from the Core release you intend to test. Computing a hash
+from an arbitrary file alone does not establish build provenance. Doctor checks
+both hashes, the installed tool paths and the sandbox canary without launching
+an app. Actual readiness additionally requires the owned display, exact window
+title and PID, measured viewport, Core identity and bound shell established by
+the run.
+
+### Hermetic runs
+
+`run` and `doctor` start bubblewrap (`/usr/bin/bwrap`) with an empty environment
+before any other process. The journey driver, its D-Bus session, Xvfb, the
+candidate, Core and each shell run inside one user, mount, PID, network, IPC and
+UTS namespace. `src/sandbox.rs` owns the namespace, the environment table and
+the canary. The host needs bubblewrap and unprivileged user namespaces.
+
+The sandbox root is an empty tmpfs. It holds only these paths:
+
+| Path in the sandbox | Source |
+| --- | --- |
+| `/usr`, `/etc` and the `/bin`, `/sbin`, `/lib` and `/lib64` links | The host's, read-only. |
+| `/proc`, `/dev` and `/tmp` | New and private. |
+| `/voyager/runtime` | A private tmpfs. It is `XDG_RUNTIME_DIR` and holds the Core socket. |
+| `/voyager/bin/hc` | The hashed `hc`, read-only. It is the only `hc` on `PATH`. |
+| `/voyager/home` | `home/` in the evidence directory. It is `HOME`. |
+| `/voyager/home/project` | The fixture project. It is the app's working directory, so it becomes the Voyage. |
+| The verifier, the candidate and the `--assets` folder | Read-only, at their host paths. |
+| The evidence directory | Writable, at its host path. |
+
+The environment is the `ENVIRONMENT` table in `src/sandbox.rs`, plus the private
+`DBUS_SESSION_BUS_ADDRESS`, `DISPLAY`, `HC_SESSION` and `HC_SOCKET` that the
+driver sets. No variable comes from the caller. The table forces Mesa software
+rendering. On a host with a vendor GPU driver, Xvfb otherwise loads that
+driver's EGL library and crashes, because the sandbox has no GPU devices. The
+network namespace has loopback only. It also hides the host's abstract sockets,
+which include the real X server.
+
+The candidate reads its avatar artwork from the `desktop/assets` folder of the
+checkout that built it. Name that folder with `--assets`. Without it the app
+does not start.
+
+`hc` comes from the caller's `PATH` and must match `--hc-sha256`. `doctor.json`
+records its path and hash. The verifier refuses a different binary before it
+starts anything, and the driver checks the bound copy again before each launch.
+
+Before the driver starts Xvfb, a canary inside the sandbox looks for the host
+session. It looks for the home folder, `/run/user/<uid>`, each socket in that
+folder (the session bus and the Wayland socket are two of them) and the X11
+sockets. The canary compares device and inode numbers, so it opens no connection
+to the real session. `containment.json` holds one result for each resource.
+`absent` means that the path does not exist in the sandbox. `replaced` means
+that a different object is at that path, for example an empty parent folder of
+the candidate. `reached` means that the sandbox can see the host object, and it
+makes the run inconclusive. `doctor` runs the same canary and prints the results
+under `containment`.
+
+The sandbox does not virtualize the kernel, and `/usr` and `/etc` are the
+host's. A different host package set can still change a result.
 
 ### One implementation and one result contract
 
 Rust owns the migrated journey, probe, input, capture, identity, recording and
 cleanup. It calls installed native tools, not a Python driver. Every run creates
-its own D-Bus session, Xvfb, private XDG paths, app profile and Core session.
+its own sandbox, D-Bus session, Xvfb, home folder, app profile and Core session.
 Core remains the terminal/process owner. Existing-only JSON-RPC observation uses
 the dedicated Unix socket and never starts or reconnects a lost Core. Shutdown
 uses that same Core API after checking its recorded identity.
@@ -99,16 +154,22 @@ read-only. Each input intent and command acknowledgement is recorded separately.
 `actions.jsonl` preserves commands, input intents, Core requests/replies and capture
 hashes. `observations.json` holds the observed cases. Screenshots have unique names.
 `doctor.json`, `launch.json`, `identity.json`, native/display logs and `checks.json`
-retain candidate and environment identities. The verifier records its own binary
-and source fingerprints. Changed Rust source requires a rebuild before a run.
-Evidence is outside Git and survives resource cleanup. Scratch data remains named
-in the result for inspection; this prototype does not recursively delete it.
+retain candidate and environment identities. `sandbox.json` records the session
+name and the complete bubblewrap command. `containment.json` holds the canary
+results. The verifier records its own binary and source fingerprints. Changed
+Rust source requires a rebuild before a run.
+Evidence is outside Git and survives resource cleanup. `home/` keeps what the
+app, Core and the shell wrote under `HOME`, and the fixture project. The runtime
+folder and `/tmp` are tmpfs and end with the namespace.
 
-SIGINT and SIGTERM request cooperative cancellation. The driver stops issuing input
-at its next checked boundary and still attempts cleanup. A command can take up to
-eight seconds and a Core read up to five seconds before returning. SIGKILL, kernel
-failure and power loss cannot guarantee cleanup. Retain the run identity and
-inspect it before any later cleanup; a timeout is not permission to replay.
+When the driver finishes, bubblewrap exits and the kernel kills every process
+left in the PID namespace. On SIGINT or SIGTERM, `run` kills the namespace,
+returns after its last process is gone and exits 2. If `run` itself is killed,
+SIGKILL included, bubblewrap dies with it and the kernel kills the namespace.
+In that case a process can take a moment to disappear after `run` is gone. A
+run that ends early leaves its evidence directory without `checks.json`. Treat
+it as inconclusive and start a new run in a new directory. A timeout is not
+permission to replay.
 
 ### Finite verification
 
