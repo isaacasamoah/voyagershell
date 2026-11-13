@@ -1,12 +1,14 @@
 {
   "schema": 1,
-  "lastVerifiedCommit": "285c1c25d1525ee0780dab89140514352f077b85",
+  "lastVerifiedCommit": "b8f06ed0592a0f02fd73c3d9e355b248e6dd4606",
   "covered": [
     {
       "path": "tests/native/src/lifecycle.rs",
       "items": [
         "Run::step",
-        "Run::verdict"
+        "Run::verdict",
+        "Event::Acknowledge",
+        "Event::Crash"
       ]
     },
     {
@@ -18,15 +20,16 @@
     {
       "path": "tests/native/src/main.rs",
       "items": [
-        "drive: actual gate calls"
+        "drive: actual gate calls",
+        "journey: acknowledgement before match"
       ]
     }
   ],
-  "sourceFingerprint": "22be93cc93e2fd2de795f09d4acb8de42f833c1a1094856133126289824cbadd",
+  "sourceFingerprint": "2fc74c73ba20cd28597c2089216406de5d9d655c337d75278397be987c297b4d",
   "domain": {
-    "representableStatesMaximum": 640,
-    "reachableStates": 124,
-    "events": 10,
+    "representableStatesMaximum": 1280,
+    "reachableStates": 212,
+    "events": 11,
     "traceDepthLimit": null
   },
   "scope": "Actual finite verification reporting code. No proof of external observations, operating system, product-wide behavior or concurrency.",
