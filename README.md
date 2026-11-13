@@ -109,7 +109,7 @@ voice integration and increasing-load performance remain open.
 - [Terminal input and lifecycle](docs/terminal.md)
 - [Notes and content ownership](docs/content.md)
 - [Private conversation and providers](docs/conversation.md)
-- [Native proving fixture](tests/native/README.md), entered through `prove.py --foundation`
+- [Native verification environment](tests/native/README.md), invoked directly as `voyager-verification`; retained Python drivers require `--legacy-reproduction`
 - [Retained experiments and Electron UX reference](experiments/README.md)
 
 Experiments remain separate from the native product. Authority and animation

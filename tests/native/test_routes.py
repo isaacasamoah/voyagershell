@@ -350,6 +350,7 @@ class Routes(unittest.TestCase):
                     "arrangement",
                 ):
                     result = self.run_cli(
+                        "--legacy-reproduction",
                         "--foundation",
                         "--journey",
                         journey,
@@ -455,6 +456,7 @@ class Routes(unittest.TestCase):
             "terminal-reported-status",
         ):
             result = self.run_cli(
+                "--legacy-reproduction",
                 "--foundation",
                 "--journey",
                 route,
@@ -501,6 +503,7 @@ class Routes(unittest.TestCase):
                     [
                         sys.executable,
                         str(ROOT / "prove.py"),
+                        "--legacy-reproduction",
                         "--foundation",
                         "--journey",
                         route,

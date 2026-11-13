@@ -1,0 +1,220 @@
+[[feature]]
+id = "voyages"
+name = "Voyages"
+path = "Create a Voyage from the header, switch between Voyages and rename one."
+sources = ["desktop/mods/header/creation.ts", "desktop/mods/header/navigation-view.ts", "desktop/mods/header/voyage-colours.ts", "app/src/content/rename.rs", "app/src/scope.rs"]
+journeys = []
+platforms = ["linux"]
+python = ["workspace", "placement", "demo-feedback"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "fleets"
+name = "Fleets"
+path = "Group Vessels into a Fleet inside a Voyage and arrange the Fleet."
+sources = ["app/src/panels.rs", "desktop/src/arrangement.rs", "docs/arrangement.md"]
+journeys = []
+platforms = ["linux"]
+python = ["workspace", "layouts", "arrangement"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "vessels"
+name = "Vessels"
+path = "Launch a terminal or agent Vessel and see it in the arrangement."
+sources = ["app/src/launch.rs", "app/src/terminal_lifecycle.rs", "desktop/mods/header/agents.ts", "desktop/mods/header/processes.ts"]
+journeys = []
+platforms = ["linux"]
+python = ["workspace", "arrangement", "terminal-agent"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "portals"
+name = "Portals"
+path = "Open a content Portal beside a Vessel, use it and close it."
+sources = ["app/src/content.rs", "app/src/content/*.rs", "desktop/mods/header/panels.ts", "desktop/mods/header/panel-view.ts"]
+journeys = []
+platforms = ["linux"]
+python = ["placement", "portal-terminal", "portal-close"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "split-resize-maximize"
+name = "Split / resize / maximize"
+path = "Split a pane, drag the divider to resize it and maximize one pane."
+sources = ["desktop/src/split.rs"]
+journeys = []
+platforms = ["linux"]
+python = ["split-resize", "pane-maximize", "workspace-ux"]
+behavior = "python-only"
+performance = "none"
+visual = "none"
+debug = "python-only"
+
+[[feature]]
+id = "terminal-io"
+name = "Terminal I/O"
+path = "Type into the terminal, run commands and read their output."
+sources = ["desktop/src/terminal.rs", "desktop/src/terminal_input.rs", "desktop/src/terminal_screen.rs", "desktop/src/terminal_view.rs", "desktop/src/terminal_rows.rs", "desktop/src/terminal_font.rs", "desktop/src/terminal_background.rs"]
+journeys = []
+platforms = ["linux"]
+python = ["terminal", "terminal-grid", "portal-terminal"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "terminal-scrolling"
+name = "Terminal scroll"
+path = "Wheel through shell history and full-screen programs, then reattach the viewer."
+sources = ["desktop/src/terminal_scroll.rs", "desktop/src/terminal.rs", "desktop/src/terminal_screen.rs", "desktop/src/terminal_view.rs"]
+journeys = ["terminal-scrolling"]
+platforms = ["linux"]
+python = ["terminal-scrolling"]
+behavior = "covered"
+performance = "none"
+visual = "covered"
+debug = "covered"
+
+[[feature]]
+id = "selection"
+name = "Selection"
+path = "Select terminal text with the pointer."
+sources = ["desktop/src/terminal_screen.rs", "desktop/src/terminal_input.rs"]
+journeys = []
+platforms = ["linux"]
+python = ["terminal-grid"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "clipboard"
+name = "Clipboard"
+path = "Copy text out of and paste text into a terminal, canvas or note."
+sources = ["desktop/src/text.rs", "desktop/src/terminal_input.rs"]
+journeys = []
+platforms = ["linux"]
+python = ["terminal-grid", "canvas", "notes-lifetime"]
+behavior = "python-only"
+performance = "none"
+visual = "none"
+debug = "python-only"
+
+[[feature]]
+id = "notes"
+name = "Notes"
+path = "Open a note, type into it and find it again after a restart."
+sources = ["desktop/src/notes.rs", "desktop/src/notes_*.rs"]
+journeys = []
+platforms = ["linux"]
+python = ["notes", "notes-lifetime"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "avatar"
+name = "Avatar docking / drag"
+path = "Drag the avatar around the window and dock it to a Vessel."
+sources = ["desktop/src/avatar.rs", "desktop/src/avatar/*.rs", "desktop/src/avatar_motion.rs", "desktop/src/avatar_pack.rs", "desktop/src/avatar_pack/*.rs", "contract/src/avatar_animation.rs"]
+journeys = []
+platforms = ["linux"]
+python = ["avatar", "portal-avatar"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "chat"
+name = "Chat / conversation"
+path = "Talk to the assistant in the conversation panel and read, scroll and stop its replies."
+sources = ["desktop/src/conversation.rs", "app/src/conversation.rs", "app/src/conversation_*.rs", "desktop/mods/header/chat.ts"]
+journeys = []
+platforms = ["linux"]
+python = ["conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "conversation-scroll", "conversation-stop", "conversation-content"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "voice"
+name = "Voice"
+path = "Speak to the assistant and hear it answer."
+sources = ["desktop/src/speech.rs", "app/src/voice.rs", "app/src/voice_*.rs"]
+journeys = []
+platforms = ["linux"]
+python = ["conversation-voice"]
+behavior = "python-only"
+performance = "none"
+visual = "none"
+debug = "python-only"
+
+[[feature]]
+id = "layouts-home"
+name = "Layouts / Home"
+path = "Pick a layout and return to the Home view."
+sources = ["desktop/mods/header/home.ts", "desktop/mods/header/layout-panel.ts", "docs/layouts.md"]
+journeys = []
+platforms = ["linux"]
+python = ["layouts", "workspace-ux"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "worktrees"
+name = "Worktrees"
+path = "Create and switch git worktrees from a Vessel."
+sources = ["contract/src/worktree.rs", "desktop/mods/header/worktrees.ts"]
+journeys = []
+platforms = ["linux"]
+python = ["demo-feedback"]
+behavior = "python-only"
+performance = "none"
+visual = "none"
+debug = "python-only"
+
+[[feature]]
+id = "close-quit-restore"
+name = "Close Voyage / quit / restore"
+path = "Close a Voyage, quit the app and find the session restored on the next launch."
+sources = ["desktop/src/quit.rs", "app/src/voyage_close.rs", "contract/src/voyage_close.rs", "desktop/mods/header/voyage-close.ts"]
+journeys = []
+platforms = ["linux"]
+python = ["session-quit", "voyage-close", "workspace"]
+behavior = "python-only"
+performance = "none"
+visual = "python-only"
+debug = "python-only"
+
+[[feature]]
+id = "scripts-live-edit"
+name = "Scripts live edit"
+path = "Edit a header script and see the change appear live."
+sources = ["desktop/mods/header/layout-panel.ts", "desktop/src/script_types.rs", "desktop/script-types.json"]
+journeys = []
+platforms = ["linux"]
+python = ["canvas", "canvas-stack"]
+behavior = "python-only"
+performance = "python-only"
+visual = "python-only"
+debug = "python-only"
