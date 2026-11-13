@@ -24,7 +24,7 @@ import {
 } from "voyager_workspace";
 import { NameState, Name, ArrangementCapture, Status } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
-import { Occluding } from "voyager_native";
+import { Occluding, Inspect } from "voyager_native";
 import { Chat } from "./chat.js";
 import { composeCanvas } from "./canvas.js";
 import { inspectProcesses } from "./processes.js";
@@ -1187,6 +1187,7 @@ export default class Workspace extends View {
         .on_mouse_down_out(() => this.focus.focus())
         .child(Name.new(this.editing.state));
     const button = Button.new(`navigation-${key}-${JSON.stringify(action)}`)
+      .child(Inspect.new(`navigation-${key}-${JSON.stringify(action)}`, action?.operation === "create-fleet" ? "Create Fleet" : label))
       .justify_start()
       .line_height(1.618034)
       .role("button")
@@ -1361,6 +1362,7 @@ export default class Workspace extends View {
   }
   sidebarToggle() {
     return Button.new("toggle-sidebar")
+      .child(Inspect.new("toggle-sidebar", this.sidebar ? "Collapse sidebar" : "Expand sidebar"))
       .accessibility_label(this.sidebar ? "Collapse sidebar" : "Expand sidebar")
       .tooltip(this.sidebar ? "Collapse sidebar" : "Expand sidebar")
       .w(32)
@@ -1528,6 +1530,7 @@ export default class Workspace extends View {
         insertion: { kind: "beside", id: panel.id, side },
       },
       Button.new(id)
+        .child(Inspect.new(id, `Split ${entity} ${side}`))
         .accessibility_label(`Split ${entity} ${side}`)
         .tooltip(
           side === "right" ? "Split side by side" : "Split above and below",

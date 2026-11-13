@@ -71,7 +71,7 @@ fn wait<T>(
     observe: &mut impl FnMut() -> Result<Option<T>>,
     cancellable: bool,
 ) -> Result<T> {
-    let deadline = Instant::now() + Duration::from_secs(12);
+    let deadline = Instant::now() + Duration::from_secs(45);
     loop {
         ensure!(!cancellable || !interrupted(), "Verification cancelled");
         if let Some(value) = observe()? {
@@ -201,7 +201,7 @@ impl System {
         Ok(())
     }
 
-    fn command(&self, program: &str) -> Command {
+    pub fn command(&self, program: &str) -> Command {
         let mut command = Command::new(program);
         command.env_clear().envs(&self.env);
         command

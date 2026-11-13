@@ -15,11 +15,11 @@ pub struct Native {
     pub candidate: Pinned,
     pub hc: Pinned,
     display: Option<Owned>,
-    viewer: Option<Owned>,
+    pub viewer: Option<Owned>,
     core: Option<Identity>,
     shell: Option<Identity>,
     pub address: String,
-    window: String,
+    pub window: String,
     core_id: Value,
 }
 

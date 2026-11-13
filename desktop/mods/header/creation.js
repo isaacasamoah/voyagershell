@@ -1,6 +1,7 @@
 import { div } from "gpui-kit";
 import { Popover } from "gpui-base";
 import { menuButton, menuSurface } from "./menu.js";
+import { Inspect } from "voyager_native";
 import { launches } from "voyager_workspace";
 import { descriptions } from "voyager_content_view";
 import {
@@ -153,6 +154,7 @@ export class CreationPicker {
       if (this.notes)
         content.child(
           menuButton("create-notes-vessel", `Create Notes ${entity}`)
+            .child(Inspect.new("create-notes-vessel", `Create Notes ${entity}`))
             .child("Notes")
             .on_click((_event, cx) => {
               if (this.current !== opening) return;

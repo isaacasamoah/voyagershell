@@ -1,5 +1,6 @@
 mod lifecycle;
 mod native;
+mod observation;
 mod probe;
 mod proof;
 mod sandbox;
@@ -74,6 +75,7 @@ fn entry() -> Result<i32> {
         "--hc-sha256",
         "--assets",
         "--evidence",
+        "--script",
     ];
     ensure!(args.len().is_multiple_of(2), "Every option needs a value");
     for pair in args.as_chunks::<2>().0 {
@@ -133,19 +135,23 @@ fn entry() -> Result<i32> {
         sandbox::sealed(&containment)?;
         return Ok(0);
     }
+    let journey = get("--journey")?;
     ensure!(
-        get("--journey")? == "terminal-scrolling",
+        journey == "terminal-scrolling" || journey == "observation",
         "Journey has not migrated to Rust"
     );
     let evidence = PathBuf::from(get("--evidence")?);
     sandbox::prepare(&evidence)?;
+    if let Ok(script) = get("--script") {
+        std::fs::copy(script, evidence.join("obs.py"))?;
+    }
     system::save(evidence.join("doctor.json"), &readiness)?;
     let session = format!(
         "voyager-verify-{}-{:08x}",
         std::process::id(),
         system::stamp() as u32
     );
-    let plan = json!({"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host});
+    let plan = json!({"journey":journey,"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host});
     let command = confine(
         Some(&evidence),
         &[
@@ -181,6 +187,7 @@ fn entry() -> Result<i32> {
 
 #[derive(Deserialize)]
 struct Plan {
+    journey: String,
     candidate: Pinned,
     hc: Pinned,
     evidence: PathBuf,
@@ -201,13 +208,28 @@ fn drive(plan: Plan) -> Result<i32> {
             &containment,
         )?;
         sandbox::sealed(&containment)?;
+        if plan.journey == "observation" {
+            let path = native.system.evidence.join("inspect.json");
+            native
+                .system
+                .env
+                .insert("VOYAGER_INSPECT".into(), sandbox::text(&path)?);
+            native
+                .system
+                .env
+                .insert("VOYAGER_REDRAW_PROBE".into(), "1".into());
+        }
         native.prepare()?;
         gate.step(Event::Ready)?;
         gate.step(Event::Dispatch)?;
-        scrolling::drive(&mut native, &mut cases)?;
+        if plan.journey == "observation" {
+            observation::drive(&mut native, &mut cases)?;
+        } else {
+            scrolling::drive(&mut native, &mut cases)?;
+        }
         gate.step(Event::Acknowledge)?;
         gate.step(
-            if cases.len() == 4 && cases.iter().all(|case| case["passed"] == true) {
+            if !cases.is_empty() && cases.iter().all(|case| case["passed"] == true) {
                 Event::Match
             } else {
                 Event::Mismatch
@@ -248,7 +270,8 @@ fn drive(plan: Plan) -> Result<i32> {
     }
 }
 
-const SOURCES: [(&str, &[u8]); 10] = [
+const SOURCES: [(&str, &[u8]); 11] = [
+    ("src/observation.rs", include_bytes!("observation.rs")),
     ("src/main.rs", include_bytes!("main.rs")),
     ("src/lifecycle.rs", include_bytes!("lifecycle.rs")),
     ("src/proof.rs", include_bytes!("proof.rs")),

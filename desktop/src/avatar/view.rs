@@ -432,7 +432,12 @@ impl Render for AvatarView {
         let geometry = Rc::clone(&self.targets);
         let workspace = self.surface == Surface::Workspace && !dragging;
         let diagnostics = self.diagnostics_enabled;
+        crate::inspect::state(
+            "avatar",
+            serde_json::json!({"scope": serde_json::to_value(&avatar.scope).unwrap_or_default(), "floating": self.surface == Surface::Floating, "dragging": dragging, "diameter": f32::from(px(s)), "x": f32::from(position.x), "y": f32::from(position.y)}),
+        );
         let image = div()
+            .child(crate::inspect::marker("voyager-avatar".into(), Some("Voyager avatar".into())))
             .id("voyager-avatar")
             .absolute()
             .left(position.x)

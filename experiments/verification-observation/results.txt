@@ -1,0 +1,25 @@
+negative controls: shifted AT-SPI box reported as disagreement; missing endpoint lookup not counted as found
+runs: 10; verifier verdict passed: 10; script errors: 3
+endpointFoundA: 10/10
+endpointFoundB: 10/10
+endpointSplitEffectB: 10/10
+atspiFoundB: 10/10
+atspiFoundA2: 7/10
+agreeB: 10/10
+agreeA2: 7/10
+fixed offsets from layout A that still hit after change (of 4): [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+endpoint lookup ms median (min,max over runs): (0.047, 0.021, 0.065)
+atspi lookup ms median: (28.367, 26.816, 32.802)
+atspi activation s: (0.095, 0.092, 0.107)
+settle after change, endpoint (A->B): (0.309, 0.308, 0.311)
+settle after change, both polled (B->A2) atspi / endpoint: (0.348, 0.342, 0.4) (0.348, 0.342, 0.4)
+burst CPU s/4s a11y off / on: (10.19, 0.18, 11.61) (9.845, 5.87, 10.73)
+idle CPU s/2s a11y off / on: (0.05, 0.03, 0.13) (0.04, 0.03, 0.41)
+redraw probe a11y off: runs with terminal_canvas_rows>0: 10/10; terminal_renders total: 1557; terminal_canvas_rows total: 60910
+redraw probe a11y on: runs with terminal_canvas_rows>0: 0/10; terminal_renders total: 1807; terminal_canvas_rows total: 0
+processClickMs (median of per-run medians, min, max): (104.44, 103.782, 105.592)
+processMoveMs (median of per-run medians, min, max): (3.619, 3.419, 4.13)
+processVerifiedKeyMs (median of per-run medians, min, max): (24.649, 22.778, 28.681)
+processCaptureMs (median of per-run medians, min, max): (122.966, 92.98, 181.454)
+x11rbClickMs (median of per-run medians, min, max): (0.163, 0.144, 0.234)
+x11rbCaptureMs (median of per-run medians, min, max): (17.05, 14.488, 24.442)
