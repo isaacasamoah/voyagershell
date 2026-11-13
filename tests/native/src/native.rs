@@ -442,6 +442,12 @@ impl Native {
         Ok(())
     }
 
+    pub fn halted(&self) -> bool {
+        self.viewer.as_ref().is_some_and(|viewer| {
+            matches!(process_state(viewer.identity.pid), None | Some('T' | 'Z'))
+        })
+    }
+
     pub fn diagnose(&mut self, error: &anyhow::Error) -> Cause {
         let unseen = error.downcast_ref::<Unseen>().is_some();
         let timed_out = unseen || error.downcast_ref::<TimedOut>().is_some();
@@ -728,6 +734,23 @@ pub(crate) mod tests {
             pinned,
             Surface::default(),
         ))
+    }
+
+    pub(crate) fn stopped() -> Result<Native> {
+        let mut native = native()?;
+        let viewer = native.system.spawn(
+            Path::new("/usr/bin/tail"),
+            &["-f", "/dev/null"],
+            &[],
+            "viewer.log",
+        )?;
+        let pid = rustix::process::Pid::from_raw(i32::try_from(viewer.identity.pid)?)
+            .context("Invalid viewer PID")?;
+        native.viewer = Some(viewer);
+        ensure!(!native.halted(), "A running candidate counts as halted");
+        rustix::process::kill_process(pid, rustix::process::Signal::STOP)?;
+        until("a stopped candidate", || Ok(native.halted().then_some(())))?;
+        Ok(native)
     }
 
     #[test]

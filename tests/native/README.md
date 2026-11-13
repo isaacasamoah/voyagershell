@@ -328,6 +328,13 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 | Owned display exited or stopped answering, a host tool is missing, failed or ran out of time, the sandbox refused, or an unrelated verifier error | `inconclusive` |
 | Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
 
+A case whose expectation did not hold is recorded as `failed` only while the
+candidate is still running. A stopped candidate keeps its last frame and its
+last pixels, so a wait would otherwise judge the hang as an expectation that
+the product did not meet. If the candidate has exited or is stopped when a
+case returns such a verdict, the case is `interrupted` and the first row
+applies.
+
 `Terminal::same_program` reports a defect only when the shell's process is
 gone or Core names another program for the terminal. A Core request that
 fails there is diagnosed like any other error, so it is a product failure

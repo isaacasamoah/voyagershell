@@ -294,7 +294,14 @@ impl<'a, C: Case> Cases<'a, C> {
             return Ok(());
         };
         native.system.record(json!({"event":"case","case":name}))?;
-        let finished = match run(native) {
+        let judged = run(native).and_then(|verdict| {
+            ensure!(
+                verdict.passed() || !native.halted(),
+                "The candidate was not running when the case {name} judged it"
+            );
+            Ok(verdict)
+        });
+        let finished = match judged {
             Ok(verdict) => self.outcomes.close(index, Some(verdict)),
             Err(error) => self.outcomes.close(index, None).and(Err(error)),
         };
@@ -312,6 +319,7 @@ impl<'a, C: Case> Cases<'a, C> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native::Cause;
     use std::collections::BTreeSet;
     use std::path::Path;
     use std::process::Command;
@@ -505,6 +513,27 @@ mod tests {
             matches!(unkept[..], [line] if line.contains("Missing display connection")),
             "Only the failed case records the capture that it could not keep: {unkept:?}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_failed_verdict_about_a_stopped_candidate_is_a_hang() -> Result<()> {
+        let mut native = crate::native::tests::stopped()?;
+        let path = native.system.evidence.join("observations.json");
+        let mut outcomes = Outcomes::new(JOURNEY, path);
+        let case = scrolling::Case::NormalHistory;
+        let verdict = Verdict::new().expect("wheel up shows earlier history", false);
+        let hang = Cases::over(&mut outcomes)
+            .check(&mut native, case, |_| Ok(verdict))
+            .expect_err("A stopped candidate was judged by an expectation");
+        assert_eq!(outcomes.interrupted(), Some(case.name()));
+        assert!(outcomes.first_failure().is_none());
+        let cause = native.diagnose(&hang);
+        assert!(
+            matches!(&cause, Cause::Product(detail) if detail.contains("stopped")),
+            "A stopped candidate was not blamed on the product"
+        );
+        assert!(native.cleanup(true).is_empty());
         Ok(())
     }
 
