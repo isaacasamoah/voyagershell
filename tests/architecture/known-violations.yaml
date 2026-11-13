@@ -23,3 +23,42 @@ known:
   - id: 'voyage-close-not-on-client: uses(rs:voyager_app::voyage_close,rs:voyager_app::client)'
     owner: isaac
     reason: 'voyage_close uses client while client uses voyage_close. Removing the use clears it.'
+  - id: 'file-size: app/src/administrator.rs'
+    limit: 1480
+    owner: isaac
+    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
+  - id: 'file-size: app/src/client.rs'
+    limit: 4382
+    owner: isaac
+    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
+  - id: 'file-size: app/src/content.rs'
+    limit: 1520
+    owner: isaac
+    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
+  - id: 'file-size: app/src/conversation_client.rs'
+    limit: 1108
+    owner: isaac
+    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
+  - id: 'file-size: app/src/core.rs'
+    limit: 1520
+    owner: isaac
+    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
+  - id: 'file-size: app/src/tests.rs'
+    limit: 1557
+    owner: isaac
+    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
+  - id: 'file-size: desktop/mods/header/main.ts'
+    limit: 2197
+    owner: isaac
+    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
+  - id: 'file-size: desktop/src/avatar.rs'
+    limit: 1286
+    owner: isaac
+    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
+  - id: 'file-size: desktop/src/host.rs'
+    limit: 1020
+    owner: isaac
+    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
+  - id: 'no-script-cycles: ts:desktop/mods/header/main.ts <-> ts:desktop/mods/header/navigation-view.ts <-> ts:desktop/mods/header/panel-view.ts'
+    owner: isaac
+    reason: 'Modules in this group import each other. Breaking the loop clears it.'

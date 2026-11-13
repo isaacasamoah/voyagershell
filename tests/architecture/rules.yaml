@@ -14,3 +14,12 @@ rules:
     kinds: [uses]
   - id: no-module-cycles
     check: acyclic
+    kind: uses
+  - id: no-script-cycles
+    check: acyclic
+    kind: imports
+  - id: file-size
+    check: max_lines
+    limit: 1000
+    roots: ['app/*', 'contract/src/*', 'desktop/src/*', 'desktop/mods/*', 'content/*']
+    exclude: ['contract/generated/*']
