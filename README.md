@@ -1,10 +1,11 @@
 # VoyagerShell
 
-VoyagerShell is a Linux desktop app for terminals, coding agents and Markdown
-notes. Drag its assistant onto a panel, a tab or a whole space, and that is
-what it can see and change.
+VoyagerShell is a canvas for agents and humans to collaborate. It is a Linux
+desktop app for terminals, coding agents and Markdown notes. Drag the Voyager
+avatar onto a panel, a tab or a whole space, and that is what it can see and
+change.
 
-![A VoyagerShell workspace with a terminal, a Notes Portal and the avatar docked to the note](docs/images/workspace.png)
+![A VoyagerShell workspace with a terminal, a Notes Portal and the Voyager avatar docked to the note](docs/images/workspace.png)
 
 There are no releases yet. Build from source.
 
@@ -14,12 +15,12 @@ The workspace has four kinds of place. A **Voyage** is a space for one project.
 A **Fleet** is a tab in a Voyage. A **Vessel** is a panel in a Fleet. A
 **Portal** is a panel that stays on screen across every Fleet in its Voyage.
 
-The avatar is your assistant. Drag it onto any of those places to dock it
-there. The status bar shows the dock, such as **Voyager / Design notes.md** for
+The **Voyager avatar** is the assistant you dock. Drag it onto any of those
+places to dock it there. The status bar shows the dock, such as **Voyager / Design notes.md** for
 a Portal in the Voyage named Voyager. **Overwatch** means the whole workspace.
 For example, dock on the terminal where a test failed and ask why it failed.
 
-Docking sets what the assistant can see and change. It never moves your
+Docking sets what the Voyager avatar can see and change. It never moves your
 keyboard focus or limits your own clicks. A request keeps the context it was
 sent with, so docking somewhere else never changes a request already sent.
 
@@ -32,7 +33,7 @@ sent with, so docking somewhere else never changes a request already sent.
   resize and maximize any panel.
 - **Keep notes beside the work.** Notes edits and previews Markdown and saves
   each note as a file in the project's `notes/` folder.
-- **Ask the assistant.** It runs on Codex. It can arrange panels, read and type
+- **Ask the Voyager avatar.** It runs on Codex. It can arrange panels, read and type
   into terminals, read and write notes, and create Git worktrees, only where you
   dock it. It does not edit your code. Coding agents in panels do that.
 - **Change the interface while it runs.** The interface is TypeScript compiled
@@ -52,7 +53,7 @@ You need Git, Python 3, Node.js 24, Rust, Zig 0.17, a working Vulkan driver,
 and the GPUI native libraries for X11 or Wayland. Install
 [Herdr Core](https://github.com/herdrdev/herdr-core) so that `hc` is on
 `PATH`. VoyagerShell's Core API is generated from Core 0.1.16, and CI tests
-against Core 0.1.21. Install Codex to use the assistant, and Claude Code for a
+against Core 0.1.21. Install Codex to use the Voyager avatar, and Claude Code for a
 Claude panel. Shells and Notes need neither.
 
 Build from the repository root:
@@ -78,7 +79,7 @@ holds your interface scripts, theme and settings. `--session` names your Herdr
 Core session. It starts with `voyager-` and uses lowercase letters, digits and
 hyphens.
 
-Quit with **Ctrl+Q**. Closing the window leaves the avatar floating on the
+Quit with **Ctrl+Q**. Closing the window leaves the Voyager avatar floating on the
 desktop.
 
 To learn the app by using it, follow the tutorial,
@@ -90,7 +91,7 @@ part of the workspace and traces one click through the code.
 ```mermaid
 flowchart LR
 	UI["Interface scripts<br/>TypeScript"] -->|"typed operations"| App["VoyagerShell<br/>Rust"]
-	Agent["Assistant<br/>Codex"] -->|"docked tool calls"| App
+	Agent["Voyager avatar<br/>Codex"] -->|"docked tool calls"| App
 	App -->|"workspace document and programs"| Core["Herdr Core"]
 	App -->|"layout and terminal output"| View["Native views<br/>GPUI and libghostty"]
 	UI --> View
@@ -98,18 +99,18 @@ flowchart LR
 
 Herdr Core owns programs, terminals and the saved workspace document.
 VoyagerShell's Rust application owns placement, content and the dock. Your
-clicks and the assistant's tool calls run the same Rust operations. The app
-also checks each assistant call against where it is docked. One contract,
+clicks and the Voyager avatar's tool calls run the same Rust operations. The
+app also checks each of its tool calls against where it is docked. One contract,
 written in Rust, generates the TypeScript types and validators that the
 interface uses.
 
-| Directory              | Contents                                                                |
-| ---------------------- | ----------------------------------------------------------------------- |
-| [contract/](contract/) | Shared operations, identities and results, with generated types.        |
-| [app/](app/)           | Workspace, content and dock owners, plus the Core and Codex connectors. |
-| [desktop/](desktop/)   | Native views, the terminal, the avatar and the interface scripts.       |
-| [content/](content/)   | Content packages that ship with the app, such as Notes.                 |
-| [tests/](tests/)       | The native verification environment and the architecture checks.        |
+| Directory              | Contents                                                                  |
+| ---------------------- | ------------------------------------------------------------------------- |
+| [contract/](contract/) | Shared operations, identities and results, with generated types.          |
+| [app/](app/)           | Workspace, content and dock owners, plus the Core and Codex connectors.   |
+| [desktop/](desktop/)   | Native views, the terminal, the Voyager avatar and the interface scripts. |
+| [content/](content/)   | Content packages that ship with the app, such as Notes.                   |
+| [tests/](tests/)       | The native verification environment and the architecture checks.          |
 
 ## Documentation
 
@@ -123,7 +124,7 @@ Design notes for contributors:
 - [Agent launch](docs/agent-launch.md) covers `launches.json`, which adds
   agents beyond Codex and Claude Code.
 - [Notes and content](docs/content.md) covers content types and their data.
-- [Private conversation](docs/conversation.md) covers the assistant and its
+- [Private conversation](docs/conversation.md) covers the Voyager avatar's conversation and its
   tools.
 - [Avatar](docs/avatar.md) covers docking and motion.
 
