@@ -130,7 +130,7 @@ the typed text`, and `firstFailingCheck.observed.rename.after` must read
 
 ## Gaps
 
-Isaac approved two gaps on 13 November 2026.
+Isaac approved dropping two checks on 13 November 2026.
 
 - The refusal of a stale layout version is not driven here, because the
   verifier never writes to Core. `app/tests/maximize.rs` asserts
@@ -138,12 +138,29 @@ Isaac approved two gaps on 13 November 2026.
 - A rename during a pending selection is not driven, because the old check
   patched the profile's script to delay the selection.
 
-Isaac approved three more for later waves.
+The native journey does not drive the checks below, and nobody has approved
+dropping them. The Python `workspace` and `placement` journeys in
+`tests/native/proof_workspace.py` hold them and stay, behind
+`--legacy-reproduction`, until a native journey proves each one.
 
-- Docking with Shift+Enter is not driven, because a frame does not report
-  which dock target has keyboard focus.
-- Portals are not driven.
-- Close, quit and restore of a Voyage stay with their Python journeys.
+- Portals. `placement` creates a Portal, docks to it, renames it and expects
+  its identity and its context to survive a Fleet change.
+- Docking by a click and from the keyboard. The native journey docks by a
+  drag only. `workspace` and `placement` dock by a click. A frame does not
+  report which dock target has keyboard focus, so Shift+Enter is not driven.
+- Close, quit and restore. The native journey quits once with Ctrl+Q and
+  launches again. `workspace` and `placement` reopen the saved workspace and
+  expect the app's Quit to end Core. Closing a Voyage stays with the Python
+  `voyage-close` and `session-quit` journeys.
+- The Ctrl+Shift+O split shortcut, and Refresh after a refused stale layout,
+  which `workspace` drives.
+
+Neither Python journey was run for this recipe, because both take the real
+pointer and keyboard. Read from their source, they click fixed coordinates,
+look for a Fleet named `Workbench` and wait for Core to exit after Quit. The
+native runs observe a first Fleet named `Fleet 1` and a Core that keeps
+running after Quit. Both journeys are therefore expected to fail against
+this app until someone updates them. That is inferred, not observed.
 
 These gaps are open. Nobody has approved them.
 
@@ -152,8 +169,8 @@ These gaps are open. Nobody has approved them.
   label, or a narrow control that cuts the text short, passes. Reading the
   drawn pixels belongs to the visual tier.
 - The journey keeps captures but compares no pixels, so the visual tier of
-  Voyages, Fleets and Vessels is `none`. The Python `demo-feedback` journey
-  also keeps captures of the Voyage rows and compares none.
+  Voyages, Fleets and Vessels is `none`. The Python `workspace`, `placement`
+  and `demo-feedback` journeys also keep captures and compare none.
 - `rename-keyboard` proves one Tab step and one Shift+Tab step, between two
   Voyage names. It does not walk the Fleet tabs or the Vessel titles.
 
