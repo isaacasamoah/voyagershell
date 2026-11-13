@@ -1548,10 +1548,7 @@ impl Client {
                         }
                         if previous.is_none() {
                             settle_created_content(&mut created_contents, &content, &result);
-                            terminal_requests.push_back((
-                                request,
-                                result.as_ref().map(Viewer::downgrade).map_err(Error::clone),
-                            ));
+                            terminal_requests.push_back((request, result.clone().map(Into::into)));
                             if terminal_requests.len() > 32 {
                                 terminal_requests.pop_front();
                             }

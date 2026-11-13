@@ -1,4 +1,4 @@
-use super::{Lease, Stream, Streams, TOTAL_LIMIT, Viewer, reader::Reader};
+use super::{Lease, Stream, Streams, TOTAL_LIMIT, Viewer, WeakViewer, reader::Reader};
 use crate::wire::Frame;
 use serde_json::json;
 use std::sync::{
@@ -91,7 +91,7 @@ fn a_cached_receipt_does_not_keep_a_refused_viewer_alive() {
     let streams = streams(&[(7, b"crashed on startup", true)]);
     let (control, sent) = mpsc::sync_channel(4);
     let attached = viewer(7, &streams, &control);
-    let receipt = attached.downgrade();
+    let receipt = WeakViewer::from(attached.clone());
     assert!(receipt.upgrade().is_ok());
     drop(attached);
     assert_eq!(streams.lock().unwrap().occupied(), 0);
