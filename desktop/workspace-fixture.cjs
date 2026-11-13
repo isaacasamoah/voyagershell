@@ -44,5 +44,9 @@ module.exports = function workspaceSource(
           .replace(/^import [\s\S]*?;\n/gm, "")
           .replace(/^export /gm, "")
       : "";
-  return ui + "\n" + helpers + "\n" + source;
+  const marker =
+    filename === "main.js"
+      ? 'const Marker = { new: (role, key = "") => ({ marker: [role, key] }) };'
+      : "";
+  return marker + "\n" + ui + "\n" + helpers + "\n" + source;
 };

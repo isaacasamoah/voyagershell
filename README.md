@@ -127,6 +127,8 @@ Design notes for contributors:
 - [Private conversation](docs/conversation.md) covers the Voyager avatar's conversation and its
   tools.
 - [Avatar](docs/avatar.md) covers docking and motion.
+- [Inspection](docs/inspection.md) covers the `--inspect` report of where
+  controls are on screen.
 
 ## Contributing
 
