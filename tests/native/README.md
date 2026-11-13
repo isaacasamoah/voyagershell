@@ -43,6 +43,14 @@ resource coordination and the desktop queue. Do not import pstack agent-launch o
 autonomous-merge authority. Keep one owner for each action, capability definition,
 success rule and evidence schema; generate derived views where practical.
 
+### Feature registry
+
+`tests/native/features.toml` is the one record per user feature: source globs, native
+journeys, tier status and the retained Python journeys. `voyager-verification features`
+validates it and prints the coverage table. `features --write` regenerates the table in
+`.agents/skills/verify/features/README.md`, `features --check` fails when it is stale and
+`features --changed GIT_RANGE` lists the features and journeys a diff touches.
+
 ### Build and inspect
 
 From the selected checkout:
