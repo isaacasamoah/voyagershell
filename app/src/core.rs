@@ -1127,6 +1127,10 @@ impl Drop for Core {
 mod adapter_tests;
 
 #[cfg(test)]
+#[path = "core_slot_tests.rs"]
+mod slot_tests;
+
+#[cfg(test)]
 mod resize_tests {
     use super::{Streams, Viewer};
     use std::sync::{Arc, Mutex, mpsc};
