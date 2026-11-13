@@ -11,6 +11,7 @@ pub mod canvas;
 pub mod content;
 pub mod context;
 pub mod conversation;
+pub mod inspection;
 pub mod launch;
 pub mod observation;
 pub mod voice;

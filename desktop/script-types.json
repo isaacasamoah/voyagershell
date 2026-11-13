@@ -1,6 +1,6 @@
 {
   "header": {
-    "rawSha256": "9e61e2a6d1d38a5a2bc00a5576ac6e49aa8c10c1b4772e3ee9ad4a5451c62f16",
+    "rawSha256": "9c1adfaa46f4e17fa8faafe3ff4a2c6c227dbe7b51b4765444f41e4abba2ded4",
     "modules": [
       "gpui-base",
       "gpui-kit",

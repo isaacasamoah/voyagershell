@@ -109,6 +109,8 @@ voice integration and increasing-load performance remain open.
 - [Terminal input and lifecycle](docs/terminal.md)
 - [Notes and content ownership](docs/content.md)
 - [Private conversation and providers](docs/conversation.md)
+- [Inspection endpoint](docs/inspection.md), which reports where controls are when
+  the app starts with `--inspect`
 - [Native verification environment](tests/native/README.md), invoked directly as `voyager-verification`; retained Python drivers require `--legacy-reproduction`
 - [Retained experiments and Electron UX reference](experiments/README.md)
 
