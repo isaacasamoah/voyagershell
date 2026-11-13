@@ -206,11 +206,8 @@ feature. Extend this fixture, or record the missing capability and its bounded
 migration. Retire an old implementation only after equivalent real-surface checks
 pass. Do not change old assertions to make migration easier.
 
-Count this entire authored verification crate, the retained dispatcher and one-off checks
-in acceptance inventories. A Rust implementation is still proving code; calling
-it development infrastructure does not exempt it from CONSTRAINTS.md. Full
-acceptance stays open when the test-size gate fails. YAML architecture rules and
-Jev judgments are not implemented by this increment.
+This crate is maintained as its own product with its own tests. Architecture
+rules live in `tests/architecture/`.
 
 ### Inspected sources
 

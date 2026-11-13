@@ -103,6 +103,8 @@ that Voyage's verified programs.
 go through pull requests. Complete application acceptance, broader input coverage,
 voice integration and increasing-load performance remain open.
 
+- [Learn VoyagerShell by running it](docs/README.md), a tutorial for agents and
+  new contributors
 - [Workspace and script authoring](docs/workspace.md#script-authoring-and-checking)
 - [Terminal input and lifecycle](docs/terminal.md)
 - [Notes and content ownership](docs/content.md)
