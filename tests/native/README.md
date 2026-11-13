@@ -77,7 +77,9 @@ refuses a `--sidebar` value that contradicts it.
 
 A case runs inside `cases.check` and returns a `Verdict`. A `Verdict` holds
 named expectations, each of which held or did not, and the values that the
-case observed. A `Verdict` without an expectation does not pass.
+case observed. A case that returns a `Verdict` without an expectation judged
+nothing, so it ends the run as a fixture error. A value that cannot be
+recorded also ends the run as a fixture error.
 `observations.json` lists every declared case with one status:
 
 | Status | Meaning |
@@ -308,6 +310,7 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 | Owned display exited or stopped answering, a host tool is missing or failed, the sandbox refused, or an unrelated verifier error | `inconclusive` |
 | Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
 
+| A case returned no expectation, or an observed value could not be recorded | `inconclusive`, blamed on the fixture |
 `Acknowledge` is a real event. It fires only when at least one recorded action
 (an input the display answered, or a host command) completed successfully after
 dispatch, and a match is rejected without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only

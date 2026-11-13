@@ -2,7 +2,7 @@ mod scrolling;
 
 use crate::native::{Native, Sidebar};
 use crate::system::save;
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::marker::PhantomData;
@@ -133,11 +133,11 @@ impl Verdict {
         self
     }
 
-    pub fn observed(mut self, name: &'static str, value: impl Serialize) -> Self {
+    pub fn observed(mut self, name: &'static str, value: impl Serialize) -> Result<Self> {
         let value = serde_json::to_value(value)
-            .unwrap_or_else(|error| json!({"unrecorded":error.to_string()}));
+            .with_context(|| format!("The observed value {name} cannot be recorded"))?;
         self.observed.insert(name.into(), value);
-        self
+        Ok(self)
     }
 
     pub fn passed(&self) -> bool {
@@ -170,7 +170,6 @@ struct Outcome {
 }
 
 pub struct Outcomes {
-    journey: Journey,
     cases: Vec<Outcome>,
     path: PathBuf,
 }
@@ -186,15 +185,7 @@ impl Outcomes {
                 verdict: Verdict::new(),
             })
             .collect();
-        Self {
-            journey,
-            cases,
-            path,
-        }
-    }
-
-    pub fn journey(&self) -> Journey {
-        self.journey
+        Self { cases, path }
     }
 
     pub fn passed(&self) -> bool {
@@ -221,10 +212,7 @@ impl Outcomes {
             .cases
             .iter()
             .find(|case| case.status == Status::Failed)?;
-        let unmet = failed
-            .verdict
-            .first_unmet()
-            .unwrap_or("the case stated no expectation");
+        let unmet = failed.verdict.first_unmet()?;
         Some(
             json!({"check":failed.case,"blame":"product","detail":format!("The product did not meet the expectation: {unmet}"),"observed":failed.verdict.observed}),
         )
@@ -258,19 +246,23 @@ impl Outcomes {
         }
     }
 
-    fn close(&mut self, index: usize, verdict: Option<Verdict>) {
+    fn close(&mut self, index: usize, verdict: Option<Verdict>) -> Result<()> {
         let outcome = &mut self.cases[index];
-        match verdict {
-            Some(verdict) => {
-                outcome.status = if verdict.passed() {
-                    Status::Passed
-                } else {
-                    Status::Failed
-                };
-                outcome.verdict = verdict;
-            }
-            None => outcome.status = Status::Interrupted,
+        outcome.status = match &verdict {
+            Some(verdict) if verdict.passed() => Status::Passed,
+            Some(verdict) if verdict.first_unmet().is_some() => Status::Failed,
+            _ => Status::Interrupted,
+        };
+        let judged = outcome.status != Status::Interrupted;
+        if let Some(verdict) = verdict {
+            outcome.verdict = verdict;
+            ensure!(
+                judged,
+                "The case {} stated no expectation, so it judged nothing",
+                outcome.case
+            );
         }
+        Ok(())
     }
 }
 
@@ -299,14 +291,8 @@ impl<'a, C: Case> Cases<'a, C> {
         };
         native.system.record(json!({"event":"case","case":name}))?;
         let finished = match run(native) {
-            Ok(verdict) => {
-                self.outcomes.close(index, Some(verdict));
-                Ok(())
-            }
-            Err(error) => {
-                self.outcomes.close(index, None);
-                Err(error)
-            }
+            Ok(verdict) => self.outcomes.close(index, Some(verdict)),
+            Err(error) => self.outcomes.close(index, None).and(Err(error)),
         };
         let saved = self.outcomes.save(None);
         finished?;
@@ -329,10 +315,10 @@ mod tests {
     }
 
     fn judge(outcomes: &mut Outcomes, case: &'static str, verdict: Option<Verdict>) -> Result<()> {
-        if let Some(index) = outcomes.open(case)? {
-            outcomes.close(index, verdict);
+        match outcomes.open(case)? {
+            Some(index) => outcomes.close(index, verdict),
+            None => Ok(()),
         }
-        Ok(())
     }
 
     fn held() -> Option<Verdict> {
@@ -388,10 +374,46 @@ mod tests {
     }
 
     #[test]
-    fn a_verdict_without_expectations_does_not_pass() {
+    fn a_verdict_without_expectations_does_not_pass() -> Result<()> {
         assert!(!Verdict::new().passed());
-        assert!(!Verdict::new().observed("seen", 1).passed());
+        assert!(!Verdict::new().observed("seen", 1)?.passed());
         assert!(Verdict::new().expect("it held", true).passed());
+        Ok(())
+    }
+
+    #[test]
+    fn a_case_without_expectations_is_a_journey_fault_not_a_product_failure() -> Result<()> {
+        let mut outcomes = outcomes();
+        let [first, second, ..] = JOURNEY.cases() else {
+            bail!("The journey declares fewer than two cases");
+        };
+        let unjudged = Verdict::new().observed("seen", 1)?;
+        let fault =
+            judge(&mut outcomes, first, Some(unjudged)).expect_err("An unjudged case closed");
+        assert!(fault.to_string().contains(first));
+        assert_eq!(outcomes.interrupted(), Some(*first));
+        assert!(outcomes.first_failure().is_none() && !outcomes.passed());
+        assert_eq!(
+            statuses(&outcomes)[..2],
+            [format!("{first}:interrupted"), format!("{second}:skipped")]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn an_observed_value_that_cannot_be_recorded_fails_the_case() {
+        struct Unrecordable;
+        impl Serialize for Unrecordable {
+            fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+                Err(serde::ser::Error::custom("no shape"))
+            }
+        }
+        let fault = Verdict::new()
+            .expect("it held", true)
+            .observed("seen", Unrecordable)
+            .err()
+            .expect("An unrecordable value was stored");
+        assert!(format!("{fault:#}").contains("seen") && format!("{fault:#}").contains("no shape"));
     }
 
     #[test]
@@ -425,7 +447,7 @@ mod tests {
         let verdict = Verdict::new()
             .expect("it held", true)
             .expect("the name is the typed text", false)
-            .observed("after", "NATIVE FLEET");
+            .observed("after", "NATIVE FLEET")?;
         judge(&mut outcomes, first, Some(verdict))?;
         judge(&mut outcomes, second, held())?;
         assert_eq!(

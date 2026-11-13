@@ -221,6 +221,7 @@ struct Plan {
 fn journey(
     native: &mut Native,
     gate: &mut Run,
+    driven: Journey,
     outcomes: &mut Outcomes,
     host: Vec<Resource>,
     fault: Option<&Fault>,
@@ -238,7 +239,7 @@ fn journey(
     if let Some(fault) = fault {
         native.inject(fault)?;
     }
-    outcomes.journey().drive(native, outcomes)?;
+    driven.drive(native, outcomes)?;
     ensure!(
         fault.is_none() || native.fault_fired(),
         "The injected fault never fired before the journey ended"
@@ -270,6 +271,7 @@ fn drive(plan: Plan) -> Result<i32> {
     let result = journey(
         &mut native,
         &mut gate,
+        plan.journey,
         &mut outcomes,
         plan.host,
         plan.fault.as_ref(),

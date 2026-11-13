@@ -87,10 +87,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 )
                 .expect("the screen changed on wheel up", before != upper)
                 .expect("the screen changed on wheel down", upper != lower)
-                .observed("initial", &initial)
-                .observed("up", &up)
-                .observed("down", &down)
-                .observed("identity", &identity);
+                .observed("initial", &initial)?
+                .observed("up", &up)?
+                .observed("down", &down)?
+                .observed("identity", &identity)?;
             native.press(Key::Char('q'))?;
             until("probe exit", || {
                 Ok(state(&path)?["ended"].as_bool().filter(|ended| *ended))
