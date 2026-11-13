@@ -305,13 +305,25 @@ cleanup also left Xvfb deaf to SIGTERM in 1 of 30 runs.
 sends SIGTERM and waits up to 12 s for the exit. While it waits, it sends
 SIGTERM again every second. An X server checks its exit flag and then sleeps
 in its poll. A signal that lands between the two only sets the flag, and the
-server sleeps on until its next timer, which is up to 600 s away once the last
-client has left. Under a debugger, an Xvfb that took SIGTERM at that point was
-still asleep in `ep_poll` 5 s later, and a second SIGTERM ended it within
-0.04 s. Before the driver repeated the signal, Xvfb outlived the 12 s wait in
-2 of 744 runs, both on a loaded machine, and both runs ended `inconclusive`.
-Nobody has inspected such a run while it hung, so the cause of those two is
-not proved.
+server sleeps on until something else wakes it. Under a debugger, an Xvfb that
+took SIGTERM at that point was still asleep in `ep_poll` 5 s later, and a
+second SIGTERM ended it within 0.04 s. Before the driver repeated the signal,
+Xvfb outlived the 12 s wait in 2 of 744 runs, both on a loaded machine, and
+both runs ended `inconclusive`. Nobody inspected those two runs while they
+hung. Three later runs were inspected. In each, 0.4 s after its last client
+had gone, Xvfb was asleep in `ep_poll` with no signal pending and a timer
+about two minutes away. Two left as soon as a tracer attached, and the third
+left on the second SIGTERM. So each had its exit flag set while it slept.
+
+Cleanup stops the display while the driver's X connection is still open, and
+closes the connection afterwards. Closing the last connection wakes the
+server, and a SIGTERM sent right after the close arrives while the server is
+on its way back to its poll. The three sleeping displays were in 128 runs
+that closed the connection first. In 120 runs that stopped the display first,
+no stop needed a second signal. That difference is too small to prove that
+the order matters. A bare Xvfb with one client slept through 1 of 37,000
+stops that closed the connection first, so the close alone does not explain
+three in 128.
 
 A stop that needed more than one signal is a `repeated-stop` event in
 `actions.jsonl`, with the process and the number of signals. If the process is

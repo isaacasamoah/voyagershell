@@ -630,11 +630,11 @@ impl Native {
                 errors.push(format!("process {}: {error:#}", identity.pid));
             }
         }
-        self.x11 = None;
         if let Some(mut display) = self.display.take() {
             let stopped = display.stop();
             errors.extend(self.retired("display", stopped));
         }
+        self.x11 = None;
         if let Some(number) = self
             .system
             .env
