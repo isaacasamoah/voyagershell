@@ -44,6 +44,7 @@ impl Model {
         let mut model = Self { layout };
         panels::normalize(&mut model.layout)?;
         model.ensure_home(cwd)?;
+        crate::rank::validate(&model.layout)?;
         if model
             .layout
             .home
@@ -78,6 +79,7 @@ impl Model {
             type_id,
             cwd,
             backend: None,
+            rank: Default::default(),
             configuration: None,
             start_pending: None,
             launch,
@@ -146,6 +148,7 @@ impl Model {
     pub fn apply(&mut self, action: Action) -> Result<(), String> {
         match action {
             Action::Inspect => (),
+            Action::SetAgentRank { id, rank } => crate::rank::set(&mut self.layout, &id, rank)?,
             Action::StartNewShell { .. } => {
                 return Err("New shell intent requires terminal owner validation".into());
             }
@@ -548,7 +551,7 @@ impl Model {
                 reorder(&mut voyage.fleets, source, destination, before);
             }
         }
-        Ok(())
+        crate::rank::validate(&self.layout)
     }
 }
 

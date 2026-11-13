@@ -734,6 +734,33 @@
             "voyage"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "operation": {
+              "const": "set-agent-rank",
+              "type": "string"
+            },
+            "rank": {
+              "enum": [
+                "crew",
+                "captain",
+                "commodore",
+                "admiral"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "operation",
+            "id",
+            "rank"
+          ],
+          "type": "object"
         }
       ]
     },
