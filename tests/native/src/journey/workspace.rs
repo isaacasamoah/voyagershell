@@ -85,6 +85,27 @@ struct Restored {
     docked: bool,
     drawn: Vec<String>,
     missing: Vec<String>,
+    names: Vec<Kept>,
+}
+
+#[derive(PartialEq, Serialize)]
+struct Kept {
+    control: String,
+    given: &'static str,
+    saved: Option<String>,
+    label: Option<String>,
+}
+
+impl Kept {
+    fn saved_as_given(&self) -> bool {
+        self.saved.as_deref() == Some(self.given)
+    }
+
+    fn drawn_as_given(&self) -> bool {
+        self.label
+            .as_deref()
+            .is_some_and(|label| titled(label, self.given))
+    }
 }
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
@@ -407,10 +428,22 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             shell.same_program(native)?;
         }
         native.launch()?;
+        let given = [
+            (&first_fleet, FLEET_NAME),
+            (&first_voyage, VOYAGE_NAME),
+            (&new_vessel, VESSEL_NAME),
+        ];
         let restored = native.settle(
             "the relaunched window holding still",
-            |seen| Some(restored(seen)),
-            |restored| restored.docked && restored.missing.is_empty(),
+            |seen| Some(restored(seen, &given)),
+            |restored| {
+                restored.docked
+                    && restored.missing.is_empty()
+                    && restored
+                        .names
+                        .iter()
+                        .all(|name| name.saved_as_given() && name.drawn_as_given())
+            },
         )?;
         for shell in shells {
             shell.same_program(native)?;
@@ -422,12 +455,20 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 after == before,
             )
             .expect(
+                "every renamed Voyage, Fleet and Vessel still has the name that the journey gave it",
+                restored.names.iter().all(Kept::saved_as_given),
+            )
+            .expect(
                 "the avatar is docked where the document says",
                 restored.docked,
             )
             .expect(
-                "the relaunched window draws every Fleet tab and every Vessel of the selected Fleet",
+                "the relaunched window draws every Voyage row, every Fleet tab and every Vessel of the selected Fleet",
                 restored.missing.is_empty() && !restored.drawn.is_empty(),
+            )
+            .expect(
+                "the relaunched window draws every renamed name",
+                restored.names.iter().all(Kept::drawn_as_given),
             )
             .observed("before", &before)?
             .observed("after", &after)?
@@ -589,8 +630,17 @@ fn at_rest(native: &Native) -> Result<Saved> {
     })
 }
 
-fn restored(seen: &Seen) -> Restored {
+fn restored(seen: &Seen, given: &[(&RenameTarget, &'static str)]) -> Restored {
     let layout = seen.document;
+    let rows = layout
+        .voyages
+        .iter()
+        .filter(|voyage| !voyage.closed)
+        .map(|voyage| {
+            Target::name(&RenameTarget::Voyage {
+                id: voyage.id.clone(),
+            })
+        });
     let tabs = voyages(layout)
         .filter(|voyage| layout.selected_voyage.as_ref() == Some(&voyage.id))
         .flat_map(|voyage| &voyage.fleets)
@@ -612,13 +662,26 @@ fn restored(seen: &Seen) -> Restored {
                 Target::terminal(&placed.id),
             ]
         });
-    let (drawn, missing) = tabs.chain(panes).partition(|target| seen.shows(target));
+    let (drawn, missing) = rows
+        .chain(tabs)
+        .chain(panes)
+        .partition(|target| seen.shows(target));
     let listed = |targets: Vec<Target>| targets.iter().map(Target::to_string).collect();
+    let names = given.iter().map(|&(subject, given)| {
+        let control = Target::name(subject);
+        Kept {
+            given,
+            saved: name_of(layout, subject),
+            label: seen.label(&control).map(str::to_owned),
+            control: control.to_string(),
+        }
+    });
     Restored {
         dock: seen.frame.dock.clone(),
         docked: seen.frame.dock == layout.context,
         drawn: listed(drawn),
         missing: listed(missing),
+        names: names.collect(),
     }
 }
 
@@ -713,20 +776,22 @@ mod tests {
     use voyager_contract::inspection::Frame;
 
     #[test]
-    fn a_relaunch_names_each_tab_and_vessel_that_the_window_does_not_draw() -> Result<()> {
-        let vessel = |id: &str| json!({"id": id, "content": "content-1", "name": "Terminal"});
-        let fleet = |id: &str, vessels: &[&str]| {
-            let vessels: Vec<_> = vessels.iter().map(|id| vessel(id)).collect();
-            json!({"id": id, "name": "Fleet", "root": null, "vessels": vessels})
-        };
-        let voyage = |id: &str, fleets: Vec<serde_json::Value>| json!({"id": id, "name": "Voyage", "fleets": fleets, "portals": []});
+    fn a_relaunch_names_each_control_that_the_window_does_not_draw() -> Result<()> {
+        let vessel = |id: &str, name: &str| json!({"id": id, "content": "content-1", "name": name});
+        let fleet = |id: &str, name: &str, vessels: &[serde_json::Value]| json!({"id": id, "name": name, "root": null, "vessels": vessels});
+        let voyage = |id: &str, name: &str, fleets: Vec<serde_json::Value>| json!({"id": id, "name": name, "fleets": fleets, "portals": []});
         let document: Layout = serde_json::from_value(json!({
             "voyages": [
-                voyage("voyage-1", vec![
-                    fleet("fleet-4", &["placement-3", "placement-10"]),
-                    fleet("fleet-13", &["placement-12"]),
+                voyage("voyage-1", VOYAGE_NAME, vec![
+                    fleet("fleet-4", FLEET_NAME, &[
+                        vessel("placement-3", "Terminal 1"),
+                        vessel("placement-10", "Discarded"),
+                    ]),
+                    fleet("fleet-13", "Fleet 2", &[vessel("placement-12", "Terminal 1")]),
                 ]),
-                voyage("voyage-14", vec![fleet("fleet-17", &["placement-16"])]),
+                voyage("voyage-14", "second-project", vec![
+                    fleet("fleet-17", "Fleet 1", &[vessel("placement-16", "Terminal 1")]),
+                ]),
             ],
             "contents": [],
             "selectedVoyage": "voyage-1",
@@ -734,11 +799,25 @@ mod tests {
             "context": {"kind": "vessel", "id": "placement-10"},
             "nextId": "18"
         }))?;
-        let drawn = |drawn: &[(&str, &str)]| -> Result<Restored> {
+        let renamed = [
+            RenameTarget::Fleet {
+                id: FleetId("fleet-4".into()),
+            },
+            RenameTarget::Voyage {
+                id: VoyageId("voyage-1".into()),
+            },
+            super::vessel(&PlacementId("placement-10".into())),
+        ];
+        let given = [
+            (&renamed[0], FLEET_NAME),
+            (&renamed[1], VOYAGE_NAME),
+            (&renamed[2], VESSEL_NAME),
+        ];
+        let drawn = |drawn: &[(&str, &str, Option<&str>)]| -> Result<Restored> {
             let elements: Vec<_> = drawn
                 .iter()
-                .map(|(role, key)| {
-                    json!({"role":role,"key":key,"bounds":{"x":0.0,"y":0.0,"width":1.0,"height":1.0}})
+                .map(|(role, key, label)| {
+                    json!({"role":role,"key":key,"label":label,"bounds":{"x":0.0,"y":0.0,"width":1.0,"height":1.0}})
                 })
                 .collect();
             let frame: Frame = serde_json::from_value(json!({
@@ -749,30 +828,51 @@ mod tests {
                 "elements": elements,
                 "ambiguous": []
             }))?;
-            Ok(restored(&Seen {
-                document: &document,
-                version: 27,
-                frame: &frame,
-            }))
+            Ok(restored(
+                &Seen {
+                    document: &document,
+                    version: 27,
+                    frame: &frame,
+                },
+                &given,
+            ))
         };
         let whole = [
-            ("fleet-name", "fleet-4"),
-            ("fleet-name", "fleet-13"),
-            ("vessel-name", "placement-3"),
-            ("terminal", "placement-3"),
-            ("vessel-name", "placement-10"),
-            ("terminal", "placement-10"),
+            ("voyage-name", "voyage-1", Some("Keyboard Voyage")),
+            ("voyage-name", "voyage-14", Some("second-project")),
+            ("fleet-name", "fleet-4", Some("Native Fleet 2")),
+            ("fleet-name", "fleet-13", Some("Fleet 2")),
+            ("vessel-name", "placement-3", Some("bash · project")),
+            ("terminal", "placement-3", None),
+            ("vessel-name", "placement-10", Some("bash · project · +")),
+            ("terminal", "placement-10", None),
         ];
         let all = drawn(&whole)?;
-        assert!(all.missing.is_empty() && all.drawn.len() == 6);
+        assert!(all.missing.is_empty() && all.drawn.len() == 8);
         assert!(all.docked && all.dock == document.context);
-        let partial = drawn(&whole[..4])?;
+        let [tab, row, title] = &all.names[..] else {
+            panic!("One name for each renamed control: {}", all.names.len());
+        };
+        assert!(
+            tab.saved_as_given() && !tab.drawn_as_given(),
+            "a tab that draws another name"
+        );
+        assert!(row.saved_as_given() && row.drawn_as_given());
+        assert!(
+            !title.saved_as_given() && title.drawn_as_given(),
+            "a name that a late save replaced"
+        );
+        let partial = drawn(&whole[..6])?;
         assert_eq!(
             partial.missing,
             ["vessel-name \"placement-10\"", "terminal \"placement-10\""]
         );
-        let empty = drawn(&[("fleet-name", "fleet-17"), ("vessel-name", "placement-16")])?;
-        assert!(empty.drawn.is_empty() && empty.missing.len() == 6 && empty.docked);
+        assert!(partial.names[2].label.is_none() && !partial.names[2].drawn_as_given());
+        let other = drawn(&[
+            ("fleet-name", "fleet-17", Some("Fleet 1")),
+            ("vessel-name", "placement-16", Some("bash · second-project")),
+        ])?;
+        assert!(other.drawn.is_empty() && other.missing.len() == 8 && other.docked);
         Ok(())
     }
 
