@@ -1,0 +1,25 @@
+rules:
+  - id: no-experiment-includes
+    check: forbid_code
+    from: ['rs:*', 'crate:*']
+    to: ['source:experiments/*', 'rs:*experiments*']
+  - id: contract-stays-low
+    check: forbid_reach
+    from: voyager-contract
+    to: ['gpui*', voyager-app, voyager-desktop]
+  - id: voyage-close-not-on-client
+    check: forbid_code
+    from: ['rs:voyager_app::voyage_close*']
+    to: ['rs:voyager_app::client*']
+    kinds: [uses]
+  - id: no-module-cycles
+    check: acyclic
+    kind: uses
+  - id: no-script-cycles
+    check: acyclic
+    kind: imports
+  - id: file-size
+    check: max_lines
+    limit: 1000
+    roots: ['app/*', 'contract/src/*', 'desktop/src/*', 'desktop/mods/*', 'content/*']
+    exclude: ['contract/generated/*']

@@ -13,7 +13,6 @@ from proof_common import process_identity, verify_candidate, reference_root
 
 root = reference_root()
 evidence = root / "evidence"
-evidence.mkdir(exist_ok=True)
 parser = argparse.ArgumentParser()
 parser.add_argument("--launch", action="store_true")
 parser.add_argument("--review", action="store_true")
@@ -56,6 +55,8 @@ if args.evidence:
         evidence.mkdir(parents=True, exist_ok=False)
     elif not evidence.is_dir():
         raise RuntimeError("Existing candidate evidence is required")
+else:
+    evidence.mkdir(exist_ok=True)
 port = args.port
 env = dict(os.environ)
 if args.desktop_env:

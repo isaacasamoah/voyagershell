@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "lastVerifiedCommit": "285c1c25d1525ee0780dab89140514352f077b85",
+  "covered": [
+    {
+      "path": "tests/native/src/lifecycle.rs",
+      "items": [
+        "Run::step",
+        "Run::verdict"
+      ]
+    },
+    {
+      "path": "tests/native/src/proof.rs",
+      "items": [
+        "check"
+      ]
+    },
+    {
+      "path": "tests/native/src/main.rs",
+      "items": [
+        "drive: actual gate calls"
+      ]
+    }
+  ],
+  "sourceFingerprint": "22be93cc93e2fd2de795f09d4acb8de42f833c1a1094856133126289824cbadd",
+  "domain": {
+    "representableStatesMaximum": 640,
+    "reachableStates": 124,
+    "events": 10,
+    "traceDepthLimit": null
+  },
+  "scope": "Actual finite verification reporting code. No proof of external observations, operating system, product-wide behavior or concurrency.",
+  "maintenance": "Advance only after covered-code review, the finite check and a relevant negative control. Runtime receipts stay outside Git."
+}

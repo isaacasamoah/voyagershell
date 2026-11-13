@@ -17,9 +17,11 @@ Use a dedicated VOYAGER_WORKSPACE_SESSION for experiments. The default profile n
 
 On contract branches, also run npm run typecheck and npm run contract:check. The earlier experimental content Rust crate lives in experiments/typed-content/contract/. When changing it, run cargo fmt --check, cargo test --locked and cargo clippy --locked --all-targets -- -D warnings from that directory. Keep lockfiles and generated declaration drift checks intact.
 
-Native journeys use the candidate revision's prove.py and focused modules in tests/native/. Choose exactly one route: --foundation for the current native app, --reference for the retained Electron fixture, or --native-mod-host/--native-avatar for the named historical experiments. There is no default route. `python prove.py --help` describes those choices; append --help to a route for its driver options. Supply a unique session, debugging port and new evidence directory. A later --quit uses that same explicit route, evidence and candidate. Do not infer microphone audibility, compositor behavior or another operating system from an X11 test.
+New native verification uses the Rust environment in [tests/native](tests/native/README.md), invoked directly as `tests/native/target/debug/voyager-verification`. Read the project verify skill. Build the locked verifier after SDK preparation, run doctor against a reviewed candidate/hash, and use a named supported journey with a fresh evidence directory. The current implemented journey is Linux X11 terminal scrolling. Workspace, Portal, compositor, provider and other legacy journeys are migration gaps, not implicit fallbacks. Do not infer microphone audibility, compositor behavior or another operating system from X11.
 
-The non-launch dispatcher/path checks use `python -m unittest discover -s tests/native -p test_routes.py`. They check mode refusal, help and source paths. They do not establish a native journey. Keep historical avatar/Notes experiment source in experiments/ and new product journeys with the current shared native helpers in tests/native/.
+Extend the shared environment when a capability is missing. Preserve failing evidence, diagnose fixture versus product, independently demonstrate a fixture repair and rerun the affected behavior. Reuse shared actions, identities, evidence and cleanup; do not create feature-private runners or ad hoc Python/shell proving programs. ETC, orthogonality and DRY apply to this environment as well as the app. Runtime pass, finite proof and quality review remain separate required evidence. Follow CONSTRAINTS.md even when calling code development infrastructure.
+
+The retained Python routes require `--legacy-reproduction` for driver execution. Route help remains available without effects. These routes preserve earlier coverage and enable parity comparison; they do not establish that coverage in Rust. Their non-launch path checks use `python3 -m unittest discover -s tests/native -p test_routes.py`; the default-refusal regression uses `test_rust_route.py`. Unit/source checks do not establish a native journey. Retire old drivers only after named real-surface parity and applicable approval.
 
 The selected native workspace uses one root Cargo workspace and build-only Node dependencies:
 
@@ -33,7 +35,6 @@ cargo fmt --all --check
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo build --release --locked -p voyager-desktop --bin voyager-shell
-python prove.py --foundation --journey workspace --launch --session voyager-unique-name --evidence /absolute/new/evidence --desktop-env /absolute/desktop-environment.json
 ```
 
 `prepare-sdk.py` checks out the pinned upstream GPUI Kit revision in the user
@@ -57,10 +58,12 @@ release artifact; preparing a dependency does not establish a performance gain.
 
 The current workspace checkpoint is described in [docs/workspace.md](docs/workspace.md). Its Core-backed shell works in a Fleet Vessel or persistent Voyage Portal. The terminal-grid candidate demonstrated native colored Unicode, alternate screen and dynamic sizing, as described in [docs/terminal.md](docs/terminal.md). Its continuation adds selection, clipboard and native composition source, with the actual native journeys still open. Full terminal behavior and integrated avatar/chat remain unfinished. The combined checkpoint is under review. Performance measurements use the resulting `target/release/voyager-shell` and record the exact artifact and workload. Debug build timings do not establish release runtime performance.
 
-The focused native terminal journey uses the same maintained fixture:
+## Retained journey reproduction
+
+The following describes retained Python coverage pending migration. Use it only for an explicitly selected reproduction or parity comparison. Preserve its candidate, unique session, debugging port and new evidence directory. A later --quit requires that same explicit route, evidence and candidate. The focused terminal journey is:
 
 ```sh
-python prove.py --foundation --journey portal-terminal --launch --binary target/release/voyager-shell --session voyager-unique-name --evidence /absolute/new/evidence --desktop-env /absolute/desktop-environment.json
+python3 prove.py --legacy-reproduction --foundation --journey portal-terminal --launch --binary target/release/voyager-shell --session voyager-unique-name --evidence /absolute/new/evidence --desktop-env /absolute/desktop-environment.json
 ```
 
 This journey verifies shell input/output, known refusal and explicit Refresh, retained Portal process identity across Fleet changes, rename-to-terminal focus and a refused sibling that must not block the Portal. Its final cleanup explicitly stops only its dedicated Core session after the application quits. It does not establish the application's full Quit lifecycle.
@@ -77,7 +80,7 @@ CONSTRAINTS.md owns the review rules. Keep a fresh independent review and releva
 
 Make one logical change per PR. Preserve the existing MIT license and source attribution. Local task specs/plans remain untracked. Do not commit profiles, screenshots, transcripts or credentials. Merging, installation and replacing a demo are separate owner decisions.
 
-The native avatar and content experiments are retained under experiments/gpui-avatar/ and experiments/native-content/. Their Cargo manifests build those experiments only; they do not establish the working foundation. Shared original artwork lives in desktop/assets. Use the root prove.py native routes with an explicitly selected isolated binary/session. Native performance measurements require cargo build --release and the resulting target/release executable, with the exact artifact and all helper processes recorded.
+The native avatar and content experiments are retained under experiments/gpui-avatar/ and experiments/native-content/. Their Cargo manifests build those experiments only; they do not establish the working foundation. Shared original artwork lives in desktop/assets. Historical reproduction uses the root prove.py routes with --legacy-reproduction and an explicitly selected isolated binary/session. New verification extends the native Rust environment. Native performance measurements require cargo build --release and the resulting target/release executable, with the exact artifact and all helper processes recorded.
 
 `npm test` checks the current TypeScript composition and generated JavaScript
 before its Node tests. It runs the headless Rust declaration exporter and needs
