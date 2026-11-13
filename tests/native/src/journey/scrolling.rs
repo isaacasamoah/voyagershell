@@ -80,7 +80,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 "Probe identity changed"
             );
             let verdict = Verdict::new()
-                .expect("wheel up moved the program up", position(&up)? < 100)
+                .expect(
+                    "wheel up moved the program up",
+                    position(&up)? < position(&initial)?,
+                )
                 .expect(
                     "wheel down moved the program back down",
                     position(&down)? > position(&up)?,
