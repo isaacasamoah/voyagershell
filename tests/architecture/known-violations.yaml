@@ -40,7 +40,7 @@ known:
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/core.rs'
-    limit: 1520
+    limit: 1264
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/tests.rs'
