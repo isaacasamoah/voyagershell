@@ -1,6 +1,6 @@
 ---
 name: core-viewers
-description: Model-check VoyagerShell's Core terminal viewer slots and output buffers with TLA+. Use when a change touches Viewer, Lease, Stream or Streams in app/src/core.rs, the Core reader in app/src/core_reader.rs, the Core writer thread, terminal_attach, Core::begin, Pending::wait, install_viewer in desktop/src/host.rs or the take/credit pump in desktop/src/terminal.rs. It does not cover terminal rendering, input bytes or Herdr Core itself.
+description: Model-check VoyagerShell's Core terminal viewer slots and output buffers with TLA+. Use when a change touches Viewer, WeakViewer or Lease in app/src/core_viewer.rs, Stream or Streams in app/src/core.rs, the terminal receipt cache in app/src/client.rs, the Core reader in app/src/core_reader.rs, the Core writer thread, terminal_attach, Core::begin, Pending::wait, install_viewer in desktop/src/host.rs or the take/credit pump in desktop/src/terminal.rs. It does not cover terminal rendering, input bytes or Herdr Core itself.
 ---
 
 # Core viewer slots
@@ -53,7 +53,8 @@ path back fails the check.
    viewer was installed, or a new viewer refused because the old one's close
    found the control queue full, kept its slot for the rest of the session. A
    `Lease` shared by every clone of a `Viewer` now frees the stream and queues
-   CLOSE when the last clone drops.
+   CLOSE when the last clone drops. The client's receipt cache holds only a
+   `WeakViewer`, so a cached receipt never keeps a refused viewer alive.
 
 ## Coverage
 
@@ -61,16 +62,19 @@ path back fails the check.
 |---|---|---|
 | `app/src/core.rs` | `Stream::occupied`, `Streams::occupied` | `Occupied`, `OccupiedCount` |
 | `app/src/core.rs` | `VIEW_LIMIT`, `TOTAL_LIMIT`, `VIEWER_LIMIT` | `ViewLimit`, `TotalLimit`, `ViewerLimit` |
-| `app/src/core.rs` | `enqueue`, `Viewer::send`, control queue capacity 64 | `Enqueue`, `TryEnqueue`, `ControlCapacity` |
+| `app/src/core.rs` | `enqueue`, control queue capacity 64 | `Enqueue`, `TryEnqueue`, `ControlCapacity` |
+| `app/src/core_viewer.rs` | `Viewer::send` | `Enqueue` |
 | `app/src/core.rs` | `Core::terminal_attach` slot check, `Core::begin` and its `attaches` set | `Attach` |
-| `app/src/core.rs` | `Lease::close`, `Lease::release`, `Drop for Lease` | `Replace`, `InstallFails` |
-| `app/src/core.rs` | `Viewer::take`, `Viewer::credit`, `Viewer::close`, `Viewer::ensure_open`, `Core::viewer` | `Take`, `GiveCredit`, `Replace`, `Install`, `InstallFails` |
+| `app/src/core_viewer.rs` | `Lease::close`, `Lease::release`, `Drop for Lease`, `WeakViewer::upgrade` | `Replace`, `InstallFails` |
+| `app/src/core_viewer.rs` | `Viewer::take`, `Viewer::credit`, `Viewer::close`, `Viewer::ensure_open` | `Take`, `GiveCredit`, `Replace`, `Install`, `InstallFails` |
+| `app/src/core.rs` | `Core::viewer` | `Install`, `InstallFails` |
 | `app/src/core_reader.rs` | `Reader::receive`, `Reader::reply`, `Reader::output`, `Reader::ended` | `Read`, `ReadReply`, `ReadData`, `ReadEnd` |
-| `app/src/core_pending.rs` | `Pending::wait` timeout, `Drop for Pending` | `TimeOut`, the `waiting` check in `ReadReply` |
+| `app/src/core_pending.rs` | `Pending::wait` timeout and its recheck under the replies lock, `Drop for Pending` | `TimeOut`, the `waiting` check in `ReadReply` |
+| `app/src/client.rs` | `terminal_requests` receipt cache of `WeakViewer` | `InstallFails` frees the slot because no other strong `Viewer` exists |
 | `desktop/src/host.rs` | `install_viewer` | `Install`, `Replace`, `InstallFails` |
 | `desktop/src/terminal.rs` | `Pane::pump` | `Take`, `GiveCredit` |
 
-Sync commit: `7020892cfb0407b78d78526f5e242f3cf0e43a3d`
+Sync commit: `4cc27da7a526396bcf3ed3ff4a43f1d750870478`
 
 `check.sh` reads the file column and the sync commit from this file. Move the sync
 commit forward only after you have read every diff in those files since the
@@ -97,8 +101,9 @@ It leaves out the activity channel, input and protocol replies, read and write
 I/O failures, Core crashing, and the desktop never draining a viewer it holds.
 Each modelled action is one step, matching code that holds the `streams` lock
 or runs on one thread for that step. A timeout and an attach reply are separate
-steps, so the model does not cover a reply that the reader hands over in the
-instant `Pending::wait` gives up.
+steps. That is true to the code because `Pending::wait`, after it times out,
+removes its reply slot under the replies lock and takes any reply the reader
+already handed over.
 
 ## Telling a bug from a modelling error
 
