@@ -20,7 +20,7 @@ function toDocuments(model) {
   const code = {
     schema: "architecture/v1",
     kind: "code",
-    source: { ...source, app: model.meta.app ?? undefined, layer: model.meta.layer ?? undefined, producer: "experiments/app-atlas (facts from experiments/architecture-map, meaning from the app's layer/*.yaml, runtime from its runs/)", extractor: model.meta.observedGenerator },
+    source: { ...source, app: model.meta.app ?? undefined, layer: model.meta.layer ?? undefined, producer: "experiments/app-atlas (facts from tests/architecture, meaning from the app's layer/*.yaml, runtime from its runs/)", extractor: model.meta.observedGenerator },
     view: model.meta.view ?? {},
     levels: LEVELS,
     features: model.features,

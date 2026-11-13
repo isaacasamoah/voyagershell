@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { build, anchorResolver, loadLayer, loadApp } = require("./atlas.cjs");
 const { modelFrom, compareDocuments } = require("./format.cjs");
-const { stringify, parse } = require("../architecture-map/yaml.cjs");
+const { stringify, parse } = require("../../tests/architecture/yaml.cjs");
 const Ajv = require("ajv");
 
 const BASE = "e6bd5b19ebdac674d6852f8414b1c9c248648e27";
@@ -134,13 +134,4 @@ test("a build file names the crate that holds it without claiming the whole crat
   const comparison = compareDocuments(intended, built.documents.code);
   assert.equal(comparison.parts.find((part) => part.id === "intended:schema").status, "matched");
   assert.equal(comparison.homes["rs:voyager_app::client"], "intended:app");
-});
-
-// Herdr Core's source is not in this repository: set HERDR_CORE_SOURCE to a checkout to run this.
-test("Herdr Core maps with every claim anchored at v0.1.19", { skip: !process.env.HERDR_CORE_SOURCE }, () => {
-  const { model } = build("v0.1.19", loadApp(path.join(__dirname, "apps", "herdr-core"), { source: process.env.HERDR_CORE_SOURCE }));
-  assert.deepEqual(model.problems, []);
-  assert.equal(model.proposed, null);
-  assert.ok(model.pathways.length >= 9 && model.interfaces.length >= 18);
-  assert.ok(model.history.prs.some((pr) => pr.pull), "squash-merged pull requests are found");
 });

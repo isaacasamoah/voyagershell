@@ -4,8 +4,8 @@ note: 'Everything the atlas needs to know about Voyager Shell that is not in its
 name: Voyager Shell
 # The git checkout to read, relative to this file. --source overrides it.
 source: ../../../..
-# The architecture-map extractor settings, shared with experiments/architecture-map.
-extractor: ../../../architecture-map/config.json
+# The extractor settings, shared with the architecture gate in tests/architecture.
+extractor: ../../../../tests/architecture/config.json
 
 # Layer ids that name a generated node differently.
 aliases:

@@ -2468,7 +2468,7 @@ pathways:
             at: {path: app/src/worktrees.rs, find: '&["worktree", "add", "-b", branch, "--", path, commit.trim()],'}
             runs_on: background
             via: process
-            says: 'On a thread spawned by the owner, git creates the branch and checkout under the main checkout''s .worktrees folder, after adding /.worktrees/ to Git''s local exclude file.'
+            says: 'On a thread spawned by the owner, git creates the branch and checkout under the main checkout''s worktrees folder, after adding that folder to Git''s local exclude file.'
             symbol: 'voyager_app::worktrees::create'
           - id: launch-agent-1c
             fn: worktree_voyage_action

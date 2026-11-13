@@ -1,12 +1,12 @@
 // App atlas: joins generated code facts with a small hand-written layer and renders one map.
-// Facts come from ../architecture-map (observe.cjs). Everything a person wrote lives in layer/.
+// Facts come from tests/architecture (observe.cjs). Everything a person wrote lives in layer/.
 const { execFileSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { observe, lockReach } = require("../architecture-map/observe.cjs");
-const { merges } = require("../architecture-map/history.cjs");
-const { parse, stringify } = require("../architecture-map/yaml.cjs");
+const { observe, lockReach } = require("../../tests/architecture/observe.cjs");
+const { merges } = require("../../tests/architecture/history.cjs");
+const { parse, stringify } = require("../../tests/architecture/yaml.cjs");
 const { toDocuments, compareDocuments, modelFrom } = require("./format.cjs");
 
 const TOOL_ROOT = path.resolve(__dirname, "../..");
@@ -132,7 +132,8 @@ function collect(revision, app) {
   const { git, layerDir, config } = app;
   const mapConfig = app.extractor;
   const commit = git(["rev-parse", revision]).trim();
-  const observed = observe(app.source, commit, mapConfig).observed;
+  const observation = observe(app.source, commit, mapConfig);
+  const observed = observation.observed;
   const layer = loadLayer(layerDir);
   const lockFile = path.join(layerDir, "anchors.lock.yaml");
   const lock = fs.existsSync(lockFile) ? parse(fs.readFileSync(lockFile, "utf8"))?.anchors ?? {} : null;
@@ -258,7 +259,7 @@ function collect(revision, app) {
     links: observed.edges.map((edge) => ({ kind: edge.kind, from: edge.from, to: edge.to, at: edge.evidence?.[0] ? `${edge.evidence[0].path}:${edge.evidence[0].line}` : null })),
   };
   const reach = {};
-  if (read("Cargo.lock")) for (const node of observed.nodes.filter((item) => item.kind === "crate")) reach[node.id] = lockReach(app.source, commit, node.name);
+  if (observation.lock) for (const node of observed.nodes.filter((item) => item.kind === "crate")) reach[node.id] = lockReach(observation.lock, node.name);
 
   for (const module of modules) {
     if (module.entry) module.entry.id = addFunction(module.entry.fn, module.id, module.entry.at, module.entry.plain);
@@ -331,7 +332,7 @@ function collect(revision, app) {
     const observed = (item.observed_core ?? []).map((method) => {
       const run = coreRuns.find((entry) => entry.methods[method] || entry.notifications[method]);
       const found = run?.methods[method] ?? run?.notifications[method];
-      if (!found) problems.push({ kind: "interface-unobserved-method", id: `${item.id}:${method}` });
+      if (!found && coreRuns.length) problems.push({ kind: "interface-unobserved-method", id: `${item.id}:${method}` });
       return found ? { method, run: run.id, count: found.count, request: found.request ?? found.example, result: found.result, error: found.error } : null;
     }).filter(Boolean);
     return { ...item, request: side(item.request), response: side(item.response), at: resolve(item.at), observed };

@@ -8,7 +8,7 @@ One YAML format for an application's architecture, whether it was read from code
 
 | `kind` | Written by | Says |
 | --- | --- | --- |
-| `code` | A code reader (here: architecture-map facts plus an app's checked layer and runtime runs) | What the code at one commit contains and does. |
+| `code` | A code reader (here: architecture extractor facts plus an app's checked layer and runtime runs) | What the code at one commit contains and does. |
 | `intended` | A design (here: an app's `layer/proposed.yaml`) or a spec reader (here: `import-v0.cjs`, from the spec reader's architecture-map/v0 file) | What the architecture should be. |
 | `comparison` | `compareDocuments(intended, code)` | Where the code matches, misses or breaks the intended design. |
 
@@ -87,7 +87,7 @@ A compared part also lists `unmatched` names that found no code.
 
 ## Writing the YAML
 
-The documents use the strict YAML subset read by `../architecture-map/yaml.cjs`. Write numbers as whole numbers (milliseconds, not fractional seconds): the reader keeps anything else as text.
+The documents use the strict YAML subset read by `tests/architecture/yaml.cjs`. Write numbers as whole numbers (milliseconds, not fractional seconds): the reader keeps anything else as text.
 
 ## Changing the format
 

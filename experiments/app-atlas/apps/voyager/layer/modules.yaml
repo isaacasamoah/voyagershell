@@ -640,7 +640,7 @@ modules:
       fn: 'core_endpoint::endpoint (Unix)'
       path: app/src/core_endpoint.rs
       find: 'let uid = unsafe { libc::getuid() };'
-      plain: 'Uses XDG_RUNTIME_DIR, else /run/user/<uid>, else the state folder, then herdr-core/<session>.sock.'
+      plain: 'Uses XDG_RUNTIME_DIR, else the per-user runtime folder, else the state folder, then herdr-core/<session>.sock.'
     key:
       - {fn: 'core_endpoint::unix_endpoint', path: app/src/core_endpoint.rs, find: 'fn unix_endpoint(', plain: 'The pure path rule, separated so a test can check it matches Core.'}
     talks_to: 'core.rs passes the result to hc connect as HC_SOCKET.'

@@ -1,7 +1,7 @@
 // Converts an architecture-map/v0 intended file (the spec reader's output, with its recorded
 // judgements) into an architecture/v1 intended document, so specs and designs share one format.
 // The v0 file cites spec lines; every citation is carried over unchanged.
-const { digest } = require("../architecture-map/observe.cjs");
+const { digest } = require("../../tests/architecture/observe.cjs");
 const { LEVELS, resolver } = require("./format.cjs");
 
 const CHECKS = { forbid_edge: "forbid_code", require_edge: "require_code", forbid_reach: "forbid_reach", judged: "judged" };

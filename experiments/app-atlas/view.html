@@ -1016,7 +1016,7 @@ function renderAbout() {
   const layer = m.layer ?? "layer";
   const appDir = layer.replace(/\/layer$/, "");
   h += `<h2>What is generated and what is written by hand</h2><table><tr><th>Part</th><th>Source</th><th>How it stays true</th></tr>
-  <tr><td>Crates, modules, scripts and the code links between them (${m.counts.modules} modules)</td><td>The architecture-map extractor, rules ${esc(m.observedGenerator.rules)}</td><td>Regenerated from the commit every build.</td></tr>`;
+  <tr><td>Crates, modules, scripts and the code links between them (${m.counts.modules} modules)</td><td>The tests/architecture extractor, rules ${esc(m.observedGenerator.rules)}</td><td>Regenerated from the commit every build.</td></tr>`;
   if (DATA.history.prs.length) h += `<tr><td>Pull requests and commits</td><td>Git history${DATA.history.from ? ` since <code>${esc(DATA.history.from)}</code>` : ""}</td><td>Regenerated every build.</td></tr>`;
   h += `<tr><td>Concepts, features, descriptions, entry points, reasons and pathways${DATA.proposed ? ", proposals and the intended architecture" : ""}</td><td><code>${esc(layer)}/*.yaml</code></td><td>Every claim points at source text. The build finds each line again and flags any that moved or changed.</td></tr>`;
   if (DATA.interfaces.length) h += `<tr><td>Interfaces: what each connection carries and why</td><td><code>${esc(layer)}/interfaces.yaml</code></td><td>Field names come from the code; each shape links to where it is defined.</td></tr>`;
