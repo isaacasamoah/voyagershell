@@ -353,8 +353,13 @@ list. Voyage renames and live bindings change only when the list began at the
 current version; exited panels close either way, because an exit is final. Calls
 whose reply decides the next effect stay on the owner in order: document saves
 with their version compare-and-set, the open/run/attach chain, liveness checks
-before a Send, Stop or reopen, Quit, and context preparation. They move with the
-front door, which owns ordered effects.
+before a Send, Stop or reopen, Quit, and context preparation. Reads stay there
+too: the administrator's process List (`terminal.list`) and Read
+(`terminal.get`, then `terminal.read`) in `app/src/process.rs`, the
+`terminal.list` checks before a worktree removal, a Voyage close and a content
+package change from a live directory, and the `events.subscribe` that
+resubscribes activity. They move with the front door, which owns ordered
+effects.
 
 Core events arrive on one subscription with no filter. A label filter would
 match only an exact value, and Core numbers every event in one sequence, so a

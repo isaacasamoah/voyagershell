@@ -586,11 +586,27 @@ that a wheel report names; both are gaps.
 shell, so a program outside the app starts in the run's Core session, and waits
 until Core reports it finished. The saved layout version must
 stay the same and the placed terminal must stay shown with no new Vessel.
-`exit-closes` then types `exit` into the placed shell and measures, at the
-fixture's 80 ms glance, how long the Vessel takes to leave the drawn frame after
-a newer layout is saved. It must close within 1 s. The record `exit to closed ms`
-is the exit-to-shown delay. The app's 3 s header observation alone meets that
-bound only when its next tick happens to fall within 1 s of the exit.
+`exit-closes` then proves that the placed shell's exit closes its Vessel
+through Core's finished event, not through the header's observation. The
+header observes the workspace, waits 3 s and observes again, and an observation
+also closes an exited panel. The case writes a loop to `~/tick` in the run's
+home and types only `. ~/tick` into the placed shell, because under heavy load
+the app can refuse a keystroke as busy and a long typed line then loses a
+character. Every 50 ms the loop writes the wall-clock time to `exit-ticks/at-N` and then changes
+into `exit-ticks/tick-N`. The header's Vessel label names the folder that its
+last observation listed, so the first label that names `tick-N` shows that an
+observation listed Core's terminals after the time in `at-N`. The header's next
+observation cannot start until 3 s after that. The case then creates
+`exit-ticks/stop`; the loop ends and the shell exits. A newer layout must be saved
+before the time in `at-N` plus 3 s, and the Vessel must then leave the drawn
+frame. The deadline does not depend on machine speed: a build that waits for the
+observation misses it under any load, and load only takes margin from a build
+that closes on the event. The case records `observed tick`, `refresh margin ms`,
+`exit to saved ms` (from `stop` to the newer saved layout, at the fixture's 80 ms
+poll) and `exit to closed ms` (from `stop` to the drawn closure, at its 80 ms
+glance). `exit to closed ms` is the exit-to-shown delay. The case assumes that
+nothing else saves the layout or observes the workspace in that interval, which
+holds after `foreign-exit` because that case leaves the layout unchanged.
 
 The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The probe counts the wheel reports and the cursor keys that move it, and it writes both counts to its state file. The `arrows` case expects cursor keys and no wheel reports, and the `mouse` case expects wheel reports and no cursor keys. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
 
