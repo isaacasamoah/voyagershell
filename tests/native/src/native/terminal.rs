@@ -159,6 +159,14 @@ pub struct Terminal {
     shell: Identity,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Program {
+    pub state: Option<String>,
+    pub pid: Option<u64>,
+    pub argv: serde_json::Value,
+    pub same: bool,
+}
+
 impl Terminal {
     pub fn first(native: &mut Native) -> Result<Self> {
         let placement = until("a placed first terminal", || {
@@ -171,7 +179,7 @@ impl Terminal {
                 .and_then(|content| placement_of(&layout, &content.id).cloned()))
         })?;
         let terminal = Self::bind(native, &placement)?;
-        native.identify(Some(&terminal))?;
+        native.identify_first(&terminal)?;
         Ok(terminal)
     }
 
@@ -201,6 +209,19 @@ impl Terminal {
             address,
             placement: placement.clone(),
             shell,
+        })
+    }
+
+    pub fn program(&self, native: &Native) -> Result<Program> {
+        let reported = native
+            .system
+            .rpc("terminal.get", json!({"terminal":self.address}))?;
+        let pid = reported["pid"].as_u64();
+        Ok(Program {
+            state: reported["state"].as_str().map(str::to_owned),
+            pid,
+            argv: reported["argv"].clone(),
+            same: self.shell.verify().is_ok() && pid == Some(u64::from(self.shell.pid)),
         })
     }
 

@@ -111,6 +111,16 @@ case that runs out of order ends the run as a fixture error. If `drive` returns
 without running a declared case although no case failed, the run is
 inconclusive.
 
+A journey may stop Core between launches, in place of a reboot.
+`Native::stop_core` refuses while a candidate runs. It checks the bound Core's
+identity, sends `server.stop`, and waits until the socket is gone and the
+process has exited. The next `launch` lets the app's `hc connect` start a new
+Core and binds that Core's identity. The verifier never starts a Core.
+`Native::live_terminals` returns the sorted addresses of the terminals that
+Core reports live. `Terminal::program` returns the state, PID and `argv` that
+Core reports for a terminal, and whether the bound shell is still the same
+process. A journey judges these values as expectations.
+
 ### Negative controls
 
 Each journey has a patch at `tests/native/controls/JOURNEY.patch`. The patch
@@ -134,7 +144,11 @@ The `terminal-scrolling` patch makes the terminal ignore an upward wheel in
 ordinary shell history. `normal-history` then fails on the expectation
 `wheel up draws the live screen's lines lower, below earlier history`. The `workspace` patch upper-cases a
 submitted name. `rename-fleet-enter` then fails on the expectation `the saved
-name is the typed text`, and the observed name is `NATIVE FLEET`.
+name is the typed text`, and the observed name is `NATIVE FLEET`. The
+`quit-restore` patch makes a relaunch clear the backend of a terminal that is
+still live, so the app starts a second shell while the first keeps running.
+`relaunch-reattaches` then fails on the expectation `Core lists the same live
+terminals after the relaunch`, with two live addresses observed.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
@@ -472,7 +486,10 @@ waits (`doc.get`, `terminal.read`) is recorded only when its reply differs
 from the previous reply, so the ledger shows inputs and changes.
 `inspection-N.json` holds the last frame of each launch. `observations.json` holds the observed cases. Screenshots have unique names.
 `doctor.json`, `launch.json`, `identity.json`, native/display logs and `checks.json`
-retain candidate and environment identities. `sandbox.json` records the session
+retain candidate and environment identities. `identity.json` names the bound
+Core and lists each Core that the journey stopped, in order. A case that ends
+with the candidate closed records an `unkept` event in place of its window
+capture. `sandbox.json` records the session
 name and the complete bubblewrap command. `containment.json` holds the canary
 results. The verifier records its own binary and source fingerprints. Changed
 Rust source requires a rebuild before a run.
