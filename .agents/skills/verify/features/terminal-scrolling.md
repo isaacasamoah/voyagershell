@@ -3,8 +3,10 @@
 ## Sub-features
 
 Ordinary shell history moves locally in both directions. An alternate-screen
-program receives cursor input; a mouse-reporting program receives its wheel
-protocol. Closing and reopening the viewer preserves the Core shell and history.
+program that did not ask for mouse reports receives cursor keys and no wheel
+reports. A program that asked for SGR mouse reports receives wheel reports and
+no cursor keys. Closing and reopening the viewer preserves the Core shell and
+history.
 
 ## How to get to it (user POV)
 
@@ -15,16 +17,30 @@ down, exit the probe, close the viewer and reopen the same isolated profile.
 ## Driving it with the maintained fixture
 
 Follow the exact doctor and run commands in ../SKILL.md. The Rust journey in
-tests/native/src/scrolling.rs owns the recipe. Terminal product behavior is owned
+tests/native/src/journey/scrolling.rs owns the recipe. Terminal product behavior is owned
 by desktop/src/terminal.rs, terminal_screen.rs and terminal_view.rs in the selected
 candidate. The retained fixed replay also uses terminal_scroll.rs. Source identity
 and hash come from the candidate receipt, not the current checkout's file list.
 
 The expected full-screen probe positions are 100, then 82 after six upward wheel
 events, then 100 after downward events. The automated check requires movement in
-both directions and changed captures; it does not rely solely on probe state.
-Normal history must move and return to the same captured region. Core and shell
-identity must survive viewer reattachment. Inspect all direction captures.
+both directions, and the probe's drawn lines must move by as many rows as its
+position changed; it does not rely solely on probe state.
+The probe counts the cursor keys and the wheel reports that move it, as `keys`
+and `wheel` in its state file. The `arrows` case expects cursor keys only, and
+the `mouse` case expects wheel reports only. A wheel report is an SGR report
+for button 64 or 65. The journey proves no other mouse protocol.
+In normal history, wheel up must draw the live screen's lines lower, below
+earlier lines, and wheel down must return the same capture. After reattachment
+the live screen must draw the same printed lines at the same places. Core and
+shell identity must survive viewer reattachment. Inspect all direction captures.
+
+## Negative control
+
+tests/native/controls/terminal-scrolling.patch makes the terminal ignore an
+upward wheel in ordinary shell history. A candidate built with it must fail
+`normal-history` on the expectation
+`wheel up draws the live screen's lines lower, below earlier history`.
 
 ## Gotchas
 

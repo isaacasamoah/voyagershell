@@ -1,5 +1,5 @@
 use crate::sandbox;
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -11,7 +11,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
-    Arc, OnceLock,
+    Arc, Mutex, OnceLock,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::thread::sleep;
@@ -62,24 +62,35 @@ pub fn until_cleanup<T>(name: &str, observe: impl FnMut() -> Result<Option<T>>) 
         .ok_or_else(|| TimedOut(name.into()).into())
 }
 
+pub const QUIET: Duration = Duration::from_millis(150);
+
+struct Held<T>(Option<(T, Instant)>);
+
+impl<T: PartialEq> Held<T> {
+    fn see(&mut self, value: Option<T>, now: Instant) -> bool {
+        let since = match (self.0.take(), &value) {
+            (Some((previous, since)), Some(value)) if previous == *value => since,
+            _ => now,
+        };
+        self.0 = value.map(|value| (value, since));
+        self.0.is_some() && now.duration_since(since) >= QUIET
+    }
+}
+
 pub fn settle<T: PartialEq>(
     within: Duration,
-    quiet: Duration,
-    mut observe: impl FnMut() -> Result<T>,
-    expected: impl Fn(&T) -> bool,
-) -> Result<T> {
-    let mut last: Option<(T, Instant)> = None;
-    poll(within, Duration::from_millis(10), true, || {
-        let value = observe()?;
-        let since = match last.take() {
-            Some((previous, since)) if previous == value => since,
-            _ => Instant::now(),
-        };
-        let done = expected(&value) && since.elapsed() >= quiet;
-        last = Some((value, since));
-        Ok(done.then_some(()))
+    every: Duration,
+    mut read: impl FnMut() -> Result<Option<T>>,
+    wanted: impl Fn(&T) -> bool,
+) -> Result<Option<T>> {
+    let mut held = Held(None);
+    let mut still = false;
+    poll(within, every, true, || {
+        still = held.see(read()?, Instant::now());
+        let settled = still && held.0.as_ref().is_some_and(|(value, _)| wanted(value));
+        Ok(settled.then_some(()))
     })?;
-    Ok(last.context("Nothing was observed")?.0)
+    Ok(held.0.filter(|_| still).map(|(value, _)| value))
 }
 
 static CANCELLED: OnceLock<Arc<AtomicBool>> = OnceLock::new();
@@ -162,25 +173,66 @@ pub struct Owned {
     pub identity: Identity,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Stopped {
+    Exited { signals: u32 },
+    Killed { signals: u32, stuck: String },
+}
+
+const RESIGNAL: Duration = Duration::from_secs(1);
+
 impl Owned {
-    pub fn stop(&mut self) -> Result<()> {
+    pub fn stop(&mut self) -> Result<Stopped> {
+        self.stop_within(PATIENCE)
+    }
+
+    pub fn stop_within(&mut self, patience: Duration) -> Result<Stopped> {
+        let mut signals = 0;
         if self.child.try_wait()?.is_none() {
             self.identity.verify()?;
             let pid = rustix::process::Pid::from_raw(i32::try_from(self.identity.pid)?)
                 .context("Invalid owned PID")?;
-            rustix::process::kill_process(pid, rustix::process::Signal::TERM)?;
-            if let Err(error) = until_cleanup("owned child graceful exit", || {
-                Ok(self.child.try_wait()?.map(|_| ()))
-            }) {
+            let mut signalled: Option<Instant> = None;
+            let exited = poll(patience, Duration::from_millis(80), false, || {
+                if self.child.try_wait()?.is_some() {
+                    return Ok(Some(()));
+                }
+                if signalled.is_none_or(|at| at.elapsed() >= RESIGNAL) {
+                    rustix::process::kill_process(pid, rustix::process::Signal::TERM)?;
+                    signalled = Some(Instant::now());
+                    signals += 1;
+                }
+                Ok(None)
+            })?;
+            if exited.is_none() {
                 self.identity.verify()?;
+                let stuck = stuck(self.identity.pid);
                 self.child.kill()?;
                 self.child.wait()?;
-                bail!("Owned child required forced termination: {error:#}");
+                return Ok(Stopped::Killed { signals, stuck });
             }
         }
         self.child.wait()?;
-        Ok(())
+        Ok(Stopped::Exited { signals })
     }
+}
+
+fn stuck(pid: u32) -> String {
+    let read = |file: &str| {
+        fs::read_to_string(format!("/proc/{pid}/{file}"))
+            .unwrap_or_else(|error| format!("unreadable: {error}"))
+    };
+    let stat = read("stat");
+    let state = stat
+        .rsplit_once(')')
+        .and_then(|(_, fields)| fields.split_whitespace().next())
+        .unwrap_or("unknown");
+    let syscall = read("syscall");
+    format!(
+        "state {state}, waiting in {}, system call {}",
+        read("wchan").trim(),
+        syscall.split_whitespace().next().unwrap_or("unknown")
+    )
 }
 
 impl Owned {
@@ -206,6 +258,7 @@ pub struct System {
     pub env: BTreeMap<String, String>,
     acknowledged: AtomicUsize,
     dispatch_mark: AtomicUsize,
+    watched: Mutex<BTreeMap<String, Value>>,
 }
 
 impl System {
@@ -252,6 +305,7 @@ impl System {
             env,
             acknowledged: AtomicUsize::new(0),
             dispatch_mark: AtomicUsize::new(0),
+            watched: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -319,9 +373,11 @@ impl System {
                     drop(child.stdin.take());
                 }
                 let output = child.wait_with_output()?;
-                if matches!(output.status.code(), Some(124 | 137)) {
-                    return Err(TimedOut(format!("{program} {}", arguments.join(" "))).into());
-                }
+                ensure!(
+                    !matches!(output.status.code(), Some(124 | 137)),
+                    "The host tool {program} {} did not finish within 8 s",
+                    arguments.join(" ")
+                );
                 ensure!(
                     output.status.success(),
                     "{program} failed with {}: {}",
@@ -376,6 +432,31 @@ impl System {
     }
 
     pub fn rpc(&self, method: &str, params: Value) -> Result<Value> {
+        let request = self.request(method, params)?;
+        self.record(json!({"event":"Core-intent","request":request}))?;
+        let reply = self.exchange(&request)?;
+        self.record(json!({"event":"Core-observation","reply":reply}))?;
+        answer(&request, reply)
+    }
+
+    pub fn watch(&self, method: &str, params: Value) -> Result<Value> {
+        let subject = format!("{method} {params}");
+        let request = self.request(method, params)?;
+        let reply = self.exchange(&request)?;
+        let seen = json!([reply["result"], reply["error"]]);
+        let changed = self
+            .watched
+            .lock()
+            .expect("the watch record is never held across a panic")
+            .insert(subject, seen.clone())
+            != Some(seen);
+        if changed {
+            self.record(json!({"event":"Core-observation","request":request,"reply":reply}))?;
+        }
+        answer(&request, reply)
+    }
+
+    fn request(&self, method: &str, params: Value) -> Result<Value> {
         ensure!(
             fs::metadata(self.socket())?.file_type().is_socket(),
             "Dedicated Core is absent"
@@ -392,9 +473,10 @@ impl System {
             ),
             "Unsupported verification Core operation"
         );
-        let id = stamp() as u64;
-        let request = json!({"jsonrpc":"2.0","id":id,"method":method,"params":params});
-        self.record(json!({"event":"Core-intent","request":request}))?;
+        Ok(json!({"jsonrpc":"2.0","id":stamp() as u64,"method":method,"params":params}))
+    }
+
+    fn exchange(&self, request: &Value) -> Result<Value> {
         let mut stream = UnixStream::connect(self.socket())?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
         stream.set_write_timeout(Some(Duration::from_secs(5)))?;
@@ -404,17 +486,21 @@ impl System {
             .take(8 * 1024 * 1024)
             .read_until(b'\n', &mut bytes)?;
         ensure!(bytes.ends_with(b"\n"), "Incomplete or oversized Core reply");
-        let value: Value = serde_json::from_slice(&bytes)?;
-        self.record(json!({"event":"Core-observation","reply":value}))?;
-        ensure!(
-            value["id"] == id && value["jsonrpc"] == "2.0",
-            "Core reply identity disagrees"
-        );
-        value
-            .get("result")
-            .cloned()
-            .context(format!("Core refused {method}: {value}"))
+        Ok(serde_json::from_slice(&bytes)?)
     }
+}
+
+fn answer(request: &Value, reply: Value) -> Result<Value> {
+    ensure!(
+        reply["id"] == request["id"] && reply["jsonrpc"] == "2.0",
+        "Core reply identity disagrees"
+    );
+    reply.get("result").cloned().with_context(|| {
+        format!(
+            "Core refused {}: {reply}",
+            request["method"].as_str().unwrap_or_default()
+        )
+    })
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -518,9 +604,118 @@ pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    use std::cell::Cell;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn a_value_holds_only_through_unbroken_glances_of_the_quiet_window() {
+        let start = Instant::now();
+        let at = |milliseconds: u64| start + Duration::from_millis(milliseconds);
+        let mut held = Held(None);
+        assert!(!held.see(Some(1), at(0)));
+        assert!(!held.see(Some(1), at(80)));
+        assert!(held.see(Some(1), at(160)));
+        assert!(!held.see(Some(2), at(240)), "a changed value");
+        assert!(!held.see(None, at(320)), "a glance without the value");
+        assert!(
+            !held.see(Some(2), at(400)),
+            "a value kept its age across a glance without it"
+        );
+        assert!(held.see(Some(2), at(550)));
+        assert!(
+            !held.see(None, at(630)) && held.0.is_none(),
+            "a value outlived the glance that lost it"
+        );
+    }
+
+    fn settled(read: impl Fn(u32) -> Option<u32>, wanted: u32) -> Result<(Option<u32>, Duration)> {
+        let (start, glances) = (Instant::now(), Cell::new(0));
+        let value = settle(
+            Duration::from_millis(400),
+            Duration::from_millis(10),
+            || {
+                glances.set(glances.get() + 1);
+                Ok(read(glances.get()))
+            },
+            |value| *value == wanted,
+        )?;
+        Ok((value, start.elapsed()))
+    }
+
+    #[test]
+    fn settle_returns_a_value_only_after_it_held() -> Result<()> {
+        let deadline = Duration::from_millis(400);
+        let (value, took) = settled(|_| Some(7), 7)?;
+        ensure!(
+            value == Some(7) && took >= QUIET,
+            "A wanted value was not returned once it held: {value:?} after {took:?}"
+        );
+        let (value, took) = settled(|_| Some(3), 7)?;
+        ensure!(
+            value == Some(3) && took >= deadline,
+            "A value that held was not returned at the deadline: {value:?} after {took:?}"
+        );
+        let (value, took) = settled(Some, 7)?;
+        ensure!(
+            value.is_none() && took >= deadline,
+            "A value that never stopped changing was returned: {value:?}"
+        );
+        let (value, took) = settled(|glance| (glance == 1).then_some(7), 7)?;
+        ensure!(
+            value.is_none() && took >= deadline,
+            "A value that was gone at the deadline was returned: {value:?}"
+        );
+        Ok(())
+    }
+
+    pub(crate) fn deaf(name: &str, trap: &str) -> Result<Owned> {
+        let evidence =
+            std::env::temp_dir().join(format!("vv-{name}-{}-{}", std::process::id(), stamp()));
+        fs::create_dir(&evidence)?;
+        let ready = evidence.join("ready");
+        let script = format!("trap '{trap}' TERM; : > \"$0\"; while :; do sleep 0.02; done");
+        let system = System::with_env(evidence, "voyager-verify-test".into(), BTreeMap::new());
+        let child = system.spawn(
+            Path::new("/usr/bin/bash"),
+            &["-c", &script, ready.to_str().context("Non-UTF8 path")?],
+            &[],
+            "child.log",
+        )?;
+        until("the child's signal trap", || {
+            Ok(ready.exists().then_some(()))
+        })?;
+        Ok(child)
+    }
+
+    #[test]
+    fn a_child_that_lost_the_first_signal_exits_on_the_next_one() -> Result<()> {
+        let mut child = deaf("resignal", "trap - TERM")?;
+        let start = Instant::now();
+        let stopped = child.stop_within(Duration::from_secs(4))?;
+        ensure!(
+            stopped == Stopped::Exited { signals: 2 } && start.elapsed() >= RESIGNAL,
+            "A child that needed a second SIGTERM ended as {stopped:?} after {:?}",
+            start.elapsed()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_child_that_ignores_every_signal_is_killed_at_the_deadline() -> Result<()> {
+        let mut child = deaf("ignore", "")?;
+        let stopped = child.stop_within(Duration::from_millis(400))?;
+        ensure!(
+            matches!(&stopped, Stopped::Killed { signals: 1, stuck } if stuck.starts_with("state ")),
+            "A child that ignores SIGTERM ended as {stopped:?}"
+        );
+        ensure!(
+            child.child.try_wait()?.is_some(),
+            "A killed child was left running"
+        );
+        Ok(())
+    }
 
     #[test]
     fn assets_must_match_what_the_candidate_was_built_for() -> Result<()> {

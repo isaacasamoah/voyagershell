@@ -1,3 +1,4 @@
+use crate::journey::Journey;
 use anyhow::{Context, Result, bail, ensure};
 use globset::{Glob, GlobSetBuilder};
 use serde::Deserialize;
@@ -5,7 +6,6 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
-pub const NATIVE_JOURNEYS: [&str; 1] = ["terminal-scrolling"];
 pub const REGISTRY: &str = "tests/native/features.toml";
 pub const TABLE_FILE: &str = ".agents/skills/verify/features/README.md";
 const BEGIN: &str = "<!-- features:begin -->";
@@ -66,7 +66,12 @@ impl Registry {
         toml::from_str(text).context("Feature registry")
     }
 
-    pub fn validate(&self, files: &[String], python: &BTreeSet<String>) -> Result<()> {
+    pub fn validate(
+        &self,
+        files: &[String],
+        native: &[&str],
+        python: &BTreeSet<String>,
+    ) -> Result<()> {
         let mut problems = Vec::new();
         let mut seen = BTreeSet::new();
         for feature in &self.feature {
@@ -94,7 +99,7 @@ impl Registry {
             for journey in feature
                 .journeys
                 .iter()
-                .filter(|j| !NATIVE_JOURNEYS.contains(&j.as_str()))
+                .filter(|j| !native.contains(&j.as_str()))
             {
                 problems.push(format!("{id}: unknown journey {journey}"));
             }
@@ -106,6 +111,12 @@ impl Registry {
             }
             if feature.tiers().contains(&Status::PythonOnly) && feature.python.is_empty() {
                 problems.push(format!("{id}: a python-only tier needs a Python journey"));
+            }
+        }
+        for journey in native {
+            let covers = |feature: &Feature| feature.journeys.iter().any(|j| j == journey);
+            if !self.feature.iter().any(covers) {
+                problems.push(format!("journey {journey} covers no feature"));
             }
         }
         ensure!(problems.is_empty(), "{}", problems.join("\n"));
@@ -231,7 +242,7 @@ pub fn run(args: &[String]) -> Result<i32> {
         .lines()
         .map(String::from)
         .collect();
-    registry.validate(&files, &python_journeys(root)?)?;
+    registry.validate(&files, &Journey::names(), &python_journeys(root)?)?;
     let readme_path = root.join(TABLE_FILE);
     match args {
         [] => {
@@ -320,7 +331,7 @@ debug = "none"
     }
 
     fn check(text: &str) -> Result<()> {
-        Registry::parse(text)?.validate(&files(), &python())
+        Registry::parse(text)?.validate(&files(), &["terminal-scrolling"], &python())
     }
 
     fn failure(text: &str) -> String {
@@ -340,6 +351,17 @@ debug = "none"
             1,
         );
         assert!(failure(&bad).contains("imaginary"));
+    }
+
+    #[test]
+    fn a_journey_that_covers_no_feature_fails() {
+        let bad = SEED.replacen("journeys = [\"terminal-scrolling\"]", "journeys = []", 1);
+        let bad = bad.replacen("behavior = \"covered\"", "behavior = \"python-only\"", 1);
+        let bad = bad.replacen("debug = \"covered\"", "debug = \"none\"", 1);
+        assert_eq!(
+            failure(&bad),
+            "journey terminal-scrolling covers no feature"
+        );
     }
 
     #[test]

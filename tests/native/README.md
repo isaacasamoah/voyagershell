@@ -1,7 +1,8 @@
 # Native verification environment
 
-This is the first Rust slice of the maintained native fixture. It verifies terminal
-scrolling on an owned Linux X11 display. The accepted application remains unchanged.
+This is the Rust slice of the maintained native fixture. It runs the journeys in
+its journey registry on an owned Linux X11 display. Terminal scrolling is the only
+journey so far. The app changes only to mark controls for inspection.
 Invoke `voyager-verification` directly. New verification extends this environment,
 including its shared actions and evidence contract. A single command wrapping
 unrelated rigs would not meet that requirement. Unsupported capabilities remain
@@ -15,13 +16,13 @@ readiness, isolation, shared actions/observations, evidence, repair, cleanup,
 functional journeys, boundary failures, platform behavior, resource measurements,
 formal properties and ETC/ORTH/DRY review. Plan these together before adding more
 journeys. Implement small complete slices of that design, not private rigs.
-The active worktree SPEC.md owns the comprehensive initiative design; it is local
-and remains unaccepted as a complete implementation.
+The environment is not yet accepted as a complete implementation of that design.
 
 | Capability | Implemented status |
 | --- | --- |
 | Owned X11 scrolling, input/capture/identity, evidence and cleanup | Implemented at any window size. Input aims at the controls that the app reports through `--inspect`; see Locating controls below. |
 | Hermetic runs | Implemented with bubblewrap. Each run and each `doctor` checks it with a canary. See Hermetic runs below. |
+| Journey registry, verdicts for each case and one negative control for each journey | Implemented. See Journeys and Negative controls below. |
 | Finite reporting gate and regression controls | Implemented for the actual Rust gate, not app/OS behavior. |
 | ETC/ORTH/DRY checks | Required independent review criteria; not an automatic architecture score. |
 | Versioned request/result contract and independent receipt conformance | Planned. Pilot receipts are evidence, not a certified acceptance validator. |
@@ -50,6 +51,80 @@ journeys, tier status and the retained Python journeys. `voyager-verification fe
 validates it and prints the coverage table. `features --write` regenerates the table in
 `.agents/skills/verify/features/README.md`, `features --check` fails when it is stale and
 `features --changed GIT_RANGE` lists the features and journeys a diff touches.
+
+### Journeys
+
+`journeys!` in `src/journey.rs` is the one list of native journeys. Each row
+names the journey, its module under `src/journey/` and the sidebar state that
+the journey needs. The module declares its cases with `cases!`, the case that
+its negative control must fail (`CONTROL`) and its `drive` function. The
+`--journey` choices, the plan that crosses into the sandbox, the name in
+`checks.json`, the number of cases and the registry validation all read this
+list. `voyager-verification journeys` prints it as JSON.
+
+To add a journey:
+
+1. Add one row to `journeys!` and write the module.
+2. Add the module's file to `SOURCES` in `src/main.rs`. A test fails when a
+   file under `src/` is missing from that list.
+3. Add the control patch. See Negative controls below.
+4. Name the journey in the `journeys` list of each feature that it covers in
+   `features.toml`. A journey that no feature names fails `features`.
+
+A journey that needs one sidebar state gets that state on every launch. `run`
+refuses a `--sidebar` value that contradicts it.
+
+A case runs inside `cases.check` and returns a `Verdict`. A `Verdict` holds
+named expectations, each of which held or did not, and the values that the
+case observed. A case that returns a `Verdict` without an expectation judged
+nothing, so it ends the run as a fixture error. A value that cannot be
+recorded also ends the run as a fixture error.
+`observations.json` lists every declared case with one status:
+
+| Status | Meaning |
+| --- | --- |
+| `passed` | Every expectation held. |
+| `failed` | An expectation did not hold. |
+| `interrupted` | The case ended in an error. `diagnose` blames the product or the fixture. |
+| `skipped` | The case did not run, because an earlier case failed or was interrupted. |
+
+Cases build on each other, so a later case would start from a state that the
+failed case left unknown. A failed or interrupted case therefore ends the
+journey.
+
+After each case the driver saves `observations.json` and a capture of the whole
+window, named `case-CASE-STAMP.png`. If the save or the capture fails after a
+case that failed, the driver records the error in `actions.jsonl` as an
+`unkept` event and the failure stands. After a case that passed, the same
+error ends the run as a fixture error. Cases run in their declared order, and a
+case that runs out of order ends the run as a fixture error. If `drive` returns
+without running a declared case although no case failed, the run is
+inconclusive.
+
+### Negative controls
+
+Each journey has a patch at `tests/native/controls/JOURNEY.patch`. The patch
+breaks the product in one small way. The journey's control case must fail on a
+candidate that was built with the patch. `voyager-verification journeys` prints
+the control case and the patch of each journey. A unit test fails when a patch
+no longer applies to the current tree. The verifier never applies a patch.
+
+To run a control, use a checkout that you can discard:
+
+1. Apply the patch: `git apply tests/native/controls/terminal-scrolling.patch`.
+2. Build the candidate with the release command in Build and inspect below.
+3. Run the journey against that candidate with a new evidence directory.
+4. Confirm that the run exits 1 and that `firstFailingCheck.check` in
+   `checks.json` is the control case.
+5. Revert the patch with `git apply -R` and build again before any other run.
+
+The `terminal-scrolling` patch makes the terminal ignore an upward wheel in
+ordinary shell history. `normal-history` then fails on the expectation
+`wheel up draws the live screen's lines lower, below earlier history`.
+
+`--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
+candidate that crashes or hangs. They work with every journey, before and
+after a journey launches the candidate again.
 
 ### Build and inspect
 
@@ -157,20 +232,67 @@ latency.
 The driver starts the candidate with `--inspect inspection-N.json` in the
 evidence folder, a new file for each launch, and parses each frame with the
 `Frame` type from the `voyager-contract` crate (see
-[the inspection endpoint](../../docs/inspection.md)). `locate(role, key)` waits
-for that element and converts its bounds to device pixels with `window.scale`
-and the window's origin on the screen. `wait_for` polls the frame every 10 ms
-until a predicate holds, so it can wait for an element or for its absence. A
-frame drawn for another window size is ignored. When the deadline passes, the
-journey ends `failed`, blamed on the product, and the error names the missing
-role and key. The app marks `terminal` only once the terminal view is attached,
-so the driver clicks and types only after that element appears.
+[the inspection endpoint](../../docs/inspection.md)). A journey names a control
+with a `Target` from `src/inspection.rs`. A `Target` pairs a role with the key
+that the app gives that role, and its constructors take the id types of the
+contract. No input method takes a coordinate.
+
+Before a pointer input, the driver waits for the target's element and converts
+its bounds to device pixels with `window.scale` and the window's origin on the
+screen. The driver aims at the centre of the element. If the avatar's reported
+bounds cover that centre, the driver aims at the centre of the largest part of
+the element that the avatar leaves clear, because a click on the avatar
+activates the avatar and never reaches the control. After the pointer moves,
+the driver reads the frame again and aims again if the element no longer
+contains the pointer. It records each miss in `actions.jsonl` as a `re-aim`
+event with both aims, and it waits 80 ms before the next attempt. A frame that
+lists the target under `ambiguous` ends the run as a product failure, because
+the product drew one control twice. A frame drawn for another window size is ignored. The
+frame is polled every 10 ms. When the deadline passes, the journey ends
+`failed`, blamed on the product, and the error names the missing role and key.
+The app marks `terminal` only once the terminal view is attached, so the
+driver clicks and types only after that element appears.
+
+`settle` in `src/system.rs` is the one rule for waiting. It reads a value
+again and again. A value counts only after every read has returned it
+unchanged for 150 ms, and a read that returns no value starts the 150 ms
+again. `settle` returns a value that counts as soon as that value is the
+wanted one. When the deadline passes, it returns the value that counts at
+that moment, wanted or not, and it returns nothing when no value counts.
+
+`observe` in `src/native.rs` is the one way to wait for an outcome. Every
+80 ms it reads the latest frame and gives `settle` the value of its check. A
+glance that has no frame, no value or an unprepared workspace gives no value.
+Every value is wanted, so `observe` returns the first value that counts. When
+the deadline passes, the journey ends `failed`, blamed on the product.
+
+A launch ends with `observe`. The header sends no workspace action while a
+workspace request is in progress, so a click on the sidebar toggle during the
+first preparation is lost. In 5 of 10 runs at `--window 1180x820 --sidebar
+collapsed`, a driver that clicked the toggle as soon as the toggle was drawn
+never saw the sidebar collapse. The header reports that state itself, as
+`prepared` in each frame (see
+[the inspection endpoint](../../docs/inspection.md)), and the driver waits for
+that report. The driver does not guess it from the drawn terminals.
+
+Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
+`Chord` adds a modifier to a key. `Terminal` in `src/native/terminal.rs` binds
+one terminal Vessel by its placement. It owns the terminal's Core address and
+shell identity, its captures and its wheel input, so a journey without a
+terminal does not wait for one. `Terminal::first` reads the layout document
+(`doc.get`, parsed as the `Layout` type of the contract). A document that does
+not parse as `Layout` is a fixture error. Rebuild the verifier from the
+candidate's checkout. `line` clicks its own terminal before it types, so the
+text cannot reach another control that holds the keyboard.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and
-capture (`GetImage`). A capture is the `terminal` element's area, with the
-avatar's reported bounds blanked. After an input the journey polls until the
-expected state holds and has not changed for 150 ms, or until 4 s pass. It
-records the last observation either way, and the case decides pass or fail. No
+capture (`GetImage`). A terminal capture is the `terminal` element's area, with
+the avatar's reported bounds blanked. After an input, `Terminal::settled` gives
+`settle` a capture every 10 ms for up to 4 s. It returns the capture once the
+capture is the expected one and has not changed for 150 ms. After 4 s it
+returns the capture that has not changed for 150 ms, and the case decides pass
+or fail. A terminal that never holds still for 150 ms ends the journey
+`failed`, blamed on the product. No
 step waits a fixed time for the app. Key events are 1 ms apart, as with the
 earlier `xdotool --delay 1`: typed back to back, 2 of 10 runs lost characters.
 
@@ -180,9 +302,45 @@ the `Xft.dpi: 192` resource, so the candidate drew at scale 1 in a 1450 by 940
 window. It now draws at scale 2, in a 2900 by 1880 window. A reset during
 cleanup also left Xvfb deaf to SIGTERM in 1 of 30 runs.
 
+`Owned::stop` in `src/system.rs` stops a process that the driver owns. It
+sends SIGTERM and waits up to 12 s for the exit. While it waits, it sends
+SIGTERM again every second. An X server checks its exit flag and then sleeps
+in its poll. A signal that lands between the two only sets the flag, and the
+server sleeps on until something else wakes it. Under a debugger, an Xvfb that
+took SIGTERM at that point was still asleep in `ep_poll` 5 s later, and a
+second SIGTERM ended it within 0.04 s. Before the driver repeated the signal,
+Xvfb outlived the 12 s wait in 2 of 744 runs, both on a loaded machine, and
+both runs ended `inconclusive`. Nobody inspected those two runs while they
+hung. Three later runs were inspected. In each, 0.4 s after its last client
+had gone, Xvfb was asleep in `ep_poll` with no signal pending and a timer
+about two minutes away. Two left as soon as a tracer attached, and the third
+left on the second SIGTERM. So each had its exit flag set while it slept.
+
+Cleanup stops the display while the driver's X connection is still open, and
+closes the connection afterwards. Closing the last connection wakes the
+server, and a SIGTERM sent right after the close arrives while the server is
+on its way back to its poll. The three sleeping displays were in 128 runs
+that closed the connection first. In 120 runs that stopped the display first,
+no stop needed a second signal. That difference is too small to prove that
+the order matters. A bare Xvfb with one client slept through 1 of 37,000
+stops that closed the connection first, so the close alone does not explain
+three in 128.
+
+A stop that needed more than one signal is a `repeated-stop` event in
+`actions.jsonl`, with the process and the number of signals. If the process is
+still alive at the deadline, the driver reads its state, the kernel function
+that it sleeps in and its system call from `/proc`, kills it, records all of
+that as a `forced-stop` event and reports a cleanup error. A cleanup error
+still prevents a pass.
+
 `--window WIDTHxHEIGHT` resizes the candidate's window in device pixels, and
 `--sidebar open|collapsed` sets the sidebar with its own toggle. Both apply
 again after reattachment and do nothing when the window already matches.
+
+Each launch moves the candidate's window to the origin of the display. The
+app opens its 2900 by 1880 window at 362, 260, which puts the right 262 and
+the bottom 140 device pixels outside the 3000 by 2000 screen, and the pointer
+cannot leave the screen. An aim point outside the display is a fixture error.
 
 The result is `checks.json`. Exit 0 means the named runtime journey passed;
 exit 1 means an observed behavior failed; exit 2 means verification was
@@ -192,18 +350,43 @@ An error inside the journey is blamed after the fact (`diagnose` in `src/native.
 
 | Observation when the journey stopped | Verdict |
 | --- | --- |
-| Candidate exited or was killed, or is stopped | `failed`, blamed on the product |
+| Candidate exited or was killed, or is stopped, during a case or when the last case ends | `failed`, blamed on the product |
 | Core exited while the candidate ran | `failed`, blamed on the product |
+| A bound shell died or Core reports another program for its terminal (`Terminal::same_program`), or the candidate quit with a failure status (`Native::close`) | `failed`, blamed on the product |
 | Timeout while the display still answers | `failed`, a hang, blamed on the product |
-| A case's observation disagreed | `failed` |
-| Owned display exited or stopped answering, a host tool is missing or failed, the sandbox refused, or an unrelated verifier error | `inconclusive` |
+| A case's expectation did not hold | `failed`, and `firstFailingCheck` names the case, the expectation and the observed values |
+| The save or the capture after a failed case failed | `failed`. The failed case stands, and `actions.jsonl` holds the error as an `unkept` event |
+| A case returned no expectation, or an observed value could not be recorded | `inconclusive`, blamed on the fixture |
+| `drive` returned without running a declared case although no case failed | `inconclusive` |
+| Owned display exited or stopped answering, a host tool is missing, failed or ran out of time, the sandbox refused, or an unrelated verifier error | `inconclusive` |
 | Cleanup or evidence write failed, or the candidate or Core changed on disk | `inconclusive` |
+
+A case whose expectation did not hold is recorded as `failed` only while the
+candidate is still running. A stopped candidate keeps its last frame and its
+last pixels, so a wait would otherwise judge the hang as an expectation that
+the product did not meet. If the candidate has exited or is stopped when a
+case returns such a verdict, the case is `interrupted` and the first row
+applies.
+
+`Terminal::same_program` reports a defect only when the shell's process is
+gone or Core names another program for the terminal. A Core request that
+fails there is diagnosed like any other error, so it is a product failure
+only when Core has exited.
 
 `Acknowledge` is a real event. It fires only when at least one recorded action
 (an input the display answered, or a host command) completed successfully after
 dispatch, and a match is rejected without it. `run` accepts `--fault kill:SECONDS` or `--fault stop:SECONDS`, a test-only
-control that sends SIGKILL or SIGSTOP to the identity-checked candidate after that
-delay. `checks.json` records the fault, and a fault that never fires before the journey ends makes the run inconclusive. Liveness reads the candidate's own process state, so a zombie counts as exited, and the candidate gets a one second grace to finish dying before an error is blamed on the fixture. `--assets` is required. Before launch, `doctor` and `run` refuse an assets folder that is not the `assets` folder next to the path the candidate was built for, or that lacks a frame file the candidate names.
+control that sends SIGKILL or SIGSTOP after that delay to the candidate that is
+running then. Each launch records its candidate's identity for the fault, and
+the fault checks that identity before it sends the signal. If no candidate is
+running when the delay ends, because the journey closed it and has not launched
+it again, the fault goes to the next candidate that the journey launches.
+When the last case ends, the driver withdraws a fault that has not fired, so
+the fault cannot reach the candidate during diagnosis or cleanup. The journey
+then ends in an error if its candidate has exited or is stopped. A fault that
+fires after the last case therefore ends the run `failed`, blamed on the
+product, and a run whose fault fired cannot pass.
+`checks.json` records the fault, and a fault that never fires before the journey ends makes the run inconclusive. Liveness reads the candidate's own process state, so a zombie counts as exited, and the candidate gets a one second grace to finish dying before an error is blamed on the fixture. `--assets` is required. Before launch, `doctor` and `run` refuse an assets folder that is not the `assets` folder next to the path the candidate was built for, or that lacks a frame file the candidate names.
 
 A `failed` or `inconclusive` run also writes `bundle/` in the evidence folder:
 `summary.json` (the first failing check and which side to blame), `processes.json`
@@ -220,8 +403,12 @@ runtime pass. Preserve an incomplete or failed directory; a new run needs a new
 directory. There is no replay of failed input commands. Observation polling is
 read-only. Each input intent and command acknowledgement is recorded separately.
 
-`actions.jsonl` preserves commands, input intents and acknowledgements, located
-elements with their frame sequence, Core requests/replies and capture hashes.
+`actions.jsonl` preserves commands, input intents and acknowledgements, the
+start of each case, Core requests and replies, and capture hashes. A pointer
+intent carries its target, the element's region, the aim point and the frame
+sequence that the driver aimed from. A read that the driver repeats while it
+waits (`doc.get`, `terminal.read`) is recorded only when its reply differs
+from the previous reply, so the ledger shows inputs and changes.
 `inspection-N.json` holds the last frame of each launch. `observations.json` holds the observed cases. Screenshots have unique names.
 `doctor.json`, `launch.json`, `identity.json`, native/display logs and `checks.json`
 retain candidate and environment identities. `sandbox.json` records the session
@@ -266,9 +453,9 @@ Reconsider a code verifier when the next concrete property needs one.
 
 | Principle | Required review | Present ownership |
 | --- | --- | --- |
-| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `scrolling.rs` describes the journey; `native.rs` handles the app window; `x11.rs` owns the display connection; `inspection.rs` reads frames; `system.rs` owns process/recording/polling/Core primitives. |
+| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `journey.rs` owns the journey registry and case verdicts; `journey/scrolling.rs` describes the journey; `native.rs` handles the app window; `native/input.rs` owns pointer and key input; `native/terminal.rs` owns a bound terminal; `x11.rs` owns the display connection; `inspection.rs` reads frames and names controls; `system.rs` owns process/recording/polling/Core primitives. |
 | Orthogonality | Product code does not depend on the fixture; the reporting gate is independent of I/O. Core owns programs. | Standalone development crate; pure `lifecycle.rs`; platform dependencies remain outside the app. |
-| DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, event list, reporting gate, recorder, polling loop, input/capture adapter, locator and shutdown path for the migrated journey. The frame type is the app's own. |
+| DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, journey list, event list, reporting gate, recorder, polling loop, input/capture adapter, locator and shutdown path for the migrated journeys. The frame and layout types are the app's own. |
 
 These are review criteria, not an automated universal quality score. The retained
 legacy platform helpers are a migration gap. Do not add a private runner for a new
@@ -294,7 +481,24 @@ Herdr Core was inspected at its 0.1.19 source revision
 socket protocol with no start behavior. Herdr App guidance was inspected at
 `1581a587919dddd6f1efd5f78eb542c4b2b02cb5`. Upstream approval policies remain upstream.
 
-The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
+The scrolling checks judge the lines that a capture draws, not whether the
+screen changed. A terminal capture masks the terminal's 8-pixel padding, scaled
+to device pixels, and the avatar. Each run of pixel rows that holds a pixel other
+than the background is one drawn line, identified by the SHA-256 of its pixels.
+After wheel up, the lines of the live screen must appear again at one common
+distance lower. Every one that lands at or above the lowest line either capture
+draws must be drawn there, so a terminal that leaves its lower rows blank fails.
+At least one line must be drawn above them, and in shell history every line
+above must be one the live capture does not draw, so a terminal that repeats the
+live screen as its history fails. Wheel down must restore the exact live capture. In `arrows` and `mouse`,
+the probe draws `SCROLL` lines from its position, so its lines must move by as
+many rows as its position changed. `reattached-history` first prints 60 short
+`REATTACH` lines, so the live screen holds only lines that the journey printed,
+and after the relaunch the live screen must draw the same lines at the same
+places. The checks do not claim a scroll distance for shell history or the cell
+that a wheel report names; both are gaps.
+
+The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The probe counts the wheel reports and the cursor keys that move it, and it writes both counts to its state file. The `arrows` case expects cursor keys and no wheel reports, and the `mouse` case expects wheel reports and no cursor keys. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
 
 ## Retained Python journey reference
 

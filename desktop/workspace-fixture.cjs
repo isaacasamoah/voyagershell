@@ -46,7 +46,10 @@ module.exports = function workspaceSource(
       : "";
   const marker =
     filename === "main.js"
-      ? 'const Marker = { new: (role, key = "") => ({ marker: [role, key] }) };'
+      ? [
+          'const Marker = { new: (role, key = "", label) => ({ marker: label === undefined ? [role, key] : [role, key, label] }) };',
+          'const EditorMarker = { new: (key, state) => ({ marker: ["name-editor", key, state] }) };',
+        ].join("\n")
       : "";
   return marker + "\n" + ui + "\n" + helpers + "\n" + source;
 };

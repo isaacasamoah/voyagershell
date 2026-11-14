@@ -1,7 +1,9 @@
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use image::RgbaImage;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use serde::{Serialize, Serializer};
 use std::collections::BTreeMap;
+use std::fmt;
 use std::io::{self, IoSlice};
 use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
@@ -25,7 +27,60 @@ const RETURN: u32 = 0xff0d;
 const SHIFT: u32 = 0xffe1;
 const CONTROL: u32 = 0xffe3;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Key {
+    Return,
+    Char(char),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Chord {
+    ctrl: bool,
+    key: Key,
+}
+
+impl Key {
+    pub fn ctrl(self) -> Chord {
+        Chord {
+            ctrl: true,
+            key: self,
+        }
+    }
+
+    fn symbol(self) -> Result<u32> {
+        match self {
+            Key::Return => Ok(RETURN),
+            Key::Char(character) if (' '..='~').contains(&character) => Ok(character as u32),
+            Key::Char(character) => bail!("Unsupported key {character:?}"),
+        }
+    }
+}
+
+impl From<Key> for Chord {
+    fn from(key: Key) -> Self {
+        Self { ctrl: false, key }
+    }
+}
+
+impl fmt::Display for Chord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.ctrl {
+            f.write_str("ctrl+")?;
+        }
+        match self.key {
+            Key::Return => f.write_str("Return"),
+            Key::Char(character) => write!(f, "{character}"),
+        }
+    }
+}
+
+impl Serialize for Chord {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub struct Geometry {
     pub x: i16,
     pub y: i16,
@@ -40,6 +95,16 @@ pub struct Pixels {
 }
 
 impl Pixels {
+    #[cfg(test)]
+    pub fn new(region: Geometry, bgrx: Vec<u8>) -> Self {
+        Self { region, bgrx }
+    }
+
+    pub fn rows(&self) -> std::slice::ChunksExact<'_, u8> {
+        self.bgrx
+            .chunks_exact(usize::from(self.region.width).max(1) * 4)
+    }
+
     pub fn mask(&mut self, area: Geometry) {
         let span = |start: i16, length: u16, origin: i16, limit: u16| {
             let clamp = |edge: i32| (edge - i32::from(origin)).clamp(0, i32::from(limit)) as usize;
@@ -161,6 +226,16 @@ impl Display {
         })
     }
 
+    pub fn place(&self, window: Window, x: i16, y: i16) -> Result<()> {
+        self.connection
+            .configure_window(
+                window,
+                &ConfigureWindowAux::new().x(i32::from(x)).y(i32::from(y)),
+            )?
+            .check()?;
+        Ok(())
+    }
+
     pub fn resize(&self, window: Window, width: u16, height: u16) -> Result<()> {
         self.connection
             .configure_window(
@@ -198,23 +273,22 @@ impl Display {
         self.fake(BUTTON_RELEASE_EVENT, button, 0, 0)
     }
 
-    pub fn chord(&self, chord: &str) -> Result<()> {
+    pub fn chord(&self, chord: Chord) -> Result<()> {
         let mut held = Vec::new();
-        for name in chord.split('+') {
-            let symbol = match name {
-                "ctrl" => CONTROL,
-                "shift" => SHIFT,
-                "Return" => RETURN,
-                _ => single(name)?,
-            };
-            held.push(self.code(symbol)?);
+        if chord.ctrl {
+            held.push(self.code(CONTROL)?);
         }
+        held.push(self.code(chord.key.symbol()?)?);
         self.press(&held)
     }
 
     pub fn type_text(&self, text: &str) -> Result<()> {
         for character in text.chars() {
-            self.press(&[self.code(single(&character.to_string())?)?])?;
+            let key = match character {
+                '\n' => Key::Return,
+                character => Key::Char(character),
+            };
+            self.press(&[self.code(key.symbol()?)?])?;
         }
         Ok(())
     }
@@ -245,17 +319,18 @@ impl Display {
         })
     }
 
-    pub fn screen(&self) -> Result<Pixels> {
+    pub fn extent(&self) -> Result<Geometry> {
         let size = self.connection.get_geometry(self.root)?.reply()?;
-        self.capture(
-            self.root,
-            Geometry {
-                x: 0,
-                y: 0,
-                width: size.width,
-                height: size.height,
-            },
-        )
+        Ok(Geometry {
+            x: 0,
+            y: 0,
+            width: size.width,
+            height: size.height,
+        })
+    }
+
+    pub fn screen(&self) -> Result<Pixels> {
+        self.capture(self.root, self.extent()?)
     }
 
     fn code(&self, symbol: u32) -> Result<(u8, bool)> {
@@ -290,15 +365,6 @@ impl Display {
             .xtest_fake_input(kind, detail, CURRENT_TIME, self.root, x, y, NONE as u8)?
             .check()?;
         Ok(())
-    }
-}
-
-fn single(name: &str) -> Result<u32> {
-    let mut characters = name.chars();
-    match (characters.next(), characters.next()) {
-        (Some('\n'), None) => Ok(RETURN),
-        (Some(character), None) if (' '..='~').contains(&character) => Ok(character as u32),
-        _ => anyhow::bail!("Unsupported key {name:?}"),
     }
 }
 
@@ -413,5 +479,16 @@ mod tests {
             height: 2,
         });
         assert_eq!(pixels.bgrx.iter().filter(|byte| **byte == 0).count(), 8);
+    }
+
+    #[test]
+    fn a_chord_is_recorded_by_its_modifier_and_key() {
+        assert_eq!(Key::Char('q').ctrl().to_string(), "ctrl+q");
+        assert_eq!(Chord::from(Key::Return).to_string(), "Return");
+        assert_eq!(
+            serde_json::to_value(Chord::from(Key::Char('q'))).unwrap(),
+            "q"
+        );
+        assert!(Key::Char('\t').symbol().is_err());
     }
 }

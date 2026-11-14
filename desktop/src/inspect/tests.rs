@@ -1,9 +1,10 @@
-use super::{Inspection, avatar, install, register, stage, write};
+use super::{Inspection, Mark, Marker, Shown, avatar, install, register, stage, write};
 use gpui::{
     AnyWindowHandle, AppContext as _, AsyncApp, Bounds, Context as ViewContext, Entity,
     IntoElement, ParentElement as _, Pixels, Render, Styled as _, Window, WindowBounds,
     WindowOptions, canvas, div, point, px, size,
 };
+use gpui_base::input::InputState;
 use gpui_shell::{ComponentRegistry, HostModule, ScriptView, ShellRuntime, policy::Policy};
 use std::{
     cell::{Cell, RefCell},
@@ -25,18 +26,19 @@ use voyager_contract::{
 const SCRIPT: &str = r#"
 import { View, div } from 'gpui-kit';
 import { Popover } from 'gpui-base';
-import { Marker } from 'voyager_native';
-import { Measure, collapsed, menu, marked, duplicate } from 'layout_probe';
-function control(element, role, key) {
+import { Marker, Prepared } from 'voyager_native';
+import { Measure, collapsed, menu, marked, duplicate, prepared, title } from 'layout_probe';
+function control(element, role, key, label) {
   element.child(Measure.new(`${role}:${key}`, {}));
-  if (marked()) element.child(key ? Marker.new(role, key) : Marker.new(role));
+  if (marked())
+    element.child(label ? Marker.new(role, key, label) : key ? Marker.new(role, key) : Marker.new(role));
   return element;
 }
 export default class extends View {
   render() {
     const main = div().flex().flex_col().flex_1().min_w(0)
       .child(div().flex().h(45)
-        .child(control(div().w(120).h_full(), 'fleet-name', 'fleet-1')))
+        .child(control(div().w(120).h_full(), 'fleet-name', 'fleet-1', title())))
       .child(div().flex()
         .child(control(div().flex_1().min_w(0).h(35), 'vessel-name', 'placement-2'))
         .child(control(div().w(22).h(22), 'split-right', 'placement-1')))
@@ -52,6 +54,7 @@ export default class extends View {
         .child(control(div().w(30).h(20), 'split-bottom', 'placement-9')));
     if (duplicate()) main.child(control(div().w(10).h(10), 'fleet-name', 'fleet-1'));
     const row = div().flex().size_full();
+    if (marked()) row.child(Prepared.new(prepared()));
     if (!collapsed())
       row.child(div().w(260).h_full().flex_shrink_0()
         .child(control(div().h(38), 'voyage-name', 'voyage-1')));
@@ -66,6 +69,9 @@ struct Probe {
     menu: Cell<bool>,
     marked: Cell<bool>,
     duplicate: Cell<bool>,
+    prepared: Cell<bool>,
+    title: RefCell<String>,
+    editor_renders: Cell<u32>,
     prepaints: Cell<u32>,
     avatar: Cell<f32>,
     measured: RefCell<BTreeMap<String, Bounds<Pixels>>>,
@@ -73,7 +79,29 @@ struct Probe {
 
 struct Root {
     script: Entity<ScriptView>,
+    editor: Option<Entity<Editor>>,
     probe: Rc<Probe>,
+}
+
+struct Editor {
+    draft: Entity<InputState>,
+    probe: Rc<Probe>,
+}
+
+impl Render for Editor {
+    fn render(&mut self, _: &mut Window, _: &mut ViewContext<Self>) -> impl IntoElement {
+        self.probe
+            .editor_renders
+            .set(self.probe.editor_renders.get() + 1);
+        div().size_full().child(Marker {
+            id: "draft".into(),
+            mark: Mark::Control {
+                role: Role::NameEditor,
+                key: "fleet-1".into(),
+                shown: Shown::Draft(self.draft.downgrade()),
+            },
+        })
+    }
 }
 
 impl Render for Root {
@@ -86,6 +114,15 @@ impl Render for Root {
                     .clone()
                     .cached(gpui::StyleRefinement::default().size_full()),
             )
+            .children(self.editor.clone().map(|editor| {
+                div()
+                    .absolute()
+                    .left(px(600.))
+                    .top(px(400.))
+                    .w(px(60.))
+                    .h(px(32.))
+                    .child(editor.cached(gpui::StyleRefinement::default().size_full()))
+            }))
             .child(
                 div()
                     .absolute()
@@ -119,6 +156,31 @@ impl Scene {
         self.probe.avatar.set(left);
         self.root.update(cx, |_, cx| cx.notify());
         self.draw(cx);
+    }
+
+    fn edit(&self, text: &str, cx: &mut AsyncApp) -> Entity<InputState> {
+        let probe = self.probe.clone();
+        let root = self.root.clone();
+        cx.update_window(self.window, |_, window, cx| {
+            let draft = cx.new(|cx| InputState::new(window, cx).default_value(text.to_owned()));
+            let editor = cx.new(|_| Editor {
+                draft: draft.clone(),
+                probe,
+            });
+            root.update(cx, |root, cx| {
+                root.editor = Some(editor);
+                cx.notify();
+            });
+            draft
+        })
+        .unwrap()
+    }
+
+    fn retype(&self, draft: &Entity<InputState>, text: &str, cx: &mut AsyncApp) {
+        cx.update_window(self.window, |_, window, cx| {
+            draft.update(cx, |draft, cx| draft.set_value(text.to_owned(), window, cx));
+        })
+        .unwrap();
     }
 
     fn resize(&self, width: f32, height: f32, cx: &mut AsyncApp) {
@@ -218,6 +280,7 @@ fn run<T: 'static>(
             let probe = Rc::new(Probe::default());
             probe.marked.set(marked);
             probe.menu.set(true);
+            probe.title.replace("Fleet 1".into());
             probe.avatar.set(300.);
             let flag = |read: fn(&Probe) -> bool| {
                 let probe = probe.clone();
@@ -229,6 +292,11 @@ fn run<T: 'static>(
                 .function("menu", flag(|probe| probe.menu.get()))
                 .function("marked", flag(|probe| probe.marked.get()))
                 .function("duplicate", flag(|probe| probe.duplicate.get()))
+                .function("prepared", flag(|probe| probe.prepared.get()))
+                .function("title", {
+                    let probe = probe.clone();
+                    move |_: &gpui_shell::HostArguments| Ok(probe.title.borrow().clone().into())
+                })
                 .component("Measure", move |args, _, _| {
                     let id = args.id().to_owned();
                     let measured = measured.clone();
@@ -268,6 +336,7 @@ fn run<T: 'static>(
                         let script = runtime.mount_application(&application, window, cx).unwrap();
                         cx.new(|_| Root {
                             script,
+                            editor: None,
                             probe: view_probe,
                         })
                     },
@@ -416,6 +485,77 @@ fn layout_change_moves_bounds_and_closed_entries_leave() {
 }
 
 #[test]
+fn a_frame_reports_preparation_and_the_text_a_control_shows() {
+    let directory = scratch("shown");
+    let path = directory.join("frame.json");
+    let report = path.clone();
+    run(Some(path), true, async move |scene, cx| {
+        let label = |frame: &Frame, role: Role| {
+            let mut found = frame.elements.iter().filter(|element| element.role == role);
+            let label = found.next()?.label.clone();
+            assert!(found.next().is_none(), "{role:?} is listed twice");
+            label
+        };
+        let pending = scene
+            .frame(&report, cx, |frame| {
+                bounds(frame, Role::FleetName, "fleet-1").is_some()
+            })
+            .await;
+        assert!(!pending.prepared);
+        assert_eq!(label(&pending, Role::FleetName).as_deref(), Some("Fleet 1"));
+        assert!(
+            pending
+                .elements
+                .iter()
+                .all(|element| element.role == Role::FleetName || element.label.is_none()),
+            "a control without a label reported one"
+        );
+
+        scene.probe.prepared.set(true);
+        scene.probe.title.replace("Native Fleet".into());
+        scene.redraw_script(cx);
+        let ready = scene.frame(&report, cx, |frame| frame.prepared).await;
+        assert_eq!(
+            label(&ready, Role::FleetName).as_deref(),
+            Some("Native Fleet")
+        );
+        scene.probe.prepared.set(false);
+        scene.redraw_script(cx);
+        scene.frame(&report, cx, |frame| !frame.prepared).await;
+
+        let draft = scene.edit("Native Fleet", cx);
+        let opened = scene
+            .frame(&report, cx, |frame| {
+                bounds(frame, Role::NameEditor, "fleet-1").is_some()
+            })
+            .await;
+        assert_eq!(
+            label(&opened, Role::NameEditor).as_deref(),
+            Some("Native Fleet")
+        );
+        let renders = scene.probe.editor_renders.get();
+        scene.retype(&draft, "Discarded", cx);
+        scene
+            .frame(&report, cx, |frame| {
+                label(frame, Role::NameEditor).as_deref() == Some("Discarded")
+            })
+            .await;
+        scene.retype(&draft, "", cx);
+        scene
+            .frame(&report, cx, |frame| {
+                label(frame, Role::NameEditor).as_deref() == Some("")
+            })
+            .await;
+        assert_eq!(
+            scene.probe.editor_renders.get(),
+            renders,
+            "the cached editor view was rendered again"
+        );
+    });
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn rapid_changes_write_at_most_once_per_period() {
     let directory = scratch("rate");
     let path = directory.join("frame.json");
@@ -506,10 +646,12 @@ fn a_polling_reader_only_parses_whole_frames() {
             scale: 1.,
         },
         dock: dock(),
+        prepared: true,
         elements: (0..1500)
             .map(|index| Element {
                 role: Role::VesselName,
                 key: format!("placement-{index}"),
+                label: None,
                 bounds: Rect {
                     x: index as f32,
                     y: 45.,

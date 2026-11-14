@@ -1,9 +1,55 @@
 use crate::x11::Geometry;
 use anyhow::{Context, Result};
+use serde::Serialize;
+use std::fmt;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
+use voyager_contract::PlacementId;
 use voyager_contract::inspection::{Element, Frame, Rect, Role};
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct Target {
+    role: Role,
+    key: String,
+}
+
+impl Target {
+    pub const AVATAR: Self = Self::single(Role::Avatar);
+    pub const SIDEBAR_TOGGLE: Self = Self::single(Role::SidebarToggle);
+
+    const fn single(role: Role) -> Self {
+        Self {
+            role,
+            key: String::new(),
+        }
+    }
+
+    pub fn terminal(placement: &PlacementId) -> Self {
+        Self {
+            role: Role::Terminal,
+            key: placement.0.clone(),
+        }
+    }
+
+    pub fn find<'a>(&self, frame: &'a Frame) -> Option<&'a Element> {
+        frame.elements.iter().find(|element| self.names(element))
+    }
+
+    pub fn ambiguous(&self, frame: &Frame) -> bool {
+        frame.ambiguous.iter().any(|element| self.names(element))
+    }
+
+    fn names(&self, element: &Element) -> bool {
+        element.role == self.role && element.key == self.key
+    }
+}
+
+impl fmt::Display for Target {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {:?}", Role::NAMES[self.role as usize], self.key)
+    }
+}
 
 #[derive(Debug)]
 pub struct Unseen(pub String);
@@ -12,7 +58,7 @@ impl std::fmt::Display for Unseen {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "The inspection frame never showed {} within the deadline",
+            "The candidate never showed {} within the deadline",
             self.0
         )
     }
@@ -28,17 +74,6 @@ pub fn read(path: &Path) -> Result<Option<Frame>> {
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
     }
-}
-
-pub fn named(role: Role, key: &str) -> String {
-    format!("{} {key:?}", Role::NAMES[role as usize])
-}
-
-pub fn find<'a>(frame: &'a Frame, role: Role, key: &str) -> Option<&'a Element> {
-    frame
-        .elements
-        .iter()
-        .find(|element| element.role == role && element.key == key)
 }
 
 pub fn drawn_for(frame: &Frame, window: Geometry) -> bool {
@@ -67,11 +102,67 @@ pub fn centre(region: Geometry) -> (i16, i16) {
     )
 }
 
+pub fn contains(region: Geometry, point: (i16, i16)) -> bool {
+    let inside = |at: i16, start: i16, length: u16| {
+        (i32::from(start)..i32::from(start) + i32::from(length)).contains(&i32::from(at))
+    };
+    inside(point.0, region.x, region.width) && inside(point.1, region.y, region.height)
+}
+
+pub fn clear_of(target: Geometry, obstacle: Option<Geometry>) -> Option<(i16, i16)> {
+    let Some(obstacle) = obstacle.filter(|obstacle| contains(*obstacle, centre(target))) else {
+        return Some(centre(target));
+    };
+    let edges = |region: Geometry| {
+        let (left, top) = (i32::from(region.x), i32::from(region.y));
+        (
+            left,
+            top,
+            left + i32::from(region.width),
+            top + i32::from(region.height),
+        )
+    };
+    let (left, top, right, bottom) = edges(target);
+    let (covered_left, covered_top, covered_right, covered_bottom) = edges(obstacle);
+    let side = |left: i32, top: i32, right: i32, bottom: i32| {
+        (right > left && bottom > top).then(|| Geometry {
+            x: left as i16,
+            y: top as i16,
+            width: (right - left) as u16,
+            height: (bottom - top) as u16,
+        })
+    };
+    [
+        side(left, top, covered_left.min(right), bottom),
+        side(covered_right.max(left), top, right, bottom),
+        side(left, top, right, covered_top.min(bottom)),
+        side(left, covered_bottom.max(top), right, bottom),
+    ]
+    .into_iter()
+    .flatten()
+    .max_by_key(|side| u32::from(side.width) * u32::from(side.height))
+    .map(centre)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use voyager_contract::Context as Dock;
     use voyager_contract::inspection::Window;
+
+    fn toggle() -> Element {
+        Element {
+            role: Role::SidebarToggle,
+            key: String::new(),
+            label: None,
+            bounds: Rect {
+                x: 6.5,
+                y: 3.0,
+                width: 16.0,
+                height: 16.0,
+            },
+        }
+    }
 
     fn frame(scale: f32) -> Frame {
         Frame {
@@ -82,40 +173,57 @@ mod tests {
                 scale,
             },
             dock: Dock::Workspace,
-            elements: vec![Element {
-                role: Role::SidebarToggle,
-                key: String::new(),
-                bounds: Rect {
-                    x: 6.5,
-                    y: 3.0,
-                    width: 16.0,
-                    height: 16.0,
-                },
-            }],
+            prepared: true,
+            elements: vec![toggle()],
             ambiguous: Vec::new(),
+        }
+    }
+
+    fn area(x: i16, y: i16, width: u16, height: u16) -> Geometry {
+        Geometry {
+            x,
+            y,
+            width,
+            height,
         }
     }
 
     #[test]
     fn logical_bounds_become_device_pixels_inside_the_control() {
         let frame = frame(2.0);
-        let toggle = find(&frame, Role::SidebarToggle, "").expect("toggle");
+        let toggle = Target::SIDEBAR_TOGGLE.find(&frame).expect("toggle");
         let region = region(&frame, &toggle.bounds);
-        assert_eq!(
-            region,
-            Geometry {
-                x: 13,
-                y: 6,
-                width: 32,
-                height: 32
-            }
-        );
+        assert_eq!(region, area(13, 6, 32, 32));
         assert_eq!(centre(region), (29, 22));
-        assert!(find(&frame, Role::SidebarToggle, "other").is_none());
+        let terminal = Target::terminal(&PlacementId("placement-3".into()));
+        assert!(terminal.find(&frame).is_none());
+        assert_eq!(terminal.to_string(), "terminal \"placement-3\"");
+    }
+
+    #[test]
+    fn a_control_drawn_twice_is_ambiguous_and_not_found() {
+        let mut frame = frame(2.0);
+        frame.ambiguous = vec![toggle(), toggle()];
+        frame.elements.clear();
+        assert!(Target::SIDEBAR_TOGGLE.ambiguous(&frame));
+        assert!(Target::SIDEBAR_TOGGLE.find(&frame).is_none());
+        assert!(!Target::AVATAR.ambiguous(&frame));
+    }
+
+    #[test]
+    fn the_aim_point_is_the_centre_unless_the_avatar_covers_it() {
+        let vessel = area(100, 100, 400, 300);
+        assert_eq!(clear_of(vessel, None), Some((300, 250)));
         assert_eq!(
-            named(Role::Terminal, "placement-3"),
-            "terminal \"placement-3\""
+            clear_of(vessel, Some(area(110, 110, 94, 94))),
+            Some((300, 250))
         );
+        let docked = area(280, 203, 94, 94);
+        let aim = clear_of(vessel, Some(docked)).expect("a clear side");
+        assert_eq!(aim, (190, 250));
+        assert!(contains(vessel, aim) && !contains(docked, aim));
+        assert_eq!(clear_of(area(300, 220, 24, 24), Some(docked)), None);
+        assert!(!contains(vessel, (500, 250)) && contains(vessel, (499, 399)));
     }
 
     #[test]

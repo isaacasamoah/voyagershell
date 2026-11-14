@@ -1,27 +1,32 @@
-use crate::inspection::{self, Unseen, centre, drawn_for, find, named, region};
+mod input;
+mod terminal;
+
+pub use input::Wheel;
+pub use terminal::{Lines, Terminal};
+
+use crate::inspection::{self, Target, Unseen, drawn_for};
 use crate::sandbox;
 use crate::system::{
-    Identity, Owned, PATIENCE, Pinned, System, TimedOut, digest, interrupted, poll, save, settle,
-    stamp, until, until_cleanup,
+    Identity, Owned, PATIENCE, Pinned, Stopped, System, TimedOut, digest, interrupted, poll, save,
+    settle, stamp, until, until_cleanup,
 };
-use crate::x11::{Display, Geometry, Pixels, Window};
+use crate::x11::{Display, Geometry, Key, Pixels, Window};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use voyager_contract::inspection::{Frame, Role};
+use voyager_contract::{Layout, Vessel};
 
-const EXPECTATION: Duration = Duration::from_secs(4);
-const QUIET: Duration = Duration::from_millis(150);
-const WHEEL_CLICKS: usize = 6;
+const GLANCE: Duration = Duration::from_millis(80);
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
-pub struct Layout {
+pub struct Surface {
     pub window: Option<(u16, u16)>,
     pub sidebar: Option<Sidebar>,
 }
@@ -33,7 +38,16 @@ pub enum Sidebar {
     Collapsed,
 }
 
-impl Layout {
+impl fmt::Display for Sidebar {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Sidebar::Open => "open",
+            Sidebar::Collapsed => "collapsed",
+        })
+    }
+}
+
+impl Surface {
     pub fn parse(window: Option<&str>, sidebar: Option<&str>) -> Result<Self> {
         let window = window
             .map(|text| -> Result<(u16, u16)> {
@@ -51,44 +65,115 @@ impl Layout {
             .transpose()?;
         Ok(Self { window, sidebar })
     }
+
+    pub fn with_sidebar(mut self, required: Option<Sidebar>) -> Result<Self> {
+        if let Some(required) = required {
+            ensure!(
+                self.sidebar.is_none_or(|chosen| chosen == required),
+                "The journey needs the sidebar {required}"
+            );
+            self.sidebar = Some(required);
+        }
+        Ok(self)
+    }
+}
+
+pub struct Seen<'a> {
+    pub frame: &'a Frame,
+}
+
+impl Seen<'_> {
+    pub fn shows(&self, target: &Target) -> bool {
+        target.find(self.frame).is_some()
+    }
+}
+
+enum Glance<T> {
+    Absent,
+    Preparing,
+    Ready(T),
+}
+
+impl<T> Glance<T> {
+    fn ready(self) -> Option<T> {
+        match self {
+            Glance::Ready(value) => Some(value),
+            Glance::Absent | Glance::Preparing => None,
+        }
+    }
+}
+
+fn glance<T>(frame: Option<&Frame>, check: impl FnOnce(&Seen) -> Option<T>) -> Glance<T> {
+    let Some(frame) = frame else {
+        return Glance::Absent;
+    };
+    match check(&Seen { frame }) {
+        None => Glance::Absent,
+        Some(_) if !frame.prepared => Glance::Preparing,
+        Some(value) => Glance::Ready(value),
+    }
+}
+
+fn placed(layout: &Layout) -> impl Iterator<Item = &Vessel> {
+    layout
+        .voyages
+        .iter()
+        .chain(&layout.home)
+        .flat_map(|voyage| {
+            voyage
+                .fleets
+                .iter()
+                .flat_map(|fleet| &fleet.vessels)
+                .chain(&voyage.portals)
+        })
 }
 
 pub struct Native {
     pub system: System,
     pub candidate: Pinned,
     pub hc: Pinned,
-    layout: Layout,
+    surface: Surface,
     display: Option<Owned>,
     x11: Option<Display>,
     viewer: Option<Owned>,
     core: Option<Identity>,
-    shell: Option<Identity>,
-    pub address: String,
-    placement: String,
+    core_id: Value,
+    adopted: Vec<(String, Identity)>,
     window: Window,
     launches: u32,
-    core_id: Value,
-    fault_fired: Arc<AtomicBool>,
+    aim: Arc<Mutex<Aim>>,
+}
+
+#[derive(Default)]
+struct Aim {
+    candidate: Option<Identity>,
+    injection: Injection,
+}
+
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
+enum Injection {
+    #[default]
+    Waiting,
+    Fired,
+    Withdrawn,
 }
 
 impl Native {
-    pub fn new(system: System, candidate: Pinned, hc: Pinned, layout: Layout) -> Self {
+    pub fn new(system: System, candidate: Pinned, hc: Pinned, surface: Surface) -> Self {
         Self {
             system,
             candidate,
             hc,
-            layout,
+            surface,
             display: None,
             x11: None,
             viewer: None,
             core: None,
-            shell: None,
-            address: String::new(),
-            placement: String::new(),
+            core_id: Value::Null,
+            adopted: Vec::new(),
             window: 0,
             launches: 0,
-            core_id: Value::Null,
-            fault_fired: Arc::new(AtomicBool::new(false)),
+            aim: Arc::default(),
         }
     }
 
@@ -122,7 +207,7 @@ impl Native {
         })?);
         self.system
             .execute("xrdb", &["-merge"], Some("Xft.dpi: 192\n"))?;
-        self.launch()?;
+        self.start()?;
         until("dedicated Core socket", || {
             Ok(self.system.socket().exists().then_some(()))
         })?;
@@ -130,30 +215,35 @@ impl Native {
         self.core = Some(Identity::read(pid(&core)?)?);
         self.core_id = core["core"]["id"].clone();
         ensure!(!self.core_id.is_null(), "Missing Core identity");
-        (self.address, self.placement) = until("bound terminal", || {
-            let doc = self
-                .system
-                .rpc("doc.get", json!({"name":"voyager-layout-v1"}))?;
-            let content = &doc["value"]["contents"][0];
-            Ok(content["backend"]
-                .as_str()
-                .zip(content["id"].as_str())
-                .and_then(|(backend, id)| {
-                    Some((backend.to_owned(), placement_of(&doc["value"], id)?))
-                }))
-        })?;
-        let shell = self
-            .system
-            .rpc("terminal.get", json!({"terminal":self.address}))?;
-        self.shell = Some(Identity::read(pid(&shell)?)?);
+        self.identify(None)?;
+        self.present()
+    }
+
+    fn identify(&self, first: Option<&Terminal>) -> Result<()> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Identities<'a> {
+            core: &'a Option<Identity>,
+            core_id: &'a Value,
+            #[serde(flatten)]
+            first: Option<&'a Terminal>,
+        }
         save(
             self.system.evidence.join("identity.json"),
-            &json!({"core":self.core,"coreId":self.core_id,"shell":self.shell,"terminal":self.address,"placement":self.placement}),
-        )?;
-        self.focus()
+            &Identities {
+                core: &self.core,
+                core_id: &self.core_id,
+                first,
+            },
+        )
     }
 
     pub fn launch(&mut self) -> Result<()> {
+        self.start()?;
+        self.present()
+    }
+
+    fn start(&mut self) -> Result<()> {
         ensure!(
             self.viewer.is_none(),
             "Existing viewer must close before reattachment"
@@ -176,7 +266,7 @@ impl Native {
             &[("RUST_LOG", "debug"), ("RUST_BACKTRACE", "full")],
             "native.log",
         )?;
-        self.viewer = Some(viewer);
+        self.attach(viewer);
         let title = self.title();
         self.window = until("unique candidate window", || {
             let viewer = self.viewer.as_ref().context("Missing viewer")?;
@@ -188,9 +278,25 @@ impl Native {
         self.verify()?;
         save(
             self.system.evidence.join("launch.json"),
-            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.layout}),
-        )?;
-        Ok(())
+            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.surface}),
+        )
+    }
+
+    fn attach(&mut self, viewer: Owned) {
+        self.aim
+            .lock()
+            .expect("the fault's aim is never held across a panic")
+            .candidate = Some(viewer.identity.clone());
+        self.viewer = Some(viewer);
+    }
+
+    fn present(&self) -> Result<()> {
+        self.arrange()?;
+        let x11 = self.x11()?;
+        self.system
+            .act(json!({"input":"focus","window":self.window}), || {
+                x11.focus(self.window)
+            })
     }
 
     pub fn inspection(&self) -> PathBuf {
@@ -222,7 +328,7 @@ impl Native {
         Ok(())
     }
 
-    pub fn wait_for<T>(
+    fn wait_for<T>(
         &self,
         expected: &str,
         within: Duration,
@@ -239,26 +345,22 @@ impl Native {
         .ok_or_else(|| Unseen(expected.into()).into())
     }
 
-    pub fn locate(&self, role: Role, key: &str) -> Result<Geometry> {
-        let located = self.wait_for(&named(role, key), PATIENCE, |frame| {
-            find(frame, role, key).map(|element| (region(frame, &element.bounds), frame.sequence))
-        })?;
-        self.system.record(
-            json!({"event":"locate","role":role,"key":key,"region":located.0,"sequence":located.1}),
-        )?;
-        Ok(located.0)
-    }
-
     fn arrange(&self) -> Result<()> {
         let x11 = self.x11()?;
-        if let Some((width, height)) = self.layout.window {
-            let current = x11.geometry(self.window)?;
-            if (current.width, current.height) != (width, height) {
-                self.system.act(
-                    json!({"input":"resize","window":self.window,"size":[width,height]}),
-                    || x11.resize(self.window, width, height),
-                )?;
-            }
+        let current = x11.geometry(self.window)?;
+        if (current.x, current.y) != (0, 0) {
+            self.system.act(
+                json!({"input":"place","window":self.window,"at":[0,0]}),
+                || x11.place(self.window, 0, 0),
+            )?;
+        }
+        if let Some((width, height)) = self.surface.window
+            && (current.width, current.height) != (width, height)
+        {
+            self.system.act(
+                json!({"input":"resize","window":self.window,"size":[width,height]}),
+                || x11.resize(self.window, width, height),
+            )?;
         }
         let open = |frame: &Frame| {
             frame
@@ -266,112 +368,61 @@ impl Native {
                 .iter()
                 .any(|element| element.role == Role::VoyageName)
         };
-        let drawn = self.wait_for(&named(Role::Terminal, &self.placement), PATIENCE, |frame| {
-            find(frame, Role::Terminal, &self.placement).map(|_| open(frame))
+        let toggle = Target::SIDEBAR_TOGGLE;
+        let drawn = self.observe("the prepared workspace", |seen| {
+            seen.shows(&toggle).then(|| open(seen.frame))
         })?;
-        if let Some(sidebar) = self.layout.sidebar
+        if let Some(sidebar) = self.surface.sidebar
             && drawn != (sidebar == Sidebar::Open)
         {
-            let toggle = self.locate(Role::SidebarToggle, "")?;
-            self.click(toggle)?;
-            self.wait_for(&format!("the sidebar {sidebar:?}"), PATIENCE, |frame| {
-                (open(frame) == (sidebar == Sidebar::Open)).then_some(())
+            self.click(&toggle)?;
+            self.observe(&format!("the sidebar {sidebar}"), |seen| {
+                (open(seen.frame) == (sidebar == Sidebar::Open)).then_some(())
             })?;
         }
         Ok(())
     }
 
-    fn point(&self, target: Geometry) -> Result<()> {
+    pub fn observe<T: PartialEq>(
+        &self,
+        expected: &str,
+        mut check: impl FnMut(&Seen) -> Option<T>,
+    ) -> Result<T> {
         let x11 = self.x11()?;
-        let window = x11.geometry(self.window)?;
-        let (x, y) = centre(target);
-        let (x, y) = (window.x + x, window.y + y);
-        self.system
-            .act(json!({"input":"move","at":[x,y]}), || x11.move_to(x, y))?;
-        self.pointer()
+        let path = self.inspection();
+        let mut preparing = false;
+        let held = settle(
+            PATIENCE,
+            GLANCE,
+            || {
+                let window = x11.geometry(self.window)?;
+                let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
+                let seen = glance(frame.as_ref(), &mut check);
+                preparing = matches!(seen, Glance::Preparing);
+                Ok(seen.ready())
+            },
+            |_| true,
+        )?;
+        held.ok_or_else(|| {
+            let prepared = if preparing {
+                " with the workspace prepared"
+            } else {
+                ""
+            };
+            Unseen(format!("{expected}{prepared}")).into()
+        })
     }
 
-    fn click(&self, target: Geometry) -> Result<()> {
-        self.point(target)?;
-        let x11 = self.x11()?;
-        self.system
-            .act(json!({"input":"click","button":1}), || x11.click(1))
-    }
-
-    pub fn focus(&self) -> Result<()> {
-        self.verify()?;
-        self.arrange()?;
-        let x11 = self.x11()?;
-        self.system
-            .act(json!({"input":"focus","window":self.window}), || {
-                x11.focus(self.window)
-            })?;
-        self.click(self.locate(Role::Terminal, &self.placement)?)
-    }
-
-    fn keyboard(&self) -> Result<()> {
-        self.verify()?;
-        ensure!(
-            self.x11()?.focused()? == self.window,
-            "Keyboard focus left the owned candidate"
-        );
-        Ok(())
-    }
-
-    fn pointer(&self) -> Result<()> {
-        self.verify()?;
-        let under = self.x11()?.under_pointer()?;
-        ensure!(
-            under == self.window,
-            "Pointer left the owned candidate: {under}"
-        );
-        Ok(())
-    }
-
-    pub fn type_text(&self, text: &str) -> Result<()> {
-        self.keyboard()?;
-        let x11 = self.x11()?;
-        self.system
-            .act(json!({"input":"type","text":text}), || x11.type_text(text))
-    }
-
-    pub fn key(&self, chord: &str) -> Result<()> {
-        self.keyboard()?;
-        let x11 = self.x11()?;
-        self.system
-            .act(json!({"input":"key","chord":chord}), || x11.chord(chord))
-    }
-
-    pub fn line(&self, text: &str) -> Result<()> {
-        self.type_text(text)?;
-        self.key("Return")
-    }
-
-    pub fn wheel(&self, up: bool) -> Result<()> {
-        self.point(self.locate(Role::Terminal, &self.placement)?)?;
-        let x11 = self.x11()?;
-        let button = if up { 4 } else { 5 };
-        self.system.act(
-            json!({"input":"wheel","button":button,"clicks":WHEEL_CLICKS}),
-            || (0..WHEEL_CLICKS).try_for_each(|_| x11.click(button)),
-        )
-    }
-
-    pub fn look(&self) -> Result<Pixels> {
-        let (terminal, avatar) =
-            self.wait_for(&named(Role::Terminal, &self.placement), PATIENCE, |frame| {
-                let terminal = find(frame, Role::Terminal, &self.placement)?;
-                let avatar = find(frame, Role::Avatar, "");
-                Some((
-                    region(frame, &terminal.bounds),
-                    avatar.map(|avatar| region(frame, &avatar.bounds)),
-                ))
-            })?;
-        let mut pixels = self.x11()?.capture(self.window, terminal)?;
-        if let Some(avatar) = avatar {
-            pixels.mask(avatar);
+    pub fn document(&self) -> Result<Option<Layout>> {
+        let reply = self
+            .system
+            .watch("doc.get", json!({"name":"voyager-layout-v1"}))?;
+        match &reply["value"] {
+            Value::Null => Ok(None),
+            value => serde_json::from_value(value.clone()).map(Some).context(
+                "The layout document is not the contract Layout this verifier was built with",
+            ),
         }
-        Ok(pixels)
     }
 
     pub fn keep(&self, name: &str, look: &Pixels) -> Result<()> {
@@ -382,63 +433,51 @@ impl Native {
         )
     }
 
-    pub fn settled(&self, name: &str, expected: impl Fn(&Pixels) -> bool) -> Result<Pixels> {
-        let look = settle(EXPECTATION, QUIET, || self.look(), expected)?;
-        self.keep(name, &look)?;
-        Ok(look)
+    pub fn keep_window(&self, name: &str) -> Result<()> {
+        let x11 = self.x11()?;
+        let window = x11.geometry(self.window)?;
+        let whole = Geometry {
+            x: 0,
+            y: 0,
+            ..window
+        };
+        self.keep(name, &x11.capture(self.window, whole)?)
     }
 
-    pub fn settled_with<T: PartialEq>(
-        &self,
-        name: &str,
-        mut observe: impl FnMut() -> Result<T>,
-        expected: impl Fn(&T, &Pixels) -> bool,
-    ) -> Result<(T, Pixels)> {
-        let (value, look) = settle(
-            EXPECTATION,
-            QUIET,
-            || Ok((observe()?, self.look()?)),
-            |(value, look)| expected(value, look),
-        )?;
-        self.keep(name, &look)?;
-        Ok((value, look))
-    }
-
-    pub fn same_program(&self) -> Result<()> {
-        self.core
-            .as_ref()
-            .context("Missing Core identity")?
-            .verify()?;
-        let shell = self.shell.as_ref().context("Missing shell identity")?;
-        shell.verify()?;
-        ensure!(
-            pid(&self
-                .system
-                .rpc("terminal.get", json!({"terminal":self.address}))?)?
-                == shell.pid,
-            "Terminal shell changed"
-        );
-        ensure!(
-            self.system.rpc("server.status", json!({}))?["core"]["id"] == self.core_id,
-            "Core identity changed"
-        );
-        Ok(())
+    pub fn adopt(&mut self, name: String, identity: Identity) {
+        self.adopted.push((name, identity));
     }
 
     pub fn close(&mut self) -> Result<()> {
-        self.key("ctrl+q")?;
+        self.press(Key::Char('q').ctrl())?;
         let viewer = self.viewer.as_mut().context("Missing viewer")?;
-        until("owned viewer exit", || {
-            Ok(viewer.child.try_wait()?.map(|_| ()))
-        })?;
+        let status = until("owned viewer exit", || Ok(viewer.child.try_wait()?))?;
         self.viewer = None;
+        if !status.success() {
+            return Err(Defect(format!(
+                "the candidate did not quit cleanly: {}",
+                describe(status)
+            ))
+            .into());
+        }
         Ok(())
+    }
+
+    pub fn halted(&self) -> bool {
+        self.viewer.as_ref().is_some_and(|viewer| {
+            matches!(process_state(viewer.identity.pid), None | Some('T' | 'Z'))
+        })
     }
 
     pub fn diagnose(&mut self, error: &anyhow::Error) -> Cause {
         let unseen = error.downcast_ref::<Unseen>().is_some();
         let timed_out = unseen || error.downcast_ref::<TimedOut>().is_some();
-        let attempts = if timed_out { 1 } else { EXIT_GRACE_POLLS };
+        let defect = error.downcast_ref::<Defect>();
+        let attempts = if timed_out || defect.is_some() {
+            1
+        } else {
+            EXIT_GRACE_POLLS
+        };
         for attempt in 0..attempts {
             if let Some(viewer) = self.viewer.as_mut()
                 && let Some(status) = exited(viewer)
@@ -453,6 +492,9 @@ impl Native {
             && let Some(status) = exited(display)
         {
             return Cause::Fixture(format!("owned display exited: {status}"));
+        }
+        if let Some(Defect(detail)) = defect {
+            return Cause::Product(detail.clone());
         }
         if let Some(viewer) = &self.viewer
             && process_state(viewer.identity.pid) == Some('T')
@@ -497,53 +539,67 @@ impl Native {
         };
         owned("candidate", self.viewer.as_mut());
         owned("display", self.display.as_mut());
-        for (name, identity) in [("core", &self.core), ("shell", &self.shell)] {
-            if let Some(identity) = identity {
-                report.insert(
-                    name.into(),
-                    json!({"identity":identity,"alive":identity.verify().is_ok(),"state":process_state(identity.pid).map(String::from)}),
-                );
-            }
+        let core = self.core.iter().map(|identity| ("core", identity));
+        let adopted = self
+            .adopted
+            .iter()
+            .map(|(name, identity)| (name.as_str(), identity));
+        for (name, identity) in core.chain(adopted) {
+            report.insert(
+                name.into(),
+                json!({"identity":identity,"alive":identity.verify().is_ok(),"state":process_state(identity.pid).map(String::from)}),
+            );
         }
         Value::Object(report)
     }
 
-    pub fn inject(&self, fault: &Fault) -> Result<()> {
-        let identity = self
-            .viewer
-            .as_ref()
-            .context("Missing viewer")?
-            .identity
-            .clone();
+    pub fn inject(&self, fault: &Fault) {
         let (delay, signal) = (fault.after, fault.signal());
-        let fired = self.fault_fired.clone();
+        let aim = self.aim.clone();
         std::thread::spawn(move || {
             sleep(Duration::from_secs(delay));
-            if identity.verify().is_ok()
-                && let Some(pid) = rustix::process::Pid::from_raw(identity.pid as i32)
-            {
-                let _ = rustix::process::kill_process(pid, signal);
-                fired.store(true, Ordering::SeqCst);
+            loop {
+                {
+                    let mut aim = aim
+                        .lock()
+                        .expect("the fault's aim is never held across a panic");
+                    if aim.injection == Injection::Withdrawn {
+                        return;
+                    }
+                    if let Some(identity) = &aim.candidate
+                        && identity.verify().is_ok()
+                        && let Some(pid) = rustix::process::Pid::from_raw(identity.pid as i32)
+                        && rustix::process::kill_process(pid, signal).is_ok()
+                    {
+                        aim.injection = Injection::Fired;
+                        return;
+                    }
+                }
+                sleep(FAULT_RETRY);
             }
         });
-        Ok(())
     }
 
-    pub fn fault_fired(&self) -> bool {
-        self.fault_fired.load(Ordering::SeqCst)
+    pub fn withdraw_fault(&self) -> bool {
+        let mut aim = self
+            .aim
+            .lock()
+            .expect("the fault's aim is never held across a panic");
+        if aim.injection == Injection::Waiting {
+            aim.injection = Injection::Withdrawn;
+        }
+        aim.injection == Injection::Fired
     }
 
     pub fn cleanup(&mut self, candidate_faulted: bool) -> Vec<String> {
         let mut errors = Vec::new();
         if let Some(mut viewer) = self.viewer.take() {
             let stopped = if candidate_faulted {
-                viewer.abandon()
+                viewer.abandon().map(|()| Stopped::Exited { signals: 0 })
             } else {
                 viewer.stop()
             };
-            if let Err(error) = stopped {
-                errors.push(format!("viewer: {error:#}"));
-            }
+            errors.extend(self.retired("viewer", stopped));
         }
         if self.system.socket().exists() {
             let stopped = (|| -> Result<()> {
@@ -566,19 +622,19 @@ impl Native {
                 errors.push(format!("Core: {error:#}"));
             }
         }
-        for identity in [&self.core, &self.shell].into_iter().flatten() {
+        let adopted = self.adopted.iter().map(|(_, identity)| identity);
+        for identity in self.core.iter().chain(adopted) {
             if let Err(error) = until_cleanup("owned program exit", || {
                 Ok((!Path::new(&format!("/proc/{}", identity.pid)).exists()).then_some(()))
             }) {
                 errors.push(format!("process {}: {error:#}", identity.pid));
             }
         }
-        self.x11 = None;
-        if let Some(mut display) = self.display.take()
-            && let Err(error) = display.stop()
-        {
-            errors.push(format!("display: {error:#}"));
+        if let Some(mut display) = self.display.take() {
+            let stopped = display.stop();
+            errors.extend(self.retired("display", stopped));
         }
+        self.x11 = None;
         if let Some(number) = self
             .system
             .env
@@ -598,10 +654,42 @@ impl Native {
     }
 }
 
+impl Native {
+    fn retired(&self, process: &str, stopped: Result<Stopped>) -> Option<String> {
+        let (event, error) = match stopped {
+            Err(error) => return Some(format!("{process}: {error:#}")),
+            Ok(Stopped::Exited { signals: 0 | 1 }) => return None,
+            Ok(Stopped::Exited { signals }) => (
+                json!({"event":"repeated-stop","process":process,"signals":signals}),
+                None,
+            ),
+            Ok(Stopped::Killed { signals, stuck }) => (
+                json!({"event":"forced-stop","process":process,"signals":signals,"stuck":stuck}),
+                Some(format!(
+                    "{process}: Owned child required forced termination after {signals} SIGTERM signals ({stuck})"
+                )),
+            ),
+        };
+        let recorded = self.system.record(event);
+        error.or(recorded.err().map(|error| format!("{process}: {error:#}")))
+    }
+}
+
 pub enum Cause {
     Product(String),
     Fixture(String),
 }
+
+#[derive(Debug)]
+pub struct Defect(pub String);
+
+impl fmt::Display for Defect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Defect {}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum Action {
@@ -637,6 +725,7 @@ impl Fault {
 }
 
 const EXIT_GRACE_POLLS: usize = 10;
+const FAULT_RETRY: Duration = Duration::from_millis(10);
 
 fn exited(process: &mut Owned) -> Option<String> {
     if let Ok(Some(status)) = process.child.try_wait() {
@@ -662,17 +751,6 @@ fn process_state(pid: u32) -> Option<char> {
     stat.rsplit_once(')')?.1.trim().chars().next()
 }
 
-fn placement_of(value: &Value, content: &str) -> Option<String> {
-    match value {
-        Value::Object(map) if map.get("content").and_then(Value::as_str) == Some(content) => {
-            map.get("id").and_then(Value::as_str).map(str::to_owned)
-        }
-        Value::Object(map) => map.values().find_map(|item| placement_of(item, content)),
-        Value::Array(items) => items.iter().find_map(|item| placement_of(item, content)),
-        _ => None,
-    }
-}
-
 pub fn pid(value: &Value) -> Result<u32> {
     u32::try_from(value["pid"].as_u64().context("Missing process PID")?).context("Invalid PID")
 }
@@ -692,11 +770,11 @@ pub fn quote(value: &Path) -> Result<String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    fn native() -> Result<Native> {
+    pub(crate) fn native() -> Result<Native> {
         let evidence =
             std::env::temp_dir().join(format!("vv-diagnose-{}-{}", std::process::id(), stamp()));
         fs::create_dir(&evidence)?;
@@ -707,8 +785,25 @@ mod tests {
             system,
             pinned.clone(),
             pinned,
-            Layout::default(),
+            Surface::default(),
         ))
+    }
+
+    pub(crate) fn stopped() -> Result<Native> {
+        let mut native = native()?;
+        let viewer = native.system.spawn(
+            Path::new("/usr/bin/tail"),
+            &["-f", "/dev/null"],
+            &[],
+            "viewer.log",
+        )?;
+        let pid = rustix::process::Pid::from_raw(i32::try_from(viewer.identity.pid)?)
+            .context("Invalid viewer PID")?;
+        native.viewer = Some(viewer);
+        ensure!(!native.halted(), "A running candidate counts as halted");
+        rustix::process::kill_process(pid, rustix::process::Signal::STOP)?;
+        until("a stopped candidate", || Ok(native.halted().then_some(())))?;
+        Ok(native)
     }
 
     #[test]
@@ -732,6 +827,138 @@ mod tests {
     }
 
     #[test]
+    fn a_fault_goes_to_the_candidate_that_runs_when_it_fires() -> Result<()> {
+        let mut native = native()?;
+        let idle = |native: &Native| {
+            native.system.spawn(
+                Path::new("/usr/bin/tail"),
+                &["-f", "/dev/null"],
+                &[],
+                "viewer.log",
+            )
+        };
+        let first = idle(&native)?;
+        native.attach(first);
+        native
+            .viewer
+            .take()
+            .context("the first candidate")?
+            .abandon()?;
+        native.inject(&Fault {
+            action: Action::Kill,
+            after: 0,
+        });
+        let relaunched = idle(&native)?;
+        native.attach(relaunched);
+        let relaunched = native.viewer.as_mut().context("the relaunched candidate")?;
+        let ended = until("the relaunched candidate's end", || Ok(exited(relaunched)))?;
+        ensure!(
+            ended == "signal 9",
+            "The fault did not kill the candidate that was running: {ended}"
+        );
+        ensure!(
+            native.withdraw_fault(),
+            "A fault that killed the candidate does not count as fired"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_withdrawn_fault_never_fires() -> Result<()> {
+        let mut native = native()?;
+        native.inject(&Fault {
+            action: Action::Kill,
+            after: 0,
+        });
+        ensure!(
+            !native.withdraw_fault(),
+            "A fault fired although no candidate was running"
+        );
+        let later = native.system.spawn(
+            Path::new("/usr/bin/tail"),
+            &["-f", "/dev/null"],
+            &[],
+            "viewer.log",
+        )?;
+        native.attach(later);
+        let later = native.viewer.as_mut().context("the later candidate")?;
+        let ended = poll(crate::system::QUIET * 2, FAULT_RETRY, false, || {
+            Ok(exited(later))
+        })?;
+        ensure!(
+            ended.is_none(),
+            "A withdrawn fault reached a later candidate: {ended:?}"
+        );
+        ensure!(
+            !native.withdraw_fault(),
+            "A withdrawn fault counts as fired"
+        );
+        Ok(())
+    }
+
+    fn ledger(native: &Native) -> Result<Vec<Value>> {
+        let text = fs::read_to_string(native.system.evidence.join("actions.jsonl"))?;
+        Ok(text
+            .lines()
+            .map(serde_json::from_str)
+            .collect::<Result<_, _>>()?)
+    }
+
+    #[test]
+    fn a_stop_that_needed_more_than_one_signal_is_recorded() -> Result<()> {
+        let native = native()?;
+        ensure!(
+            native
+                .retired("display", Ok(Stopped::Exited { signals: 1 }))
+                .is_none()
+                && !native.system.evidence.join("actions.jsonl").exists(),
+            "A stop on the first signal was recorded or failed the cleanup"
+        );
+        ensure!(
+            native
+                .retired("display", Ok(Stopped::Exited { signals: 2 }))
+                .is_none(),
+            "A stop on the second signal failed the cleanup"
+        );
+        let stuck = "state S, waiting in ep_poll, system call 232";
+        let killed = Stopped::Killed {
+            signals: 12,
+            stuck: stuck.into(),
+        };
+        let forced = native
+            .retired("display", Ok(killed))
+            .context("A forced stop left the cleanup clean")?;
+        ensure!(
+            forced
+                == format!(
+                    "display: Owned child required forced termination after 12 SIGTERM signals ({stuck})"
+                ),
+            "A forced stop is reported as: {forced}"
+        );
+        assert_eq!(
+            ledger(&native)?,
+            [
+                json!({"event":"repeated-stop","process":"display","signals":2}),
+                json!({"event":"forced-stop","process":"display","signals":12,"stuck":stuck}),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cleanup_stops_a_display_that_lost_its_first_signal() -> Result<()> {
+        let mut native = native()?;
+        native.display = Some(crate::system::tests::deaf("display", "trap - TERM")?);
+        let errors = native.cleanup(false);
+        ensure!(errors.is_empty(), "The cleanup failed: {errors:?}");
+        assert_eq!(
+            ledger(&native)?,
+            [json!({"event":"repeated-stop","process":"display","signals":2})]
+        );
+        Ok(())
+    }
+
+    #[test]
     fn a_missing_host_tool_is_a_fixture_fault() -> Result<()> {
         let mut native = native()?;
         let error = native
@@ -745,14 +972,122 @@ mod tests {
         Ok(())
     }
 
+    fn frame(prepared: bool) -> Result<Frame> {
+        Ok(serde_json::from_value(json!({
+            "sequence": 1,
+            "window": {"width": 725.0, "height": 470.0, "scale": 2.0},
+            "dock": {"kind": "workspace"},
+            "prepared": prepared,
+            "elements": [],
+            "ambiguous": []
+        }))?)
+    }
+
     #[test]
-    fn the_terminal_placement_is_found_by_its_content() {
-        let layout = json!({"voyages":[{"fleets":[{"vessels":[{"content":"content-6","id":"placement-7"},{"content":"content-2","id":"placement-3"}]}]}]});
-        assert_eq!(
-            placement_of(&layout, "content-2").as_deref(),
-            Some("placement-3")
+    fn a_control_drawn_twice_is_a_product_failure() -> Result<()> {
+        let mut native = native()?;
+        let mut twice = frame(true)?;
+        let toggle: voyager_contract::inspection::Element = serde_json::from_value(json!({
+            "role": "sidebar-toggle",
+            "key": "",
+            "bounds": {"x": 1.0, "y": 1.0, "width": 10.0, "height": 10.0}
+        }))?;
+        twice.ambiguous = vec![toggle.clone(), toggle];
+        let error = input::single(&Target::SIDEBAR_TOGGLE, &twice)
+            .expect_err("A control drawn twice had a single place to aim at");
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Product(detail) if detail.contains("more than once")),
+            "A control drawn twice was blamed on the fixture"
         );
-        assert_eq!(placement_of(&layout, "content-9"), None);
+        ensure!(
+            input::single(&Target::SIDEBAR_TOGGLE, &frame(true)?).is_ok(),
+            "A frame without the control counted as drawing it twice"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn an_outcome_seen_while_the_workspace_prepares_does_not_count() -> Result<()> {
+        let (preparing, prepared) = (frame(false)?, frame(true)?);
+        let seen = |frame: Option<&Frame>, outcome: Option<u8>| glance(frame, |_| outcome);
+        ensure!(
+            matches!(seen(Some(&preparing), Some(7)), Glance::Preparing),
+            "An outcome counted while the header reported a pending workspace request"
+        );
+        ensure!(
+            matches!(seen(Some(&prepared), Some(7)), Glance::Ready(7)),
+            "An outcome in a prepared workspace did not count"
+        );
+        ensure!(
+            matches!(seen(Some(&prepared), None), Glance::Absent),
+            "A missing outcome counted"
+        );
+        ensure!(
+            matches!(seen(None, Some(7)), Glance::Absent),
+            "An outcome counted without a frame"
+        );
+        ensure!(
+            seen(Some(&prepared), Some(7)).ready() == Some(7)
+                && seen(Some(&preparing), Some(7)).ready().is_none()
+                && seen(Some(&prepared), None).ready().is_none(),
+            "Only an outcome in a prepared workspace is a value that can hold"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_defect_the_driver_saw_is_a_product_failure() -> Result<()> {
+        let mut native = native()?;
+        let error = anyhow::Error::from(Defect("the candidate did not quit cleanly".into()));
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Product(detail) if detail.contains("quit cleanly")),
+            "A defect that the driver observed was blamed on the fixture"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_host_tool_that_hangs_is_a_fixture_fault() -> Result<()> {
+        let mut native = native()?;
+        let error = native
+            .system
+            .execute("timeout", &["0.1s", "sleep", "5"], None)
+            .expect_err("A tool that ran out of time succeeded");
+        ensure!(
+            error.downcast_ref::<TimedOut>().is_none(),
+            "A hung host tool reads as a candidate that stopped responding"
+        );
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Fixture(detail) if detail.contains("timeout")),
+            "A hung host tool was blamed on the product"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_journey_fixes_its_sidebar_and_refuses_the_other_one() -> Result<()> {
+        let unset = Surface::parse(None, None)?;
+        ensure!(
+            unset.with_sidebar(None)?.sidebar.is_none(),
+            "A sidebar was chosen without a requirement"
+        );
+        ensure!(
+            unset.with_sidebar(Some(Sidebar::Open))?.sidebar == Some(Sidebar::Open),
+            "The required sidebar was not applied"
+        );
+        let collapsed = Surface::parse(Some("1180x820"), Some("collapsed"))?;
+        ensure!(
+            collapsed.with_sidebar(Some(Sidebar::Collapsed)).is_ok(),
+            "A matching sidebar was refused"
+        );
+        let refusal = collapsed
+            .with_sidebar(Some(Sidebar::Open))
+            .expect_err("A contradicting sidebar was accepted");
+        ensure!(
+            refusal.to_string() == "The journey needs the sidebar open",
+            "The refusal does not name the required sidebar: {refusal}"
+        );
+        Ok(())
     }
 
     #[test]

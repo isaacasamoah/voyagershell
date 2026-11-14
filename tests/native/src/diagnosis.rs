@@ -1,3 +1,4 @@
+use crate::journey::Outcomes;
 use crate::native::{Cause, Native};
 use crate::system::save;
 use crate::x11::Display;
@@ -102,7 +103,7 @@ fn copy_core_logs(evidence: &Path, session: &str, bundle: &Path) -> Result<()> {
 
 pub struct Findings<'a> {
     pub cause: Option<&'a Cause>,
-    pub cases: &'a [Value],
+    pub outcomes: &'a Outcomes,
     pub recording_error: Option<&'a str>,
     pub cleanup_errors: &'a [String],
     pub identity_changed: bool,
@@ -110,18 +111,16 @@ pub struct Findings<'a> {
 
 impl Findings<'_> {
     pub fn first_failing_check(&self) -> Value {
+        if let Some(failure) = self.outcomes.first_failure() {
+            return failure;
+        }
         if let Some(cause) = self.cause {
             let (kind, detail) = match cause {
                 Cause::Product(detail) => ("product", detail),
                 Cause::Fixture(detail) => ("fixture", detail),
             };
-            return json!({"check":"journey","blame":kind,"detail":detail});
-        }
-        if let Some(case) = self.cases.iter().find(|case| case["passed"] != true) {
-            return json!({"check":case["case"],"blame":"product","detail":"observed behavior disagreed with the expectation"});
-        }
-        if self.cases.len() != 4 {
-            return json!({"check":"cases","blame":"product","detail":format!("{} of 4 cases ran", self.cases.len())});
+            let check = self.outcomes.interrupted().unwrap_or("journey");
+            return json!({"check":check,"blame":kind,"detail":detail});
         }
         if let Some(error) = self.recording_error {
             return json!({"check":"evidence","blame":"fixture","detail":error});

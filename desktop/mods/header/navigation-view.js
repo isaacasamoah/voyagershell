@@ -1,10 +1,26 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { Name, MeasureHeight } from "voyager_native";
+import { Name, MeasureHeight, Marker, EditorMarker } from "voyager_native";
 import { Brand, dock_target_visible, speech_in_primary } from "voyager_avatar";
 import { Speech } from "voyager_conversation";
 import { projection } from "voyager_header";
 import { voyageColour } from "./voyage-colours.js";
+export function renderNameEditor(workspace, state, id) {
+  return div()
+    .min_w(60)
+    .h(32)
+    .on_mouse_down_out(() => workspace.focus.focus())
+    .child(Name.new(state))
+    .child(EditorMarker.new(id, state));
+}
+export function renderName(rename, label) {
+  return [
+    ...(rename ? [Marker.new(`${rename.kind}-name`, rename.id, label)] : []),
+    rename?.kind === "voyage"
+      ? div().flex_1().min_w(0).truncate().child(label)
+      : label,
+  ];
+}
 export function renderSidebar(workspace, layout, voyage) {
   const colors = projection();
   const sidebar = div()
@@ -140,6 +156,7 @@ export function renderSidebar(workspace, layout, voyage) {
             .h(24)
             .p(2)
             .child("+")
+            .child(Marker.new("create-voyage"))
             .on_click((_event, cx) => workspace.createVoyage(cx)),
         ),
     );
@@ -350,6 +367,7 @@ export function renderSidebar(workspace, layout, voyage) {
         .h(28)
         .p(2)
         .child("+")
+        .child(Marker.new("create-voyage"))
         .on_click((_event, cx) => workspace.createVoyage(cx)),
     );
   const measure = (name, child) =>
@@ -513,6 +531,7 @@ export function renderFleets(workspace, layout, voyage, fleet) {
           .p(2)
           .flex_shrink_0()
           .child("+")
+          .child(Marker.new("create-fleet", voyage.id))
           .on_mouse_down("left", (_event, cx) => cx.stop_propagation()),
       ),
       workspace.closedFleetItems(voyage),
