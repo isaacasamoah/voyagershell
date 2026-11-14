@@ -276,11 +276,15 @@ impl gpui::Element for Marker {
 }
 
 pub fn avatar() -> impl IntoElement {
+    control(Role::Avatar, String::new())
+}
+
+pub fn control(role: Role, key: String) -> impl IntoElement {
     Marker {
-        id: "inspect-avatar".into(),
+        id: ElementId::Name(format!("inspect-{role:?}-{key}").into()),
         mark: Mark::Control {
-            role: Role::Avatar,
-            key: String::new(),
+            role,
+            key,
             shown: Shown::Nothing,
         },
     }

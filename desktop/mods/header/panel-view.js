@@ -196,6 +196,7 @@ export function renderPanel(workspace, placement, scope, group) {
                     .child(
                       svg(maximized ? "restore.svg" : "maximize.svg").size(12),
                     )
+                    .child(Marker.new("maximize-panel", placement.id))
                     .on_click((_event, cx) => {
                       workspace.focused = placement.id;
                       workspace.run(
@@ -315,7 +316,8 @@ export function renderPanel(workspace, placement, scope, group) {
                       ? workspace.drag.bounds.height / 2
                       : workspace.drag.bounds.height,
                   )
-                  .bg("#b3d2e525"),
+                  .bg("#b3d2e525")
+                  .child(Marker.new("move-preview", placement.id)),
               ]
             : [],
         ),
