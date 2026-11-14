@@ -61,11 +61,11 @@ pub(crate) fn observe_parsed(terminal: &libghostty_vt::Terminal<'_, '_>) {
     if !*ENABLED {
         return;
     }
-    crate::typing_trace::record("glyph_scan_start", 0);
+    crate::diagnostics::trace("glyph_scan_start", 0);
     let count = parsed_prefix(terminal);
-    crate::typing_trace::record("glyph_scan_end", 0);
+    crate::diagnostics::trace("glyph_scan_end", 0);
     if let Some(count) = count {
-        crate::typing_trace::record("glyph_parsed", count);
+        crate::diagnostics::trace("glyph_parsed", count);
     }
 }
 
@@ -82,7 +82,7 @@ pub(crate) fn observe(grid: Option<&Grid>) -> Option<usize> {
         }
     }
     if let Some(count) = found {
-        crate::typing_trace::record("glyph_snapshot", count);
+        crate::diagnostics::trace("glyph_snapshot", count);
     }
     found
 }

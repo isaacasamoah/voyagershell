@@ -8,6 +8,7 @@ pub mod context;
 pub mod core;
 mod core_endpoint;
 pub mod core_state;
+pub mod diagnostics;
 pub mod launch;
 pub mod observation;
 mod panels;
@@ -37,6 +38,4 @@ mod voice_session;
 mod voice_transcript;
 mod voice_wire;
 
-#[path = "../../experiments/performance/typing-latency/trace.rs"]
-mod typing_trace;
-pub use typing_trace::record as record_terminal_trace;
+use diagnostics as typing_trace;
