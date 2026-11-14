@@ -553,7 +553,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             )
             .unwrap();
         assert!(matches!(&*opened, Response::NoteOpened { .. }));
-        wait(client.quit()).unwrap();
+        wait(client.end(voyager_app::client::Lifecycle::StopSession)).unwrap();
         quit = true;
         let mut after_quit = request;
         if let Request::Configure {

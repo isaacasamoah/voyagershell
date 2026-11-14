@@ -15,8 +15,8 @@ use std::thread::sleep;
 use std::time::Duration;
 use x11rb::connection::Connection as _;
 use x11rb::protocol::xproto::{
-    Atom, AtomEnum, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, ConfigureWindowAux,
-    ConnectionExt as _, ImageFormat, InputFocus, KEY_PRESS_EVENT, KEY_RELEASE_EVENT,
+    Atom, AtomEnum, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, ClientMessageEvent, ConfigureWindowAux,
+    ConnectionExt as _, EventMask, ImageFormat, InputFocus, KEY_PRESS_EVENT, KEY_RELEASE_EVENT,
     MOTION_NOTIFY_EVENT, MapState,
 };
 use x11rb::protocol::xtest::ConnectionExt as _;
@@ -297,6 +297,27 @@ impl Display {
                     .height(u32::from(height)),
             )?
             .check()?;
+        Ok(())
+    }
+
+    pub fn request_close(&self, window: Window) -> Result<()> {
+        let atom = |name: &str| -> Result<u32> {
+            Ok(self
+                .connection
+                .intern_atom(false, name.as_bytes())?
+                .reply()?
+                .atom)
+        };
+        let event = ClientMessageEvent::new(
+            32,
+            window,
+            atom("WM_PROTOCOLS")?,
+            [atom("WM_DELETE_WINDOW")?, CURRENT_TIME, 0, 0, 0],
+        );
+        self.connection
+            .send_event(false, window, EventMask::NO_EVENT, event)?
+            .check()?;
+        self.connection.flush()?;
         Ok(())
     }
 

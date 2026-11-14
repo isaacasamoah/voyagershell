@@ -389,9 +389,9 @@ document and captures the rendered result. An external document edit makes the
 next visible action fail unchanged; an explicit Refresh obtains the new revision.
 The fixture then reopens the same profile and verifies retained layout identity.
 Its dedicated Core session is stopped only after the owned application quits.
-Closing the current checkpoint's window closes its bridge, not the Core server.
-The complete application's floating-avatar and explicit-Quit lifecycle remains
-assigned to the later integration tasks.
+Closing the window quits and keeps the Core server and its programs. The
+[lifecycle](terminal.md#lifecycle) defines closing the window, quitting and
+stopping the session.
 
 Source basis: Core 0.1.16 at
 [`e07c2a1`](https://github.com/herdrdev/herdr-core/tree/e07c2a1bedd62cf4787ee026ee23ee79c7d95491),

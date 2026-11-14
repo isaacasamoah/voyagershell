@@ -1065,14 +1065,12 @@ mod tests {
             .unwrap();
         assert_eq!(rejected.delivery, Delivery::Rejected);
         assert!(rejected.error.unwrap().contains("quitting"));
-        let first = ready(workspace.quit());
+        let keep = || workspace.end(crate::client::Lifecycle::StopSession);
+        let first = ready(keep());
         assert!(
             matches!(&first, Err(crate::core::Error::Rejected {kind, ..}) if kind == "invalid_session")
         );
-        assert_eq!(
-            format!("{first:?}"),
-            format!("{:?}", ready(workspace.quit()))
-        );
+        assert_eq!(format!("{first:?}"), format!("{:?}", ready(keep())));
     }
 
     #[test]

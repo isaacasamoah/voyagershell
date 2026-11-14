@@ -187,6 +187,7 @@ struct WorkspaceBinding {
     avatar: crate::avatar::Binding,
     notice: Rc<Cell<WorkspaceNotice>>,
     activity: Rc<RefCell<voyager_contract::activity::Projection>>,
+    stop: async_channel::Sender<()>,
 }
 
 fn load(
@@ -222,6 +223,7 @@ fn load(
     let process_executor = cx.background_executor().clone();
     let activity_reader = workspace_binding.activity.clone();
     let activity_refresh = client.clone();
+    let stop = workspace_binding.stop.clone();
     let terminal_client = client.clone();
     let revision = workspace_binding.notice.clone();
     let notice = workspace_binding.notice.clone();
@@ -285,6 +287,10 @@ fn load(
             let raw = serde_json::to_string(&*activity_reader.borrow())
                 .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
             Ok(HostValue::from(raw))
+        })
+        .function("stop_session", move |_| {
+            let _ = stop.try_send(());
+            Ok(HostValue::Null)
         })
         .async_function("refresh_activity", move |_| {
             let client = activity_refresh.clone();
@@ -514,6 +520,7 @@ pub struct Setup {
     pub notes: crate::notes::Host,
     pub conversation: voyager_app::conversation_client::Client,
     pub avatar: crate::avatar::Binding,
+    pub stop_session: async_channel::Sender<()>,
 }
 
 impl Header {
@@ -533,6 +540,7 @@ impl Header {
             notes,
             conversation,
             avatar,
+            stop_session,
         } = setup;
         let workspace_binding = WorkspaceBinding {
             client,
@@ -543,6 +551,7 @@ impl Header {
             activity: Rc::new(RefCell::new(
                 voyager_contract::activity::Projection::default(),
             )),
+            stop: stop_session,
         };
         let close_saves = workspace_binding.notes.watch_close_saves(window, cx);
         let current = Rc::new(RefCell::new(theme(&initial_theme)));

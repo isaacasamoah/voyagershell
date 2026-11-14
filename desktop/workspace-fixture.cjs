@@ -23,6 +23,7 @@ module.exports = function workspaceSource(
       ? [
           "worktrees.js",
           "voyage-close.js",
+          "stop-session.js",
           "voyage-colours.js",
           "process-icons.js",
           "panels.js",

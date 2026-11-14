@@ -23,6 +23,7 @@ export function processes(version: string): Promise<string>;
 export function notice(): { revision: string; closeRevision: string; packageRevision: string; activityRevision: string };
 export function reported_activity(): string;
 export function refresh_activity(): Promise<void>;
+export function stop_session(): void;
 "#;
 
 pub const CONVERSATION_MODULE: &str = "voyager_conversation";
