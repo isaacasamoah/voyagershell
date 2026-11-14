@@ -98,11 +98,13 @@ export function renderSidebar(
         .mt(12)
         .mb(8)
         .child(
-          workspace.target(
-            "workspace-dock",
-            { kind: "workspace" },
-            Brand.new("brand", {}),
-          ),
+          workspace
+            .target(
+              "workspace-dock",
+              { kind: "workspace" },
+              Brand.new("brand", {}),
+            )
+            .child(Marker.new("workspace-dock")),
         ),
     );
   const primaryControls = div();
@@ -312,6 +314,7 @@ export function renderSidebar(
               },
               {
                 label: "Close",
+                marker: { role: "close-voyage", key: item.id },
                 choose: (version, cx) =>
                   workspace.run(
                     { operation: "close-voyage", id: item.id },
@@ -358,6 +361,7 @@ export function renderSidebar(
         .text_size(11)
         .text_color(colors.muted)
         .child(`${workspace.recentOpen ? "▾" : "▸"} Recent voyages`)
+        .child(Marker.new("recent-voyages"))
         .on_click((_event, cx) => {
           workspace.recentOpen = !workspace.recentOpen;
           cx.notify();
@@ -380,6 +384,11 @@ export function renderSidebar(
                 .min_w(0)
                 .truncate()
                 .child(item.label.replace(/^Reopen /, "")),
+            )
+            .children(
+              item.marker
+                ? [Marker.new(item.marker.role, item.marker.key)]
+                : [],
             )
             .on_click((_event, cx) => item.choose(workspace.version, cx)),
         ),
@@ -639,7 +648,10 @@ export function renderContext(
       ),
   );
   if (facts) row.child(div().child(facts.path.join(" / ")));
-  if (!visible && goThere) row.child(workspace.action("Go there", goThere));
+  if (!visible && goThere)
+    row.child(
+      workspace.action("Go there", goThere).child(Marker.new("go-there")),
+    );
   const region = div().flex().flex_col().child(row);
   if (workspace.status || workspace.worktrees?.status)
     region.child(workspace.statusView());
@@ -677,6 +689,7 @@ export function portalControls(
     .p(3)
     .text_size(11)
     .child(column.visible ? "›" : "‹")
+    .child(Marker.new("toggle-portals", voyage.id))
     .on_click((_event, cx) => workspace.togglePortals(voyage, cx));
   controls.child(
     workspace.creationControl(

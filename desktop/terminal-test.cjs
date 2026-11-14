@@ -1055,6 +1055,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     },
   };
   let occluders = 0;
+  const areas = new Map();
   const prepared = [];
   const layers = [];
   let animationNotice = null;
@@ -1088,6 +1089,8 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "MeasureHeight",
     "Occluding",
     "Prepared",
+    "PortalArea",
+    "Column",
     source,
   )(
     class {},
@@ -1140,6 +1143,14 @@ test("Home presents the retained out-of-view avatar without docking or starting 
         return div();
       },
     },
+    {
+      new(id) {
+        const area = div();
+        areas.set(id, area);
+        return area;
+      },
+    },
+    component,
   );
   const view = new Workspace();
   const context = { kind: "vessel", id: "vessel" };
@@ -1237,6 +1248,10 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     (node) => node.calls.accessibility_label?.[0] === "Maximize Vessel",
   );
   assert.ok(maximize, "The maximize Button exists without mouse hover");
+  const close = nodes.find((node) =>
+    node.calls.accessibility_label?.[0]?.startsWith("Close Vessel"),
+  );
+  assert.deepEqual(close.calls.child[0].marker, ["close-panel", "vessel"]);
   assert.equal(maximize.calls.opacity[0], 0);
   assert.equal(typeof maximize.calls.focus[0], "function");
   assert.equal(maximize.calls.on_mouse_down?.[0], "left");
@@ -1392,6 +1407,15 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "A caught-up layout notice must not prepare again",
   );
   assert.equal(prepared.at(-1), true);
+  assert.equal(areas.size, 0);
+  view.layout.home.portalLayout.visible = true;
+  view.render({});
+  assert.deepEqual([...areas.keys()], ["portal-area-home-voyage"]);
+  assert.deepEqual(areas.get("portal-area-home-voyage").calls.child[0].marker, [
+    "portal-area",
+    "home-voyage",
+  ]);
+  view.layout.home.portalLayout.visible = false;
   view.busy = true;
   ownerRevision = "11";
   view.render({});

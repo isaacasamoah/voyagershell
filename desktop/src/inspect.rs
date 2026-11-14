@@ -37,12 +37,19 @@ impl Global for Inspection {}
 
 struct Ledger {
     window: WindowId,
-    stage: Option<(Viewport, Context)>,
+    stage: Option<Stage>,
     slots: BTreeMap<u64, Drawn>,
     opened: u64,
     sequence: u64,
     changed: bool,
     changes: async_channel::Sender<()>,
+}
+
+#[derive(Clone, PartialEq)]
+struct Stage {
+    window: Viewport,
+    dock: Context,
+    dock_focus: Option<Context>,
 }
 
 #[derive(PartialEq)]
@@ -96,7 +103,11 @@ impl Ledger {
     }
 
     fn frame(&mut self) -> Option<Frame> {
-        let (window, dock) = self.stage.clone()?;
+        let Stage {
+            window,
+            dock,
+            dock_focus,
+        } = self.stage.clone()?;
         if !std::mem::take(&mut self.changed) {
             return None;
         }
@@ -119,6 +130,7 @@ impl Ledger {
             sequence: self.sequence,
             window,
             dock,
+            dock_focus,
             prepared,
             elements: listed(elements),
             ambiguous: listed(ambiguous),
@@ -274,7 +286,7 @@ pub fn avatar() -> impl IntoElement {
     }
 }
 
-pub fn stage(dock: &Context, window: &Window, cx: &App) {
+pub fn stage(dock: &Context, dock_focus: Option<Context>, window: &Window, cx: &App) {
     let Some(inspection) = cx.try_global::<Inspection>() else {
         return;
     };
@@ -283,14 +295,15 @@ pub fn stage(dock: &Context, window: &Window, cx: &App) {
         return;
     }
     let size = window.viewport_size();
-    let stage = Some((
-        Viewport {
+    let stage = Some(Stage {
+        window: Viewport {
             width: size.width.into(),
             height: size.height.into(),
             scale: window.scale_factor(),
         },
-        dock.clone(),
-    ));
+        dock: dock.clone(),
+        dock_focus,
+    });
     if ledger.stage != stage {
         ledger.stage = stage;
         ledger.touch();
@@ -344,6 +357,7 @@ struct Component;
 enum Marked {
     Control(Role, String, Option<String>),
     Editor(String, ComponentArgument),
+    Composer(ComponentArgument),
     Prepared(bool),
 }
 
@@ -362,6 +376,13 @@ impl ComponentMaterializer for Component {
             Marked::Editor(key, state) => Mark::Control {
                 role: Role::NameEditor,
                 key: key.clone(),
+                shown: Shown::Draft(
+                    request.with_state::<Entity<InputState>, _>(state, Entity::downgrade)?,
+                ),
+            },
+            Marked::Composer(state) => Mark::Control {
+                role: Role::ChatComposer,
+                key: String::new(),
                 shown: Shown::Draft(
                     request.with_state::<Entity<InputState>, _>(state, Entity::downgrade)?,
                 ),
@@ -430,6 +451,19 @@ pub fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
                         state.clone(),
                     ))),
                     _ => Err("EditorMarker requires an id and NameState".into()),
+                },
+            ),
+            ConstructorDescriptor::new(
+                "ComposerMarker",
+                vec![ArgumentDescriptor::new(
+                    "state",
+                    ArgumentSchema::Entity("ComposerState"),
+                )],
+                |args| match args {
+                    [state @ ComponentArgument::Entity { .. }] => {
+                        Ok(ComponentPayload::new(Marked::Composer(state.clone())))
+                    }
+                    _ => Err("ComposerMarker requires ComposerState".into()),
                 },
             ),
             ConstructorDescriptor::new(

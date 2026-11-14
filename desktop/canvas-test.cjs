@@ -30,6 +30,24 @@ function markers(node) {
     .flatMap((child) => (Array.isArray(child?.marker) ? [child.marker] : []));
 }
 
+const MarkerStub = {
+  new: (role, key = "", label) => ({
+    marker: label === undefined ? [role, key] : [role, key, label],
+  }),
+};
+
+function deepMarkers(node, seen = new Set()) {
+  if (!node || typeof node !== "object" || seen.has(node)) return [];
+  if (Array.isArray(node))
+    return node.flatMap((item) => deepMarkers(item, seen));
+  if (Array.isArray(node.marker)) return [node.marker];
+  if (!Array.isArray(node.calls)) return [];
+  seen.add(node);
+  return node.calls.flatMap(([, ...args]) =>
+    args.flatMap((arg) => deepMarkers(arg, seen)),
+  );
+}
+
 function menuModule(Button) {
   const exports = {};
   new Function(
@@ -49,6 +67,7 @@ function menuModule(Button) {
     ).outputText,
   )(exports, (name) => {
     if (name === "./ui.js") return uiModule(element, Button);
+    if (name === "voyager_native") return { Marker: MarkerStub };
     return name === "gpui-kit"
       ? { div: element }
       : { Button, Popover: { new: element } };
@@ -134,8 +153,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
         Popover: { new: element },
       };
     if (name === "./menu.js") return menuModule(Button);
-    if (name === "voyager_native")
-      return { Marker: { new: (role, key = "") => ({ marker: [role, key] }) } };
+    if (name === "voyager_native") return { Marker: MarkerStub };
     if (name === "voyager_workspace")
       return {
         launches: () =>
@@ -300,6 +318,22 @@ test("worker creation keeps its opening target and revision across a delayed cat
   assert.deepEqual(markers(buttons.get("create-agents-vessel")), [
     ["create-agents", ""],
   ]);
+  Object.assign(picker, {
+    hidden: [{ id: "hidden-1", name: "Shell", path: "/work" }],
+    expanded: false,
+  });
+  buttons.clear();
+  picker.render("original", destination, "7", create);
+  assert.deepEqual(markers(buttons.get("hidden-vessels")), [
+    ["hidden-panels", ""],
+  ]);
+  assert.equal(buttons.has("reopen-hidden-1"), false);
+  picker.expanded = true;
+  buttons.clear();
+  picker.render("original", destination, "7", create);
+  assert.deepEqual(markers(buttons.get("reopen-hidden-1")), [
+    ["reopen-panel", "hidden-1"],
+  ]);
   picker.current = null;
   buttons.clear();
   picker.render("original", destination, "7", create);
@@ -327,6 +361,7 @@ test("inspection markers name each control by its role and id and report the tex
     "Speech",
     "MeasureHeight",
     "speech_in_primary",
+    "dock_target_visible",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(
     class {},
@@ -344,13 +379,21 @@ test("inspection markers name each control by its role and id and report the tex
     { new: element },
     { new: element },
     () => false,
+    () => dockVisible,
   );
+  const menus = new Map();
+  let dockVisible = false;
   const view = Object.assign(new Workspace(), {
     sidebar: true,
     names: new Map(),
     chat: { toggleView: element, render: element },
     target: (_id, _scope, child) => child,
-    contextMenu: (_id, child) => child,
+    contextMenu: (id, child, items) => {
+      menus.set(id, items);
+      return child;
+    },
+    creationControl: (_id, _destination, trigger) => trigger,
+    compactPortalContext: () => false,
     closedFleetItems: () => [],
   });
   const fleet = { kind: "fleet", id: "fleet-7" };
@@ -408,6 +451,129 @@ test("inspection markers name each control by its role and id and report the tex
       markers(view.splitControl({ id: "placement-3" }, group, side)),
       [[`split-${side}`, "placement-3"]],
     );
+  const populated = {
+    voyages: [
+      { id: "voyage-7", name: "Open", fleets: [] },
+      { id: "voyage-9", name: "Shut", closed: true, closedOrder: "1" },
+    ],
+    context: { kind: "workspace" },
+    view: "fleet",
+  };
+  Object.assign(view, {
+    layout: populated,
+    worktrees: {
+      available: () => true,
+      canRemove: () => false,
+      groups: (voyages) => ({
+        roots: voyages.map((item) => item.id),
+        children: {},
+      }),
+    },
+    recentOpen: true,
+  });
+  const sidebar = deepMarkers(
+    view.sidebarRegion(populated, populated.voyages[0]),
+  );
+  for (const expected of [
+    ["workspace-dock", ""],
+    ["recent-voyages", ""],
+    ["reopen-voyage", "voyage-9"],
+  ])
+    assert.deepEqual(
+      sidebar.filter(
+        ([role, key]) => role === expected[0] && key === expected[1],
+      ),
+      [expected],
+      expected[0],
+    );
+  assert.deepEqual(
+    menus.get("voyage-voyage-7").find((item) => item.label === "Close").marker,
+    { role: "close-voyage", key: "voyage-7" },
+  );
+  view.recentOpen = false;
+  assert.equal(
+    deepMarkers(view.sidebarRegion(populated, populated.voyages[0])).some(
+      ([role]) => role === "reopen-voyage",
+    ),
+    false,
+  );
+  const portals = {
+    id: "voyage-7",
+    fleets: [],
+    portalLayout: { visible: true, mode: "overlay", root: null, width: 340 },
+  };
+  assert.deepEqual(
+    deepMarkers(view.fleetRegion(populated, portals, undefined)).filter(
+      ([role]) => role === "toggle-portals",
+    ),
+    [["toggle-portals", "voyage-7"]],
+  );
+  const vessel = { kind: "vessel", id: "placement-4" };
+  const away = { ...populated, context: vessel };
+  assert.deepEqual(
+    deepMarkers(view.contextRegion(away, portals, undefined)).filter(
+      ([role]) => role === "go-there",
+    ),
+    [["go-there", ""]],
+  );
+  dockVisible = true;
+  assert.deepEqual(
+    deepMarkers(view.contextRegion(away, portals, undefined)).filter(
+      ([role]) => role === "go-there",
+    ),
+    [],
+  );
+});
+
+test("a context menu keeps the marker of each item and draws it inside the entry", () => {
+  const entries = new Map();
+  const Button = {
+    new(id) {
+      const node = element();
+      entries.set(id, node);
+      return node;
+    },
+  };
+  const { WorkspaceMenu } = menuModule(Button);
+  const menu = new WorkspaceMenu();
+  const items = [
+    { label: "Plain", choose() {} },
+    {
+      label: "Close",
+      marker: { role: "close-voyage", key: "voyage-1" },
+      choose() {},
+    },
+  ];
+  menu.current = { id: "voyage-1", version: "1", items };
+  menu.render("voyage-1", "1", element(), items);
+  assert.deepEqual(markers(entries.get("menu-voyage-1-0")), []);
+  assert.deepEqual(markers(entries.get("menu-voyage-1-1")), [
+    ["close-voyage", "voyage-1"],
+  ]);
+});
+
+test("the workspace context menu passes each item's marker to the menu", () => {
+  const Workspace = new Function(
+    "View",
+    workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
+  )(class {});
+  let passed;
+  const view = Object.assign(new Workspace(), {
+    version: "5",
+    editing: null,
+    layoutName: null,
+    menus: {
+      render: (_id, _version, _trigger, items) => {
+        passed = items;
+        return null;
+      },
+    },
+  });
+  const marker = { role: "close-voyage", key: "voyage-1" };
+  view.contextMenu("voyage-1", element(), [
+    { label: "Close", marker, choose() {} },
+  ]);
+  assert.deepEqual(passed[0].marker, marker);
 });
 
 test("the actual canvas composes a retained right column through native presentation", () => {
@@ -1171,7 +1337,7 @@ test("Activity refresh and hidden choices share an in-flight process snapshot", 
   assert.deepEqual(await choices, { panels: [], error: undefined });
 });
 
-test("chat fits measured messages before scrolling at its cap", () => {
+function chatClass() {
   const source = workspaceSource(
     "VOYAGER_CHAT_SOURCE",
     "return class",
@@ -1184,10 +1350,24 @@ test("chat fits measured messages before scrolling at its cap", () => {
     "MeasureHeight",
     "svg",
     "FollowScroll",
+    "Marker",
+    "ComposerMarker",
     source,
-  )(element, { new: element }, { new: element }, { new: element }, element, {
-    new: element,
-  });
+  )(
+    element,
+    { new: element },
+    { new: element },
+    { new: element },
+    element,
+    { new: element },
+    MarkerStub,
+    { new: (state) => ({ marker: ["chat-composer", "", state] }) },
+  );
+  return Chat;
+}
+
+test("chat fits measured messages before scrolling at its cap", () => {
+  const Chat = chatClass();
   const chat = Object.assign(Object.create(Chat.prototype), {
     open: true,
     present: true,
@@ -1212,6 +1392,52 @@ test("chat fits measured messages before scrolling at its cap", () => {
   assert.equal(height(), capped);
   chat.open = false;
   assert.equal(height(), 0);
+});
+
+test("chat marks its toggle, messages, composer, send control, status and error by what they draw", () => {
+  const Chat = chatClass();
+  const input = {};
+  const chat = Object.assign(Object.create(Chat.prototype), {
+    open: true,
+    present: true,
+    heights: { sidebar: 900, heading: 200, navigation: 100, messages: 120 },
+    error: "",
+    input,
+    state: {
+      version: "3",
+      phase: "working",
+      limited: false,
+      omitted: "0",
+      error: null,
+      messages: [
+        { id: "m1", role: "user", text: "Open the notes" },
+        { id: "m2", role: "assistant", text: "Done" },
+      ],
+    },
+  });
+  const colors = { muted: "muted", foreground: "fg", accent: "accent" };
+  assert.deepEqual(deepMarkers(chat.toggleView(colors)), [["chat-toggle", ""]]);
+  chat.error = "Request refused";
+  assert.deepEqual(deepMarkers(chat.render(colors, { kind: "workspace" })), [
+    ["chat-message", "m1", "Open the notes"],
+    ["chat-message", "m2", "Done"],
+    ["chat-status", "", "Thinking…"],
+    ["chat-error", "", "Request refused"],
+    ["chat-messages", ""],
+    ["chat-composer", "", input],
+    ["chat-send", "", "Interrupt"],
+  ]);
+  chat.error = "";
+  chat.state.phase = "idle";
+  assert.deepEqual(deepMarkers(chat.render(colors, { kind: "workspace" })), [
+    ["chat-message", "m1", "Open the notes"],
+    ["chat-message", "m2", "Done"],
+    ["chat-messages", ""],
+    ["chat-composer", "", input],
+    ["chat-send", "", "Send"],
+  ]);
+  chat.present = false;
+  assert.deepEqual(deepMarkers(chat.render(colors, { kind: "workspace" })), []);
 });
 
 test("dock snapshots retain only identity-matched display labels", async () => {
@@ -1731,7 +1957,7 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
     name: "Demo",
     version: "7",
     phase: "ready",
-    entries: [],
+    entries: [{ content: "content-1", typeId: "terminal", name: "bash" }],
     message: "Confirm",
     uncommittedChanges: 2,
   };
@@ -1752,6 +1978,7 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
     exports,
     (name) => {
       if (name === "gpui-kit") return { div: element };
+      if (name === "voyager_native") return { Marker: MarkerStub };
       if (name === "./ui.js") return uiModule(element, Button);
       if (name === "./workspace.js")
         return {
@@ -1791,6 +2018,11 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
       .calls.find(([name]) => name === "on_click")[1](null, cx);
   };
   controls.observe(plan);
+  assert.deepEqual(deepMarkers(controls.render()), [
+    ["voyage-close-entry", "content-1"],
+    ["voyage-close-cancel", "voyage"],
+    ["voyage-close-confirm", "voyage"],
+  ]);
   assert.match(
     JSON.stringify(controls.render().calls),
     /2 uncommitted changes/,

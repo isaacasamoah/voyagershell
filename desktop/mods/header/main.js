@@ -1294,6 +1294,7 @@ export default class Workspace extends View {
       .slice(0, 10)
       .map((item) => ({
         label: `Reopen ${item.name}`,
+        marker: { role: "reopen-voyage", key: item.id },
         choose: (version, cx) =>
           this.run(
             { operation: "reopen-voyage", id: item.id },
@@ -1371,7 +1372,7 @@ export default class Workspace extends View {
       this.version,
       trigger,
       items.map((item) => ({
-        label: item.label,
+        ...item,
         choose: (version, cx) => {
           if (version !== this.version) {
             this.status = "The layout changed. Open the menu again.";
@@ -1825,9 +1826,9 @@ export default class Workspace extends View {
                 .size_full()
                 .bg(colors.background)
                 .child(
-                  PortalArea.new(`portal-area-${voyage.id}`, {}).child(
-                    this.groupRegion(group),
-                  ),
+                  PortalArea.new(`portal-area-${voyage.id}`, {})
+                    .child(this.groupRegion(group))
+                    .child(Marker.new("portal-area", voyage.id)),
                 );
             }
           }
