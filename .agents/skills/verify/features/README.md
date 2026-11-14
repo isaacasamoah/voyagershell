@@ -14,7 +14,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Vessels | covered | none | none | covered | workspace | - | linux |
 | Agent Vessels | python-only | none | python-only | python-only | - | arrangement, terminal-agent | linux |
 | Portals | python-only | none | python-only | python-only | - | placement, portal-terminal, portal-close | linux |
-| Split / resize / maximize | covered | none | none | covered | arrangement | split-resize, pane-maximize, workspace-ux | linux |
+| Split / resize / maximize | covered | none | none | covered | arrangement | workspace-ux | linux |
 | Terminal I/O | python-only | none | python-only | python-only | - | terminal, terminal-grid, portal-terminal | linux |
 | Terminal scroll | covered | none | covered | covered | terminal-scrolling | terminal-scrolling | linux |
 | Selection | python-only | none | python-only | python-only | - | terminal-grid | linux |

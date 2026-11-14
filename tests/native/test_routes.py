@@ -236,18 +236,6 @@ class Routes(unittest.TestCase):
                             exec(code, state)
                     self.assertEqual(attempts, ["Quit"])
 
-    def test_quit_pane_selection_excludes_the_overlay_from_the_vessel(self):
-        from proof_pane_maximize import pane_candidates
-
-        vessel = {"x": 0, "y": 0, "width": 100, "height": 100}
-        portal = {**vessel, "x": 60, "width": 40}
-        left = {**vessel, "x": 10, "width": 20}
-        right = {**left, "x": 70}
-        items = [left, right, {**left, "width": 0}]
-        self.assertEqual(pane_candidates(items, vessel, portal), [left])
-        self.assertEqual(pane_candidates(items, portal), [right])
-        self.assertEqual(len(pane_candidates(items, vessel)), 2)
-
     def test_cleanup_observes_without_connecting_or_repeating_stop(self):
         from proof_process import observe_core_exit
         from proof_workspace import core_rpc
@@ -338,7 +326,6 @@ class Routes(unittest.TestCase):
                 for journey in (
                     "notes-lifetime",
                     "notes-configuration",
-                    "pane-maximize",
                     "workspace-ux",
                     "conversation-voice",
                     "conversation-content",
@@ -425,8 +412,6 @@ class Routes(unittest.TestCase):
             ("--foundation", "notes"),
             ("--foundation", "notes-lifetime"),
             ("--foundation", "notes-configuration"),
-            ("--foundation", "split-resize"),
-            ("--foundation", "pane-maximize"),
             ("--foundation", "workspace-ux"),
             ("--foundation", "terminal-reported-status"),
             ("--native-mod-host", "--notes-case"),
@@ -445,8 +430,6 @@ class Routes(unittest.TestCase):
             "notes",
             "notes-lifetime",
             "notes-configuration",
-            "split-resize",
-            "pane-maximize",
             "workspace-ux",
             "terminal-reported-status",
         ):
@@ -468,8 +451,6 @@ class Routes(unittest.TestCase):
                     "notes",
                     "notes-lifetime",
                     "notes-configuration",
-                    "split-resize",
-                    "pane-maximize",
                     "workspace-ux",
                     "terminal-reported-status",
                 )
@@ -486,8 +467,6 @@ class Routes(unittest.TestCase):
                 "notes",
                 "notes-lifetime",
                 "notes-configuration",
-                "split-resize",
-                "pane-maximize",
                 "workspace-ux",
                 "terminal-reported-status",
             ):
@@ -539,7 +518,6 @@ class Routes(unittest.TestCase):
             "proof_foundation_notes",
             "proof_notes_lifetime",
             "proof_split_resize",
-            "proof_pane_maximize",
             "proof_workspace_ux",
             "proof_conversation",
             "proof_conversation_scroll",
@@ -547,19 +525,6 @@ class Routes(unittest.TestCase):
             self.assertEqual(
                 Path(importlib.import_module(name).__file__).parent, directory
             )
-
-    def test_resize_observer_preserves_real_invoke_and_valid_source(self):
-        proof = importlib.import_module("proof_split_resize")
-        source = proof.observer_source(
-            (ROOT / "desktop/mods/header/main.js").read_text()
-        )
-        self.assertEqual(
-            source.count("result = await invoke(action, expectedVersion);"), 1
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "observed.mjs"
-            path.write_text(source)
-            subprocess.run(["node", "--check", str(path)], check=True, timeout=5)
 
     def test_resize_point_avoids_recorded_nested_crossing_and_uses_largest_span(self):
         proof = importlib.import_module("proof_split_resize")
@@ -578,33 +543,6 @@ class Routes(unittest.TestCase):
         covering = {"x": 576, "y": 204, "width": 2000, "height": 1666}
         with self.assertRaises(AssertionError):
             proof.splitter_point(outer, [covering])
-
-    def test_maximized_pane_extent_includes_every_accepted_pane(self):
-        proof = importlib.import_module("proof_pane_maximize")
-        panes = [
-            {"x": 576, "y": 276, "width": 1152, "height": 759},
-            {"x": 576, "y": 1109, "width": 1152, "height": 759},
-            {"x": 1732, "y": 276, "width": 1152, "height": 1592},
-        ]
-        self.assertEqual(proof.pane_extent(panes), [576, 276, 2308, 1592])
-        self.assertNotEqual(proof.pane_extent(panes[1:2]), proof.pane_extent(panes))
-        with self.assertRaises(AssertionError):
-            proof.pane_extent([])
-
-    def test_resize_preview_requires_the_intended_three_pane_change(self):
-        proof = importlib.import_module("proof_split_resize")
-        before = [
-            [576, 276, 1152, 759],
-            [576, 1109, 1152, 759],
-            [1732, 276, 1152, 1592],
-        ]
-        outer = [[576, 276, 1384, 759], [576, 1109, 1384, 759], [1964, 276, 920, 1592]]
-        nested = [[576, 276, 1152, 909], [576, 1259, 1152, 609], before[2]]
-        self.assertTrue(proof.preview_changed(before, outer, True))
-        self.assertFalse(proof.preview_changed(before, outer, False))
-        self.assertTrue(proof.preview_changed(before, nested, False))
-        self.assertFalse(proof.preview_changed(before, nested, True))
-        self.assertFalse(proof.preview_changed(before, before, True))
 
     def test_only_matching_launched_child_is_reaped_after_exit(self):
         driver = importlib.import_module("proof_native_mod_host")
