@@ -1,0 +1,604 @@
+settings:
+  kinds: [rs, ts, js, cjs, json, md, toml, yaml, yml, py, patch, txt, html, sh]
+  skip:
+    - 'experiments/**'
+    - 'tests/architecture/vocabulary.*'
+    - 'desktop/patches/**'
+    - '**/Cargo.lock'
+    - '**/package-lock.json'
+  generated:
+    - 'contract/generated/**'
+    - 'desktop/script-types.json'
+    - 'desktop/canvas/*.js'
+    - 'content/ui.js'
+    - 'content/notes/main.js'
+
+moves:
+  - {stage: 2, from: desktop/mods/header, to: desktop/canvas}
+  - {stage: 2, from: desktop/canvas/canvas.ts, to: desktop/canvas/regions.ts}
+  - {stage: 2, from: desktop/canvas/canvas.js, to: desktop/canvas/regions.js}
+  - {stage: 2, from: desktop/canvas/mod.json, to: desktop/canvas/canvas.json}
+  - {stage: 2, from: content/notes/mod.json, to: content/notes/vessel.json}
+
+rules:
+  - id: canvas-package-path
+    stage: 2
+    group: canvas-package
+    old: 'desktop/mods/header'
+    new: 'desktop/canvas'
+  - id: canvas-package-root
+    stage: 2
+    group: canvas-package
+    old: 'desktop/mods\b'
+    new: 'desktop/canvas'
+  - id: canvas-profile-path
+    stage: 2
+    group: canvas-package
+    old: '\bmods/header\b'
+    new: 'canvas'
+  - id: canvas-manifest-path
+    stage: 2
+    group: canvas-package
+    old: 'canvas/mod\.json'
+    new: 'canvas/canvas.json'
+  - id: canvas-seed-manifest
+    stage: 2
+    group: canvas-package
+    old: 'package\.join\("mod\.json"\)'
+    new: 'package.join("canvas.json")'
+    files: ['desktop/src/lib.rs']
+  - id: canvas-import-depth
+    stage: 2
+    old: '\.\./\.\./\.\./'
+    new: '../../'
+    files: ['desktop/canvas/*.ts']
+    ban: false
+  - id: vessel-package-path
+    stage: 2
+    group: vessel-package
+    old: '\bmods/'
+    new: 'vessels/'
+  - id: vessel-package-directory
+    stage: 2
+    group: vessel-package
+    old: '"mods"'
+    new: '"vessels"'
+  - id: vessel-manifest
+    stage: 2
+    group: vessel-package
+    old: '\bmod\.json\b'
+    new: 'vessel.json'
+  - id: theme-module
+    stage: 2
+    group: theme-module
+    old: '\bvoyager_header\b'
+    new: 'voyager_theme'
+  - id: theme-module-constant
+    stage: 2
+    group: theme-module
+    old: '\bHEADER_MODULE\b'
+    new: 'THEME_MODULE'
+  - id: canvas-manifest-name
+    stage: 2
+    old: '"Voyager header"'
+    new: '"Voyager canvas"'
+    ban: false
+  - id: canvas-host-messages
+    stage: 2
+    old: '\bHeader (load|reload|manifest)'
+    new: 'Canvas $1'
+    files: ['desktop/src/*.rs']
+    ban: false
+  - id: canvas-host-manifest-message
+    stage: 2
+    old: 'Reading header manifest'
+    new: 'Reading canvas manifest'
+    files: ['desktop/src/lib.rs']
+    ban: false
+  - id: canvas-host-type
+    stage: 2
+    group: canvas-package
+    old: '\bHeader\b'
+    new: 'CanvasHost'
+    files: ['desktop/src/*.rs']
+    code: true
+  - id: canvas-host-binding
+    stage: 2
+    group: canvas-package
+    old: '\bheader\b'
+    new: 'canvas'
+    files: ['desktop/src/host.rs', 'desktop/src/quit.rs', 'desktop/src/lib.rs']
+    code: true
+  - id: canvas-host-render-counter
+    stage: 2
+    old: '"header_renders"'
+    new: '"canvas_renders"'
+    ban: false
+  - id: canvas-script-scope
+    stage: 2
+    old: '"header"'
+    new: '"canvas"'
+    files: ['desktop/typecheck.cjs', 'tests/architecture/config.json']
+    ban: false
+  - id: canvas-root-class
+    stage: 2
+    old: '\bWorkspace\b'
+    new: 'Canvas'
+    files: ['desktop/canvas/main.ts', 'desktop/canvas/navigation-view.ts', 'desktop/canvas/panel-view.ts', 'desktop/rename-test.cjs', 'desktop/terminal-test.cjs', 'desktop/canvas-test.cjs']
+    code: true
+    ban: false
+  - id: canvas-root-class-evaluated
+    stage: 2
+    old: '\}\\nWorkspace`'
+    new: '}\nCanvas`'
+    files: ['desktop/rename-test.cjs']
+    ban: false
+  - id: canvas-regions-function
+    stage: 2
+    group: canvas-package
+    old: '\bcomposeCanvas\b'
+    new: 'composeRegions'
+  - id: panel-frame-function
+    stage: 2
+    group: canvas-package
+    old: '\bvesselFrame\b'
+    new: 'panelFrame'
+  - id: regions-module
+    stage: 2
+    old: '(canvas/|\./|")canvas\.(ts|js)\b'
+    new: '$1regions.$2'
+    ban: false
+  - id: native-app-id
+    stage: 2
+    group: canvas-package
+    old: '\bvoyager-native-mod-host\b'
+    new: 'voyager-shell'
+  - id: placement-type
+    stage: 3
+    old: '(?<!Context::)(?<!RenameTarget::)(?<!Scope::)\bVessel\b(?!\s*\{\s*id:\s*PlacementId)'
+    new: 'Placement'
+    files: ['**/*.rs', 'desktop/canvas/*.ts']
+    code: true
+    ban: false
+  - id: vessel-id-type
+    stage: 3
+    group: vessel-ids
+    old: '\bContentId\b'
+    new: 'VesselId'
+  - id: placement-owner-type
+    stage: 3
+    group: placement-names
+    old: '\bPanelOwner\b'
+    new: 'PlacementOwner'
+  - id: placement-insertion-type
+    stage: 3
+    group: placement-names
+    old: '\bPanelInsertion\b'
+    new: 'PlacementInsertion'
+  - id: placement-observation-type
+    stage: 3
+    group: placement-names
+    old: '\bPanelObservation\b'
+    new: 'PlacementObservation'
+  - id: arrangement-type
+    stage: 3
+    group: arrangement-names
+    old: '\bSavedLayout\b'
+    new: 'Arrangement'
+  - id: arrangement-field
+    stage: 3
+    group: arrangement-names
+    old: '\b(saved_layouts|savedLayouts)\b'
+    new: 'arrangements'
+  - id: vessel-id-field-snake
+    stage: 3
+    group: vessel-ids
+    old: '\bcontent_id\b'
+    new: 'vessel_id'
+  - id: vessel-id-field-camel
+    stage: 3
+    group: vessel-ids
+    old: '\bcontentId\b'
+    new: 'vesselId'
+  - id: created-vessels-field
+    stage: 3
+    group: vessel-ids
+    old: '\bcreated_contents\b'
+    new: 'created_vessels'
+  - id: created-vessels-key
+    stage: 3
+    group: vessel-ids
+    old: '\bcreatedContents\b'
+    new: 'createdVessels'
+  - id: primary-placement-field
+    stage: 3
+    group: placement-names
+    old: '\bprimary_vessel\b'
+    new: 'primary_placement'
+  - id: primary-placement-key
+    stage: 3
+    group: placement-names
+    old: '\bprimaryVessel\b'
+    new: 'primaryPlacement'
+  - id: layout-document-name
+    stage: 3
+    group: layout-document
+    old: '\bvoyager-layout-v1\b'
+    new: 'voyager-layout-v2'
+  - id: fleet-placements-access
+    stage: 3
+    old: '\.vessels\b'
+    new: '.placements'
+    files: ['**/*.rs', 'desktop/canvas/*.ts', 'desktop/*.cjs', 'tests/**/*.py', 'tests/**/*.patch']
+    ban: false
+  - id: fleet-placements-field
+    stage: 3
+    old: '\bvessels:(?!\s*&)'
+    new: 'placements:'
+    files: ['**/*.rs', 'desktop/canvas/*.ts', 'desktop/*.cjs']
+    code: true
+    ban: false
+  - id: stored-key-vessels
+    stage: 3
+    old: '(["''])vessels\1(?=\s*[:\]])'
+    new: '$1placements$1'
+    ban: false
+  - id: layout-vessels-access
+    stage: 3
+    old: '\.contents\b'
+    new: '.vessels'
+    files: ['**/*.rs', 'desktop/canvas/*.ts', 'desktop/*.cjs']
+    ban: false
+  - id: layout-vessels-field
+    stage: 3
+    old: '\bpub contents:'
+    new: 'pub vessels:'
+    files: ['**/*.rs']
+    ban: false
+  - id: stored-key-contents
+    stage: 3
+    old: '(["''])contents\1(?=\s*[:\]])'
+    new: '$1vessels$1'
+    ban: false
+  - id: stored-key-content-python
+    stage: 3
+    old: '\[(["''])content\1\]'
+    new: '[$1vessel$1]'
+    files: ['tests/**/*.py']
+    ban: false
+  - id: vessel-struct-qualified
+    stage: 3
+    old: '\bvoyager_contract::Content\b'
+    new: 'voyager_contract::Vessel'
+    files: ['**/*.rs']
+    ban: false
+  - id: vessel-struct
+    stage: 3
+    old: '(?<![\w:])(?!(?<=^ {4})Content \{$)(?<!as )Content\b(?!\s*\(|::)'
+    new: 'Vessel'
+    flags: 'gm'
+    files: ['**/*.rs']
+    skip: ['contract/src/canvas.rs', 'tests/native/src/x11/**']
+    code: true
+    ban: false
+  - id: instance-list-name
+    stage: 3
+    old: '\bcontents\b'
+    new: 'vessels'
+    files: ['app/src/voyage_close.rs', 'app/src/content/rename.rs', 'desktop/src/notes.rs', 'app/tests/voyage_close.rs', 'tests/native/src/journey/voyage_close.rs']
+    code: true
+    ban: false
+  - id: instance-list-field
+    stage: 3
+    old: '\bcontents:'
+    new: 'vessels:'
+    files: ['app/src/client.rs']
+    code: true
+    ban: false
+  - id: placement-vessel-access
+    stage: 3
+    old: '\.content\b(?!\s*\()'
+    new: '.vessel'
+    files: ['**/*.rs', 'desktop/canvas/*.ts', 'desktop/*.cjs']
+    ban: false
+  - id: placement-vessel-field
+    stage: 3
+    old: '\b(pub )?content: (VesselId|&VesselId)'
+    new: '$1vessel: $2'
+    files: ['contract/src/lib.rs', 'contract/src/voyage_close.rs', 'contract/src/panels.rs']
+    ban: false
+  - id: placement-vessel-literal
+    stage: 3
+    old: '\bcontent: '
+    new: 'vessel: '
+    files: ['contract/src/panels.rs', 'app/src/conversation.rs', 'app/src/voyage_close.rs']
+    code: true
+    ban: false
+  - id: placement-vessel-shorthand
+    stage: 3
+    old: '(\n {12})content,(\n {12}name,)'
+    new: '$1vessel: content,$2'
+    files: ['app/src/workspace.rs']
+    ban: false
+  - id: vessel-type-script
+    stage: 3
+    old: '\bContent\b'
+    new: 'Vessel'
+    files: ['desktop/canvas/main.ts']
+    code: true
+    ban: false
+  - id: fixture-placement-vessel-key
+    stage: 3
+    old: '\bcontent:'
+    new: 'vessel:'
+    files: ['desktop/canvas-test.cjs', 'desktop/terminal-test.cjs']
+    code: true
+    ban: false
+  - id: fixture-layout-vessels-key
+    stage: 3
+    old: '\bcontents:'
+    new: 'vessels:'
+    files: ['desktop/*-test.cjs', 'desktop/*-fixture.cjs']
+    code: true
+    ban: false
+  - id: fixture-placement-vessel-shorthand
+    stage: 3
+    old: '\(\{ id, content, name: id'
+    new: '({ id, vessel: content, name: id'
+    files: ['desktop/canvas-test.cjs']
+    ban: false
+  - id: fixture-layout-vessels-shorthand
+    stage: 3
+    old: '(const layout = \{\n\s+)contents,'
+    new: '$1vessels: contents,'
+    files: ['desktop/canvas-test.cjs']
+    ban: false
+  - id: stored-placement-vessel-key
+    stage: 3
+    old: '"content":'
+    new: '"vessel":'
+    files: ['app/src/observation.rs', 'contract/tests/panels.rs', 'tests/native/src/journey/workspace.rs', 'tests/native/src/native/terminal.rs']
+    ban: false
+  - id: savearrangement-variant
+    stage: 4
+    group: wire-operations
+    old: '\bSavePanelLayout\b'
+    new: 'SaveArrangement'
+  - id: loadarrangement-variant
+    stage: 4
+    group: wire-operations
+    old: '\bLoadPanelLayout\b'
+    new: 'LoadArrangement'
+  - id: removearrangement-variant
+    stage: 4
+    group: wire-operations
+    old: '\bRemovePanelLayout\b'
+    new: 'RemoveArrangement'
+  - id: save-arrangement-operation
+    stage: 4
+    group: wire-operations
+    old: '\bsave-panel-layout\b'
+    new: 'save-arrangement'
+  - id: load-arrangement-operation
+    stage: 4
+    group: wire-operations
+    old: '\bload-panel-layout\b'
+    new: 'load-arrangement'
+  - id: remove-arrangement-operation
+    stage: 4
+    group: wire-operations
+    old: '\bremove-panel-layout\b'
+    new: 'remove-arrangement'
+  - id: removeplacement-variant
+    stage: 4
+    group: wire-operations
+    old: '\bRemovePanel\b'
+    new: 'RemovePlacement'
+  - id: remove-placement-operation
+    stage: 4
+    group: wire-operations
+    old: '\bremove-panel\b(?!-layout)'
+    new: 'remove-placement'
+  - id: reopenplacement-variant
+    stage: 4
+    group: wire-operations
+    old: '\bReopenPanel\b'
+    new: 'ReopenPlacement'
+  - id: reopen-placement-operation
+    stage: 4
+    group: wire-operations
+    old: '\breopen-panel\b(?!-layout)'
+    new: 'reopen-placement'
+  - id: moveplacement-variant
+    stage: 4
+    group: wire-operations
+    old: '\bMovePanel\b'
+    new: 'MovePlacement'
+  - id: move-placement-operation
+    stage: 4
+    group: wire-operations
+    old: '\bmove-panel\b(?!-layout)'
+    new: 'move-placement'
+  - id: revealplacement-variant
+    stage: 4
+    group: wire-operations
+    old: '\bRevealPanel\b'
+    new: 'RevealPlacement'
+  - id: reveal-placement-operation
+    stage: 4
+    group: wire-operations
+    old: '\breveal-panel\b(?!-layout)'
+    new: 'reveal-placement'
+  - id: setplacementhidden-variant
+    stage: 4
+    group: wire-operations
+    old: '\bSetPanelHidden\b'
+    new: 'SetPlacementHidden'
+  - id: set-placement-hidden-operation
+    stage: 4
+    group: wire-operations
+    old: '\bset-panel-hidden\b(?!-layout)'
+    new: 'set-placement-hidden'
+  - id: setplacementmaximized-variant
+    stage: 4
+    group: wire-operations
+    old: '\bSetPanelMaximized\b'
+    new: 'SetPlacementMaximized'
+  - id: set-placement-maximized-operation
+    stage: 4
+    group: wire-operations
+    old: '\bset-panel-maximized\b(?!-layout)'
+    new: 'set-placement-maximized'
+  - id: resizeplacementsplit-variant
+    stage: 4
+    group: wire-operations
+    old: '\bResizePanelSplit\b'
+    new: 'ResizePlacementSplit'
+  - id: resize-placement-split-operation
+    stage: 4
+    group: wire-operations
+    old: '\bresize-panel-split\b(?!-layout)'
+    new: 'resize-placement-split'
+  - id: createvessel-variant
+    stage: 4
+    group: wire-operations
+    old: '\bCreateContent\b'
+    new: 'CreateVessel'
+  - id: create-vessel-operation
+    stage: 4
+    group: wire-operations
+    old: '\bcreate-content\b'
+    new: 'create-vessel'
+  - id: createfleetwithvessel-variant
+    stage: 4
+    group: wire-operations
+    old: '\bCreateFleetWithContent\b'
+    new: 'CreateFleetWithVessel'
+  - id: create-fleet-with-vessel-operation
+    stage: 4
+    group: wire-operations
+    old: '\bcreate-fleet-with-content\b'
+    new: 'create-fleet-with-vessel'
+  - id: removevesselpackage-variant
+    stage: 4
+    group: wire-operations
+    old: '\bRemoveContentPackage\b'
+    new: 'RemoveVesselPackage'
+  - id: remove-vessel-package-operation
+    stage: 4
+    group: wire-operations
+    old: '\bremove-content-package\b'
+    new: 'remove-vessel-package'
+  - id: restorevesselpackage-variant
+    stage: 4
+    group: wire-operations
+    old: '\bRestoreContentPackage\b'
+    new: 'RestoreVesselPackage'
+  - id: restore-vessel-package-operation
+    stage: 4
+    group: wire-operations
+    old: '\brestore-content-package\b'
+    new: 'restore-vessel-package'
+  - id: placement-destination-variant
+    stage: 4
+    group: wire-operations
+    old: 'ContentDestination::Panel\b'
+    new: 'ContentDestination::Placement'
+  - id: placement-destination-definition
+    stage: 4
+    group: wire-operations
+    old: '(pub enum ContentDestination \{\n    )Panel\b'
+    new: '$1Placement'
+    files: ['contract/src/lib.rs']
+    ban: false
+  - id: vessel-tool-name
+    stage: 4
+    group: wire-operations
+    old: '\bvoyager_content\b'
+    new: 'voyager_vessel'
+  - id: placement-destination-kind
+    stage: 4
+    group: wire-operations
+    old: '(\bkind"?\s*(?::|===|!==)\s*)"panel"'
+    new: '$1"placement"'
+  - id: portal-title-bars
+    stage: 5
+    old: '\bPortal headers\b'
+    new: 'Portal title bars'
+    ban: false
+  - id: portal-title-bar
+    stage: 5
+    old: '\bPortal header\b'
+    new: 'Portal title bar'
+    ban: false
+  - id: uncovered-title-bars
+    stage: 5
+    old: '\bUncovered headers\b'
+    new: 'Uncovered Portal title bars'
+    ban: false
+  - id: panel-title-bar
+    stage: 5
+    old: '\bpanel header\b'
+    new: 'panel title bar'
+    ban: false
+  - id: canvas-sentence-start
+    stage: 5
+    old: '(^|[.!?|#]\s+)Header\b'
+    new: '$1Canvas'
+    flags: 'gm'
+    skip: ['app/src/wire.rs', 'app/src/voice_wire.rs', 'app/tests/wire.rs']
+    ban: false
+  - id: canvas-noun
+    stage: 5
+    group: canvas-package
+    old: '\b[Hh]eader\b'
+    new: 'canvas'
+    skip: ['app/src/wire.rs', 'app/src/voice_wire.rs', 'app/tests/wire.rs', 'tests/native/proof_resources.py', 'tests/native/test_frames.py']
+    ban: '\b[Hh]eaders?\b'
+  - id: vessel-package-prose
+    stage: 5
+    old: '\b([Cc])ontent package(s?)\b'
+    new: 'Vessel package$2'
+    files: ['**/*.md']
+    skip: ['AGENTS.md']
+    ban: false
+  - id: vessel-type-prose
+    stage: 5
+    old: '\b([Cc])ontent type(s?)\b'
+    new: 'Vessel type$2'
+    files: ['**/*.md']
+    skip: ['AGENTS.md']
+    ban: false
+  - id: vessel-instance-prose
+    stage: 5
+    old: '\b[Cc]ontent instance(s?)\b'
+    new: 'Vessel$1'
+    files: ['**/*.md']
+    skip: ['AGENTS.md']
+    ban: false
+  - id: realm-term
+    stage: 5
+    group: legacy-names
+    old: '\brealms?\b'
+    new: '$&'
+    ban: '\brealms?\b'
+  - id: placement-destination-prose
+    stage: 5
+    old: '\bpanel destination\b'
+    new: 'placement destination'
+    files: ['**/*.md']
+    ban: false
+  - id: placement-owner-alias
+    stage: 3
+    old: '\bPlacementOwner\b'
+    new: 'Owner'
+    files: ['desktop/canvas/main.ts']
+    code: true
+    ban: false
+  - id: placement-owner-alias-import
+    stage: 3
+    old: '^(\s+)Owner,$'
+    new: '$1PlacementOwner as Owner,'
+    flags: 'gm'
+    files: ['desktop/canvas/main.ts']
+    ban: false

@@ -46,3 +46,39 @@ known:
   - id: 'no-script-cycles: ts:desktop/mods/header/main.ts <-> ts:desktop/mods/header/navigation-view.ts <-> ts:desktop/mods/header/panel-view.ts'
     owner: isaac
     reason: 'Modules in this group import each other. Breaking the loop clears it.'
+  - id: 'one-vocabulary: arrangement-names'
+    limit: 44
+    owner: isaac
+    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
+  - id: 'one-vocabulary: canvas-package'
+    limit: 666
+    owner: isaac
+    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
+  - id: 'one-vocabulary: layout-document'
+    limit: 78
+    owner: isaac
+    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
+  - id: 'one-vocabulary: legacy-names'
+    limit: 1
+    owner: isaac
+    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
+  - id: 'one-vocabulary: placement-names'
+    limit: 495
+    owner: isaac
+    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
+  - id: 'one-vocabulary: theme-module'
+    limit: 15
+    owner: isaac
+    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
+  - id: 'one-vocabulary: vessel-ids'
+    limit: 1017
+    owner: isaac
+    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
+  - id: 'one-vocabulary: vessel-package'
+    limit: 216
+    owner: isaac
+    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
+  - id: 'one-vocabulary: wire-operations'
+    limit: 678
+    owner: isaac
+    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'

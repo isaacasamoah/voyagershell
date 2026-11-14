@@ -26,3 +26,6 @@ rules:
     limit: 1000
     roots: ['app/*', 'contract/src/*', 'desktop/src/*', 'desktop/mods/*', 'content/*', 'tests/architecture/*']
     exclude: ['contract/generated/*']
+  - id: one-vocabulary
+    check: forbid_terms
+    table: vocabulary.yaml

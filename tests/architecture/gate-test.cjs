@@ -123,7 +123,7 @@ function expectFailure(result, ...named) {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /13 violations, 13 known\n.*PASS\n$/s);
+  assert.match(result.out, /(\d+) violations, \1 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -493,5 +493,40 @@ test("the recorded header cycle that is not recorded fails", () => {
   expectFailure(
     run(scratch(), ["--known", without(/no-script-cycles/)]),
     "NEW no-script-cycles: ts:desktop/mods/header/main.ts",
+  );
+});
+
+const OLD_WORD = ["Content", "Id"].join("");
+
+test("an old word in new source fails the vocabulary rule", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/lib.rs",
+    (text) => `${text}\npub struct ${OLD_WORD}(pub String);\n`,
+  );
+  expectFailure(run(directory), "NEW one-vocabulary: vessel-ids has");
+});
+
+test("the codemod rewrites a planted old word with the table", () => {
+  const directory = scratch();
+  const planted = path.join(directory, "app/src/planted.rs");
+  fs.writeFileSync(planted, `pub struct ${OLD_WORD}(pub String);\n`);
+  execFileSync("git", ["add", "-A"], { cwd: directory });
+  const result = spawnSync(
+    "node",
+    [
+      path.join(__dirname, "vocabulary.cjs"),
+      "--repository",
+      directory,
+      "--apply",
+      "3",
+    ],
+    { encoding: "utf8", env: ENV },
+  );
+  assert.strictEqual(result.status, 0, result.stdout + result.stderr);
+  assert.strictEqual(
+    fs.readFileSync(planted, "utf8"),
+    "pub struct VesselId(pub String);\n",
   );
 });
