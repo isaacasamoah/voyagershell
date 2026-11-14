@@ -11,7 +11,7 @@ def prove(
     *, native, capture, geometry, close, start_frame, evidence, session, env,
     journey, resize_window=None,
 ):
-    assert journey in ("demo-feedback", "voyage-close", "activity-refinement", "portal-close")
+    assert journey in ("demo-feedback", "activity-refinement", "portal-close")
     observed = {"passed": [], "targets": [], "cleanupErrors": [], "limits": "No real agent, private chat or voice trial. Terminal accessibility remains unproved."}
     repo = evidence / "demo-repo"
 
@@ -315,65 +315,6 @@ def prove(
             opened = False
             close()
             return observed["passed"]
-        if journey == "voyage-close":
-            click("Collapse Voyage demo-repo")
-            capture("home-collapsed-voyage")
-            click("Expand Voyage demo-repo")
-            click("demo-repo")
-            click("Show Portals")
-            click("Create Notes Portal")
-            wait(document, lambda value: len([c for c in value["contents"] if c["typeId"] == "notes"]) == 2, "Portal Note")
-            portal_note = next(c for c in document()["contents"] if c["typeId"] == "notes" and c["id"] != note["id"])
-            portal_file = portal_note["configuration"]["notesFile"]
-            portal_path = Path(portal_file["directory"]) / portal_file["filename"]
-            click("Portal Note text")
-            type_text("Portal shutdown draft")
-            click("Hide Portals")
-            click("Note text")
-            type_text(" Before shutdown")
-            selected = next(v for v in document()["voyages"] if v.get("cwd") == str(repo))
-            owned_ids = {p["content"] for f in selected["fleets"] for p in f["vessels"]} | {p["content"] for p in selected["portals"]}
-            targets = {c["id"]: c["backend"] for c in document()["contents"] if c["id"] in owned_ids and c.get("backend")}
-            siblings = {c["backend"]: rpc("terminal.get", {"terminal": c["backend"]})["pid"] for c in document()["contents"] if c["id"] not in owned_ids and c.get("backend")}
-            click("demo-repo", 273)
-            click("Close")
-            capture("voyage-close-confirmation")
-            click("Cancel Voyage close")
-            assert not next(v for v in document()["voyages"] if v["id"] == selected["id"]).get("closed", False)
-            assert all(rpc("terminal.get", {"terminal": address})["state"] == "live" for address in targets.values())
-            record("cancel-shutdown-preserves-programs")
-            clean = path.read_bytes()
-            click("Note text")
-            type_text(" Conflict draft")
-            path.write_bytes(clean + b"\nOutside edit\n")
-            click("demo-repo", 273)
-            click("Close")
-            click("Confirm Voyage close")
-            capture("voyage-close-save-refusal")
-            click("Cancel Voyage close")
-            assert not next(v for v in document()["voyages"] if v["id"] == selected["id"]).get("closed", False)
-            assert all(rpc("terminal.get", {"terminal": address})["state"] == "live" for address in targets.values())
-            record("note-save-conflict-refuses-before-stop")
-            path.write_bytes(clean)
-            click("demo-repo", 273)
-            click("Close")
-            click("Confirm Voyage close")
-            wait(document, lambda value: next(v for v in value["voyages"] if v["id"] == selected["id"]).get("closed", False), "confirmed Voyage shutdown")
-            assert "Conflict draft" in path.read_text() and "Before shutdown" in path.read_text()
-            assert "Portal shutdown draft" in portal_path.read_text()
-            assert all(rpc("terminal.get", {"terminal": address})["state"] == "finished" for address in targets.values())
-            assert all(rpc("terminal.get", {"terminal": address})["state"] == "live" and rpc("terminal.get", {"terminal": address})["pid"] == process for address, process in siblings.items())
-            click("Home")
-            capture("home-closed-voyage-absent")
-            click("Expand Recent voyages")
-            click("Reopen demo-repo")
-            current = wait(document, lambda value: any(c["id"] in targets and c.get("backend") and c["backend"] != targets[c["id"]] for c in value["contents"]), "warm reopen fresh shell")
-            for content in current["contents"]:
-                if content["id"] in targets:
-                    terminal = rpc("terminal.get", {"terminal": content["backend"]})
-                    assert terminal["state"] == "live" and terminal["argv"] == ["/bin/bash"]
-            capture("voyage-warm-reopen")
-            record("saved-shutdown-and-warm-reopen-preserves-independent-worktree")
         before = document()
         opened = False
         close()

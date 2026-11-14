@@ -7,6 +7,9 @@ use serde::Serialize;
 use serde_json::json;
 use voyager_contract::inspection::Frame;
 
+const PRIMARY: u8 = 1;
+const SECONDARY: u8 = 3;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Wheel {
@@ -38,12 +41,20 @@ impl Native {
         self.clicks(target, 2)
     }
 
+    pub fn context_click(&self, target: &Target) -> Result<()> {
+        self.press_button(target, SECONDARY, 1)
+    }
+
     fn clicks(&self, target: &Target, count: u8) -> Result<()> {
+        self.press_button(target, PRIMARY, count)
+    }
+
+    fn press_button(&self, target: &Target, button: u8, count: u8) -> Result<()> {
         let aim = self.reach(target)?;
         let x11 = self.x11()?;
         self.system.act(
-            json!({"input":"click","button":1,"count":count,"target":target,"aim":aim}),
-            || (0..count).try_for_each(|_| x11.click(1)),
+            json!({"input":"click","button":button,"count":count,"target":target,"aim":aim}),
+            || (0..count).try_for_each(|_| x11.click(button)),
         )
     }
 

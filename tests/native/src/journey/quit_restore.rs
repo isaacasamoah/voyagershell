@@ -1,4 +1,4 @@
-use super::layout::avatar_on_dock;
+use super::layout::{avatar_on_dock, without_runtime};
 use super::{Cases, Verdict, cases};
 use crate::native::{Native, Seen, Terminal, voyages};
 use crate::system::Identity;
@@ -264,17 +264,6 @@ fn shell_of(native: &Native, layout: &Layout, vessel: &Vessel) -> Result<Value> 
             .rpc("terminal.get", json!({"terminal":backend})),
         None => Ok(Value::Null),
     }
-}
-
-fn without_runtime(layout: &Layout) -> Layout {
-    let mut layout = layout.clone();
-    for content in &mut layout.contents {
-        content.backend = None;
-        content.launch = None;
-        content.start_pending = None;
-        content.shell_intent = None;
-    }
-    layout
 }
 
 fn drawn(seen: &Seen) -> Drawn {
