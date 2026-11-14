@@ -120,7 +120,7 @@ To run a control, use a checkout that you can discard:
 
 The `terminal-scrolling` patch makes the terminal ignore an upward wheel in
 ordinary shell history. `normal-history` then fails on the expectation
-`wheel up shows earlier history`.
+`wheel up draws the live screen's lines lower, below earlier history`.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
@@ -480,6 +480,20 @@ Herdr Core was inspected at its 0.1.19 source revision
 `hc connect` can autostart; the adapter instead uses the published plain JSON-RPC
 socket protocol with no start behavior. Herdr App guidance was inspected at
 `1581a587919dddd6f1efd5f78eb542c4b2b02cb5`. Upstream approval policies remain upstream.
+
+The scrolling checks judge the lines that a capture draws, not whether the
+screen changed. A terminal capture masks the terminal's 8-pixel padding, scaled
+to device pixels, and the avatar. Each run of pixel rows that holds a pixel other
+than the background is one drawn line, identified by the SHA-256 of its pixels.
+After wheel up, the lines of the live screen must appear again at one common
+distance lower, every one that still fits, with at least one line drawn above
+them. Wheel down must restore the exact live capture. In `arrows` and `mouse`,
+the probe draws `SCROLL` lines from its position, so its lines must move by as
+many rows as its position changed. `reattached-history` first prints 60 short
+`REATTACH` lines, so the live screen holds only lines that the journey printed,
+and after the relaunch the live screen must draw the same lines at the same
+places. The checks do not claim a scroll distance for shell history or the cell
+that a wheel report names; both are gaps.
 
 The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The probe counts the wheel reports and the cursor keys that move it, and it writes both counts to its state file. The `arrows` case expects cursor keys and no wheel reports, and the `mouse` case expects wheel reports and no cursor keys. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
 

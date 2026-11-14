@@ -1,16 +1,146 @@
 use super::{Defect, Native, Wheel, pid, placed};
 use crate::inspection::{Target, Unseen, region};
 use crate::system::{Identity, PATIENCE, settle, until};
-use crate::x11::{Key, Pixels};
+use crate::x11::{Geometry, Key, Pixels};
 use anyhow::{Context, Result, ensure};
 use serde::Serialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::time::Duration;
 use voyager_contract::{ContentId, CoreTerminalId, Layout, PlacementId};
 
 const EXPECTATION: Duration = Duration::from_secs(4);
 const LOOK: Duration = Duration::from_millis(10);
 const WHEEL_CLICKS: usize = 6;
+const PADDING: f32 = 8.;
+const MASKED: [u8; 3] = [0, 0, 0];
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Line {
+    top: usize,
+    height: usize,
+    #[serde(skip)]
+    image: [u8; 32],
+}
+
+impl Line {
+    fn new(rows: &[&[u8]], top: usize, end: usize) -> Self {
+        let mut image = Sha256::new();
+        for row in &rows[top..end] {
+            image.update(row);
+        }
+        Self {
+            top,
+            height: end - top,
+            image: image.finalize().into(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Lines(Vec<Line>);
+
+impl Lines {
+    pub fn of(look: &Pixels) -> Self {
+        let rows: Vec<&[u8]> = look.rows().collect();
+        let Some(background) = background(&rows) else {
+            return Self(Vec::new());
+        };
+        let blank: Vec<u8> = rows
+            .first()
+            .map(|row| {
+                row.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .flat_map(|_| background)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ink = |row: &[u8]| {
+            row != blank.as_slice()
+                && row
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|pixel| pixel[..3] != background[..3] && pixel[..3] != MASKED)
+        };
+        let mut lines = Vec::new();
+        let mut top = None;
+        for (y, row) in rows.iter().enumerate() {
+            match (ink(row), top) {
+                (true, None) => top = Some(y),
+                (false, Some(start)) => {
+                    lines.push(Line::new(&rows, start, y));
+                    top = None;
+                }
+                _ => {}
+            }
+        }
+        if let Some(start) = top {
+            lines.push(Line::new(&rows, start, rows.len()));
+        }
+        Self(lines)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn lowered(&self, to: &Self) -> Option<usize> {
+        let first = self.0.first()?;
+        let last = to.0.last()?.top;
+        to.0.iter().enumerate().find_map(|(above, line)| {
+            let distance = line.top.checked_sub(first.top).filter(|moved| *moved > 0)?;
+            let kept = self.0.iter().filter(|kept| kept.top + distance <= last);
+            let found = |kept: &Line| {
+                to.0.iter()
+                    .any(|drawn| drawn.top == kept.top + distance && drawn.image == kept.image)
+            };
+            (line.image == first.image && kept.into_iter().all(found)).then_some(above)
+        })
+    }
+}
+
+fn background(rows: &[&[u8]]) -> Option<[u8; 4]> {
+    let mut counts: BTreeMap<[u8; 4], usize> = BTreeMap::new();
+    for row in rows.iter().step_by(8) {
+        for pixel in row.as_chunks::<4>().0.iter().step_by(8) {
+            if pixel[..3] != MASKED {
+                *counts.entry(*pixel).or_default() += 1;
+            }
+        }
+    }
+    counts
+        .into_iter()
+        .max_by_key(|(_, count)| *count)
+        .map(|(pixel, _)| pixel)
+}
+
+fn padding(area: Geometry, inset: u16) -> [Geometry; 4] {
+    let inset = inset.min(area.width / 2).min(area.height / 2);
+    let far = |start: i16, length: u16| (i32::from(start) + i32::from(length - inset)) as i16;
+    [
+        Geometry {
+            height: inset,
+            ..area
+        },
+        Geometry {
+            y: far(area.y, area.height),
+            height: inset,
+            ..area
+        },
+        Geometry {
+            width: inset,
+            ..area
+        },
+        Geometry {
+            x: far(area.x, area.width),
+            width: inset,
+            ..area
+        },
+    ]
+}
 
 #[derive(Serialize)]
 pub struct Terminal {
@@ -78,17 +208,19 @@ impl Terminal {
 
     pub fn look(&self, native: &Native) -> Result<Pixels> {
         let target = self.target();
-        let (terminal, avatar) = native.wait_for(&target.to_string(), PATIENCE, |frame| {
-            let terminal = target.find(frame)?;
-            let avatar = Target::AVATAR.find(frame);
-            Some((
-                region(frame, &terminal.bounds),
-                avatar.map(|avatar| region(frame, &avatar.bounds)),
-            ))
-        })?;
+        let (terminal, avatar, inset) =
+            native.wait_for(&target.to_string(), PATIENCE, |frame| {
+                let terminal = target.find(frame)?;
+                let avatar = Target::AVATAR.find(frame);
+                Some((
+                    region(frame, &terminal.bounds),
+                    avatar.map(|avatar| region(frame, &avatar.bounds)),
+                    (PADDING * frame.window.scale).ceil() as u16,
+                ))
+            })?;
         let mut pixels = native.x11()?.capture(native.window, terminal)?;
-        if let Some(avatar) = avatar {
-            pixels.mask(avatar);
+        for edge in padding(terminal, inset).into_iter().chain(avatar) {
+            pixels.mask(edge);
         }
         Ok(pixels)
     }
@@ -161,6 +293,75 @@ mod tests {
     use super::*;
     use crate::native::{Cause, tests::native};
     use std::path::Path;
+
+    const WIDTH: u16 = 12;
+    const HEIGHT: u16 = 30;
+    const BACKGROUND: [u8; 4] = [22, 19, 17, 0];
+
+    fn screen(lines: &[(usize, u8)]) -> Pixels {
+        let stride = usize::from(WIDTH) * 4;
+        let mut bgrx: Vec<u8> = (0..usize::from(WIDTH) * usize::from(HEIGHT))
+            .flat_map(|_| BACKGROUND)
+            .collect();
+        for (top, shade) in lines {
+            for row in *top..top + 2 {
+                bgrx[row * stride + 8..row * stride + 16].fill(*shade);
+            }
+        }
+        let region = Geometry {
+            x: 0,
+            y: 0,
+            width: WIDTH,
+            height: HEIGHT,
+        };
+        Pixels::new(region, bgrx)
+    }
+
+    #[test]
+    fn lines_drawn_lower_after_a_scroll_are_found_with_the_lines_above_them() {
+        let live = Lines::of(&screen(&[(3, 90), (11, 120), (19, 150)]));
+        let history = Lines::of(&screen(&[(3, 60), (11, 90), (19, 120), (27, 150)]));
+        assert_eq!(live.lowered(&history), Some(1));
+        let history = Lines::of(&screen(&[(3, 60), (11, 70), (19, 90), (27, 120)]));
+        assert_eq!(live.lowered(&history), Some(2));
+    }
+
+    #[test]
+    fn a_scroll_that_drops_every_line_or_draws_none_shows_no_lowered_lines() {
+        let live = Lines::of(&screen(&[(3, 90), (11, 120), (19, 150)]));
+        let elsewhere = Lines::of(&screen(&[(3, 30), (11, 40), (19, 50)]));
+        assert_eq!(live.lowered(&elsewhere), None);
+        let blank = Lines::of(&screen(&[]));
+        assert!(blank.is_empty());
+        assert_eq!(live.lowered(&blank), None);
+        assert_eq!(blank.lowered(&live), None);
+        assert_eq!(live.lowered(&live), None);
+    }
+
+    #[test]
+    fn a_line_that_moved_by_a_different_distance_from_its_neighbours_is_not_lowered() {
+        let live = Lines::of(&screen(&[(3, 90), (11, 120), (19, 150)]));
+        let torn = Lines::of(&screen(&[(3, 60), (11, 90), (19, 150), (27, 120)]));
+        assert_eq!(live.lowered(&torn), None);
+    }
+
+    #[test]
+    fn masked_padding_and_the_avatar_are_not_drawn_lines() {
+        let mut look = screen(&[(11, 90)]);
+        let area = look.region;
+        for edge in padding(area, 2) {
+            look.mask(edge);
+        }
+        look.mask(Geometry {
+            x: 3,
+            y: 20,
+            width: 4,
+            height: 4,
+        });
+        let lines = Lines::of(&look);
+        assert_eq!(lines.0.len(), 1);
+        assert_eq!(lines.0[0].top, 11);
+    }
 
     #[test]
     fn a_shell_that_died_is_a_product_failure() -> Result<()> {

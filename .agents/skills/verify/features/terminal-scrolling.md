@@ -24,19 +24,23 @@ and hash come from the candidate receipt, not the current checkout's file list.
 
 The expected full-screen probe positions are 100, then 82 after six upward wheel
 events, then 100 after downward events. The automated check requires movement in
-both directions and changed captures; it does not rely solely on probe state.
+both directions, and the probe's drawn lines must move by as many rows as its
+position changed; it does not rely solely on probe state.
 The probe counts the cursor keys and the wheel reports that move it, as `keys`
 and `wheel` in its state file. The `arrows` case expects cursor keys only, and
 the `mouse` case expects wheel reports only. A wheel report is an SGR report
 for button 64 or 65. The journey proves no other mouse protocol.
-Normal history must move and return to the same captured region. Core and shell
-identity must survive viewer reattachment. Inspect all direction captures.
+In normal history, wheel up must draw the live screen's lines lower, below
+earlier lines, and wheel down must return the same capture. After reattachment
+the live screen must draw the same printed lines at the same places. Core and
+shell identity must survive viewer reattachment. Inspect all direction captures.
 
 ## Negative control
 
 tests/native/controls/terminal-scrolling.patch makes the terminal ignore an
 upward wheel in ordinary shell history. A candidate built with it must fail
-`normal-history` on the expectation `wheel up shows earlier history`.
+`normal-history` on the expectation
+`wheel up draws the live screen's lines lower, below earlier history`.
 
 ## Gotchas
 

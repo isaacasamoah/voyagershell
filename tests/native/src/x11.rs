@@ -95,6 +95,16 @@ pub struct Pixels {
 }
 
 impl Pixels {
+    #[cfg(test)]
+    pub fn new(region: Geometry, bgrx: Vec<u8>) -> Self {
+        Self { region, bgrx }
+    }
+
+    pub fn rows(&self) -> std::slice::ChunksExact<'_, u8> {
+        self.bgrx
+            .chunks_exact(usize::from(self.region.width).max(1) * 4)
+    }
+
     pub fn mask(&mut self, area: Geometry) {
         let span = |start: i16, length: u16, origin: i16, limit: u16| {
             let clamp = |edge: i32| (edge - i32::from(origin)).clamp(0, i32::from(limit)) as usize;

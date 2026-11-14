@@ -2,7 +2,7 @@ mod input;
 mod terminal;
 
 pub use input::Wheel;
-pub use terminal::Terminal;
+pub use terminal::{Lines, Terminal};
 
 use crate::inspection::{self, Target, Unseen, drawn_for};
 use crate::sandbox;

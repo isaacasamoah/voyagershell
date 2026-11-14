@@ -1,7 +1,7 @@
 use super::{Case as _, Cases, Verdict, cases};
-use crate::native::{Native, Terminal, Wheel, pid, quote, state};
+use crate::native::{Lines, Native, Terminal, Wheel, pid, quote, state};
 use crate::system::{Identity, until};
-use crate::x11::Key;
+use crate::x11::{Key, Pixels};
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 
@@ -34,13 +34,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         terminal.line(native, "printf 'HISTORY-%03d\\n' {1..120}")?;
         terminal.shows(native, "HISTORY-120")?;
         let live = terminal.settled(native, "history-live", |look| look != &empty)?;
-        terminal.wheel(native, Wheel::Up)?;
-        let history = terminal.settled(native, "history-up", |look| look != &live)?;
-        terminal.wheel(native, Wheel::Down)?;
-        let restored = terminal.settled(native, "history-down", |look| look == &live)?;
-        Ok(Verdict::new()
-            .expect("wheel up shows earlier history", live != history)
-            .expect("wheel down returns to the live screen", live == restored))
+        history(native, &terminal, "history", &live, Verdict::new())
     })?;
     let executable = std::env::current_exe()?;
     let encodings = [
@@ -73,27 +67,23 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             let identity = Identity::read(pid(&initial)?)?;
             let before =
                 terminal.settled(native, &format!("{mode}-before"), |look| look != &prompt)?;
+            let start = Lines::of(&before);
             terminal.wheel(native, Wheel::Up)?;
             let (up, upper) = terminal.settled_with(
                 native,
                 &format!("{mode}-up"),
                 || state(&path),
-                |up, look| {
-                    position(up)
-                        .is_ok_and(|up| position(&initial).is_ok_and(|initial| up < initial))
-                        && look != &before
-                },
+                |up, look| moved(&start, &Lines::of(look), &initial, up),
             )?;
+            let raised = Lines::of(&upper);
             terminal.wheel(native, Wheel::Down)?;
             let (down, lower) = terminal.settled_with(
                 native,
                 &format!("{mode}-down"),
                 || state(&path),
-                |down, look| {
-                    position(down).is_ok_and(|down| position(&up).is_ok_and(|up| down > up))
-                        && look != &upper
-                },
+                |down, look| moved(&Lines::of(look), &raised, down, &up),
             )?;
+            let lowered = Lines::of(&lower);
             identity.verify()?;
             ensure!(
                 pid(&up)? == identity.pid && pid(&down)? == identity.pid,
@@ -108,8 +98,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     "wheel down moved the program back down",
                     position(&down)? > position(&up)?,
                 )
-                .expect("the screen changed on wheel up", before != upper)
-                .expect("the screen changed on wheel down", upper != lower)
+                .expect(
+                    "wheel up draws the program's lines as many rows lower as the program moved",
+                    moved(&start, &raised, &initial, &up),
+                )
+                .expect(
+                    "wheel down draws the program's lines as many rows higher as the program moved",
+                    moved(&lowered, &raised, &down, &up),
+                )
                 .expect(
                     encoded,
                     received(&down, sent)? > 0 && received(&down, withheld)? == 0,
@@ -117,6 +113,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .observed("initial", &initial)?
                 .observed("up", &up)?
                 .observed("down", &down)?
+                .observed("lines before", &start)?
+                .observed("lines after wheel up", &raised)?
+                .observed("lines after wheel down", &lowered)?
                 .observed("identity", &identity)?;
             native.press(Key::Char('q'))?;
             until("probe exit", || {
@@ -127,18 +126,65 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         })?;
     }
     cases.check(native, Case::ReattachedHistory, |native| {
+        terminal.line(native, "printf 'REATTACH-%03d\\n' {1..60}")?;
+        terminal.shows(native, "REATTACH-060")?;
+        let kept = terminal.settled(native, "reattached-before", |_| true)?;
+        let drawn = Lines::of(&kept);
         native.close()?;
         terminal.same_program(native)?;
         native.launch()?;
         terminal.focus(native)?;
-        let live = terminal.settled(native, "reattached-live", |_| true)?;
-        terminal.wheel(native, Wheel::Up)?;
-        let history = terminal.settled(native, "reattached-history", |look| look != &live)?;
-        terminal.wheel(native, Wheel::Down)?;
-        let restored = terminal.settled(native, "reattached-down", |look| look == &live)?;
+        let live = terminal.settled(native, "reattached-live", |look| Lines::of(look) == drawn)?;
+        let reattached = Lines::of(&live);
+        let verdict = Verdict::new()
+            .expect(
+                "after the relaunch, the live screen draws the lines it drew before",
+                !drawn.is_empty() && reattached == drawn,
+            )
+            .observed("lines before the relaunch", &drawn)?
+            .observed("lines after the relaunch", &reattached)?;
+        let verdict = history(native, &terminal, "reattached", &live, verdict)?;
         terminal.same_program(native)?;
-        Ok(Verdict::new()
-            .expect("wheel up shows earlier history", live != history)
-            .expect("wheel down returns to the live screen", live == restored))
+        Ok(verdict)
     })
+}
+
+fn moved(from: &Lines, to: &Lines, before: &Value, after: &Value) -> bool {
+    let rows = position(before)
+        .and_then(|before| Ok(before - position(after)?))
+        .ok()
+        .and_then(|rows| usize::try_from(rows).ok())
+        .filter(|rows| *rows > 0);
+    rows.is_some() && from.lowered(to) == rows
+}
+
+fn history(
+    native: &Native,
+    terminal: &Terminal,
+    name: &str,
+    live: &Pixels,
+    verdict: Verdict,
+) -> Result<Verdict> {
+    let drawn = Lines::of(live);
+    terminal.wheel(native, Wheel::Up)?;
+    let earlier = terminal.settled(native, &format!("{name}-up"), |look| {
+        drawn
+            .lowered(&Lines::of(look))
+            .is_some_and(|above| above > 0)
+    })?;
+    let scrolled = Lines::of(&earlier);
+    terminal.wheel(native, Wheel::Down)?;
+    let restored = terminal.settled(native, &format!("{name}-down"), |look| look == live)?;
+    verdict
+        .expect(
+            "wheel up draws the live screen's lines lower, below earlier history",
+            drawn.lowered(&scrolled).is_some_and(|above| above > 0),
+        )
+        .expect(
+            "wheel down returns to the live screen and its lines",
+            !drawn.is_empty() && &restored == live,
+        )
+        .observed("live lines", &drawn)?
+        .observed("lines after wheel up", &scrolled)?
+        .observed("lines after wheel down", Lines::of(&restored))
 }
