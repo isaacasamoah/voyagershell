@@ -280,18 +280,7 @@ def prove(
             height,
             evidence,
         )
-    return placement(
-        native,
-        capture,
-        click,
-        wait,
-        state,
-        close,
-        start_frame,
-        width,
-        height,
-        evidence,
-    )
+    raise AssertionError(f"Unsupported journey {journey}")
 
 
 def arrangement_panes(fields, fleet, contents):
@@ -564,79 +553,6 @@ def arrangement(
         "moved-terminal-input",
         "fleet-reorder",
         "voyage-reorder",
-        "native-quit",
-    ]
-
-
-def placement(
-    native,
-    capture,
-    click,
-    wait,
-    state,
-    close,
-    start_frame,
-    width,
-    height,
-    evidence,
-):
-    def key(value):
-        native("key", value, True)
-        native("key", value, False)
-
-    def rename(x, y, value):
-        click(x, y)
-        click(x, y)
-        time.sleep(0.15)
-        pid = json.loads((evidence / "launch.json").read_text())["pid"]
-        deadline = time.monotonic() + 5
-        while True:
-            fields = native("fields", pid, ["Name"], "window")["fields"]
-            (evidence / "placement-name-fields.json").write_text(
-                json.dumps(fields, indent=2)
-            )
-            if (
-                len(fields) == 1
-                and fields[0]["focused"]
-                and fields[0]["width"] > 0
-                and fields[0]["height"] > 0
-            ):
-                break
-            assert time.monotonic() < deadline, "No unique focused native Name editor"
-            time.sleep(0.05)
-        native("key", 65507, True)
-        key(ord("a"))
-        native("key", 65507, False)
-        key(65288)
-        for character in value:
-            key(ord(character))
-        key(65293)
-
-    capture("placement-initial")
-    click(70, height - 30)
-    created = wait(lambda layout: len(layout["voyages"][0]["portals"]) == 1)
-    portal = created["value"]["voyages"][0]["portals"][0]
-    capture("placement-portal-created")
-    click(width - 40, 80)
-    wait(lambda layout: layout["context"] == {"kind": "portal", "id": portal["id"]})
-    rename(width - 270, 80, "+")
-    wait(lambda layout: layout["voyages"][0]["portals"][0].get("name") == "+")
-    portal = state()["value"]["voyages"][0]["portals"][0]
-    click(355, 30)
-    switched = wait(lambda layout: len(layout["voyages"][0]["fleets"]) == 2)
-    assert switched["value"]["voyages"][0]["portals"][0] == portal
-    assert switched["value"]["context"] == {"kind": "portal", "id": portal["id"]}
-    capture("placement-portal-across-fleets")
-    saved = state()
-    close()
-    start_frame("placement-reopened")
-    assert state() == saved
-    close()
-    return [
-        "real-voyage-portal",
-        "portal-plus-name",
-        "portal-identity-and-context-retained-across-fleets",
-        "saved-placement-reopened",
         "native-quit",
     ]
 

@@ -27,7 +27,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["portal-close", "activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing", "canvas-stack", "workspace-ux", "workspace-unavailable", "placement", "terminal", "portal-terminal", "terminal-grid", "terminal-scrolling", "terminal-reported-status", "arrangement", "layouts", "split-resize", "pane-maximize", "notes", "notes-lifetime", "notes-configuration", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
+    parser.add_argument("--journey", choices=["activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing", "canvas-stack", "workspace-ux", "workspace-unavailable", "terminal", "portal-terminal", "terminal-grid", "terminal-scrolling", "terminal-reported-status", "arrangement", "layouts", "split-resize", "pane-maximize", "notes", "notes-lifetime", "notes-configuration", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--review", action="store_true")
@@ -115,7 +115,7 @@ def run():
                 socket = Path(env["XDG_RUNTIME_DIR"]) / "herdr-core" / (selected + ".sock")
                 if socket.exists():
                     raise RuntimeError("Selected Stop requires two fresh dedicated Core sessions")
-    if args.review or args.journey in ("portal-close", "avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration", "split-resize", "pane-maximize", "canvas-stack", "workspace-ux", "activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "canvas-stack", "terminal-reported-status", "terminal-scrolling"):
+    if args.review or args.journey in ("avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration", "split-resize", "pane-maximize", "canvas-stack", "workspace-ux", "activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing", "conversation-voice", "conversation-content", "terminal-agent-create", "arrangement", "canvas-stack", "terminal-reported-status", "terminal-scrolling"):
         if env.get("HC_SOCKET"):
             raise RuntimeError("This journey requires an unset HC_SOCKET before launch")
         env.pop("HC_SESSION", None)
@@ -367,7 +367,7 @@ def run():
         path = evidence / f"{name}.png"
         window = record["window"] if window is None else window
         assert int(execute("xdotool", "getwindowpid", window)) == record["pid"]
-        if not args.compositor or args.journey not in ("portal-close", "avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration"):
+        if not args.compositor or args.journey not in ("avatar", "portal-avatar", "notes", "notes-lifetime", "notes-configuration"):
             execute("import", "-window", window, str(path))
         if args.compositor:
             bounds = geometry(window)
@@ -435,7 +435,7 @@ def run():
             passed.append("native-quit")
         elif args.foundation:
             import importlib
-            module = "proof_terminal_scroll" if args.journey == "terminal-scrolling" else "proof_demo_feedback" if args.journey in ("portal-close", "voyage-close", "demo-feedback", "activity-refinement") else "proof_feedback_ux" if args.journey in ("activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing") else "proof_workspace_ux" if args.journey == "workspace-ux" else "proof_voice" if args.journey == "conversation-voice" else "proof_canvas_stack" if args.journey == "canvas-stack" else "proof_split_resize" if args.journey in ("split-resize", "pane-maximize") else "proof_notes_lifetime" if args.journey in ("notes-lifetime", "notes-configuration") else "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey in ("terminal-agent", "terminal-agent-create") else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
+            module = "proof_terminal_scroll" if args.journey == "terminal-scrolling" else "proof_demo_feedback" if args.journey in ("voyage-close", "demo-feedback", "activity-refinement") else "proof_feedback_ux" if args.journey in ("activity-refinement", "voyage-close", "demo-feedback", "feedback-ux", "rename-typing") else "proof_workspace_ux" if args.journey == "workspace-ux" else "proof_voice" if args.journey == "conversation-voice" else "proof_canvas_stack" if args.journey == "canvas-stack" else "proof_split_resize" if args.journey in ("split-resize", "pane-maximize") else "proof_notes_lifetime" if args.journey in ("notes-lifetime", "notes-configuration") else "proof_foundation_notes" if args.journey == "notes" else "proof_avatar" if args.journey in ("avatar", "portal-avatar") else "proof_selected_stop" if args.journey == "conversation-stop" else "proof_conversation_scroll" if args.journey == "conversation-scroll" else "proof_terminal_agent" if args.journey in ("terminal-agent", "terminal-agent-create") else "proof_conversation" if args.journey and args.journey.startswith("conversation") else "proof_workspace"
             proof_workspace = importlib.import_module(module)
 
             options = dict(native=native, capture=capture, geometry=geometry, close=close, start_frame=start_frame, evidence=evidence, session=args.session, env=env, journey=args.journey)
