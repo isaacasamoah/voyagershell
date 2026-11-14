@@ -229,7 +229,7 @@ platforms = ["linux"]
 python = []
 behavior = "covered"
 performance = "none"
-visual = "python-only"
+visual = "none"
 debug = "covered"
 
 [[feature]]
