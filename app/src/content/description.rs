@@ -1,4 +1,5 @@
 use super::{INITIAL_NOTES, manifest, state_schema};
+pub use crate::content_type::NOTES_TYPE;
 use std::path::Path;
 use voyager_contract::content::{
     Actions, Availability, Backend, Catalog, DataDescription, Description, NativeHost, NativeView,
@@ -22,8 +23,6 @@ struct State {
     package: &'static str,
     defaults: &'static [u8],
 }
-
-pub const NOTES_TYPE: &str = "notes";
 
 const IMPLEMENTATIONS: &[Implementation] = &[
     Implementation {

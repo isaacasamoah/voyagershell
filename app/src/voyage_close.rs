@@ -1,6 +1,7 @@
 use crate::{
     client::{CallError, Client},
-    core::{Core, Error, TerminalState},
+    core::{Core, Error},
+    core_state::TerminalState,
     panels,
 };
 use async_channel::{Receiver, Sender};
@@ -208,7 +209,7 @@ impl Closing {
                     .find(|terminal| terminal.address == address.0)
             });
             let live = terminal.filter(|terminal| terminal.is_live());
-            let note = content.type_id == crate::content::NOTES_TYPE;
+            let note = content.type_id == crate::content_type::NOTES_TYPE;
             if note {
                 self.notes.push(content.id.clone());
             }

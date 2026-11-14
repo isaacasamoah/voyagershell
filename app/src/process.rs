@@ -1,6 +1,7 @@
 use crate::{
-    core::{Core, Error, MAX_INPUT_BYTES, Pending, TerminalState},
+    core::{Core, Error, MAX_INPUT_BYTES, Pending},
     core_shapes::{InterruptResult, SendResult, Terminal},
+    core_state::TerminalState,
     scope,
 };
 use std::sync::Arc;
@@ -74,6 +75,10 @@ fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo
 
 fn is_live(state: &str) -> bool {
     TerminalState::parse(state) == TerminalState::Live
+}
+
+pub(crate) fn ended(state: &str) -> bool {
+    TerminalState::parse(state) == TerminalState::Finished
 }
 
 fn stop_result(target: ProcessInfo, observed: ProcessInfo) -> Result<ProcessOutput, Error> {

@@ -564,7 +564,7 @@ pub(crate) fn insert(
 
 pub(crate) fn default_name(members: &[Vessel], type_id: &str) -> String {
     let base = match type_id {
-        crate::content::NOTES_TYPE => "Notes",
+        crate::content_type::NOTES_TYPE => "Notes",
         "agents" => "Agents",
         _ => "Terminal",
     };
@@ -811,7 +811,7 @@ mod tests {
         let first = model.layout.voyages[0].fleets[0].vessels[0].clone();
         model
             .apply(Action::CreateContent {
-                type_id: crate::content::NOTES_TYPE.into(),
+                type_id: crate::content_type::NOTES_TYPE.into(),
                 destination: ContentDestination::Panel {
                     owner: PanelOwner::Fleet {
                         id: model.layout.voyages[0].fleets[0].id.clone(),

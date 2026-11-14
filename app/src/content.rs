@@ -472,9 +472,8 @@ pub(crate) fn initialize_created(
     let ids: Vec<_> = current
         .contents
         .iter()
-        .filter(|content| {
-            content.type_id == NOTES_TYPE
-                && !previous.contents.iter().any(|old| old.id == content.id)
+        .filter(|item| {
+            item.type_id == NOTES_TYPE && !previous.contents.iter().any(|old| old.id == item.id)
         })
         .map(|content| content.id.clone())
         .collect();

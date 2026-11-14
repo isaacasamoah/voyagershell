@@ -94,10 +94,16 @@ mod tests {
         view.activate().unwrap();
         let changes = owner.subscribe(&binding, Some(0));
         let original_data = fs::read(profile.join("data/stable-note.json")).unwrap();
-        owner.remove_package(crate::content::NOTES_TYPE).unwrap();
+        owner
+            .remove_package(crate::content_type::NOTES_TYPE)
+            .unwrap();
         assert!(!view.is_active());
         assert_eq!(changes.try_recv().unwrap(), 1);
-        assert!(owner.require_available(crate::content::NOTES_TYPE).is_err());
+        assert!(
+            owner
+                .require_available(crate::content_type::NOTES_TYPE)
+                .is_err()
+        );
         assert!(owner.require_available("terminal").is_ok());
         assert!(!active.exists());
         assert_eq!(
@@ -113,7 +119,7 @@ mod tests {
         let notes = catalog
             .types
             .iter()
-            .find(|kind| kind.type_id == crate::content::NOTES_TYPE)
+            .find(|kind| kind.type_id == crate::content_type::NOTES_TYPE)
             .unwrap();
         assert_eq!(notes.availability, Availability::Removed);
         assert!(notes.state.is_none() && notes.actions.is_none());
@@ -122,7 +128,9 @@ mod tests {
             Availability::Ready
         );
         let restored = owner.subscribe(&binding, Some(1));
-        owner.restore_package(crate::content::NOTES_TYPE).unwrap();
+        owner
+            .restore_package(crate::content_type::NOTES_TYPE)
+            .unwrap();
         assert!(
             !view.is_active(),
             "Restore must not revive old view authority"
@@ -141,7 +149,11 @@ mod tests {
             original_data
         );
         fs::remove_file(active.join("main.js")).unwrap();
-        assert!(owner.require_available(crate::content::NOTES_TYPE).is_err());
+        assert!(
+            owner
+                .require_available(crate::content_type::NOTES_TYPE)
+                .is_err()
+        );
         seed_package(&active, &files).unwrap();
         assert!(
             !active.join("main.js").exists(),
@@ -153,7 +165,11 @@ mod tests {
         fs::write(active.join("mod.json"), serde_json::to_vec(&huge).unwrap()).unwrap();
         let catalog = discover(&packages).unwrap();
         assert!(serde_json::to_vec(&catalog).unwrap().len() <= crate::content::ENVELOPE_LIMIT);
-        assert!(owner.require_available(crate::content::NOTES_TYPE).is_err());
+        assert!(
+            owner
+                .require_available(crate::content_type::NOTES_TYPE)
+                .is_err()
+        );
         assert!(owner.require_available("terminal").is_ok());
         fs::write(active.join("mod.json"), "invalid personal metadata").unwrap();
         let catalog = discover(&packages).unwrap();
@@ -161,7 +177,7 @@ mod tests {
             catalog
                 .types
                 .iter()
-                .find(|kind| kind.type_id == crate::content::NOTES_TYPE)
+                .find(|kind| kind.type_id == crate::content_type::NOTES_TYPE)
                 .unwrap()
                 .availability,
             Availability::Unavailable { .. }
@@ -175,12 +191,18 @@ mod tests {
             fs::read(active.join("mod.json")).unwrap(),
             b"invalid personal metadata"
         );
-        owner.remove_package(crate::content::NOTES_TYPE).unwrap();
+        owner
+            .remove_package(crate::content_type::NOTES_TYPE)
+            .unwrap();
         fs::create_dir(&active).unwrap();
         assert!(super::move_package(&removed, &active).is_err());
         assert!(removed.join("main.js").exists());
         fs::write(active.join("main.js"), "new personal package").unwrap();
-        assert!(owner.restore_package(crate::content::NOTES_TYPE).is_err());
+        assert!(
+            owner
+                .restore_package(crate::content_type::NOTES_TYPE)
+                .is_err()
+        );
         assert_eq!(
             fs::read(active.join("main.js")).unwrap(),
             b"new personal package"

@@ -495,7 +495,7 @@ mod tests {
                 voyage: voyage.clone(),
                 name: "Fleet 2".into(),
                 source: source.clone(),
-                type_id: crate::content::NOTES_TYPE.into(),
+                type_id: crate::content_type::NOTES_TYPE.into(),
                 launch: None,
             })
             .unwrap();
@@ -508,7 +508,7 @@ mod tests {
             .iter()
             .find(|content| content.id == fleet.vessels[0].content)
             .unwrap();
-        assert_eq!(content.type_id, crate::content::NOTES_TYPE);
+        assert_eq!(content.type_id, crate::content_type::NOTES_TYPE);
         assert_eq!(content.cwd, "/tmp/project");
         assert!(content.backend.is_none());
         let saved = model.layout.clone();

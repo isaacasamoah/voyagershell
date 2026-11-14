@@ -116,7 +116,7 @@ pub(crate) fn prepare(
                         append_preview(&mut text, "Current terminal screen is unavailable.\n")
                     }
                 }
-            } else if instance.type_id == crate::content::NOTES_TYPE {
+            } else if instance.type_id == crate::content_type::NOTES_TYPE {
                 if let Some(owner) = content.as_deref_mut() {
                     let binding = crate::content::register_content(owner, &scoped, &instance.id)?;
                     let response = owner.call(
@@ -331,7 +331,7 @@ mod tests {
         let voyage = model.layout.voyages[0].id.clone();
         model
             .apply(Action::CreateContent {
-                type_id: crate::content::NOTES_TYPE.into(),
+                type_id: crate::content_type::NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
                     owner: voyager_contract::PanelOwner::Portals {
                         voyage: voyage.clone(),
