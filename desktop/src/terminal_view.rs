@@ -7,14 +7,14 @@ use gpui::{
 
 impl Render for Pane {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
-        crate::typing_trace::record("render_start", usize::from(self.dirty));
-        crate::redraw_probe::record("terminal_renders", 1);
+        crate::diagnostics::trace("render_start", usize::from(self.dirty));
+        crate::diagnostics::redraw::record("terminal_renders", 1);
         if self.dirty {
             match self.screen.snapshot() {
                 Ok(grid) => {
                     self.grid = Some(grid);
                     self.dirty = false;
-                    crate::typing_trace::record("snapshot_done", 0);
+                    crate::diagnostics::trace("snapshot_done", 0);
                 }
                 Err(error) => self.status = format!("Terminal display: {error:#}"),
             }
@@ -32,7 +32,7 @@ impl Render for Pane {
         let terminal_bounds = self.bounds.clone();
         let weak = entity.downgrade();
         #[cfg(feature = "frame-profiler")]
-        let glyph = crate::glyph_probe::observe(self.grid.as_ref());
+        let glyph = crate::diagnostics::glyph::observe(self.grid.as_ref());
         let measure = canvas(
             move |bounds, window, cx| {
                 if bounds.size.width <= px(16.) || bounds.size.height <= px(16.) {
@@ -69,10 +69,10 @@ impl Render for Pane {
                 }
             },
             move |bounds, _, window, cx| {
-                crate::typing_trace::record("native_paint_callback", 0);
+                crate::diagnostics::trace("native_paint_callback", 0);
                 #[cfg(feature = "frame-profiler")]
                 if let Some(count) = glyph {
-                    crate::typing_trace::record("glyph_paint_callback", count);
+                    crate::diagnostics::trace("glyph_paint_callback", count);
                 }
                 window.handle_input(
                     &input_focus,
@@ -90,7 +90,7 @@ impl Render for Pane {
         let row_paint = !window.is_a11y_active()
             && window.text_style().text_overflow.is_none()
             && window.text_style().line_clamp.is_none();
-        crate::typing_trace::record(
+        crate::diagnostics::trace(
             "terminal_renderer_mode",
             usize::from(row_paint) | (usize::from(window.is_a11y_active()) << 1),
         );
@@ -101,8 +101,8 @@ impl Render for Pane {
             if row_paint {
                 self.row_paints
                     .resize_with(grid.rows.len(), Default::default);
-                crate::redraw_probe::record("terminal_canvas_rows", grid.rows.len() as u64);
-                crate::typing_trace::record("row_paint_used", grid.rows.len());
+                crate::diagnostics::redraw::record("terminal_canvas_rows", grid.rows.len() as u64);
+                crate::diagnostics::trace("row_paint_used", grid.rows.len());
             }
             for (y, cells) in grid.rows.iter().enumerate() {
                 if row_paint {
@@ -331,7 +331,7 @@ impl Render for Pane {
                 cx.stop_propagation();
             }))
             .on_key_down(move |event, _, cx| {
-                crate::typing_trace::record("key_received", 0);
+                crate::diagnostics::trace("key_received", 0);
                 if event.keystroke.modifiers.control && event.keystroke.key == "q" {
                     return;
                 }

@@ -230,7 +230,7 @@ impl Pane {
     }
 
     fn pump(&mut self, cx: &mut Context<Self>) -> bool {
-        crate::typing_trace::record("pump_start", 0);
+        crate::diagnostics::trace("pump_start", 0);
         let start = Instant::now();
         let previous_status = self.status.clone();
         let mut consumed = 0;
@@ -268,9 +268,9 @@ impl Pane {
             self.pending_credit = 0;
         }
         if consumed != 0 {
-            crate::typing_trace::record("output_parsed", consumed);
+            crate::diagnostics::trace("output_parsed", consumed);
             #[cfg(feature = "frame-profiler")]
-            crate::glyph_probe::observe_parsed(&self.screen.terminal);
+            crate::diagnostics::glyph::observe_parsed(&self.screen.terminal);
             self.dirty = true;
             cx.notify();
         }
@@ -406,7 +406,7 @@ impl Pane {
         self.viewer
             .input(bytes)
             .map_err(|error| anyhow::anyhow!("{error:?}"))?;
-        crate::typing_trace::record("input_admitted", count);
+        crate::diagnostics::trace("input_admitted", count);
         self.input_sent()
     }
 
