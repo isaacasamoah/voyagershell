@@ -355,6 +355,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/features.rs", include_bytes!("features.rs")),
     ("src/inspection.rs", include_bytes!("inspection.rs")),
     ("src/journey.rs", include_bytes!("journey.rs")),
+    ("src/journey/input.rs", include_bytes!("journey/input.rs")),
     ("src/journey/layout.rs", include_bytes!("journey/layout.rs")),
     (
         "src/journey/quit_restore.rs",
@@ -388,6 +389,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/sandbox.rs", include_bytes!("sandbox.rs")),
     ("src/system.rs", include_bytes!("system.rs")),
     ("src/x11.rs", include_bytes!("x11.rs")),
+    ("src/x11/clipboard.rs", include_bytes!("x11/clipboard.rs")),
     ("Cargo.toml", include_bytes!("../Cargo.toml")),
     ("Cargo.lock", include_bytes!("../Cargo.lock")),
 ];

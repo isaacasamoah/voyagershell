@@ -94,13 +94,13 @@ id = "terminal-io"
 name = "Terminal I/O"
 path = "Type into the terminal, run commands and read their output."
 sources = ["desktop/src/terminal.rs", "desktop/src/terminal_input.rs", "desktop/src/terminal_screen.rs", "desktop/src/terminal_view.rs", "desktop/src/terminal_rows.rs", "desktop/src/terminal_font.rs", "desktop/src/terminal_background.rs"]
-journeys = []
+journeys = ["terminal-input"]
 platforms = ["linux"]
 python = ["terminal", "terminal-grid", "portal-terminal"]
-behavior = "python-only"
+behavior = "covered"
 performance = "none"
-visual = "python-only"
-debug = "python-only"
+visual = "covered"
+debug = "covered"
 
 [[feature]]
 id = "terminal-scrolling"
@@ -120,20 +120,20 @@ id = "selection"
 name = "Selection"
 path = "Select terminal text with the pointer."
 sources = ["desktop/src/terminal_screen.rs", "desktop/src/terminal_input.rs"]
-journeys = []
+journeys = ["terminal-input"]
 platforms = ["linux"]
 python = ["terminal-grid"]
-behavior = "python-only"
+behavior = "covered"
 performance = "none"
-visual = "python-only"
-debug = "python-only"
+visual = "covered"
+debug = "covered"
 
 [[feature]]
 id = "clipboard"
 name = "Clipboard"
 path = "Copy text out of and paste text into a terminal, canvas or note."
 sources = ["desktop/src/text.rs", "desktop/src/terminal_input.rs"]
-journeys = []
+journeys = ["terminal-input"]
 platforms = ["linux"]
 python = ["terminal-grid", "notes-lifetime"]
 behavior = "python-only"

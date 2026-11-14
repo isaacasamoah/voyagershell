@@ -2,7 +2,7 @@ mod input;
 mod terminal;
 
 pub use input::Wheel;
-pub use terminal::{Lines, Program, Terminal};
+pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
 use crate::inspection::{self, Target, Unseen, drawn_for};
 use crate::sandbox;
@@ -10,7 +10,7 @@ use crate::system::{
     Identity, Owned, PATIENCE, Pinned, Stopped, System, TimedOut, digest, interrupted, poll, save,
     settle, stamp, until, until_cleanup,
 };
-use crate::x11::{Display, Geometry, Key, Pixels, Window};
+use crate::x11::{Clipboard, Display, Geometry, Key, Pixels, Window};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -158,6 +158,8 @@ pub struct Native {
     surface: Surface,
     display: Option<Owned>,
     x11: Option<Display>,
+    clipboard: Option<Clipboard>,
+    ledgered: usize,
     viewer: Option<Owned>,
     core: Option<Identity>,
     core_id: Value,
@@ -192,6 +194,8 @@ impl Native {
             surface,
             display: None,
             x11: None,
+            clipboard: None,
+            ledgered: 0,
             viewer: None,
             core: None,
             core_id: Value::Null,
@@ -696,6 +700,9 @@ impl Native {
 
     pub fn cleanup(&mut self, candidate_faulted: bool) -> Vec<String> {
         let mut errors = Vec::new();
+        if let Err(error) = self.release_clipboard() {
+            errors.push(format!("clipboard: {error:#}"));
+        }
         if let Some(mut viewer) = self.viewer.take() {
             let stopped = if candidate_faulted {
                 viewer.abandon().map(|()| Stopped::Exited { signals: 0 })

@@ -314,6 +314,10 @@ impl System {
             .store(self.acknowledged.load(Ordering::SeqCst), Ordering::SeqCst);
     }
 
+    pub fn acted(&self) -> usize {
+        self.acknowledged.load(Ordering::SeqCst)
+    }
+
     pub fn acknowledged_since_dispatch(&self) -> bool {
         self.acknowledged.load(Ordering::SeqCst) > self.dispatch_mark.load(Ordering::SeqCst)
     }
