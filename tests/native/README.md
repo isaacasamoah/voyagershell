@@ -582,6 +582,15 @@ and after the relaunch the live screen must draw the same lines at the same
 places. The checks do not claim a scroll distance for shell history or the cell
 that a wheel report names; both are gaps.
 
+`foreign-exit` starts `/bin/true` through Core in the run's session, outside
+the app, and waits until Core reports it finished. The saved layout version must
+stay the same and the placed terminal must stay shown with no new Vessel.
+`exit-closes` then types `exit` into the placed shell and measures, at the
+fixture's 80 ms glance, how long the Vessel takes to leave the drawn frame after
+a newer layout is saved. It must close within 1 s. The record `exit to closed ms`
+is the exit-to-shown delay. The app's 3 s header observation alone meets that
+bound only when its next tick happens to fall within 1 s of the exit.
+
 The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The probe counts the wheel reports and the cursor keys that move it, and it writes both counts to its state file. The `arrows` case expects cursor keys and no wheel reports, and the `mouse` case expects wheel reports and no cursor keys. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
 
 ## Retained Python journey reference

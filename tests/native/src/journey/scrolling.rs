@@ -1,15 +1,18 @@
 use super::{Case as _, Cases, Verdict, cases};
-use crate::native::{Lines, Native, Terminal, Wheel, pid, quote, state};
+use crate::native::{Lines, Native, Terminal, Wheel, pid, quote, state, vessels};
 use crate::system::{Identity, until};
 use crate::x11::{Key, Pixels};
 use anyhow::{Context, Result, ensure};
-use serde_json::Value;
+use serde_json::{Value, json};
+use std::time::{Duration, Instant};
 
 cases! {
     NormalHistory => "normal-history",
     Arrows => "arrows",
     Mouse => "mouse",
     ReattachedHistory => "reattached-history",
+    ForeignExit => "foreign-exit",
+    ExitCloses => "exit-closes",
 }
 
 pub const CONTROL: Case = Case::NormalHistory;
@@ -146,6 +149,56 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let verdict = history(native, &terminal, "reattached", &live, verdict)?;
         terminal.same_program(native)?;
         Ok(verdict)
+    })?;
+    cases.check(native, Case::ForeignExit, |native| {
+        let (before, earlier) = native.document()?.context("Missing saved layout")?;
+        let foreign = native.system.rpc(
+            "terminal.run",
+            json!({"argv":["/bin/true"],"cwd":"/tmp","no_parent":true}),
+        )?;
+        let address = foreign["address"]
+            .as_str()
+            .context("Missing foreign terminal")?
+            .to_owned();
+        until("the foreign program's exit", || {
+            let reported = native
+                .system
+                .watch("terminal.get", json!({"terminal":address}))?;
+            Ok((reported["state"] == "finished").then_some(()))
+        })?;
+        std::thread::sleep(Duration::from_millis(500));
+        let (after, layout) = native.document()?.context("Missing saved layout")?;
+        let shown = native.observe("the placed terminal after a foreign exit", |seen| {
+            Some(seen.shows(&terminal.target()))
+        })?;
+        native.keep_window("foreign-exit")?;
+        Verdict::new()
+            .expect(
+                "a program outside the app exiting in the same Core session leaves the saved layout unchanged",
+                after == before,
+            )
+            .expect(
+                "the placed terminal stays shown with no new Vessel",
+                shown && vessels(&layout).count() == vessels(&earlier).count(),
+            )
+            .observed("foreign terminal", address)?
+            .observed("layout versions", [before, after])
+    })?;
+    cases.check(native, Case::ExitCloses, |native| {
+        let (before, _) = native.document()?.context("Missing saved layout")?;
+        terminal.line(native, "exit")?;
+        let typed = Instant::now();
+        native.observe("the exited shell's Vessel closed", |seen| {
+            (!seen.shows(&terminal.target()) && seen.version > before).then_some(())
+        })?;
+        let delay = typed.elapsed().as_millis();
+        native.keep_window("exit-closes")?;
+        Verdict::new()
+            .expect(
+                "the exited shell's Vessel closes within 1 s of the typed exit",
+                delay < 1000,
+            )
+            .observed("exit to closed ms", delay)
     })
 }
 

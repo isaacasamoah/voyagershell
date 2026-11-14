@@ -5,17 +5,31 @@ use std::{
 };
 use voyager_app::{client::Client, core::Core};
 use voyager_contract::{
-    Action, ContentId, Context, Layout, Request, Status,
+    Action, ContentId, Context, Layout, PlacementId, Request, Split, Status,
     administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest},
 };
 
+fn leaf(split: &Split, placement: &PlacementId) -> bool {
+    match split {
+        Split::Leaf { placement: shown } => shown == placement,
+        Split::Branch { first, second, .. } => leaf(first, placement) || leaf(second, placement),
+    }
+}
+
 fn placed(layout: &Layout, content: &ContentId) -> bool {
-    layout.voyages.iter().any(|voyage| {
-        voyage
-            .fleets
-            .iter()
-            .any(|fleet| fleet.vessels.iter().any(|panel| &panel.content == content))
-    })
+    layout
+        .voyages
+        .iter()
+        .flat_map(|voyage| &voyage.fleets)
+        .any(|fleet| {
+            fleet.vessels.iter().any(|vessel| {
+                &vessel.content == content
+                    && fleet
+                        .root
+                        .as_ref()
+                        .is_some_and(|root| leaf(root, &vessel.id))
+            })
+        })
 }
 
 #[test]

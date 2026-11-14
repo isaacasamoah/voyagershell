@@ -23,7 +23,7 @@ impl std::fmt::Display for Incompatible {
             ),
             Self::Release(found) => write!(
                 formatter,
-                "Herdr Core {found} is older than {major}.{minor}.{patch}, the oldest release Voyager supports"
+                "Herdr Core reports release {found}; Voyager supports {major}.{minor}.{patch} and newer"
             ),
             Self::Missing(names) => write!(
                 formatter,
@@ -135,8 +135,11 @@ impl Core {
         if !missing.is_empty() {
             return Err(Incompatible::Missing(missing));
         }
-        if !hello.framed || hello.core.id.is_empty() {
+        if !hello.framed {
             return Err(Incompatible::Missing(vec!["framed"]));
+        }
+        if hello.core.id.is_empty() {
+            return Err(Incompatible::Missing(vec!["a Core identity"]));
         }
         Ok(())
     }
