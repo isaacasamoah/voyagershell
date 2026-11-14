@@ -1,7 +1,45 @@
 use crate::inspection::Target;
-use crate::native::Seen;
+use crate::native::{Native, Seen, vessels};
+use anyhow::Result;
 use voyager_contract::inspection::{Rect, Role};
-use voyager_contract::{Context, Layout};
+use voyager_contract::{Context, Layout, PlacementId, RenameTarget};
+
+pub fn split_right(
+    native: &Native,
+    before: &Layout,
+    vessel: &PlacementId,
+) -> Result<(Layout, Rect, Vec<Rect>)> {
+    native.hover(&Target::name(&RenameTarget::Vessel { id: vessel.clone() }))?;
+    native.click(&Target::split_right(vessel))?;
+    native.click(&Target::worker("terminal"))?;
+    native.settle(
+        "the first Vessel's terminal and a new Vessel's terminal drawn",
+        |seen| {
+            let born = born(vessels(before), vessels(seen.document), |vessel| &vessel.id);
+            let pane = |id: &PlacementId| Some(Target::terminal(id).find(seen.frame)?.bounds);
+            let old = pane(vessel)?;
+            let new: Vec<Rect> = born
+                .iter()
+                .map(|vessel| pane(&vessel.id))
+                .collect::<Option<_>>()?;
+            (!new.is_empty()).then(|| (seen.document.clone(), old, new))
+        },
+        |(_, old, new)| new.iter().all(|new| right_of(new, old)),
+    )
+}
+
+pub fn born<'a, T, I: PartialEq + 'a>(
+    before: impl Iterator<Item = &'a T>,
+    after: impl Iterator<Item = &'a T>,
+    id: impl Fn(&T) -> &I,
+) -> Vec<&'a T> {
+    let known: Vec<&I> = before.map(&id).collect();
+    after.filter(|item| !known.contains(&id(item))).collect()
+}
+
+pub fn right_of(new: &Rect, old: &Rect) -> bool {
+    new.x >= old.x + old.width && new.y < old.y + old.height && old.y < new.y + new.height
+}
 
 pub fn avatar_bounds(seen: &Seen) -> Option<Rect> {
     Some(Target::AVATAR.find(seen.frame)?.bounds)
