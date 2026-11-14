@@ -13,12 +13,16 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 REVISION = "944803984cf0ba3111861d6e1aa9d6265c109ff9"
 URL = "https://github.com/longbridge/gpui-kit"
-PATCH = ROOT / "desktop" / "patches" / "gpui-shell-native-overlay.patch"
+PATCHES = (
+    ROOT / "desktop" / "patches" / "gpui-shell-native-overlay.patch",
+    ROOT / "desktop" / "patches" / "gpui-shell-engine-limits.patch",
+)
 CHECKOUT = (
     Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
     / "voyagershell"
     / "sdk"
-    / f"{REVISION}-{hashlib.sha256(PATCH.read_bytes()).hexdigest()[:12]}"
+    / f"{REVISION}-"
+    f"{hashlib.sha256(b''.join(p.read_bytes() for p in PATCHES)).hexdigest()[:12]}"
 )
 CONFIG = ROOT / ".cargo" / "config.toml"
 PACKAGES = {
@@ -74,8 +78,18 @@ def prepare_linux(check):
             shutil.copytree(source, LINUX_SOURCE)
 
 
-def git(*args):
-    return subprocess.check_output(["git", "-C", str(CHECKOUT), *args], text=True)
+def git(*args, env=None):
+    return subprocess.check_output(
+        ["git", "-C", str(CHECKOUT), *args], text=True, env=env
+    )
+
+
+def reviewed_tree():
+    with tempfile.TemporaryDirectory(prefix="voyager-sdk-index-") as directory:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(directory) / "index")}
+        git("read-tree", REVISION, env=env)
+        git("apply", "--cached", *(str(p) for p in PATCHES), env=env)
+        return git("write-tree", env=env).strip()
 
 
 def prepare(check):
@@ -109,13 +123,10 @@ def prepare(check):
         raise RuntimeError(
             "Native SDK contains untracked source; preserving it unchanged"
         )
-    patch = PATCH.read_text()
-    difference = git("diff", "--binary", "HEAD")
-    if not difference and not check:
-        subprocess.run(["git", "-C", str(CHECKOUT), "apply", str(PATCH)], check=True)
-        difference = git("diff", "--binary", "HEAD")
-    if difference != patch:
-        raise RuntimeError("Native SDK differs from the reviewed overlay patch")
+    if not git("diff", "--binary", "HEAD") and not check:
+        git("apply", *(str(p) for p in PATCHES))
+    if git("diff", "--binary", reviewed_tree()):
+        raise RuntimeError("Native SDK differs from the reviewed overlay patches")
     prepare_linux(check)
     if existing != config:
         if check:
@@ -126,7 +137,7 @@ def prepare(check):
         with CONFIG.open("x" if existing is None else "w") as file:
             file.write(config)
     print(
-        f"Native SDK ready: {REVISION}, reviewed overlay patch, coherent shared crates"
+        f"Native SDK ready: {REVISION}, reviewed overlay patches, coherent shared crates"
     )
 
 
