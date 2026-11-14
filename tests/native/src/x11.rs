@@ -15,9 +15,9 @@ use std::thread::sleep;
 use std::time::Duration;
 use x11rb::connection::Connection as _;
 use x11rb::protocol::xproto::{
-    Atom, AtomEnum, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, ClientMessageEvent, ConfigureWindowAux,
-    ConnectionExt as _, EventMask, ImageFormat, InputFocus, KEY_PRESS_EVENT, KEY_RELEASE_EVENT,
-    MOTION_NOTIFY_EVENT, MapState,
+    Atom, AtomEnum, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, ClientMessageEvent,
+    ConfigureWindowAux, ConnectionExt as _, EventMask, ImageFormat, InputFocus, KEY_PRESS_EVENT,
+    KEY_RELEASE_EVENT, MOTION_NOTIFY_EVENT, MapState,
 };
 use x11rb::protocol::xtest::ConnectionExt as _;
 use x11rb::rust_connection::{DefaultStream, PollMode, RustConnection, Stream};
