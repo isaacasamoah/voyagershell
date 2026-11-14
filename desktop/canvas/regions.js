@@ -1,13 +1,6 @@
 import { div, Background } from "gpui-kit";
-import type { NativeElement } from "gpui-kit";
-import type { Canvas, Node, Region } from "../../../contract/generated/canvas";
-
-export function composeCanvas(
-  canvas: Canvas,
-  region: (name: Region) => NativeElement | null,
-  column: (underlay: NativeElement, portals: NativeElement) => NativeElement,
-): NativeElement {
-  function visit(node: Node, axis: "row" | "column"): NativeElement | null {
+export function composeRegions(canvas, region, column) {
+  function visit(node, axis) {
     const block = node.kind === "block";
     const element = block ? region(node.region) : div().relative().flex();
     if (!element) return null;
@@ -33,8 +26,8 @@ export function composeCanvas(
         return child ? element.child(child) : element;
       }
       if (node.kind === "column") element.flex_col();
-      const children: NativeElement[] = [];
-      let portals: NativeElement | null = null;
+      const children = [];
+      let portals = null;
       for (const child of node.children) {
         const rendered = visit(child, node.kind);
         if (!rendered) continue;
@@ -57,12 +50,7 @@ export function composeCanvas(
   if (!root) throw Error("The workspace canvas has no root.");
   return root;
 }
-
-export function vesselFrame(
-  surface: NativeElement,
-  selected: boolean,
-  arranging: boolean,
-): NativeElement {
+export function panelFrame(surface, selected, arranging) {
   const frame = div()
     .relative()
     .flex()

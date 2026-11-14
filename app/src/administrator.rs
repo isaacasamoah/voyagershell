@@ -813,15 +813,15 @@ mod tests {
         };
         let directory =
             std::env::temp_dir().join(format!("voyager-n3-owner-{}", std::process::id()));
-        std::fs::create_dir_all(directory.join("mods/notes")).unwrap();
+        std::fs::create_dir_all(directory.join("vessels/notes")).unwrap();
         std::fs::write(
-            directory.join("mods/notes/main.js"),
+            directory.join("vessels/notes/main.js"),
             include_str!("../../content/notes/main.js"),
         )
         .unwrap();
         std::fs::write(
-            directory.join("mods/notes/mod.json"),
-            include_str!("../../content/notes/mod.json"),
+            directory.join("vessels/notes/vessel.json"),
+            include_str!("../../content/notes/vessel.json"),
         )
         .unwrap();
         let session = format!("voyager-n3-owner-{}", std::process::id());
@@ -1076,7 +1076,7 @@ mod tests {
             assert_eq!(completed(&mut tools).outcome.status, Status::Rejected);
             assert_eq!(std::fs::read(&b_path).unwrap(), b_before);
             std::fs::write(
-                directory.join("mods/notes/mod.json"),
+                directory.join("vessels/notes/vessel.json"),
                 br#"{"name":"Notes"}"#,
             )
             .unwrap();

@@ -1,17 +1,17 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { projection } from "voyager_header";
+import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
 import { voyageColour } from "./voyage-colours.js";
 import { processIcon } from "./process-icons.js";
 import { visiblePanels } from "./panels.js";
 import type { Context, NativeElement } from "gpui-kit";
-import type { Layout, PanelOwner } from "../../../contract/generated/response";
-import type { ProcessInfo } from "../../../contract/generated/processResponse";
+import type { Layout, PanelOwner } from "../../contract/generated/response";
+import type { ProcessInfo } from "../../contract/generated/processResponse";
 import type {
   Projection as ActivityProjection,
   ReportedActivity,
-} from "../../../contract/generated/reportedActivity";
+} from "../../contract/generated/reportedActivity";
 
 const AGENT_NAMES: Record<string, string> = {
   codex: "Codex",

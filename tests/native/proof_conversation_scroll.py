@@ -72,7 +72,7 @@ def prove(
         assert len(raw) <= 262144, "Use a bounded recorded public Snapshot"
         recorded = json.loads(raw)
         assert recorded["phase"] == "completed" and recorded["messages"]
-        wrapper = evidence / "profile/mods/header/conversation.js"
+        wrapper = evidence / "profile/canvas/conversation.js"
         original = wrapper.read_bytes()
         marker = "export async function observe(after) {"
         assert original.decode().count(marker) == 1

@@ -4091,9 +4091,9 @@ mod content_admission_tests {
     fn reads_wait_for_queue_space_and_cancel_without_replaying_effects() {
         let directory =
             std::env::temp_dir().join(format!("voyager-n3-mailbox-{}", std::process::id()));
-        std::fs::create_dir_all(directory.join("mods/notes")).unwrap();
+        std::fs::create_dir_all(directory.join("vessels/notes")).unwrap();
         std::fs::write(
-            directory.join("mods/notes/mod.json"),
+            directory.join("vessels/notes/vessel.json"),
             br#"{"name":"Notes"}"#,
         )
         .unwrap();

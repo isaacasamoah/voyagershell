@@ -476,23 +476,23 @@ test("a large file that is not recorded fails", () => {
 test("a new TypeScript import cycle fails", () => {
   const directory = scratch();
   fs.writeFileSync(
-    path.join(directory, "desktop/mods/header/planted-a.ts"),
+    path.join(directory, "desktop/canvas/planted-a.ts"),
     'import { b } from "./planted-b.js";\nexport const a = b;\n',
   );
   fs.writeFileSync(
-    path.join(directory, "desktop/mods/header/planted-b.ts"),
+    path.join(directory, "desktop/canvas/planted-b.ts"),
     'import { a } from "./planted-a.js";\nexport const b = a;\n',
   );
   expectFailure(
     run(directory),
-    "NEW no-script-cycles: ts:desktop/mods/header/planted-a.ts <-> ts:desktop/mods/header/planted-b.ts",
+    "NEW no-script-cycles: ts:desktop/canvas/planted-a.ts <-> ts:desktop/canvas/planted-b.ts",
   );
 });
 
 test("the recorded header cycle that is not recorded fails", () => {
   expectFailure(
     run(scratch(), ["--known", without(/no-script-cycles/)]),
-    "NEW no-script-cycles: ts:desktop/mods/header/main.ts",
+    "NEW no-script-cycles: ts:desktop/canvas/main.ts",
   );
 });
 

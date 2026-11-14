@@ -3,9 +3,9 @@ import { Button } from "gpui-base";
 import { Marker, Terminal } from "voyager_native";
 import { agentsView } from "./agents.js";
 import { Notes } from "voyager_content_view";
-import { projection } from "voyager_header";
+import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
-import { vesselFrame } from "./canvas.js";
+import { panelFrame } from "./regions.js";
 import { visiblePanels } from "./panels.js";
 import { processIcon } from "./process-icons.js";
 export function renderPanel(workspace, placement, scope, group) {
@@ -91,7 +91,7 @@ export function renderPanel(workspace, placement, scope, group) {
   return workspace.target(
     `${scope.kind}-${placement.id}`,
     scope,
-    vesselFrame(
+    panelFrame(
       div()
         .relative()
         .flex()

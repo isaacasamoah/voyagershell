@@ -26,7 +26,7 @@ Follow the exact doctor and run commands in ../SKILL.md with
 tests/native/src/journey/arrangement.rs owns the recipe. The split tree
 belongs to app/src/panels.rs, the divider and its share tracker to
 desktop/src/split.rs, and the title buttons, shortcuts and drag preview to
-desktop/mods/header/main.ts and panel-view.ts.
+desktop/canvas/main.ts and panel-view.ts.
 
 V1 is the first Vessel, and the journey makes V2, V3 and V4.
 

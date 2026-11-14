@@ -82,8 +82,8 @@ fn shared_canvas_keeps_single_and_split_frames_inside_their_region() {
         ));
         std::fs::create_dir(&package).unwrap();
         std::fs::write(
-            package.join("canvas.js"),
-            include_str!("../mods/header/canvas.js"),
+            package.join("regions.js"),
+            include_str!("../canvas/regions.js"),
         )
         .unwrap();
         let source = format!(
@@ -91,9 +91,9 @@ fn shared_canvas_keeps_single_and_split_frames_inside_their_region() {
 import {{ View, div }} from 'gpui-kit';
 import {{ Split, Column }} from 'voyager_native';
 import {{ Target, Bounds }} from 'layout_probe';
-import {{ composeCanvas, vesselFrame }} from './canvas.js';
+import {{ composeRegions, panelFrame }} from './regions.js';
 function leaf(id) {{
-  return Target.new(id, {{}}).child(vesselFrame(div().flex().flex_col().flex_1().min_w(0).min_h(0)
+  return Target.new(id, {{}}).child(panelFrame(div().flex().flex_col().flex_1().min_w(0).min_h(0)
 .child(div().h(30).flex_shrink_0())
 .child(div().flex_1().min_h(0).child(div().h({intrinsic})))
 .child(Bounds.new(id, {{}})), false, false));
@@ -104,7 +104,7 @@ const panel = '{axis}' === 'single' ? leaf('first') : Split.new('panels', '{axis
 const region = name => name === 'portals' ? ({portals} ? div().flex().flex_col().size_full().child(leaf('portal')) : null)
   : name === 'active-fleet' ? div().flex().flex_col().flex_1().min_w(0).min_h(0).p(8).child(panel)
   : name === 'context-bar' ? div().h(30) : div();
-return div().flex().size_full().child(composeCanvas({canvas}, region,
+return div().flex().size_full().child(composeRegions({canvas}, region,
   (underlay, panels) => Column.new('column', 340, '1', 0, () => {{}}).flex_1().min_w(0).min_h(0).child(underlay).child(panels)));
   }}
 }}

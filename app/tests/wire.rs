@@ -126,12 +126,15 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
     use voyager_contract::{Action, Context, Request, Status};
     let session = format!("voyager-package-effects-{}", std::process::id());
     let profile = std::env::temp_dir().join(&session);
-    let package = profile.join("mods/notes");
+    let package = profile.join("vessels/notes");
     seed_package(
         &package,
         &[
             ("main.js", "personal source"),
-            ("mod.json", include_str!("../../content/notes/mod.json")),
+            (
+                "vessel.json",
+                include_str!("../../content/notes/vessel.json"),
+            ),
         ],
     )
     .unwrap();

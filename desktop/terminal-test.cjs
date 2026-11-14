@@ -71,7 +71,7 @@ function fixture(
   const actions = [];
   const choices = [];
   const versions = [];
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "invoke",
     "openTerminal",
@@ -107,7 +107,7 @@ function fixture(
     () => "9",
     () => ({ revision: String(version), packageRevision: "1" }),
   );
-  const view = new Workspace();
+  const view = new Canvas();
   Object.assign(view, {
     version: "1",
     workspaceNotice: { revision: "1", packageRevision: "0" },
@@ -390,13 +390,13 @@ test("Create Fleet and Refresh expose native buttons while preserving their pres
     });
     return node;
   }
-  const Workspace = new Function("View", "div", "Button", "projection", source)(
+  const Canvas = new Function("View", "div", "Button", "projection", source)(
     class {},
     div,
     { new: div },
     () => ({ foreground: "fg", muted: "muted" }),
   );
-  const view = new Workspace();
+  const view = new Canvas();
   view.names = new Map();
   const actions = [];
   view.run = (action) => actions.push(action);
@@ -1065,7 +1065,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
       return div();
     },
   };
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "div",
     "Button",
@@ -1078,10 +1078,10 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "take_animation_notice",
     "Status",
     "workspace_notice",
-    "composeCanvas",
+    "composeRegions",
     "reported_activity",
     "validateReportedActivity",
-    "vesselFrame",
+    "panelFrame",
     "svg",
     "activityBadge",
     "dock_target_visible",
@@ -1112,9 +1112,9 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     new Function(
       "div",
       fs
-        .readFileSync(`${__dirname}/mods/header/canvas.js`, "utf8")
+        .readFileSync(`${__dirname}/canvas/regions.js`, "utf8")
         .replace(/^import [\s\S]*?;\n/gm, "")
-        .replaceAll("export function", "function") + "\nreturn composeCanvas;",
+        .replaceAll("export function", "function") + "\nreturn composeRegions;",
     )(div),
     () => {
       activityReads += 1;
@@ -1152,7 +1152,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     },
     component,
   );
-  const view = new Workspace();
+  const view = new Canvas();
   const context = { kind: "vessel", id: "vessel" };
   Object.assign(view, {
     version: "7",

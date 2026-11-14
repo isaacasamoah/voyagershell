@@ -564,7 +564,7 @@ class Routes(unittest.TestCase):
         from contextlib import contextmanager
 
         proof = importlib.import_module("proof_foundation_notes")
-        header = (ROOT / "desktop/mods/header/main.js").read_text()
+        header = (ROOT / "desktop/canvas/main.js").read_text()
         setup = proof.setup_source(header)
         self.assertEqual(setup.count('operation: "create-content"'), 2)
         with self.assertRaises(AssertionError):

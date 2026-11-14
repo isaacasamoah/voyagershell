@@ -19,10 +19,10 @@ fn bound_updates_preserve_other_data_and_refuse_stale_or_forged() {
             .unwrap()
             .as_nanos()
     ));
-    fs::create_dir_all(path.join("mods/notes")).unwrap();
+    fs::create_dir_all(path.join("vessels/notes")).unwrap();
     fs::write(
-        path.join("mods/notes/mod.json"),
-        include_str!("../../content/notes/mod.json"),
+        path.join("vessels/notes/vessel.json"),
+        include_str!("../../content/notes/vessel.json"),
     )
     .unwrap();
     let mut owner = Owner::open(&path).unwrap();
@@ -77,11 +77,11 @@ fn named_schema_reload_and_legacy_data_remain_truthful() {
             .unwrap()
             .as_nanos()
     ));
-    fs::create_dir_all(path.join("mods/notes")).unwrap();
-    let manifest = path.join("mods/notes/mod.json");
-    fs::write(&manifest, include_str!("../../content/notes/mod.json")).unwrap();
+    fs::create_dir_all(path.join("vessels/notes")).unwrap();
+    let manifest = path.join("vessels/notes/vessel.json");
+    fs::write(&manifest, include_str!("../../content/notes/vessel.json")).unwrap();
     fs::write(
-        path.join("mods/notes/main.js"),
+        path.join("vessels/notes/main.js"),
         include_str!("../../content/notes/main.js"),
     )
     .unwrap();
@@ -156,19 +156,23 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
     let socket = runtime.join("herdr-core").join(format!("{session}.sock"));
     assert!(!socket.exists());
     let profile = runtime.join(format!("configuration-{}", std::process::id()));
-    for (name, source) in [
-        ("notes", include_str!("../../content/notes/mod.json")),
-        ("header", include_str!("../../desktop/mods/header/mod.json")),
+    for (package, file, source) in [
+        (
+            profile.join("vessels/notes"),
+            "vessel.json",
+            include_str!("../../content/notes/vessel.json"),
+        ),
+        (
+            profile.join("canvas"),
+            "canvas.json",
+            include_str!("../../desktop/canvas/canvas.json"),
+        ),
     ] {
-        fs::create_dir_all(profile.join("mods").join(name)).unwrap();
+        fs::create_dir_all(&package).unwrap();
         let mut manifest: serde_json::Value = serde_json::from_str(source).unwrap();
         manifest["contentConfiguration"] = serde_json::json!(1);
-        fs::write(
-            profile.join("mods").join(name).join("mod.json"),
-            serde_json::to_vec(&manifest).unwrap(),
-        )
-        .unwrap();
-        fs::write(profile.join("mods").join(name).join("main.js"), "").unwrap();
+        fs::write(package.join(file), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        fs::write(package.join("main.js"), "").unwrap();
     }
     let mut cleanup = Core::connect(&session).unwrap();
     let client = Client::with_content(
@@ -335,15 +339,15 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         assert!(
             matches!(&*restored, Response::Snapshot {snapshot,configuration:Some(current),..} if snapshot.revision == original.revision && !current.configuration.show_heading && current.workspace_version == *workspace_version)
         );
-        let header_path = profile.join("mods/header/mod.json");
-        let header = fs::read(&header_path).unwrap();
-        let mut legacy: serde_json::Value = serde_json::from_slice(&header).unwrap();
+        let canvas_path = profile.join("canvas/canvas.json");
+        let canvas = fs::read(&canvas_path).unwrap();
+        let mut legacy: serde_json::Value = serde_json::from_slice(&canvas).unwrap();
         legacy
             .as_object_mut()
             .unwrap()
             .remove("contentConfiguration");
-        fs::write(&header_path, serde_json::to_vec(&legacy).unwrap()).unwrap();
-        let catalog = voyager_app::content::discover(&profile.join("mods")).unwrap();
+        fs::write(&canvas_path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let catalog = voyager_app::content::discover(&profile.join("vessels")).unwrap();
         let notes = catalog
             .types
             .iter()
@@ -372,9 +376,13 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
                 ..
             }
         ));
-        fs::write(&header_path, header).unwrap();
+        fs::write(&canvas_path, canvas).unwrap();
         let mut external = Core::connect(&session).unwrap();
-        let manifests = [profile.join("mods/notes/mod.json"), header_path.clone()].map(|path| {
+        let manifests = [
+            profile.join("vessels/notes/vessel.json"),
+            canvas_path.clone(),
+        ]
+        .map(|path| {
             let bytes = fs::read(&path).unwrap();
             (path, bytes)
         });

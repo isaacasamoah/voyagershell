@@ -21,7 +21,7 @@ The Rust journey in tests/native/src/journey/chat.rs owns the recipe. The stand-
 provider in tests/native/src/provider.rs answers the app in place of Codex. The
 conversation owner is app/src/conversation_client.rs, its reducer is
 app/src/conversation.rs, the Codex frames are app/src/codex_protocol.rs, and the
-panel is desktop/mods/header/chat.ts.
+panel is desktop/canvas/chat.ts.
 
 - `open-chat` clicks `chat-toggle`. The composer is drawn and empty, the send
   control reads Send, no message is drawn, and no provider has started.

@@ -38,14 +38,14 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
             .as_nanos()
     );
     let directory = std::env::temp_dir().join(format!("voyager-close-{unique}"));
-    std::fs::create_dir_all(directory.join("mods/notes")).unwrap();
+    std::fs::create_dir_all(directory.join("vessels/notes")).unwrap();
     std::fs::write(
-        directory.join("mods/notes/mod.json"),
-        include_str!("../../content/notes/mod.json"),
+        directory.join("vessels/notes/vessel.json"),
+        include_str!("../../content/notes/vessel.json"),
     )
     .unwrap();
     std::fs::write(
-        directory.join("mods/notes/main.js"),
+        directory.join("vessels/notes/main.js"),
         "export default class Notes {}",
     )
     .unwrap();

@@ -4,7 +4,7 @@ import type {
   Split,
   Vessel,
   Voyage,
-} from "../../../contract/generated/response";
+} from "../../contract/generated/response";
 
 export type PanelGroup = {
   owner: PanelOwner;
@@ -95,8 +95,8 @@ export type HiddenPanel = Vessel & { path: string };
 
 export function hiddenPanels(
   layout: Layout,
-  destination: import("../../../contract/generated/request").ContentDestination,
-  processes: import("../../../contract/generated/processResponse").ProcessInfo[],
+  destination: import("../../contract/generated/request").ContentDestination,
+  processes: import("../../contract/generated/processResponse").ProcessInfo[],
 ): HiddenPanel[] {
   const groups = panelGroups(layout);
   const target = groups.find(

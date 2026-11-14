@@ -1,6 +1,6 @@
 {
-  "header": {
-    "rawSha256": "a293a5f0e0fbf3d57ccc13ee3b2f60d88abbf1b73a1bc606600a0ca77f696327",
+  "canvas": {
+    "rawSha256": "7ed4acd2c34ccea1fe0cf6dc185b560c2762518c1debaa65a46e7c3b9df87595",
     "modules": [
       "gpui-base",
       "gpui-kit",
@@ -8,8 +8,8 @@
       "voyager_avatar",
       "voyager_content_view",
       "voyager_conversation",
-      "voyager_header",
       "voyager_native",
+      "voyager_theme",
       "voyager_workspace"
     ]
   },

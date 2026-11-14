@@ -1,6 +1,6 @@
 import { View, div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { projection } from "voyager_header";
+import { projection } from "voyager_theme";
 import { Layer, Target, PortalArea } from "voyager_avatar";
 import {
   take_result,
@@ -26,8 +26,10 @@ import { NameState, Name, ArrangementCapture, Status } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding, Marker, Prepared } from "voyager_native";
 import { Chat } from "./chat.js";
-import { composeCanvas } from "./canvas.js";
+import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
+import type { ProcessInfo } from "../../contract/generated/processResponse";
+import type { CreationDestination, HiddenChoices } from "./creation.js";
 import { CreationPicker } from "./creation.js";
 import { renderPanel } from "./panel-view.js";
 import {
@@ -47,20 +49,141 @@ import {
   visiblePanels,
   hiddenPanels,
 } from "./panels.js";
+import type { PanelGroup } from "./panels.js";
+import type { MenuItem } from "./menu.js";
+import type { Projection as ActivityProjection } from "../../contract/generated/reportedActivity";
+import type { WorkspaceObservation } from "../../contract/generated/workspaceObservation";
+import type { DirectorySource } from "../../contract/generated/request";
+import type { Facts } from "../../contract/generated/contextFacts";
+
+import type {
+  AsyncContext,
+  Context as UIContext,
+  FocusHandle,
+  NativeElement,
+  MouseMoveEvent,
+  MouseButtonEvent,
+  KeyEvent,
+} from "gpui-kit";
+import type { Action, RenameTarget } from "../../contract/generated/request";
+import type {
+  Content,
+  Context as Scope,
+  Fleet,
+  Layout,
+  Response,
+  PanelOwner,
+  Voyage,
+  Split,
+  Vessel,
+} from "../../contract/generated/response";
+import type { TerminalResponse } from "../../contract/generated/terminalResponse";
+
 const CONTEXT_REFRESH_MS = 3000;
-function errorMessage(error) {
+
+type ContentScope = Extract<Scope, { kind: "vessel" | "portal" }>;
+
+type Editing = {
+  target: RenameTarget;
+  state: NameState;
+  saving: boolean;
+  pending?: boolean;
+  name?: string;
+  unconfirmed?: string;
+};
+type Opening = {
+  status: TerminalResponse["status"] | "pending" | "unbound";
+  reason?: TerminalResponse["reason"];
+  intent?: Content["shellIntent"];
+  message?: string | null;
+};
+
+type Drag = {
+  kind: "vessel" | "fleet" | "voyage";
+  id: string;
+  version: string;
+  voyage: string | null | undefined;
+  fleet: string | null | undefined;
+  x: number;
+  y: number;
+  moved: boolean;
+  target?: string;
+  side?: "left" | "right" | "top" | "bottom" | boolean;
+  bounds?: { x: number; y: number; width: number; height: number };
+};
+type LayoutName = { state: NameState; owner: PanelOwner; submitted: boolean };
+type PresentationAction = Extract<
+  Action,
+  { operation: "remove-panel" | "set-portal-presentation" }
+>;
+
+function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-export default class Workspace extends View {
-  constructor() {
-    super(...arguments);
-    this.worktrees = new WorktreeControls();
-    this.closeVoyage = new VoyageClose();
-    this.processes = [];
-    this.processRead = null;
-    this.processError = "";
-  }
-  init(_props, cx) {
+
+export default class Canvas extends View {
+  declare creation: CreationPicker | undefined;
+  declare menus: WorkspaceMenu;
+  worktrees = new WorktreeControls();
+  declare expandedVoyages: Set<string>;
+  declare version: Response["version"];
+  declare contextFacts: Facts | null;
+  declare contextRead: number;
+  declare observation: WorkspaceObservation | null;
+  declare observedPanels: WorkspaceObservation["panels"];
+  declare observationRead: number;
+  declare fleetChoice: {
+    destination: Extract<CreationDestination, { kind: "new-fleet" }>;
+    version: string;
+  } | null;
+  declare sidebar: boolean;
+  declare dockReceipt: string;
+  declare dockEpoch: string;
+  declare layout: Layout | null;
+  declare busy: boolean;
+  declare pendingPresentation: {
+    action: PresentationAction;
+    target: string;
+    done?: (result: Response | null, cx: AsyncContext) => void;
+  } | null;
+  declare fresh: boolean;
+  declare focus: FocusHandle;
+  declare names: Map<string, { focus: FocusHandle; name: string }>;
+  declare status: string;
+  declare animationNotice: string | undefined;
+  declare activityRevision: string;
+  declare reportedActivity: ActivityProjection["terminals"];
+  declare activityLimit: string | null;
+  declare terminals: Map<string, TerminalState>;
+  declare openings: Map<string, Opening>;
+  declare editing: Editing | null | undefined;
+  declare afterRename: Action | null | undefined;
+  declare chat: Chat;
+  declare refreshRequested: boolean;
+  closeVoyage = new VoyageClose();
+  declare workspaceNotice: ReturnType<typeof workspace_notice>;
+  declare automaticRefresh: boolean;
+  declare focused: string | null;
+  declare hoveredPanel: string | null;
+  declare hoveredFleet: string | null;
+  processes: ProcessInfo[] = [];
+  declare processPending: boolean;
+  private processRead: {
+    version: string;
+    pending: Promise<ProcessInfo[]>;
+  } | null = null;
+  processError = "";
+  declare collapsedGroups: Set<string>;
+  declare recentOpen: boolean;
+  declare splitReset: number;
+  declare splitSession: string;
+  declare pendingShortcuts: string[];
+  declare drag: Drag | null;
+  declare layoutName: LayoutName | null | undefined;
+  declare savingLayout: boolean | undefined;
+  declare pendingLayout:
+    Extract<Action, { operation: "save-panel-layout" }> | null | undefined;
+  init(_props: unknown, cx: AsyncContext) {
     this.menus = new WorkspaceMenu();
     this.expandedVoyages = new Set();
     this.chat = new Chat(cx);
@@ -107,7 +230,8 @@ export default class Workspace extends View {
     this.run({ operation: "inspect" }, cx);
     this.startContext(cx);
   }
-  startContext(cx) {
+
+  startContext(cx: AsyncContext) {
     cx.spawn(async (task) => {
       while (true) {
         await this.readContext(task);
@@ -128,21 +252,27 @@ export default class Workspace extends View {
       }
     });
   }
-  activePlacement() {
+
+  activePlacement(): Vessel | undefined {
     if (!this.layout) return;
     const shown = activeGroups(this.layout).flatMap((group) =>
       visiblePanels(group, true),
     );
     return shown.find((panel) => panel.id === this.focused) || shown[0];
   }
-  async readObservation(cx) {
+
+  async readObservation(
+    cx: AsyncContext,
+  ): Promise<WorkspaceObservation | null> {
     if (!this.layout) return null;
     const version = this.version;
     const active = this.activePlacement()?.id || null;
     const read = ++this.observationRead;
-    let result = null;
+    let result: WorkspaceObservation | null = null;
     try {
-      const value = JSON.parse(await workspace_observation(version, active));
+      const value: unknown = JSON.parse(
+        await workspace_observation(version, active),
+      );
       if (!validateObservation(value))
         throw Error("Invalid workspace observation");
       if (value.version !== version || value.active !== active)
@@ -178,7 +308,8 @@ export default class Workspace extends View {
     }
     return result;
   }
-  directorySource(observed) {
+
+  directorySource(observed: WorkspaceObservation): DirectorySource {
     const directory = observed.directory;
     if (directory.kind === "unavailable")
       throw Error("Working directory is unavailable");
@@ -205,7 +336,8 @@ export default class Workspace extends View {
       return { kind: "voyage", voyageId: voyage.id, cwd: directory.path };
     throw Error("Working directory source changed");
   }
-  createVoyage(cx) {
+
+  createVoyage(cx: UIContext) {
     cx.spawn(async (task) => {
       try {
         const observed = await this.readObservation(task);
@@ -223,14 +355,15 @@ export default class Workspace extends View {
       }
     });
   }
-  openFleetChoices(voyage, cx) {
+
+  openFleetChoices(voyage: Voyage, cx: UIContext) {
     cx.spawn(async (task) => {
       try {
         const observed = await this.readObservation(task);
         if (!observed || this.layout?.selectedVoyage !== voyage.id)
           throw Error("Select this Voyage before creating a Fleet");
         const destination = {
-          kind: "new-fleet",
+          kind: "new-fleet" as const,
           voyage: voyage.id,
           name: `Fleet ${voyage.fleets.length + 1}`,
           source: this.directorySource(observed),
@@ -249,7 +382,8 @@ export default class Workspace extends View {
       }
     });
   }
-  fleetCreationControl(voyage, trigger) {
+
+  fleetCreationControl(voyage: Voyage, trigger: NativeElement): NativeElement {
     trigger.on_click((_event, cx) => this.openFleetChoices(voyage, cx));
     const choice = this.fleetChoice;
     if (!choice || choice.destination.voyage !== voyage.id || !this.creation)
@@ -271,14 +405,15 @@ export default class Workspace extends View {
       false,
     );
   }
-  async readContext(cx) {
+
+  async readContext(cx: AsyncContext) {
     if (!this.layout) return;
     const version = this.version;
     const scope = JSON.stringify(this.layout.context);
     const read = (this.contextRead = (this.contextRead ?? 0) + 1);
-    let facts = null;
+    let facts: Facts | null = null;
     try {
-      const value = JSON.parse(await context_facts());
+      const value: unknown = JSON.parse(await context_facts());
       if (!validateFacts(value)) throw Error("Invalid context metadata");
       if (
         value.version !== this.version ||
@@ -300,7 +435,8 @@ export default class Workspace extends View {
       cx.notify();
     }
   }
-  async readProcesses(cx) {
+
+  async readProcesses(cx: AsyncContext) {
     if (this.processPending) return;
     const version = this.version;
     this.processPending = true;
@@ -328,7 +464,8 @@ export default class Workspace extends View {
       this.processPending = false;
     }
   }
-  async processSnapshot(version) {
+
+  private async processSnapshot(version: string): Promise<ProcessInfo[]> {
     if (this.processRead?.version === version) return this.processRead.pending;
     const read = { version, pending: inspectProcesses(version) };
     this.processRead = read;
@@ -338,9 +475,16 @@ export default class Workspace extends View {
       if (this.processRead === read) this.processRead = null;
     }
   }
-  async hiddenChoices(destination, version) {
-    let observed = [];
-    let error;
+
+  async hiddenChoices(
+    destination: Extract<
+      Action,
+      { operation: "create-content" }
+    >["destination"],
+    version: string,
+  ): Promise<HiddenChoices> {
+    let observed: ProcessInfo[] = [];
+    let error: string | undefined;
     try {
       observed = await this.processSnapshot(version);
     } catch (failure) {
@@ -350,7 +494,8 @@ export default class Workspace extends View {
       throw Error("Workspace changed; reopen the content chooser.");
     return { panels: hiddenPanels(this.layout, destination, observed), error };
   }
-  presentationTarget(action) {
+
+  presentationTarget(action: PresentationAction): string | null {
     if (!this.layout) return null;
     const groups = panelGroups(this.layout).filter(
       (group) => !group.voyage.closed,
@@ -377,7 +522,8 @@ export default class Workspace extends View {
         ])
       : null;
   }
-  finishPresentation(cx, ready) {
+
+  finishPresentation(cx: UIContext, ready: boolean) {
     const pending = this.pendingPresentation;
     if (!pending || (ready && this.busy)) return;
     this.pendingPresentation = null;
@@ -390,11 +536,12 @@ export default class Workspace extends View {
       this.run(pending.action, cx, pending.done, this.version);
     }
   }
+
   run(
-    action,
-    cx,
-    done,
-    expectedVersion = this.version,
+    action: Action,
+    cx: UIContext,
+    done?: (result: Response | null, cx: AsyncContext) => void,
+    expectedVersion: string = this.version,
     prepareContents = true,
   ) {
     this.drag = null;
@@ -489,7 +636,7 @@ export default class Workspace extends View {
       this.layout?.contents?.map((item) => item.id) || [],
     );
     cx.spawn(async (task) => {
-      let result = null;
+      let result: Response | null = null;
       let accepted = false;
       let prepared = false;
       try {
@@ -503,7 +650,7 @@ export default class Workspace extends View {
           this.dockReceipt = result.requestId;
           this.dockEpoch = dockEpoch;
         }
-        const retry = new Set();
+        const retry = new Set<string>();
         if (
           prepareContents &&
           accepted &&
@@ -613,7 +760,8 @@ export default class Workspace extends View {
     });
     cx.notify();
   }
-  inspectNotice(cx) {
+
+  inspectNotice(cx: UIContext) {
     const notice = workspace_notice();
     const packageChanged =
       notice.packageRevision !== this.workspaceNotice.packageRevision;
@@ -634,7 +782,8 @@ export default class Workspace extends View {
       this.automaticRefresh = false;
     }
   }
-  acceptSnapshot(result, task) {
+
+  acceptSnapshot(result: Response, task: AsyncContext) {
     this.drag = null;
     if (BigInt(result.version) < BigInt(this.version)) {
       if (result.status !== "applied")
@@ -693,7 +842,7 @@ export default class Workspace extends View {
     }
     this.fresh = result.fresh;
     this.status = result.message || "";
-    const retain = (target, name) => {
+    const retain = (target: RenameTarget, name: string) => {
       const key = JSON.stringify(target);
       const retained = this.names.get(key);
       if (retained) retained.name = name;
@@ -714,12 +863,19 @@ export default class Workspace extends View {
     }
     return true;
   }
-  target(id, scope, child, fallback = false) {
+
+  target(
+    id: string,
+    scope: Scope,
+    child: NativeElement,
+    fallback = false,
+  ): NativeElement {
     return Target.new(id, { scope: JSON.stringify(scope), fallback }).child(
       child,
     );
   }
-  layer(shell, layout) {
+
+  layer(shell: NativeElement, layout: Layout): NativeElement {
     return Layer.new("avatar-layer", {
       dockReceipt: this.dockReceipt,
       dockEpoch: this.dockEpoch,
@@ -734,14 +890,16 @@ export default class Workspace extends View {
       ]),
     }).child(shell);
   }
-  contentName(placement) {
+
+  contentName(placement: Vessel): string {
     return (
       (placement.nameOrigin === "automatic" ? this.observedPanels : [])?.find(
         (panel) => panel.placementId === placement.id,
       )?.effectiveName || placement.name
     );
   }
-  panelLabel(placement) {
+
+  panelLabel(placement: Vessel): string {
     const observed = this.observedPanels?.find(
       (panel) => panel.placementId === placement.id,
     );
@@ -765,12 +923,14 @@ export default class Workspace extends View {
       .filter(Boolean)
       .join(" · ");
   }
-  visibleVessels(fleet) {
+
+  visibleVessels(fleet: Fleet | undefined): Vessel[] {
     return fleet
       ? visiblePanels({ root: fleet.root ?? null, members: fleet.vessels })
       : [];
   }
-  displayedVessels(fleet) {
+
+  displayedVessels(fleet: Fleet | undefined): Vessel[] {
     return fleet
       ? visiblePanels(
           {
@@ -782,22 +942,24 @@ export default class Workspace extends View {
         )
       : [];
   }
-  panelGroup(id) {
+
+  panelGroup(id: string): PanelGroup | undefined {
     return this.layout
       ? panelGroups(this.layout).find((group) =>
           group.members.some((panel) => panel.id === id),
         )
       : undefined;
   }
+
   async prepare(
-    task,
+    task: AsyncContext,
     existingOnly = false,
-    retry = new Set(),
-    allowed = new Set(),
-  ) {
+    retry: Set<string> = new Set(),
+    allowed: Set<string> = new Set(),
+  ): Promise<void> {
     const layout = this.layout;
     if (!layout) throw Error("Workspace snapshot is unavailable.");
-    const errors = [];
+    const errors: string[] = [];
     for (const vessel of activeGroups(layout).flatMap((group) =>
       visiblePanels(group, true),
     )) {
@@ -838,7 +1000,7 @@ export default class Workspace extends View {
         status: "pending",
         intent: content.shellIntent,
       });
-      let opened;
+      let opened: TerminalResponse;
       try {
         opened = await openTerminal(vessel.content, this.version);
       } catch (error) {
@@ -872,7 +1034,8 @@ export default class Workspace extends View {
     }
     if (errors.length) throw Error(errors[0]);
   }
-  terminalStatus(content) {
+
+  terminalStatus(content: Content): string {
     if (content.startPending)
       return "Terminal start is unconfirmed. Inspect before trying again.";
     const outcome = this.openings.get(content.id);
@@ -888,13 +1051,15 @@ export default class Workspace extends View {
     if (!content.backend && !outcome) return "No terminal is bound.";
     return "Connecting terminal";
   }
-  closeName(editing, cx) {
+
+  closeName(editing: Editing, cx: UIContext) {
     if (this.editing !== editing) return;
     this.editing = null;
     editing.state.release();
     cx.notify();
   }
-  saveName(editing, cx) {
+
+  saveName(editing: Editing, cx: UIContext) {
     if (editing.name === undefined) throw Error("No submitted name.");
     this.run(
       { operation: "rename", target: editing.target, name: editing.name },
@@ -907,12 +1072,13 @@ export default class Workspace extends View {
       },
     );
   }
-  editName(target, value, cx) {
+
+  editName(target: RenameTarget, value: string, cx: UIContext) {
     if (this.editing) return;
     const state = NameState.new(value);
-    const editing = { target, state, saving: false };
+    const editing: Editing = { target, state, saving: false };
     this.editing = editing;
-    const finish = (_event, cx) => {
+    const finish: Parameters<NameState["on"]>[1] = (_event, cx) => {
       if (this.editing !== editing || editing.saving) return;
       editing.name = state.value().trim();
       const retained = this.names.get(JSON.stringify(target));
@@ -937,7 +1103,13 @@ export default class Workspace extends View {
     state.focus();
     cx.notify();
   }
-  startDrag(kind, id, event, cx) {
+
+  startDrag(
+    kind: Drag["kind"],
+    id: string,
+    event: MouseButtonEvent,
+    cx: UIContext,
+  ) {
     if (this.busy || this.editing || !this.layout) return;
     this.drag = {
       kind,
@@ -951,7 +1123,8 @@ export default class Workspace extends View {
     };
     cx.notify();
   }
-  moveDrag(x, y, cx) {
+
+  moveDrag(x: number, y: number, cx: UIContext) {
     if (
       this.drag &&
       !this.drag.moved &&
@@ -962,7 +1135,13 @@ export default class Workspace extends View {
       cx.notify();
     }
   }
-  targetDrag(kind, id, event, cx) {
+
+  targetDrag(
+    kind: Drag["kind"],
+    id: string,
+    event: MouseMoveEvent,
+    cx: UIContext,
+  ) {
     if (!this.drag?.moved || this.drag.kind !== kind || this.drag.id === id)
       return;
     if (kind === "vessel") {
@@ -983,7 +1162,7 @@ export default class Workspace extends View {
     }
     const { x, y, width, height } = event.bounds;
     if (width <= 0 || height <= 0) return;
-    let side;
+    let side: Drag["side"];
     if (kind === "vessel") {
       const distances = [
         (event.position.x - x) / width,
@@ -991,7 +1170,7 @@ export default class Workspace extends View {
         (event.position.y - y) / height,
         1 - (event.position.y - y) / height,
       ];
-      side = ["left", "right", "top", "bottom"][
+      side = (["left", "right", "top", "bottom"] as const)[
         distances.indexOf(Math.min(...distances))
       ];
     } else {
@@ -1009,7 +1188,8 @@ export default class Workspace extends View {
       cx.notify();
     } else this.drag.bounds = { x, y, width, height };
   }
-  finishDrag(x, y, cx) {
+
+  finishDrag(x: number, y: number, cx: UIContext) {
     if (!this.drag) return;
     const { kind, id, moved, target, side, bounds, version, voyage, fleet } =
       this.drag;
@@ -1042,7 +1222,8 @@ export default class Workspace extends View {
     }
     cx.notify();
   }
-  maximizeShortcut(id, event, cx) {
+
+  maximizeShortcut(id: string, event: KeyEvent, cx: UIContext) {
     if (this.editing || this.layoutName || this.menus?.current) return;
     const { control, shift, alt, platform } = event.modifiers;
     if (
@@ -1078,7 +1259,8 @@ export default class Workspace extends View {
       cx,
     );
   }
-  shortcut(event, cx) {
+
+  shortcut(event: KeyEvent, cx: UIContext) {
     if (this.editing || this.layoutName || this.menus?.current) return;
     const { control, shift, alt, platform } = event.modifiers;
     if (
@@ -1093,7 +1275,7 @@ export default class Workspace extends View {
           cx.stop_propagation();
           return;
         }
-        const action = {
+        const action: Action = {
           operation: "set-portal-presentation",
           voyage: voyage.id,
           mode:
@@ -1122,14 +1304,16 @@ export default class Workspace extends View {
     this.dispatchShortcut(key, cx);
     cx.stop_propagation();
   }
-  flushShortcuts(cx, applied) {
+
+  flushShortcuts(cx: UIContext, applied: boolean) {
     if (!applied) this.pendingShortcuts = [];
     while (!this.busy && this.pendingShortcuts.length) {
       const key = this.pendingShortcuts.shift();
       if (key) this.dispatchShortcut(key, cx);
     }
   }
-  dispatchShortcut(key, cx) {
+
+  dispatchShortcut(key: string, cx: UIContext) {
     const layout = this.layout;
     if (!layout) return;
     const voyage = currentVoyage(layout);
@@ -1150,7 +1334,8 @@ export default class Workspace extends View {
       panels.find((panel) => panel.id === this.focused) || panels[0];
     this.openSplit(group, panel?.id, key === "o" ? "right" : "bottom", cx);
   }
-  refreshActivity(cx) {
+
+  refreshActivity(cx: UIContext) {
     cx.spawn(async (task) => {
       try {
         await refresh_activity();
@@ -1160,9 +1345,10 @@ export default class Workspace extends View {
       task.notify();
     });
   }
-  readActivity(revision) {
+
+  readActivity(revision: string) {
     if (this.activityRevision === revision) return;
-    const value = JSON.parse(reported_activity());
+    const value: unknown = JSON.parse(reported_activity());
     if (!validateReportedActivity(value))
       throw Error("Invalid reported activity");
     this.reportedActivity = value.terminals;
@@ -1171,7 +1357,14 @@ export default class Workspace extends View {
       : null;
     this.activityRevision = revision;
   }
-  action(label, action, selected = false, rename = null, displayLabel = label) {
+
+  action(
+    label: string,
+    action: Action | null,
+    selected = false,
+    rename: RenameTarget | null = null,
+    displayLabel = label,
+  ): NativeElement {
     const colors = projection();
     const key = JSON.stringify(rename);
     const focus = this.names.get(key)?.focus;
@@ -1224,12 +1417,13 @@ export default class Workspace extends View {
         });
     return button;
   }
-  saveLayout(owner, cx) {
+
+  saveLayout(owner: PanelOwner, cx: UIContext) {
     if (this.layoutName || this.savingLayout) return;
     const state = NameState.new("");
     const editing = { state, owner, submitted: false };
     this.layoutName = editing;
-    const finish = (_event, task) => {
+    const finish = (_event: unknown, task: UIContext) => {
       if (this.layoutName !== editing || editing.submitted) return;
       editing.submitted = true;
       const name = state.value().trim();
@@ -1248,9 +1442,10 @@ export default class Workspace extends View {
     state.focus();
     cx.notify();
   }
-  layoutItems(group) {
+
+  layoutItems(group: PanelGroup): MenuItem[] {
     const owner = group.owner;
-    const items = [
+    const items: MenuItem[] = [
       {
         label: "Save layout",
         choose: (_version, cx) => this.saveLayout(owner, cx),
@@ -1283,7 +1478,8 @@ export default class Workspace extends View {
     }
     return items;
   }
-  closedVoyageItems() {
+
+  closedVoyageItems(): MenuItem[] {
     return (this.layout?.voyages || [])
       .filter((item) => item.closed && this.worktrees.available(item.cwd))
       .sort((a, b) => {
@@ -1304,7 +1500,8 @@ export default class Workspace extends View {
           ),
       }));
   }
-  closedFleetItems(voyage) {
+
+  closedFleetItems(voyage: Voyage): MenuItem[] {
     return voyage.fleets
       .filter((item) => item.closed)
       .map((item) => ({
@@ -1318,8 +1515,9 @@ export default class Workspace extends View {
           ),
       }));
   }
-  fleetMenu(fleet, voyage) {
-    const items = [
+
+  fleetMenu(fleet: Fleet, voyage: Voyage): MenuItem[] {
+    const items: MenuItem[] = [
       {
         label: "Rename",
         choose: (_version, cx) =>
@@ -1350,7 +1548,8 @@ export default class Workspace extends View {
       : undefined;
     return group ? [...items, ...this.layoutItems(group)] : items;
   }
-  sidebarToggle() {
+
+  sidebarToggle(): NativeElement {
     return Button.new("toggle-sidebar")
       .child(Marker.new("sidebar-toggle"))
       .accessibility_label(this.sidebar ? "Collapse sidebar" : "Expand sidebar")
@@ -1365,7 +1564,12 @@ export default class Workspace extends View {
         this.run({ operation: "set-sidebar", collapsed: this.sidebar }, cx),
       );
   }
-  contextMenu(id, trigger, items) {
+
+  contextMenu(
+    id: string,
+    trigger: NativeElement,
+    items: MenuItem[],
+  ): NativeElement {
     if (this.editing || this.layoutName || !items.length) return trigger;
     return this.menus.render(
       id,
@@ -1384,7 +1588,16 @@ export default class Workspace extends View {
       })),
     );
   }
-  creationControl(id, destination, trigger, triggerOpens = true) {
+
+  creationControl(
+    id: string,
+    destination: Extract<
+      Action,
+      { operation: "create-content" }
+    >["destination"],
+    trigger: NativeElement,
+    triggerOpens = true,
+  ): NativeElement {
     const creation = (this.creation ??= new CreationPicker());
     return creation.render(
       id,
@@ -1428,7 +1641,8 @@ export default class Workspace extends View {
       },
     );
   }
-  statusView() {
+
+  statusView(): NativeElement {
     return div()
       .flex()
       .flex_col()
@@ -1444,11 +1658,19 @@ export default class Workspace extends View {
       )
       .child(this.action("Refresh", { operation: "inspect" }));
   }
-  openSplit(group, id, side, cx) {
+
+  openSplit(
+    group: PanelGroup,
+    id: string | undefined,
+    side: "left" | "right" | "top" | "bottom",
+    cx: UIContext,
+  ) {
     if (this.busy || this.editing || this.layoutName) return;
-    const insertion = id ? { kind: "beside", id, side } : { kind: "empty" };
+    const insertion = id
+      ? { kind: "beside" as const, id, side }
+      : { kind: "empty" as const };
     const destination = {
-      kind: "panel",
+      kind: "panel" as const,
       owner: group.owner,
       insertion,
     };
@@ -1460,12 +1682,13 @@ export default class Workspace extends View {
       () => this.hiddenChoices(destination, this.version),
     );
   }
+
   pane(
-    tree,
-    group,
-    path = [],
+    tree: Split | null,
+    group: PanelGroup,
+    path: Extract<Action, { operation: "resize-panel-split" }>["path"] = [],
     members = new Map(group.members.map((panel) => [panel.id, panel])),
-  ) {
+  ): NativeElement | null {
     if (!tree) return null;
     if (tree.kind === "leaf") {
       const panel = members.get(tree.placement);
@@ -1509,7 +1732,12 @@ export default class Workspace extends View {
       .child(first)
       .child(second);
   }
-  splitControl(panel, group, side) {
+
+  splitControl(
+    panel: Vessel,
+    group: PanelGroup,
+    side: "right" | "bottom",
+  ): NativeElement {
     const entity = group.owner.kind === "portals" ? "Portal" : "Vessel";
     const id = `split-${panel.id}-${side}`;
     return this.creationControl(
@@ -1542,8 +1770,9 @@ export default class Workspace extends View {
         ),
     );
   }
-  splitPreview(panel) {
-    const edges = [];
+
+  splitPreview(panel: Vessel): NativeElement[] {
+    const edges: NativeElement[] = [];
     const opening = this.creation?.current;
     if (
       opening?.destination.kind === "panel" &&
@@ -1565,18 +1794,30 @@ export default class Workspace extends View {
     }
     return edges;
   }
-  content(placement, scope, group) {
+
+  content(
+    placement: Vessel,
+    scope: ContentScope,
+    group: PanelGroup,
+  ): NativeElement {
     return renderPanel(this, placement, scope, group);
   }
-  sidebarRegion(layout, voyage) {
+
+  sidebarRegion(layout: Layout, voyage: Voyage | undefined): NativeElement {
     return renderSidebar(this, layout, voyage);
   }
-  fleetRegion(layout, voyage, fleet) {
+
+  fleetRegion(
+    layout: Layout,
+    voyage: Voyage | undefined,
+    fleet: Fleet | undefined,
+  ): NativeElement {
     return renderFleets(this, layout, voyage, fleet);
   }
-  groupRegion(group) {
+
+  groupRegion(group: PanelGroup): NativeElement {
     const root = group.maximizedPlacement
-      ? { kind: "leaf", placement: group.maximizedPlacement }
+      ? { kind: "leaf" as const, placement: group.maximizedPlacement }
       : group.root;
     const panel = this.pane(root, group);
     const body = div()
@@ -1614,13 +1855,15 @@ export default class Workspace extends View {
       );
     return empty;
   }
-  activeRegion(layout, fleet) {
+
+  activeRegion(layout: Layout, fleet: Fleet | undefined): NativeElement {
     const group = activeGroups(layout).find(
       (group) => group.owner.kind === "fleet" && group.owner.id === fleet?.id,
     );
     return group ? this.groupRegion(group) : div().flex_1();
   }
-  compactPortalContext() {
+
+  compactPortalContext(): boolean {
     const layout = this.layout;
     const voyage = layout && currentVoyage(layout);
     const context = layout?.context;
@@ -1630,7 +1873,8 @@ export default class Workspace extends View {
       Boolean(voyage?.portals.some((panel) => panel.id === context.id))
     );
   }
-  togglePortals(voyage, cx) {
+
+  togglePortals(voyage: Voyage, cx: UIContext) {
     const column = voyage.portalLayout;
     if (!column) return;
     const visible = !column.visible;
@@ -1658,9 +1902,9 @@ export default class Workspace extends View {
         )
           return;
         const destination = {
-          kind: "panel",
+          kind: "panel" as const,
           owner: group.owner,
-          insertion: { kind: "empty" },
+          insertion: { kind: "empty" as const },
         };
         (this.creation ??= new CreationPicker()).open(
           `portal-choices-${voyage.id}`,
@@ -1672,7 +1916,12 @@ export default class Workspace extends View {
       },
     );
   }
-  portalColumn(underlay, panels, voyage) {
+
+  portalColumn(
+    underlay: NativeElement,
+    panels: NativeElement,
+    voyage: Voyage,
+  ): NativeElement {
     const column = voyage.portalLayout;
     if (!column) throw Error("Portal presentation is unavailable.");
     const revision = this.version;
@@ -1711,10 +1960,16 @@ export default class Workspace extends View {
           .child(panels),
       );
   }
-  contextRegion(layout, voyage, fleet) {
+
+  contextRegion(
+    layout: Layout,
+    voyage: Voyage | undefined,
+    fleet: Fleet | undefined,
+  ): NativeElement {
     return renderContext(this, layout, voyage, fleet);
   }
-  render(cx) {
+
+  render(cx: UIContext): NativeElement {
     const animationNotice = take_animation_notice();
     if (animationNotice !== null) {
       if (animationNotice || this.status === this.animationNotice)
@@ -1724,7 +1979,7 @@ export default class Workspace extends View {
     try {
       const raw = take_result();
       if (raw !== null) {
-        const result = JSON.parse(raw);
+        const result: unknown = JSON.parse(raw);
         if (!validateResponse(result))
           throw Error("Invalid native dock response");
         const accepted = this.acceptSnapshot(result, cx);
@@ -1800,7 +2055,7 @@ export default class Workspace extends View {
         ? voyage?.fleets[0]
         : voyage?.fleets.find((item) => item.id === layout.selectedFleet);
     shell.child(
-      composeCanvas(
+      composeRegions(
         canvas,
         (region) => {
           switch (region) {

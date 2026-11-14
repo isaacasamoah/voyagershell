@@ -57,8 +57,8 @@ def prove(
     opened = True
     owned, errors = {}, []
     original_clipboard = None
-    header = profile / "mods/header/main.js"
-    package = profile / "mods/notes/main.js"
+    header = profile / "canvas/main.js"
+    package = profile / "vessels/notes/main.js"
     original_header = original_source = None
     targets = []
     accessibility_before = None
@@ -586,7 +586,7 @@ def prove(
             if operation == "remove":
                 wait(fields, lambda items: not items, "removed Notes views")
                 assert not package.parent.exists()
-                preserved = profile / "mods/.notes.removed/main.js"
+                preserved = profile / "vessels/.notes.removed/main.js"
                 assert preserved.read_bytes() == personal_source and data() == saved
                 assert source_files(preserved.parent) == personal_files
                 visual(
@@ -654,7 +654,7 @@ def prove(
         source_path = (
             package
             if package.parent.is_dir()
-            else profile / "mods/.notes.removed/main.js"
+            else profile / "vessels/.notes.removed/main.js"
         )
         for path, original in (
             (header, original_header),
@@ -694,7 +694,7 @@ def prove(
                     and (
                         package
                         if package.parent.is_dir()
-                        else profile / "mods/.notes.removed/main.js"
+                        else profile / "vessels/.notes.removed/main.js"
                     ).read_bytes()
                     == original_source,
                 },

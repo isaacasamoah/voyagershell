@@ -1,4 +1,4 @@
-use crate::{Quit, host::Header};
+use crate::{Quit, host::CanvasHost};
 use gpui::{App, AsyncApp, WeakEntity};
 use std::{cell::RefCell, rc::Rc};
 use voyager_app::{
@@ -15,21 +15,21 @@ enum State {
 
 #[derive(Clone)]
 struct Ending {
-    header: WeakEntity<Header>,
+    canvas: WeakEntity<CanvasHost>,
     workspace: Client,
     conversation: conversation_client::Client,
     state: Rc<RefCell<State>>,
 }
 
 pub fn register(
-    header: WeakEntity<Header>,
+    canvas: WeakEntity<CanvasHost>,
     workspace: Client,
     conversation: conversation_client::Client,
     stop_requests: async_channel::Receiver<()>,
     cx: &mut App,
 ) {
     let ending = Ending {
-        header,
+        canvas,
         workspace,
         conversation,
         state: Rc::new(RefCell::new(State::Ready)),
@@ -109,7 +109,7 @@ impl Ending {
 
     fn status(&self, status: String, cx: &mut App) {
         let _ = self
-            .header
-            .update(cx, |header, cx| header.quit_status(status, cx));
+            .canvas
+            .update(cx, |canvas, cx| canvas.quit_status(status, cx));
     }
 }

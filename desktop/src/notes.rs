@@ -449,7 +449,7 @@ struct Source {
 fn signature(package: &Path) -> Result<Source> {
     let files = crate::host::source_snapshot(package)?;
     let mut bytes = Vec::new();
-    std::fs::File::open(package.join("mod.json"))?
+    std::fs::File::open(package.join("vessel.json"))?
         .take(voyager_app::content::ENVELOPE_LIMIT as u64 + 1)
         .read_to_end(&mut bytes)?;
     anyhow::ensure!(

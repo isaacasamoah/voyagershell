@@ -55,7 +55,7 @@ function menuModule(Button) {
     "require",
     ts.transpileModule(
       fs.readFileSync(
-        process.env.VOYAGER_MENU_SOURCE || `${__dirname}/mods/header/menu.ts`,
+        process.env.VOYAGER_MENU_SOURCE || `${__dirname}/canvas/menu.ts`,
         "utf8",
       ),
       {
@@ -76,7 +76,7 @@ function menuModule(Button) {
 }
 
 test("maximization renders the selected leaf while retaining preparation of the whole tree", () => {
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "div",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
@@ -92,7 +92,7 @@ test("maximization renders the selected leaf while retaining preparation of the 
     },
   };
   const rendered = [];
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     pane(tree) {
       rendered.push(tree);
       return element();
@@ -124,8 +124,7 @@ test("worker creation keeps its opening target and revision across a delayed cat
     await import("../contract/generated/validate.js");
   const source = ts.transpileModule(
     fs.readFileSync(
-      process.env.VOYAGER_CREATION_SOURCE ||
-        `${__dirname}/mods/header/creation.ts`,
+      process.env.VOYAGER_CREATION_SOURCE || `${__dirname}/canvas/creation.ts`,
       "utf8",
     ),
     {
@@ -349,7 +348,7 @@ test("inspection markers name each control by its role and id and report the tex
       return node;
     },
   };
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "div",
     "Button",
@@ -383,7 +382,7 @@ test("inspection markers name each control by its role and id and report the tex
   );
   const menus = new Map();
   let dockVisible = false;
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     sidebar: true,
     names: new Map(),
     chat: { toggleView: element, render: element },
@@ -553,12 +552,12 @@ test("a context menu keeps the marker of each item and draws it inside the entry
 });
 
 test("the workspace context menu passes each item's marker to the menu", () => {
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(class {});
   let passed;
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "5",
     editing: null,
     layoutName: null,
@@ -579,7 +578,7 @@ test("the workspace context menu passes each item's marker to the menu", () => {
 test("the actual canvas composes a retained right column through native presentation", () => {
   const exports = {};
   const source = ts.transpileModule(
-    fs.readFileSync(`${__dirname}/mods/header/canvas.ts`, "utf8"),
+    fs.readFileSync(`${__dirname}/canvas/regions.ts`, "utf8"),
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -589,7 +588,7 @@ test("the actual canvas composes a retained right column through native presenta
   ).outputText;
   new Function("exports", "require", source)(exports, () => ({ div: element }));
   const columnCalls = [];
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "div",
     "Column",
@@ -602,7 +601,7 @@ test("the actual canvas composes a retained right column through native presenta
     },
   });
   const actions = [];
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "7",
     splitSession: "test",
     splitReset: 0,
@@ -622,7 +621,7 @@ test("the actual canvas composes a retained right column through native presenta
       id: "voyage",
       portalLayout: { mode, width: 340, visible: true },
     };
-    const rendered = exports.composeCanvas(
+    const rendered = exports.composeRegions(
       {
         ...canvas,
         sidebarCollapsed: true,
@@ -688,13 +687,13 @@ test("context metadata rejects a late different dock and notifies only changed f
   const { contextFacts: validateFacts } =
     await import("../contract/generated/validate.js");
   let result;
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "context_facts",
     "validateFacts",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(class {}, async () => result, validateFacts);
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "2",
     layout: { context: { kind: "workspace" }, voyages: [] },
     contextFacts: null,
@@ -753,7 +752,7 @@ test("context metadata rejects a late different dock and notifies only changed f
 
 test("Chat stays below the primary dock before Home and Voyages, using one retained instance", () => {
   const buttons = new Map();
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "div",
     "Button",
@@ -791,7 +790,7 @@ test("Chat stays below the primary dock before Home and Voyages, using one retai
       return panel;
     },
   };
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     sidebar: true,
     chat,
     target: (_id, _scope, child) => child,
@@ -843,11 +842,11 @@ test("right-click actions retain their opening revision and dismiss before actin
       return node;
     },
   }).WorkspaceMenu;
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
   )(class {});
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     menus: new Menu(),
     version: "7",
   });
@@ -913,7 +912,7 @@ test("hidden choices retain process-free data and require matching live backends
   new Function(
     "exports",
     ts.transpileModule(
-      fs.readFileSync(`${__dirname}/mods/header/panels.ts`, "utf8"),
+      fs.readFileSync(`${__dirname}/canvas/panels.ts`, "utf8"),
       {
         compilerOptions: {
           module: ts.ModuleKind.CommonJS,
@@ -999,12 +998,12 @@ test("hidden choices retain process-free data and require matching live backends
 });
 
 test("Activity scopes live work, orders status rows and preserves navigation", async () => {
-  const { activityBadge } = await import("./mods/header/activity.js");
+  const { activityBadge } = await import("./canvas/activity.js");
   const buttons = new Map();
   const icons = [];
   const exports = {};
   const source = ts.transpileModule(
-    fs.readFileSync(`${__dirname}/mods/header/agents.ts`, "utf8"),
+    fs.readFileSync(`${__dirname}/canvas/agents.ts`, "utf8"),
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -1024,7 +1023,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
           },
         },
       };
-    if (name === "voyager_header") return { projection: () => ({}) };
+    if (name === "voyager_theme") return { projection: () => ({}) };
     if (name === "./process-icons.js")
       return {
         processIcon: (program) => {
@@ -1039,7 +1038,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
       new Function(
         "exports",
         ts.transpileModule(
-          fs.readFileSync(`${__dirname}/mods/header/panels.ts`, "utf8"),
+          fs.readFileSync(`${__dirname}/canvas/panels.ts`, "utf8"),
           { compilerOptions: { module: ts.ModuleKind.CommonJS } },
         ).outputText,
       )(panels);
@@ -1304,7 +1303,7 @@ test("Activity scopes live work, orders status rows and preserves navigation", a
 test("Activity refresh and hidden choices share an in-flight process snapshot", async () => {
   let reads = 0,
     finish;
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "inspectProcesses",
     workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class"),
@@ -1314,7 +1313,7 @@ test("Activity refresh and hidden choices share an in-flight process snapshot", 
       finish = done;
     });
   });
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "7",
     layout: { voyages: [], contents: [] },
   });
@@ -1443,7 +1442,7 @@ test("chat marks its toggle, messages, composer, send control, status and error 
 
 test("dock snapshots retain only identity-matched display labels", async () => {
   let dialog = false;
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "workspace_observation",
     "window",
@@ -1499,7 +1498,7 @@ test("dock snapshots retain only identity-matched display labels", async () => {
     portals: [],
   });
   const inspected = [];
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "1",
     layout,
     names: new Map(),
@@ -1596,7 +1595,7 @@ test("late active-directory observations cannot replace newer facts", async () =
   const { workspaceObservation: validateObservation } =
     await import("../contract/generated/validate.js");
   const responses = [];
-  const Workspace = new Function(
+  const Canvas = new Function(
     "View",
     "workspace_observation",
     "validateObservation",
@@ -1606,7 +1605,7 @@ test("late active-directory observations cannot replace newer facts", async () =
     () => new Promise((resolve) => responses.push(resolve)),
     validateObservation,
   );
-  const view = Object.assign(new Workspace(), {
+  const view = Object.assign(new Canvas(), {
     version: "1",
     focused: "panel",
     observationRead: 0,
@@ -1705,7 +1704,7 @@ test("worktree controller groups identified checkouts and preserves request iden
     return node;
   };
   const source = ts.transpileModule(
-    fs.readFileSync(`${__dirname}/mods/header/worktrees.ts`, "utf8"),
+    fs.readFileSync(`${__dirname}/canvas/worktrees.ts`, "utf8"),
     {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -1967,7 +1966,7 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
     "require",
     "window",
     ts.transpileModule(
-      fs.readFileSync(`${__dirname}/mods/header/voyage-close.ts`, "utf8"),
+      fs.readFileSync(`${__dirname}/canvas/voyage-close.ts`, "utf8"),
       {
         compilerOptions: {
           module: ts.ModuleKind.CommonJS,

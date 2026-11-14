@@ -9,14 +9,11 @@ import {
 import { menuButton } from "./menu.js";
 import { actionButton, dialogActions } from "./ui.js";
 import type { Context, NativeElement } from "gpui-kit";
-import type {
-  Action,
-  Request,
-} from "../../../contract/generated/worktreeRequest";
+import type { Action, Request } from "../../contract/generated/worktreeRequest";
 import type {
   Checkout,
   Response,
-} from "../../../contract/generated/worktreeResponse";
+} from "../../contract/generated/worktreeResponse";
 
 type Observation = {
   cwd: string;

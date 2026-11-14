@@ -3,7 +3,7 @@ import { Marker } from "voyager_native";
 import { invoke } from "./workspace.js";
 import { actionButton, dialogActions } from "./ui.js";
 import type { Context, NativeElement } from "gpui-kit";
-import type { Response } from "../../../contract/generated/response";
+import type { Response } from "../../contract/generated/response";
 
 type Plan = NonNullable<Response["closePlan"]>;
 

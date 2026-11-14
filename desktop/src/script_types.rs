@@ -1,4 +1,4 @@
-pub const HEADER_MODULE: &str = "voyager_header";
+pub const THEME_MODULE: &str = "voyager_theme";
 pub const WORKSPACE_MODULE: &str = "voyager_workspace";
 
 pub const HEADER: &str = r#"

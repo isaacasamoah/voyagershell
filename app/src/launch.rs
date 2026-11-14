@@ -192,7 +192,7 @@ mod tests {
     }
 
     fn agents_view_programs() -> Vec<String> {
-        let source = include_str!("../../desktop/mods/header/agents.ts");
+        let source = include_str!("../../desktop/canvas/agents.ts");
         let block = source
             .split("const AGENT_NAMES")
             .nth(1)

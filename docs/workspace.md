@@ -14,7 +14,7 @@ running app. A component registration therefore has one owner for both runtime
 presentation and generated script definitions. The Notes registry remains its
 own supported component set.
 
-`desktop/mods/` and `content/` provide configurable presentation through those
+`desktop/canvas/` and `content/` provide configurable presentation through those
 native components and the generated application contract. Moving a placement
 does not change its content identity or backend. These layers implement the
 architecture's ownership rules; they do not require a file for every diagram box.
@@ -158,7 +158,7 @@ persists selection and arrangement together. Legacy Portal width migration
 traverses only the selected alternative. No human JSON editor or additional
 selector style is introduced by this contract.
 
-`desktop/mods/header/main.ts` controls retained preparation and versioned actions.
+`desktop/canvas/main.ts` controls retained preparation and versioned actions.
 `panel-view.ts` renders shared panel controls and content; `navigation-view.ts`
 renders the sidebar, Fleet tabs and context bar. `panels.ts` selects groups and
 visible members from the Rust projection. `canvas.ts` composes the saved outer
@@ -368,7 +368,7 @@ request JSON to 64 KiB before dispatching asynchronous work. Content packages
 do not receive this module. Additional agent/content entry points must bind
 their caller at the host boundary before reaching the same owner.
 
-`desktop/mods/header/main.js` is retained presentation and interaction binding.
+`desktop/canvas/main.js` is retained presentation and interaction binding.
 It receives confirmed snapshots and uses the generated wrapper for operations.
 Switching a Voyage or Fleet changes navigation, not the explicit avatar context.
 The scope controls in this checkpoint set that context; they are not the final
@@ -501,7 +501,7 @@ Worktree completion publishes the existing Rust workspace notice. Its native wat
 
 Home groups existing content by Voyage using the same colour function as the sidebar. Agent status groups start collapsed. Closed Voyages are absent from Home. Voyage headings start expanded and collapse their contents when clicked, without a separate arrow. A successful complete Core process snapshot excludes ended or absent bindings from the running-work list; failed retrieval remains unavailable. Notes and other content without processes remain present. The current reported-activity contract has task progress, not reliable context-window usage, so this candidate does not display a context percentage.
 
-This UX follows the [Herdr worktree mod](https://github.com/herdrdev/herdr-app/blob/f896da489de594fdb18a92a31dd953da3cf58da2/defaults/mods/worktree/main.js), with Voyager's project-local storage, styling and typed application owner. Source checks do not establish the complete native journey.
+This UX follows the [Herdr worktree mod](https://github.com/herdrdev/herdr-app/blob/f896da489de594fdb18a92a31dd953da3cf58da2/defaults/vessels/worktree/main.js), with Voyager's project-local storage, styling and typed application owner. Source checks do not establish the complete native journey.
 
 
 ## Confirmed Voyage shutdown

@@ -167,7 +167,7 @@ changes.
 1. In your second terminal, rename the sidebar heading:
 
    ```sh
-   cd /var/tmp/voyager-try/profile/mods/header
+   cd /var/tmp/voyager-try/profile/canvas
    cp navigation-view.js navigation-view.js.bak
    sed -i 's/\.child("Voyages"),/.child("My Voyages"),/' navigation-view.js
    ```
@@ -201,7 +201,7 @@ full workflow.
 This step follows what happens when you pick **Terminal** in the split chooser
 from step 4. Open each file as you read and find the named function.
 
-1. [`desktop/mods/header/creation.ts`](../desktop/mods/header/creation.ts)
+1. [`desktop/canvas/creation.ts`](../desktop/canvas/creation.ts)
    builds the action
    `{operation: "create-content", destination, typeId: "terminal", launch}`.
    The `launch` entry comes from `launches.json` in the profile.
@@ -297,7 +297,7 @@ procedure.
 - **A workspace operation.** Start at `Action` in `contract/src/lib.rs`, then
   `Model::apply` in `app/src/workspace.rs` and `scope::check`. See
   [Workspace](workspace.md).
-- **An interface change.** Start at the `.ts` files in `desktop/mods/header/`
+- **An interface change.** Start at the `.ts` files in `desktop/canvas/`
   or `content/`. See
   [Script authoring](workspace.md#script-authoring-and-checking).
 - **A native view.** Start at `native_registry` in `desktop/src/lib.rs`. See

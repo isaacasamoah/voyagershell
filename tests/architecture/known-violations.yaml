@@ -31,7 +31,7 @@ known:
     limit: 1551
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
-  - id: 'file-size: desktop/mods/header/main.ts'
+  - id: 'file-size: desktop/canvas/main.ts'
     limit: 2119
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
@@ -43,7 +43,7 @@ known:
     limit: 1028
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
-  - id: 'no-script-cycles: ts:desktop/mods/header/main.ts <-> ts:desktop/mods/header/navigation-view.ts <-> ts:desktop/mods/header/panel-view.ts'
+  - id: 'no-script-cycles: ts:desktop/canvas/main.ts <-> ts:desktop/canvas/navigation-view.ts <-> ts:desktop/canvas/panel-view.ts'
     owner: isaac
     reason: 'Modules in this group import each other. Breaking the loop clears it.'
   - id: 'one-vocabulary: arrangement-names'
@@ -51,7 +51,7 @@ known:
     owner: isaac
     reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
   - id: 'one-vocabulary: canvas-package'
-    limit: 666
+    limit: 120
     owner: isaac
     reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
   - id: 'one-vocabulary: layout-document'
@@ -66,16 +66,8 @@ known:
     limit: 495
     owner: isaac
     reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
-  - id: 'one-vocabulary: theme-module'
-    limit: 15
-    owner: isaac
-    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
   - id: 'one-vocabulary: vessel-ids'
     limit: 1017
-    owner: isaac
-    reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
-  - id: 'one-vocabulary: vessel-package'
-    limit: 216
     owner: isaac
     reason: 'This banned word is still in the tree. The codemod stage that renames it clears this entry.'
   - id: 'one-vocabulary: wire-operations'

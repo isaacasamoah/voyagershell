@@ -23,8 +23,8 @@ Follow the exact doctor and run commands in ../SKILL.md with
 `--journey voyage-close`. The Rust journey in
 tests/native/src/journey/voyage_close.rs owns the recipe. The close plan and
 its stops belong to app/src/voyage_close.rs, the dialog to
-desktop/mods/header/voyage-close.ts, the Voyage row menu and Recent voyages to
-desktop/mods/header/navigation-view.ts, and reopening to
+desktop/canvas/voyage-close.ts, the Voyage row menu and Recent voyages to
+desktop/canvas/navigation-view.ts, and reopening to
 app/src/terminal_lifecycle.rs.
 
 Voyage A is the first Voyage with the first shell. Voyage B is made by the

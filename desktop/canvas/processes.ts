@@ -1,6 +1,6 @@
 import { processes } from "voyager_workspace";
 import { processResponse } from "./validate.js";
-import type { ProcessInfo } from "../../../contract/generated/processResponse";
+import type { ProcessInfo } from "../../contract/generated/processResponse";
 
 export async function inspectProcesses(
   version: string,

@@ -103,7 +103,7 @@ differ when the Voyage is created. The focused terminal is in
 `/voyager/home/second-project`. The first Vessel's shell, the folder that
 each terminal started in and the first Voyage's folder are all
 `/voyager/home/project`. The header takes the folder from the shell of the
-focused Vessel (`directorySource` in `desktop/mods/header/main.ts`).
+focused Vessel (`directorySource` in `desktop/canvas/main.ts`).
 
 Every rename case waits for `name-editor` to replace the name control. After
 it types, it reads the editor's draft from the frame until the draft is the
@@ -169,7 +169,7 @@ name is never drawn.
 ## Negative control
 
 tests/native/controls/workspace.patch upper-cases a submitted name in
-desktop/mods/header/main.ts and in the compiled main.js. A candidate built
+desktop/canvas/main.ts and in the compiled main.js. A candidate built
 with it must fail `rename-fleet-enter` on the expectation `the saved name is
 the typed text`, and `firstFailingCheck.observed.rename.after` must read
 `NATIVE FLEET`.

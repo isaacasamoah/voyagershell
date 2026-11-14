@@ -53,76 +53,70 @@ fn seed(path: &Path, data: &str) -> Result<()> {
 }
 
 pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Result<()> {
-    let package = profile.join("mods/header");
+    let package = profile.join("canvas");
     let theme = profile.join("themes/voyager.json");
-    seed(
-        &package.join("main.js"),
-        include_str!("../mods/header/main.js"),
-    )?;
+    seed(&package.join("main.js"), include_str!("../canvas/main.js"))?;
     seed(&package.join("ui.js"), include_str!("../../content/ui.js"))?;
     seed(
-        &package.join("mod.json"),
-        include_str!("../mods/header/mod.json"),
+        &package.join("canvas.json"),
+        include_str!("../canvas/canvas.json"),
     )?;
     seed(
-        &package.join("canvas.js"),
-        include_str!("../mods/header/canvas.js"),
+        &package.join("regions.js"),
+        include_str!("../canvas/regions.js"),
     )?;
     seed(
         &package.join("creation.js"),
-        include_str!("../mods/header/creation.js"),
+        include_str!("../canvas/creation.js"),
     )?;
     seed(
         &package.join("navigation-view.js"),
-        include_str!("../mods/header/navigation-view.js"),
+        include_str!("../canvas/navigation-view.js"),
     )?;
     seed(
         &package.join("panel-view.js"),
-        include_str!("../mods/header/panel-view.js"),
+        include_str!("../canvas/panel-view.js"),
     )?;
     seed(
         &package.join("panels.js"),
-        include_str!("../mods/header/panels.js"),
+        include_str!("../canvas/panels.js"),
     )?;
-    seed(
-        &package.join("menu.js"),
-        include_str!("../mods/header/menu.js"),
-    )?;
+    seed(&package.join("menu.js"), include_str!("../canvas/menu.js"))?;
     seed(
         &package.join("activity.js"),
-        include_str!("../mods/header/activity.js"),
+        include_str!("../canvas/activity.js"),
     )?;
     seed(
         &package.join("voyage-colours.js"),
-        include_str!("../mods/header/voyage-colours.js"),
+        include_str!("../canvas/voyage-colours.js"),
     )?;
     seed(
         &package.join("agents.js"),
-        include_str!("../mods/header/agents.js"),
+        include_str!("../canvas/agents.js"),
     )?;
     seed(
         &package.join("processes.js"),
-        include_str!("../mods/header/processes.js"),
+        include_str!("../canvas/processes.js"),
     )?;
     seed(
         &package.join("process-icons.js"),
-        include_str!("../mods/header/process-icons.js"),
+        include_str!("../canvas/process-icons.js"),
     )?;
     seed(
         &package.join("worktrees.js"),
-        include_str!("../mods/header/worktrees.js"),
+        include_str!("../canvas/worktrees.js"),
     )?;
     seed(
         &package.join("AGENTS.md"),
-        include_str!("../mods/header/AGENTS.md"),
+        include_str!("../canvas/AGENTS.md"),
     )?;
     seed(
         &package.join("voyage-close.js"),
-        include_str!("../mods/header/voyage-close.js"),
+        include_str!("../canvas/voyage-close.js"),
     )?;
     seed(
         &package.join("stop-session.js"),
-        include_str!("../mods/header/stop-session.js"),
+        include_str!("../canvas/stop-session.js"),
     )?;
     seed(&theme, include_str!("../themes/voyager.json"))?;
     seed(
@@ -133,56 +127,50 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         &package.join("workspace.js"),
         include_str!("../../contract/generated/workspace.js"),
     )?;
-    seed(
-        &package.join("chat.js"),
-        include_str!("../mods/header/chat.js"),
-    )?;
+    seed(&package.join("chat.js"), include_str!("../canvas/chat.js"))?;
     seed(
         &package.join("chat.svg"),
-        include_str!("../mods/header/chat.svg"),
+        include_str!("../canvas/chat.svg"),
     )?;
     for (name, source) in [
-        ("home.svg", include_str!("../mods/header/home.svg")),
-        ("activity.svg", include_str!("../mods/header/activity.svg")),
-        ("sidebar.svg", include_str!("../mods/header/sidebar.svg")),
+        ("home.svg", include_str!("../canvas/home.svg")),
+        ("activity.svg", include_str!("../canvas/activity.svg")),
+        ("sidebar.svg", include_str!("../canvas/sidebar.svg")),
         (
             "sidebar-collapse.svg",
-            include_str!("../mods/header/sidebar-collapse.svg"),
+            include_str!("../canvas/sidebar-collapse.svg"),
         ),
-        ("bash.svg", include_str!("../mods/header/bash.svg")),
-        ("note.svg", include_str!("../mods/header/note.svg")),
-        ("codex.svg", include_str!("../mods/header/codex.svg")),
-        ("claude.svg", include_str!("../mods/header/claude.svg")),
+        ("bash.svg", include_str!("../canvas/bash.svg")),
+        ("note.svg", include_str!("../canvas/note.svg")),
+        ("codex.svg", include_str!("../canvas/codex.svg")),
+        ("claude.svg", include_str!("../canvas/claude.svg")),
         (
             "icons-LICENSE.txt",
-            include_str!("../mods/header/icons-LICENSE.txt"),
+            include_str!("../canvas/icons-LICENSE.txt"),
         ),
         (
             "icons-NOTICE.txt",
-            include_str!("../mods/header/icons-NOTICE.txt"),
+            include_str!("../canvas/icons-NOTICE.txt"),
         ),
-        ("helmet.svg", include_str!("../mods/header/helmet.svg")),
-        ("orbit.svg", include_str!("../mods/header/orbit.svg")),
-        ("voyager.svg", include_str!("../mods/header/voyager.svg")),
+        ("helmet.svg", include_str!("../canvas/helmet.svg")),
+        ("orbit.svg", include_str!("../canvas/orbit.svg")),
+        ("voyager.svg", include_str!("../canvas/voyager.svg")),
         (
             "split-horizontal.svg",
-            include_str!("../mods/header/split-horizontal.svg"),
+            include_str!("../canvas/split-horizontal.svg"),
         ),
         (
             "split-vertical.svg",
-            include_str!("../mods/header/split-vertical.svg"),
+            include_str!("../canvas/split-vertical.svg"),
         ),
-        ("close.svg", include_str!("../mods/header/close.svg")),
-        ("embed.svg", include_str!("../mods/header/embed.svg")),
-        ("overlay.svg", include_str!("../mods/header/overlay.svg")),
-        ("maximize.svg", include_str!("../mods/header/maximize.svg")),
-        ("restore.svg", include_str!("../mods/header/restore.svg")),
-        ("folder.svg", include_str!("../mods/header/folder.svg")),
-        ("branch.svg", include_str!("../mods/header/branch.svg")),
-        (
-            "speech-wave.svg",
-            include_str!("../mods/header/speech-wave.svg"),
-        ),
+        ("close.svg", include_str!("../canvas/close.svg")),
+        ("embed.svg", include_str!("../canvas/embed.svg")),
+        ("overlay.svg", include_str!("../canvas/overlay.svg")),
+        ("maximize.svg", include_str!("../canvas/maximize.svg")),
+        ("restore.svg", include_str!("../canvas/restore.svg")),
+        ("folder.svg", include_str!("../canvas/folder.svg")),
+        ("branch.svg", include_str!("../canvas/branch.svg")),
+        ("speech-wave.svg", include_str!("../canvas/speech-wave.svg")),
     ] {
         seed(&package.join(name), source)?;
     }
@@ -190,13 +178,16 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         &package.join("conversation.js"),
         include_str!("../../contract/generated/conversation.js"),
     )?;
-    let notes_package = profile.join("mods/notes");
+    let notes_package = profile.join("vessels/notes");
     voyager_app::content::seed_package(
         &notes_package,
         &[
             ("main.js", include_str!("../../content/notes/main.js")),
             ("ui.js", include_str!("../../content/ui.js")),
-            ("mod.json", include_str!("../../content/notes/mod.json")),
+            (
+                "vessel.json",
+                include_str!("../../content/notes/vessel.json"),
+            ),
             (
                 "validate.js",
                 include_str!("../../contract/generated/validate.js"),
@@ -204,8 +195,9 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         ],
     )?;
     let content_owner = voyager_app::content::Owner::open(&profile)?;
-    let manifest: serde_json::Value = serde_json::from_slice(&fs::read(package.join("mod.json"))?)
-        .context("Reading header manifest")?;
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(package.join("canvas.json"))?)
+            .context("Reading canvas manifest")?;
     if manifest.get("entry").and_then(serde_json::Value::as_str) != Some("main.js")
         || manifest.get("version").and_then(serde_json::Value::as_u64) != Some(1)
         || manifest
@@ -213,7 +205,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
             .and_then(serde_json::Value::as_str)
             .is_none_or(str::is_empty)
     {
-        bail!("Header manifest requires a name, version 1 and main.js entry");
+        bail!("Canvas manifest requires a name, version 1 and main.js entry");
     }
     let initial_theme = fs::read(&theme).context("Reading theme")?;
     let initial_source = host::source_snapshot(&package).map_err(|error| format!("{error:#}"));
@@ -270,7 +262,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                     title: Some(format!("Voyager — {session}").into()),
                     ..Default::default()
                 }),
-                app_id: Some("voyager-native-mod-host".into()),
+                app_id: Some("voyager-shell".into()),
                 ..Default::default()
             };
             if let Err(error) = cx.open_window(options, |window, cx| {
@@ -289,8 +281,8 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                 speech::initialize(conversation.clone(), cx);
                 let avatar = avatar::Binding::new(client.clone(), animations, window, cx);
                 let avatar_view = avatar.view();
-                let header = cx.new(|cx| {
-                    host::Header::new(
+                let canvas = cx.new(|cx| {
+                    host::CanvasHost::new(
                         runtime,
                         host::Setup {
                             package,
@@ -309,14 +301,14 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                     )
                 });
                 quit::register(
-                    header.downgrade(),
+                    canvas.downgrade(),
                     quit_workspace,
                     quit_conversation,
                     stop_requests,
                     cx,
                 );
                 cx.new(|cx| {
-                    ShellRoot::new(header.into(), window, cx).with_native_overlay(avatar_view)
+                    ShellRoot::new(canvas.into(), window, cx).with_native_overlay(avatar_view)
                 })
             }) {
                 eprintln!("Native window failed: {error}");
@@ -353,7 +345,7 @@ fn native_registry(viewers: terminal::Viewers) -> Result<gpui_shell::FrozenCompo
 pub fn declarations() -> Result<String> {
     let mut declarations = gpui_shell::type_declarations(&native_registry(Default::default())?);
     for (name, body) in [
-        (script_types::HEADER_MODULE, script_types::HEADER),
+        (script_types::THEME_MODULE, script_types::HEADER),
         (script_types::AVATAR_MODULE, script_types::AVATAR),
         (script_types::WORKSPACE_MODULE, script_types::WORKSPACE),
         (

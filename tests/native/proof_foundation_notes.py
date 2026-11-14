@@ -116,11 +116,11 @@ def prove(
         assert identity["uid"] == os.getuid(), identity
         owned[name] = {"pid": process, **identity}
 
-    package = profile / "mods/header/main.js"
+    package = profile / "canvas/main.js"
     original = package.read_bytes()
     source = original.decode()
     setup_active = False
-    notes_path = profile / "mods/notes/main.js"
+    notes_path = profile / "vessels/notes/main.js"
     fresh_notes = None
     try:
         assert not native("accessibility-state")["enabled"], (
@@ -305,7 +305,7 @@ def prove(
             notes.resize_and_refresh,
         ):
             stages.extend(case(**options))
-        manifest = profile / "mods/notes/mod.json"
+        manifest = profile / "vessels/notes/vessel.json"
         manifest_bytes = manifest.read_bytes()
         schema_failure = None
         schema_errors = []

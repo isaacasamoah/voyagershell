@@ -9,9 +9,9 @@ import {
   contentCatalog as validateContentCatalog,
 } from "./validate.js";
 import type { Context, NativeElement } from "gpui-kit";
-import type { Catalog } from "../../../contract/generated/launchCatalog";
+import type { Catalog } from "../../contract/generated/launchCatalog";
 import type { HiddenPanel } from "./panels.js";
-import type { Request } from "../../../contract/generated/request";
+import type { Request } from "../../contract/generated/request";
 
 type Create = Extract<Request["action"], { operation: "create-content" }>;
 export type HiddenChoices = { panels: HiddenPanel[]; error?: string };

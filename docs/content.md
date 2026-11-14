@@ -98,7 +98,7 @@ workspace actions. Native administration and an administrator captured at whole
 Workspace scope use the existing Client queue and request receipts. Narrower
 captured scopes refuse. Before changing files, the owner reads the actual Core
 document and checks the expected revision and caller again. It moves the complete
-personal Notes directory between mods/notes and mods/.notes.removed. Restore
+personal Notes directory between vessels/notes and vessels/.notes.removed. Restore
 requires no active destination; neither operation edits instance data, placement
 or any Core backend. A reused remove receipt cannot remove a restored package.
 On Linux the move uses renameat2 with RENAME_NOREPLACE, including when another

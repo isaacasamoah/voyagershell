@@ -27,9 +27,9 @@ pub const LIMIT: usize = 1024 * 1024;
 pub const ENVELOPE_LIMIT: usize = LIMIT + 16 * 1024;
 const INITIAL_NOTES: &[u8] = br#"{"title":"Title","text":""}"#;
 
-fn manifest(package: &Path) -> Result<serde_json::Value, String> {
+fn manifest(package: &Path, file: &str) -> Result<serde_json::Value, String> {
     let mut bytes = Vec::new();
-    fs::File::open(package.join("mod.json"))
+    fs::File::open(package.join(file))
         .and_then(|file| file.take(ENVELOPE_LIMIT as u64 + 1).read_to_end(&mut bytes))
         .map_err(|error| error.to_string())?;
     if bytes.len() > ENVELOPE_LIMIT {
@@ -47,7 +47,7 @@ fn state_schema(manifest: &serde_json::Value) -> Result<Option<serde_json::Value
 }
 
 fn schema(package: &Path) -> Result<Option<serde_json::Value>, String> {
-    state_schema(&manifest(package)?)
+    state_schema(&manifest(package, "vessel.json")?)
 }
 
 pub(crate) fn fingerprint(value: &impl serde::Serialize) -> [u8; 32] {
@@ -438,7 +438,7 @@ pub(crate) fn configuration(
     id: &ContentId,
     version: u64,
 ) -> Result<Option<ConfigurationSnapshot>, String> {
-    let packages = owner.root.parent().expect("profile root").join("mods");
+    let packages = owner.root.with_file_name("vessels");
     if description::configuration(&packages)?.is_none() {
         return Ok(None);
     }
@@ -560,17 +560,17 @@ impl Owner {
             .root
             .parent()
             .expect("profile root")
-            .join("mods")
+            .join("vessels")
             .join(name))
     }
 
     pub(crate) fn require_configure(&self) -> Result<(), String> {
-        let packages = self.root.parent().expect("profile root").join("mods");
+        let packages = self.root.with_file_name("vessels");
         require_action(&describe(&packages, NOTES_TYPE)?, "configure")
     }
 
     pub fn require_available(&self, type_id: &str) -> Result<(), String> {
-        let packages = self.root.parent().expect("profile root").join("mods");
+        let packages = self.root.with_file_name("vessels");
         if description::package_name(type_id)?.is_none() {
             return description::require_ready(&describe(&packages, type_id)?);
         }
@@ -735,8 +735,7 @@ impl Owner {
     }
 
     fn schema(&self) -> Result<Option<serde_json::Value>, String> {
-        let package = self.root.parent().expect("profile root").join("mods/notes");
-        schema(&package)
+        schema(&self.root.with_file_name("vessels").join("notes"))
     }
 
     fn warning(&self, data: &Notes) -> Option<String> {
@@ -820,6 +819,7 @@ impl Owner {
 
     fn dispatch(&mut self, binding: &Binding, request: Request) -> Response {
         let (id, request_id, expected) = identity(&request);
+        let packages = self.root.with_file_name("vessels");
         let (id, request_id, expected) = (
             id.clone(),
             request_id.to_owned(),
@@ -843,27 +843,25 @@ impl Owner {
             | Request::OpenNote { .. } => {
                 rejected("This operation requires the workspace owner".into())
             }
-            Request::Describe { .. } => match describe(
-                &self.root.parent().expect("profile root").join("mods"),
-                NOTES_TYPE,
-            )
-            .and_then(|description| {
-                description::require_ready(&description)?;
-                Ok(description)
-            }) {
-                Ok(description) => {
-                    let schema = description.state.and_then(|state| state.schema);
-                    Response::Described {
-                        version: Version::V1,
-                        request_id,
-                        content_id: id,
-                        schema_declared: schema.is_some(),
-                        state_schema: schema,
-                        configuration: description.configuration,
+            Request::Describe { .. } => {
+                match describe(&packages, NOTES_TYPE).and_then(|description| {
+                    description::require_ready(&description)?;
+                    Ok(description)
+                }) {
+                    Ok(description) => {
+                        let schema = description.state.and_then(|state| state.schema);
+                        Response::Described {
+                            version: Version::V1,
+                            request_id,
+                            content_id: id,
+                            schema_declared: schema.is_some(),
+                            state_schema: schema,
+                            configuration: description.configuration,
+                        }
                     }
+                    Err(error) => rejected(format!("State schema unavailable: {error}")),
                 }
-                Err(error) => rejected(format!("State schema unavailable: {error}")),
-            },
+            }
             Request::Inspect { .. } => match self.read(&id).map(DataRead::snapshot) {
                 Ok(snapshot) => Response::Snapshot {
                     version: Version::V1,
@@ -1013,7 +1011,7 @@ mod tests {
     fn notes_versions_keep_file_metadata_and_only_legacy_configuration_writes() {
         let directory =
             std::env::temp_dir().join(format!("voyager-notes-versions-{}", std::process::id()));
-        let packages = directory.join("mods");
+        let packages = directory.join("vessels");
         let owner = Owner::open(&directory).unwrap();
         let mut model = crate::workspace::Model::default();
         model
@@ -1050,7 +1048,7 @@ mod tests {
                 .unwrap()
                 .clone(),
         );
-        for (notes, header, metadata, writable) in [
+        for (notes, canvas, metadata, writable) in [
             (2, 2, true, false),
             (1, 2, true, true),
             (1, 1, true, true),
@@ -1058,12 +1056,14 @@ mod tests {
             (3, 2, false, false),
             (1, 3, false, false),
         ] {
-            for (package, version) in [("notes", notes), ("header", header)] {
-                let path = packages.join(package);
+            for (path, file, version) in [
+                (packages.join("notes"), "vessel.json", notes),
+                (directory.join("canvas"), "canvas.json", canvas),
+            ] {
                 fs::create_dir_all(&path).unwrap();
                 fs::write(path.join("main.js"), "personal source").unwrap();
-                fs::write(path.join("mod.json"), serde_json::to_vec(&serde_json::json!({
-                    "name": package, "version": 1, "entry": "main.js", "contentConfiguration": version
+                fs::write(path.join(file), serde_json::to_vec(&serde_json::json!({
+                    "name": "package", "version": 1, "entry": "main.js", "contentConfiguration": version
                 })).unwrap()).unwrap();
             }
             let description = describe(&packages, NOTES_TYPE).unwrap();
@@ -1084,12 +1084,12 @@ mod tests {
     fn descriptions_reuse_the_bound_schema_and_refuse_unsupported_capabilities() {
         let directory =
             std::env::temp_dir().join(format!("voyager-description-test-{}", std::process::id()));
-        let packages = directory.join("mods");
+        let packages = directory.join("vessels");
         let package = packages.join("notes");
         fs::create_dir_all(&package).unwrap();
         fs::write(
-            package.join("mod.json"),
-            include_str!("../../content/notes/mod.json"),
+            package.join("vessel.json"),
+            include_str!("../../content/notes/vessel.json"),
         )
         .unwrap();
         fs::write(package.join("main.js"), "personal source").unwrap();
@@ -1203,10 +1203,10 @@ mod tests {
         let directory =
             std::env::temp_dir().join(format!("voyager-content-agent-test-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
-        fs::create_dir_all(directory.join("mods/notes")).unwrap();
+        fs::create_dir_all(directory.join("vessels/notes")).unwrap();
         fs::write(
-            directory.join("mods/notes/mod.json"),
-            include_str!("../../content/notes/mod.json"),
+            directory.join("vessels/notes/vessel.json"),
+            include_str!("../../content/notes/vessel.json"),
         )
         .unwrap();
         let mut owner = Owner::open(&directory).unwrap();
@@ -1352,10 +1352,10 @@ mod tests {
         let directory =
             std::env::temp_dir().join(format!("voyager-notes-mode-{}", std::process::id()));
         fs::create_dir(&directory).unwrap();
-        fs::create_dir_all(directory.join("mods/notes")).unwrap();
+        fs::create_dir_all(directory.join("vessels/notes")).unwrap();
         fs::write(
-            directory.join("mods/notes/mod.json"),
-            include_str!("../../content/notes/mod.json"),
+            directory.join("vessels/notes/vessel.json"),
+            include_str!("../../content/notes/vessel.json"),
         )
         .unwrap();
         let file = directory.join("Private.md");
@@ -1437,9 +1437,9 @@ mod tests {
     fn equal_revision_fallback_cannot_confirm_a_write() {
         let directory =
             std::env::temp_dir().join(format!("voyager-fallback-test-{}", std::process::id()));
-        fs::create_dir_all(directory.join("mods/notes")).unwrap();
+        fs::create_dir_all(directory.join("vessels/notes")).unwrap();
         fs::write(
-            directory.join("mods/notes/mod.json"),
+            directory.join("vessels/notes/vessel.json"),
             br#"{"name":"Notes"}"#,
         )
         .unwrap();

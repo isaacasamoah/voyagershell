@@ -75,7 +75,7 @@ data during an explicit compatible update. Source reload retains the last usable
 package on error and grants no Header, process or private-conversation authority
 to a content package.
 
-The current Header declares numeric `contentConfiguration: 1` in mod.json.
+The current Header declares numeric `contentConfiguration: 1` in vessel.json.
 Together with the matching Notes declaration, this enables Notes configuration
 discovery and actions. Preserve optional Content.configuration when validating
 or composing the workspace. Rust owns validation and writes. An older strict

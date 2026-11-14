@@ -92,8 +92,8 @@ pub(crate) fn require_ready(description: &Description) -> Result<(), String> {
     }
 }
 
-fn installed_schema(package: &Path) -> Result<Option<serde_json::Value>, String> {
-    let manifest = manifest(package)?;
+fn installed_schema(package: &Path, file: &str) -> Result<Option<serde_json::Value>, String> {
+    let manifest = manifest(package, file)?;
     let entry = manifest
         .get("entry")
         .and_then(serde_json::Value::as_str)
@@ -111,13 +111,19 @@ fn installed_schema(package: &Path) -> Result<Option<serde_json::Value>, String>
 }
 
 pub(crate) fn configuration(packages: &Path) -> Result<Option<DataDescription>, String> {
-    for package in ["notes", "header"] {
-        let path = packages.join(package);
-        if installed_schema(&path).is_err() {
+    let canvas = packages
+        .parent()
+        .ok_or("Vessel packages have no profile")?
+        .join("canvas");
+    for (path, file) in [
+        (packages.join("notes"), "vessel.json"),
+        (canvas, "canvas.json"),
+    ] {
+        if installed_schema(&path, file).is_err() {
             return Ok(None);
         }
         if !matches!(
-            manifest(&path)?
+            manifest(&path, file)?
                 .get("contentConfiguration")
                 .and_then(serde_json::Value::as_u64),
             Some(1 | 2)
@@ -146,7 +152,7 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
         .transpose()?
         .flatten();
     let configurable = configuration.is_some()
-        && manifest(&packages.join("notes"))?
+        && manifest(&packages.join("notes"), "vessel.json")?
             .get("contentConfiguration")
             .and_then(serde_json::Value::as_u64)
             == Some(1);
@@ -177,7 +183,7 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
             if super::package::removed_path(&path).exists() && !path.exists() {
                 (Availability::Removed, None)
             } else {
-                match installed_schema(&path) {
+                match installed_schema(&path, "vessel.json") {
                     Ok(schema) => (
                         Availability::Ready,
                         Some(DataDescription {

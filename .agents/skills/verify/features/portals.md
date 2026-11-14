@@ -25,7 +25,7 @@ Follow the exact doctor and run commands in ../SKILL.md with
 `--journey portals`. The Rust journey in tests/native/src/journey/portals.rs
 owns the recipe. Portal placement and its column belong to
 app/src/workspace.rs and app/src/panels.rs, and the toggle, the chooser and the
-Hidden Portals list to desktop/mods/header/main.ts, panels.ts and
+Hidden Portals list to desktop/canvas/main.ts, panels.ts and
 panel-view.ts.
 
 - `open-portal` creates a terminal Portal through `toggle-portals` and the

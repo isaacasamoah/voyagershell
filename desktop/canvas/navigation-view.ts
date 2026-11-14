@@ -3,10 +3,26 @@ import { Button } from "gpui-base";
 import { Name, MeasureHeight, Marker, EditorMarker } from "voyager_native";
 import { Brand, dock_target_visible, speech_in_primary } from "voyager_avatar";
 import { Speech } from "voyager_conversation";
-import { projection } from "voyager_header";
+import { projection } from "voyager_theme";
+import type Canvas from "./main.js";
+import type { NativeElement } from "gpui-kit";
+import type { NameState } from "voyager_native";
+import type { Action, RenameTarget } from "../../contract/generated/request";
+import type {
+  Layout,
+  Fleet,
+  Voyage,
+  Context as Scope,
+} from "../../contract/generated/response";
+
 import { voyageColour } from "./voyage-colours.js";
 import { stopSession } from "./stop-session.js";
-export function renderNameEditor(workspace, state, id) {
+
+export function renderNameEditor(
+  workspace: Canvas,
+  state: NameState,
+  id: string,
+): NativeElement {
   return div()
     .min_w(60)
     .h(32)
@@ -14,7 +30,11 @@ export function renderNameEditor(workspace, state, id) {
     .child(Name.new(state))
     .child(EditorMarker.new(id, state));
 }
-export function renderName(rename, label) {
+
+export function renderName(
+  rename: RenameTarget | null,
+  label: string,
+): (NativeElement | string)[] {
   return [
     ...(rename ? [Marker.new(`${rename.kind}-name`, rename.id, label)] : []),
     rename?.kind === "voyage"
@@ -22,7 +42,12 @@ export function renderName(rename, label) {
       : label,
   ];
 }
-export function renderSidebar(workspace, layout, voyage) {
+
+export function renderSidebar(
+  workspace: Canvas,
+  layout: Layout,
+  voyage: Voyage | undefined,
+): NativeElement {
   const colors = projection();
   const sidebar = div()
     .flex()
@@ -175,7 +200,7 @@ export function renderSidebar(workspace, layout, voyage) {
   const voyages = layout.voyages.filter((item) => !item.closed);
   const grouped = workspace.worktrees?.groups(voyages) || {
     roots: voyages.map((item) => item.id),
-    children: {},
+    children: {} as Record<string, string[]>,
   };
   const nested = new Set(Object.values(grouped.children).flat());
   const shown = grouped.roots.flatMap((id) => [
@@ -183,9 +208,9 @@ export function renderSidebar(workspace, layout, voyage) {
     ...(grouped.children[id] || []),
   ]);
   for (const id of shown) {
-    const item = voyages.find((entry) => entry.id === id);
+    const item = voyages.find((entry) => entry.id === id)!;
     const index = layout.voyages.findIndex((entry) => entry.id === id);
-    const scope = { kind: "voyage", id: item.id };
+    const scope: Scope = { kind: "voyage", id: item.id };
     const docked =
       layout.context.kind === "voyage" && layout.context.id === item.id;
     const worktree =
@@ -308,20 +333,22 @@ export function renderSidebar(workspace, layout, voyage) {
                     version,
                   ),
               },
-              ...[
-                "new",
-                "open",
-                ...(workspace.worktrees.canRemove(item.id, item.cwd || "")
-                  ? ["remove"]
-                  : []),
-              ].map((mode) => ({
+              ...(
+                [
+                  "new",
+                  "open",
+                  ...(workspace.worktrees.canRemove(item.id, item.cwd || "")
+                    ? ["remove"]
+                    : []),
+                ] as const
+              ).map((mode) => ({
                 label: `${mode === "new" ? "New" : mode === "open" ? "Open" : "Remove"} worktree`,
-                choose: (version, cx) =>
+                choose: (version: string, cx: import("gpui-kit").Context) =>
                   workspace.worktrees.open(
                     item.id,
                     version,
                     cx,
-                    mode,
+                    mode as "new" | "open" | "remove",
                     item.cwd || "",
                   ),
               })),
@@ -389,7 +416,11 @@ export function renderSidebar(workspace, layout, voyage) {
         .child(Marker.new("create-voyage"))
         .on_click((_event, cx) => workspace.createVoyage(cx)),
     );
-  const measure = (name, child) =>
+
+  const measure = (
+    name: "sidebar" | "heading" | "navigation",
+    child: NativeElement,
+  ): NativeElement =>
     MeasureHeight.new(
       `${workspace.splitSession}-${name}`,
       (height, cx) => workspace.chat.measure(name, height, cx),
@@ -406,7 +437,13 @@ export function renderSidebar(workspace, layout, voyage) {
   sidebar.child(div().flex_1());
   return measure("sidebar", sidebar);
 }
-export function renderFleets(workspace, layout, voyage, fleet) {
+
+export function renderFleets(
+  workspace: Canvas,
+  layout: Layout,
+  voyage: Voyage | undefined,
+  fleet: Fleet | undefined,
+): NativeElement {
   const strip = div()
     .flex()
     .items_center()
@@ -558,14 +595,20 @@ export function renderFleets(workspace, layout, voyage, fleet) {
   );
   return strip.child(tabs).child(portalControls(workspace, voyage));
 }
-export function renderContext(workspace, layout, voyage, fleet) {
+
+export function renderContext(
+  workspace: Canvas,
+  layout: Layout,
+  voyage: Voyage | undefined,
+  fleet: Fleet | undefined,
+): NativeElement {
   const context = layout.context;
   const compactPrimary = context.kind === "workspace" && !workspace.sidebar;
   const visible =
     compactPrimary ||
     workspace.compactPortalContext() ||
     dock_target_visible(JSON.stringify(context));
-  let goThere;
+  let goThere: Action | undefined;
   if (context.kind === "fleet")
     goThere = { operation: "select-fleet", id: context.id };
   else if (context.kind === "voyage")
@@ -624,7 +667,11 @@ export function renderContext(workspace, layout, voyage, fleet) {
     region.child(workspace.statusView());
   return region;
 }
-export function portalControls(workspace, voyage) {
+
+export function portalControls(
+  workspace: Canvas,
+  voyage: Voyage,
+): NativeElement {
   const column = voyage.portalLayout;
   if (!column) return div();
   const controls = div().flex().items_center().gap(4).flex_shrink_0();

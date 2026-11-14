@@ -461,7 +461,7 @@ def run():
         else:
             time.sleep(0.5)
             initial = capture("header-initial")
-            package = profile / "mods/header/main.js"
+            package = profile / "canvas/main.js"
             source = package.read_text()
             changed = source.replace('.child("Voyager")', '.child("Voyager Live")')
             assert changed != source, "Expected shipped native header source"

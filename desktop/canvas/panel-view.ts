@@ -3,20 +3,20 @@ import { Button } from "gpui-base";
 import { Marker, Terminal } from "voyager_native";
 import { agentsView } from "./agents.js";
 import { Notes } from "voyager_content_view";
-import { projection } from "voyager_header";
+import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
-import { vesselFrame } from "./canvas.js";
+import { panelFrame } from "./regions.js";
 import { visiblePanels } from "./panels.js";
 import { processIcon } from "./process-icons.js";
-import type Workspace from "./main.js";
+import type Canvas from "./main.js";
 import type { MenuItem } from "./menu.js";
 import type { PanelGroup } from "./panels.js";
 import type { Context as UIContext, NativeElement } from "gpui-kit";
-import type { Action } from "../../../contract/generated/request";
-import type { Context, Vessel } from "../../../contract/generated/response";
+import type { Action } from "../../contract/generated/request";
+import type { Context, Vessel } from "../../contract/generated/response";
 
 export function renderPanel(
-  workspace: Workspace,
+  workspace: Canvas,
   placement: Vessel,
   scope: Extract<Context, { kind: "vessel" | "portal" }>,
   group: PanelGroup,
@@ -103,7 +103,7 @@ export function renderPanel(
   return workspace.target(
     `${scope.kind}-${placement.id}`,
     scope,
-    vesselFrame(
+    panelFrame(
       div()
         .relative()
         .flex()

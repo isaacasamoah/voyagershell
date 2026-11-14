@@ -1,6 +1,6 @@
 import { div, svg } from "gpui-kit";
 import { Button } from "gpui-base";
-import { projection } from "voyager_header";
+import { projection } from "voyager_theme";
 import { activityBadge } from "./activity.js";
 import { voyageColour } from "./voyage-colours.js";
 import { processIcon } from "./process-icons.js";

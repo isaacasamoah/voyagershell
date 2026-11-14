@@ -200,7 +200,7 @@ fn load(
     cx: &mut App,
 ) -> Result<Entity<ShellRoot>> {
     let readable = current.clone();
-    let module = HostModule::new(crate::script_types::HEADER_MODULE)
+    let module = HostModule::new(crate::script_types::THEME_MODULE)
         .declarations(crate::script_types::HEADER)
         .function("projection", move |_| {
             let value = readable.borrow();
@@ -495,7 +495,7 @@ fn load(
     runtime.try_load(package, window, cx)
 }
 
-pub struct Header {
+pub struct CanvasHost {
     root: Option<Entity<ShellRoot>>,
     _watch: Option<Watcher>,
     _avatar: Option<gpui::Subscription>,
@@ -523,7 +523,7 @@ pub struct Setup {
     pub stop_session: async_channel::Sender<()>,
 }
 
-impl Header {
+impl CanvasHost {
     pub fn new(
         runtime: Rc<ShellRuntime>,
         setup: Setup,
@@ -574,14 +574,14 @@ impl Header {
             cx,
         ) {
             Ok(root) => (Some(root), None),
-            Err(error) => (None, Some(format!("Header load failed: {error:#}"))),
+            Err(error) => (None, Some(format!("Canvas load failed: {error:#}"))),
         };
         let avatar_observe = root
             .as_ref()
             .map(|root| workspace_binding.avatar.observe(root, cx));
         let (watch, watch_error) = match root.as_ref().map(|root| runtime.watch(root, window, cx)) {
             Some(Ok(watch)) => (Some(watch), None),
-            Some(Err(error)) => (None, Some(format!("Header reload unavailable: {error:#}"))),
+            Some(Err(error)) => (None, Some(format!("Canvas reload unavailable: {error:#}"))),
             None => (None, initial_source.as_ref().err().cloned()),
         };
         let changed_client = workspace_binding.client.clone();
@@ -609,7 +609,7 @@ impl Header {
                 } else {
                     None
                 };
-                let updated = this.update(cx, |header, cx| {
+                let updated = this.update(cx, |canvas, cx| {
                     match next {
                         Ok(notice) => {
                             after = Some(notice);
@@ -617,13 +617,13 @@ impl Header {
                             if let Some(activity) = activity {
                                 *changed_activity.borrow_mut() = activity;
                             }
-                            if let Some(root) = &header.root
+                            if let Some(root) = &canvas.root
                                 && let Err(error) = changed_runtime.refresh(root, cx)
                             {
-                                header.watch_error = Some(format!("{error:#}"));
+                                canvas.watch_error = Some(format!("{error:#}"));
                             }
                         }
-                        Err(error) => header.watch_error = Some(error),
+                        Err(error) => canvas.watch_error = Some(error),
                     }
                     cx.notify();
                 });
@@ -665,13 +665,13 @@ impl Header {
                     prior_source = bytes.clone();
                 }
                 let result = handle.update(cx, |_, window, cx| {
-                    this.update(cx, |header, cx| {
+                    this.update(cx, |canvas, cx| {
                         let active = window.is_a11y_active();
                         crate::diagnostics::redraw::record("a11y_poll_active", u64::from(active));
-                        let changed_accessibility = header.accessibility != active;
-                        header.accessibility = active;
+                        let changed_accessibility = canvas.accessibility != active;
+                        canvas.accessibility = active;
                         if !changed_theme && !changed_source && !changed_accessibility {
-                            return header.root.is_some();
+                            return canvas.root.is_some();
                         }
                         if changed_accessibility {
                             workspace_binding.notes.invalidate(cx);
@@ -687,28 +687,28 @@ impl Header {
                             }) {
                                 Ok(value) => {
                                     *current.borrow_mut() = Ok(value);
-                                    header.theme_error = None;
+                                    canvas.theme_error = None;
                                     valid_theme_change = true;
-                                    if let Some(root) = &header.root
+                                    if let Some(root) = &canvas.root
                                         && let Err(error) = runtime.refresh(root, cx)
                                     {
-                                        header.theme_error = Some(format!("{error:#}"));
+                                        canvas.theme_error = Some(format!("{error:#}"));
                                     }
                                     if let Err(error) = workspace_binding.notes.refresh(cx) {
-                                        header.theme_error = Some(format!("{error:#}"));
+                                        canvas.theme_error = Some(format!("{error:#}"));
                                     }
                                 }
-                                Err(error) => header.theme_error = Some(format!("{error:#}")),
+                                Err(error) => canvas.theme_error = Some(format!("{error:#}")),
                             }
                         }
                         if changed_source {
-                            header.watch_error = source_bytes
+                            canvas.watch_error = source_bytes
                                 .as_ref()
                                 .and_then(|snapshot| snapshot.as_ref().err().cloned());
                         }
                         let source_ready = source_bytes.as_ref().is_some_and(Result::is_ok);
                         if (changed_source && source_ready || valid_theme_change)
-                            && header.root.is_none()
+                            && canvas.root.is_none()
                         {
                             match load(
                                 &runtime,
@@ -720,27 +720,27 @@ impl Header {
                                 cx,
                             ) {
                                 Ok(root) => {
-                                    header._avatar =
+                                    canvas._avatar =
                                         Some(workspace_binding.avatar.observe(&root, cx));
                                     match runtime.watch(&root, window, cx) {
-                                        Ok(watch) => header._watch = Some(watch),
+                                        Ok(watch) => canvas._watch = Some(watch),
                                         Err(error) => {
-                                            header.watch_error = Some(format!(
-                                                "Header reload unavailable: {error:#}"
+                                            canvas.watch_error = Some(format!(
+                                                "Canvas reload unavailable: {error:#}"
                                             ))
                                         }
                                     }
-                                    header.root = Some(root);
-                                    header.load_error = None;
+                                    canvas.root = Some(root);
+                                    canvas.load_error = None;
                                 }
                                 Err(error) => {
-                                    header.load_error =
-                                        Some(format!("Header load failed: {error:#}"))
+                                    canvas.load_error =
+                                        Some(format!("Canvas load failed: {error:#}"))
                                 }
                             }
                         }
                         cx.notify();
-                        header.root.is_some()
+                        canvas.root.is_some()
                     })
                 });
                 match result {
@@ -749,10 +749,10 @@ impl Header {
                 }
             }
         });
-        cx.defer_in(window, move |header, window, cx| {
+        cx.defer_in(window, move |canvas, window, cx| {
             if let Some(root) = window.root::<ShellRoot>().flatten() {
                 let notes = invalidate_notes.clone();
-                header
+                canvas
                     ._observers
                     .push(cx.observe_in(&root, window, move |_, _, window, cx| {
                         if window.is_a11y_active() {
@@ -761,7 +761,7 @@ impl Header {
                         }
                     }));
                 if let Some(tooltip) = ShellRoot::tooltip_overlay(window, cx) {
-                    header._observers.push(cx.observe_in(
+                    canvas._observers.push(cx.observe_in(
                         &tooltip,
                         window,
                         move |_, _, window, cx| {
@@ -796,9 +796,9 @@ impl Header {
     }
 }
 
-impl Render for Header {
+impl Render for CanvasHost {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        crate::diagnostics::redraw::record("header_renders", 1);
+        crate::diagnostics::redraw::record("canvas_renders", 1);
         let content = self.root.as_ref().map(|root| {
             let view = root.read(cx).content().clone();
             if window.is_a11y_active() {
@@ -881,7 +881,7 @@ mod tests {
             std::process::id()
         ));
         let mut import_continues = false;
-        let source = include_str!("../mods/header/main.js")
+        let source = include_str!("../canvas/main.js")
             .lines()
             .filter(|line| {
                 if import_continues {

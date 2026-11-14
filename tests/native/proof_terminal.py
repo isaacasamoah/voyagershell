@@ -68,7 +68,7 @@ def terminal(
         return core_rpc(session, env, method, params)
 
     def workspace_control(label):
-        header = evidence / "profile/mods/header/main.js"
+        header = evidence / "profile/canvas/main.js"
         digest = hashlib.sha256(header.read_bytes()).hexdigest()
         if digest != LEGACY_DIV_HEADER:
             click(*named_button(native, evidence, label))
@@ -98,7 +98,7 @@ def terminal(
                 reference=(
                     "native-01/terminal-output.png"
                     if label == "Create Fleet"
-                    else "desktop/mods/header/main.ts:statusView"
+                    else "desktop/canvas/main.ts:statusView"
                 ),
             )
         )
@@ -884,7 +884,7 @@ def terminal(
                 ),
                 "third Fleet with unresolved refusal",
             )
-            source_path = evidence / "profile/mods/header/main.js"
+            source_path = evidence / "profile/canvas/main.js"
             source_path.write_text(source_path.read_text() + "\n")
             time.sleep(1)
             capture("portal-terminal-refused-sibling")
