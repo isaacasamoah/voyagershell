@@ -48,8 +48,10 @@ fn entry() -> Result<i32> {
         "Actual Codex has not migrated to the Rust journey; use the retained explicit legacy route"
     );
     if command == "probe" {
-        ensure!(args.len() == 2, "Probe needs state path and mode");
-        probe::run(&PathBuf::from(&args[0]), &args[1])?;
+        let (path, mode) = args
+            .split_first()
+            .context("Probe needs state path and mode")?;
+        probe::run(Path::new(path), probe::Mode::parse(mode)?)?;
         return Ok(0);
     }
     if command == "features" {

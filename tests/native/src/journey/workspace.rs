@@ -1,6 +1,6 @@
 mod model;
 
-use super::layout::{avatar_bounds, avatar_on_dock};
+use super::layout::{avatar_bounds, avatar_on_dock, born, right_of, split_right};
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Native, Seen, Terminal, fleets, vessels, voyages};
@@ -164,25 +164,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
 
     let split = cases.make(native, Case::SplitVessel, |native| {
         let before = at_rest(native)?.document;
-        native.hover(&Target::name(&vessel(&start.vessel.id)))?;
-        native.click(&Target::split_right(&start.vessel.id))?;
-        native.click(&Target::worker("terminal"))?;
-        let (after, old, new) = native.settle(
-            "the first Vessel's terminal and a new Vessel's terminal drawn",
-            |seen| {
-                let born = born(vessels(&before), vessels(seen.document), |vessel| {
-                    &vessel.id
-                });
-                let pane = |id: &PlacementId| Some(Target::terminal(id).find(seen.frame)?.bounds);
-                let old = pane(&start.vessel.id)?;
-                let new: Vec<Rect> = born
-                    .iter()
-                    .map(|vessel| pane(&vessel.id))
-                    .collect::<Option<_>>()?;
-                (!new.is_empty()).then(|| (seen.document.clone(), old, new))
-            },
-            |(_, old, new)| new.iter().all(|new| right_of(new, old)),
-        )?;
+        let (after, old, new) = split_right(native, &before, &start.vessel.id)?;
         let born = born(vessels(&before), vessels(&after), |vessel| &vessel.id);
         let split = fleet(&after, &start.fleet);
         let beside = split
@@ -894,10 +876,6 @@ fn beside_right(root: &Split, left: &PlacementId, right: &PlacementId) -> bool {
     holds(first, left) && holds(second, right)
 }
 
-fn right_of(new: &Rect, old: &Rect) -> bool {
-    new.x >= old.x + old.width && new.y < old.y + old.height && old.y < new.y + new.height
-}
-
 fn start(layout: &Layout) -> Option<Start> {
     let [voyage] = &layout.voyages[..] else {
         return None;
@@ -931,15 +909,6 @@ fn shown(seen: &Seen, fleet: &Fleet) -> bool {
         .vessels
         .iter()
         .all(|placed| seen.shows(&Target::name(&vessel(&placed.id))))
-}
-
-fn born<'a, T, I: PartialEq + 'a>(
-    before: impl Iterator<Item = &'a T>,
-    after: impl Iterator<Item = &'a T>,
-    id: impl Fn(&T) -> &I,
-) -> Vec<&'a T> {
-    let known: Vec<&I> = before.map(&id).collect();
-    after.filter(|item| !known.contains(&id(item))).collect()
 }
 
 fn fleet<'a>(layout: &'a Layout, id: &FleetId) -> Option<&'a Fleet> {
