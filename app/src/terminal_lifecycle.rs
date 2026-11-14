@@ -145,7 +145,7 @@ impl Lifecycle {
                 let result = core
                     .as_mut()
                     .map_err(|error| error.clone())
-                    .and_then(|core| core.end(self));
+                    .and_then(|core| core.end(self == Lifecycle::StopSession));
                 *ended = Some((self, result.clone()));
                 result
             }

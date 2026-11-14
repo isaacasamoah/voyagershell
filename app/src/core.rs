@@ -700,11 +700,7 @@ impl Core {
         self.call("server.stop", StopParams(Default::default()))
     }
 
-    pub(crate) fn end(
-        &mut self,
-        operation: crate::terminal_lifecycle::Lifecycle,
-    ) -> Result<(), Error> {
-        let stop = operation == crate::terminal_lifecycle::Lifecycle::StopSession;
+    pub(crate) fn end(&mut self, stop: bool) -> Result<(), Error> {
         *self
             .input_open
             .lock()

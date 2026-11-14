@@ -36,11 +36,11 @@ app/src/terminal_lifecycle.rs.
   for that terminal, read through `terminal.read`. The Fleet tabs, Vessels and terminals must be drawn with
   the avatar docked where the document says, and `AFTER-42` must reach the same
   shell.
-- `quit-busy-keeps-output` starts a loop that prints `BUSY-1` to `BUSY-60`
-  over six seconds and then `BUSY-42`, and quits after `BUSY-3`. The shell must
-  be the same live program with the loop unfinished while the app is closed.
-  After the relaunch the loop must finish in the same shell, and Core's live
-  terminals must be unchanged.
+- `quit-busy-keeps-output` starts a loop that prints `BUSY-1` to `BUSY-100`
+  over ten seconds and then `BUSY-DONE-42`, and quits after `BUSY-3`. While the
+  app is closed, the shell must be the same live program, and one read of Core's
+  screen must not yet hold `BUSY-DONE-42`. After the relaunch the loop must
+  finish in the same shell, and Core's live terminals must be unchanged.
 - `close-window-keeps` asks the window to close the way a window manager's
   close button does (`WM_DELETE_WINDOW`). The app must exit cleanly and leave
   Core, the shell and Core's live terminals unchanged. The relaunch must draw

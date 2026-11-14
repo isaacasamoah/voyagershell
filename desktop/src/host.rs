@@ -223,6 +223,7 @@ fn load(
     let process_executor = cx.background_executor().clone();
     let activity_reader = workspace_binding.activity.clone();
     let activity_refresh = client.clone();
+    let stop = workspace_binding.stop.clone();
     let terminal_client = client.clone();
     let revision = workspace_binding.notice.clone();
     let notice = workspace_binding.notice.clone();
@@ -287,7 +288,10 @@ fn load(
                 .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
             Ok(HostValue::from(raw))
         })
-        .function("stop_session", crate::quit::stop(&workspace_binding.stop))
+        .function("stop_session", move |_| {
+            let _ = stop.try_send(());
+            Ok(HostValue::Null)
+        })
         .async_function("refresh_activity", move |_| {
             let client = activity_refresh.clone();
             Ok(async move {

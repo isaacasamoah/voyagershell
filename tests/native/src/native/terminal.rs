@@ -263,6 +263,15 @@ impl Terminal {
         Err(TimedOut(format!("{text} in the terminal")).into())
     }
 
+    pub fn holds_now(&self, native: &Native, text: &str) -> Result<bool> {
+        let read = native
+            .system
+            .rpc("terminal.read", json!({"terminal":self.address}))?;
+        Ok(read["text"]
+            .as_str()
+            .is_some_and(|shown| shown.contains(text)))
+    }
+
     pub fn printed(&self, native: &Native, text: &str) -> Result<bool> {
         let printed = poll(PATIENCE, GLANCE, true, || {
             let read = native

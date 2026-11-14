@@ -166,15 +166,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::QuitBusy, |native| {
         terminal.line(
             native,
-            "for i in $(seq 1 60); do echo BUSY-$i; sleep 0.1; done; echo BUSY-$((6*7))",
+            "for i in $(seq 1 100); do echo BUSY-$i; sleep 0.1; done; echo BUSY-DONE-$((6*7))",
         )?;
         terminal.shows(native, "BUSY-3")?;
         let roster = native.live_terminals()?;
         native.close()?;
         let mid = terminal.program(native)?;
-        let unfinished = !terminal.printed(native, "BUSY-42")?;
+        let unfinished = !terminal.holds_now(native, "BUSY-DONE-42")?;
         native.launch()?;
-        let finished = terminal.printed(native, "BUSY-42")?;
+        let finished = terminal.printed(native, "BUSY-DONE-42")?;
         let roster_after = native.live_terminals()?;
         let shell = terminal.program(native)?;
         Verdict::new()
