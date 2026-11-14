@@ -60,9 +60,15 @@ The journey needs no sidebar state and no window size.
 
 ## Negative control
 
-tests/native/controls/quit-restore.patch routes Ctrl+Q to stop-session. A
-candidate built with it must fail `quit-and-keep` on the expectation `Core is
-the same process after Quit`, with no Core answering after Quit.
+tests/native/controls/quit-restore.patch makes a relaunch clear the backend of
+a terminal that is still live. A candidate built with it must fail
+`relaunch-reattaches` on the expectation `Core lists the same live terminals
+after the relaunch`, with two live addresses observed.
+
+A recorded mutant, not the journey's control, routes Ctrl+Q to stop-session.
+A candidate built with it must fail `quit-and-keep` on the expectation `Core
+is the same process after Quit`, with no Core answering after Quit. Its patch
+text is in the PR that introduced `quit-and-keep`.
 
 ## Gotchas
 

@@ -19,7 +19,7 @@ cases! {
     StopSession => "stop-session",
 }
 
-pub const CONTROL: Case = Case::QuitAndKeep;
+pub const CONTROL: Case = Case::RelaunchReattaches;
 
 #[derive(Clone, PartialEq, Serialize)]
 struct Saved {
