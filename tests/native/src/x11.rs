@@ -30,6 +30,7 @@ const ESCAPE: u32 = 0xff1b;
 const F2: u32 = 0xffbf;
 const SHIFT: u32 = 0xffe1;
 const CONTROL: u32 = 0xffe3;
+const ALT: u32 = 0xffe9;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Key {
@@ -45,6 +46,7 @@ pub enum Key {
 pub struct Chord {
     ctrl: bool,
     shift: bool,
+    alt: bool,
     key: Key,
 }
 
@@ -76,11 +78,25 @@ impl Key {
     }
 }
 
+impl Chord {
+    pub fn shift(self) -> Self {
+        Self {
+            shift: true,
+            ..self
+        }
+    }
+
+    pub fn alt(self) -> Self {
+        Self { alt: true, ..self }
+    }
+}
+
 impl From<Key> for Chord {
     fn from(key: Key) -> Self {
         Self {
             ctrl: false,
             shift: false,
+            alt: false,
             key,
         }
     }
@@ -93,6 +109,9 @@ impl fmt::Display for Chord {
         }
         if self.shift {
             f.write_str("shift+")?;
+        }
+        if self.alt {
+            f.write_str("alt+")?;
         }
         match self.key {
             Key::Char(character) => write!(f, "{character}"),
@@ -315,6 +334,9 @@ impl Display {
         }
         if chord.shift {
             held.push((self.code(SHIFT)?.0, false));
+        }
+        if chord.alt {
+            held.push((self.code(ALT)?.0, false));
         }
         held.push(self.code(chord.key.symbol()?)?);
         self.press(&held)

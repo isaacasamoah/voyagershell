@@ -11,7 +11,7 @@ def prove(
     *, native, capture, geometry, close, start_frame, evidence, session, env,
     journey, resize_window=None,
 ):
-    assert journey in ("demo-feedback", "voyage-close", "activity-refinement", "portal-close")
+    assert journey in ("demo-feedback", "voyage-close", "activity-refinement")
     observed = {"passed": [], "targets": [], "cleanupErrors": [], "limits": "No real agent, private chat or voice trial. Terminal accessibility remains unproved."}
     repo = evidence / "demo-repo"
 
@@ -74,7 +74,7 @@ def prove(
         click("Close Portal " + portal["name"])
         wait(document, lambda value: not next(v for v in value["voyages"] if v["id"] == voyage_id)["portalLayout"]["visible"], "empty Portal collapse")
         click("Show Portals")
-        click("Terminal input" if journey == "portal-close" else "Note text")
+        click("Note text")
         wait(document, lambda value: not next(v for v in value["voyages"] if v["id"] == voyage_id)["portalLayout"]["visible"], "empty chooser click-away collapse")
         click("Show Portals")
         click("Hidden Portals")
@@ -116,9 +116,6 @@ def prove(
         click("Create Voyage")
         wait(document, lambda value: any(v.get("cwd") == str(repo) for v in value["voyages"]), "directory-backed Voyage")
         record("directory-backed-voyage")
-        if journey == "portal-close":
-            portal_lifetime()
-            return observed["passed"]
         if journey != "activity-refinement":
             click("demo-repo", 273)
             click("New worktree")

@@ -184,17 +184,12 @@ Isaac approved dropping two checks on 13 November 2026.
 - A rename during a pending selection is not driven, because the old check
   patched the profile's script to delay the selection.
 
-The Python `workspace` journey is deleted, and the Python `placement`
-journey keeps only the Portal and the close, quit and restore checks that no
-native journey holds yet. Both stay in `tests/native/proof_workspace.py`
-behind `--legacy-reproduction`.
-
-- Portals. `placement` creates a Portal, docks to it by a click, renames it
-  to `+` and expects its identity and its context to survive a new Fleet.
-- Close, quit and restore. `placement` reopens the saved workspace and
-  expects the same document. The native `quit-restore` journey covers Quit,
-  a warm relaunch and a cold restart. Closing a Voyage stays with the Python
-  `voyage-close` journey.
+The Python `workspace` and `placement` journeys are deleted. The native
+`portals` journey covers the Portal checks that `placement` kept: creating a
+Portal, docking to it, renaming it and keeping it across a new Fleet. The
+native `quit-restore` journey covers its reopen of the saved workspace.
+Closing a Voyage is covered by the native `voyage-close` journey once that
+lands, and stays with the Python `voyage-close` journey until then.
 
 These deleted checks are out of date.
 
@@ -215,9 +210,6 @@ These deleted checks are current behavior that no journey drives yet.
 - The Ctrl+Shift+O split shortcut. The arrangement journey is to cover it.
   The native journey splits through the chooser.
 
-`placement` was not run for this recipe, because it takes the real pointer
-and keyboard.
-
 These gaps are open. Nobody has approved them.
 
 - A `label` is the string that the header gives a name control. The journey
@@ -225,8 +217,8 @@ These gaps are open. Nobody has approved them.
   label, or a narrow control that cuts the text short, passes. Reading the
   drawn pixels belongs to the visual tier.
 - The journey keeps captures but compares no pixels, so the visual tier of
-  Voyages, Fleets and Vessels is `none`. The Python `placement` and
-  `demo-feedback` journeys also keep captures and compare none.
+  Voyages, Fleets and Vessels is `none`. The Python `demo-feedback`
+  journey also keeps captures and compares none.
 - `rename-keyboard` proves one Tab step and one Shift+Tab step, between two
   Voyage names. It does not walk the Fleet tabs or the Vessel titles.
 - While the docked Vessel is in a Fleet or Voyage that is not shown, the app
