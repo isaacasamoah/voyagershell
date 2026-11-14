@@ -1,4 +1,5 @@
-use super::{drawn_as, placed_on, vessel};
+use super::{drawn_as, vessel};
+use crate::journey::layout::placed_on;
 use crate::native::Seen;
 use serde::Serialize;
 use voyager_contract::inspection::{Element, Rect, Role};

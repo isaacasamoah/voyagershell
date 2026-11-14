@@ -161,6 +161,8 @@ pub struct Native {
     viewer: Option<Owned>,
     core: Option<Identity>,
     core_id: Value,
+    stopped: Vec<Identity>,
+    first: Option<Value>,
     adopted: Vec<(String, Identity)>,
     window: Window,
     launches: u32,
@@ -193,6 +195,8 @@ impl Native {
             viewer: None,
             core: None,
             core_id: Value::Null,
+            stopped: Vec::new(),
+            first: None,
             adopted: Vec::new(),
             window: 0,
             launches: 0,
@@ -231,6 +235,11 @@ impl Native {
         self.system
             .execute("xrdb", &["-merge"], Some("Xft.dpi: 192\n"))?;
         self.start()?;
+        self.bind_core()?;
+        self.present()
+    }
+
+    fn bind_core(&mut self) -> Result<()> {
         until("dedicated Core socket", || {
             Ok(self.system.socket().exists().then_some(()))
         })?;
@@ -238,32 +247,84 @@ impl Native {
         self.core = Some(Identity::read(pid(&core)?)?);
         self.core_id = core["core"]["id"].clone();
         ensure!(!self.core_id.is_null(), "Missing Core identity");
-        self.identify(None)?;
-        self.present()
+        self.identify()
     }
 
-    fn identify(&self, first: Option<&Terminal>) -> Result<()> {
+    fn identify(&self) -> Result<()> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Identities<'a> {
             core: &'a Option<Identity>,
             core_id: &'a Value,
+            stopped_cores: &'a [Identity],
             #[serde(flatten)]
-            first: Option<&'a Terminal>,
+            first: &'a Option<Value>,
         }
         save(
             self.system.evidence.join("identity.json"),
             &Identities {
                 core: &self.core,
                 core_id: &self.core_id,
-                first,
+                stopped_cores: &self.stopped,
+                first: &self.first,
             },
         )
     }
 
+    fn identify_first(&mut self, first: &Terminal) -> Result<()> {
+        self.first = Some(serde_json::to_value(first)?);
+        self.identify()
+    }
+
     pub fn launch(&mut self) -> Result<()> {
         self.start()?;
+        if self.core.is_none() {
+            self.bind_core()?;
+        }
         self.present()
+    }
+
+    pub fn core(&self) -> Result<&Identity> {
+        self.core.as_ref().context("Missing Core identity")
+    }
+
+    pub fn stop_core(&mut self) -> Result<Identity> {
+        ensure!(
+            self.viewer.is_none(),
+            "Core is stopped only while no viewer runs"
+        );
+        let core = self.core.clone().context("Missing Core identity")?;
+        core.verify()?;
+        self.system.rpc("server.stop", json!({}))?;
+        until("dedicated Core socket removal", || {
+            Ok((!self.system.socket().exists()).then_some(()))
+        })?;
+        until("stopped Core exit", || {
+            Ok(core.verify().is_err().then_some(()))
+        })?;
+        self.core = None;
+        self.core_id = Value::Null;
+        self.stopped.push(core.clone());
+        self.identify()?;
+        Ok(core)
+    }
+
+    pub fn live_terminals(&self) -> Result<Vec<String>> {
+        let listed = self.system.rpc("terminal.list", json!({"all":true}))?;
+        let mut live = listed["terminals"]
+            .as_array()
+            .context("Core listed no terminals")?
+            .iter()
+            .filter(|terminal| terminal["state"] == "live")
+            .map(|terminal| {
+                terminal["address"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .context("A listed terminal has no address")
+            })
+            .collect::<Result<Vec<_>>>()?;
+        live.sort();
+        Ok(live)
     }
 
     fn start(&mut self) -> Result<()> {
@@ -471,6 +532,11 @@ impl Native {
     }
 
     pub fn keep_window(&self, name: &str) -> Result<()> {
+        if self.viewer.is_none() && self.display.is_some() {
+            return self
+                .system
+                .record(json!({"event":"unkept","capture":name,"reason":"no candidate window"}));
+        }
         let x11 = self.x11()?;
         let window = x11.geometry(self.window)?;
         let whole = Geometry {
@@ -841,6 +907,25 @@ pub(crate) mod tests {
         rustix::process::kill_process(pid, rustix::process::Signal::STOP)?;
         until("a stopped candidate", || Ok(native.halted().then_some(())))?;
         Ok(native)
+    }
+
+    #[test]
+    fn a_window_is_not_kept_while_no_candidate_runs() -> Result<()> {
+        let mut native = native()?;
+        native.display = Some(native.system.spawn(
+            Path::new("/usr/bin/tail"),
+            &["-f", "/dev/null"],
+            &[],
+            "display.log",
+        )?);
+        native.keep_window("case-closed")?;
+        let actions = fs::read_to_string(native.system.evidence.join("actions.jsonl"))?;
+        ensure!(
+            actions.contains(r#""capture":"case-closed""#)
+                && actions.contains("no candidate window"),
+            "A closed candidate's capture was not recorded as unkept: {actions}"
+        );
+        Ok(())
     }
 
     #[test]

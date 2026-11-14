@@ -192,8 +192,9 @@ behind `--legacy-reproduction`.
 - Portals. `placement` creates a Portal, docks to it by a click, renames it
   to `+` and expects its identity and its context to survive a new Fleet.
 - Close, quit and restore. `placement` reopens the saved workspace and
-  expects the same document. Closing a Voyage stays with the Python
-  `voyage-close` and `session-quit` journeys.
+  expects the same document. The native `quit-restore` journey covers Quit,
+  a warm relaunch and a cold restart. Closing a Voyage and warm window close
+  stay with the Python `voyage-close` and `session-quit` journeys.
 
 These deleted checks are out of date.
 
@@ -209,8 +210,8 @@ These deleted checks are current behavior that no journey drives yet.
 - Docking to a Vessel by a click. The avatar journey is to cover it. The
   native journey docks by a drag only.
 - Docking from the keyboard with Shift+Enter. The avatar journey is to
-  cover it with the frame's dock focus field. A frame of this branch does
-  not report which dock target has keyboard focus.
+  cover it with the frame's `dockFocus` field. No native journey presses
+  Shift+Enter yet.
 - The Ctrl+Shift+O split shortcut. The arrangement journey is to cover it.
   The native journey splits through the chooser.
 

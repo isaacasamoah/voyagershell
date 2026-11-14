@@ -1,3 +1,5 @@
+mod layout;
+mod quit_restore;
 mod scrolling;
 mod workspace;
 
@@ -92,6 +94,7 @@ macro_rules! journeys {
 journeys! {
     TerminalScrolling => "terminal-scrolling" in scrolling, sidebar: None, window: None;
     Workspace => "workspace" in workspace, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    QuitRestore => "quit-restore" in quit_restore, sidebar: None, window: None;
 }
 
 impl Journey {
