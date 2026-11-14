@@ -1,12 +1,15 @@
+mod model;
+
 use super::{Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Native, Seen, Terminal, fleets, vessels, voyages};
 use crate::sandbox;
 use crate::x11::Key;
 use anyhow::Result;
+use model::{Model, Row, Tab};
 use serde::Serialize;
 use std::path::Path;
-use voyager_contract::inspection::{Frame, Rect, Role};
+use voyager_contract::inspection::{Rect, Role};
 use voyager_contract::{
     Axis, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split, Vessel, Voyage,
     VoyageId,
@@ -33,13 +36,13 @@ pub const CONTROL: Case = Case::RenameFleetEnter;
 const FLEET_NAME: &str = "Native Fleet";
 const VOYAGE_NAME: &str = "Keyboard Voyage";
 const VESSEL_NAME: &str = "+";
+const MODELLED: &str = "the saved and drawn workspace match the journey's model";
 
 #[derive(PartialEq)]
 struct Start {
     voyage: VoyageId,
     fleet: FleetId,
     vessel: Vessel,
-    home: Option<Voyaged>,
 }
 
 struct Created<Id> {
@@ -50,6 +53,12 @@ struct Created<Id> {
 enum Open {
     DoubleClick,
     ClickThenF2,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Outcome {
+    Typed,
+    Kept,
 }
 
 enum Finish<'a> {
@@ -93,57 +102,6 @@ struct Step {
     fleet: Option<FleetId>,
     #[serde(flatten)]
     landing: Landing,
-}
-
-type Fleeted = (FleetId, Vec<PlacementId>);
-type Voyaged = (VoyageId, Vec<Fleeted>);
-
-#[derive(Debug, PartialEq, Serialize)]
-struct Shape {
-    home: Option<Voyaged>,
-    voyages: Vec<Voyaged>,
-}
-
-impl Shape {
-    fn new(home: Option<Voyaged>, mut voyages: Vec<Voyaged>) -> Self {
-        let home = home.map(sorted_voyage);
-        voyages = voyages.into_iter().map(sorted_voyage).collect();
-        voyages.sort_by(|a, b| a.0.0.cmp(&b.0.0));
-        Self { home, voyages }
-    }
-}
-
-fn sorted_voyage((id, mut fleets): Voyaged) -> Voyaged {
-    for (_, vessels) in &mut fleets {
-        vessels.sort_by(|a, b| a.0.cmp(&b.0));
-    }
-    fleets.sort_by(|a, b| a.0.0.cmp(&b.0.0));
-    (id, fleets)
-}
-
-#[derive(Debug, PartialEq, Serialize)]
-struct Keys {
-    voyages: Vec<String>,
-    fleets: Vec<String>,
-    vessels: Vec<String>,
-    terminals: Vec<String>,
-}
-
-#[derive(PartialEq, Serialize)]
-struct Workspace {
-    shape: Shape,
-    expected: Keys,
-    drawn: Keys,
-}
-
-impl Workspace {
-    fn saved(&self, model: &Shape) -> bool {
-        self.shape == *model
-    }
-
-    fn drawn(&self) -> bool {
-        self.drawn == self.expected
-    }
 }
 
 #[derive(PartialEq, Serialize)]
@@ -198,9 +156,10 @@ impl Name {
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let first = Terminal::first(native)?;
-    let start = native.observe("one Voyage with one Fleet and one Vessel", |seen| {
-        start(seen.document)
-    })?;
+    let (start, mut model) = native
+        .observe("one Voyage with one Fleet and one Vessel", |seen| {
+            start(seen.document).zip(Model::start(seen.document))
+        })?;
 
     let split = cases.make(native, Case::SplitVessel, |native| {
         let before = at_rest(native)?.document;
@@ -251,6 +210,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("arrangement", root)?
             .observed("first terminal", old)?
             .observed("new terminals", &new)?;
+        let verdict = match born[..] {
+            [made] => {
+                model.split_right(&start.fleet, &start.vessel.id, made);
+                modelled(native, &model, verdict)?
+            }
+            _ => verdict,
+        };
         let Some(shell) = bind(native, &verdict, born.first().copied())? else {
             return Ok((verdict, None));
         };
@@ -274,13 +240,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |seen| (seen.document.context != before).then(|| landing(seen)),
             Landing::landed,
         )?;
-        Verdict::new()
+        let verdict = Verdict::new()
             .expect(
                 "the avatar docked to the new Vessel",
                 landing.context == docked && landing.landed(),
             )
             .observed("before", &before)?
-            .observed("landing", &landing)
+            .observed("landing", &landing)?;
+        model.dock = docked.clone();
+        modelled(native, &model, verdict)
     })?;
 
     let made = cases.make(native, Case::CreateFleet, |native| {
@@ -322,6 +290,16 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("selected", &after.selected_fleet)?
             .observed("context", &after.context)?
             .observed("picture", &picture)?;
+        let verdict = match born[..] {
+            [made] => {
+                if let Some(row) = model.row(&start.voyage) {
+                    row.fleets.push(Tab::saved(made));
+                }
+                model.fleet = made.id.clone();
+                modelled(native, &model, verdict)?
+            }
+            _ => verdict,
+        };
         let placed = born.first().and_then(|fleet| fleet.vessels.first());
         let shell = bind(native, &verdict, placed)?;
         let made = shell.zip(born.first()).map(|(shell, fleet)| Created {
@@ -348,12 +326,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 |step| step.landing.stayed(&docked),
             )?);
         }
-        Verdict::new()
+        let verdict = Verdict::new()
             .expect(
                 "the dock stayed on the Vessel through every switch",
                 steps.iter().all(|step| step.landing.stayed(&docked)),
             )
-            .observed("steps", &steps)
+            .observed("steps", &steps)?;
+        model.fleet = start.fleet.clone();
+        modelled(native, &model, verdict)
     })?;
 
     let made = cases.make(native, Case::CreateVoyage, |native| {
@@ -423,30 +403,29 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("selected", &after.selected_voyage)?
             .observed("context", &after.context)?
             .observed("picture", &picture)?;
+        let verdict = match born[..] {
+            [made] => {
+                model.voyages.push(Row::saved(made));
+                model.voyage = made.id.clone();
+                if let Some(fleet) = made.fleets.first() {
+                    model.fleet = fleet.id.clone();
+                }
+                modelled(native, &model, verdict)?
+            }
+            _ => verdict,
+        };
         let placed = born
             .first()
             .and_then(|voyage| voyage.fleets.first())
             .and_then(|fleet| fleet.vessels.first());
         let shell = bind(native, &verdict, placed)?;
-        let fleet = born
-            .first()
-            .and_then(|voyage| voyage.fleets.first())
-            .map(|fleet| fleet.id.clone());
-        let made = shell
-            .zip(born.first())
-            .zip(fleet)
-            .map(|((shell, voyage), fleet)| {
-                (
-                    Created {
-                        id: voyage.id.clone(),
-                        shell,
-                    },
-                    fleet,
-                )
-            });
+        let made = shell.zip(born.first()).map(|(shell, voyage)| Created {
+            id: voyage.id.clone(),
+            shell,
+        });
         Ok((verdict, made))
     })?;
-    let Some((other, other_fleet)) = made else {
+    let Some(other) = made else {
         return Ok(());
     };
 
@@ -465,7 +444,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 |step| step.landing.stayed(&docked),
             )?);
         }
-        Verdict::new()
+        let verdict = Verdict::new()
             .expect(
                 "the dock stayed on the Vessel through every switch",
                 steps.iter().all(|step| step.landing.stayed(&docked)),
@@ -476,7 +455,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                     .last()
                     .is_some_and(|step| step.fleet.as_ref() == Some(&start.fleet)),
             )
-            .observed("steps", &steps)
+            .observed("steps", &steps)?;
+        model.voyage = start.voyage.clone();
+        model.fleet = start.fleet.clone();
+        modelled(native, &model, verdict)
     })?;
 
     let first_fleet = RenameTarget::Fleet {
@@ -490,20 +472,20 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     cases.check(native, Case::RenameFleetEnter, |native| {
         let open = Open::DoubleClick;
         let renamed = rename(native, &first_fleet, open, FLEET_NAME, Finish::Enter)?;
-        typed(Verdict::new(), renamed)
+        concluded(native, &mut model, Verdict::new(), renamed, Outcome::Typed)
     })?;
 
     cases.check(native, Case::RenameVoyageBlur, |native| {
         let finish = Finish::Blur(&first.target());
         let open = Open::DoubleClick;
         let renamed = rename(native, &first_voyage, open, "Blur Voyage", finish)?;
-        typed(Verdict::new(), renamed)
+        concluded(native, &mut model, Verdict::new(), renamed, Outcome::Typed)
     })?;
 
     cases.check(native, Case::RenameVesselF2, |native| {
         let open = Open::ClickThenF2;
         let renamed = rename(native, &new_vessel, open, VESSEL_NAME, Finish::Enter)?;
-        typed(Verdict::new(), renamed)
+        concluded(native, &mut model, Verdict::new(), renamed, Outcome::Typed)
     })?;
 
     cases.check(native, Case::RenameKeyboard, |native| {
@@ -542,56 +524,26 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             return Ok(verdict);
         }
         let renamed = edit(native, &first_voyage, before, VOYAGE_NAME, Finish::Enter)?;
-        typed(verdict, renamed)
+        concluded(native, &mut model, verdict, renamed, Outcome::Typed)
     })?;
 
     cases.check(native, Case::RenameEscape, |native| {
         let open = Open::DoubleClick;
-        kept(rename(
-            native,
-            &first_fleet,
-            open,
-            "Discarded",
-            Finish::Escape,
-        )?)
+        let renamed = rename(native, &first_fleet, open, "Discarded", Finish::Escape)?;
+        concluded(native, &mut model, Verdict::new(), renamed, Outcome::Kept)
     })?;
 
     cases.check(native, Case::RenameEmpty, |native| {
-        kept(rename(
-            native,
-            &new_vessel,
-            Open::DoubleClick,
-            "",
-            Finish::Enter,
-        )?)
+        let renamed = rename(native, &new_vessel, Open::DoubleClick, "", Finish::Enter)?;
+        concluded(native, &mut model, Verdict::new(), renamed, Outcome::Kept)
     })?;
-
-    let model = Shape::new(
-        start.home.clone(),
-        vec![
-            (
-                start.voyage.clone(),
-                vec![
-                    (
-                        start.fleet.clone(),
-                        vec![start.vessel.id.clone(), shell.placement().clone()],
-                    ),
-                    (second.id.clone(), vec![second.shell.placement().clone()]),
-                ],
-            ),
-            (
-                other.id.clone(),
-                vec![(other_fleet, vec![other.shell.placement().clone()])],
-            ),
-        ],
-    );
 
     cases.check(native, Case::Relaunch, |native| {
         let shells = [&first, &shell, &second.shell, &other.shell];
         let ending = native.settle(
-            "the saved workspace and the window holding what the journey created",
-            |seen| Some(workspace(&model, seen)),
-            |ending| ending.saved(&model) && ending.drawn(),
+            "the saved workspace and the window as the journey's model has them",
+            |seen| Some(model.differences(seen)),
+            Vec::is_empty,
         )?;
         let before = at_rest(native)?;
         native.close()?;
@@ -606,14 +558,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         ];
         let (restored, reopened) = native.settle(
             "the relaunched window holding still",
-            |seen| Some((restored(seen, &given), workspace(&model, seen))),
+            |seen| Some((restored(seen, &given), model.differences(seen))),
             |(restored, reopened)| {
                 restored.docked
                     && restored.whole()
                     && restored.named()
                     && restored.names.iter().all(Name::saved_as_given)
-                    && reopened.saved(&model)
-                    && reopened.drawn()
+                    && reopened.is_empty()
             },
         )?;
         for shell in shells {
@@ -622,12 +573,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let after = at_rest(native)?;
         Verdict::new()
             .expect(
-                "before the relaunch, the saved workspace holds exactly the Voyages, Fleets and Vessels that the journey created",
-                ending.saved(&model),
-            )
-            .expect(
-                "before the relaunch, the window draws exactly the Voyage rows, Fleet tabs and Vessels of that workspace",
-                ending.drawn(),
+                "before the relaunch, the saved and drawn workspace match the journey's model",
+                ending.is_empty(),
             )
             .expect(
                 "the layout document and its version are the same after the relaunch",
@@ -650,16 +597,28 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 restored.named(),
             )
             .expect(
-                "after the relaunch, the window draws exactly the Voyage rows, Fleet tabs and Vessels of that workspace",
-                reopened.saved(&model) && reopened.drawn(),
+                "after the relaunch, the saved and drawn workspace match the journey's model",
+                reopened.is_empty(),
             )
             .observed("model", &model)?
-            .observed("before the relaunch", &ending)?
+            .observed("differences before the relaunch", &ending)?
             .observed("before", &before)?
             .observed("after", &after)?
             .observed("restored", &restored)?
-            .observed("after the relaunch", &reopened)
+            .observed("differences after the relaunch", &reopened)
     })
+}
+
+fn modelled(native: &Native, model: &Model, verdict: Verdict) -> Result<Verdict> {
+    let differences = native.settle(
+        "the saved workspace and the window as the journey's model has them",
+        |seen| Some(model.differences(seen)),
+        Vec::is_empty,
+    )?;
+    verdict
+        .expect(MODELLED, differences.is_empty())
+        .observed("model", model)?
+        .observed("differences from the model", &differences)
 }
 
 fn rename(
@@ -769,39 +728,36 @@ fn bind(
     }
 }
 
-fn typed(verdict: Verdict, renamed: Renamed) -> Result<Verdict> {
-    let saved = renamed.typed.clone();
-    judged(verdict, renamed, "the saved name is the typed text", &saved)
-}
-
-fn kept(renamed: Renamed) -> Result<Verdict> {
-    let saved = renamed.before.clone();
-    judged(
-        Verdict::new(),
-        renamed,
-        "the saved name is unchanged",
-        &saved,
-    )
-}
-
-fn judged(
+fn concluded(
+    native: &Native,
+    model: &mut Model,
     verdict: Verdict,
     renamed: Renamed,
-    saving: &'static str,
-    saved: &str,
+    outcome: Outcome,
 ) -> Result<Verdict> {
-    let drawn = matches!(
-        (&renamed.label, &renamed.after),
-        (Some(label), Some(after)) if drawn_as(&renamed.subject, label, after)
+    let verdict = verdict.expect(
+        "the editor held the typed draft before the finishing input",
+        renamed.draft == renamed.typed,
     );
-    verdict
-        .expect(
-            "the editor held the typed draft before the finishing input",
-            renamed.draft == renamed.typed,
-        )
-        .expect(saving, renamed.after.as_deref() == Some(saved))
+    let Some(after) = renamed.after.clone() else {
+        return verdict.observed("rename", &renamed);
+    };
+    let (saving, saved) = match outcome {
+        Outcome::Typed => ("the saved name is the typed text", renamed.typed.clone()),
+        Outcome::Kept => ("the saved name is unchanged", renamed.before.clone()),
+    };
+    if outcome == Outcome::Typed {
+        model.rename(&renamed.subject, &saved);
+    }
+    let drawn = renamed
+        .label
+        .as_deref()
+        .is_some_and(|label| drawn_as(&renamed.subject, label, &after));
+    let verdict = verdict
+        .expect(saving, after == saved)
         .expect("the drawn name is the saved name", drawn)
-        .observed("rename", &renamed)
+        .observed("rename", &renamed)?;
+    modelled(native, model, verdict)
 }
 
 fn drawn_as(subject: &RenameTarget, label: &str, name: &str) -> bool {
@@ -861,75 +817,6 @@ fn landing(seen: &Seen) -> Landing {
         dock: seen.frame.dock.clone(),
         avatar: avatar_bounds(seen),
         on_dock: avatar_on_dock(seen),
-    }
-}
-
-fn shape(layout: &Layout) -> Shape {
-    Shape::new(
-        layout.home.as_ref().map(voyaged),
-        layout.voyages.iter().map(voyaged).collect(),
-    )
-}
-
-fn voyaged(voyage: &Voyage) -> Voyaged {
-    let fleets = voyage.fleets.iter().map(|fleet| {
-        let vessels = fleet.vessels.iter().map(|vessel| vessel.id.clone());
-        (fleet.id.clone(), vessels.collect())
-    });
-    (voyage.id.clone(), fleets.collect())
-}
-
-fn expected_keys(model: &Shape, layout: &Layout) -> Keys {
-    let selected = model
-        .voyages
-        .iter()
-        .find(|(id, _)| layout.selected_voyage.as_ref() == Some(id));
-    let tabs = selected
-        .map(|(_, fleets)| fleets.as_slice())
-        .unwrap_or_default();
-    let shown = tabs
-        .iter()
-        .find(|(id, _)| layout.selected_fleet.as_ref() == Some(id));
-    let placed = shown
-        .map(|(_, vessels)| vessels.as_slice())
-        .unwrap_or_default();
-    Keys {
-        voyages: sorted(model.voyages.iter().map(|(id, _)| id.0.clone())),
-        fleets: sorted(tabs.iter().map(|(id, _)| id.0.clone())),
-        vessels: sorted(placed.iter().map(|id| id.0.clone())),
-        terminals: sorted(placed.iter().map(|id| id.0.clone())),
-    }
-}
-
-fn drawn_keys(frame: &Frame) -> Keys {
-    let keys = |role: Role| {
-        sorted(
-            frame
-                .elements
-                .iter()
-                .filter(|element| element.role == role)
-                .map(|element| element.key.clone()),
-        )
-    };
-    Keys {
-        voyages: keys(Role::VoyageName),
-        fleets: keys(Role::FleetName),
-        vessels: keys(Role::VesselName),
-        terminals: keys(Role::Terminal),
-    }
-}
-
-fn sorted(keys: impl Iterator<Item = String>) -> Vec<String> {
-    let mut keys: Vec<String> = keys.collect();
-    keys.sort();
-    keys
-}
-
-fn workspace(model: &Shape, seen: &Seen) -> Workspace {
-    Workspace {
-        shape: shape(seen.document),
-        expected: expected_keys(model, seen.document),
-        drawn: drawn_keys(seen.frame),
     }
 }
 
@@ -1020,9 +907,13 @@ fn tab(fleet: &Fleet) -> RenameTarget {
 }
 
 fn controls(fleet: &Fleet) -> impl Iterator<Item = Target> {
-    let titles = fleet.vessels.iter();
-    std::iter::once(Target::name(&tab(fleet)))
-        .chain(titles.map(|placed| Target::name(&vessel(&placed.id))))
+    let panes = fleet.vessels.iter().flat_map(|placed| {
+        [
+            Target::name(&vessel(&placed.id)),
+            Target::terminal(&placed.id),
+        ]
+    });
+    std::iter::once(Target::name(&tab(fleet))).chain(panes)
 }
 
 fn beside_right(root: &Split, left: &PlacementId, right: &PlacementId) -> bool {
@@ -1065,7 +956,6 @@ fn start(layout: &Layout) -> Option<Start> {
         voyage: voyage.id.clone(),
         fleet: fleet.id.clone(),
         vessel: vessel.clone(),
-        home: layout.home.as_ref().map(voyaged),
     })
 }
 
@@ -1174,7 +1064,7 @@ mod tests {
                 json!({"role":role,"key":key,"label":label,"bounds":{"x":x,"y":y,"width":width,"height":height}})
             })
             .collect();
-        let frame: Frame = serde_json::from_value(json!({
+        let frame: voyager_contract::inspection::Frame = serde_json::from_value(json!({
             "sequence": 1,
             "window": {"width": 725.0, "height": 470.0, "scale": 2.0},
             "dock": {"kind": "vessel", "id": "placement-10"},
@@ -1299,15 +1189,25 @@ mod tests {
             })
         };
         let title = ("vessel-name", "placement-12", Some("bash · project"));
-        let whole = made(&[("fleet-name", "fleet-13", Some("Fleet 2")), title])?;
+        let pane = ("terminal", "placement-12", None);
+        let whole = made(&[("fleet-name", "fleet-13", Some("Fleet 2")), title, pane])?;
         assert!(whole.whole() && whole.named());
-        let mistitled = made(&[("fleet-name", "fleet-13", Some("Fleet 1")), title])?;
+        let mistitled = made(&[("fleet-name", "fleet-13", Some("Fleet 1")), title, pane])?;
         assert!(mistitled.whole() && !mistitled.named());
-        let untabbed = made(&[title])?;
+        let untabbed = made(&[title, pane])?;
         assert_eq!(untabbed.missing, ["fleet-name \"fleet-13\""]);
         assert!(!untabbed.whole() && !untabbed.named());
+        let unattached = made(&[("fleet-name", "fleet-13", Some("Fleet 2")), title])?;
+        assert_eq!(unattached.missing, ["terminal \"placement-12\""]);
+        assert!(
+            !unattached.whole(),
+            "a Vessel title over a pane with no terminal"
+        );
         let empty = made(&[("fleet-name", "fleet-13", Some("Fleet 2"))])?;
-        assert_eq!(empty.missing, ["vessel-name \"placement-12\""]);
+        assert_eq!(
+            empty.missing,
+            ["vessel-name \"placement-12\"", "terminal \"placement-12\""]
+        );
         assert!(!empty.whole() && empty.named());
         let nothing = seen(&document, &WHOLE, |seen| {
             picture(seen, std::iter::empty(), std::iter::empty())
@@ -1464,31 +1364,148 @@ mod tests {
         );
     }
 
-    fn model() -> Shape {
-        let (voyage, fleet, vessel) = (
-            |id: &str| VoyageId(id.into()),
-            |id: &str| FleetId(id.into()),
-            |id: &str| PlacementId(id.into()),
+    fn modelled_layout() -> Result<Layout> {
+        let mut document = layout(VESSEL_NAME)?;
+        document.voyages[0].fleets[0].root = Some(serde_json::from_value(json!({
+            "kind": "branch",
+            "axis": "horizontal",
+            "first": {"kind": "leaf", "placement": "placement-10"},
+            "second": {"kind": "leaf", "placement": "placement-3"}
+        }))?);
+        Ok(document)
+    }
+
+    fn model(document: &Layout) -> Result<Model> {
+        let mut model = Model::start(document)
+            .ok_or_else(|| anyhow::anyhow!("no selected Voyage and Fleet"))?;
+        model.rename(&vessel(&PlacementId("placement-10".into())), VESSEL_NAME);
+        Ok(model)
+    }
+
+    fn differences(model: &Model, document: &Layout, drawn: &[Drawn]) -> Result<Vec<String>> {
+        seen(document, drawn, |seen| model.differences(seen))
+    }
+
+    fn first(found: &[String], expected: &str) -> bool {
+        found.first().is_some_and(|first| first.contains(expected))
+    }
+
+    #[test]
+    fn the_saved_and_drawn_workspace_match_a_model_of_what_the_journey_made() -> Result<()> {
+        let document = modelled_layout()?;
+        let model = model(&document)?;
+        assert_eq!(
+            differences(&model, &document, &WHOLE)?,
+            Vec::<String>::new()
         );
-        Shape::new(
-            None,
-            vec![
-                (
-                    voyage("voyage-14"),
-                    vec![(fleet("fleet-17"), vec![vessel("placement-16")])],
-                ),
-                (
-                    voyage("voyage-1"),
-                    vec![
-                        (fleet("fleet-13"), vec![vessel("placement-12")]),
-                        (
-                            fleet("fleet-4"),
-                            vec![vessel("placement-10"), vessel("placement-3")],
-                        ),
-                    ],
-                ),
-            ],
-        )
+        Ok(())
+    }
+
+    #[test]
+    fn a_saved_difference_from_the_model_names_the_element_that_differs() -> Result<()> {
+        let document = modelled_layout()?;
+        let model = model(&document)?;
+        let mut every_fleet_renamed = document.clone();
+        every_fleet_renamed.voyages[0].fleets[1].name = FLEET_NAME.into();
+        let found = differences(&model, &every_fleet_renamed, &WHOLE)?;
+        assert!(
+            first(&found, "Fleet fleet-13 is saved as \"Native Fleet\""),
+            "{found:?}"
+        );
+        let mut moved_dock = document.clone();
+        moved_dock.context = Context::Vessel {
+            id: PlacementId("placement-3".into()),
+        };
+        let found = differences(&model, &moved_dock, &WHOLE)?;
+        assert!(first(&found, "the saved dock"), "{found:?}");
+        let mut extra = document.clone();
+        let mut voyage = extra.voyages[1].clone();
+        voyage.id = VoyageId("voyage-97".into());
+        extra.voyages.push(voyage);
+        let found = differences(&model, &extra, &WHOLE)?;
+        assert!(first(&found, "the saved Voyages are"), "{found:?}");
+        let mut late = document.clone();
+        let mut placed = late.voyages[0].fleets[0].vessels[0].clone();
+        placed.id = PlacementId("placement-99".into());
+        late.voyages[0].fleets[0].vessels.push(placed);
+        let found = differences(&model, &late, &WHOLE)?;
+        assert!(
+            first(&found, "Fleet fleet-4 saves the Vessels"),
+            "{found:?}"
+        );
+        let mut stacked = document.clone();
+        if let Some(Split::Branch { axis, .. }) = stacked.voyages[0].fleets[0].root.as_mut() {
+            *axis = Axis::Vertical;
+        }
+        let found = differences(&model, &stacked, &WHOLE)?;
+        assert!(
+            first(&found, "Fleet fleet-4 saves the arrangement"),
+            "{found:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_drawn_difference_from_the_model_names_the_element_that_differs() -> Result<()> {
+        let document = modelled_layout()?;
+        let model = model(&document)?;
+        let unattached: Vec<Drawn> = WHOLE
+            .iter()
+            .copied()
+            .filter(|drawn| *drawn != ("terminal", "placement-10", None))
+            .collect();
+        let found = differences(&model, &document, &unattached)?;
+        assert!(
+            first(&found, "the terminal of Vessel placement-10 is not drawn"),
+            "{found:?}"
+        );
+        let mut mislabelled = WHOLE;
+        mislabelled[3].2 = Some("Fleet 1");
+        let found = differences(&model, &document, &mislabelled)?;
+        assert!(first(&found, "Fleet tab 2 is drawn as"), "{found:?}");
+        let mut retitled = WHOLE;
+        retitled[6].2 = Some("bash · project");
+        let found = differences(&model, &document, &retitled)?;
+        assert!(first(&found, "Vessel placement-10 is titled"), "{found:?}");
+        let found = differences(
+            &model,
+            &document,
+            &more(&[("terminal", "placement-99", None)]),
+        )?;
+        assert!(
+            first(&found, "which the shown Fleet does not hold"),
+            "{found:?}"
+        );
+        let found = differences(&model, &document, &WHOLE[..8])?;
+        assert!(first(&found, "the avatar is not drawn"), "{found:?}");
+        let mut beside = model.clone();
+        if let Some(tab) = beside.tab(&FleetId("fleet-4".into()))
+            && let Some(model::Arrangement::Branch { axis, .. }) = tab.arrangement.as_mut()
+        {
+            *axis = Axis::Vertical;
+        }
+        let mut stacked = document.clone();
+        if let Some(Split::Branch { axis, .. }) = stacked.voyages[0].fleets[0].root.as_mut() {
+            *axis = Axis::Vertical;
+        }
+        let found = differences(&beside, &stacked, &WHOLE)?;
+        assert!(first(&found, "the Vertical split"), "{found:?}");
+        let twice = seen(&document, &WHOLE, |seen| {
+            let mut frame = seen.frame.clone();
+            frame.ambiguous = frame
+                .elements
+                .iter()
+                .filter(|element| element.role == Role::VesselName)
+                .cloned()
+                .collect();
+            model.differences(&Seen {
+                document: seen.document,
+                version: seen.version,
+                frame: &frame,
+            })
+        })?;
+        assert!(first(&twice, "more than once"), "{twice:?}");
+        Ok(())
     }
 
     fn more<'a>(extra: &[Drawn<'a>]) -> Vec<Drawn<'a>> {
@@ -1497,94 +1514,27 @@ mod tests {
         drawn
     }
 
-    fn judged_workspace(document: &Layout, drawn: &[Drawn]) -> Result<Workspace> {
-        seen(document, drawn, |seen| workspace(&model(), seen))
-    }
-
-    #[test]
-    fn the_saved_shape_and_the_drawn_keys_match_the_journeys_own_model() -> Result<()> {
-        let document = layout(VESSEL_NAME)?;
-        assert_eq!(shape(&document), model());
-        let whole = judged_workspace(&document, &WHOLE)?;
-        assert!(whole.saved(&model()) && whole.drawn());
-        assert_eq!(whole.expected.voyages, ["voyage-1", "voyage-14"]);
-        assert_eq!(whole.expected.fleets, ["fleet-13", "fleet-4"]);
-        assert_eq!(whole.expected.vessels, ["placement-10", "placement-3"]);
-        assert_eq!(whole.expected.terminals, whole.expected.vessels);
-        Ok(())
-    }
-
-    #[test]
-    fn a_late_extra_vessel_fleet_or_voyage_fails_the_comparison() -> Result<()> {
-        let mut document = layout(VESSEL_NAME)?;
-        let extra_vessel = {
-            let mut vessel = document.voyages[0].fleets[0].vessels[0].clone();
-            vessel.id = PlacementId("placement-99".into());
-            vessel
-        };
-        let mut extra_fleet = document.voyages[0].fleets[1].clone();
-        extra_fleet.id = FleetId("fleet-98".into());
-        let mut extra_voyage = document.voyages[1].clone();
-        extra_voyage.id = VoyageId("voyage-97".into());
-
-        let saved = |document: &Layout| shape(document) == model();
-
-        let mut vessel_added = document.clone();
-        vessel_added.voyages[0].fleets[0].vessels.push(extra_vessel);
-        assert!(!saved(&vessel_added), "a second new Vessel in the Fleet");
-        let drawn = judged_workspace(
-            &document,
-            &more(&[
-                ("vessel-name", "placement-99", Some("bash · project")),
-                ("terminal", "placement-99", None),
-            ]),
-        )?;
-        assert!(
-            drawn.saved(&model()) && !drawn.drawn(),
-            "an extra Vessel drawn"
-        );
-
-        let mut fleet_added = document.clone();
-        fleet_added.voyages[0].fleets.push(extra_fleet);
-        assert!(!saved(&fleet_added), "a second new Fleet");
-        let drawn = judged_workspace(
-            &document,
-            &more(&[("fleet-name", "fleet-98", Some("Fleet 3"))]),
-        )?;
-        assert!(!drawn.drawn(), "an extra Fleet tab drawn");
-
-        document.voyages.push(extra_voyage);
-        assert!(!saved(&document), "a second new Voyage");
-        let drawn = judged_workspace(
-            &layout(VESSEL_NAME)?,
-            &more(&[("voyage-name", "voyage-97", Some("x"))]),
-        )?;
-        assert!(!drawn.drawn(), "an extra Voyage row drawn");
-
-        let missing = judged_workspace(&layout(VESSEL_NAME)?, &WHOLE[..7])?;
-        assert!(!missing.drawn(), "a Vessel that is not drawn");
-        Ok(())
-    }
-
     #[test]
     fn the_home_voyage_is_held_apart_from_the_voyage_rows() -> Result<()> {
-        let mut document = layout(VESSEL_NAME)?;
+        let mut document = modelled_layout()?;
         let mut home = document.voyages[1].clone();
         home.id = VoyageId("home-voyage-5".into());
         home.fleets[0].id = FleetId("home-fleet-8".into());
         home.fleets[0].vessels[0].id = PlacementId("placement-7".into());
         document.home = Some(home);
-        let started = Shape::new(document.home.as_ref().map(voyaged), model().voyages);
-        let whole = seen(&document, &WHOLE, |seen| workspace(&started, seen))?;
-        assert!(whole.saved(&started) && whole.drawn());
-        assert_eq!(whole.expected.voyages, ["voyage-1", "voyage-14"]);
-        assert!(!whole.saved(&model()), "a Home Voyage that the model lacks");
+        let started = model(&document)?;
+        assert_eq!(
+            differences(&started, &document, &WHOLE)?,
+            Vec::<String>::new()
+        );
+        let found = differences(&model(&modelled_layout()?)?, &document, &WHOLE)?;
+        assert!(first(&found, "Home Voyage"), "{found:?}");
         if let Some(home) = document.home.as_mut() {
             home.fleets[0].vessels.clear();
         }
-        assert_ne!(
-            shape(&document),
-            started,
+        let found = differences(&started, &document, &WHOLE)?;
+        assert!(
+            first(&found, "Home Voyage"),
             "a Home Voyage that lost its Vessel"
         );
         Ok(())
