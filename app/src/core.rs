@@ -563,7 +563,13 @@ impl Core {
 
     pub fn terminal_get(&mut self, terminal: &str) -> Result<Terminal, Error> {
         let before = self.activity_seed_start(terminal);
-        let result = self.begin_terminal_get(terminal)?.wait()?;
+        let result: Terminal = self.call(
+            "terminal.get",
+            GetParams {
+                caller: None,
+                terminal: terminal.into(),
+            },
+        )?;
         if result.address != terminal {
             return Err(Error::Uncertain(
                 "Core observation returned a different terminal identity; no action was sent"
@@ -584,19 +590,6 @@ impl Core {
             ListParams {
                 all: true,
                 ..Default::default()
-            },
-        )
-    }
-
-    pub(crate) fn begin_terminal_get(
-        &mut self,
-        terminal: &str,
-    ) -> Result<Pending<Terminal>, Error> {
-        self.begin(
-            "terminal.get",
-            GetParams {
-                caller: None,
-                terminal: terminal.into(),
             },
         )
     }

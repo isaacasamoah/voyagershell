@@ -73,7 +73,7 @@ pub(crate) struct Activity {
     early: Vec<u8>,
     partial: Vec<u8>,
     close: Option<u32>,
-    ended: Vec<String>,
+    ended: bool,
     dirty: bool,
     wake: Option<Box<dyn Fn() + Send + Sync>>,
 }
@@ -169,7 +169,7 @@ impl Activity {
         std::mem::take(&mut self.dirty)
     }
 
-    pub(crate) fn take_ended(&mut self) -> Vec<String> {
+    pub(crate) fn take_ended(&mut self) -> bool {
         std::mem::take(&mut self.ended)
     }
 
@@ -425,9 +425,7 @@ impl Activity {
                     && let Some(address) = event.terminal
                     && self.entries.contains_key(&address)
                 {
-                    if event.kind == "finished" && !self.ended.contains(&address) {
-                        self.ended.push(address.clone());
-                    }
+                    self.ended |= event.kind == "finished";
                     self.changed();
                     self.entries.insert(
                         address,
@@ -541,6 +539,24 @@ mod tests {
             assert_eq!(fact.state, ActivityState::Unknown);
             assert_eq!(fact.reason.as_deref(), Some(reason));
         }
+    }
+
+    #[test]
+    fn only_a_placed_terminal_finishing_requests_an_exit_check() {
+        let mut facts = Activity::default();
+        facts.bind(["t1"]);
+        facts.begin();
+        facts
+            .install(json!({"seq":0,"channel":9,"terminals":[]}))
+            .unwrap();
+        let event = |seq: u64, kind: &str, terminal: &str| json!({"jsonrpc":"2.0","method":"event","params":{"seq":seq,"type":kind,"terminal":terminal,"data":{"reason":"exited"}}});
+        facts.notification(event(1, "finished", "foreign")).unwrap();
+        facts.notification(event(2, "lost", "t1")).unwrap();
+        assert!(!facts.take_ended());
+        facts.notification(event(3, "finished", "t1")).unwrap();
+        facts.notification(event(4, "finished", "t1")).unwrap();
+        assert!(facts.take_ended());
+        assert!(!facts.take_ended());
     }
 
     #[test]

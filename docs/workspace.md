@@ -636,5 +636,6 @@ The 7 November release uses generated Core types from the pinned 0.1.16 input.
 Its real native restore/reattach and Notes/Voyage-shutdown journeys ran against
 Core 0.1.18. The owner handoff also retained an existing 0.1.18 Core. This
 establishes that these consumed operations work across that additive upgrade.
-It does not establish a general compatibility matrix. Generation/capability
-checks remain the admission rule; a newer version string alone is not refusal.
+It does not establish a general compatibility matrix. Generation, capability
+and minimum-release checks are the admission rule: a newer release is accepted,
+and one older than 0.1.18 is refused.

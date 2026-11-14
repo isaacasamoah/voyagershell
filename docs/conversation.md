@@ -168,7 +168,8 @@ selected-program journey, not full application Quit or a complete census of ever
 possible detached descendant.
 
 The Core generator accepts an optional saved-schema path after --write or
---check. It retains the complete canonical 0.1.16 hash guard and the original
+--check. It checks the released 0.1.18 schema's canonical hash, as
+[the Core adapter](terminal.md#core-adapter) describes, and keeps the original
 run/attach shapes. Generated types add only the process methods now used. Core's
 ListResult schema declares machines required, but its serializer omits an empty
 machines list. The process adapter therefore requires and decodes only the

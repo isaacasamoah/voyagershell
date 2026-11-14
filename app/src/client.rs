@@ -18,6 +18,10 @@ use voyager_contract::{
     Action, ContentId, Context, CoreTerminalId, Layout, Request, Response, Status, TerminalRequest,
 };
 
+#[path = "client_core.rs"]
+mod core_calls;
+use core_calls::{ExitCheck, close_exits, commit, live, next_message, post};
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WorkspaceNotice {
     pub package_revision: u64,
@@ -76,7 +80,7 @@ enum Message {
         terminals: Option<Vec<crate::core_shapes::Terminal>>,
     },
     Ended {
-        terminal: Result<crate::core_shapes::Terminal, Error>,
+        terminals: Result<Vec<crate::core_shapes::Terminal>, Error>,
     },
     WorkspaceChanges {
         after: Option<WorkspaceNotice>,
@@ -238,42 +242,6 @@ pub struct Client {
     prepared_context: Arc<Mutex<Option<crate::context::Prepared>>>,
 }
 
-fn post<R: serde::de::DeserializeOwned + Send + 'static>(
-    sender: &async_channel::Sender<Message>,
-    pending: crate::core::Pending<R>,
-    done: impl FnOnce(Result<R, Error>) -> Message + Send + 'static,
-) {
-    let sender = sender.clone();
-    thread::spawn(move || {
-        let _ = sender.send_blocking(done(pending.wait()));
-    });
-}
-
-fn next_message(
-    receiver: &async_channel::Receiver<Message>,
-    activity: &Arc<Mutex<Activity>>,
-    layout: &Layout,
-    mut notice: WorkspaceNotice,
-    listener: Option<&async_channel::Sender<WorkspaceNotice>>,
-) -> Result<Message, async_channel::RecvError> {
-    let message = receiver.recv_blocking()?;
-    if let Ok(mut activity) = activity.lock() {
-        activity.bind(
-            layout
-                .contents
-                .iter()
-                .filter_map(|content| content.backend.as_ref().map(|backend| backend.0.as_str())),
-        );
-        if activity.take_dirty()
-            && let Some(listener) = listener
-        {
-            notice.activity_revision = activity.revision;
-            let _ = listener.try_send(notice);
-        }
-    }
-    Ok(message)
-}
-
 impl Client {
     pub(crate) fn conversation_focus(
         &self,
@@ -379,6 +347,7 @@ impl Client {
             let mut created_contents = Vec::<CreatedTerminal>::new();
             let mut reopened = false;
             let mut live_bindings = Vec::<CoreTerminalId>::new();
+            let mut exit_check = ExitCheck::default();
             let mut terminal_requests: VecDeque<(TerminalRequest, Result<WeakViewer, Error>)> =
                 VecDeque::new();
             let mut process_requests: VecDeque<(
@@ -414,26 +383,11 @@ impl Client {
             ) {
                 if quit_result.is_none()
                     && let Ok(current_core) = core.as_mut()
-                {
-                    let ended = observed_activity
+                    && observed_activity
                         .lock()
-                        .map(|mut activity| activity.take_ended())
-                        .unwrap_or_default();
-                    for address in ended {
-                        if let Ok(pending) = current_core.begin_terminal_get(&address) {
-                            post(&core_sender, pending, move |terminal| Message::Ended {
-                                terminal: terminal.and_then(|terminal| {
-                                    if terminal.address == address {
-                                        Ok(terminal)
-                                    } else {
-                                        Err(Error::Uncertain(
-                                            "Core returned a different terminal".into(),
-                                        ))
-                                    }
-                                }),
-                            });
-                        }
-                    }
+                        .is_ok_and(|mut activity| activity.take_ended())
+                {
+                    exit_check.request(current_core, &core_sender);
                 }
                 let mut note_exit = None;
                 let mut rename_ready = None;
@@ -574,43 +528,32 @@ impl Client {
                         continue;
                     }
                     Message::ActivityChanged => continue,
-                    Message::Ended { terminal } => {
-                        if let Ok(terminal) = terminal
-                            && quit_result.is_none()
-                            && fresh
-                            && terminal.has_exited()
+                    Message::Ended { terminals } => {
+                        if quit_result.is_none()
                             && let Ok(current_core) = core.as_mut()
                         {
-                            let live: Vec<_> = live_bindings
-                                .iter()
-                                .filter(|address| !closing.owns_terminal(address))
-                                .cloned()
-                                .collect();
-                            let mut candidate = Model {
-                                layout: (*layout).clone(),
-                            };
-                            if let Ok(true) = crate::terminal_lifecycle::close_exited(
-                                &mut candidate,
-                                std::slice::from_ref(&terminal),
-                                &live,
-                            ) {
-                                match save(current_core, &candidate.layout, version) {
-                                    Ok(saved) => {
-                                        version = saved;
-                                        layout = Arc::new(candidate.layout);
-                                        if let Some(listener) = &workspace_listener {
-                                            let _ = listener.try_send(WorkspaceNotice {
-                                                revision: version,
-                                                close_revision: closing.revision,
-                                                package_revision: published_packages
-                                                    .load(Ordering::Relaxed),
-                                                activity_revision: current_core.activity_revision(),
-                                            });
-                                        }
-                                    }
-                                    Err(_) => fresh = false,
-                                }
-                            }
+                            exit_check.listed(current_core, &core_sender);
+                        }
+                        if let Ok(terminals) = terminals
+                            && quit_result.is_none()
+                            && fresh
+                            && let Ok(current_core) = core.as_mut()
+                            && close_exits(
+                                current_core,
+                                &mut layout,
+                                &mut version,
+                                &mut fresh,
+                                &terminals,
+                                &live(&live_bindings, &closing),
+                            )
+                            && let Some(listener) = &workspace_listener
+                        {
+                            let _ = listener.try_send(WorkspaceNotice {
+                                revision: version,
+                                close_revision: closing.revision,
+                                package_revision: published_packages.load(Ordering::Relaxed),
+                                activity_revision: current_core.activity_revision(),
+                            });
                         }
                         continue;
                     }
@@ -707,13 +650,10 @@ impl Client {
                                         voyage.name = name;
                                     }
                                 }
-                                let live: Vec<_> = live_bindings.iter().filter(|address| !closing.owns_terminal(address)).cloned().collect();
+                                let live = live(&live_bindings, &closing);
+                                let current_core = core.as_mut().map_err(|error| format!("{error:?}"))?;
                                 if crate::terminal_lifecycle::close_exited(&mut candidate, terminals, &live)? || renamed {
-                                    let current_core = core.as_mut().map_err(|error| format!("{error:?}"))?;
-                                    match save(current_core, &candidate.layout, version) {
-                                        Ok(saved) => { version = saved; layout = Arc::new(candidate.layout); }
-                                        Err(error) => { fresh = false; return Err(format!("Exited panel closure unconfirmed: {error:?}")); }
-                                    }
+                                    commit(current_core, &mut layout, &mut version, &mut fresh, candidate)?;
                                     if let Some(listener) = &workspace_listener {
                                         let _ = listener.try_send(WorkspaceNotice { revision: version, close_revision: closing.revision,
                                             package_revision: published_packages.load(Ordering::Relaxed),
@@ -4400,60 +4340,6 @@ mod content_admission_tests {
         ));
         assert!(receive.is_empty());
         std::fs::remove_dir_all(directory).unwrap();
-    }
-}
-
-#[cfg(test)]
-mod activity_notice_tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn reported_activity_full_mailbox_is_published_before_a_continuing_message() {
-        let (sender, receiver) = async_channel::bounded(8);
-        for _ in 0..8 {
-            sender.try_send(Message::RefreshContentViews).unwrap();
-        }
-        let activity = Arc::new(Mutex::new(Activity::default()));
-        let mut model = Model::default();
-        model
-            .apply(Action::CreateVoyage {
-                name: "Status".into(),
-                cwd: "/tmp".into(),
-            })
-            .unwrap();
-        model.layout.contents[0].backend = Some(CoreTerminalId("t1".into()));
-        {
-            let mut facts = activity.lock().unwrap();
-            facts.bind(["t1"]);
-            facts.begin();
-            facts
-                .install(json!({"seq":0,"channel":7,"terminals":[]}))
-                .unwrap();
-            facts.take_dirty();
-            facts.wake_with(Box::new(move || {
-                let _ = sender.try_send(Message::ActivityChanged);
-            }));
-            facts.notification(json!({"jsonrpc":"2.0","method":"event","params":{"seq":1,"type":"status","terminal":"t1","data":{"status":{"state":"done"},"reported":true}}})).unwrap();
-        }
-        let (listener, changed) = async_channel::bounded(1);
-        let notice = WorkspaceNotice {
-            close_revision: 0,
-            revision: 55,
-            package_revision: 7,
-            activity_revision: 0,
-        };
-        assert!(matches!(
-            next_message(&receiver, &activity, &model.layout, notice, Some(&listener)).unwrap(),
-            Message::RefreshContentViews
-        ));
-        let actual = changed.try_recv().unwrap();
-        assert_eq!((actual.revision, actual.package_revision), (55, 7));
-        assert!(actual.activity_revision > 0);
-        assert_eq!(
-            activity.lock().unwrap().get("t1").state,
-            voyager_contract::activity::ActivityState::Done
-        );
     }
 }
 

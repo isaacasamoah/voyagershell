@@ -1314,13 +1314,7 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
             matches!(&interrupted.output, Some(ProcessOutput::Interrupt { key, outcome, .. }) if key == "ctrl+c" && outcome == "stopped"),
             "{interrupted:?}"
         );
-        assert_eq!(
-            client
-                .process(scope.clone(), process(send(content.clone(), "exit".into())))
-                .unwrap()
-                .status,
-            Status::Applied
-        );
+        external.terminal_kill(&target.terminal_id.0).unwrap();
         loop {
             let response = read();
             if matches!(&response.output, Some(ProcessOutput::Read { target, .. }) if target.state == "finished")

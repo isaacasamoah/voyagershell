@@ -115,7 +115,7 @@ impl Core {
         "server.stop",
     ];
 
-    fn compatible(hello: &HelloResult) -> Result<(), Incompatible> {
+    pub(super) fn compatible(hello: &HelloResult) -> Result<(), Incompatible> {
         if hello.generation != 1 {
             return Err(Incompatible::Generation(hello.generation));
         }

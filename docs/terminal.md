@@ -308,14 +308,60 @@ continuation source. The first corrective release remains pending independent
 source review. Performance, native agent behavior, additional terminal styles,
 complete lifecycle and platform acceptance remain open.
 
-`app/core-schema.cjs` extracts the used hello, document, terminal and server
-message types from the reviewed Core 0.1.16 schema after checking its canonical
-SHA-256. Cargo generates the Rust types from that checked schema. Named Core
-adapter methods own the wire conversions; document values remain arbitrary JSON.
-The hello request uses the generated type, while its fuller response and endpoint
-compatibility validation remain the separate K2 continuation. Terminal list
-decodes the used terminal records without requiring the reviewed schema's
-`machines` field, which the installed Core omitted in an isolated check. The VT
+### Core adapter
+
+Every Core call goes through `app/src/core.rs`. Its types come from the
+released schema of the oldest supported Core, 0.1.18. `app/core-schema.cjs`
+reads that release's `schema/hc.openrpc.json` (or `hc schema --json` from an
+installed 0.1.18), refuses any other release or a changed canonical SHA-256, and
+extracts the used hello, document, terminal, event and server message types.
+Cargo generates the Rust types from that checked schema. Named Core adapter
+methods own the wire conversions; document values remain arbitrary JSON.
+
+The minimum is 0.1.18 because it is the oldest release with native evidence.
+The 7 November restore and Notes/shutdown journeys ran against Core 0.1.18, and
+CI and the native journeys run against 0.1.21. Every method, feature and field
+Voyager uses exists in 0.1.18. The 0.1.18 schema also requires
+`resize_notifications` and `automatic_input` in an attach result, so an older
+Core's attach reply would not parse.
+
+Reads tolerate a newer Core. Herdr Core's API only grows, and the generator
+refuses a schema object that closes its fields, so no generated type rejects an
+unknown field. A field that a newer release adds is ignored; one that the
+minimum release lacks is never required. Terminal list decodes only the
+terminals array, because releases before 0.1.21 omitted the schema's required
+`machines` field.
+
+Hello checks the Core before any other call. `app/src/core_hello.rs` returns
+the typed `Incompatible` when Core speaks another protocol generation, reports a
+release older than 0.1.18 or a version Voyager cannot read, or lacks a required
+method or feature. The connection then fails with the refusal kind
+`unsupported_core` and a message naming Core's release and the minimum. Every
+later request repeats that refusal; nothing reconnects or retries.
+
+The owner queue in `app/src/client.rs` does not wait for a read whose reply
+decides no effect. The workspace observation's and the exit check's
+`terminal.list` start on the owner (`Core::begin` needs the request sequence),
+and a short worker thread waits for the reply and posts it back as a message. The owner then rechecks the workspace version: a changed
+workspace answers "observe it again" rather than applying a stale list. Calls
+whose reply decides the next effect stay on the owner in order: document saves
+with their version compare-and-set, the open/run/attach chain, liveness checks
+before a Send, Stop or reopen, Quit, and context preparation. They move with the
+front door, which owns ordered effects.
+
+Core events arrive on one subscription with no filter. A label filter would
+match only an exact value, and Core numbers every event in one sequence, so a
+filtered stream would read as gaps. `Activity` keeps only events for terminals
+that a placement records as its backend. A `finished` event for such a terminal
+marks an exit check. At its next message the owner lists Core's terminals and
+closes each retained panel whose terminal exited while bound as live, saves the
+layout and notifies the header. At most one exit check is in flight; exits that
+finish meanwhile request one more list after it, so a burst of exits holds one
+of Core's nine request slots, not one each. A program's exit therefore shows without the
+header's 3 s observation. That observation remains: it renames Voyages, refreshes
+live bindings and recovers an exit missed in a sequence gap or a refused
+`terminal.list`. A foreign program in the same session produces events that match
+no placement and change nothing. The VT
 binding uses [libghostty-rs at 8363442](https://github.com/Uzaaft/libghostty-rs/tree/83634421c232385f9fd7c61f454961341453d661),
 which builds Ghostty's VT library and requires the matching Zig toolchain.
 Core protocol behavior is based on
