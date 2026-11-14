@@ -1,6 +1,6 @@
-use super::{Defect, Native, Wheel, pid, placed};
+use super::{Defect, GLANCE, Native, Wheel, pid, placed};
 use crate::inspection::{Target, Unseen, region};
-use crate::system::{Identity, PATIENCE, settle, until};
+use crate::system::{Identity, PATIENCE, TimedOut, poll, settle, until};
 use crate::x11::{Geometry, Key, Pixels};
 use anyhow::{Context, Result, ensure};
 use serde::Serialize;
@@ -161,28 +161,51 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn first(native: &mut Native) -> Result<Self> {
-        let (address, placement) = until("bound terminal", || {
-            let Some(layout) = native.document()? else {
+        let placement = until("a placed first terminal", || {
+            let Some((_, layout)) = native.document()? else {
                 return Ok(None);
             };
-            Ok(layout.contents.first().and_then(|content| {
-                Some((
-                    content.backend.clone()?,
-                    placement_of(&layout, &content.id)?.clone(),
-                ))
-            }))
+            Ok(layout
+                .contents
+                .first()
+                .and_then(|content| placement_of(&layout, &content.id).cloned()))
+        })?;
+        let terminal = Self::bind(native, &placement)?;
+        native.identify(Some(&terminal))?;
+        Ok(terminal)
+    }
+
+    pub fn bind(native: &mut Native, placement: &PlacementId) -> Result<Self> {
+        let address = until("the Vessel's bound terminal", || {
+            let Some((_, layout)) = native.document()? else {
+                return Ok(None);
+            };
+            let content = placed(&layout)
+                .find(|placed| &placed.id == placement)
+                .and_then(|placed| {
+                    layout
+                        .contents
+                        .iter()
+                        .find(|content| content.id == placed.content)
+                });
+            Ok(content.and_then(|content| content.backend.clone()))
         })?;
         let shell = Identity::read(pid(&native
             .system
             .rpc("terminal.get", json!({"terminal":address}))?)?)?;
-        native.adopt("shell".into(), shell.clone());
-        let terminal = Self {
+        native.system.record(
+            json!({"event":"bind","terminal":address,"placement":placement,"shell":shell}),
+        )?;
+        native.adopt(format!("shell {}", placement.0), shell.clone());
+        Ok(Self {
             address,
-            placement,
+            placement: placement.clone(),
             shell,
-        };
-        native.identify(Some(&terminal))?;
-        Ok(terminal)
+        })
+    }
+
+    pub fn placement(&self) -> &PlacementId {
+        &self.placement
     }
 
     pub fn target(&self) -> Target {
@@ -199,8 +222,28 @@ impl Terminal {
         native.press(Key::Return)
     }
 
+    pub fn enter(&self, native: &Native, folder: &str) -> Result<()> {
+        self.line(native, &format!("cd {folder}"))?;
+        until(
+            &format!("the shell of {} in {folder}", self.target()),
+            || {
+                let reported = native
+                    .system
+                    .watch("terminal.get", json!({"terminal":self.address}))?;
+                Ok((reported["foreground"]["cwd"] == folder).then_some(()))
+            },
+        )
+    }
+
     pub fn shows(&self, native: &Native, text: &str) -> Result<()> {
-        until(&format!("{text} in the terminal"), || {
+        if self.printed(native, text)? {
+            return Ok(());
+        }
+        Err(TimedOut(format!("{text} in the terminal")).into())
+    }
+
+    pub fn printed(&self, native: &Native, text: &str) -> Result<bool> {
+        let printed = poll(PATIENCE, GLANCE, true, || {
             let read = native
                 .system
                 .watch("terminal.read", json!({"terminal":self.address}))?;
@@ -208,7 +251,8 @@ impl Terminal {
                 .as_str()
                 .is_some_and(|shown| shown.contains(text))
                 .then_some(()))
-        })
+        })?;
+        Ok(printed.is_some())
     }
 
     pub fn wheel(&self, native: &Native, direction: Wheel) -> Result<()> {

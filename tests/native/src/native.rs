@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use voyager_contract::inspection::{Frame, Role};
-use voyager_contract::{Layout, Vessel};
+use voyager_contract::{Fleet, Layout, Vessel, Voyage};
 
 const GLANCE: Duration = Duration::from_millis(80);
 
@@ -66,25 +66,37 @@ impl Surface {
         Ok(Self { window, sidebar })
     }
 
-    pub fn with_sidebar(mut self, required: Option<Sidebar>) -> Result<Self> {
-        if let Some(required) = required {
+    pub fn fitting(mut self, sidebar: Option<Sidebar>, least: Option<(u16, u16)>) -> Result<Self> {
+        if let Some(required) = sidebar {
             ensure!(
                 self.sidebar.is_none_or(|chosen| chosen == required),
                 "The journey needs the sidebar {required}"
             );
             self.sidebar = Some(required);
         }
+        if let (Some((width, height)), Some((least_width, least_height))) = (self.window, least) {
+            ensure!(
+                width >= least_width && height >= least_height,
+                "The journey needs a window of at least {least_width}x{least_height}"
+            );
+        }
         Ok(self)
     }
 }
 
 pub struct Seen<'a> {
+    pub document: &'a Layout,
+    pub version: u64,
     pub frame: &'a Frame,
 }
 
 impl Seen<'_> {
     pub fn shows(&self, target: &Target) -> bool {
         target.find(self.frame).is_some()
+    }
+
+    pub fn label(&self, target: &Target) -> Option<&str> {
+        target.find(self.frame)?.label.as_deref()
     }
 }
 
@@ -103,29 +115,40 @@ impl<T> Glance<T> {
     }
 }
 
-fn glance<T>(frame: Option<&Frame>, check: impl FnOnce(&Seen) -> Option<T>) -> Glance<T> {
-    let Some(frame) = frame else {
+fn glance<T>(
+    frame: Option<&Frame>,
+    saved: Option<&(u64, Layout)>,
+    check: impl FnOnce(&Seen) -> Option<T>,
+) -> Glance<T> {
+    let (Some(frame), Some((version, document))) = (frame, saved) else {
         return Glance::Absent;
     };
-    match check(&Seen { frame }) {
+    let seen = Seen {
+        document,
+        version: *version,
+        frame,
+    };
+    match check(&seen) {
         None => Glance::Absent,
         Some(_) if !frame.prepared => Glance::Preparing,
         Some(value) => Glance::Ready(value),
     }
 }
 
+pub fn voyages(layout: &Layout) -> impl Iterator<Item = &Voyage> {
+    layout.voyages.iter().chain(&layout.home)
+}
+
+pub fn fleets(layout: &Layout) -> impl Iterator<Item = &Fleet> {
+    voyages(layout).flat_map(|voyage| &voyage.fleets)
+}
+
+pub fn vessels(layout: &Layout) -> impl Iterator<Item = &Vessel> {
+    fleets(layout).flat_map(|fleet| &fleet.vessels)
+}
+
 fn placed(layout: &Layout) -> impl Iterator<Item = &Vessel> {
-    layout
-        .voyages
-        .iter()
-        .chain(&layout.home)
-        .flat_map(|voyage| {
-            voyage
-                .fleets
-                .iter()
-                .flat_map(|fleet| &fleet.vessels)
-                .chain(&voyage.portals)
-        })
+    vessels(layout).chain(voyages(layout).flat_map(|voyage| &voyage.portals))
 }
 
 pub struct Native {
@@ -386,7 +409,16 @@ impl Native {
     pub fn observe<T: PartialEq>(
         &self,
         expected: &str,
-        mut check: impl FnMut(&Seen) -> Option<T>,
+        check: impl FnMut(&Seen) -> Option<T>,
+    ) -> Result<T> {
+        self.settle(expected, check, |_| true)
+    }
+
+    pub fn settle<T: PartialEq>(
+        &self,
+        expected: &str,
+        mut read: impl FnMut(&Seen) -> Option<T>,
+        wanted: impl Fn(&T) -> bool,
     ) -> Result<T> {
         let x11 = self.x11()?;
         let path = self.inspection();
@@ -397,11 +429,12 @@ impl Native {
             || {
                 let window = x11.geometry(self.window)?;
                 let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
-                let seen = glance(frame.as_ref(), &mut check);
+                let saved = self.document()?;
+                let seen = glance(frame.as_ref(), saved.as_ref(), &mut read);
                 preparing = matches!(seen, Glance::Preparing);
                 Ok(seen.ready())
             },
-            |_| true,
+            wanted,
         )?;
         held.ok_or_else(|| {
             let prepared = if preparing {
@@ -413,16 +446,20 @@ impl Native {
         })
     }
 
-    pub fn document(&self) -> Result<Option<Layout>> {
+    pub fn document(&self) -> Result<Option<(u64, Layout)>> {
         let reply = self
             .system
             .watch("doc.get", json!({"name":"voyager-layout-v1"}))?;
-        match &reply["value"] {
-            Value::Null => Ok(None),
-            value => serde_json::from_value(value.clone()).map(Some).context(
-                "The layout document is not the contract Layout this verifier was built with",
-            ),
+        if reply["value"].is_null() {
+            return Ok(None);
         }
+        let layout = serde_json::from_value(reply["value"].clone()).context(
+            "The layout document is not the contract Layout this verifier was built with",
+        )?;
+        let version = reply["version"]
+            .as_u64()
+            .context("The layout document has no version")?;
+        Ok(Some((version, layout)))
     }
 
     pub fn keep(&self, name: &str, look: &Pixels) -> Result<()> {
@@ -1009,27 +1046,49 @@ pub(crate) mod tests {
     #[test]
     fn an_outcome_seen_while_the_workspace_prepares_does_not_count() -> Result<()> {
         let (preparing, prepared) = (frame(false)?, frame(true)?);
-        let seen = |frame: Option<&Frame>, outcome: Option<u8>| glance(frame, |_| outcome);
+        let layout: Layout = serde_json::from_value(json!({
+            "voyages": [],
+            "contents": [],
+            "selectedVoyage": null,
+            "selectedFleet": null,
+            "context": {"kind": "workspace"},
+            "nextId": "1"
+        }))?;
+        let document = (3, layout);
+        let seen = |frame: Option<&Frame>, saved: Option<&(u64, Layout)>, outcome: Option<u8>| {
+            glance(frame, saved, |seen| outcome.filter(|_| seen.version == 3))
+        };
         ensure!(
-            matches!(seen(Some(&preparing), Some(7)), Glance::Preparing),
+            matches!(
+                seen(Some(&preparing), Some(&document), Some(7)),
+                Glance::Preparing
+            ),
             "An outcome counted while the header reported a pending workspace request"
         );
         ensure!(
-            matches!(seen(Some(&prepared), Some(7)), Glance::Ready(7)),
+            matches!(
+                seen(Some(&prepared), Some(&document), Some(7)),
+                Glance::Ready(7)
+            ),
             "An outcome in a prepared workspace did not count"
         );
         ensure!(
-            matches!(seen(Some(&prepared), None), Glance::Absent),
+            matches!(seen(Some(&prepared), Some(&document), None), Glance::Absent),
             "A missing outcome counted"
         );
         ensure!(
-            matches!(seen(None, Some(7)), Glance::Absent),
-            "An outcome counted without a frame"
+            matches!(seen(None, Some(&document), Some(7)), Glance::Absent)
+                && matches!(seen(Some(&prepared), None, Some(7)), Glance::Absent),
+            "An outcome counted without a frame or without a document"
         );
         ensure!(
-            seen(Some(&prepared), Some(7)).ready() == Some(7)
-                && seen(Some(&preparing), Some(7)).ready().is_none()
-                && seen(Some(&prepared), None).ready().is_none(),
+            seen(Some(&prepared), Some(&document), Some(7)).ready() == Some(7)
+                && seen(Some(&preparing), Some(&document), Some(7))
+                    .ready()
+                    .is_none()
+                && seen(Some(&prepared), Some(&document), None)
+                    .ready()
+                    .is_none(),
             "Only an outcome in a prepared workspace is a value that can hold"
         );
         Ok(())
@@ -1068,24 +1127,54 @@ pub(crate) mod tests {
     fn a_journey_fixes_its_sidebar_and_refuses_the_other_one() -> Result<()> {
         let unset = Surface::parse(None, None)?;
         ensure!(
-            unset.with_sidebar(None)?.sidebar.is_none(),
+            unset.fitting(None, None)?.sidebar.is_none(),
             "A sidebar was chosen without a requirement"
         );
         ensure!(
-            unset.with_sidebar(Some(Sidebar::Open))?.sidebar == Some(Sidebar::Open),
+            unset.fitting(Some(Sidebar::Open), None)?.sidebar == Some(Sidebar::Open),
             "The required sidebar was not applied"
         );
         let collapsed = Surface::parse(Some("1180x820"), Some("collapsed"))?;
         ensure!(
-            collapsed.with_sidebar(Some(Sidebar::Collapsed)).is_ok(),
+            collapsed.fitting(Some(Sidebar::Collapsed), None).is_ok(),
             "A matching sidebar was refused"
         );
         let refusal = collapsed
-            .with_sidebar(Some(Sidebar::Open))
+            .fitting(Some(Sidebar::Open), None)
             .expect_err("A contradicting sidebar was accepted");
         ensure!(
             refusal.to_string() == "The journey needs the sidebar open",
             "The refusal does not name the required sidebar: {refusal}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_journey_refuses_a_window_smaller_than_it_needs() -> Result<()> {
+        let least = Some((1180, 1000));
+        let short = Surface::parse(Some("1180x820"), None)?;
+        let refusal = short
+            .fitting(None, least)
+            .expect_err("A window that is too short was accepted");
+        ensure!(
+            refusal.to_string() == "The journey needs a window of at least 1180x1000",
+            "The refusal does not name the smallest window: {refusal}"
+        );
+        ensure!(
+            Surface::parse(Some("1000x1200"), None)?
+                .fitting(None, least)
+                .is_err(),
+            "A window that is too narrow was accepted"
+        );
+        for fits in [None, Some("1180x1000"), Some("2000x1300")] {
+            ensure!(
+                Surface::parse(fits, None)?.fitting(None, least).is_ok(),
+                "A window that fits was refused: {fits:?}"
+            );
+        }
+        ensure!(
+            short.fitting(None, None).is_ok(),
+            "A journey without a smallest window refused one"
         );
         Ok(())
     }

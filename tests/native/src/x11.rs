@@ -23,19 +23,28 @@ pub type Window = u32;
 
 const ANSWER: Duration = Duration::from_secs(5);
 const KEY_PACE: Duration = Duration::from_millis(1);
+const BACKSPACE: u32 = 0xff08;
+const TAB: u32 = 0xff09;
 const RETURN: u32 = 0xff0d;
+const ESCAPE: u32 = 0xff1b;
+const F2: u32 = 0xffbf;
 const SHIFT: u32 = 0xffe1;
 const CONTROL: u32 = 0xffe3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Key {
     Return,
+    Tab,
+    Escape,
+    BackSpace,
+    F2,
     Char(char),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Chord {
     ctrl: bool,
+    shift: bool,
     key: Key,
 }
 
@@ -43,13 +52,24 @@ impl Key {
     pub fn ctrl(self) -> Chord {
         Chord {
             ctrl: true,
-            key: self,
+            ..Chord::from(self)
+        }
+    }
+
+    pub fn shift(self) -> Chord {
+        Chord {
+            shift: true,
+            ..Chord::from(self)
         }
     }
 
     fn symbol(self) -> Result<u32> {
         match self {
             Key::Return => Ok(RETURN),
+            Key::Tab => Ok(TAB),
+            Key::Escape => Ok(ESCAPE),
+            Key::BackSpace => Ok(BACKSPACE),
+            Key::F2 => Ok(F2),
             Key::Char(character) if (' '..='~').contains(&character) => Ok(character as u32),
             Key::Char(character) => bail!("Unsupported key {character:?}"),
         }
@@ -58,7 +78,11 @@ impl Key {
 
 impl From<Key> for Chord {
     fn from(key: Key) -> Self {
-        Self { ctrl: false, key }
+        Self {
+            ctrl: false,
+            shift: false,
+            key,
+        }
     }
 }
 
@@ -67,9 +91,12 @@ impl fmt::Display for Chord {
         if self.ctrl {
             f.write_str("ctrl+")?;
         }
+        if self.shift {
+            f.write_str("shift+")?;
+        }
         match self.key {
-            Key::Return => f.write_str("Return"),
             Key::Char(character) => write!(f, "{character}"),
+            named => write!(f, "{named:?}"),
         }
     }
 }
@@ -269,7 +296,15 @@ impl Display {
     }
 
     pub fn click(&self, button: u8) -> Result<()> {
-        self.fake(BUTTON_PRESS_EVENT, button, 0, 0)?;
+        self.hold(button)?;
+        self.release(button)
+    }
+
+    pub fn hold(&self, button: u8) -> Result<()> {
+        self.fake(BUTTON_PRESS_EVENT, button, 0, 0)
+    }
+
+    pub fn release(&self, button: u8) -> Result<()> {
         self.fake(BUTTON_RELEASE_EVENT, button, 0, 0)
     }
 
@@ -277,6 +312,9 @@ impl Display {
         let mut held = Vec::new();
         if chord.ctrl {
             held.push(self.code(CONTROL)?);
+        }
+        if chord.shift {
+            held.push((self.code(SHIFT)?.0, false));
         }
         held.push(self.code(chord.key.symbol()?)?);
         self.press(&held)
@@ -484,6 +522,8 @@ mod tests {
     #[test]
     fn a_chord_is_recorded_by_its_modifier_and_key() {
         assert_eq!(Key::Char('q').ctrl().to_string(), "ctrl+q");
+        assert_eq!(Key::Tab.shift().to_string(), "shift+Tab");
+        assert_eq!(Chord::from(Key::F2).to_string(), "F2");
         assert_eq!(Chord::from(Key::Return).to_string(), "Return");
         assert_eq!(
             serde_json::to_value(Chord::from(Key::Char('q'))).unwrap(),

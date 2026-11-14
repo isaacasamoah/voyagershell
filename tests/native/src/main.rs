@@ -37,7 +37,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features, journeys\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS] [--window WIDTHxHEIGHT] [--sidebar open|collapsed]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features, journeys\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS] [--window WIDTHxHEIGHT] [--sidebar open|collapsed]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
             Journey::names().join("|")
         );
         return Ok(0);
@@ -162,8 +162,8 @@ fn entry() -> Result<i32> {
         get("--window").ok().as_deref(),
         get("--sidebar").ok().as_deref(),
     )?
-    .with_sidebar(journey.sidebar())
-    .with_context(|| format!("--sidebar contradicts the {} journey", journey.name()))?;
+    .fitting(journey.sidebar(), journey.window())
+    .with_context(|| format!("The {} journey cannot run as asked", journey.name()))?;
     let evidence = PathBuf::from(get("--evidence")?);
     sandbox::prepare(&evidence)?;
     system::save(evidence.join("doctor.json"), &readiness)?;
@@ -356,6 +356,14 @@ const SOURCES: &[(&str, &[u8])] = &[
     (
         "src/journey/scrolling.rs",
         include_bytes!("journey/scrolling.rs"),
+    ),
+    (
+        "src/journey/workspace.rs",
+        include_bytes!("journey/workspace.rs"),
+    ),
+    (
+        "src/journey/workspace/model.rs",
+        include_bytes!("journey/workspace/model.rs"),
     ),
     ("src/lifecycle.rs", include_bytes!("lifecycle.rs")),
     ("src/native.rs", include_bytes!("native.rs")),

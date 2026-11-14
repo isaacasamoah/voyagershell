@@ -60,6 +60,10 @@ run_parent=$(mktemp -d /var/tmp/voyager-verification-XXXXXX)
 tests/native/target/debug/voyager-verification run --journey terminal-scrolling --binary "$candidate" --sha256 "$expected" --hc-sha256 "$core" --assets "$PWD/desktop/assets" --evidence "$run_parent/scrolling"
 ```
 
+For Voyages, Fleets and Vessels, run `--journey workspace` the same way and
+read features/workspace.md. That journey needs the sidebar open and a window
+of at least 1180 by 1000 device pixels.
+
 Exit 0 is a named runtime pass, 1 is observed failure, and 2 is inconclusive or
 unavailable. Unsupported journeys and actual-Codex requests are refused. There is
 no implicit legacy fallback. Existing Python drivers require --legacy-reproduction

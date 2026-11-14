@@ -1,8 +1,9 @@
 # Native verification environment
 
 This is the Rust slice of the maintained native fixture. It runs the journeys in
-its journey registry on an owned Linux X11 display. Terminal scrolling is the only
-journey so far. The app changes only to mark controls for inspection.
+its journey registry on an owned Linux X11 display. The journeys are
+`terminal-scrolling` and `workspace`, which covers Voyages, Fleets and Vessels.
+The app changes only to mark controls for inspection.
 Invoke `voyager-verification` directly. New verification extends this environment,
 including its shared actions and evidence contract. A single command wrapping
 unrelated rigs would not meet that requirement. Unsupported capabilities remain
@@ -26,7 +27,8 @@ The environment is not yet accepted as a complete implementation of that design.
 | Finite reporting gate and regression controls | Implemented for the actual Rust gate, not app/OS behavior. |
 | ETC/ORTH/DRY checks | Required independent review criteria; not an automatic architecture score. |
 | Versioned request/result contract and independent receipt conformance | Planned. Pilot receipts are evidence, not a certified acceptance validator. |
-| Workspace/Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
+| Voyages, Fleets and Vessels | Implemented by the `workspace` journey. Its recipe lists the checks that it does not drive. |
+| Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
 | Compositor/drag/IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
 | Configurable architecture YAML and typed Jev review | Separate later work. |
 
@@ -55,9 +57,10 @@ validates it and prints the coverage table. `features --write` regenerates the t
 ### Journeys
 
 `journeys!` in `src/journey.rs` is the one list of native journeys. Each row
-names the journey, its module under `src/journey/` and the sidebar state that
-the journey needs. The module declares its cases with `cases!`, the case that
-its negative control must fail (`CONTROL`) and its `drive` function. The
+names the journey, its module under `src/journey/`, the sidebar state that
+the journey needs and the smallest window that it fits. The module declares
+its cases with `cases!`, the case that its negative control must fail
+(`CONTROL`) and its `drive` function. The
 `--journey` choices, the plan that crosses into the sandbox, the name in
 `checks.json`, the number of cases and the registry validation all read this
 list. `voyager-verification journeys` prints it as JSON.
@@ -72,12 +75,19 @@ To add a journey:
    `features.toml`. A journey that no feature names fails `features`.
 
 A journey that needs one sidebar state gets that state on every launch. `run`
-refuses a `--sidebar` value that contradicts it.
+refuses a `--sidebar` value that contradicts it, and a `--window` that is
+smaller than the journey's smallest window. The `workspace` journey needs the
+sidebar open and a window of at least 1180 by 1000 device pixels. At 1180 by
+820 the sidebar has room for one Voyage row, so the name of a second Voyage
+is never drawn.
 
-A case runs inside `cases.check` and returns a `Verdict`. A `Verdict` holds
-named expectations, each of which held or did not, and the values that the
-case observed. A case that returns a `Verdict` without an expectation judged
-nothing, so it ends the run as a fixture error. A value that cannot be
+A case runs inside `cases.check` and returns a `Verdict`. A case that creates
+something a later case needs runs inside `cases.make` and also returns the
+thing that it made. `make` hands that thing to the journey only when the case
+passed, so a later case never starts from a creation that failed. A `Verdict`
+holds named expectations, each of which held or did not, and the values that
+the case observed. A case that returns a `Verdict` without an expectation
+judged nothing, so it ends the run as a fixture error. A value that cannot be
 recorded also ends the run as a fixture error.
 `observations.json` lists every declared case with one status:
 
@@ -112,6 +122,8 @@ no longer applies to the current tree. The verifier never applies a patch.
 To run a control, use a checkout that you can discard:
 
 1. Apply the patch: `git apply tests/native/controls/terminal-scrolling.patch`.
+   A patch that changes a header script changes its compiled `.js` file too,
+   so no generation step is needed.
 2. Build the candidate with the release command in Build and inspect below.
 3. Run the journey against that candidate with a new evidence directory.
 4. Confirm that the run exits 1 and that `firstFailingCheck.check` in
@@ -120,7 +132,9 @@ To run a control, use a checkout that you can discard:
 
 The `terminal-scrolling` patch makes the terminal ignore an upward wheel in
 ordinary shell history. `normal-history` then fails on the expectation
-`wheel up draws the live screen's lines lower, below earlier history`.
+`wheel up draws the live screen's lines lower, below earlier history`. The `workspace` patch upper-cases a
+submitted name. `rename-fleet-enter` then fails on the expectation `the saved
+name is the typed text`, and the observed name is `NATIVE FLEET`.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
@@ -179,6 +193,7 @@ The sandbox root is an empty tmpfs. It holds only these paths:
 | `/voyager/bin/hc` | The hashed `hc`, read-only. It is the only `hc` on `PATH`. |
 | `/voyager/home` | `home/` in the evidence directory. It is `HOME`. |
 | `/voyager/home/project` | The fixture project. It is the app's working directory, so it becomes the Voyage. |
+| `/voyager/home/second-project` | An empty second folder. The `workspace` journey moves one shell into it before it creates a Voyage. |
 | The verifier, the candidate and the `--assets` folder | Read-only, at their host paths. |
 | The evidence directory | Writable, at its host path. |
 
@@ -260,11 +275,44 @@ again. `settle` returns a value that counts as soon as that value is the
 wanted one. When the deadline passes, it returns the value that counts at
 that moment, wanted or not, and it returns nothing when no value counts.
 
-`observe` in `src/native.rs` is the one way to wait for an outcome. Every
-80 ms it reads the latest frame and gives `settle` the value of its check. A
-glance that has no frame, no value or an unprepared workspace gives no value.
-Every value is wanted, so `observe` returns the first value that counts. When
-the deadline passes, the journey ends `failed`, blamed on the product.
+`observe` in `src/native.rs` is the one way to wait for an outcome that must
+happen. Every 80 ms it reads the layout document (`doc.get`, parsed as the
+`Layout` type of the contract, with its version) and the latest frame, and
+gives `settle` the value of its check. A glance that has no frame, no
+document, no value or an unprepared workspace gives no value. Every value is
+wanted, so `observe` returns the first value that counts. When the deadline
+passes, the journey ends `failed`, blamed on the product.
+
+`Native::settle` reads the same way for a value that a case will judge, and
+`observe` is `Native::settle` with every value wanted. It returns the value
+once the value is the wanted one and counts. When the deadline passes it
+returns the value that counts at that moment, so the case states a named
+expectation about that value and `firstFailingCheck` shows what the app drew.
+A value from an unprepared frame, or from a frame that no longer shows the
+control, never counts. If no value counts when the deadline passes, the
+journey ends `failed`, blamed on the product, and the error names what never
+held still. The `workspace` journey uses `Native::settle` for the draft of
+the rename editor, for the text of a name after a rename, for the editor that
+F2 opens, for what a split or a creation draws and for the controls that a
+relaunch draws.
+
+A glance pairs the layout document with the latest frame, and nothing says
+which document a frame drew. The app saves a change before it draws it. Until
+that draw is published, a glance holds the new document beside a frame from
+before the input, and that frame is still `prepared`. On a loaded machine
+this lasts longer than 150 ms. A wait after an input therefore names what the
+input must draw. Its check gives a value only from a frame that shows that
+result, or its wanted value requires that result. A frame from before the
+input cannot show a control that the input creates, so the wait goes on, and
+every frame value that the case judges comes from the glance that showed the
+result. `split-vessel` wants the terminals of both Vessels drawn, with the new
+one to the right. `create-fleet` and `create-voyage` want the new tab, row and
+Vessel drawn under their saved names, and they read the dock from that glance.
+Before this rule, `create-fleet` waited only for the new Fleet in the document
+and judged the frame of the first glance that held. On a correct candidate, 2
+of 20 runs on a loaded machine then failed `the new Fleet's tab and Vessel are
+drawn`, on a frame from before the click. A candidate that publishes every
+frame 700 ms late fails the same way on a quiet machine.
 
 A launch ends with `observe`. The header sends no workspace action while a
 workspace request is in progress, so a click on the sidebar toggle during the
@@ -275,6 +323,14 @@ never saw the sidebar collapse. The header reports that state itself, as
 [the inspection endpoint](../../docs/inspection.md)), and the driver waits for
 that report. The driver does not guess it from the drawn terminals.
 
+Pointer input is a click, a double-click, a hover, a wheel or a drag. A drag
+aims at its destination before it presses, because the avatar follows the
+pointer once it is held. A drag is one press at the source, one move to the
+destination and one release, with no pause. The avatar starts to float on the
+first move of more than 7 logical pixels with the button held, and it docks
+where the button is released (`moving` and `released` in
+`desktop/src/avatar.rs`). The button is released even when the move fails.
+
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
 `Chord` adds a modifier to a key. `Terminal` in `src/native/terminal.rs` binds
 one terminal Vessel by its placement. It owns the terminal's Core address and
@@ -283,7 +339,12 @@ terminal does not wait for one. `Terminal::first` reads the layout document
 (`doc.get`, parsed as the `Layout` type of the contract). A document that does
 not parse as `Layout` is a fixture error. Rebuild the verifier from the
 candidate's checkout. `line` clicks its own terminal before it types, so the
-text cannot reach another control that holds the keyboard.
+text cannot reach another control that holds the keyboard. `enter` types `cd`
+with a folder and waits until Core reports that folder for the shell.
+`Terminal::bind` binds the terminal of one Vessel, and `Terminal::first` binds
+the first one. Every bound shell is adopted, so cleanup waits for its exit and
+`processes.json` lists it as `shell PLACEMENT`. The `workspace` journey binds
+the shell of every Vessel that it creates.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and
 capture (`GetImage`). A terminal capture is the `terminal` element's area, with
@@ -453,7 +514,7 @@ Reconsider a code verifier when the next concrete property needs one.
 
 | Principle | Required review | Present ownership |
 | --- | --- | --- |
-| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `journey.rs` owns the journey registry and case verdicts; `journey/scrolling.rs` describes the journey; `native.rs` handles the app window; `native/input.rs` owns pointer and key input; `native/terminal.rs` owns a bound terminal; `x11.rs` owns the display connection; `inspection.rs` reads frames and names controls; `system.rs` owns process/recording/polling/Core primitives. |
+| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `journey.rs` owns the journey registry and case verdicts; `journey/scrolling.rs` and `journey/workspace.rs` describe the journeys; `native.rs` handles the app window; `native/input.rs` owns pointer and key input; `native/terminal.rs` owns a bound terminal; `x11.rs` owns the display connection; `inspection.rs` reads frames and names controls; `system.rs` owns process/recording/polling/Core primitives. |
 | Orthogonality | Product code does not depend on the fixture; the reporting gate is independent of I/O. Core owns programs. | Standalone development crate; pure `lifecycle.rs`; platform dependencies remain outside the app. |
 | DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, journey list, event list, reporting gate, recorder, polling loop, input/capture adapter, locator and shutdown path for the migrated journeys. The frame and layout types are the app's own. |
 

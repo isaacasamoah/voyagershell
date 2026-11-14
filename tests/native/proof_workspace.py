@@ -101,25 +101,6 @@ def click_control(native, capture, geometry, evidence, owner, name, targets, cod
     targets.append(item)
 
 
-def create_voyage(capture, click, evidence):
-    frame = capture("before-create-voyage")
-    assert frame.size == (1450, 940), (
-        "The measured +Voyage position needs the observed viewport"
-    )
-    (evidence / "create-voyage-point.json").write_text(
-        json.dumps(
-            {
-                "capture": "before-create-voyage",
-                "measuredFrom": "/var/tmp/voyager-working-core-layouts-01/layouts-stopped-terminal-compositor.png",
-                "viewport": list(frame.size),
-                "point": [65, 302],
-            },
-            indent=2,
-        )
-    )
-    click(65, 302)
-
-
 def core_environment(session, env):
     runtime = env.get("XDG_RUNTIME_DIR")
     assert runtime and Path(runtime).is_absolute(), (
@@ -299,84 +280,18 @@ def prove(
             height,
             evidence,
         )
-    if journey == "placement":
-        return placement(
-            native,
-            capture,
-            click,
-            wait,
-            state,
-            rpc,
-            close,
-            observe_exit,
-            start_frame,
-            original,
-            width,
-            height,
-            evidence,
-        )
-    capture("workspace-initial")
-    (evidence / "workspace-initial.json").write_text(json.dumps(initial, indent=2))
-    click(367, 30)
-    created = wait(lambda layout: len(layout["voyages"][0]["fleets"]) == 2)
-    second = created["value"]["voyages"][0]["fleets"][1]
-    chord(native, "o")
-    split = wait(lambda layout: len(layout["voyages"][0]["fleets"][1]["vessels"]) == 2)
-    assert (
-        split["value"]["voyages"][0]["fleets"][1]["vessels"][0] == second["vessels"][0]
+    return placement(
+        native,
+        capture,
+        click,
+        wait,
+        state,
+        close,
+        start_frame,
+        width,
+        height,
+        evidence,
     )
-    capture("workspace-split")
-    click(width - 40, 80)
-    docked = wait(lambda layout: layout["context"]["kind"] == "vessel")
-    context = docked["value"]["context"]
-    click(*named_button(native, evidence, "Workbench"))
-    selected = wait(
-        lambda layout: layout["selectedFleet"] == original["fleets"][0]["id"]
-    )
-    assert selected["value"]["context"] == context, (
-        "Navigation changed explicit context"
-    )
-    create_voyage(capture, click, evidence)
-    added = wait(lambda layout: len(layout["voyages"]) == 2)
-    capture("workspace-new-voyage")
-    assert added["value"]["context"] == context
-    click(*named_button(native, evidence, original["name"]))
-    selected = wait(lambda layout: layout["selectedVoyage"] == original["id"])
-    bumped = rpc(
-        "doc.set",
-        {
-            "name": "voyager-layout-v1",
-            "version": selected["version"],
-            "value": selected["value"],
-        },
-    )
-    click(465, 30)
-    time.sleep(0.3)
-    refused = state()
-    assert (
-        refused["value"] == selected["value"]
-        and refused["version"] == bumped["version"]
-    )
-    capture("workspace-stale-refused")
-    (evidence / "workspace-stale.json").write_text(json.dumps(refused, indent=2))
-    click(270, height - 30)
-    chord(native, "o")
-    repaired = wait(
-        lambda layout: len(layout["voyages"][0]["fleets"][0]["vessels"]) == 2
-    )
-    capture("workspace-refreshed")
-    close()
-    start_frame("workspace-reopened")
-    assert state() == repaired, "Reopening changed the saved workspace"
-    close()
-    observe_exit()
-    return [
-        "native-create-select-split-dock",
-        "context-independent-of-navigation",
-        "stale-layout-refused-and-refreshed",
-        "saved-workspace-reopened",
-        "native-quit",
-    ]
 
 
 def arrangement_panes(fields, fleet, contents):
@@ -659,11 +574,8 @@ def placement(
     click,
     wait,
     state,
-    rpc,
     close,
-    observe_exit,
     start_frame,
-    original,
     width,
     height,
     evidence,
@@ -672,7 +584,10 @@ def placement(
         native("key", value, True)
         native("key", value, False)
 
-    def replace(value):
+    def rename(x, y, value):
+        click(x, y)
+        click(x, y)
+        time.sleep(0.15)
         pid = json.loads((evidence / "launch.json").read_text())["pid"]
         deadline = time.monotonic() + 5
         while True:
@@ -695,16 +610,7 @@ def placement(
         key(65288)
         for character in value:
             key(ord(character))
-
-    def rename(x, y, value, finish="enter"):
-        click(x, y)
-        click(x, y)
-        time.sleep(0.15)
-        replace(value)
-        if finish == "blur":
-            click(500, height - 120)
-        else:
-            key(65307 if finish == "escape" else 65293)
+        key(65293)
 
     capture("placement-initial")
     click(70, height - 30)
@@ -713,91 +619,23 @@ def placement(
     capture("placement-portal-created")
     click(width - 40, 80)
     wait(lambda layout: layout["context"] == {"kind": "portal", "id": portal["id"]})
-    rename(*named_button(native, evidence, "Workbench"), "Native Fleet")
-    wait(lambda layout: layout["voyages"][0]["fleets"][0]["name"] == "Native Fleet")
-    rename(*named_button(native, evidence, "Voyager"), "Native Voyage")
-    wait(lambda layout: layout["voyages"][0]["name"] == "Native Voyage")
-    rename(*named_button(native, evidence, "Native Fleet"), "Blur Fleet", "blur")
-    wait(lambda layout: layout["voyages"][0]["fleets"][0]["name"] == "Blur Fleet")
-    capture("placement-blur-saved")
-    click(*named_button(native, evidence, "Native Voyage"))
-    key(65289)
-    native("key", 65505, True)
-    try:
-        key(65289)
-    finally:
-        native("key", 65505, False)
-    key(65471)
-    capture("placement-keyboard-editor")
-    replace("Keyboard Voyage")
-    key(65293)
-    wait(lambda layout: layout["voyages"][0]["name"] == "Keyboard Voyage")
-    rename(275, 80, "+")
-    wait(
-        lambda layout: (
-            layout["voyages"][0]["fleets"][0]["vessels"][0].get("name") == "+"
-        )
-    )
     rename(width - 270, 80, "+")
     wait(lambda layout: layout["voyages"][0]["portals"][0].get("name") == "+")
     portal = state()["value"]["voyages"][0]["portals"][0]
-    rename(275, 80, "Native Vessel")
-    wait(
-        lambda layout: (
-            layout["voyages"][0]["fleets"][0]["vessels"][0].get("name")
-            == "Native Vessel"
-        )
-    )
-    rename(275, 80, "")
-    time.sleep(0.3)
-    assert (
-        state()["value"]["voyages"][0]["fleets"][0]["vessels"][0]["name"]
-        == "Native Vessel"
-    )
-    capture("placement-empty-name-refused")
     click(355, 30)
     switched = wait(lambda layout: len(layout["voyages"][0]["fleets"]) == 2)
     assert switched["value"]["voyages"][0]["portals"][0] == portal
     assert switched["value"]["context"] == {"kind": "portal", "id": portal["id"]}
     capture("placement-portal-across-fleets")
-    source_path = evidence / "profile/mods/header/main.js"
-    source = source_path.read_text()
-    delayed = source.replace(
-        "result = await invoke(action, this.version);",
-        'if (action.operation === "select-fleet") await task.sleep(2000);\n'
-        "result = await invoke(action, this.version);",
-    )
-    assert delayed != source
-    source_path.write_text(delayed)
-    time.sleep(1)
-    click(*named_button(native, evidence, "Blur Fleet"))
-    click(*named_button(native, evidence, "Blur Fleet"))
-    assert state()["value"]["selectedFleet"] == switched["value"]["selectedFleet"]
-    capture("placement-editor-during-pending-selection")
-    replace("Slow Fleet")
-    key(65293)
-    wait(lambda layout: layout["voyages"][0]["fleets"][0]["name"] == "Slow Fleet")
-    source_path.write_text(source)
-    time.sleep(0.6)
-    rename(*named_button(native, evidence, "Slow Fleet"), "Discarded Fleet", "escape")
-    time.sleep(0.3)
-    assert state()["value"]["voyages"][0]["fleets"][0]["name"] == "Slow Fleet"
-    capture("placement-rename-cancelled")
     saved = state()
     close()
     start_frame("placement-reopened")
     assert state() == saved
     close()
-    observe_exit()
     return [
         "real-voyage-portal",
-        "enter-and-blur-save",
-        "keyboard-tab-and-f2-rename",
-        "vessel-and-portal-plus-names",
-        "empty-name-refused",
+        "portal-plus-name",
         "portal-identity-and-context-retained-across-fleets",
-        "rename-during-controlled-pending-selection",
-        "changed-draft-escape-cancelled",
         "saved-placement-reopened",
         "native-quit",
     ]
@@ -818,8 +656,6 @@ def layouts(
     height,
     evidence,
 ):
-    from PIL import ImageChops
-
     owner = json.loads((evidence / "launch.json").read_text())["pid"]
 
     def field(name, focused=False):
@@ -920,43 +756,10 @@ def layouts(
     } == processes
     assert rpc("terminal.get", {"terminal": stopped_address})["state"] == "finished"
     capture("layouts-restored")
-    press("Save Fleet layout")
-    field("Name", focused=True)
-    for character in "Overview":
-        key(ord(character))
-    press("Home")
-    home = wait(lambda layout: layout["view"] == "home")
-    assert any(
-        item["fleet"] == fleet and item["name"] == "Overview"
-        for item in home["value"]["savedLayouts"]
-    )
-    assert home["value"]["context"] == context and ids() == terminals_before
-    before = capture("home-overview")
-    source_path = evidence / "profile/mods/header/home.js"
-    source = source_path.read_text()
-    edited = source.replace("Your Voyages and Fleets", "My workspace overview")
-    assert edited != source
-    temporary = source_path.with_name("home.js.tmp")
-    temporary.write_text(edited)
-    temporary.replace(source_path)
-    for _ in range(30):
-        after = capture("home-customized")
-        if ImageChops.difference(before, after).getbbox():
-            break
-        time.sleep(0.1)
-    else:
-        raise AssertionError("Home edit did not become visible")
-    assert ids() == terminals_before and state()["value"]["context"] == context
-    press("Open Fleet Workbench")
-    selected = wait(
-        lambda layout: layout["view"] == "fleet" and layout["selectedFleet"] == fleet
-    )
-    assert selected["value"]["context"] == context and ids() == terminals_before
-    capture("layouts-returned")
     saved = state()
     close()
     start_frame("layouts-reopened")
-    assert state() == saved and source_path.read_text() == edited
+    assert state() == saved
     assert {
         address: rpc("terminal.get", {"terminal": address})["pid"]
         for address in processes
@@ -967,9 +770,6 @@ def layouts(
     return [
         "saved-fleet-tree-with-finished-terminal",
         "restored-identity-and-context",
-        "name-blur-then-home",
-        "editable-home-overview",
-        "home-navigation-no-new-process",
         "saved-layout-reopened",
         "native-quit",
     ]

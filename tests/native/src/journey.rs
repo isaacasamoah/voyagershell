@@ -1,4 +1,5 @@
 mod scrolling;
+mod workspace;
 
 use crate::native::{Native, Sidebar};
 use crate::system::save;
@@ -34,7 +35,11 @@ macro_rules! cases {
 pub(crate) use cases;
 
 macro_rules! journeys {
-    ($($variant:ident => $name:literal in $module:ident, sidebar: $sidebar:expr);+ $(;)?) => {
+    ($(
+        $variant:ident => $name:literal in $module:ident,
+        sidebar: $sidebar:expr,
+        window: $window:expr
+    );+ $(;)?) => {
         #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
         pub enum Journey {
             $(#[serde(rename = $name)] $variant),+
@@ -67,6 +72,12 @@ macro_rules! journeys {
                 }
             }
 
+            pub fn window(self) -> Option<(u16, u16)> {
+                match self {
+                    $(Journey::$variant => $window),+
+                }
+            }
+
             pub fn drive(self, native: &mut Native, outcomes: &mut Outcomes) -> Result<()> {
                 match self {
                     $(Journey::$variant => {
@@ -79,7 +90,8 @@ macro_rules! journeys {
 }
 
 journeys! {
-    TerminalScrolling => "terminal-scrolling" in scrolling, sidebar: None;
+    TerminalScrolling => "terminal-scrolling" in scrolling, sidebar: None, window: None;
+    Workspace => "workspace" in workspace, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {
@@ -105,7 +117,7 @@ impl Journey {
         Self::ALL
             .iter()
             .map(|journey| {
-                json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
+                json!({"journey":journey,"cases":journey.cases(),"sidebar":journey.sidebar(),"smallestWindow":journey.window(),"control":{"case":journey.control(),"patch":journey.control_patch()}})
             })
             .collect()
     }
@@ -289,29 +301,45 @@ impl<'a, C: Case> Cases<'a, C> {
         case: C,
         run: impl FnOnce(&mut Native) -> Result<Verdict>,
     ) -> Result<()> {
+        self.make(native, case, |native| Ok((run(native)?, Some(()))))
+            .map(drop)
+    }
+
+    pub fn make<T>(
+        &mut self,
+        native: &mut Native,
+        case: C,
+        run: impl FnOnce(&mut Native) -> Result<(Verdict, Option<T>)>,
+    ) -> Result<Option<T>> {
         let name = case.name();
         let Some(index) = self.outcomes.open(name)? else {
-            return Ok(());
+            return Ok(None);
         };
         native.system.record(json!({"event":"case","case":name}))?;
-        let judged = run(native).and_then(|verdict| {
+        let judged = run(native).and_then(|(verdict, made)| {
             ensure!(
                 verdict.passed() || !native.halted(),
                 "The candidate was not running when the case {name} judged it"
             );
-            Ok(verdict)
+            Ok((verdict, made))
         });
         let finished = match judged {
-            Ok(verdict) => self.outcomes.close(index, Some(verdict)),
+            Ok((verdict, made)) => {
+                let passed = verdict.passed();
+                self.outcomes
+                    .close(index, Some(verdict))
+                    .map(|()| made.filter(|_| passed))
+            }
             Err(error) => self.outcomes.close(index, None).and(Err(error)),
         };
         let saved = self.outcomes.save(None);
-        finished?;
+        let made = finished?;
         match saved.and_then(|()| native.keep_window(&format!("case-{name}"))) {
             Err(error) if self.outcomes.failed() => native
                 .system
-                .record(json!({"event":"unkept","case":name,"error":format!("{error:#}")})),
-            kept => kept,
+                .record(json!({"event":"unkept","case":name,"error":format!("{error:#}")}))
+                .map(|()| made),
+            kept => kept.map(|()| made),
         }
     }
 }
