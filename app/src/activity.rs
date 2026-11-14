@@ -73,6 +73,7 @@ pub(crate) struct Activity {
     early: Vec<u8>,
     partial: Vec<u8>,
     close: Option<u32>,
+    ended: Vec<String>,
     dirty: bool,
     wake: Option<Box<dyn Fn() + Send + Sync>>,
 }
@@ -166,6 +167,10 @@ impl Activity {
 
     pub(crate) fn take_dirty(&mut self) -> bool {
         std::mem::take(&mut self.dirty)
+    }
+
+    pub(crate) fn take_ended(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.ended)
     }
 
     #[cfg(test)]
@@ -420,6 +425,9 @@ impl Activity {
                     && let Some(address) = event.terminal
                     && self.entries.contains_key(&address)
                 {
+                    if event.kind == "finished" && !self.ended.contains(&address) {
+                        self.ended.push(address.clone());
+                    }
                     self.changed();
                     self.entries.insert(
                         address,

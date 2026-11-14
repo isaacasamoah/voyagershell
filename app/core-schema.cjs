@@ -12,6 +12,10 @@ function canonical(value) {
       .map((key) => [key, canonical(value[key])]),
   );
 }
+const minimum = {
+  version: "0.1.18",
+  digest: "7dc7e3e4d4eb0084b5ae48ae73b8145fe96034e22e6f9db94761e4015b87dea8",
+};
 const raw = process.argv[3]
   ? readFileSync(process.argv[3])
   : execFileSync("hc", ["schema", "--json"]);
@@ -19,10 +23,12 @@ const schema = JSON.parse(raw);
 const digest = createHash("sha256")
   .update(JSON.stringify(canonical(schema)))
   .digest("hex");
-if (
-  digest !== "043843b5609ef31bf80c6a52b803c0738be6f7c125c5921b8c39e4a4e994aa28"
-)
-  throw Error("Core schema differs from the reviewed 0.1.16 schema");
+if (schema.info?.version !== minimum.version)
+  throw Error(
+    `Core schema is ${schema.info?.version}; pass the released schema/hc.openrpc.json of Core ${minimum.version}`,
+  );
+if (digest !== minimum.digest)
+  throw Error(`Core schema differs from the released ${minimum.version} schema`);
 const definitions = {};
 const references = new Set();
 function convert(value) {
@@ -73,11 +79,14 @@ for (const name of references) {
     throw Error(`Core definition missing: ${name}`);
   definitions[name] = convert(schema.components.schemas[name]);
 }
+if (JSON.stringify(definitions).includes('"additionalProperties":false'))
+  throw Error("Core schema closes an object; replies must tolerate new fields");
 const output =
   JSON.stringify(
     {
       $schema: "http://json-schema.org/draft-07/schema#",
       title: "CoreMessages",
+      description: `Herdr Core ${minimum.version} messages`,
       type: "object",
       definitions,
       properties: {

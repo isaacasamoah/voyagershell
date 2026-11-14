@@ -66,6 +66,18 @@ enum Message {
             Result<voyager_contract::observation::WorkspaceObservation, String>,
         >,
     },
+    Observed {
+        scope: Context,
+        version: u64,
+        active: Option<voyager_contract::PlacementId>,
+        reply: async_channel::Sender<
+            Result<voyager_contract::observation::WorkspaceObservation, String>,
+        >,
+        terminals: Option<Vec<crate::core_shapes::Terminal>>,
+    },
+    Ended {
+        terminal: Result<crate::core_shapes::Terminal, Error>,
+    },
     WorkspaceChanges {
         after: Option<WorkspaceNotice>,
         reply: async_channel::Sender<async_channel::Receiver<WorkspaceNotice>>,
@@ -226,6 +238,17 @@ pub struct Client {
     prepared_context: Arc<Mutex<Option<crate::context::Prepared>>>,
 }
 
+fn post<R: serde::de::DeserializeOwned + Send + 'static>(
+    sender: &async_channel::Sender<Message>,
+    pending: crate::core::Pending<R>,
+    done: impl FnOnce(Result<R, Error>) -> Message + Send + 'static,
+) {
+    let sender = sender.clone();
+    thread::spawn(move || {
+        let _ = sender.send_blocking(done(pending.wait()));
+    });
+}
+
 fn next_message(
     receiver: &async_channel::Receiver<Message>,
     activity: &Arc<Mutex<Activity>>,
@@ -340,6 +363,7 @@ impl Client {
         };
         let close_client = client.clone();
         let close_sender = sender.clone();
+        let core_sender = sender.clone();
         thread::spawn(move || {
             let mut core = Core::connect_activity(&session, observed_activity.clone());
             if let Ok(core) = &mut core {
@@ -388,6 +412,29 @@ impl Client {
                 },
                 workspace_listener.as_ref(),
             ) {
+                if quit_result.is_none()
+                    && let Ok(current_core) = core.as_mut()
+                {
+                    let ended = observed_activity
+                        .lock()
+                        .map(|mut activity| activity.take_ended())
+                        .unwrap_or_default();
+                    for address in ended {
+                        if let Ok(pending) = current_core.begin_terminal_get(&address) {
+                            post(&core_sender, pending, move |terminal| Message::Ended {
+                                terminal: terminal.and_then(|terminal| {
+                                    if terminal.address == address {
+                                        Ok(terminal)
+                                    } else {
+                                        Err(Error::Uncertain(
+                                            "Core returned a different terminal".into(),
+                                        ))
+                                    }
+                                }),
+                            });
+                        }
+                    }
+                }
                 let mut note_exit = None;
                 let mut rename_ready = None;
                 let mut rename_rebind = None;
@@ -527,6 +574,46 @@ impl Client {
                         continue;
                     }
                     Message::ActivityChanged => continue,
+                    Message::Ended { terminal } => {
+                        if let Ok(terminal) = terminal
+                            && quit_result.is_none()
+                            && fresh
+                            && terminal.has_exited()
+                            && let Ok(current_core) = core.as_mut()
+                        {
+                            let live: Vec<_> = live_bindings
+                                .iter()
+                                .filter(|address| !closing.owns_terminal(address))
+                                .cloned()
+                                .collect();
+                            let mut candidate = Model {
+                                layout: (*layout).clone(),
+                            };
+                            if let Ok(true) = crate::terminal_lifecycle::close_exited(
+                                &mut candidate,
+                                std::slice::from_ref(&terminal),
+                                &live,
+                            ) {
+                                match save(current_core, &candidate.layout, version) {
+                                    Ok(saved) => {
+                                        version = saved;
+                                        layout = Arc::new(candidate.layout);
+                                        if let Some(listener) = &workspace_listener {
+                                            let _ = listener.try_send(WorkspaceNotice {
+                                                revision: version,
+                                                close_revision: closing.revision,
+                                                package_revision: published_packages
+                                                    .load(Ordering::Relaxed),
+                                                activity_revision: current_core.activity_revision(),
+                                            });
+                                        }
+                                    }
+                                    Err(_) => fresh = false,
+                                }
+                            }
+                        }
+                        continue;
+                    }
                     Message::RefreshActivity { reply } => {
                         if quit_result.is_none()
                             && let Ok(core) = &mut core
@@ -573,9 +660,42 @@ impl Client {
                         active,
                         reply,
                     } => {
+                        if !fresh || expected != version {
+                            let _ =
+                                reply.try_send(Err("Workspace changed; observe it again".into()));
+                            continue;
+                        }
+                        match core
+                            .as_mut()
+                            .ok()
+                            .and_then(|core| core.begin_terminal_list().ok())
+                        {
+                            Some(pending) => {
+                                post(&core_sender, pending, move |listed| Message::Observed {
+                                    scope,
+                                    version: expected,
+                                    active,
+                                    reply,
+                                    terminals: listed.ok().map(|listed| listed.terminals),
+                                })
+                            }
+                            None => {
+                                let _ = reply.try_send(crate::observation::capture(
+                                    &layout, version, &scope, active, None,
+                                ));
+                            }
+                        }
+                        continue;
+                    }
+                    Message::Observed {
+                        scope,
+                        version: expected,
+                        active,
+                        reply,
+                        terminals,
+                    } => {
                         let result = (|| -> Result<voyager_contract::observation::WorkspaceObservation, String> {
                             if !fresh || expected != version { return Err("Workspace changed; observe it again".into()); }
-                            let terminals = core.as_mut().ok().and_then(|core| core.terminal_list().ok());
                             if let Some(terminals) = &terminals {
                                 let names = crate::observation::voyage_names(&layout, terminals);
                                 if !names.is_empty() || terminals.iter().any(|terminal| terminal.has_exited()
