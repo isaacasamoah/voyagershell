@@ -38,7 +38,7 @@ cargo build --release --locked -p voyager-desktop --bin voyager-shell
 ```
 
 `prepare-sdk.py` checks out the pinned upstream GPUI Kit revision in the user
-cache, applies the reviewed native-overlay patch in `desktop/patches/`
+cache, applies the reviewed native-overlay and engine-limits patches in `desktop/patches/`
 and writes a local Cargo override for the shared SDK crates. Run it before
 native Cargo or Node checks. Later Cargo commands use that configuration
 normally. `python3 desktop/prepare-sdk.py --check` verifies the prepared source

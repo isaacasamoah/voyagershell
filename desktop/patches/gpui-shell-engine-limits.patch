@@ -1,0 +1,1125 @@
+diff --git a/crates/shell/src/capability.rs b/crates/shell/src/capability.rs
+index 4baf8dc0..06d657ed 100644
+--- a/crates/shell/src/capability.rs
++++ b/crates/shell/src/capability.rs
+@@ -34,6 +34,7 @@ pub struct Capabilities {
+     clipboard_read: bool,
+     clipboard_write: bool,
+     exit: bool,
++    window: bool,
+     env_variables: Vec<String>,
+ }
+ 
+@@ -312,6 +313,20 @@ impl Capabilities {
+         &self.env_variables
+     }
+ 
++    /// Whether script may change the whole window: its size, scale, focus,
++    /// key bindings, dialogs, sheets and toasts, and its actions. Denied by
++    /// default, because a view embedded among others shares that window with
++    /// them. Reading the window stays allowed, and so does `cx.open_url`, which
++    /// carries no more authority than a `Link`.
++    pub fn window(mut self, allowed: bool) -> Self {
++        self.window = allowed;
++        self
++    }
++
++    pub fn may_control_window(&self) -> bool {
++        self.window
++    }
++
+     pub fn may_exit(&self) -> bool {
+         self.exit
+     }
+diff --git a/crates/shell/src/engine/mod.rs b/crates/shell/src/engine/mod.rs
+index 14bb9f02..270e30a8 100644
+--- a/crates/shell/src/engine/mod.rs
++++ b/crates/shell/src/engine/mod.rs
+@@ -135,7 +135,7 @@ pub(crate) mod quickjs;
+ #[cfg(test)]
+ pub(crate) use quickjs::ViewType;
+ #[cfg(feature = "quickjs")]
+-pub use quickjs::{LoadedApplication, ShellRuntime, ViewObject};
++pub use quickjs::{EngineLimits, LoadedApplication, Refusal, Retirement, ShellRuntime, ViewObject};
+ 
+ /// Points the script-visible store at its backing file.
+ ///
+diff --git a/crates/shell/src/engine/quickjs/mod.rs b/crates/shell/src/engine/quickjs/mod.rs
+index 5087d4a6..78c022ac 100644
+--- a/crates/shell/src/engine/quickjs/mod.rs
++++ b/crates/shell/src/engine/quickjs/mod.rs
+@@ -889,8 +889,10 @@ mod component_callback_value_tests {
+ /// attempt, including an attempt whose construction or initialization fails.
+ /// A foreign runtime is rejected before that consumption.
+ pub struct LoadedApplication {
+-    runtime: Weak<ShellRuntime>,
++    /// Declared before `runtime`: the view class is a script value, and it has
++    /// to be released while the runtime that owns it is still alive.
+     view_type: ViewType,
++    runtime: Rc<ShellRuntime>,
+     mounted: Cell<bool>,
+ }
+ 
+@@ -1072,6 +1074,7 @@ mod host_modules;
+ pub(crate) mod js_error;
+ mod overlay;
+ pub(crate) mod sandbox;
++pub use sandbox::{EngineLimits, Refusal, Retirement};
+ mod scheduler;
+ 
+ pub(crate) fn cancel_policy_tasks(policy: &Rc<Policy>) {
+@@ -1411,6 +1414,8 @@ pub struct ShellRuntime {
+     /// pending-job removal, so terminal quarantine is the only way to prevent
+     /// the unfinished wave from later running under another view.
+     terminal_job_error: RefCell<Option<String>>,
++    /// Spending against the host's [`EngineLimits`]. See [`Self::set_limits`].
++    meter: Rc<sandbox::Meter>,
+     /// What the runtime is spending. See [`Self::metrics`].
+     metrics: Metrics,
+     /// An HTTP client supplied by tests that exercise a loopback server.
+@@ -1535,8 +1540,8 @@ impl ShellRuntime {
+         entry: &str,
+     ) -> Result<LoadedApplication> {
+         Ok(LoadedApplication {
+-            runtime: Rc::downgrade(self),
+             view_type: self.load_app(directory, entry)?,
++            runtime: self.clone(),
+             mounted: Cell::new(false),
+         })
+     }
+@@ -1553,10 +1558,7 @@ impl ShellRuntime {
+         cx: &mut App,
+     ) -> Result<Entity<ScriptView>> {
+         anyhow::ensure!(
+-            application
+-                .runtime
+-                .upgrade()
+-                .is_some_and(|runtime| Rc::ptr_eq(&runtime, self)),
++            Rc::ptr_eq(&application.runtime, self),
+             "loaded application belongs to a different ShellRuntime"
+         );
+         anyhow::ensure!(
+@@ -1700,7 +1702,10 @@ impl ShellRuntime {
+         // where they are applied. A runaway script must not be able to hold the
+         // UI thread (§19.3). The heap is deliberately unbounded; see `sandbox`.
+         js_runtime.set_max_stack_size(sandbox::max_stack_size_bytes());
+-        js_runtime.set_interrupt_handler(Some(Box::new(sandbox::interrupt_handler())));
++        let meter = Rc::new(sandbox::Meter::new());
++        js_runtime.set_interrupt_handler(Some(Box::new(sandbox::metered_interrupt_handler(
++            meter.clone(),
++        ))));
+ 
+         let runtime = Rc::new(Self {
+             callbacks: RefCell::new(CallbackArena::default()),
+@@ -1724,6 +1729,7 @@ impl ShellRuntime {
+             panel_scripts: RefCell::new(HashMap::new()),
+             active_context: Cell::new(None),
+             terminal_job_error: RefCell::new(None),
++            meter,
+             metrics: Metrics::default(),
+             #[cfg(test)]
+             test_http_client: RefCell::new(None),
+@@ -1743,6 +1749,33 @@ impl ShellRuntime {
+         Ok(runtime)
+     }
+ 
++    /// Applies a host's limits to this runtime.
++    ///
++    /// Call it before the first load. Calling it again applies the new limits
++    /// and forgives earlier strikes, which a host can use to give a reloaded
++    /// script a fresh start.
++    pub fn set_limits(&self, limits: EngineLimits) {
++        self.js_runtime
++            .set_memory_limit(limits.heap_bytes().unwrap_or(0));
++        self.meter.reset(limits);
++        self.js_runtime
++            .set_interrupt_handler(Some(Box::new(sandbox::metered_interrupt_handler(
++                self.meter.clone(),
++            ))));
++    }
++
++    /// Calls refused so far: stopped by a budget or the share, or refused for
++    /// memory.
++    pub fn strikes(&self) -> u32 {
++        self.meter.strikes()
++    }
++
++    /// Set once the strike limit is reached. Every later call into the
++    /// runtime is refused with its message.
++    pub fn retirement(&self) -> Option<Retirement> {
++        self.meter.retirement()
++    }
++
+     pub fn component_registry(&self) -> &FrozenComponentRegistry {
+         &self.components
+     }
+@@ -2150,6 +2183,9 @@ impl ShellRuntime {
+     }
+ 
+     fn job_queue_error(&self) -> Option<anyhow::Error> {
++        if let Some(retirement) = self.meter.retirement() {
++            return Some(anyhow!("{retirement}"));
++        }
+         self.terminal_job_error
+             .borrow()
+             .as_ref()
+@@ -5174,6 +5210,7 @@ impl ShellRuntime {
+             return Err(error);
+         }
+         let pending_checkpoint = self.pending_nested.borrow().len();
++        let _metered = self.meter.enter();
+         sandbox::begin_host_execution();
+         let result = self.context.with(|ctx| {
+             // Restored rather than cleared, because a `with_js` reached from
+@@ -12192,3 +12229,37 @@ mod reserved_element_method_tests {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod loaded_application_teardown_tests {
++    use super::*;
++
++    #[test]
++    fn a_loaded_application_keeps_its_runtime_until_it_drops() {
++        let directory = std::env::temp_dir().join(format!(
++            "gpui-shell-loaded-application-{}",
++            std::process::id()
++        ));
++        std::fs::create_dir_all(&directory).unwrap();
++        std::fs::write(
++            directory.join("main.js"),
++            "export default class { render() { return null; } }",
++        )
++        .unwrap();
++        let runtime = ShellRuntime::new_isolated().expect("runtime");
++        runtime.set_editor_files(false);
++        let application = runtime
++            .load_application(&directory, "main.js")
++            .expect("load");
++        std::fs::remove_dir_all(&directory).unwrap();
++
++        let released = Rc::downgrade(&runtime);
++        drop(runtime);
++        assert!(
++            released.upgrade().is_some(),
++            "the handle keeps its runtime alive"
++        );
++        drop(application);
++        assert!(released.upgrade().is_none());
++    }
++}
+diff --git a/crates/shell/src/engine/quickjs/overlay.rs b/crates/shell/src/engine/quickjs/overlay.rs
+index 57dfec85..e9270ffd 100644
+--- a/crates/shell/src/engine/quickjs/overlay.rs
++++ b/crates/shell/src/engine/quickjs/overlay.rs
+@@ -309,6 +309,7 @@ pub fn install(_ctx: &Ctx<'_>, globals: &Object<'_>) -> JsResult<()> {
+ /// Outside any scope there is no window to reach either, so `none` is refused
+ /// with the same message: both cases mean the call has no live host frame.
+ fn guard(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {
++    super::window_api::window_gate(ctx, api)?;
+     let phase = scope::current_phase();
+     if phase.is_some_and(ScopePhase::allows_notify) {
+         return Ok(());
+@@ -684,6 +685,7 @@ mod tests {
+         cx: &mut TestAppContext,
+     ) -> (Rc<ShellRuntime>, Entity<ShellRoot>, &mut VisualTestContext) {
+         cx.update(crate::init);
++        crate::policy::grant_window_control();
+ 
+         let runtime = cx.update(ShellRuntime::new).expect("runtime");
+         // The views these tests open hold `Persistent` script values, and a
+@@ -725,6 +727,45 @@ mod tests {
+         })
+     }
+ 
++    #[gpui::test]
++    fn whole_window_calls_need_the_window_grant(cx: &mut TestAppContext) {
++        let (runtime, root, cx) = shell(cx);
++        crate::policy::set_default(crate::policy::Policy::new());
++        let rem_size = cx.update(|window, _| window.rem_size());
++
++        for call in [
++            "window.set_rem_size(40)",
++            "window.open_dialog(() => __gpui.text('confirm'))",
++            "cx.bind_keys([{ keystroke: 'ctrl-k', action: 'probe' }])",
++        ] {
++            let error = eval::<()>(
++                &runtime,
++                cx,
++                ScopePhase::Event,
++                &format!("{call}; undefined"),
++            )
++            .err()
++            .unwrap_or_else(|| panic!("{call} needs the window grant"))
++            .to_string();
++            assert!(
++                error.contains("this view's policy does not grant window control"),
++                "{call}: {error}"
++            );
++        }
++        assert_eq!(cx.update(|window, _| window.rem_size()), rem_size);
++        assert_eq!(root.read_with(cx, |root, _| root.dialog_count()), 0);
++
++        crate::policy::grant_window_control();
++        eval::<()>(
++            &runtime,
++            cx,
++            ScopePhase::Event,
++            "window.set_rem_size(40); undefined",
++        )
++        .expect("granted");
++        assert_eq!(cx.update(|window, _| window.rem_size()), gpui::px(40.));
++    }
++
+     #[gpui::test]
+     fn a_script_opens_a_dialog_on_the_root(cx: &mut TestAppContext) {
+         let (runtime, root, cx) = shell(cx);
+@@ -765,6 +806,7 @@ mod tests {
+     #[gpui::test]
+     fn overlays_reach_the_root_inside_the_catalog_window(cx: &mut TestAppContext) {
+         cx.update(crate::components::init);
++        crate::policy::grant_window_control();
+         let runtime = cx.update(ShellRuntime::new).expect("runtime");
+         std::mem::forget(runtime.clone());
+ 
+@@ -816,6 +858,7 @@ mod tests {
+     #[gpui::test]
+     fn an_isolated_runtime_owns_the_overlay_view_it_constructs(cx: &mut TestAppContext) {
+         cx.update(crate::init);
++        crate::policy::grant_window_control();
+         let default = cx.update(ShellRuntime::new).expect("default runtime");
+         let isolated = ShellRuntime::new_isolated().expect("isolated runtime");
+         std::mem::forget(default);
+diff --git a/crates/shell/src/engine/quickjs/sandbox.rs b/crates/shell/src/engine/quickjs/sandbox.rs
+index 15e694d0..13188489 100644
+--- a/crates/shell/src/engine/quickjs/sandbox.rs
++++ b/crates/shell/src/engine/quickjs/sandbox.rs
+@@ -674,7 +674,8 @@ fn granted_env<'js>(ctx: Ctx<'js>) -> JsResult<Object<'js>> {
+ // case — a file tree of a few hundred thousand entries — into a broken
+ // application that only a restart could recover, long before the machine was
+ // short of anything. A host that embeds untrusted plugins and wants a bound can
+-// set one on its own runtime; the report below explains it when it is hit.
++// set one on its own runtime with `EngineLimits::with_heap_bytes`; the report
++// below explains it when it is hit.
+ 
+ /// A heap that has reached this share of its ceiling is the likely reason a
+ /// value that is not an error was thrown.
+@@ -690,16 +691,16 @@ pub(super) fn explain_out_of_memory(ctx: &Ctx<'_>, message: Option<&str>) -> Opt
+     let advice = "Keep less data in script — derive values instead of storing them on every \
+                   item — or move a large data set into a host module.";
+     let (used, limit) = heap_usage(ctx)?;
+-    match (message, limit) {
+-        (Some("out of memory"), Some(limit)) => Some(reached(limit, advice)),
+-        (None, Some(limit)) if used as f64 >= limit as f64 * NEARLY_FULL => {
+-            Some(reached(limit, advice))
++    let explained = match (message, limit) {
++        (Some("out of memory"), Some(limit)) => reached(limit, advice),
++        (None, Some(limit)) if used as f64 >= limit as f64 * NEARLY_FULL => reached(limit, advice),
++        (Some("out of memory"), None) => {
++            format!("The script ran out of memory: the system could not allocate more.\n{advice}")
+         }
+-        (Some("out of memory"), None) => Some(format!(
+-            "The script ran out of memory: the system could not allocate more.\n{advice}"
+-        )),
+-        _ => None,
+-    }
++        _ => return None,
++    };
++    refuse(Refusal::OutOfMemory);
++    Some(explained)
+ }
+ 
+ fn reached(limit: u64, advice: &str) -> String {
+@@ -758,9 +759,9 @@ pub fn max_stack_size_bytes() -> usize {
+ /// anything a working application takes, and a call that is merely slow is
+ /// reported in the log at `warn_after` instead, where its author will see it.
+ ///
+-/// Kept private: the numbers are policy, not API, and tests need a version with
+-/// a millisecond deadline so they finish quickly.
+-#[derive(Clone, Copy)]
++/// The defaults are policy, not API. A host that runs several engines in one
++/// window, each sharing its frames, sets tighter ones through [`EngineLimits`].
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ struct Budgets {
+     /// Render and layout run inside GPUI's frame, so the window is frozen for
+     /// as long as they take; this is the tightest limit.
+@@ -809,6 +810,293 @@ fn spoken(duration: Duration) -> String {
+     }
+ }
+ 
++/// What a host lets one [`ShellRuntime`](super::ShellRuntime) spend.
++///
++/// The default is the shell's own policy: no heap ceiling, the watchdog
++/// budgets above, no share and no strike limit. A host that embeds engines it
++/// does not trust, several to a window, tightens them before the first load.
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub struct EngineLimits {
++    heap_bytes: Option<usize>,
++    budgets: Budgets,
++    share_per_second: Option<Duration>,
++    strike_limit: Option<u32>,
++}
++
++impl EngineLimits {
++    pub fn new() -> Self {
++        Self::default()
++    }
++
++    /// The JavaScript heap ceiling. An allocation past it is refused with the
++    /// out-of-memory report rather than aborting the process.
++    pub fn with_heap_bytes(mut self, bytes: usize) -> Self {
++        self.heap_bytes = Some(bytes);
++        self
++    }
++
++    pub fn heap_bytes(&self) -> Option<usize> {
++        self.heap_bytes
++    }
++
++    /// How long one render or layout call may run before it is stopped.
++    pub fn with_render_budget(mut self, budget: Duration) -> Self {
++        self.budgets.render = budget;
++        self
++    }
++
++    pub fn render_budget(&self) -> Duration {
++        self.budgets.render
++    }
++
++    /// How long one event handler or resumed task may run before it is stopped.
++    pub fn with_event_budget(mut self, budget: Duration) -> Self {
++        self.budgets.event = budget;
++        self
++    }
++
++    pub fn event_budget(&self) -> Duration {
++        self.budgets.event
++    }
++
++    /// How long one module evaluation may run before it is stopped.
++    pub fn with_load_budget(mut self, budget: Duration) -> Self {
++        self.budgets.detached = budget;
++        self
++    }
++
++    pub fn load_budget(&self) -> Duration {
++        self.budgets.detached
++    }
++
++    /// How much of each second the engine's calls may hold the UI thread
++    /// together. A call that takes the total past it is stopped, so many short
++    /// calls cannot hold the window where one long call could not.
++    pub fn with_share_per_second(mut self, share: Duration) -> Self {
++        self.share_per_second = Some(share);
++        self
++    }
++
++    pub fn share_per_second(&self) -> Option<Duration> {
++        self.share_per_second
++    }
++
++    /// How many refused calls retire the engine. A retired engine refuses every
++    /// later call at once, so a stopped script cannot keep stalling the window
++    /// each time its timer fires.
++    pub fn with_strike_limit(mut self, strikes: u32) -> Self {
++        self.strike_limit = Some(strikes);
++        self
++    }
++
++    pub fn strike_limit(&self) -> Option<u32> {
++        self.strike_limit
++    }
++}
++
++/// Why the engine refused a call.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++#[non_exhaustive]
++pub enum Refusal {
++    /// One call ran past its render, event or load budget.
++    Budget,
++    /// The engine's calls together passed their share of one second.
++    Share,
++    /// The JavaScript heap reached its ceiling.
++    OutOfMemory,
++}
++
++impl Refusal {
++    fn reason(self) -> &'static str {
++        match self {
++            Self::Budget => "a call ran past its time budget",
++            Self::Share => "its calls used more than their share of the window's time",
++            Self::OutOfMemory => "its JavaScript heap reached its limit",
++        }
++    }
++}
++
++/// An engine that reached its strike limit. Every later call is refused.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Retirement {
++    strikes: u32,
++    last: Refusal,
++}
++
++impl Retirement {
++    pub fn strikes(&self) -> u32 {
++        self.strikes
++    }
++
++    pub fn last(&self) -> Refusal {
++        self.last
++    }
++}
++
++impl std::fmt::Display for Retirement {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        write!(
++            f,
++            "This script's engine was retired after {} refused calls; the last was refused \
++             because {}.\nIts host has to start a new engine to run the script again.",
++            self.strikes,
++            self.last.reason()
++        )
++    }
++}
++
++thread_local! {
++    /// The latest refusal inside the current engine entry. The handler and the
++    /// out-of-memory report leave it here; the entry that owns it counts it.
++    static REFUSED: Cell<Option<Refusal>> = const { Cell::new(None) };
++}
++
++fn refuse(refusal: Refusal) {
++    REFUSED.with(|refused| refused.set(Some(refusal)));
++}
++
++/// One engine's spending against its [`EngineLimits`], shared by the engine's
++/// entry points and its interrupt handler on the UI thread.
++pub(super) struct Meter {
++    limits: Cell<EngineLimits>,
++    strikes: Cell<u32>,
++    retirement: Cell<Option<Retirement>>,
++    second_started: Cell<Instant>,
++    busy: Cell<Duration>,
++    entered: Cell<Option<Instant>>,
++}
++
++impl Meter {
++    pub(super) fn new() -> Self {
++        Self {
++            limits: Cell::new(EngineLimits::default()),
++            strikes: Cell::new(0),
++            retirement: Cell::new(None),
++            second_started: Cell::new(Instant::now()),
++            busy: Cell::new(Duration::ZERO),
++            entered: Cell::new(None),
++        }
++    }
++
++    pub(super) fn limits(&self) -> EngineLimits {
++        self.limits.get()
++    }
++
++    /// Applies new limits and forgives earlier strikes and a retirement.
++    pub(super) fn reset(&self, limits: EngineLimits) {
++        self.limits.set(limits);
++        self.strikes.set(0);
++        self.retirement.set(None);
++        self.busy.set(Duration::ZERO);
++        self.second_started.set(Instant::now());
++    }
++
++    pub(super) fn strikes(&self) -> u32 {
++        self.strikes.get()
++    }
++
++    pub(super) fn retirement(&self) -> Option<Retirement> {
++        self.retirement.get()
++    }
++
++    /// Times one entry into the engine. A nested entry is part of the outer
++    /// one, so only the outermost is timed and counted.
++    pub(super) fn enter(&self) -> Metered<'_> {
++        if self.entered.get().is_some() {
++            return Metered {
++                meter: self,
++                outer: None,
++            };
++        }
++        self.entered.set(Some(Instant::now()));
++        Metered {
++            meter: self,
++            outer: Some(REFUSED.with(Cell::take)),
++        }
++    }
++
++    fn rolled_busy(&self, now: Instant) -> Duration {
++        if now.duration_since(self.second_started.get()) >= Duration::from_secs(1) {
++            self.second_started.set(now);
++            self.busy.set(Duration::ZERO);
++        }
++        self.busy.get()
++    }
++
++    fn overspent(&self, now: Instant) -> Option<Duration> {
++        let share = self.limits.get().share_per_second?;
++        let current = self.entered.get().map_or(Duration::ZERO, |started| {
++            now.saturating_duration_since(started)
++        });
++        (self.rolled_busy(now) + current > share).then_some(share)
++    }
++
++    fn strike(&self, refusal: Refusal) {
++        let strikes = self.strikes.get().saturating_add(1);
++        self.strikes.set(strikes);
++        if self.retirement.get().is_none()
++            && self
++                .limits
++                .get()
++                .strike_limit
++                .is_some_and(|limit| strikes >= limit)
++        {
++            self.retirement.set(Some(Retirement {
++                strikes,
++                last: refusal,
++            }));
++        }
++    }
++}
++
++pub(super) struct Metered<'a> {
++    meter: &'a Meter,
++    outer: Option<Option<Refusal>>,
++}
++
++impl Drop for Metered<'_> {
++    fn drop(&mut self) {
++        let Some(outer) = self.outer else {
++            return;
++        };
++        let now = Instant::now();
++        if let Some(started) = self.meter.entered.take() {
++            let busy = self.meter.rolled_busy(now) + now.saturating_duration_since(started);
++            self.meter.busy.set(busy);
++        }
++        if let Some(refusal) = REFUSED.with(|refused| refused.replace(outer)) {
++            self.meter.strike(refusal);
++        }
++    }
++}
++
++/// The interrupt handler an engine installs: the per-call [`deadline`] for its
++/// limits, plus the per-second share.
++pub(super) fn metered_interrupt_handler(
++    meter: std::rc::Rc<Meter>,
++) -> impl FnMut() -> bool + 'static {
++    let mut call_deadline = deadline(meter.limits().budgets);
++    move || {
++        if call_deadline() {
++            refuse(Refusal::Budget);
++            return true;
++        }
++        let Some(share) = meter.overspent(Instant::now()) else {
++            return false;
++        };
++        let phase = scope::current_phase();
++        INTERRUPTION.with(|interruption| {
++            interruption.set(Some(Interruption {
++                phase,
++                budget: share,
++                refusal: Refusal::Share,
++            }))
++        });
++        refuse(Refusal::Share);
++        true
++    }
++}
++
+ /// A deadline-based interrupt handler for `Runtime::set_interrupt_handler`.
+ ///
+ /// QuickJS calls this periodically while interpreting; returning `true` unwinds
+@@ -865,6 +1153,7 @@ enum ExecutionWindow {
+ struct Interruption {
+     phase: Option<ScopePhase>,
+     budget: Duration,
++    refusal: Refusal,
+ }
+ 
+ thread_local! {
+@@ -879,8 +1168,20 @@ pub(super) fn explain_interruption(message: &str) -> Option<String> {
+     if message != "interrupted" {
+         return None;
+     }
+-    let Interruption { phase, budget } = INTERRUPTION.with(Cell::take)?;
++    let Interruption {
++        phase,
++        budget,
++        refusal,
++    } = INTERRUPTION.with(Cell::take)?;
+     let limit = spoken(budget);
++    if refusal == Refusal::Share {
++        return Some(format!(
++            "The script used more than its {limit} share of the window's time in one second \
++             and its {} call was stopped.\n\
++             Do less work per call; await between chunks of work so other views can draw.",
++            phase.map_or("module", ScopePhase::as_str)
++        ));
++    }
+     Some(match phase {
+         Some(ScopePhase::Render) => format!(
+             "render() ran for {limit} without returning and was stopped.\n\
+@@ -946,8 +1247,13 @@ fn deadline(budgets: Budgets) -> impl FnMut() -> bool + 'static {
+ 
+         let expired = elapsed > budget;
+         if expired {
+-            INTERRUPTION
+-                .with(|interruption| interruption.set(Some(Interruption { phase, budget })));
++            INTERRUPTION.with(|interruption| {
++                interruption.set(Some(Interruption {
++                    phase,
++                    budget,
++                    refusal: Refusal::Budget,
++                }))
++            });
+         }
+         expired
+     }
+@@ -1339,4 +1645,154 @@ mod tests {
+         assert!(budgets.render < budgets.event);
+         assert!(budgets.event < budgets.detached);
+     }
++
++    fn limited(limits: EngineLimits) -> std::rc::Rc<super::super::ShellRuntime> {
++        let runtime = super::super::ShellRuntime::new_isolated().expect("runtime");
++        runtime.set_limits(limits);
++        runtime
++    }
++
++    fn load(runtime: &std::rc::Rc<super::super::ShellRuntime>, source: &str) -> anyhow::Result<()> {
++        runtime
++            .load_source("limits", &format!("{source}\nexport default class {{}}"))
++            .map(drop)
++    }
++
++    #[test]
++    fn test_engine_limits_builder() {
++        let shell = EngineLimits::new();
++        assert_eq!(shell, EngineLimits::default());
++        assert_eq!(shell.heap_bytes(), None);
++        assert_eq!(shell.render_budget(), Budgets::default().render);
++        assert_eq!(shell.event_budget(), Budgets::default().event);
++        assert_eq!(shell.load_budget(), Budgets::default().detached);
++        assert_eq!(shell.share_per_second(), None);
++        assert_eq!(shell.strike_limit(), None);
++
++        let host = EngineLimits::new()
++            .with_heap_bytes(32 << 20)
++            .with_render_budget(Duration::from_millis(50))
++            .with_event_budget(Duration::from_millis(60))
++            .with_load_budget(Duration::from_secs(2))
++            .with_share_per_second(Duration::from_millis(200))
++            .with_strike_limit(3);
++        assert_eq!(host.heap_bytes(), Some(32 << 20));
++        assert_eq!(host.render_budget(), Duration::from_millis(50));
++        assert_eq!(host.event_budget(), Duration::from_millis(60));
++        assert_eq!(host.load_budget(), Duration::from_secs(2));
++        assert_eq!(host.share_per_second(), Some(Duration::from_millis(200)));
++        assert_eq!(host.strike_limit(), Some(3));
++    }
++
++    #[test]
++    fn a_host_heap_limit_refuses_a_growing_script_without_aborting() {
++        let runtime = limited(EngineLimits::new().with_heap_bytes(16 << 20));
++
++        let error = load(
++            &runtime,
++            "globalThis.kept = []; while (true) kept.push({ path: 'x'.repeat(64) + kept.length });",
++        )
++        .expect_err("the heap limit refuses the load");
++
++        let message = error.to_string();
++        assert!(
++            message.starts_with("The script ran out of memory") && message.contains("16 MiB"),
++            "{message}"
++        );
++        assert_eq!(runtime.strikes(), 1);
++        assert_eq!(runtime.retirement(), None);
++    }
++
++    #[test]
++    fn a_host_load_budget_stops_a_spinning_module() {
++        let runtime = limited(EngineLimits::new().with_load_budget(Duration::from_millis(50)));
++
++        let started = Instant::now();
++        let error = load(&runtime, "while (true) {}").expect_err("the budget stops the loop");
++
++        assert!(started.elapsed() < Duration::from_secs(1));
++        assert!(
++            error
++                .to_string()
++                .starts_with("Loading the script ran for 50 ms"),
++            "{error}"
++        );
++        assert_eq!(runtime.strikes(), 1);
++    }
++
++    #[test]
++    fn many_short_calls_cannot_pass_the_share() {
++        let runtime = limited(
++            EngineLimits::new()
++                .with_load_budget(Duration::from_secs(5))
++                .with_share_per_second(Duration::from_millis(60)),
++        );
++        let busy = "const until = Date.now() + 15; while (Date.now() < until) {}";
++
++        let refused = (0..8)
++            .map(|_| load(&runtime, busy))
++            .find_map(Result::err)
++            .expect("the share stops one of the calls");
++
++        assert!(
++            refused
++                .to_string()
++                .starts_with("The script used more than its 60 ms share"),
++            "{refused}"
++        );
++        assert_eq!(runtime.strikes(), 1);
++    }
++
++    #[test]
++    fn the_strike_limit_retires_the_engine_until_new_limits_are_set() {
++        let limits = EngineLimits::new()
++            .with_load_budget(Duration::from_millis(20))
++            .with_strike_limit(2);
++        let runtime = limited(limits);
++
++        assert!(load(&runtime, "while (true) {}").is_err());
++        assert_eq!(runtime.retirement(), None);
++        assert!(load(&runtime, "while (true) {}").is_err());
++
++        let retirement = runtime.retirement().expect("retired at two strikes");
++        assert_eq!(retirement.strikes(), 2);
++        assert_eq!(retirement.last(), Refusal::Budget);
++
++        let started = Instant::now();
++        let refused = load(&runtime, "").expect_err("a retired engine refuses at once");
++        assert!(started.elapsed() < Duration::from_millis(20));
++        assert_eq!(refused.to_string(), retirement.to_string());
++        assert!(
++            refused
++                .to_string()
++                .starts_with("This script's engine was retired after 2"),
++            "{refused}"
++        );
++
++        runtime.set_limits(limits);
++        assert_eq!(runtime.retirement(), None);
++        assert_eq!(runtime.strikes(), 0);
++        load(&runtime, "").expect("new limits forgive the strikes");
++    }
++
++    #[test]
++    fn running_out_of_memory_counts_toward_retirement() {
++        let runtime = limited(
++            EngineLimits::new()
++                .with_heap_bytes(16 << 20)
++                .with_strike_limit(1),
++        );
++
++        assert!(
++            load(
++                &runtime,
++                "globalThis.kept = []; while (true) kept.push({ path: 'x'.repeat(64) + kept.length });",
++            )
++            .is_err()
++        );
++
++        let retirement = runtime.retirement().expect("retired at one strike");
++        assert_eq!(retirement.last(), Refusal::OutOfMemory);
++        assert!(retirement.to_string().contains("heap reached its limit"));
++    }
+ }
+diff --git a/crates/shell/src/engine/quickjs/scheduler.rs b/crates/shell/src/engine/quickjs/scheduler.rs
+index a3607609..3d42c49c 100644
+--- a/crates/shell/src/engine/quickjs/scheduler.rs
++++ b/crates/shell/src/engine/quickjs/scheduler.rs
+@@ -173,7 +173,11 @@ fn drain_runtime_job_batch(
+     cx: &mut gpui::App,
+ ) -> bool {
+     for _ in 0..MAX_JOBS_PER_DRAIN {
++        if runtime.job_queue_error().is_some() {
++            return true;
++        }
+         let pending_checkpoint = runtime.pending_nested.borrow().len();
++        let _metered = runtime.meter.enter();
+         match runtime.js_runtime.execute_pending_job() {
+             Ok(true) => {
+                 if let Err(error) = runtime.flush_pending_nested_views(window, cx) {
+@@ -237,7 +241,11 @@ pub(crate) fn drain_jobs_transactionally(
+         return Err(error);
+     }
+     for _ in 0..MAX_TRANSACTIONAL_JOBS {
++        if let Some(error) = runtime.job_queue_error() {
++            return Err(error);
++        }
+         let pending_checkpoint = runtime.pending_nested.borrow().len();
++        let _metered = runtime.meter.enter();
+         match runtime.js_runtime.execute_pending_job() {
+             Ok(true) => {
+                 if let Err(error) = runtime.flush_pending_nested_views(window, cx) {
+@@ -1986,6 +1994,87 @@ mod tests {
+         finish(&unrelated);
+     }
+ 
++    #[gpui::test]
++    fn a_retired_runtime_runs_no_later_continuation_in_the_same_drain(cx: &mut TestAppContext) {
++        cx.update(crate::init);
++        let runtime = ShellRuntime::new_isolated().expect("runtime");
++        let budget = std::time::Duration::from_millis(20);
++        runtime.set_limits(
++            crate::EngineLimits::new()
++                .with_render_budget(budget)
++                .with_event_budget(budget)
++                .with_load_budget(budget)
++                .with_strike_limit(1),
++        );
++        runtime
++            .with_js(|ctx| {
++                ctx.globals().set("second_ran", false)?;
++                ctx.eval::<(), _>(
++                    "Promise.resolve().then(() => { while (true) {} }); \
++                     Promise.resolve().then(() => { globalThis.second_ran = true; });",
++                )
++            })
++            .expect("queue promise jobs");
++
++        let window = cx.add_window(|_, _| Empty);
++        let mut context = VisualTestContext::from_window(*window.deref(), cx);
++        context.update(|window, cx| drain_runtime_jobs(&runtime, window, cx));
++
++        assert!(
++            runtime.retirement().is_some(),
++            "the spinning continuation retires the runtime"
++        );
++        let ran = runtime
++            .context
++            .with(|ctx| ctx.globals().get::<_, bool>("second_ran"))
++            .expect("read marker");
++        assert!(!ran, "a retired runtime ran a later continuation");
++
++        std::mem::forget(runtime);
++    }
++
++    #[gpui::test]
++    fn a_retired_runtime_runs_no_later_continuation_in_a_transactional_drain(
++        cx: &mut TestAppContext,
++    ) {
++        cx.update(crate::init);
++        let runtime = ShellRuntime::new_isolated().expect("runtime");
++        let budget = std::time::Duration::from_millis(20);
++        runtime.set_limits(
++            crate::EngineLimits::new()
++                .with_render_budget(budget)
++                .with_event_budget(budget)
++                .with_load_budget(budget)
++                .with_strike_limit(1),
++        );
++        runtime
++            .with_js(|ctx| {
++                ctx.globals().set("second_ran", false)?;
++                ctx.eval::<(), _>(
++                    "Promise.resolve().then(() => { while (true) {} }); \
++                     Promise.resolve().then(() => { globalThis.second_ran = true; });",
++                )
++            })
++            .expect("queue promise jobs");
++
++        let window = cx.add_window(|_, _| Empty);
++        let mut context = VisualTestContext::from_window(*window.deref(), cx);
++        let drained = context.update(|window, cx| drain_jobs_transactionally(&runtime, window, cx));
++        assert!(drained.is_err(), "a retired runtime reports its retirement");
++
++        assert!(
++            runtime.retirement().is_some(),
++            "the spinning continuation retires the runtime"
++        );
++        let ran = runtime
++            .context
++            .with(|ctx| ctx.globals().get::<_, bool>("second_ran"))
++            .expect("read marker");
++        assert!(!ran, "a retired runtime ran a later continuation");
++
++        std::mem::forget(runtime);
++    }
++
+     #[gpui::test]
+     fn cancelling_a_policy_drops_its_queued_render_drain(cx: &mut TestAppContext) {
+         cx.update(crate::init);
+diff --git a/crates/shell/src/engine/quickjs/window_api.rs b/crates/shell/src/engine/quickjs/window_api.rs
+index 6971fd8a..c6195b33 100644
+--- a/crates/shell/src/engine/quickjs/window_api.rs
++++ b/crates/shell/src/engine/quickjs/window_api.rs
+@@ -182,6 +182,7 @@ pub(super) fn install(ctx: &Ctx<'_>) -> JsResult<()> {
+ /// element it reaches is the `context` predicate's job, matched against the
+ /// `key_context(...)` an element declares.
+ fn bind_keys(ctx: Ctx<'_>, bindings: Vec<Object<'_>>) -> JsResult<u32> {
++    window_gate(&ctx, "cx.bind_keys()")?;
+     let phase = scope::current_phase();
+     if !phase.is_some_and(ScopePhase::allows_notify) {
+         return Err(js_error::type_error(
+@@ -331,6 +332,18 @@ fn appearance_name(appearance: WindowAppearance) -> &'static str {
+     }
+ }
+ 
++pub(super) fn window_gate(ctx: &Ctx<'_>, api: &str) -> JsResult<()> {
++    if crate::scope::policy().capabilities().may_control_window() {
++        return Ok(());
++    }
++    Err(js_error::type_error(
++        ctx,
++        &format!(
++            "{api} reaches the whole window and this view's policy does not grant window control"
++        ),
++    ))
++}
++
+ /// A measurement, legal from any host call including `render`.
+ fn read<R>(ctx: &Ctx<'_>, api: &str, body: impl FnOnce(&Window) -> R) -> JsResult<R> {
+     scope::with_current(|window, _| body(window)).ok_or_else(|| {
+@@ -346,6 +359,7 @@ fn read<R>(ctx: &Ctx<'_>, api: &str, body: impl FnOnce(&Window) -> R) -> JsResul
+ 
+ /// A change to the window, refused during a render pass.
+ fn write(ctx: &Ctx<'_>, api: &str, body: impl FnOnce(&mut Window, &mut gpui::App)) -> JsResult<()> {
++    window_gate(ctx, api)?;
+     let phase = scope::current_phase();
+     if !phase.is_some_and(ScopePhase::allows_notify) {
+         return Err(js_error::type_error(
+diff --git a/crates/shell/src/host.rs b/crates/shell/src/host.rs
+index 39cc6177..398224eb 100644
+--- a/crates/shell/src/host.rs
++++ b/crates/shell/src/host.rs
+@@ -1191,6 +1191,7 @@ fn local_capabilities(
+         .add_read_roots([root.to_path_buf(), store.to_path_buf()])
+         .add_write_roots([store.to_path_buf()])
+         .exit(true)
++        .window(true)
+ }
+ 
+ /// The window an application opens in. `window_size` is the manifest's
+diff --git a/crates/shell/src/lib.rs b/crates/shell/src/lib.rs
+index 83d29496..3da6ffa4 100644
+--- a/crates/shell/src/lib.rs
++++ b/crates/shell/src/lib.rs
+@@ -120,7 +120,7 @@ pub use component_registry::{
+     MethodDescriptor, RegistryError, StateDescriptor, StateMethodDescriptor,
+ };
+ pub(crate) use component_registry::{ComponentCallbackValue, ComponentId, RecordedComponentMethod};
+-pub use engine::{LoadedApplication, ShellRuntime};
++pub use engine::{EngineLimits, LoadedApplication, Refusal, Retirement, ShellRuntime};
+ pub use error::ShellError;
+ #[cfg(not(feature = "gpui-fast"))]
+ pub use gpui;
+diff --git a/crates/shell/src/plugin.rs b/crates/shell/src/plugin.rs
+index cb1b64f1..cb7a6163 100644
+--- a/crates/shell/src/plugin.rs
++++ b/crates/shell/src/plugin.rs
+@@ -756,6 +756,9 @@ struct CapabilitiesFile {
+     /// Process-level host requests, separate from filesystem execution.
+     #[serde(default)]
+     process: Option<ProcessGrantFile>,
++    /// Whether script may change the whole window it shares with its host.
++    #[serde(default)]
++    window: bool,
+ }
+ 
+ #[derive(Clone, Debug, Default, PartialEq, Deserialize, JsonSchema)]
+@@ -868,6 +871,7 @@ impl Default for CapabilitiesFile {
+             storage: granted(),
+             clipboard: None,
+             process: None,
++            window: false,
+         }
+     }
+ }
+@@ -907,6 +911,7 @@ impl CapabilitiesFile {
+             .clipboard_write(clipboard.write)
+             .exit(process.exit)
+             .env_variables(process.env)
++            .window(self.window)
+     }
+ 
+     /// A placeholder the host does not expand would otherwise reach
+@@ -1281,7 +1286,7 @@ impl std::fmt::Display for ManifestProblem {
+             ),
+             ManifestProblem::Capabilities(error) => write!(
+                 f,
+-                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts, http), storage, clipboard (read, write) and process (exit)"
++                "invalid `capabilities`: {error}. The block accepts fs (read, write, execute), network (hosts, http), storage, clipboard (read, write), process (exit) and window"
+             ),
+             ManifestProblem::Dependencies(error) => write!(
+                 f,
+@@ -3244,6 +3249,7 @@ mod tests {
+             "process",
+             "exit",
+             "env",
++            "window",
+         ] {
+             assert!(
+                 schema.contains(grant),
+diff --git a/crates/shell/src/policy.rs b/crates/shell/src/policy.rs
+index 2194bfc6..5b3a2756 100644
+--- a/crates/shell/src/policy.rs
++++ b/crates/shell/src/policy.rs
+@@ -263,6 +263,16 @@ pub fn update_default(edit: impl FnOnce(Policy) -> Policy) {
+     });
+ }
+ 
++/// Grants window control to views created after it, for tests that drive
++/// whole-window calls.
++#[cfg(test)]
++pub(crate) fn grant_window_control() {
++    update_default(|policy| {
++        let capabilities = policy.capabilities().clone().window(true);
++        policy.with_capabilities(capabilities)
++    });
++}
++
+ /// The policy a view is created with.
+ pub fn default() -> Rc<Policy> {
+     DEFAULT.with(|current| current.borrow().clone())
+diff --git a/crates/shell/src/tests/render.rs b/crates/shell/src/tests/render.rs
+index 053ec66a..869fc129 100644
+--- a/crates/shell/src/tests/render.rs
++++ b/crates/shell/src/tests/render.rs
+@@ -7559,6 +7559,7 @@ export default class Bar extends View {
+ #[gpui::test]
+ fn a_script_binds_a_chord_and_the_action_reaches_its_handler(cx: &mut TestAppContext) {
+     cx.update(|cx| crate::init(cx));
++    crate::policy::grant_window_control();
+ 
+     let runtime = ShellRuntime::new_isolated().expect("runtime");
+     cx.update(|cx| runtime.set_global(cx));
+@@ -7900,6 +7901,7 @@ export default class Picker extends View {
+ #[gpui::test]
+ fn every_added_script_api_is_reachable_under_its_documented_name(cx: &mut TestAppContext) {
+     cx.update(|cx| crate::init(cx));
++    crate::policy::grant_window_control();
+ 
+     let runtime = ShellRuntime::new_isolated().expect("runtime");
+     cx.update(|cx| runtime.set_global(cx));
+@@ -8260,6 +8262,7 @@ export default class People extends View {
+ #[gpui::test]
+ fn an_unclaimed_action_carries_on_to_an_outer_element(cx: &mut TestAppContext) {
+     cx.update(|cx| crate::init(cx));
++    crate::policy::grant_window_control();
+ 
+     let runtime = ShellRuntime::new_isolated().expect("runtime");
+     cx.update(|cx| runtime.set_global(cx));
+@@ -10764,6 +10767,7 @@ export default class LargeLists extends View {
+ #[gpui::test]
+ fn a_dialog_rebuilds_from_the_state_it_closes_over(cx: &mut TestAppContext) {
+     cx.update(|cx| crate::init(cx));
++    crate::policy::grant_window_control();
+     let runtime = ShellRuntime::new_isolated().expect("runtime");
+     cx.update(|cx| runtime.set_global(cx));
+     let source = r#"

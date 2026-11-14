@@ -13,7 +13,9 @@ use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, IntoElement as _, ParentElement as _,
     Render, Styled as _, Subscription, Task, Window, div,
 };
-use gpui_shell::{HostError, HostModule, HostValue, ScriptView, ShellRuntime, policy::Policy};
+use gpui_shell::{
+    EngineLimits, HostError, HostModule, HostValue, ScriptView, ShellRuntime, policy::Policy,
+};
 use voyager_app::{client::Client, content::ViewBinding};
 use voyager_contract::{
     ContentId,
@@ -46,9 +48,25 @@ fn validate_identity<'a>(
     Ok((request_id, (!revision.is_empty()).then_some(revision)))
 }
 
+fn vessel_limits() -> EngineLimits {
+    EngineLimits::new()
+        .with_heap_bytes(32 << 20)
+        .with_render_budget(Duration::from_millis(30))
+        .with_event_budget(Duration::from_millis(30))
+        .with_load_budget(Duration::from_millis(200))
+        .with_share_per_second(Duration::from_millis(200))
+        .with_strike_limit(3)
+}
+
+fn vessel_engine() -> Result<Rc<ShellRuntime>> {
+    let engine = ShellRuntime::new_isolated_with_components(crate::notes_input::registry()?)?;
+    engine.set_limits(vessel_limits());
+    Ok(engine)
+}
+
 #[derive(Clone)]
 pub struct Host {
-    runtime: Result<Rc<ShellRuntime>, String>,
+    available: Result<(), String>,
     package: PathBuf,
     budget: Budget,
     client: Client,
@@ -167,12 +185,11 @@ impl Host {
     }
 
     pub fn new(package: PathBuf, client: Client) -> Self {
-        let runtime = crate::notes_input::registry()
-            .map_err(anyhow::Error::from)
-            .and_then(ShellRuntime::new_isolated_with_components)
+        let available = crate::notes_input::registry()
+            .map(drop)
             .map_err(|error| format!("{error:#}"));
         Self {
-            runtime,
+            available,
             package,
             budget: Budget::default(),
             client,
@@ -183,7 +200,7 @@ impl Host {
 
     pub fn module(&self, colors: Colors) -> HostModule {
         let host = self.clone();
-        let runtime_error = self.runtime.as_ref().err().cloned();
+        let runtime_error = self.available.as_ref().err().cloned();
         let packages = self.package.parent().map(std::path::Path::to_path_buf);
         HostModule::new(crate::script_types::CONTENT_VIEW_MODULE)
             .declarations(crate::script_types::CONTENT_VIEW)
@@ -221,7 +238,7 @@ impl Host {
                 })
             })
             .component("Notes", move |args, window, cx| {
-                if let Err(error) = &host.runtime {
+                if let Err(error) = &host.available {
                     return div()
                         .p_4()
                         .child(format!("Notes unavailable: {error}"))
@@ -270,7 +287,6 @@ impl Host {
         }
         let views = Rc::downgrade(&self.views);
         let loader = Loader {
-            runtime: self.runtime.clone(),
             package: self.package.clone(),
             budget: self.budget.clone(),
             client: self.client.clone(),
@@ -467,7 +483,6 @@ fn signature(package: &Path) -> Result<Source> {
 
 #[derive(Clone)]
 struct Loader {
-    runtime: Result<Rc<ShellRuntime>, String>,
     package: PathBuf,
     budget: Budget,
     client: Client,
@@ -483,10 +498,7 @@ impl Loader {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<Candidate> {
-        let runtime = self
-            .runtime
-            .as_ref()
-            .map_err(|error| anyhow::Error::msg(error.clone()))?;
+        let engine = vessel_engine()?;
         let application = format!("notes-{}", id.0);
         let colors = note.colors.clone();
         let identity = id.0.clone();
@@ -605,10 +617,11 @@ impl Loader {
         )?;
         let session =
             crate::notes_scope::LoadSession::enter(note.session.clone(), binding.clone())?;
-        let application = runtime.load_application(&self.package, entry)?;
-        let view = runtime.mount_application(&application, window, cx)?;
+        let application = engine.load_application(&self.package, entry)?;
+        let view = engine.mount_application(&application, window, cx)?;
         Ok(Candidate {
             view,
+            engine,
             binding,
             retained: session.retained(),
             validated: false,
@@ -618,6 +631,7 @@ impl Loader {
 
 struct Candidate {
     view: Entity<ScriptView>,
+    engine: Rc<ShellRuntime>,
     binding: ViewBinding,
     retained: bool,
     validated: bool,
@@ -733,8 +747,17 @@ impl Render for Note {
                 }
             }
         }
-        let content = match &self.current {
-            Some(current) if !current.binding.is_retired() => Self::draw(current, window, cx).0,
+        let retirement = self
+            .current
+            .as_ref()
+            .and_then(|current| current.engine.retirement());
+        let content = match (&self.current, retirement) {
+            (Some(_), Some(retirement)) => {
+                div().p_4().child(retirement.to_string()).into_any_element()
+            }
+            (Some(current), None) if !current.binding.is_retired() => {
+                Self::draw(current, window, cx).0
+            }
             _ => div()
                 .p_4()
                 .child(if self.current.is_some() {
@@ -822,5 +845,39 @@ mod tests {
             assert_eq!(result.is_ok(), allowed, "{entry}");
         }
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn vessel_engines_carry_their_limits_before_the_first_load() {
+        let engine = vessel_engine().unwrap();
+        engine.set_editor_files(false);
+        let directory =
+            std::env::temp_dir().join(format!("voyager-vessel-limits-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::write(
+            directory.join("grow.js"),
+            "globalThis.kept = []; while (true) kept.push('x'.repeat(1 << 20) + kept.length); export default class {}",
+        )
+        .unwrap();
+        let refusals: Vec<_> = (0..3)
+            .map(|_| {
+                engine
+                    .load_application(&directory, "grow.js")
+                    .err()
+                    .map(|error| error.to_string())
+            })
+            .collect();
+        std::fs::remove_dir_all(directory).unwrap();
+        assert!(
+            refusals[0]
+                .as_deref()
+                .is_some_and(|message| message.contains("32 MiB")),
+            "{refusals:?}"
+        );
+        let retirement = engine
+            .retirement()
+            .expect("three refusals retire the engine");
+        assert_eq!(retirement.strikes(), 3);
+        assert_eq!(retirement.last(), gpui_shell::Refusal::OutOfMemory);
     }
 }
