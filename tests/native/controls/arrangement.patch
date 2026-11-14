@@ -1,0 +1,13 @@
+diff --git a/desktop/src/split.rs b/desktop/src/split.rs
+index 64628a2..0efae34 100644
+--- a/desktop/src/split.rs
++++ b/desktop/src/split.rs
+@@ -239,7 +239,7 @@ impl ComponentMaterializer for Split {
+                 let measuring = measuring.clone();
+                 window.defer(cx, move |window, cx| {
+                     measuring.update(cx, |state, cx| {
+-                        if state.config != expected || state.gesture.pressed {
++                        if state.config == expected || state.gesture.pressed {
+                             return;
+                         }
+                         let (index, size) = expected.allocation.resize_target(extent);

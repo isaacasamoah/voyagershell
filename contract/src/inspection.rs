@@ -93,6 +93,9 @@ roles! {
     ChatMessage => "chat-message",
     ChatStatus => "chat-status",
     ChatError => "chat-error",
+    SplitDivider => "split-divider",
+    MaximizePanel => "maximize-panel",
+    MovePreview => "move-preview",
 }
 
 #[cfg(test)]
