@@ -1,15 +1,23 @@
 use super::{Case as _, Cases, Verdict, cases};
-use crate::native::{Lines, Native, Terminal, Wheel, pid, quote, state};
+use crate::inspection::Target;
+use crate::native::{Lines, Native, Terminal, Wheel, pid, quote, state, vessels};
 use crate::system::{Identity, until};
 use crate::x11::{Key, Pixels};
 use anyhow::{Context, Result, ensure};
-use serde_json::Value;
+use serde_json::{Value, json};
+use std::fs;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use voyager_contract::RenameTarget;
+
+const HEADER_REFRESH: Duration = Duration::from_secs(3);
 
 cases! {
     NormalHistory => "normal-history",
     Arrows => "arrows",
     Mouse => "mouse",
     ReattachedHistory => "reattached-history",
+    ForeignExit => "foreign-exit",
+    ExitCloses => "exit-closes",
 }
 
 pub const CONTROL: Case = Case::NormalHistory;
@@ -146,7 +154,100 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let verdict = history(native, &terminal, "reattached", &live, verdict)?;
         terminal.same_program(native)?;
         Ok(verdict)
+    })?;
+    cases.check(native, Case::ForeignExit, |native| {
+        let (before, earlier) = native.document()?.context("Missing saved layout")?;
+        terminal.line(
+            native,
+            "hc run --no-parent --no-notify --name voyager-foreign /usr/bin/true",
+        )?;
+        let address = until("the foreign program's exit", || {
+            let listed = native
+                .system
+                .watch("terminal.list", json!({"all":true}))?;
+            Ok(listed["terminals"].as_array().and_then(|terminals| {
+                terminals
+                    .iter()
+                    .find(|item| item["name"] == "voyager-foreign" && item["state"] == "finished")
+                    .and_then(|item| item["address"].as_str().map(str::to_owned))
+            }))
+        })?;
+        std::thread::sleep(Duration::from_millis(500));
+        let (after, layout) = native.document()?.context("Missing saved layout")?;
+        let shown = native.observe("the placed terminal after a foreign exit", |seen| {
+            Some(seen.shows(&terminal.target()))
+        })?;
+        native.keep_window("foreign-exit")?;
+        Verdict::new()
+            .expect(
+                "a program outside the app exiting in the same Core session leaves the saved layout unchanged",
+                after == before,
+            )
+            .expect(
+                "the placed terminal stays shown with no new Vessel",
+                shown && vessels(&layout).count() == vessels(&earlier).count(),
+            )
+            .observed("foreign terminal", address)?
+            .observed("layout versions", [before, after])
+    })?;
+    cases.check(native, Case::ExitCloses, |native| {
+        let (before, _) = native.document()?.context("Missing saved layout")?;
+        let ticks = native.system.evidence.join("exit-ticks");
+        fs::create_dir_all(&ticks)?;
+        let folder = quote(&ticks)?;
+        fs::write(
+            native.system.evidence.join("home").join("tick"),
+            format!(
+                "i=0\nuntil [ -e {folder}/stop ]; do\n  i=$((i+1))\n  date +%s%N > {folder}/at-$i\n  mkdir -p {folder}/tick-$i\n  cd {folder}/tick-$i\n  sleep 0.05\ndone\nexit\n"
+            ),
+        )?;
+        terminal.line(native, ". ~/tick")?;
+        let name = Target::name(&RenameTarget::Vessel {
+            id: terminal.placement().clone(),
+        });
+        let tick = native.observe("a header observation of the ticking shell", |seen| {
+            seen.label(&name).and_then(tick_of)
+        })?;
+        fs::write(ticks.join("stop"), "")?;
+        let stopped = Instant::now();
+        let saved = until("a newer saved layout after the exit", || {
+            Ok(native
+                .document()?
+                .is_some_and(|(version, _)| version > before)
+                .then(SystemTime::now))
+        })?;
+        let saved_after = stopped.elapsed().as_millis();
+        native.observe("the exited shell's Vessel closed", |seen| {
+            (!seen.shows(&terminal.target()) && seen.version > before).then_some(())
+        })?;
+        let delay = stopped.elapsed().as_millis();
+        native.keep_window("exit-closes")?;
+        let entered: u64 = fs::read_to_string(ticks.join(format!("at-{tick}")))?
+            .trim()
+            .parse()
+            .context("The ticking shell's entry time")?;
+        let next_refresh = UNIX_EPOCH + Duration::from_nanos(entered) + HEADER_REFRESH;
+        let margin = millis(next_refresh)? - millis(saved)?;
+        Verdict::new()
+            .expect(
+                "the exited shell's Vessel is saved closed before the header's next 3 s observation could start",
+                saved < next_refresh,
+            )
+            .observed("observed tick", tick)?
+            .observed("refresh margin ms", margin)?
+            .observed("exit to saved ms", saved_after)?
+            .observed("exit to closed ms", delay)
     })
+}
+
+fn tick_of(label: &str) -> Option<u64> {
+    label
+        .split(" · ")
+        .find_map(|part| part.strip_prefix("tick-")?.parse().ok())
+}
+
+fn millis(time: SystemTime) -> Result<i128> {
+    Ok(time.duration_since(UNIX_EPOCH)?.as_millis().try_into()?)
 }
 
 fn moved(from: &Lines, to: &Lines, before: &Value, after: &Value) -> bool {

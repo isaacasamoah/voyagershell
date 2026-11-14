@@ -13,6 +13,8 @@ use std::{
 
 pub(super) type Replies = Arc<Mutex<HashMap<u64, SyncSender<Value>>>>;
 
+const PENDING_LIMIT: usize = 10;
+
 pub(crate) struct Pending<R> {
     id: u64,
     method: &'static str,
@@ -37,7 +39,7 @@ impl<R: DeserializeOwned> Pending<R> {
         if let Some(reason) = link.get() {
             return Err(disconnected(reason, "nothing was queued"));
         }
-        if waiting.len() >= 9 {
+        if waiting.len() >= PENDING_LIMIT {
             return Err(Error::Rejected {
                 kind: "busy".into(),
                 message: "Core request limit reached; nothing was queued".into(),
@@ -95,11 +97,11 @@ mod tests {
         let replies = Replies::default();
         let link = OnceLock::new();
         let register = |id| Pending::<Value>::register(id, "terminal.send", &replies, &link);
-        let mut pending = (1..=9).map(|id| register(id).unwrap()).collect::<Vec<_>>();
-        assert!(matches!(register(10), Err(Error::Rejected { kind, .. }) if kind == "busy"));
+        let mut pending = (1..=10).map(|id| register(id).unwrap()).collect::<Vec<_>>();
+        assert!(matches!(register(11), Err(Error::Rejected { kind, .. }) if kind == "busy"));
         drop(pending.remove(0));
         assert!(!replies.lock().unwrap().contains_key(&1));
-        assert_eq!(replies.lock().unwrap().len(), 8);
+        assert_eq!(replies.lock().unwrap().len(), 9);
         let ready = pending.remove(0);
         replies
             .lock()
@@ -114,7 +116,7 @@ mod tests {
         assert!(matches!(abandoned.wait(), Err(Error::Uncertain(_))));
         link.set("read failed".into()).unwrap();
         assert!(
-            matches!(register(11), Err(Error::Rejected { kind, .. }) if kind == "disconnected")
+            matches!(register(12), Err(Error::Rejected { kind, .. }) if kind == "disconnected")
         );
     }
 }

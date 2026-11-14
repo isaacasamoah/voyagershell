@@ -19,7 +19,8 @@ You need the tools listed in the README's
 [Build and run](../README.md#build-and-run) section. They are Git, Python 3,
 Node.js 24, Rust, Zig 0.17, a working Vulkan driver, the GPUI native libraries
 and Herdr Core's `hc` command on `PATH`. Voyager's Core API is generated from
-Core 0.1.16. Other Core releases need compatibility verification. Linux with
+Core 0.1.18, the oldest release it supports; it refuses an older Core at
+connection. Linux with
 X11 is the verified platform.
 
 We use two terminals. The first runs the app. The second runs commands while
