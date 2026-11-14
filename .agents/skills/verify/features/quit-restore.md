@@ -26,8 +26,8 @@ app/src/terminal_lifecycle.rs.
   running. Core, the shell, Core's live terminals and the layout document with
   its version must all be unchanged.
 - `relaunch-reattaches` launches again. Core's live terminals, the document and
-  its version must be the same as before Quit. `QUIT-42` must still be on the
-  terminal's screen. The Fleet tabs, Vessels and terminals must be drawn with
+  its version must be the same as before Quit. Core must still hold `QUIT-42`
+  for that terminal, read through `terminal.read`. The Fleet tabs, Vessels and terminals must be drawn with
   the avatar docked where the document says, and `AFTER-42` must reach the same
   shell.
 - `cold-restart-restores` quits, stops Core with `Native::stop_core`, and
@@ -47,6 +47,10 @@ a terminal that is still live. A candidate built with it must fail
 after the relaunch`, with two live addresses observed.
 
 ## Gotchas
+
+No case reads the terminal's pixels after the relaunch, so a build that draws
+no terminal text passes this journey. `terminal-scrolling` compares the drawn
+screen after its own relaunch and catches that build.
 
 The verifier never starts Core. Stopping Core stands in for a reboot. It does
 not test a real reboot, a lost socket or a Core that crashes. Warm window close

@@ -136,7 +136,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 saved.as_ref() == Some(&before.saved),
             )
             .expect(
-                "the output printed before Quit is still on the terminal's screen",
+                "Core still holds the output printed before Quit for that terminal",
                 earlier,
             )
             .expect(
@@ -178,12 +178,12 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .all(|shell| shell["state"] == "live" && shell["argv"] == before.argv);
         let first = selected(&layout).first().map(|vessel| vessel.id.clone());
         let typed = match &first {
-            Some(placement) => {
+            Some(placement) if plain => {
                 let restored = Terminal::bind(native, placement)?;
                 restored.line(native, "echo COLD-$((6*7))")?;
                 restored.printed(native, "COLD-42")?
             }
-            None => false,
+            _ => false,
         };
         Verdict::new()
             .expect("a new Core answers after the restart", new_core != old_core)
