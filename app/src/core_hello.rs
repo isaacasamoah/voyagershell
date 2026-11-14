@@ -43,13 +43,14 @@ impl From<Incompatible> for Error {
     }
 }
 
-fn release(version: &str) -> Option<(u64, u64, u64)> {
-    let mut parts = version
-        .split(['-', '+'])
-        .next()?
-        .split('.')
-        .map(|part| part.parse::<u64>().ok());
-    let release = (parts.next()??, parts.next()??, parts.next()??);
+fn release(version: &str) -> Option<(u64, u64, u64, bool)> {
+    let version = version.split('+').next()?;
+    let (numbers, prerelease) = match version.split_once('-') {
+        Some((numbers, _)) => (numbers, true),
+        None => (version, false),
+    };
+    let mut parts = numbers.split('.').map(|part| part.parse::<u64>().ok());
+    let release = (parts.next()??, parts.next()??, parts.next()??, !prerelease);
     parts.next().is_none().then_some(release)
 }
 
@@ -119,7 +120,8 @@ impl Core {
         if hello.generation != 1 {
             return Err(Incompatible::Generation(hello.generation));
         }
-        if release(&hello.version).is_none_or(|release| release < MINIMUM_CORE) {
+        let (major, minor, patch) = MINIMUM_CORE;
+        if release(&hello.version).is_none_or(|release| release < (major, minor, patch, true)) {
             return Err(Incompatible::Release(hello.version.clone()));
         }
         let missing: Vec<&'static str> = Self::REQUIRED_METHODS

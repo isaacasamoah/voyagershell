@@ -28,7 +28,9 @@ if (schema.info?.version !== minimum.version)
     `Core schema is ${schema.info?.version}; pass the released schema/hc.openrpc.json of Core ${minimum.version}`,
   );
 if (digest !== minimum.digest)
-  throw Error(`Core schema differs from the released ${minimum.version} schema`);
+  throw Error(
+    `Core schema differs from the released ${minimum.version} schema`,
+  );
 const definitions = {};
 const references = new Set();
 function convert(value) {

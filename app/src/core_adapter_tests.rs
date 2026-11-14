@@ -299,6 +299,11 @@ fn hello_from_a_core_older_than_the_minimum_returns_the_typed_mismatch() {
         ("0.1.17", Err(Incompatible::Release("0.1.17".into()))),
         ("0.1.9", Err(Incompatible::Release("0.1.9".into()))),
         ("unknown", Err(Incompatible::Release("unknown".into()))),
+        (
+            "0.1.18-rc.1",
+            Err(Incompatible::Release("0.1.18-rc.1".into())),
+        ),
+        ("0.1.18+build.5", Ok(())),
         ("0.1.18", Ok(())),
         ("0.1.21", Ok(())),
         ("0.2.0-dev", Ok(())),

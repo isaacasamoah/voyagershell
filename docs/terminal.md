@@ -340,10 +340,16 @@ method or feature. The connection then fails with the refusal kind
 later request repeats that refusal; nothing reconnects or retries.
 
 The owner queue in `app/src/client.rs` does not wait for a read whose reply
-decides no effect. The workspace observation's and the exit check's
-`terminal.list` start on the owner (`Core::begin` needs the request sequence),
-and a short worker thread waits for the reply and posts it back as a message. The owner then rechecks the workspace version: a changed
-workspace answers "observe it again" rather than applying a stale list. Calls
+decides no effect. Workspace observations and the exit check share one
+`terminal.list`. It starts on the owner (`Core::begin` needs the request
+sequence), and a short worker thread waits for the reply and posts it back as a
+message. At most one list is in flight: observations that arrive meanwhile wait
+for it, and an exit that finishes meanwhile asks for one more list after it. So
+reads never hold more than one of Core's nine request slots, and a save or an
+Inspect is never refused as busy behind them. The owner answers each observation
+against the current workspace version: a changed workspace answers "observe it
+again". Voyage renames and live bindings change only when the list began at the
+current version; exited panels close either way, because an exit is final. Calls
 whose reply decides the next effect stay on the owner in order: document saves
 with their version compare-and-set, the open/run/attach chain, liveness checks
 before a Send, Stop or reopen, Quit, and context preparation. They move with the
@@ -355,9 +361,8 @@ filtered stream would read as gaps. `Activity` keeps only events for terminals
 that a placement records as its backend. A `finished` event for such a terminal
 marks an exit check. At its next message the owner lists Core's terminals and
 closes each retained panel whose terminal exited while bound as live, saves the
-layout and notifies the header. At most one exit check is in flight; exits that
-finish meanwhile request one more list after it, so a burst of exits holds one
-of Core's nine request slots, not one each. A program's exit therefore shows without the
+layout and notifies the header. When Core refuses the list as busy, the check
+stays marked and starts at the next message. A program's exit therefore shows without the
 header's 3 s observation. That observation remains: it renames Voyages, refreshes
 live bindings and recovers an exit missed in a sequence gap or a refused
 `terminal.list`. A foreign program in the same session produces events that match

@@ -152,19 +152,20 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     })?;
     cases.check(native, Case::ForeignExit, |native| {
         let (before, earlier) = native.document()?.context("Missing saved layout")?;
-        let foreign = native.system.rpc(
-            "terminal.run",
-            json!({"argv":["/bin/true"],"cwd":"/tmp","no_parent":true}),
+        terminal.line(
+            native,
+            "hc run --no-parent --no-notify --name voyager-foreign /usr/bin/true",
         )?;
-        let address = foreign["address"]
-            .as_str()
-            .context("Missing foreign terminal")?
-            .to_owned();
-        until("the foreign program's exit", || {
-            let reported = native
+        let address = until("the foreign program's exit", || {
+            let listed = native
                 .system
-                .watch("terminal.get", json!({"terminal":address}))?;
-            Ok((reported["state"] == "finished").then_some(()))
+                .watch("terminal.list", json!({"all":true}))?;
+            Ok(listed["terminals"].as_array().and_then(|terminals| {
+                terminals
+                    .iter()
+                    .find(|item| item["name"] == "voyager-foreign" && item["state"] == "finished")
+                    .and_then(|item| item["address"].as_str().map(str::to_owned))
+            }))
         })?;
         std::thread::sleep(Duration::from_millis(500));
         let (after, layout) = native.document()?.context("Missing saved layout")?;

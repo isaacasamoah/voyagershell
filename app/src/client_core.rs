@@ -9,9 +9,11 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
-use voyager_contract::{CoreTerminalId, Layout};
+use voyager_contract::{
+    Context, CoreTerminalId, Layout, PlacementId, observation::WorkspaceObservation,
+};
 
-pub(super) fn post<R: serde::de::DeserializeOwned + Send + 'static>(
+fn post<R: serde::de::DeserializeOwned + Send + 'static>(
     sender: &async_channel::Sender<Message>,
     pending: crate::core::Pending<R>,
     done: impl FnOnce(Result<R, Error>) -> Message + Send + 'static,
@@ -47,35 +49,76 @@ pub(super) fn next_message(
     Ok(message)
 }
 
-#[derive(Default)]
-pub(super) enum ExitCheck {
-    #[default]
-    Idle,
-    Listing,
-    Again,
+pub(super) struct Observer {
+    pub(super) scope: Context,
+    pub(super) version: u64,
+    pub(super) active: Option<PlacementId>,
+    pub(super) reply: async_channel::Sender<Result<WorkspaceObservation, String>>,
 }
 
-impl ExitCheck {
-    pub(super) fn request(&mut self, core: &mut Core, sender: &async_channel::Sender<Message>) {
-        match self {
-            Self::Idle => {
-                if let Ok(pending) = core.begin_terminal_list() {
-                    post(sender, pending, |listed| Message::Ended {
-                        terminals: listed.map(|listed| listed.terminals),
-                    });
-                    *self = Self::Listing;
-                }
+#[derive(Default)]
+pub(super) struct Listing {
+    begun: Option<u64>,
+    exit: bool,
+    observers: Vec<Observer>,
+}
+
+impl Listing {
+    pub(super) fn exit(&mut self) {
+        self.exit = true;
+    }
+
+    pub(super) fn observe(&mut self, observer: Observer) {
+        self.observers.push(observer);
+    }
+
+    pub(super) fn start(
+        &mut self,
+        core: &mut Core,
+        version: u64,
+        sender: &async_channel::Sender<Message>,
+    ) -> Vec<Observer> {
+        if self.begun.is_some() || (!self.exit && self.observers.is_empty()) {
+            return Vec::new();
+        }
+        match core.begin_terminal_list() {
+            Ok(pending) => {
+                post(sender, pending, |listed| Message::Listed {
+                    terminals: listed.map(|listed| listed.terminals),
+                });
+                self.begun = Some(version);
+                self.exit = false;
+                Vec::new()
             }
-            Self::Listing | Self::Again => *self = Self::Again,
+            Err(_) => std::mem::take(&mut self.observers),
         }
     }
 
-    pub(super) fn listed(&mut self, core: &mut Core, sender: &async_channel::Sender<Message>) {
-        let again = matches!(self, Self::Again);
-        *self = Self::Idle;
-        if again {
-            self.request(core, sender);
-        }
+    pub(super) fn listed(&mut self) -> (Option<u64>, Vec<Observer>) {
+        (self.begun.take(), std::mem::take(&mut self.observers))
+    }
+}
+
+pub(super) fn answer(
+    observers: Vec<Observer>,
+    layout: &Arc<Layout>,
+    version: u64,
+    fresh: bool,
+    terminals: Option<&[Terminal]>,
+) {
+    for observer in observers {
+        let result = if fresh && observer.version == version {
+            crate::observation::capture(
+                layout,
+                version,
+                &observer.scope,
+                observer.active,
+                terminals,
+            )
+        } else {
+            Err("Workspace changed; observe it again".into())
+        };
+        let _ = observer.reply.try_send(result);
     }
 }
 
@@ -108,21 +151,6 @@ pub(super) fn live(
         .filter(|address| !closing.owns_terminal(address))
         .cloned()
         .collect()
-}
-
-pub(super) fn close_exits(
-    core: &mut Core,
-    layout: &mut Arc<Layout>,
-    version: &mut u64,
-    fresh: &mut bool,
-    terminals: &[Terminal],
-    live: &[CoreTerminalId],
-) -> bool {
-    let mut candidate = Model {
-        layout: (**layout).clone(),
-    };
-    crate::terminal_lifecycle::close_exited(&mut candidate, terminals, live) == Ok(true)
-        && commit(core, layout, version, fresh, candidate).is_ok()
 }
 
 #[cfg(test)]

@@ -150,3 +150,61 @@ fn an_exited_shell_closes_from_the_core_event_and_a_foreign_exit_changes_nothing
     cleanup.server_stop().unwrap();
     checked.unwrap();
 }
+
+#[test]
+fn observations_in_flight_never_crowd_out_a_workspace_save() {
+    use std::{
+        future::Future,
+        pin::pin,
+        task::{Context as TaskContext, Poll, Waker},
+    };
+    let suffix = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let session = format!("voyager-observe-busy-{}-{suffix}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let checked = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        for round in 0..10 {
+            let inspected = client
+                .call(Request {
+                    request_id: client.request_id(),
+                    expected_version: 0,
+                    action: Action::Inspect,
+                })
+                .unwrap();
+            assert_eq!(inspected.status, Status::Applied, "{inspected:?}");
+            let mut sent = 0;
+            for _ in 0..100_000 {
+                let mut observation =
+                    pin!(client.workspace_observation(Context::Workspace, inspected.version, None));
+                let polled = observation
+                    .as_mut()
+                    .poll(&mut TaskContext::from_waker(Waker::noop()));
+                sent += usize::from(matches!(polled, Poll::Pending));
+                if sent == 24 {
+                    break;
+                }
+            }
+            assert_eq!(sent, 24, "The owner never accepted 24 observations");
+            let created = loop {
+                let attempt = client.call(Request {
+                    request_id: client.request_id(),
+                    expected_version: inspected.version,
+                    action: Action::CreateVoyage {
+                        name: format!("round {round}"),
+                        cwd: "/tmp".into(),
+                    },
+                });
+                match attempt {
+                    Err(message) if message.contains("unavailable") => continue,
+                    other => break other.unwrap(),
+                }
+            };
+            assert_eq!(created.status, Status::Applied, "{created:?}");
+        }
+    }));
+    let mut cleanup = Core::connect(&session).unwrap();
+    cleanup.server_stop().unwrap();
+    checked.unwrap();
+}

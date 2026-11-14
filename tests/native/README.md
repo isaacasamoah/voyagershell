@@ -582,8 +582,9 @@ and after the relaunch the live screen must draw the same lines at the same
 places. The checks do not claim a scroll distance for shell history or the cell
 that a wheel report names; both are gaps.
 
-`foreign-exit` starts `/bin/true` through Core in the run's session, outside
-the app, and waits until Core reports it finished. The saved layout version must
+`foreign-exit` types `hc run --no-parent` for `/usr/bin/true` into the placed
+shell, so a program outside the app starts in the run's Core session, and waits
+until Core reports it finished. The saved layout version must
 stay the same and the placed terminal must stay shown with no new Vessel.
 `exit-closes` then types `exit` into the placed shell and measures, at the
 fixture's 80 ms glance, how long the Vessel takes to leave the drawn frame after

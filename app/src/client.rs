@@ -20,7 +20,7 @@ use voyager_contract::{
 
 #[path = "client_core.rs"]
 mod core_calls;
-use core_calls::{ExitCheck, close_exits, commit, live, next_message, post};
+use core_calls::{Listing, Observer, answer, commit, live, next_message};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WorkspaceNotice {
@@ -70,16 +70,7 @@ enum Message {
             Result<voyager_contract::observation::WorkspaceObservation, String>,
         >,
     },
-    Observed {
-        scope: Context,
-        version: u64,
-        active: Option<voyager_contract::PlacementId>,
-        reply: async_channel::Sender<
-            Result<voyager_contract::observation::WorkspaceObservation, String>,
-        >,
-        terminals: Option<Vec<crate::core_shapes::Terminal>>,
-    },
-    Ended {
+    Listed {
         terminals: Result<Vec<crate::core_shapes::Terminal>, Error>,
     },
     WorkspaceChanges {
@@ -347,7 +338,7 @@ impl Client {
             let mut created_contents = Vec::<CreatedTerminal>::new();
             let mut reopened = false;
             let mut live_bindings = Vec::<CoreTerminalId>::new();
-            let mut exit_check = ExitCheck::default();
+            let mut listing = Listing::default();
             let mut terminal_requests: VecDeque<(TerminalRequest, Result<WeakViewer, Error>)> =
                 VecDeque::new();
             let mut process_requests: VecDeque<(
@@ -381,13 +372,17 @@ impl Client {
                 },
                 workspace_listener.as_ref(),
             ) {
+                if observed_activity
+                    .lock()
+                    .is_ok_and(|mut activity| activity.take_ended())
+                {
+                    listing.exit();
+                }
                 if quit_result.is_none()
                     && let Ok(current_core) = core.as_mut()
-                    && observed_activity
-                        .lock()
-                        .is_ok_and(|mut activity| activity.take_ended())
                 {
-                    exit_check.request(current_core, &core_sender);
+                    let refused = listing.start(current_core, version, &core_sender);
+                    answer(refused, &layout, version, fresh, None);
                 }
                 let mut note_exit = None;
                 let mut rename_ready = None;
@@ -528,35 +523,6 @@ impl Client {
                         continue;
                     }
                     Message::ActivityChanged => continue,
-                    Message::Ended { terminals } => {
-                        if quit_result.is_none()
-                            && let Ok(current_core) = core.as_mut()
-                        {
-                            exit_check.listed(current_core, &core_sender);
-                        }
-                        if let Ok(terminals) = terminals
-                            && quit_result.is_none()
-                            && fresh
-                            && let Ok(current_core) = core.as_mut()
-                            && close_exits(
-                                current_core,
-                                &mut layout,
-                                &mut version,
-                                &mut fresh,
-                                &terminals,
-                                &live(&live_bindings, &closing),
-                            )
-                            && let Some(listener) = &workspace_listener
-                        {
-                            let _ = listener.try_send(WorkspaceNotice {
-                                revision: version,
-                                close_revision: closing.revision,
-                                package_revision: published_packages.load(Ordering::Relaxed),
-                                activity_revision: current_core.activity_revision(),
-                            });
-                        }
-                        continue;
-                    }
                     Message::RefreshActivity { reply } => {
                         if quit_result.is_none()
                             && let Ok(core) = &mut core
@@ -603,70 +569,104 @@ impl Client {
                         active,
                         reply,
                     } => {
-                        if !fresh || expected != version {
-                            let _ =
-                                reply.try_send(Err("Workspace changed; observe it again".into()));
-                            continue;
-                        }
-                        match core
-                            .as_mut()
-                            .ok()
-                            .and_then(|core| core.begin_terminal_list().ok())
-                        {
-                            Some(pending) => {
-                                post(&core_sender, pending, move |listed| Message::Observed {
-                                    scope,
-                                    version: expected,
-                                    active,
-                                    reply,
-                                    terminals: listed.ok().map(|listed| listed.terminals),
-                                })
+                        let observer = Observer {
+                            scope,
+                            version: expected,
+                            active,
+                            reply,
+                        };
+                        match core.as_mut() {
+                            Ok(current_core) if quit_result.is_none() => {
+                                listing.observe(observer);
+                                let refused = listing.start(current_core, version, &core_sender);
+                                answer(refused, &layout, version, fresh, None);
                             }
-                            None => {
-                                let _ = reply.try_send(crate::observation::capture(
-                                    &layout, version, &scope, active, None,
-                                ));
-                            }
+                            _ => answer(vec![observer], &layout, version, fresh, None),
                         }
                         continue;
                     }
-                    Message::Observed {
-                        scope,
-                        version: expected,
-                        active,
-                        reply,
-                        terminals,
-                    } => {
-                        let result = (|| -> Result<voyager_contract::observation::WorkspaceObservation, String> {
-                            if !fresh || expected != version { return Err("Workspace changed; observe it again".into()); }
-                            if let Some(terminals) = &terminals {
-                                let names = crate::observation::voyage_names(&layout, terminals);
-                                if !names.is_empty() || terminals.iter().any(|terminal| terminal.has_exited()
-                                    && live_bindings.iter().any(|id| id.0 == terminal.address)) {
-                                let mut candidate = Model { layout: (*layout).clone() };
+                    Message::Listed { terminals } => {
+                        let ((begun, observers), terminals) = (listing.listed(), terminals.ok());
+                        let closed = (|| -> Result<(), String> {
+                            let (Some(terminals), Ok(current_core), None, true) =
+                                (&terminals, core.as_mut(), &quit_result, fresh)
+                            else {
+                                return Ok(());
+                            };
+                            let current = begun == Some(version);
+                            let names = if current {
+                                crate::observation::voyage_names(&layout, terminals)
+                            } else {
+                                Vec::new()
+                            };
+                            if !names.is_empty()
+                                || terminals.iter().any(|terminal| {
+                                    terminal.has_exited()
+                                        && live_bindings.iter().any(|id| id.0 == terminal.address)
+                                })
+                            {
+                                let mut candidate = Model {
+                                    layout: (*layout).clone(),
+                                };
                                 let renamed = !names.is_empty();
                                 for (id, name) in names {
-                                    if let Some(voyage) = candidate.layout.voyages.iter_mut().find(|voyage| voyage.id == id) {
+                                    if let Some(voyage) = candidate
+                                        .layout
+                                        .voyages
+                                        .iter_mut()
+                                        .find(|voyage| voyage.id == id)
+                                    {
                                         voyage.name = name;
                                     }
                                 }
                                 let live = live(&live_bindings, &closing);
-                                let current_core = core.as_mut().map_err(|error| format!("{error:?}"))?;
-                                if crate::terminal_lifecycle::close_exited(&mut candidate, terminals, &live)? || renamed {
-                                    commit(current_core, &mut layout, &mut version, &mut fresh, candidate)?;
+                                if crate::terminal_lifecycle::close_exited(
+                                    &mut candidate,
+                                    terminals,
+                                    &live,
+                                )? || renamed
+                                {
+                                    commit(
+                                        current_core,
+                                        &mut layout,
+                                        &mut version,
+                                        &mut fresh,
+                                        candidate,
+                                    )?;
                                     if let Some(listener) = &workspace_listener {
-                                        let _ = listener.try_send(WorkspaceNotice { revision: version, close_revision: closing.revision,
-                                            package_revision: published_packages.load(Ordering::Relaxed),
-                                            activity_revision: current_core.activity_revision() });
+                                        let _ = listener.try_send(WorkspaceNotice {
+                                            revision: version,
+                                            close_revision: closing.revision,
+                                            package_revision: published_packages
+                                                .load(Ordering::Relaxed),
+                                            activity_revision: current_core.activity_revision(),
+                                        });
                                     }
                                 }
-                                }
-                                live_bindings = terminals.iter().filter(|terminal| terminal.is_live())
-                                    .map(|terminal| CoreTerminalId(terminal.address.clone())).collect();
                             }
-                            crate::observation::capture(&layout, version, &scope, active, terminals.as_deref())
+                            if current {
+                                live_bindings = terminals
+                                    .iter()
+                                    .filter(|terminal| terminal.is_live())
+                                    .map(|terminal| CoreTerminalId(terminal.address.clone()))
+                                    .collect();
+                            }
+                            Ok(())
                         })();
-                        let _ = reply.try_send(result);
+                        match closed {
+                            Ok(()) => {
+                                answer(observers, &layout, version, fresh, terminals.as_deref())
+                            }
+                            Err(error) => observers.into_iter().for_each(|observer| {
+                                let _ = observer.reply.try_send(Err(error.clone()));
+                            }),
+                        }
+                        if quit_result.is_none()
+                            && let Ok(current_core) = core.as_mut()
+                        {
+                            let refused = listing.start(current_core, version, &core_sender);
+                            answer(refused, &layout, version, fresh, None);
+                        }
                         continue;
                     }
                     Message::WorkspaceChanges { after, reply } => {
