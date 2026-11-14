@@ -368,6 +368,10 @@ Invariants:
   one second, or when the JavaScript heap reaches its limit. At the strike limit
   the engine retires. A retired engine refuses every later render, event, task
   and promise continuation at its entry, without running script.
+- Budgets and the share stop a call only at QuickJS's interrupt poll, which runs
+  between bytecode operations. One long native operation, such as a large
+  string, regular-expression or JSON call, runs to its end before it can be
+  stopped. The time it took still counts toward the share for later calls.
 - A Note whose current engine is retired draws a placeholder with the
   retirement message inside its own frame. The window and other Vessels keep
   drawing. The next source edit loads into a new engine, which is the recovery
@@ -407,8 +411,19 @@ Known gaps, outside these limits:
 - A render or task that runs out of memory and frees its garbage while
   unwinding reports a thrown `null` and counts no strike. The budgets and the
   share still stop repeated growth.
-- The numbers were set from a debug test-window prototype. Release behavior in
-  Voyager's window is measured by the E1 verification lanes.
+- Calls that spend their time inside native operations escape refusal. The E1
+  verifier ran 12 such module loads in 961 ms under a 30 ms budget and a 60 ms
+  share, and none was refused.
+- A script that catches its own out-of-memory error counts no strike.
+- The share is a fixed one-second window, so a burst that straddles the window
+  edge can use up to about twice the share. The E1 verifier observed 360 ms of
+  spinning in 384 ms under a 200 ms share.
+- Each idle engine costs about 1.9 MiB resident in a debug unit test, and every
+  Notes load creates one. It is freed with the candidate that holds it.
+- The numbers were set from a debug test-window prototype. No native journey
+  opens a script Vessel, so nothing measures these limits in the release app.
+  Whether a healthy Notes stays inside 30 ms per call and 200 ms per second on a
+  loaded machine is unproved.
 
 ## Notes controls in the feedback candidate
 
