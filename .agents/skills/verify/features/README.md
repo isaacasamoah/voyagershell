@@ -8,10 +8,10 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 <!-- features:begin -->
 | Feature | Behavior | Performance | Visual | Debug | Native journeys | Python journeys | Platforms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Voyages | covered | none | none | covered | workspace | workspace, placement, demo-feedback | linux |
-| Fleets | covered | none | none | covered | workspace | workspace | linux |
+| Voyages | covered | none | none | covered | workspace | demo-feedback | linux |
+| Fleets | covered | none | none | covered | workspace | - | linux |
 | Fleet arrangement | python-only | none | python-only | python-only | - | layouts, arrangement | linux |
-| Vessels | covered | none | none | covered | workspace | workspace | linux |
+| Vessels | covered | none | none | covered | workspace | - | linux |
 | Agent Vessels | python-only | none | python-only | python-only | - | arrangement, terminal-agent | linux |
 | Portals | python-only | none | python-only | python-only | - | placement, portal-terminal, portal-close | linux |
 | Split / resize / maximize | python-only | none | none | python-only | - | split-resize, pane-maximize, workspace-ux | linux |
@@ -25,7 +25,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Voice | python-only | none | none | python-only | - | conversation-voice | linux |
 | Layouts / Home | python-only | none | python-only | python-only | - | layouts, workspace-ux | linux |
 | Worktrees | python-only | none | none | python-only | - | demo-feedback | linux |
-| Close Voyage / quit / restore | python-only | none | python-only | python-only | - | session-quit, voyage-close, workspace | linux |
+| Close Voyage / quit / restore | python-only | none | python-only | python-only | - | session-quit, voyage-close, placement | linux |
 | Scripts live edit | python-only | python-only | python-only | python-only | - | canvas-stack | linux |
 <!-- features:end -->
 

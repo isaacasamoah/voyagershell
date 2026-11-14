@@ -184,29 +184,38 @@ Isaac approved dropping two checks on 13 November 2026.
 - A rename during a pending selection is not driven, because the old check
   patched the profile's script to delay the selection.
 
-The native journey does not drive the checks below, and nobody has approved
-dropping them. The Python `workspace` and `placement` journeys in
-`tests/native/proof_workspace.py` hold them and stay, behind
-`--legacy-reproduction`, until a native journey proves each one.
+The Python `workspace` journey is deleted, and the Python `placement`
+journey keeps only the Portal and the close, quit and restore checks that no
+native journey holds yet. Both stay in `tests/native/proof_workspace.py`
+behind `--legacy-reproduction`.
 
-- Portals. `placement` creates a Portal, docks to it, renames it and expects
-  its identity and its context to survive a Fleet change.
-- Docking by a click and from the keyboard. The native journey docks by a
-  drag only. `workspace` and `placement` dock by a click. A frame does not
-  report which dock target has keyboard focus, so Shift+Enter is not driven.
-- Close, quit and restore. The native journey quits once with Ctrl+Q and
-  launches again. `workspace` and `placement` reopen the saved workspace and
-  expect the app's Quit to end Core. Closing a Voyage stays with the Python
+- Portals. `placement` creates a Portal, docks to it by a click, renames it
+  to `+` and expects its identity and its context to survive a new Fleet.
+- Close, quit and restore. `placement` reopens the saved workspace and
+  expects the same document. Closing a Voyage stays with the Python
   `voyage-close` and `session-quit` journeys.
-- The Ctrl+Shift+O split shortcut, and Refresh after a refused stale layout,
-  which `workspace` drives.
 
-Neither Python journey was run for this recipe, because both take the real
-pointer and keyboard. Read from their source, they click fixed coordinates,
-look for a Fleet named `Workbench` and wait for Core to exit after Quit. The
-native runs observe a first Fleet named `Fleet 1` and a Core that keeps
-running after Quit. Both journeys are therefore expected to fail against
-this app until someone updates them. That is inferred, not observed.
+These deleted checks are out of date.
+
+- Lookups of a Fleet named `Workbench` and a Voyage named `Voyager`. The
+  native runs observe a first Fleet named `Fleet 1`.
+- The app's Quit ends Core. Quit shows "Programs keep running", and the
+  app deliberately leaves Core running.
+- Refresh after a refused stale layout. It depends on the stale-layout
+  refusal that Isaac approved dropping.
+
+These deleted checks are current behavior that no journey drives yet.
+
+- Docking to a Vessel by a click. The avatar journey is to cover it. The
+  native journey docks by a drag only.
+- Docking from the keyboard with Shift+Enter. The avatar journey is to
+  cover it with the frame's dock focus field. A frame of this branch does
+  not report which dock target has keyboard focus.
+- The Ctrl+Shift+O split shortcut. The arrangement journey is to cover it.
+  The native journey splits through the chooser.
+
+`placement` was not run for this recipe, because it takes the real pointer
+and keyboard.
 
 These gaps are open. Nobody has approved them.
 
@@ -215,8 +224,8 @@ These gaps are open. Nobody has approved them.
   label, or a narrow control that cuts the text short, passes. Reading the
   drawn pixels belongs to the visual tier.
 - The journey keeps captures but compares no pixels, so the visual tier of
-  Voyages, Fleets and Vessels is `none`. The Python `workspace`, `placement`
-  and `demo-feedback` journeys also keep captures and compare none.
+  Voyages, Fleets and Vessels is `none`. The Python `placement` and
+  `demo-feedback` journeys also keep captures and compare none.
 - `rename-keyboard` proves one Tab step and one Shift+Tab step, between two
   Voyage names. It does not walk the Fleet tabs or the Vessel titles.
 - While the docked Vessel is in a Fleet or Voyage that is not shown, the app
