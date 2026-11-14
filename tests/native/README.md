@@ -121,6 +121,26 @@ Core reports live. `Terminal::program` returns the state, PID and `argv` that
 Core reports for a terminal, and whether the bound shell is still the same
 process. A journey judges these values as expectations.
 
+### Stand-in provider
+
+The app starts its private conversation by running `codex app-server` from
+`PATH`. In the sandbox that finds the verifier binary, which sees its own name
+and runs as a relay. The relay connects to `/voyager/runtime/provider.sock`,
+sends a hello line with its PID and arguments, then copies the app's stdin lines
+to the socket and the socket's lines to its stdout. It does not exit when stdin
+closes, only when the socket closes or the app stops it.
+
+`Provider::listen` in `src/provider.rs` owns that socket in the journey. It
+answers `initialize`, `thread/start` and `turn/start` at once, in the Codex
+app-server shapes the app decodes, and hands each turn to the journey. The
+journey then scripts the turn with `started`, `item_started`, `delta`,
+`finish`, `complete` and `fail`. No timer drives the stand-in: each frame
+answers an app frame, or follows a state the journey has just observed. Every
+frame in both directions is recorded in `provider.jsonl` in the evidence folder,
+with its connection number. The frames are written by hand, so they are only as
+faithful as the shapes in `app/src/codex_protocol.rs`. No pinned app-server
+schema checks them yet.
+
 ### Negative controls
 
 Each journey has a patch at `tests/native/controls/JOURNEY.patch`. The patch
@@ -148,7 +168,11 @@ name is the typed text`, and the observed name is `NATIVE FLEET`. The
 `quit-restore` patch makes a relaunch clear the backend of a terminal that is
 still live, so the app starts a second shell while the first keeps running.
 `relaunch-reattaches` then fails on the expectation `Core lists the same live
-terminals after the relaunch`, with two live addresses observed.
+terminals after the relaunch`, with two live addresses observed. The `chat`
+patch makes a streamed delta replace the reply instead of extending it.
+`streamed-reply` then fails on the expectation `the second part extends the
+first while the reply is in progress`. The final `item/completed` frame repairs
+the text, so only a read taken while the reply streams catches it.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
@@ -205,6 +229,7 @@ The sandbox root is an empty tmpfs. It holds only these paths:
 | `/proc`, `/dev` and `/tmp` | New and private. |
 | `/voyager/runtime` | A private tmpfs. It is `XDG_RUNTIME_DIR` and holds the Core socket. |
 | `/voyager/bin/hc` | The hashed `hc`, read-only. It is the only `hc` on `PATH`. |
+| `/voyager/bin/codex` | The verifier binary itself, read-only. Under that name it runs as the stand-in provider's relay, so the app's private conversation never reaches a real model. It does nothing until the app starts a conversation. |
 | `/voyager/home` | `home/` in the evidence directory. It is `HOME`. |
 | `/voyager/home/project` | The fixture project. It is the app's working directory, so it becomes the Voyage. |
 | `/voyager/home/second-project` | An empty second folder. The `workspace` journey moves one shell into it before it creates a Voyage. |

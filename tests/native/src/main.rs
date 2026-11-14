@@ -6,6 +6,7 @@ mod lifecycle;
 mod native;
 mod probe;
 mod proof;
+mod provider;
 mod sandbox;
 mod system;
 mod x11;
@@ -24,6 +25,9 @@ use std::time::Duration;
 use system::{Pinned, System};
 
 fn main() {
+    if provider::invoked_as_relay() {
+        std::process::exit(provider::relay());
+    }
     match entry() {
         Ok(code) => std::process::exit(code),
         Err(error) => {
@@ -353,6 +357,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/features.rs", include_bytes!("features.rs")),
     ("src/inspection.rs", include_bytes!("inspection.rs")),
     ("src/journey.rs", include_bytes!("journey.rs")),
+    ("src/journey/chat.rs", include_bytes!("journey/chat.rs")),
     ("src/journey/layout.rs", include_bytes!("journey/layout.rs")),
     (
         "src/journey/quit_restore.rs",
@@ -379,6 +384,7 @@ const SOURCES: &[(&str, &[u8])] = &[
     ),
     ("src/probe.rs", include_bytes!("probe.rs")),
     ("src/proof.rs", include_bytes!("proof.rs")),
+    ("src/provider.rs", include_bytes!("provider.rs")),
     ("src/sandbox.rs", include_bytes!("sandbox.rs")),
     ("src/system.rs", include_bytes!("system.rs")),
     ("src/x11.rs", include_bytes!("x11.rs")),
