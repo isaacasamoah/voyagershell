@@ -2,7 +2,9 @@
 
 This is the Rust slice of the maintained native fixture. It runs the journeys in
 its journey registry on an owned Linux X11 display. The journeys are
-`terminal-scrolling` and `workspace`, which covers Voyages, Fleets and Vessels.
+`terminal-scrolling`, `workspace`, which covers Voyages, Fleets and Vessels,
+`quit-restore` and `terminal-input`, which covers typing, keys, output,
+selection and copy and paste in a terminal.
 The app changes only to mark controls for inspection.
 Invoke `voyager-verification` directly. New verification extends this environment,
 including its shared actions and evidence contract. A single command wrapping
@@ -28,6 +30,7 @@ The environment is not yet accepted as a complete implementation of that design.
 | ETC/ORTH/DRY checks | Required independent review criteria; not an automatic architecture score. |
 | Versioned request/result contract and independent receipt conformance | Planned. Pilot receipts are evidence, not a certified acceptance validator. |
 | Voyages, Fleets and Vessels | Implemented by the `workspace` journey. Its recipe lists the checks that it does not drive. |
+| Terminal typing, keys, output, selection, copy and paste | Implemented by the `terminal-input` journey. Its recipe lists the checks that it does not drive. |
 | Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
 | Compositor/drag/IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
 | Configurable architecture YAML and typed Jev review | Separate later work. |
@@ -155,6 +158,10 @@ terminals after the relaunch`, with two live addresses observed. The
 `voyage-close` patch makes a confirmed close stop only the first program of
 the Voyage. `close-voyage-confirm` then fails on the expectation `every
 program of the closed Voyage stopped`, with one of its shells observed live.
+The `terminal-input` patch makes Ctrl+Shift+C an ordinary key, so copy does
+nothing. `copy-puts-the-selection-on-the-clipboard` then fails on the
+expectation `another X client reads exactly COPYβ界 from the clipboard`, and
+the observed text is the verifier's own `VERIFIER-SENTINEL`.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
@@ -244,6 +251,14 @@ the candidate. `reached` means that the sandbox can see the host object, and it
 makes the run inconclusive. `doctor` runs the same canary and prints the results
 under `containment`.
 
+Before its first case, `terminal-input` checks that the fixture home holds no
+`.bashrc`, `.bash_profile`, `.profile` or `.inputrc` (`plain_shell` in
+`src/sandbox.rs`). It adds a `startup-file` entry for each name and a
+`first-shell` entry with the first shell's `argv` to `containment.json`. A
+file that is present ends the run `inconclusive`, because the journey would
+then measure a line editor's startup and not the app. Readline still reads the
+host's `/etc/inputrc`.
+
 The sandbox does not virtualize the kernel, and `/usr` and `/etc` are the
 host's. A different host package set can still change a result.
 
@@ -270,7 +285,8 @@ evidence folder, a new file for each launch, and parses each frame with the
 [the inspection endpoint](../../docs/inspection.md)). A journey names a control
 with a `Target` from `src/inspection.rs`. A `Target` pairs a role with the key
 that the app gives that role, and its constructors take the id types of the
-contract. No input method takes a coordinate.
+contract. No input method takes a coordinate, except `Native::drag_between`,
+which takes two points inside a named control.
 
 Before a pointer input, the driver waits for the target's element and converts
 its bounds to device pixels with `window.scale` and the window's origin on the
@@ -325,7 +341,10 @@ input must draw. Its check gives a value only from a frame that shows that
 result, or its wanted value requires that result. A frame from before the
 input cannot show a control that the input creates, so the wait goes on, and
 every frame value that the case judges comes from the glance that showed the
-result. `split-vessel` wants the terminals of both Vessels drawn, with the new
+result. The same rule holds for a capture that a later capture is compared
+with. `terminal-input` takes such a capture only once it shows what the
+program drew last. That is the waiting block of the `draw` probe, and the
+prompt below the text to select. `split-vessel` wants the terminals of both Vessels drawn, with the new
 one to the right. `create-fleet` and `create-voyage` want the new tab, row and
 Vessel drawn under their saved names, and they read the dock from that glance.
 Before this rule, `create-fleet` waited only for the new Fleet in the document
@@ -351,8 +370,14 @@ first move of more than 7 logical pixels with the button held, and it docks
 where the button is released (`moving` and `released` in
 `desktop/src/avatar.rs`). The button is released even when the move fails.
 
+`Native::drag_between` drags inside one control, between two points in device
+pixels relative to the window. A journey takes the points from a capture. The
+driver refuses a point that is outside the control or under the avatar. It
+presses at the first point, moves to the second in 4 equal steps and releases,
+and it releases the button even when a move fails.
+
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
-`Chord` adds a modifier to a key. `Terminal` in `src/native/terminal.rs` binds
+`Chord` adds Ctrl, Shift or both to a key. `Terminal` in `src/native/terminal.rs` binds
 one terminal Vessel by its placement. It owns the terminal's Core address and
 shell identity, its captures and its wheel input, so a journey without a
 terminal does not wait for one. `Terminal::first` reads the layout document
@@ -364,10 +389,31 @@ with a folder and waits until Core reports that folder for the shell.
 `Terminal::bind` binds the terminal of one Vessel, and `Terminal::first` binds
 the first one. Every bound shell is adopted, so cleanup waits for its exit and
 `processes.json` lists it as `shell PLACEMENT`. The `workspace` journey binds
-the shell of every Vessel that it creates.
+the shell of every Vessel that it creates. `split_right` in
+`src/journey/layout.rs` is the one way to split a Vessel with a terminal, and
+`workspace` and `terminal-input` both use it. `Terminal::foreground` returns
+the name of the program that Core reports in the terminal's foreground. It
+reads again until Core names one. In 1 of 10 runs on a loaded machine, one
+`terminal.get` reply carried no `foreground` while `timeout 30 yes flood`
+ran, between two replies that named `timeout`. A journey that judged that
+reply failed a correct candidate.
+`Terminal::shown` waits up to 12 s for a capture that shows a named thing. It
+serves readiness, which no case judges. `Terminal::echoed` types a long shell
+line in pieces of 16 characters and waits until Core's screen ends with each
+piece before it types the next. The app queues at most 64 frames for Core and
+drops a key that arrives while the queue is full. In 1 of 10 runs on a loaded
+machine, a 190-character line typed in one burst at the 1 ms pace lost two
+characters, and the terminal showed `Core output queue is full; frame was not
+queued`. A piece that the shell does not echo is never typed again. It ends
+the journey `failed`, blamed on the product, with the typed text beside the
+screen's text. A terminal that has lost the keyboard fails the same way. After
+`drag-selects-text`, `terminal-input` types with `echoed` and `press` on the
+terminal that already holds the keyboard, because a click would start a new
+selection.
 
 One `x11rb` connection to the owned display carries all input (XTEST) and
-capture (`GetImage`). A terminal capture is the `terminal` element's area, with
+capture (`GetImage`). A second connection belongs to the verifier's clipboard
+owner, described below, and carries nothing else. A terminal capture is the `terminal` element's area, with
 the avatar's reported bounds blanked. After an input, `Terminal::settled` gives
 `settle` a capture every 10 ms for up to 4 s. It returns the capture once the
 capture is the expected one and has not changed for 150 ms. After 4 s it
@@ -413,6 +459,38 @@ still alive at the deadline, the driver reads its state, the kernel function
 that it sleeps in and its system call from `/proc`, kills it, records all of
 that as a `forced-stop` event and reports a cleanup error. A cleanup error
 still prevents a pass.
+
+The verifier's clipboard owner (`Clipboard` in `src/x11/clipboard.rs`) is a
+second X client with its own connection, an unmapped window and one thread.
+Isaac chose this exception to the one connection. The owner must answer the
+app's request for the clipboard while the journey waits in `settle` on the
+first connection. On one connection the app would wait out its 4 s timeout.
+The owner also lets a journey read what the app copied as another X client
+does. The app answers its own paste from a cache while it owns CLIPBOARD, so a
+copy and a paste inside the app prove nothing about X.
+
+Only the owner's thread waits on that connection, for events and for replies.
+The journey's thread sends it a command through a channel and wakes it with a
+ClientMessage to the owner's window. `own` takes CLIPBOARD and confirms the
+owner with `GetSelectionOwner`. The thread answers `TARGETS`, listing
+`TARGETS` and `UTF8_STRING`, and it answers `UTF8_STRING`. It refuses any
+other target with the property None. `read` converts CLIPBOARD to
+`UTF8_STRING` and gives the owner of the clipboard 4 s. It returns the text,
+`refused` or `unanswered`. `owner` returns the window that owns CLIPBOARD.
+The thread records each request that it served or refused, with the name of
+the target, the requestor and the time, and each `SelectionClear`.
+`Native::clipboard` writes that record to `actions.jsonl` as `clipboard`
+events when a journey reads it and again at cleanup. Every wait has a
+deadline. The owner's connection gives the display 5 s to answer, as the
+first connection does, and a wait for an event that runs that long starts
+again.
+
+Cleanup stops the clipboard owner first, before the viewer, Core and the
+display. It sends the thread a stop command, wakes it, joins it and then drops
+the connection. The first connection is still open then, so the display does
+not lose its last client. A thread that failed is a cleanup error. Before its
+first case, `terminal-input` owns a canary text and reads it back. A canary
+that does not come back ends the run `inconclusive`, blamed on the fixture.
 
 `--window WIDTHxHEIGHT` resizes the candidate's window in device pixels, and
 `--sidebar open|collapsed` sets the sidebar with its own toggle. Both apply
@@ -497,7 +575,7 @@ Core and lists each Core that the journey stopped, in order. A case that ends
 with the candidate closed records an `unkept` event in place of its window
 capture. `sandbox.json` records the session
 name and the complete bubblewrap command. `containment.json` holds the canary
-results. The verifier records its own binary and source fingerprints. Changed
+results, and the shell entries that `terminal-input` adds. The verifier records its own binary and source fingerprints. Changed
 Rust source requires a rebuild before a run.
 Evidence is outside Git and survives resource cleanup. `home/` keeps what the
 app, Core and the shell wrote under `HOME`, and the fixture project. The runtime
@@ -537,7 +615,7 @@ Reconsider a code verifier when the next concrete property needs one.
 
 | Principle | Required review | Present ownership |
 | --- | --- | --- |
-| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `journey.rs` owns the journey registry and case verdicts; `journey/scrolling.rs` and `journey/workspace.rs` describe the journeys; `native.rs` handles the app window; `native/input.rs` owns pointer and key input; `native/terminal.rs` owns a bound terminal; `x11.rs` owns the display connection; `inspection.rs` reads frames and names controls; `system.rs` owns process/recording/polling/Core primitives. |
+| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `journey.rs` owns the journey registry and case verdicts; `journey/scrolling.rs`, `journey/workspace.rs`, `journey/quit_restore.rs` and `journey/input.rs` describe the journeys; `native.rs` handles the app window; `native/input.rs` owns pointer, key and clipboard input; `native/terminal.rs` owns a bound terminal and reads its captures; `x11.rs` owns the display connection and `x11/clipboard.rs` the verifier's clipboard owner; `inspection.rs` reads frames and names controls; `system.rs` owns process/recording/polling/Core primitives. |
 | Orthogonality | Product code does not depend on the fixture; the reporting gate is independent of I/O. Core owns programs. | Standalone development crate; pure `lifecycle.rs`; platform dependencies remain outside the app. |
 | DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, journey list, event list, reporting gate, recorder, polling loop, input/capture adapter, locator and shutdown path for the migrated journeys. The frame and layout types are the app's own. |
 
@@ -583,6 +661,38 @@ places. The checks do not claim a scroll distance for shell history or the cell
 that a wheel report names; both are gaps.
 
 The native Rust probe accepts only SGR wheel buttons 64 and 65 with two nonempty decimal coordinates. Other mouse buttons and malformed reports cannot move its counter. The probe counts the wheel reports and the cursor keys that move it, and it writes both counts to its state file. The `arrows` case expects cursor keys and no wheel reports, and the `mouse` case expects wheel reports and no cursor keys. The focused parser regression was observed failing before this correction; both crate regression tests pass afterward.
+
+The probe has four modes, parsed into `Mode` in `src/probe.rs`. `arrows` and
+`mouse` serve `terminal-scrolling`. `keys` and `draw` serve `terminal-input`.
+Every mode puts the terminal in raw mode and restores its modes when it ends.
+In raw mode Ctrl+C arrives as a byte and raises no signal. `keys` enters the
+alternate screen, asks for application cursor keys with `--application-cursor`
+and for bracketed paste with `--bracketed-paste`, and then draws a ready block
+in one truecolor. It saves every byte that it reads to its state file after
+each read. It ends on Ctrl+D (`0x04`), which it does not save. `draw` draws a
+waiting block in another colour and then waits for three files beside its
+state file. They carry the state file's name with the extensions `go`, `back`
+and `end`. On `go` it enters the alternate screen and draws two blocks of text
+at fixed rows and columns. On `back` it leaves the alternate screen. Its state
+file names the stage that it reached.
+
+A journey types to a `keys` probe only after it sees the ready block in a
+capture. The app parses output in order, so a drawn block shows that the app
+has parsed the modes that the probe set before it. The state file alone shows
+only that the probe wrote them. A journey also checks that no ready block is
+drawn before it starts a probe, so the block that it then sees belongs to that
+probe. No case waits on a status that the shell reports itself. Core drops
+such a status within about 100 ms.
+
+`boxes`, `changed` and `repainted` in `src/native/terminal.rs` read a capture
+by colour. `boxes` finds each box that a capture draws in one colour and
+counts the pixels of another colour inside it, which are glyph ink. `changed`
+bounds the pixels that differ between two captures. `repainted` lists the
+colours that a later capture draws where an earlier one drew a given colour.
+A colour matches within 1 per channel. The app draws a selected run of cells
+in two shades that differ by 1 in one channel (observed on Mesa software
+rendering), so one colour means one colour within that tolerance. The helpers
+give device pixels relative to the window, as `drag_between` takes them.
 
 ## Retained Python journey reference
 
