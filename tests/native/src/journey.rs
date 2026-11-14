@@ -1,4 +1,5 @@
 mod arrangement;
+mod chat;
 mod layout;
 mod portals;
 mod quit_restore;
@@ -101,6 +102,7 @@ journeys! {
     VoyageClose => "voyage-close" in voyage_close, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Arrangement => "arrangement" in arrangement, sidebar: Some(Sidebar::Open), window: None;
     Portals => "portals" in portals, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
+    Chat => "chat" in chat, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {

@@ -284,6 +284,13 @@ impl Native {
         self.present()
     }
 
+    pub fn candidate(&self) -> Result<&Identity> {
+        self.viewer
+            .as_ref()
+            .map(|viewer| &viewer.identity)
+            .context("Missing viewer")
+    }
+
     pub fn core(&self) -> Result<&Identity> {
         self.core.as_ref().context("Missing Core identity")
     }

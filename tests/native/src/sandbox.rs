@@ -12,6 +12,8 @@ pub const PROJECT: &str = "/voyager/home/project";
 pub const SECOND_PROJECT: &str = "/voyager/home/second-project";
 pub const RUNTIME: &str = "/voyager/runtime";
 pub const CORE: &str = "/voyager/bin/hc";
+pub const PROVIDER: &str = "/voyager/bin/codex";
+pub const PROVIDER_SOCKET: &str = "/voyager/runtime/provider.sock";
 pub const DISPLAY: &str = ":99";
 
 pub const ENVIRONMENT: &[(&str, &str)] = &[
@@ -53,6 +55,7 @@ impl Sandbox<'_> {
             }
         }
         command.extend(["--ro-bind".into(), text(self.core)?, CORE.into()]);
+        command.extend(["--ro-bind".into(), text(self.verifier)?, PROVIDER.into()]);
         for path in [Some(self.verifier), Some(self.candidate), self.assets]
             .into_iter()
             .flatten()
