@@ -588,8 +588,9 @@ pending and does not dispatch again. An identical completed request returns its
 retained result.
 
 The single framed Core connection routes replies by request ID. It admits at
-most nine pending RPCs, including capacity for ordinary owner reads alongside
-at most eight admitted process effects. Process admissions remain counted until
+most ten pending RPCs: at most eight admitted process effects, the one shared
+terminal list that observations and the exit check wait on, and one ordinary
+owner call. Process admissions remain counted until
 the owner reconciles completion. The thirty-two-entry process receipt history
 evicts completed entries only. Replies received after a caller has gone away
 are ignored without disconnecting unrelated viewers. Disconnects release all

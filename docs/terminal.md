@@ -345,7 +345,7 @@ decides no effect. Workspace observations and the exit check share one
 sequence), and a short worker thread waits for the reply and posts it back as a
 message. At most one list is in flight: observations that arrive meanwhile wait
 for it, and an exit that finishes meanwhile asks for one more list after it. So
-reads never hold more than one of Core's nine request slots, and a save or an
+reads never hold more than one of the connection's ten request slots, which [delayed process effects](workspace.md) count, and a save or an
 Inspect is never refused as busy behind them. The owner answers each observation
 against the current workspace version: a changed workspace answers "observe it
 again". Voyage renames and live bindings change only when the list began at the

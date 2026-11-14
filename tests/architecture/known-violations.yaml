@@ -28,7 +28,7 @@ known:
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/client.rs'
-    limit: 4376
+    limit: 4350
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/content.rs'
@@ -39,12 +39,8 @@ known:
     limit: 1108
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
-  - id: 'file-size: app/src/core.rs'
-    limit: 1031
-    owner: isaac
-    reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: app/src/tests.rs'
-    limit: 1557
+    limit: 1551
     owner: isaac
     reason: 'File is over 1000 lines. It may shrink, and lowering this limit with it keeps it from growing back. Splitting it below 1000 lines clears it.'
   - id: 'file-size: desktop/mods/header/main.ts'

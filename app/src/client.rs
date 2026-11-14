@@ -20,7 +20,7 @@ use voyager_contract::{
 
 #[path = "client_core.rs"]
 mod core_calls;
-use core_calls::{Listing, Observer, answer, commit, live, next_message};
+use core_calls::{Listing, Observer, changed_layout, commit, live, next_message};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WorkspaceNotice {
@@ -381,8 +381,7 @@ impl Client {
                 if quit_result.is_none()
                     && let Ok(current_core) = core.as_mut()
                 {
-                    let refused = listing.start(current_core, version, &core_sender);
-                    answer(refused, &layout, version, fresh, None);
+                    listing.start(current_core, &layout, version, fresh, &core_sender);
                 }
                 let mut note_exit = None;
                 let mut rename_ready = None;
@@ -578,10 +577,9 @@ impl Client {
                         match core.as_mut() {
                             Ok(current_core) if quit_result.is_none() => {
                                 listing.observe(observer);
-                                let refused = listing.start(current_core, version, &core_sender);
-                                answer(refused, &layout, version, fresh, None);
+                                listing.start(current_core, &layout, version, fresh, &core_sender);
                             }
-                            _ => answer(vec![observer], &layout, version, fresh, None),
+                            _ => observer.answer(&layout, version, fresh, None),
                         }
                         continue;
                     }
@@ -594,54 +592,25 @@ impl Client {
                                 return Ok(());
                             };
                             let current = begun == Some(version);
-                            let names = if current {
-                                crate::observation::voyage_names(&layout, terminals)
-                            } else {
-                                Vec::new()
-                            };
-                            if !names.is_empty()
-                                || terminals.iter().any(|terminal| {
-                                    terminal.has_exited()
-                                        && live_bindings.iter().any(|id| id.0 == terminal.address)
-                                })
+                            let live = live(&live_bindings, &closing);
+                            if let Some(candidate) =
+                                changed_layout(&layout, terminals, &live, current)?
                             {
-                                let mut candidate = Model {
-                                    layout: (*layout).clone(),
-                                };
-                                let renamed = !names.is_empty();
-                                for (id, name) in names {
-                                    if let Some(voyage) = candidate
-                                        .layout
-                                        .voyages
-                                        .iter_mut()
-                                        .find(|voyage| voyage.id == id)
-                                    {
-                                        voyage.name = name;
-                                    }
-                                }
-                                let live = live(&live_bindings, &closing);
-                                if crate::terminal_lifecycle::close_exited(
-                                    &mut candidate,
-                                    terminals,
-                                    &live,
-                                )? || renamed
-                                {
-                                    commit(
-                                        current_core,
-                                        &mut layout,
-                                        &mut version,
-                                        &mut fresh,
-                                        candidate,
-                                    )?;
-                                    if let Some(listener) = &workspace_listener {
-                                        let _ = listener.try_send(WorkspaceNotice {
-                                            revision: version,
-                                            close_revision: closing.revision,
-                                            package_revision: published_packages
-                                                .load(Ordering::Relaxed),
-                                            activity_revision: current_core.activity_revision(),
-                                        });
-                                    }
+                                commit(
+                                    current_core,
+                                    &mut layout,
+                                    &mut version,
+                                    &mut fresh,
+                                    candidate,
+                                )?;
+                                if let Some(listener) = &workspace_listener {
+                                    let _ = listener.try_send(WorkspaceNotice {
+                                        revision: version,
+                                        close_revision: closing.revision,
+                                        package_revision: published_packages
+                                            .load(Ordering::Relaxed),
+                                        activity_revision: current_core.activity_revision(),
+                                    });
                                 }
                             }
                             if current {
@@ -653,19 +622,18 @@ impl Client {
                             }
                             Ok(())
                         })();
-                        match closed {
-                            Ok(()) => {
-                                answer(observers, &layout, version, fresh, terminals.as_deref())
+                        for observer in observers {
+                            match &closed {
+                                Ok(()) => {
+                                    observer.answer(&layout, version, fresh, terminals.as_deref())
+                                }
+                                Err(error) => drop(observer.reply.try_send(Err(error.clone()))),
                             }
-                            Err(error) => observers.into_iter().for_each(|observer| {
-                                let _ = observer.reply.try_send(Err(error.clone()));
-                            }),
                         }
                         if quit_result.is_none()
                             && let Ok(current_core) = core.as_mut()
                         {
-                            let refused = listing.start(current_core, version, &core_sender);
-                            answer(refused, &layout, version, fresh, None);
+                            listing.start(current_core, &layout, version, fresh, &core_sender);
                         }
                         continue;
                     }

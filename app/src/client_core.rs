@@ -75,11 +75,13 @@ impl Listing {
     pub(super) fn start(
         &mut self,
         core: &mut Core,
+        layout: &Arc<Layout>,
         version: u64,
+        fresh: bool,
         sender: &async_channel::Sender<Message>,
-    ) -> Vec<Observer> {
+    ) {
         if self.begun.is_some() || (!self.exit && self.observers.is_empty()) {
-            return Vec::new();
+            return;
         }
         match core.begin_terminal_list() {
             Ok(pending) => {
@@ -88,9 +90,12 @@ impl Listing {
                 });
                 self.begun = Some(version);
                 self.exit = false;
-                Vec::new()
             }
-            Err(_) => std::mem::take(&mut self.observers),
+            Err(_) => {
+                for observer in std::mem::take(&mut self.observers) {
+                    observer.answer(layout, version, fresh, None);
+                }
+            }
         }
     }
 
@@ -99,27 +104,50 @@ impl Listing {
     }
 }
 
-pub(super) fn answer(
-    observers: Vec<Observer>,
-    layout: &Arc<Layout>,
-    version: u64,
-    fresh: bool,
-    terminals: Option<&[Terminal]>,
-) {
-    for observer in observers {
-        let result = if fresh && observer.version == version {
-            crate::observation::capture(
-                layout,
-                version,
-                &observer.scope,
-                observer.active,
-                terminals,
-            )
+impl Observer {
+    pub(super) fn answer(
+        self,
+        layout: &Arc<Layout>,
+        version: u64,
+        fresh: bool,
+        terminals: Option<&[Terminal]>,
+    ) {
+        let result = if fresh && self.version == version {
+            crate::observation::capture(layout, version, &self.scope, self.active, terminals)
         } else {
             Err("Workspace changed; observe it again".into())
         };
-        let _ = observer.reply.try_send(result);
+        let _ = self.reply.try_send(result);
     }
+}
+
+pub(super) fn changed_layout(
+    layout: &Layout,
+    terminals: &[Terminal],
+    live: &[CoreTerminalId],
+    current: bool,
+) -> Result<Option<Model>, String> {
+    let names = if current {
+        crate::observation::voyage_names(layout, terminals)
+    } else {
+        Vec::new()
+    };
+    let renamed = !names.is_empty();
+    let mut candidate = Model {
+        layout: layout.clone(),
+    };
+    for (id, name) in names {
+        if let Some(voyage) = candidate
+            .layout
+            .voyages
+            .iter_mut()
+            .find(|voyage| voyage.id == id)
+        {
+            voyage.name = name;
+        }
+    }
+    let closed = crate::terminal_lifecycle::close_exited(&mut candidate, terminals, live)?;
+    Ok((closed || renamed).then_some(candidate))
 }
 
 pub(super) fn commit(
