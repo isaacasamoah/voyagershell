@@ -75,7 +75,7 @@ function expectFailure(result, ...named) {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /18 violations, 18 known\n.*PASS\n$/s);
+  assert.match(result.out, /14 violations, 14 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -320,16 +320,31 @@ test("an existing cycle that is not recorded fails", () => {
 });
 
 test("fixing a known violation without removing its entry fails as stale", () => {
+  const include =
+    "includes(rs:voyager_app,source:experiments/performance/frame-work/probe.rs)";
+  const known = path.join(folder("architecture-known-"), "known.yaml");
+  fs.writeFileSync(
+    known,
+    `${fs.readFileSync(KNOWN, "utf8")}  - id: 'no-experiment-includes: ${include}'\n    owner: isaac\n    reason: planted\n`,
+  );
   const directory = scratch();
+  edit(
+    directory,
+    "app/src/lib.rs",
+    (text) =>
+      `${text}\n#[path = "../../experiments/performance/frame-work/probe.rs"]\nmod planted;\n`,
+  );
+  assert.strictEqual(
+    run(directory, ["--known", known]).status,
+    0,
+    "a recorded include passes while it exists",
+  );
   edit(directory, "app/src/lib.rs", (text) =>
-    text.replace(
-      /#\[path = "\.\.\/\.\.\/experiments\/performance\/typing-latency\/trace\.rs"\]\nmod typing_trace;\n/,
-      "",
-    ),
+    text.replace(/\n#\[path = [^\n]*\]\nmod planted;\n/, ""),
   );
   expectFailure(
-    run(directory),
-    "STALE no-experiment-includes: includes(rs:voyager_app,source:experiments/performance/typing-latency/trace.rs)",
+    run(directory, ["--known", known]),
+    `STALE no-experiment-includes: ${include}`,
   );
 });
 

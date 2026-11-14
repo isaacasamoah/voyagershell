@@ -6,6 +6,7 @@ mod avatar_pack;
 mod canvas_test;
 mod content_budget;
 mod conversation;
+mod diagnostics;
 mod host;
 mod inspect;
 mod measure;
@@ -235,7 +236,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         .with_assets(assets)
         .run(move |cx: &mut App| {
             #[cfg(feature = "frame-profiler")]
-            frame_profile::start(cx);
+            diagnostics::frame::start(cx);
             let registry = match native_registry(viewers.clone()) {
                 Ok(registry) => registry,
                 Err(error) => {
@@ -272,7 +273,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                 inspect::install(inspect, window, cx);
                 #[cfg(feature = "frame-profiler")]
                 if let Ok(id) = usize::try_from(window.window_handle().window_id().as_u64()) {
-                    typing_trace::record("workspace_window_id", id);
+                    diagnostics::trace("workspace_window_id", id);
                 }
                 let quit_conversation = conversation.clone();
                 speech::initialize(conversation.clone(), cx);
@@ -361,16 +362,3 @@ pub fn notes_declarations() -> Result<String> {
     ));
     Ok(declarations)
 }
-#[path = "../../experiments/performance/avatar-redraw/probe.rs"]
-mod redraw_probe;
-mod typing_trace {
-    pub(crate) use voyager_app::record_terminal_trace as record;
-}
-
-#[cfg(feature = "frame-profiler")]
-#[path = "../../experiments/performance/typing-latency/glyph.rs"]
-mod glyph_probe;
-
-#[cfg(feature = "frame-profiler")]
-#[path = "../../experiments/performance/frame-work/probe.rs"]
-mod frame_profile;

@@ -658,7 +658,7 @@ impl Header {
                 let result = handle.update(cx, |_, window, cx| {
                     this.update(cx, |header, cx| {
                         let active = window.is_a11y_active();
-                        crate::redraw_probe::record("a11y_poll_active", u64::from(active));
+                        crate::diagnostics::redraw::record("a11y_poll_active", u64::from(active));
                         let changed_accessibility = header.accessibility != active;
                         header.accessibility = active;
                         if !changed_theme && !changed_source && !changed_accessibility {
@@ -789,7 +789,7 @@ impl Header {
 
 impl Render for Header {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        crate::redraw_probe::record("header_renders", 1);
+        crate::diagnostics::redraw::record("header_renders", 1);
         let content = self.root.as_ref().map(|root| {
             let view = root.read(cx).content().clone();
             if window.is_a11y_active() {
