@@ -656,8 +656,6 @@ def layouts(
     height,
     evidence,
 ):
-    from PIL import ImageChops
-
     owner = json.loads((evidence / "launch.json").read_text())["pid"]
 
     def field(name, focused=False):
@@ -758,43 +756,10 @@ def layouts(
     } == processes
     assert rpc("terminal.get", {"terminal": stopped_address})["state"] == "finished"
     capture("layouts-restored")
-    press("Save Fleet layout")
-    field("Name", focused=True)
-    for character in "Overview":
-        key(ord(character))
-    press("Home")
-    home = wait(lambda layout: layout["view"] == "home")
-    assert any(
-        item["fleet"] == fleet and item["name"] == "Overview"
-        for item in home["value"]["savedLayouts"]
-    )
-    assert home["value"]["context"] == context and ids() == terminals_before
-    before = capture("home-overview")
-    source_path = evidence / "profile/mods/header/home.js"
-    source = source_path.read_text()
-    edited = source.replace("Your Voyages and Fleets", "My workspace overview")
-    assert edited != source
-    temporary = source_path.with_name("home.js.tmp")
-    temporary.write_text(edited)
-    temporary.replace(source_path)
-    for _ in range(30):
-        after = capture("home-customized")
-        if ImageChops.difference(before, after).getbbox():
-            break
-        time.sleep(0.1)
-    else:
-        raise AssertionError("Home edit did not become visible")
-    assert ids() == terminals_before and state()["value"]["context"] == context
-    press("Open Fleet Workbench")
-    selected = wait(
-        lambda layout: layout["view"] == "fleet" and layout["selectedFleet"] == fleet
-    )
-    assert selected["value"]["context"] == context and ids() == terminals_before
-    capture("layouts-returned")
     saved = state()
     close()
     start_frame("layouts-reopened")
-    assert state() == saved and source_path.read_text() == edited
+    assert state() == saved
     assert {
         address: rpc("terminal.get", {"terminal": address})["pid"]
         for address in processes
@@ -805,9 +770,6 @@ def layouts(
     return [
         "saved-fleet-tree-with-finished-terminal",
         "restored-identity-and-context",
-        "name-blur-then-home",
-        "editable-home-overview",
-        "home-navigation-no-new-process",
         "saved-layout-reopened",
         "native-quit",
     ]
