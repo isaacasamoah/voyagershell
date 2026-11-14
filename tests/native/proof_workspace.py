@@ -167,7 +167,6 @@ def prove(
             journey=journey,
         )
     if journey in (
-        "terminal",
         "portal-terminal",
         "terminal-grid",
         "terminal-reported-status",

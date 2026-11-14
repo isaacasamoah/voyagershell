@@ -15,10 +15,10 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Agent Vessels | python-only | none | python-only | python-only | - | arrangement, terminal-agent | linux |
 | Portals | python-only | none | python-only | python-only | - | placement, portal-terminal, portal-close | linux |
 | Split / resize / maximize | python-only | none | none | python-only | - | split-resize, pane-maximize, workspace-ux | linux |
-| Terminal I/O | covered | none | covered | covered | terminal-input | terminal, terminal-grid, portal-terminal | linux |
+| Terminal I/O | covered | none | covered | covered | terminal-input | terminal-grid, portal-terminal | linux |
 | Terminal scroll | covered | none | covered | covered | terminal-scrolling | terminal-scrolling | linux |
-| Selection | covered | none | covered | covered | terminal-input | terminal-grid | linux |
-| Clipboard | python-only | none | none | python-only | terminal-input | terminal-grid, notes-lifetime | linux |
+| Selection | covered | none | covered | covered | terminal-input | - | linux |
+| Clipboard | python-only | none | none | python-only | terminal-input | notes-lifetime | linux |
 | Notes | python-only | none | python-only | python-only | - | notes, notes-lifetime | linux |
 | Avatar docking / drag | python-only | none | python-only | python-only | - | avatar, portal-avatar | linux |
 | Chat / conversation | python-only | none | python-only | python-only | - | conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content | linux |
