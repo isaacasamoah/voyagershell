@@ -203,6 +203,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let saved = at_rest(native)?;
         let roster = native.live_terminals()?;
         let core = native.core()?.clone();
+        native.keep_window("close-window-before")?;
         native.close_window()?;
         let core_after = answering_core(native)?;
         let closed = terminal.program(native)?;
@@ -316,6 +317,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             seen.shows(&Target::STOP_SESSION_CONFIRM).then_some(())
         })?;
         let core = native.core()?.clone();
+        native.keep_window("stop-session-dialog")?;
         native.click(&Target::STOP_SESSION_CONFIRM)?;
         let exited = native.await_exit().is_ok();
         let ended = native.core_ended().ok();

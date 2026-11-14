@@ -281,8 +281,8 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                 let quit_conversation = conversation.clone();
                 let quit_workspace = client.clone();
                 let (stop_session, stop_requests) = async_channel::bounded(1);
-                window.on_window_should_close(cx, |_, cx| {
-                    cx.dispatch_action(&Quit);
+                window.on_window_should_close(cx, |window, cx| {
+                    window.dispatch_action(Box::new(Quit), cx);
                     false
                 });
                 speech::initialize(conversation.clone(), cx);
