@@ -840,7 +840,7 @@ index 15e694d0..13188489 100644
 +    }
  }
 diff --git a/crates/shell/src/engine/quickjs/scheduler.rs b/crates/shell/src/engine/quickjs/scheduler.rs
-index a3607609..0ee2b438 100644
+index a3607609..3d42c49c 100644
 --- a/crates/shell/src/engine/quickjs/scheduler.rs
 +++ b/crates/shell/src/engine/quickjs/scheduler.rs
 @@ -173,7 +173,11 @@ fn drain_runtime_job_batch(
@@ -867,7 +867,7 @@ index a3607609..0ee2b438 100644
          match runtime.js_runtime.execute_pending_job() {
              Ok(true) => {
                  if let Err(error) = runtime.flush_pending_nested_views(window, cx) {
-@@ -1986,6 +1994,45 @@ mod tests {
+@@ -1986,6 +1994,87 @@ mod tests {
          finish(&unrelated);
      }
  
@@ -896,6 +896,48 @@ index a3607609..0ee2b438 100644
 +        let window = cx.add_window(|_, _| Empty);
 +        let mut context = VisualTestContext::from_window(*window.deref(), cx);
 +        context.update(|window, cx| drain_runtime_jobs(&runtime, window, cx));
++
++        assert!(
++            runtime.retirement().is_some(),
++            "the spinning continuation retires the runtime"
++        );
++        let ran = runtime
++            .context
++            .with(|ctx| ctx.globals().get::<_, bool>("second_ran"))
++            .expect("read marker");
++        assert!(!ran, "a retired runtime ran a later continuation");
++
++        std::mem::forget(runtime);
++    }
++
++    #[gpui::test]
++    fn a_retired_runtime_runs_no_later_continuation_in_a_transactional_drain(
++        cx: &mut TestAppContext,
++    ) {
++        cx.update(crate::init);
++        let runtime = ShellRuntime::new_isolated().expect("runtime");
++        let budget = std::time::Duration::from_millis(20);
++        runtime.set_limits(
++            crate::EngineLimits::new()
++                .with_render_budget(budget)
++                .with_event_budget(budget)
++                .with_load_budget(budget)
++                .with_strike_limit(1),
++        );
++        runtime
++            .with_js(|ctx| {
++                ctx.globals().set("second_ran", false)?;
++                ctx.eval::<(), _>(
++                    "Promise.resolve().then(() => { while (true) {} }); \
++                     Promise.resolve().then(() => { globalThis.second_ran = true; });",
++                )
++            })
++            .expect("queue promise jobs");
++
++        let window = cx.add_window(|_, _| Empty);
++        let mut context = VisualTestContext::from_window(*window.deref(), cx);
++        let drained = context.update(|window, cx| drain_jobs_transactionally(&runtime, window, cx));
++        assert!(drained.is_err(), "a retired runtime reports its retirement");
 +
 +        assert!(
 +            runtime.retirement().is_some(),
