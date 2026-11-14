@@ -486,8 +486,11 @@ screen changed. A terminal capture masks the terminal's 8-pixel padding, scaled
 to device pixels, and the avatar. Each run of pixel rows that holds a pixel other
 than the background is one drawn line, identified by the SHA-256 of its pixels.
 After wheel up, the lines of the live screen must appear again at one common
-distance lower, every one that still fits, with at least one line drawn above
-them. Wheel down must restore the exact live capture. In `arrows` and `mouse`,
+distance lower. Every one that lands at or above the lowest line either capture
+draws must be drawn there, so a terminal that leaves its lower rows blank fails.
+At least one line must be drawn above them, and in shell history every line
+above must be one the live capture does not draw, so a terminal that repeats the
+live screen as its history fails. Wheel down must restore the exact live capture. In `arrows` and `mouse`,
 the probe draws `SCROLL` lines from its position, so its lines must move by as
 many rows as its position changed. `reattached-history` first prints 60 short
 `REATTACH` lines, so the live screen holds only lines that the journey printed,

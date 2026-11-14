@@ -89,7 +89,7 @@ impl Lines {
 
     pub fn lowered(&self, to: &Self) -> Option<usize> {
         let first = self.0.first()?;
-        let last = to.0.last()?.top;
+        let last = to.0.last()?.top.max(self.0.last()?.top);
         to.0.iter().enumerate().find_map(|(above, line)| {
             let distance = line.top.checked_sub(first.top).filter(|moved| *moved > 0)?;
             let kept = self.0.iter().filter(|kept| kept.top + distance <= last);
@@ -98,6 +98,15 @@ impl Lines {
                     .any(|drawn| drawn.top == kept.top + distance && drawn.image == kept.image)
             };
             (line.image == first.image && kept.into_iter().all(found)).then_some(above)
+        })
+    }
+
+    pub fn lowered_below_history(&self, to: &Self) -> bool {
+        self.lowered(to).is_some_and(|above| {
+            above > 0
+                && to.0[..above]
+                    .iter()
+                    .all(|earlier| self.0.iter().all(|live| live.image != earlier.image))
         })
     }
 }
@@ -336,6 +345,20 @@ mod tests {
         assert_eq!(live.lowered(&blank), None);
         assert_eq!(blank.lowered(&live), None);
         assert_eq!(live.lowered(&live), None);
+    }
+
+    #[test]
+    fn lines_drawn_above_must_be_earlier_history_and_every_lowered_line_that_fits_must_be_drawn() {
+        let live = Lines::of(&screen(&[(3, 90), (11, 120), (19, 150)]));
+        let history = Lines::of(&screen(&[(3, 60), (11, 90), (19, 120)]));
+        assert!(live.lowered_below_history(&history));
+        let repeated = Lines::of(&screen(&[(3, 150), (11, 90), (19, 120)]));
+        assert_eq!(live.lowered(&repeated), Some(1));
+        assert!(!live.lowered_below_history(&repeated));
+        let cut = Lines::of(&screen(&[(3, 60), (11, 90)]));
+        assert_eq!(live.lowered(&cut), None);
+        assert!(!live.lowered_below_history(&cut));
+        assert!(!live.lowered_below_history(&live));
     }
 
     #[test]

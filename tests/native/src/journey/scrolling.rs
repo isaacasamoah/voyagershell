@@ -168,9 +168,7 @@ fn history(
     let drawn = Lines::of(live);
     terminal.wheel(native, Wheel::Up)?;
     let earlier = terminal.settled(native, &format!("{name}-up"), |look| {
-        drawn
-            .lowered(&Lines::of(look))
-            .is_some_and(|above| above > 0)
+        drawn.lowered_below_history(&Lines::of(look))
     })?;
     let scrolled = Lines::of(&earlier);
     terminal.wheel(native, Wheel::Down)?;
@@ -178,7 +176,7 @@ fn history(
     verdict
         .expect(
             "wheel up draws the live screen's lines lower, below earlier history",
-            drawn.lowered(&scrolled).is_some_and(|above| above > 0),
+            drawn.lowered_below_history(&scrolled),
         )
         .expect(
             "wheel down returns to the live screen and its lines",
