@@ -124,6 +124,20 @@ aims at a control the way `click` does and presses the secondary button,
 which the X11 adapter sends as button 3. A journey names the intent, not the
 button number.
 
+A held gesture keeps the primary button down across steps. `Native::hold`
+presses at a control's aim point and returns a `Held`. `Held::toward` moves in
+eight steps to a point that `Native::point_in` gives as fractions of a
+control's drawn bounds, and refuses a point under the avatar.
+`Held::press` sends a key while the button is down, and `Held::release`
+releases it. Dropping a `Held` releases the button too, so a failed case never
+leaves it pressed. An app can install its drag handling only on the draw after
+the press, and that draw need not change the frame. `Held::until` therefore
+nudges the held pointer by one pixel and back, then reads the frame, and
+repeats within the usual deadline until the expected state is drawn. It never
+sleeps for a fixed time, and a gesture the app never answers fails on its
+deadline. `Native::resize_window` resizes the owned window, and
+`Terminal::screen` reads Core's text for a terminal once.
+
 ### Negative controls
 
 Each journey has a patch at `tests/native/controls/JOURNEY.patch`. The patch
@@ -154,7 +168,11 @@ still live, so the app starts a second shell while the first keeps running.
 terminals after the relaunch`, with two live addresses observed. The
 `voyage-close` patch makes a confirmed close stop only the first program of
 the Voyage. `close-voyage-confirm` then fails on the expectation `every
-program of the closed Voyage stopped`, with one of its shells observed live.
+program of the closed Voyage stopped`, with one of its shells observed live. The
+`arrangement` patch stops the split tracker from applying a saved share, so a
+restore from maximize puts every divider back in the middle.
+`restore-shortcut` then fails on the expectation `all three terminals are
+drawn where they were before maximize`.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and

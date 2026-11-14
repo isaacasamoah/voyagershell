@@ -42,6 +42,22 @@ impl Target {
         Self::keyed(Role::SplitRight, &placement.0)
     }
 
+    pub fn split_bottom(placement: &PlacementId) -> Self {
+        Self::keyed(Role::SplitBottom, &placement.0)
+    }
+
+    pub fn maximize_panel(placement: &PlacementId) -> Self {
+        Self::keyed(Role::MaximizePanel, &placement.0)
+    }
+
+    pub fn move_preview(placement: &PlacementId) -> Self {
+        Self::keyed(Role::MovePreview, &placement.0)
+    }
+
+    pub fn split_divider(key: &str) -> Self {
+        Self::keyed(Role::SplitDivider, key)
+    }
+
     pub fn create_fleet(voyage: &VoyageId) -> Self {
         Self::keyed(Role::CreateFleet, &voyage.0)
     }

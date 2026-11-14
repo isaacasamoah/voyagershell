@@ -10,11 +10,11 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Voyages | covered | none | none | covered | workspace | demo-feedback | linux |
 | Fleets | covered | none | none | covered | workspace | - | linux |
-| Fleet arrangement | python-only | none | python-only | python-only | - | layouts, arrangement | linux |
+| Fleet arrangement | covered | none | python-only | covered | arrangement | layouts, arrangement | linux |
 | Vessels | covered | none | none | covered | workspace | - | linux |
 | Agent Vessels | python-only | none | python-only | python-only | - | arrangement, terminal-agent | linux |
 | Portals | python-only | none | python-only | python-only | - | placement, portal-terminal, portal-close | linux |
-| Split / resize / maximize | python-only | none | none | python-only | - | split-resize, pane-maximize, workspace-ux | linux |
+| Split / resize / maximize | covered | none | none | covered | arrangement | split-resize, pane-maximize, workspace-ux | linux |
 | Terminal I/O | python-only | none | python-only | python-only | - | terminal, terminal-grid, portal-terminal | linux |
 | Terminal scroll | covered | none | covered | covered | terminal-scrolling | terminal-scrolling | linux |
 | Selection | python-only | none | python-only | python-only | - | terminal-grid | linux |
