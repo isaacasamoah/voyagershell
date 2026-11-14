@@ -124,9 +124,9 @@ never replayed. The prior revision() read remains available for personal Header
 source; new composition uses notice().
 
 The filesystem/availability and notice changes have source tests and a separately
-recorded Core-backed package receipt/scope test. The current lifetime journey reuses the session-Quit viewer Close/Restore
-helper. It requires the original shell live through warm Restore, then ended
-with zero live programs after deliberate Quit and cold reopen. Package restore
+recorded Core-backed package receipt/scope test. The retained lifetime journey requires the original shell to end with zero
+live programs after a stopped session and cold reopen. Its warm Restore step was
+removed with the warm close, which closing the window no longer performs. Package restore
 keeps that ended binding rather than starting a replacement. The earlier
 seventeen-stage result remains tied to its legacy controller.
 

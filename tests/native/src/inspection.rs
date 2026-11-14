@@ -24,6 +24,9 @@ impl Target {
     pub const CHAT_SEND: Self = Self::single(Role::ChatSend);
     pub const CHAT_STATUS: Self = Self::single(Role::ChatStatus);
     pub const CHAT_ERROR: Self = Self::single(Role::ChatError);
+    pub const HOME: Self = Self::single(Role::HomeNavigation);
+    pub const STOP_SESSION: Self = Self::single(Role::StopSession);
+    pub const STOP_SESSION_CONFIRM: Self = Self::single(Role::StopSessionConfirm);
 
     const fn single(role: Role) -> Self {
         Self {

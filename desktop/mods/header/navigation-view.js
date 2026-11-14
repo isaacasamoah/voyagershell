@@ -5,6 +5,7 @@ import { Brand, dock_target_visible, speech_in_primary } from "voyager_avatar";
 import { Speech } from "voyager_conversation";
 import { projection } from "voyager_header";
 import { voyageColour } from "./voyage-colours.js";
+import { stopSession } from "./stop-session.js";
 export function renderNameEditor(workspace, state, id) {
   return div()
     .min_w(60)
@@ -117,6 +118,7 @@ export function renderSidebar(workspace, layout, voyage) {
     .gap(9)
     .children(workspace.sidebar ? [svg("home.svg").size(14)] : [])
     .child(workspace.sidebar ? "Home" : svg("home.svg").size(16))
+    .child(Marker.new("home-navigation"))
     .on_click((_event, cx) => workspace.run({ operation: "home" }, cx));
   if (workspace.sidebar) home.justify_start();
   else home.justify_center();
@@ -128,7 +130,15 @@ export function renderSidebar(workspace, layout, voyage) {
       .w_full()
       .h(36)
       .flex_shrink_0()
-      .child(home),
+      .child(
+        workspace.contextMenu("home-navigation", home, [
+          {
+            label: "Stop session…",
+            marker: { role: "stop-session", key: "" },
+            choose: () => stopSession.show(),
+          },
+        ]),
+      ),
   );
   if (!workspace.sidebar) {
     navigation.child(div().h(6).flex_shrink_0());

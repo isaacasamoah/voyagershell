@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 from secrets import token_hex
 
-from proof_avatar_window import warm_restore
 from proof_clipboard import Clipboard
 from proof_conversation import package_turn, private_turn, provider_processes
 from proof_foundation_notes import notes, observe_owned_exit, wait
@@ -423,19 +422,6 @@ def prove(
                 lambda values: values[index] == encoded(note),
                 "native blur save",
             )
-        receipt("notes-lifetime-before-warm-restore", identity())
-        original = json.loads((evidence / "launch.json").read_text())
-        restored = warm_restore(
-            original=original,
-            native=native,
-            capture=capture,
-            geometry=geometry,
-            env=env,
-            wait=wait,
-            name="notes-lifetime",
-        )
-        assert json.loads((evidence / "launch.json").read_text()) == original
-        receipt("notes-lifetime-warm-restore", {**restored, "identity": identity()})
         for index, note in enumerate(expected):
             for name, key in (("Note title", "title"), ("Note text", "text")):
                 copied(name, index, note[key])
