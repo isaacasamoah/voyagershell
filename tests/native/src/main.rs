@@ -361,6 +361,10 @@ const SOURCES: &[(&str, &[u8])] = &[
     ),
     ("src/journey/layout.rs", include_bytes!("journey/layout.rs")),
     (
+        "src/journey/portals.rs",
+        include_bytes!("journey/portals.rs"),
+    ),
+    (
         "src/journey/quit_restore.rs",
         include_bytes!("journey/quit_restore.rs"),
     ),

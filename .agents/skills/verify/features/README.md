@@ -13,7 +13,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Fleet arrangement | covered | none | python-only | covered | arrangement | layouts, arrangement | linux |
 | Vessels | covered | none | none | covered | workspace | - | linux |
 | Agent Vessels | python-only | none | python-only | python-only | - | arrangement, terminal-agent | linux |
-| Portals | python-only | none | python-only | python-only | - | placement, portal-terminal, portal-close | linux |
+| Portals | covered | none | python-only | covered | portals | portal-terminal | linux |
 | Split / resize / maximize | covered | none | none | covered | arrangement | workspace-ux | linux |
 | Terminal I/O | python-only | none | python-only | python-only | - | terminal, terminal-grid, portal-terminal | linux |
 | Terminal scroll | covered | none | covered | covered | terminal-scrolling | terminal-scrolling | linux |
@@ -25,7 +25,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Voice | python-only | none | none | python-only | - | conversation-voice | linux |
 | Layouts / Home | python-only | none | python-only | python-only | - | layouts, workspace-ux | linux |
 | Worktrees | python-only | none | none | python-only | - | demo-feedback | linux |
-| Close Voyage / quit / restore | covered | none | python-only | covered | quit-restore, voyage-close | placement | linux |
+| Close Voyage / quit / restore | covered | none | none | covered | quit-restore, voyage-close | - | linux |
 | Scripts live edit | python-only | python-only | python-only | python-only | - | canvas-stack | linux |
 <!-- features:end -->
 
