@@ -1,0 +1,14 @@
+diff --git a/app/src/workspace.rs b/app/src/workspace.rs
+index 3639d4c..fc9e883 100644
+--- a/app/src/workspace.rs
++++ b/app/src/workspace.rs
+@@ -473,6 +473,9 @@ impl Model {
+                 self.layout.selected_voyage = Some(self.layout.voyages[v].id.clone());
+                 self.layout.selected_fleet = Some(id);
+                 self.layout.view = WorkspaceView::Fleet;
++                if let Some(column) = self.layout.voyages[v].portal_layout.as_mut() {
++                    column.visible = false;
++                }
+             }
+             Action::Dock { context } => {
+                 let exists = match &context {

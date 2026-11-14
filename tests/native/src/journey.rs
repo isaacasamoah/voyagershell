@@ -1,5 +1,6 @@
 mod arrangement;
 mod layout;
+mod portals;
 mod quit_restore;
 mod scrolling;
 mod voyage_close;
@@ -99,6 +100,7 @@ journeys! {
     QuitRestore => "quit-restore" in quit_restore, sidebar: None, window: None;
     VoyageClose => "voyage-close" in voyage_close, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     Arrangement => "arrangement" in arrangement, sidebar: Some(Sidebar::Open), window: None;
+    Portals => "portals" in portals, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
 }
 
 impl Journey {
