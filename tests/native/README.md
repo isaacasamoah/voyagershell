@@ -175,6 +175,17 @@ It does not establish fresh-machine installation. The crate needs no GPUI linkag
 or second SDK checkout. The parent Cargo patch warnings concern unused SDK crates;
 do not alter or remove the shared SDK configuration to hide them.
 
+Unit tests that need a folder take one from `Scratch` in `src/scratch.rs`. Each
+folder is `vv-<label>-<pid>-<time>` in the temporary folder and holds an
+exclusive lock on its `alive.lock` file. The lock is taken under another name and
+renamed into place, so `alive.lock` is never unlocked while its owner lives.
+Dropping the guard removes the folder, including after a failed assertion. The
+kernel releases the lock when a test process is killed. The first `Scratch` in
+each test process then removes every `vv-` folder whose `alive.lock` it can lock,
+and it removes `alive.lock` last so that an interrupted removal is retried. It
+leaves folders without `alive.lock` alone and reports a folder it cannot remove.
+The process ID in a folder name is only for reading, never for liveness.
+
 The commands below exercise the release build in this checkout. Build it first
 with `cargo build --release --locked -p voyager-desktop --bin voyager-shell`.
 
