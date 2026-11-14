@@ -7,7 +7,7 @@ use crate::native::{
 use crate::probe::{BLOCKS, READY, SIGNALS, WAITING};
 use crate::sandbox;
 use crate::system::{Identity, PATIENCE, TimedOut, poll, settle, until};
-use crate::x11::{Exchange, Geometry, Key, Pixels, Reading};
+use crate::x11::{Chord, Exchange, Geometry, Key, Pixels, Reading};
 use anyhow::{Context as _, Result, ensure};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -28,7 +28,7 @@ cases! {
 pub const CONTROL: Case = Case::CopyToClipboard;
 
 const TOLERANCE: u8 = 1;
-const KEYS: &[u8] = b"aZ~ 1\x7f\x1b\x1b[A\x1b[B\x03\r";
+const KEYS: &[u8] = b"aZ~ 1\t\x1b[Z\x7f\x1b\x1b[A\x1b[B\x03\r";
 const APPLICATION_ARROWS: &[u8] = b"\x1bOA\x1bOB\x1bOC\x1bOD";
 const INTERRUPT: u8 = 0x03;
 const COPY: [u8; 3] = [24, 160, 96];
@@ -192,18 +192,26 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         probe.type_command(native, &terminal)?;
         let identity = probe.ready(native, &terminal)?;
         native.type_text("aZ~ 1")?;
-        for key in [Key::BackSpace, Key::Escape, Key::Up, Key::Down] {
+        let keys = [
+            Chord::from(Key::Tab),
+            Key::Tab.shift(),
+            Chord::from(Key::BackSpace),
+            Chord::from(Key::Escape),
+            Chord::from(Key::Up),
+            Chord::from(Key::Down),
+            Key::Char('c').ctrl(),
+            Chord::from(Key::Return),
+        ];
+        for key in keys {
             native.press(key)?;
         }
-        native.press(Key::Char('c').ctrl())?;
-        native.press(Key::Return)?;
         let received = probe.received(KEYS)?;
         let alive = identity.verify().is_ok() && pid(&state(&probe.path)?)? == identity.pid;
         let ended = probe.end(native)?;
         let shell = terminal.program(native)?;
         Verdict::new()
             .expect(
-                "the program received a Z ~ space 1 DEL ESC ESC[A ESC[B ETX CR, in order, each once",
+                "the program received a Z ~ space 1 HT ESC[Z DEL ESC ESC[A ESC[B ETX CR, in order, each once",
                 received == KEYS,
             )
             .expect(

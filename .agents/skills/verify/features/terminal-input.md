@@ -33,9 +33,11 @@ blamed on the fixture.
 - `typed-command-runs` types `printf 'TYPED-%s\n' $((6*7))`. Core's screen
   must hold `TYPED-42`, which only a command that ran can print, and the
   capture must draw at least two more lines than before.
-- `keys-reach-the-program` runs the `keys` probe and types `aZ~ 1`, BackSpace,
-  Escape, Up, Down, Ctrl+C and Return. The probe must have received exactly
-  those bytes, in order. Ctrl+C must arrive as the byte `0x03` with the probe
+- `keys-reach-the-program` runs the `keys` probe and types `aZ~ 1`, Tab,
+  Shift+Tab, BackSpace, Escape, Up, Down, Ctrl+C and Return. The probe must
+  have received exactly those bytes, in order, with Tab as `0x09` and
+  Shift+Tab as `ESC [ Z`. Every key after Tab arriving also shows that Tab
+  left keyboard focus in the terminal. Ctrl+C must arrive as the byte `0x03` with the probe
   still the same process. Ctrl+D must end the probe and leave the shell the
   same program.
 - `keys-follow-program-modes` runs the probe with `--application-cursor`. The
@@ -84,10 +86,8 @@ The journey covers one plain Bash with no startup files, on Linux X11 with
 Mesa software rendering. Its gaps follow. Each one stays uncovered until a
 journey claims it.
 
-- Tab and Shift+Tab. Tab moves keyboard focus out of the terminal, so it
-  never reaches the program and every later key goes elsewhere. See
-  [Tab in a terminal moves focus instead of reaching the program](https://github.com/isaacasamoah/voyagershell/issues/141).
-  The keys case leaves Tab out until that is fixed.
+- Ctrl+Tab and Ctrl+Shift+Tab. The terminal reserves them for leaving the
+  terminal, and no case checks that they move focus.
 - A pump with no bounds. A candidate whose output pump has no byte or time
   limit passes the journey. In five paired runs, a key typed into the other
   terminal during the flood was echoed as soon on that candidate as on the

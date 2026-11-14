@@ -306,7 +306,7 @@ keys as bytes, keys under application cursor mode, output drawn without input,
 drag selection, copy to the X clipboard, paste with and without bracketed paste,
 and input to one split while another floods. Its recipe,
 `.agents/skills/verify/features/terminal-input.md`, lists what it does not
-cover. Tab is one of those gaps, because the window root takes Tab for focus.
+cover.
 The retained Python terminal-grid journey still covers shell grid resize, split
 sizing, IBus/XIM composition and input during a hidden Fleet's output.
 Performance, native agent behavior, additional terminal styles, complete
