@@ -52,8 +52,8 @@ macOS and Windows are not supported.
 You need Git, Python 3, Node.js 24, Rust, Zig 0.17, a working Vulkan driver,
 and the GPUI native libraries for X11 or Wayland. Install
 [Herdr Core](https://github.com/herdrdev/herdr-core) so that `hc` is on
-`PATH`. VoyagerShell's Core API is generated from Core 0.1.16, and CI tests
-against Core 0.1.21. Install Codex to use the Voyager avatar, and Claude Code for a
+`PATH`. VoyagerShell's Core API is generated from Core 0.1.18, the oldest release
+it supports, and CI tests against Core 0.1.21. Install Codex to use the Voyager avatar, and Claude Code for a
 Claude panel. Shells and Notes need neither.
 
 Build from the repository root:

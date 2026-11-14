@@ -588,8 +588,9 @@ pending and does not dispatch again. An identical completed request returns its
 retained result.
 
 The single framed Core connection routes replies by request ID. It admits at
-most nine pending RPCs, including capacity for ordinary owner reads alongside
-at most eight admitted process effects. Process admissions remain counted until
+most ten pending RPCs: at most eight admitted process effects, the one shared
+terminal list that observations and the exit check wait on, and one ordinary
+owner call. Process admissions remain counted until
 the owner reconciles completion. The thirty-two-entry process receipt history
 evicts completed entries only. Replies received after a caller has gone away
 are ignored without disconnecting unrelated viewers. Disconnects release all
@@ -636,5 +637,6 @@ The 7 November release uses generated Core types from the pinned 0.1.16 input.
 Its real native restore/reattach and Notes/Voyage-shutdown journeys ran against
 Core 0.1.18. The owner handoff also retained an existing 0.1.18 Core. This
 establishes that these consumed operations work across that additive upgrade.
-It does not establish a general compatibility matrix. Generation/capability
-checks remain the admission rule; a newer version string alone is not refusal.
+It does not establish a general compatibility matrix. Generation, capability
+and minimum-release checks are the admission rule: a newer release is accepted,
+and one older than 0.1.18 is refused.

@@ -75,7 +75,7 @@ function expectFailure(result, ...named) {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /18 violations, 18 known\n.*PASS\n$/s);
+  assert.match(result.out, /17 violations, 17 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {

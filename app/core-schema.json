@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "CoreMessages",
+  "description": "Herdr Core 0.1.18 messages",
   "type": "object",
   "definitions": {
     "HelloParams": {
@@ -23,6 +24,14 @@
             }
           ],
           "description": "Another core dialing in: who it is. Its terminals may then be parents\nof terminals here, and hear from them."
+        },
+        "features": {
+          "default": [],
+          "description": "Features supported by a core dialing in, including relaying size notifications.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "framed": {
           "default": false,
@@ -147,6 +156,17 @@
           "description": "Ignored: children end with their parent unless `outlive_parent`.",
           "type": "boolean"
         },
+        "display": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Display"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The caller's colors and cell size, answering the program's display queries\nfrom its start. Omitted: Ghostty's defaults until a viewer attaches."
+        },
         "env": {
           "additionalProperties": {
             "type": "string"
@@ -216,6 +236,17 @@
           "description": "Remove it right after it exits (once a waiting parent has the exit code).",
           "type": "boolean"
         },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/InitialSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Initial size before the program starts. Omitted: the configured\nheadless size (default 200 columns by 120 rows). Later viewers resize normally."
+        },
         "timeout": {
           "description": "Seconds before a wait checks in, leaving it running (default: config\n`wait_timeout`, else 180).",
           "format": "double",
@@ -270,6 +301,11 @@
         "observe": {
           "default": false,
           "description": "Watch only: never type or resize.",
+          "type": "boolean"
+        },
+        "resize_notifications": {
+          "default": false,
+          "description": "Observer understands core-to-viewer RESIZE before replacement paints.",
           "type": "boolean"
         },
         "resumed": {
@@ -588,6 +624,17 @@
             "null"
           ]
         },
+        "first_message": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/FirstMessage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A template first message that was not sent; retained for later inspection."
+        },
         "foreground": {
           "anyOf": [
             {
@@ -836,6 +883,70 @@
         "holders",
         "live",
         "finished"
+      ],
+      "type": "object"
+    },
+    "Display": {
+      "description": "What a viewer's own terminal looks like, reported by the client.",
+      "properties": {
+        "bg": {
+          "description": "Default background as `#rrggbb`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cell": {
+          "description": "Cell size in pixels: `[width, height]`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "cursor": {
+          "description": "Cursor color as `#rrggbb`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fg": {
+          "description": "Default foreground as `#rrggbb`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "InitialSize": {
+      "properties": {
+        "cols": {
+          "description": "Initial terminal width in columns (at least 1).",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "rows": {
+          "description": "Initial terminal height in rows (at least 1).",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cols",
+        "rows"
       ],
       "type": "object"
     },
@@ -1088,54 +1199,21 @@
       ],
       "type": "object"
     },
-    "Display": {
-      "description": "What a viewer's own terminal looks like, reported by the client.",
-      "properties": {
-        "bg": {
-          "description": "Default background as `#rrggbb`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "cell": {
-          "description": "Cell size in pixels: `[width, height]`.",
-          "items": {
-            "format": "uint32",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "maxItems": 2,
-          "minItems": 2,
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "cursor": {
-          "description": "Cursor color as `#rrggbb`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "fg": {
-          "description": "Default foreground as `#rrggbb`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
     "AttachResult": {
       "properties": {
+        "automatic_input": {
+          "description": "The entire attach path accepts AUTOMATIC_INPUT (kind 6). Absent means use DATA.",
+          "type": "boolean"
+        },
         "channel": {
           "description": "Stream channel: first paint, then live bytes. Send keys as DATA on it;\nRESIZE, FOCUS, FACTS, CREDIT and CLOSE frames control it.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "resize_notifications": {
+          "description": "True only when the entire path sends RESIZE before replacement paints.\nFalse or absent means the observer must track size changes separately.",
+          "type": "boolean"
         },
         "terminal": {
           "$ref": "#/definitions/Terminal"
@@ -1143,7 +1221,9 @@
       },
       "required": [
         "channel",
-        "terminal"
+        "terminal",
+        "resize_notifications",
+        "automatic_input"
       ],
       "type": "object"
     },
@@ -1191,7 +1271,7 @@
           "type": "string"
         },
         "why": {
-          "description": "Why only the screen: \"working\" (a full-screen app isn't scrolled while\nit works; read again once it stops).",
+          "description": "Why only the screen: \"working\", \"blocked\" or \"error\" (a full-screen app\nis not scrolled in these states).",
           "type": [
             "string",
             "null"
@@ -1299,6 +1379,40 @@
       ],
       "type": "object"
     },
+    "FirstMessage": {
+      "properties": {
+        "reason": {
+          "description": "Why it was not sent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sent": {
+          "type": "boolean"
+        },
+        "started": {
+          "description": "Whether the agent started working on it (see terminal.send).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "turn": {
+          "description": "The turn when it went in (see terminal.send).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sent"
+      ],
+      "type": "object"
+    },
     "Foreground": {
       "properties": {
         "argv": {
@@ -1394,40 +1508,6 @@
         "instance",
         "current",
         "terminals"
-      ],
-      "type": "object"
-    },
-    "FirstMessage": {
-      "properties": {
-        "reason": {
-          "description": "Why it was not sent.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sent": {
-          "type": "boolean"
-        },
-        "started": {
-          "description": "Whether the agent started working on it (see terminal.send).",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "turn": {
-          "description": "The turn when it went in (see terminal.send).",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "sent"
       ],
       "type": "object"
     },
