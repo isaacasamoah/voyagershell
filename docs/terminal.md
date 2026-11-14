@@ -26,6 +26,28 @@ Normal keyboard/paste input retains its existing return-to-live behavior. Oversi
 encoded wheel input refuses before viewer admission rather than truncating or
 replaying input.
 
+## Tab and focus
+
+The shell root binds Tab and Shift+Tab to focus cycling. GPUI dispatches a
+matched binding before an element's key-down listener, so without a terminal
+binding the root moved focus and the program never saw either key. The
+terminal element carries the `Terminal` key context. In that context,
+`terminal_input.rs` binds Tab and Shift+Tab to `NoAction`, which masks the
+root's binding of equal precedence. The keystroke then reaches the terminal's
+key-down listener, and the encoder sends `0x09` and `ESC [ Z`.
+
+Ctrl+Tab and Ctrl+Shift+Tab are reserved in the terminal for the root's focus
+actions, so a keyboard user can still leave a terminal, and the root's focus
+trap still applies. The program never receives those two chords. Outside a
+terminal, Tab and Shift+Tab move focus as before.
+
+`a_focused_terminal_receives_tab_and_shift_tab_and_keeps_focus` and
+`ctrl_tab_leaves_the_terminal_and_tab_still_moves_focus_elsewhere` mount the
+real `ShellRoot` with the app's terminal bindings over a terminal pane and
+another focusable pane. They do not draw a `TerminalView`. The native
+`terminal-input` journey is the check that the real view carries the
+context and that the program receives the bytes.
+
 ## Attachment geometry
 
 The adapter attaches using a current generated Terminal record. A newly started

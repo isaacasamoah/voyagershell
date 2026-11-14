@@ -1,6 +1,20 @@
 use super::Pane;
-use gpui::{Bounds, ClipboardItem, Context, EntityInputHandler, Pixels, UTF16Selection, Window};
+use gpui::{
+    Bounds, ClipboardItem, Context, EntityInputHandler, KeyBinding, Pixels, UTF16Selection, Window,
+};
 use std::ops::Range;
+
+pub(super) const KEY_CONTEXT: &str = "Terminal";
+
+pub(crate) fn key_bindings() -> Vec<KeyBinding> {
+    let context = Some(KEY_CONTEXT);
+    vec![
+        KeyBinding::new("tab", gpui::NoAction, context),
+        KeyBinding::new("shift-tab", gpui::NoAction, context),
+        KeyBinding::new("ctrl-tab", gpui_shell::root::Tab, context),
+        KeyBinding::new("ctrl-shift-tab", gpui_shell::root::TabPrev, context),
+    ]
+}
 
 pub(super) fn workspace_shortcut(key: &gpui::Keystroke) -> bool {
     let modifiers = key.modifiers;
@@ -206,6 +220,160 @@ impl EntityInputHandler for Pane {
 #[cfg(test)]
 mod tests {
     use super::Composition;
+    use gpui::{
+        AppContext as _, FocusHandle, InteractiveElement as _, IntoElement, Keystroke,
+        ParentElement as _, Render, Styled as _, div, px,
+    };
+    use std::{cell::RefCell, rc::Rc};
+
+    struct Panes {
+        terminal: FocusHandle,
+        other: FocusHandle,
+        received: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl Render for Panes {
+        fn render(
+            &mut self,
+            _: &mut gpui::Window,
+            _: &mut gpui::Context<Self>,
+        ) -> impl IntoElement {
+            let received = Rc::clone(&self.received);
+            div()
+                .size_full()
+                .child(div().id("other").track_focus(&self.other).size(px(20.)))
+                .child(
+                    div()
+                        .id("terminal")
+                        .key_context(super::KEY_CONTEXT)
+                        .track_focus(&self.terminal)
+                        .size(px(20.))
+                        .on_key_down(move |event, _, cx| {
+                            let pressed = &event.keystroke;
+                            let ctrl = if pressed.modifiers.control {
+                                "ctrl-"
+                            } else {
+                                ""
+                            };
+                            let shift = if pressed.modifiers.shift {
+                                "shift-"
+                            } else {
+                                ""
+                            };
+                            received
+                                .borrow_mut()
+                                .push(format!("{ctrl}{shift}{}", pressed.key));
+                            cx.stop_propagation();
+                        }),
+                )
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct Pressed {
+        key: &'static str,
+        received: Vec<String>,
+        terminal_focused: bool,
+    }
+
+    fn press_all(start_in_terminal: bool, keys: &'static [&'static str]) -> Vec<Pressed> {
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let record = Rc::clone(&seen);
+        gpui_platform::headless()
+            .with_quit_mode(gpui::QuitMode::Explicit)
+            .run(move |cx| {
+                let registry = gpui_shell::ComponentRegistry::new(
+                    gpui_shell::COMPONENT_REGISTRY_API_VERSION,
+                    "voyager_native",
+                )
+                .unwrap()
+                .freeze()
+                .unwrap();
+                gpui_shell::init_with_components(cx, &registry);
+                cx.bind_keys(super::key_bindings());
+                let received = Rc::new(RefCell::new(Vec::new()));
+                let probe = Rc::clone(&received);
+                let mut panes = None;
+                let window = cx
+                    .open_window(gpui::WindowOptions::default(), |window, cx| {
+                        let view = cx.new(|cx| Panes {
+                            terminal: cx.focus_handle().tab_stop(true),
+                            other: cx.focus_handle().tab_stop(true),
+                            received: probe,
+                        });
+                        panes = Some(view.clone());
+                        cx.new(|cx| gpui_shell::ShellRoot::new(view.into(), window, cx))
+                    })
+                    .unwrap();
+                let panes = panes.unwrap();
+                cx.spawn(async move |cx| {
+                    cx.update_window(window.into(), |_, window, cx| {
+                        let (terminal, other) = {
+                            let panes = panes.read(cx);
+                            (panes.terminal.clone(), panes.other.clone())
+                        };
+                        window.draw(cx).clear(cx);
+                        for key in keys {
+                            let start = if start_in_terminal { &terminal } else { &other };
+                            window.focus(start, cx);
+                            window.draw(cx).clear(cx);
+                            received.borrow_mut().clear();
+                            window.dispatch_keystroke(Keystroke::parse(key).unwrap(), cx);
+                            window.draw(cx).clear(cx);
+                            record.borrow_mut().push(Pressed {
+                                key,
+                                received: received.borrow().clone(),
+                                terminal_focused: terminal.is_focused(window),
+                            });
+                        }
+                    })
+                    .unwrap();
+                    cx.update(|cx| cx.quit());
+                })
+                .detach();
+            });
+        seen.take()
+    }
+
+    #[test]
+    fn a_focused_terminal_receives_tab_and_shift_tab_and_keeps_focus() {
+        let pressed = press_all(true, &["tab", "shift-tab"]);
+        assert_eq!(
+            pressed,
+            [
+                Pressed {
+                    key: "tab",
+                    received: vec!["tab".into()],
+                    terminal_focused: true,
+                },
+                Pressed {
+                    key: "shift-tab",
+                    received: vec!["shift-tab".into()],
+                    terminal_focused: true,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn ctrl_tab_leaves_the_terminal_and_tab_still_moves_focus_elsewhere() {
+        let from_terminal = press_all(true, &["ctrl-tab", "ctrl-shift-tab"]);
+        assert!(
+            from_terminal
+                .iter()
+                .all(|pressed| pressed.received.is_empty() && !pressed.terminal_focused),
+            "{from_terminal:?}"
+        );
+        let elsewhere = press_all(false, &["tab"]);
+        assert_eq!(
+            elsewhere,
+            [Pressed {
+                key: "tab",
+                received: Vec::new(),
+                terminal_focused: true,
+            }]
+        );
+    }
 
     #[test]
     fn workspace_shortcuts_leave_normal_terminal_input_alone() {

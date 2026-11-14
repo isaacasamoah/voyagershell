@@ -264,6 +264,7 @@ impl Render for Pane {
             });
         div()
             .id("terminal")
+            .key_context(super::input::KEY_CONTEXT)
             .track_focus(&self.focus)
             .role(Role::Terminal)
             .aria_label("Terminal")
