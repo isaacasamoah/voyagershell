@@ -14,7 +14,13 @@ exact source and shared crate overrides. The upstream checkout retains its
 licences and notices. No installed dependency checkout is modified or upstream
 implementation copied into the application.
 
-Keep this patch small. When upstream provides an equivalent interface, review
+`gpui-shell-engine-limits.patch` applies after it. It adds `EngineLimits`,
+`ShellRuntime::set_limits`, strikes and retirement, a default-deny window
+capability with a `capabilities.window` manifest key, and an `Rc`-held engine in
+`LoadedApplication`. [Vessel engine limits](../../docs/content.md#vessel-engine-limits)
+owns the host rule, the numbers and the gaps.
+
+Keep these patches small. When upstream provides an equivalent interface, review
 that version and replace the patch through the normal dependency update. This
 local build integration does not publish an SDK fork or establish support on
 untested platforms.

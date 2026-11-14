@@ -17,7 +17,7 @@ use gpui::{
 };
 use gpui_base::{ColorTokens, ThemeAppearance};
 use gpui_shell::{
-    HostModule, HostValue, ShellRoot, ShellRuntime, Watcher,
+    Capabilities, HostModule, HostValue, ShellRoot, ShellRuntime, Watcher,
     policy::{self, Policy},
 };
 use serde::Deserialize;
@@ -473,6 +473,7 @@ fn load(
             ]))
         });
     let policy = Policy::new()
+        .with_capabilities(Capabilities::new().window(true))
         .with_host_module(module)?
         .with_host_module(workspace)?;
     let note_colors = current.clone();
@@ -484,8 +485,7 @@ fn load(
             .map_err(|error| gpui_shell::HostError::new(format!("{error:#}")))
     })))?;
     let policy = policy.with_host_module(crate::conversation::module(conversation.clone()))?;
-    let policy = policy.with_host_module(workspace_binding.avatar.module())?;
-    let _guard = LoadGuard::enter(policy)?;
+    let _guard = LoadGuard::enter(policy.with_host_module(workspace_binding.avatar.module())?)?;
     runtime.try_load(package, window, cx)
 }
 

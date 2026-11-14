@@ -206,9 +206,11 @@ Only a confirmed workspace creation initializes its newly issued Notes IDs with
 create-new semantics. Failure after the workspace write returns Uncertain and does
 not retry initialization. Requests cannot supply their own binding or path.
 
-All Notes instances share one isolated QuickJS VM with the private voyager_input
-registry. They cannot import Header Terminal, Name or workspace modules. Each
-candidate has its captured voyager_content module and application generation.
+Each Notes candidate loads in its own isolated QuickJS VM with the private
+voyager_input registry, under the limits in
+[Vessel engine limits](#vessel-engine-limits). Candidates cannot import Header
+Terminal, Name or workspace modules. Each candidate has its captured
+voyager_content module and application generation.
 The host renders the published ScriptView beneath the existing single window
 ShellRoot and retains the accessibility activation/overlay invalidation route.
 The older native journey observed the legacy inputs with accessibility enabled
@@ -349,6 +351,88 @@ and Herdr App at
 The integration uses supported isolated runtimes, host components and retained
 views. It adds no browser engine or second Core connection.
 
+
+## Vessel engine limits
+
+A Vessel script is containment for robustness, not a security boundary. The
+reviewed `gpui-shell-engine-limits.patch` in `desktop/patches/` adds host-set
+limits to GPUI Shell's QuickJS engine. `desktop/src/notes.rs` applies them.
+
+Invariants:
+
+- Every Notes load creates a new engine and calls `set_limits` before its first
+  load. The candidate holds that engine, so closing the Vessel or publishing a
+  newer candidate drops it. An engine never outlives the version it loaded.
+- A refused call is one strike. A call is refused when it runs past its render,
+  event or load budget, when the engine's calls together pass their share of
+  one second, or when the JavaScript heap reaches its limit. At the strike limit
+  the engine retires. A retired engine refuses every later render, event, task
+  and promise continuation at its entry, without running script.
+- Budgets and the share stop a call only when QuickJS polls its interrupt
+  handler. It polls in bytecode, inside regular-expression matching and in some
+  native loops. A long native operation that does not poll, such as a large
+  string or JSON call, runs to its end before it can be stopped. The time it
+  took still counts toward the share for later calls.
+- A Note whose current engine is retired draws a placeholder with the
+  retirement message inside its own frame. The window and other Vessels keep
+  drawing. The next source edit loads into a new engine, which is the recovery
+  path. A failed load keeps the published candidate, as live authoring requires.
+- Window control is denied by default. Notes loads with no window grant, so
+  `set_rem_size`, `bind_keys`, actions, focus movement, dialogs, sheets and toasts
+  are refused. Window reads stay allowed. Only the first-party Header policy in
+  `desktop/src/host.rs` grants window control, because it opens dialogs.
+- `LoadedApplication` holds its engine, so dropping an engine while a loaded
+  handle lives cannot abort the process.
+
+Numbers, chosen for a window that several Vessels share:
+
+| Limit | Value | Why |
+|---|---|---|
+| JavaScript heap | 32 MiB | Notes rests near 1.2 MiB of heap. A 16 MiB limit refused growth in under 30 ms in the prototype. |
+| Render and layout call | 30 ms | A stopped spin costs one frame under the 50 ms frame rule. |
+| Event or task call | 30 ms | Event handlers and resumed tasks also hold the UI thread. |
+| Module load | 200 ms | The share stops a longer load in any case. |
+| Share of each second | 200 ms | Many short calls cannot hold the window where one long call could not. |
+| Strike limit | 3 | A spinning Vessel stalls at most three frames before retiring. |
+
+The engine's busy time is measured at its entry points, so calls too short to
+reach QuickJS's interrupt poll still count toward the share.
+
+Known gaps, outside these limits:
+
+- Rust-side memory a script causes, such as spec arenas, copied strings, text
+  layout and entity records, is not counted by the heap limit.
+- Anchored and deferred elements such as popovers, menus and tooltips may draw
+  outside the Vessel's frame. The patch removes window-wide calls only.
+- Element key handlers under focus were not tested beyond global `bind_keys`.
+- Timers and tasks are not counted. Each callback is stopped by the budgets and
+  the share, but a Vessel can still schedule many wakeups.
+- `cx.open_url` stays ungated. GPUI Shell treats it as equal to a `Link`, which
+  needs no grant.
+- A render or task that runs out of memory and frees its garbage while
+  unwinding reports a thrown `null` and counts no strike. The budgets and the
+  share still stop repeated growth.
+- Running out of memory inside a promise continuation counts no strike,
+  whatever the heap still holds. The second E1 verifier observed no strike at a
+  strike limit of 1.
+- The placeholder appears at the Note's next render. Nothing notifies the Note
+  when its engine retires inside a timer or task.
+- No native journey opens the header's worktrees dialog, which uses the same
+  gated calls as the voyage-close dialog.
+- Long native operations that do not poll the interrupt handler, such as large
+  string or JSON calls, escape refusal. The E1 verifier ran 12 such
+  module loads in 961 ms under a 30 ms budget and a 60 ms share, and none was
+  refused.
+- A script that catches its own out-of-memory error counts no strike.
+- The share is a fixed one-second window, so a burst that straddles the window
+  edge can use up to about twice the share. The E1 verifier observed 360 ms of
+  spinning in 384 ms under a 200 ms share.
+- Each idle engine costs about 1.9 MiB resident in a debug unit test, and every
+  Notes load creates one. It is freed with the candidate that holds it.
+- The numbers were set from a debug test-window prototype. No native journey
+  opens a script Vessel, so nothing measures these limits in the release app.
+  Whether a healthy Notes stays inside 30 ms per call and 200 ms per second on a
+  loaded machine is unproved.
 
 ## Notes controls in the feedback candidate
 
