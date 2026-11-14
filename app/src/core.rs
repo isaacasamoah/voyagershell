@@ -28,10 +28,13 @@ mod pending;
 pub(crate) use pending::Pending;
 #[path = "core_reader.rs"]
 mod reader;
+#[path = "core_state.rs"]
+mod state;
 #[path = "core_viewer.rs"]
 mod viewer;
 use pending::Replies;
 use reader::{Attaches, Reader};
+pub use state::TerminalState;
 use viewer::Lease;
 pub use viewer::{Viewer, WeakViewer};
 

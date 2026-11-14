@@ -14,7 +14,7 @@ The existing generator exports their validators beside the workspace and
 conversation contract. `app/src/content.rs` owns persisted data, revisions and
 schema checks. `create-content` uses the shared panel owner and an explicit
 empty or beside-placement insertion with a left/right/top/bottom side and
-an explicit type ID. The supported type IDs are `terminal` and `notes`.
+an explicit type ID. The supported type IDs are `terminal` and `notes`. `NOTES_TYPE` in `app/src/content/description.rs` is the one spelling of the Notes type ID in Rust; the package folder, the Notes data folder and the stored configuration keys keep their own names.
 Changing a placement does not change its content ID or data. A Notes placement
 never enters terminal preparation or starts a Core process.
 

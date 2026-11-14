@@ -578,8 +578,7 @@ impl Client {
                             let terminals = core.as_mut().ok().and_then(|core| core.terminal_list().ok());
                             if let Some(terminals) = &terminals {
                                 let names = crate::observation::voyage_names(&layout, terminals);
-                                if !names.is_empty() || terminals.iter().any(|terminal| terminal.state == "finished"
-                                    && terminal.reason.as_deref() == Some("exited")
+                                if !names.is_empty() || terminals.iter().any(|terminal| terminal.has_exited()
                                     && live_bindings.iter().any(|id| id.0 == terminal.address)) {
                                 let mut candidate = Model { layout: (*layout).clone() };
                                 let renamed = !names.is_empty();
@@ -602,7 +601,7 @@ impl Client {
                                     }
                                 }
                                 }
-                                live_bindings = terminals.iter().filter(|terminal| terminal.state == "live")
+                                live_bindings = terminals.iter().filter(|terminal| terminal.is_live())
                                     .map(|terminal| CoreTerminalId(terminal.address.clone())).collect();
                             }
                             crate::observation::capture(&layout, version, &scope, active, terminals.as_deref())
@@ -909,7 +908,7 @@ impl Client {
                             for terminal in core.terminal_list().map_err(|error| {
                                 format!("Cannot check live process directories: {error:?}")
                             })? {
-                                if terminal.state == "live" {
+                                if terminal.is_live() {
                                     if terminal.cwd.is_empty() {
                                         return Err("A live terminal directory is unavailable; no worktree was removed".into());
                                     }
@@ -1683,7 +1682,7 @@ impl Client {
                                                 backend: None, shell_intent: None,
                                             }));
                                         }
-                                        live_bindings = terminals.iter().filter(|terminal| terminal.state == "live")
+                                        live_bindings = terminals.iter().filter(|terminal| terminal.is_live())
                                             .map(|terminal| CoreTerminalId(terminal.address.clone())).collect();
                                         reopened = true;
                                     }
@@ -1894,7 +1893,7 @@ impl Client {
                                             &request.action,
                                         )
                                         .map_err(rejected)?;
-                                        if type_id == "notes"
+                                        if type_id == crate::content::NOTES_TYPE
                                             && layout.contents.iter().any(|item| {
                                                 item.type_id == *type_id
                                                     && closing.blocks_terminal(&item.id)
@@ -1990,7 +1989,7 @@ impl Client {
                                             }
                                         let created_notes = if let Some(owner) = content.as_mut() {
                                             crate::content::initialize_created(owner, &layout, &mut candidate.layout).map_err(Error::Uncertain)?
-                                        } else if candidate.layout.contents.iter().any(|item| item.type_id == "notes" && !layout.contents.iter().any(|old| old.id == item.id)) {
+                                        } else if candidate.layout.contents.iter().any(|item| item.type_id == crate::content::NOTES_TYPE && !layout.contents.iter().any(|old| old.id == item.id)) {
                                             return Err(rejected("Content owner unavailable; Notes was not created".into()));
                                         } else { false };
                                         let revision = save(core, &candidate.layout, version).map_err(|error| {
@@ -2634,7 +2633,7 @@ fn note_exit_target(
     if !layout
         .contents
         .iter()
-        .any(|item| &item.id == content && item.type_id == "notes")
+        .any(|item| &item.id == content && item.type_id == crate::content::NOTES_TYPE)
     {
         return Err("This view is not Notes".into());
     }
@@ -2702,7 +2701,7 @@ mod voice_scope_tests {
         assert!(note_exit_target(&model.layout, &shell).is_err());
         model
             .apply(Action::CreateContent {
-                type_id: "notes".into(),
+                type_id: crate::content::NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
                     owner: voyager_contract::PanelOwner::Fleet { id: fleet },
                     insertion: voyager_contract::PanelInsertion::Beside {
@@ -2837,10 +2836,7 @@ fn require_finished(
     observed: &crate::core_shapes::Terminal,
     expected: &CoreTerminalId,
 ) -> Result<(), Error> {
-    if observed.address != expected.0
-        || observed.state != "finished"
-        || observed.reason.as_deref() == Some("spawn_pending")
-    {
+    if observed.address != expected.0 || !observed.has_ended() {
         return Err(rejected(
             "The selected program is not confirmed ended; no new shell was authorized".into(),
         ));
@@ -2885,9 +2881,9 @@ fn require_live(
     expected: &CoreTerminalId,
 ) -> Result<(), Error> {
     if observed.address != expected.0
-        || observed.state != "live"
+        || !observed.is_live()
         || observed.pid.is_none_or(|pid| pid == 0)
-        || observed.reason.as_deref() == Some("spawn_pending")
+        || observed.start_unconfirmed()
     {
         return Err(rejected(
             "Terminal is not confirmed live; no program was started".into(),
@@ -3112,9 +3108,7 @@ fn open_terminal(
             }
         };
         let address = started.address.clone();
-        if !matches!(started.state.as_str(), "live" | "finished")
-            || started.reason.as_deref() == Some("spawn_pending")
-        {
+        if started.lifecycle().is_unknown() || started.start_unconfirmed() {
             let message = format!(
                 "Terminal {address} for {operation} has an unconfirmed start; inspect it in Core. No start was repeated"
             );
@@ -3838,7 +3832,7 @@ mod terminal_outcome_tests {
         model
             .apply(Action::CreateContent {
                 launch: None,
-                type_id: "notes".into(),
+                type_id: crate::content::NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
                     owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
                     insertion: voyager_contract::PanelInsertion::Beside {

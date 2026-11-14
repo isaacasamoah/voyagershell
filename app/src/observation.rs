@@ -48,20 +48,8 @@ pub(crate) fn conversation_name(terminal: &Terminal) -> Option<String> {
         .name
         .rsplit(['/', '\\'])
         .next()?;
-    if !matches!(
-        program.to_ascii_lowercase().as_str(),
-        "codex"
-            | "claude"
-            | "claude-code"
-            | "pi"
-            | "opencode"
-            | "cursor"
-            | "cursor-agent"
-            | "copilot"
-            | "amp"
-            | "gemini"
-            | "grok"
-    ) || title.is_empty()
+    if !crate::launch::is_agent_program(&program.to_ascii_lowercase())
+        || title.is_empty()
         || title.len() > 192
         || title.chars().any(char::is_control)
         || title.eq_ignore_ascii_case(program)
@@ -95,7 +83,7 @@ pub(crate) fn voyage_names(
             let backend = content.backend.as_ref()?;
             let terminal = terminals
                 .iter()
-                .find(|terminal| terminal.address == backend.0 && terminal.state == "live")?;
+                .find(|terminal| terminal.address == backend.0 && terminal.is_live())?;
             let name = agent_name(&directory(content, Some(terminal)))?;
             (name != voyage.name && name.len() <= 128).then(|| (voyage.id.clone(), name))
         })
@@ -261,9 +249,7 @@ pub(crate) fn capture(
                 .iter()
                 .find(|terminal| terminal.address == backend.0)
         })
-        .is_some_and(|terminal| {
-            terminal.state == "finished" && terminal.reason.as_deref() != Some("spawn_pending")
-        });
+        .is_some_and(|terminal| terminal.has_ended());
     let directory = active
         .as_ref()
         .and_then(|id| panels.iter().find(|panel| &panel.placement_id == id))
@@ -509,7 +495,7 @@ mod tests {
                 voyage: voyage.clone(),
                 name: "Fleet 2".into(),
                 source: source.clone(),
-                type_id: "notes".into(),
+                type_id: crate::content::NOTES_TYPE.into(),
                 launch: None,
             })
             .unwrap();
@@ -522,7 +508,7 @@ mod tests {
             .iter()
             .find(|content| content.id == fleet.vessels[0].content)
             .unwrap();
-        assert_eq!(content.type_id, "notes");
+        assert_eq!(content.type_id, crate::content::NOTES_TYPE);
         assert_eq!(content.cwd, "/tmp/project");
         assert!(content.backend.is_none());
         let saved = model.layout.clone();

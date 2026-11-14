@@ -4,7 +4,7 @@ mod package;
 pub(crate) mod rename;
 mod view;
 pub(crate) use description::supports_type;
-pub use description::{describe, discover, require_action};
+pub use description::{NOTES_TYPE, describe, discover, require_action};
 pub use package::seed_package;
 pub(crate) use view::Phase as ViewPhase;
 pub use view::ViewBinding;
@@ -288,7 +288,7 @@ pub(crate) fn member(
     if !projected
         .contents
         .iter()
-        .any(|content| content.id == *id && content.type_id == "notes")
+        .any(|content| content.id == *id && content.type_id == NOTES_TYPE)
         || !projected.containers().any(|voyage| {
             voyage
                 .portals
@@ -473,7 +473,8 @@ pub(crate) fn initialize_created(
         .contents
         .iter()
         .filter(|content| {
-            content.type_id == "notes" && !previous.contents.iter().any(|old| old.id == content.id)
+            content.type_id == NOTES_TYPE
+                && !previous.contents.iter().any(|old| old.id == content.id)
         })
         .map(|content| content.id.clone())
         .collect();
@@ -566,7 +567,7 @@ impl Owner {
 
     pub(crate) fn require_configure(&self) -> Result<(), String> {
         let packages = self.root.parent().expect("profile root").join("mods");
-        require_action(&describe(&packages, "notes")?, "configure")
+        require_action(&describe(&packages, NOTES_TYPE)?, "configure")
     }
 
     pub fn require_available(&self, type_id: &str) -> Result<(), String> {
@@ -707,7 +708,7 @@ impl Owner {
     }
 
     pub fn register_view(&mut self, binding: Binding) -> Result<ViewBinding, String> {
-        if !self.package_path("notes")?.is_dir() {
+        if !self.package_path(NOTES_TYPE)?.is_dir() {
             return Err("Notes package is unavailable".into());
         }
         if !self.instances.contains(&binding.id().0) {
@@ -845,7 +846,7 @@ impl Owner {
             }
             Request::Describe { .. } => match describe(
                 &self.root.parent().expect("profile root").join("mods"),
-                "notes",
+                NOTES_TYPE,
             )
             .and_then(|description| {
                 description::require_ready(&description)?;
@@ -1025,7 +1026,7 @@ mod tests {
         model
             .apply(voyager_contract::Action::CreateContent {
                 launch: None,
-                type_id: "notes".into(),
+                type_id: NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
                     owner: voyager_contract::PanelOwner::Portals {
                         voyage: model.layout.voyages[0].id.clone(),
@@ -1066,7 +1067,7 @@ mod tests {
                     "name": package, "version": 1, "entry": "main.js", "contentConfiguration": version
                 })).unwrap()).unwrap();
             }
-            let description = describe(&packages, "notes").unwrap();
+            let description = describe(&packages, NOTES_TYPE).unwrap();
             assert_eq!(description.configuration.is_some(), metadata);
             assert_eq!(require_action(&description, "configure").is_ok(), writable);
             assert_eq!(owner.require_configure().is_ok(), writable);
@@ -1096,7 +1097,7 @@ mod tests {
         let catalog = discover(&packages).unwrap();
         assert_eq!(catalog.types.len(), 3);
         let terminal = describe(&packages, "terminal").unwrap();
-        let notes = describe(&packages, "notes").unwrap();
+        let notes = describe(&packages, NOTES_TYPE).unwrap();
         let agents = describe(&packages, "agents").unwrap();
         assert_eq!(terminal.view.module, "voyager_native");
         assert_eq!(terminal.view.component, "Terminal");
@@ -1223,7 +1224,7 @@ mod tests {
         model
             .apply(Action::CreateContent {
                 launch: None,
-                type_id: "notes".into(),
+                type_id: NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
                     owner: voyager_contract::PanelOwner::Fleet { id: fleet.clone() },
                     insertion: voyager_contract::PanelInsertion::Beside {
@@ -1243,7 +1244,7 @@ mod tests {
         model
             .apply(Action::CreateContent {
                 launch: None,
-                type_id: "notes".into(),
+                type_id: NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Panel {
                     owner: voyager_contract::PanelOwner::Portals { voyage },
                     insertion: voyager_contract::PanelInsertion::Empty,

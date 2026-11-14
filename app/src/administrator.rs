@@ -1,4 +1,5 @@
 use crate::client::{CallError, Client};
+use crate::core::TerminalState;
 use crate::provider::{ToolCall, ToolDefinition, ToolReply, ToolResult};
 use serde_json::{Value, json};
 use std::{sync::mpsc, thread};
@@ -698,12 +699,14 @@ fn process_text(status: &Status, output: Option<&ProcessOutput>, message: Option
         Some(ProcessOutput::Interrupt { outcome, .. }) => {
             format!("Interrupt submitted; Core reports {outcome}")
         }
-        Some(ProcessOutput::Stop { observed, .. }) => if observed.state == "finished" {
-            "Program ended"
-        } else {
-            "Stop requested; Core still reports running"
+        Some(ProcessOutput::Stop { observed, .. }) => {
+            if TerminalState::parse(&observed.state) == TerminalState::Finished {
+                "Program ended"
+            } else {
+                "Stop requested; Core still reports running"
+            }
+            .into()
         }
-        .into(),
         None => message.unwrap_or("Process operation applied").into(),
     }
 }
@@ -846,7 +849,7 @@ mod tests {
             let created = call(
                 Action::CreateContent {
                     launch: None,
-                    type_id: "notes".into(),
+                    type_id: crate::content::NOTES_TYPE.into(),
                     destination: voyager_contract::ContentDestination::Panel {
                         owner: voyager_contract::PanelOwner::Fleet { id: fleet },
                         insertion: voyager_contract::PanelInsertion::Beside {
@@ -868,7 +871,7 @@ mod tests {
             let created = call(
                 Action::CreateContent {
                     launch: None,
-                    type_id: "notes".into(),
+                    type_id: crate::content::NOTES_TYPE.into(),
                     destination: voyager_contract::ContentDestination::Panel {
                         owner: voyager_contract::PanelOwner::Portals { voyage },
                         insertion: voyager_contract::PanelInsertion::Empty,

@@ -410,6 +410,12 @@ At application startup, a successful Core terminal roster can prepare retained p
 
 `app/src/terminal_lifecycle.rs` holds these small layout decisions. `app/src/client.rs` owns their Core observations, versioned saves and creation grants. The desktop remains a viewer rather than another supervisor. Existing explicit new-shell operations remain available for deliberate repair; they are no longer the intended default after a confirmed cold restart. The real-Core owner test verifies new plain-shell preparation and a new binding after shutdown, alongside an unchanged unrelated session. The complete native UI journey remains a separate check.
 
+## Terminal state words
+
+`app/src/core_state.rs` owns the words Core reports for a terminal. `TerminalState` has `Live`, `Finished` and `Unknown(String)`. It is parsed from the `state` string on access, because the generated Core types keep `state` a string and the generator belongs to the Core adapter. `Terminal::is_live`, `has_ended` (finished with a confirmed start) and `has_exited` (ended with the `exited` reason) are the only places a state or end-reason word is compared. `ProcessInfo.state` stays Core's word unchanged, so the process wire, its schema and the seeded validators do not change.
+
+An unknown word keeps its terminal. Comparisons treat it as neither live nor finished, so the placement, backend and attached viewer stay, and the existing known-refusal and uncertain-result paths apply. Each new word is written once to standard error. Core's event types and error kinds that are also spelled `finished` are separate vocabularies and stay in `core.rs` and `activity.rs`.
+
 ## Agent display names
 
 Process inspection exposes an informative program-published terminal title for
