@@ -3,6 +3,7 @@ use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const ALIVE: &str = "alive.lock";
 
@@ -14,9 +15,14 @@ pub struct Scratch {
 impl Scratch {
     pub fn new(label: &str) -> io::Result<Self> {
         static SWEPT: Once = Once::new();
-        SWEPT.call_once(sweep);
-        let path =
-            std::env::temp_dir().join(format!("vv-{label}-{}-{}", std::process::id(), stamp()));
+        static COUNT: AtomicU64 = AtomicU64::new(0);
+        SWEPT.call_once(|| sweep(&std::env::temp_dir()));
+        let path = std::env::temp_dir().join(format!(
+            "vv-{label}-{}-{}-{}",
+            std::process::id(),
+            stamp(),
+            COUNT.fetch_add(1, Ordering::Relaxed)
+        ));
         fs::create_dir(&path)?;
         let starting = path.join("alive.new");
         let alive = File::create_new(&starting)?;
@@ -57,12 +63,14 @@ fn remove(folder: &Path) -> io::Result<()> {
     fs::remove_dir(folder)
 }
 
-fn sweep() {
-    let Ok(entries) = fs::read_dir(std::env::temp_dir()) else {
+fn sweep(root: &Path) {
+    let Ok(entries) = fs::read_dir(root) else {
         return;
     };
     for entry in entries.flatten() {
-        if !entry.file_name().to_string_lossy().starts_with("vv-") {
+        if !entry.file_name().to_string_lossy().starts_with("vv-")
+            || !entry.file_type().is_ok_and(|kind| kind.is_dir())
+        {
             continue;
         }
         let folder = entry.path();
@@ -101,24 +109,42 @@ mod tests {
 
     #[test]
     fn a_sweep_removes_only_abandoned_folders() -> Result<()> {
-        let live = Scratch::new("live")?;
-        let named = |state: &str| {
-            std::env::temp_dir().join(format!("vv-{state}-{}-{}", std::process::id(), stamp()))
-        };
+        let outer = Scratch::new("sweep")?;
+        let root = outer.path();
+        let named = |state: &str| root.join(format!("vv-{state}-1-1"));
+        let live = named("live");
+        fs::create_dir(&live)?;
+        let held = File::create_new(live.join(ALIVE))?;
+        held.try_lock()?;
         let abandoned = named("abandoned");
         fs::create_dir_all(abandoned.join("session"))?;
         File::create_new(abandoned.join(ALIVE))?;
         let foreign = named("foreign");
         fs::create_dir(&foreign)?;
-        sweep();
-        let removed = !abandoned.exists();
-        let kept = (live.path().exists(), foreign.exists());
-        fs::remove_dir(&foreign)?;
-        ensure!(removed, "Abandoned folder kept: {}", abandoned.display());
+        sweep(root);
+        ensure!(!abandoned.exists(), "Abandoned folder kept");
+        ensure!(live.exists(), "Live folder removed");
+        ensure!(foreign.exists(), "Lockless folder removed");
+        Ok(())
+    }
+
+    #[test]
+    fn a_sweep_does_not_follow_a_symlink() -> Result<()> {
+        let outer = Scratch::new("link")?;
+        let root = outer.path().join("root");
+        let victim = outer.path().join("victim");
+        fs::create_dir(&root)?;
+        fs::create_dir(&victim)?;
+        File::create_new(victim.join(ALIVE))?;
+        fs::write(victim.join("precious"), b"x")?;
+        let link = root.join("vv-link-1-1");
+        std::os::unix::fs::symlink(&victim, &link)?;
+        sweep(&root);
         ensure!(
-            kept == (true, true),
-            "Live and lockless folders kept: {kept:?}"
+            victim.join("precious").exists(),
+            "Sweep followed the symlink"
         );
+        ensure!(link.symlink_metadata().is_ok(), "Sweep removed the symlink");
         Ok(())
     }
 }
