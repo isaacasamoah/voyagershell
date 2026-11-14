@@ -237,6 +237,9 @@ These gaps are open. Nobody has approved them.
   checked only for being drawn.
 - The Vessels of a Fleet that is not shown are compared in the saved
   document only.
+- `create-voyage` focuses the last Vessel of the Fleet, which is also the
+  docked one. A candidate that takes the new Voyage's folder from the last
+  Vessel instead of the focused one passes.
 - The model of what the journey created includes the Home Voyage as it was
   when the journey started. The sidebar does not draw Home, so nothing checks
   how Home is drawn.
