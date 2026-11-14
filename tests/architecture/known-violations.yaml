@@ -1,16 +1,4 @@
 known:
-  - id: 'no-experiment-includes: includes(rs:voyager_app,source:experiments/performance/typing-latency/trace.rs)'
-    owner: isaac
-    reason: 'Product code compiles a source file from experiments/ through #[path]. Removing the include clears it.'
-  - id: 'no-experiment-includes: includes(rs:voyager_desktop,source:experiments/performance/avatar-redraw/probe.rs)'
-    owner: isaac
-    reason: 'Product code compiles a source file from experiments/ through #[path]. Removing the include clears it.'
-  - id: 'no-experiment-includes: includes(rs:voyager_desktop,source:experiments/performance/frame-work/probe.rs)'
-    owner: isaac
-    reason: 'Product code compiles a source file from experiments/ through #[path]. Removing the include clears it.'
-  - id: 'no-experiment-includes: includes(rs:voyager_desktop,source:experiments/performance/typing-latency/glyph.rs)'
-    owner: isaac
-    reason: 'Product code compiles a source file from experiments/ through #[path]. Removing the include clears it.'
   - id: 'no-module-cycles: rs:voyager_app::client <-> rs:voyager_app::voyage_close'
     owner: isaac
     reason: 'Modules in this group use each other. Breaking the loop clears it.'
