@@ -99,8 +99,31 @@ impl Listing {
         }
     }
 
-    pub(super) fn listed(&mut self) -> (Option<u64>, Vec<Observer>) {
-        (self.begun.take(), std::mem::take(&mut self.observers))
+    pub(super) fn listed(&mut self) -> Option<u64> {
+        self.begun.take()
+    }
+
+    pub(super) fn answer(
+        &mut self,
+        begun: Option<u64>,
+        listed: Result<Option<&[Terminal]>, String>,
+        layout: &Arc<Layout>,
+        version: u64,
+        fresh: bool,
+    ) {
+        for observer in std::mem::take(&mut self.observers) {
+            match listed {
+                Err(ref error) => drop(observer.reply.try_send(Err(error.clone()))),
+                Ok(Some(_))
+                    if fresh
+                        && observer.version == version
+                        && begun.is_some_and(|begun| begun < version) =>
+                {
+                    self.observers.push(observer)
+                }
+                Ok(terminals) => observer.answer(layout, version, fresh, terminals),
+            }
+        }
     }
 }
 
@@ -233,5 +256,22 @@ mod activity_notice_tests {
             activity.lock().unwrap().get("t1").state,
             voyager_contract::activity::ActivityState::Done
         );
+    }
+
+    #[test]
+    fn an_observation_newer_than_the_list_waits_for_the_next_list() {
+        let (reply, answered) = async_channel::bounded(1);
+        let mut listing = Listing::default();
+        listing.observe(Observer {
+            scope: Context::Workspace,
+            version: 2,
+            active: None,
+            reply,
+        });
+        let layout = Arc::new(Layout::default());
+        listing.answer(Some(1), Ok(Some(&[])), &layout, 2, true);
+        assert!(answered.try_recv().is_err());
+        listing.answer(Some(2), Ok(Some(&[])), &layout, 2, true);
+        assert!(answered.try_recv().is_ok());
     }
 }

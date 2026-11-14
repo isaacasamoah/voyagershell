@@ -584,7 +584,7 @@ impl Client {
                         continue;
                     }
                     Message::Listed { terminals } => {
-                        let ((begun, observers), terminals) = (listing.listed(), terminals.ok());
+                        let (begun, terminals) = (listing.listed(), terminals.ok());
                         let closed = (|| -> Result<(), String> {
                             let (Some(terminals), Ok(current_core), None, true) =
                                 (&terminals, core.as_mut(), &quit_result, fresh)
@@ -622,14 +622,8 @@ impl Client {
                             }
                             Ok(())
                         })();
-                        for observer in observers {
-                            match &closed {
-                                Ok(()) => {
-                                    observer.answer(&layout, version, fresh, terminals.as_deref())
-                                }
-                                Err(error) => drop(observer.reply.try_send(Err(error.clone()))),
-                            }
-                        }
+                        let listed = closed.map(|()| terminals.as_deref());
+                        listing.answer(begun, listed, &layout, version, fresh);
                         if quit_result.is_none()
                             && let Ok(current_core) = core.as_mut()
                         {

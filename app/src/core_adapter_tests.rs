@@ -331,6 +331,12 @@ fn replies_with_fields_a_newer_core_adds_still_parse() {
 }
 
 #[test]
+fn generated_types_never_close_an_object_to_new_fields() {
+    let schema = include_str!("../core-schema.json");
+    assert!(!schema.contains("\"additionalProperties\": false"));
+}
+
+#[test]
 fn generated_types_name_the_minimum_core_release() {
     let schema: Value = serde_json::from_str(include_str!("../core-schema.json")).unwrap();
     let (major, minor, patch) = MINIMUM_CORE;

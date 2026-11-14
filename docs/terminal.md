@@ -326,8 +326,8 @@ Voyager uses exists in 0.1.18. The 0.1.18 schema also requires
 Core's attach reply would not parse.
 
 Reads tolerate a newer Core. Herdr Core's API only grows, and the generator
-refuses a schema object that closes its fields, so no generated type rejects an
-unknown field. A field that a newer release adds is ignored; one that the
+and a unit test refuse a schema object that closes its fields, so no generated
+type rejects an unknown field. A field that a newer release adds is ignored; one that the
 minimum release lacks is never required. Terminal list decodes only the
 terminals array, because releases before 0.1.21 omitted the schema's required
 `machines` field.
@@ -339,16 +339,17 @@ method or feature. The connection then fails with the refusal kind
 `unsupported_core` and a message naming Core's release and the minimum. Every
 later request repeats that refusal; nothing reconnects or retries.
 
-The owner queue in `app/src/client.rs` does not wait for a read whose reply
-decides no effect. Workspace observations and the exit check share one
-`terminal.list`. It starts on the owner (`Core::begin` needs the request
+The owner queue in `app/src/client.rs` does not wait for Core's terminal
+list; it acts on the reply when it arrives. Workspace observations and the exit
+check share one `terminal.list`. It starts on the owner (`Core::begin` needs the request
 sequence), and a short worker thread waits for the reply and posts it back as a
 message. At most one list is in flight: observations that arrive meanwhile wait
 for it, and an exit that finishes meanwhile asks for one more list after it. So
 reads never hold more than one of the connection's ten request slots, which [delayed process effects](workspace.md) count, and a save or an
 Inspect is never refused as busy behind them. The owner answers each observation
 against the current workspace version: a changed workspace answers "observe it
-again". Voyage renames and live bindings change only when the list began at the
+again", and an observation of a version newer than the list waits for the next
+list. Voyage renames and live bindings change only when the list began at the
 current version; exited panels close either way, because an exit is final. Calls
 whose reply decides the next effect stay on the owner in order: document saves
 with their version compare-and-set, the open/run/attach chain, liveness checks
