@@ -494,68 +494,6 @@ def terminal(
             )
             assert rpc("terminal.get", {"terminal": address})["pid"] == original["pid"]
             type_text(
-                "printf '\\033[2J\\033[H\\033[44mCOPY\\316\\262\\347\\225\\214\\033[0m\\n'\n"
-            )
-            wait_for(
-                screen,
-                lambda text: "COPYβ界" in text.splitlines(),
-                "copy source output",
-            )
-            time.sleep(0.3)
-            frame = capture("terminal-copy-source")
-            masks = [
-                channel.point(lambda value, color=color: 255 if value == color else 0)
-                for channel, color in zip(frame.split(), (0x97, 0xB3, 0xD6))
-            ]
-            box = ImageChops.multiply(
-                ImageChops.multiply(masks[0], masks[1]), masks[2]
-            ).getbbox()
-            assert box is not None, "Native ANSI-blue copy source was not painted"
-            bounds = geometry()
-            selection_scale = (
-                int(bounds["WIDTH"]) / frame.width,
-                int(bounds["HEIGHT"]) / frame.height,
-            )
-            y = int(bounds["Y"]) + round((box[1] + box[3]) / 2 * selection_scale[1])
-            active()
-            native(
-                "move",
-                int(bounds["X"]) + round((box[0] + 1) * selection_scale[0]),
-                y,
-                2,
-            )
-            native("button", True)
-            try:
-                native(
-                    "move",
-                    int(bounds["X"]) + round((box[2] - 1) * selection_scale[0]),
-                    y,
-                    2,
-                )
-            finally:
-                native("button", False)
-            capture("terminal-selection")
-
-            def clipboard_key(value):
-                native("key", 65507, True)
-                native("key", 65505, True)
-                try:
-                    key(ord(value))
-                finally:
-                    native("key", 65505, False)
-                    native("key", 65507, False)
-
-            clipboard_key("c")
-            type_text("read -r copied; printf 'PASTE:%s\\n' \"$copied\"\n")
-            clipboard_key("v")
-            key(65293)
-            wait_for(
-                screen,
-                lambda text: "PASTE:COPYβ界" in text.splitlines(),
-                "native Unicode selection copied and pasted",
-            )
-            capture("terminal-native-copy-paste")
-            type_text(
                 "printf 'COMPOSE_%s\\n' READY; read -r composed; printf 'COMPOSE:%s\\n' \"$composed\"\n"
             )
             wait_for(
@@ -707,40 +645,6 @@ def terminal(
             )
             assert rpc("terminal.get", {"terminal": address})["pid"] == original["pid"]
             capture("terminal-real-split-grids")
-            click(350, 190)
-            type_text("timeout 6 yes flood; printf 'FLOOD_%s\\n' END\n")
-            wait_for(
-                screen, lambda text: "flood" in text.splitlines(), "active output flood"
-            )
-            flood_before = wait_for(
-                lambda: rpc("terminal.get", {"terminal": address}),
-                lambda value: (
-                    (value.get("foreground") or {}).get("name") in {"timeout", "yes"}
-                ),
-                "foreground flood process",
-            )
-            click(width - 180, 190)
-            type_text("printf 'DURING_%s\\n' FLOOD\n")
-            wait_for(
-                lambda: rpc("terminal.read", {"terminal": sibling})["text"],
-                lambda text: "DURING_FLOOD" in text.splitlines(),
-                "other split input during saturated output",
-            )
-            assert "FLOOD_END" not in screen().splitlines(), (
-                "Other input waited until the bounded flood ended"
-            )
-            flood_during = (
-                rpc("terminal.get", {"terminal": address}).get("foreground") or {}
-            )
-            assert flood_during.get("name") in {"timeout", "yes"}, (
-                "Flood foreground process ended before the other split's input"
-            )
-            capture("terminal-focused-during-flood")
-            wait_for(
-                screen,
-                lambda text: "FLOOD_END" in text.splitlines(),
-                "bounded flood ended",
-            )
             (evidence / "terminal-grid-observed.json").write_text(
                 json.dumps(
                     {
@@ -749,9 +653,6 @@ def terminal(
                         "before": before,
                         "after": after,
                         "other": other,
-                        "selection": "COPYβ界",
-                        "selectionImageSize": [frame.width, frame.height],
-                        "selectionDeviceScale": selection_scale,
                         "hiddenOutput": screen(),
                         "splitSize": split_size,
                         "sibling": sibling,
@@ -759,8 +660,6 @@ def terminal(
                             "name": "IBus/XIM",
                             "selector": env["XMODIFIERS"],
                         },
-                        "floodBefore": flood_before.get("foreground"),
-                        "floodDuring": flood_during,
                     },
                     indent=2,
                 )
@@ -770,12 +669,10 @@ def terminal(
             return [
                 "real-shell-grid-resize",
                 "alternate-screen-colored-unicode",
-                "native-selection-copy-paste",
                 "native-IBus-XIM-preedit-commit",
                 "focused-input-during-hidden-output",
                 "same-terminal-hidden-reveal-input",
                 "real-split-grid-size-and-input",
-                "focused-input-while-flood-process-active",
                 "same-terminal-process",
                 "native-quit",
             ]

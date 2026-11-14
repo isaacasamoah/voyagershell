@@ -1,5 +1,6 @@
 mod arrangement;
 mod chat;
+mod input;
 mod layout;
 mod portals;
 mod quit_restore;
@@ -103,6 +104,7 @@ journeys! {
     Arrangement => "arrangement" in arrangement, sidebar: Some(Sidebar::Open), window: None;
     Portals => "portals" in portals, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
     Chat => "chat" in chat, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    TerminalInput => "terminal-input" in input, sidebar: None, window: None;
 }
 
 impl Journey {

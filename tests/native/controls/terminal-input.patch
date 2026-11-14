@@ -1,0 +1,13 @@
+diff --git a/desktop/src/terminal_view.rs b/desktop/src/terminal_view.rs
+index b7daa36..3631829 100644
+--- a/desktop/src/terminal_view.rs
++++ b/desktop/src/terminal_view.rs
+@@ -350,7 +350,7 @@ impl Render for Pane {
+                             && !modifiers.alt
+                             && !modifiers.platform
+                     };
+-                    let result = if clipboard && event.keystroke.key == "c" {
++                    let result = if false {
+                         pane.screen.selection_text().map(|text| {
+                             if let Some(text) = text {
+                                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));

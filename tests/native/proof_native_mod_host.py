@@ -27,7 +27,7 @@ def run():
     parser = argparse.ArgumentParser()
     parser.add_argument("--native-mod-host", action="store_true")
     parser.add_argument("--foundation", action="store_true")
-    parser.add_argument("--journey", choices=["activity-refinement", "demo-feedback", "feedback-ux", "rename-typing", "canvas-stack", "workspace-ux", "workspace-unavailable", "terminal", "portal-terminal", "terminal-grid", "terminal-scrolling", "terminal-reported-status", "arrangement", "layouts", "notes", "notes-lifetime", "notes-configuration", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
+    parser.add_argument("--journey", choices=["activity-refinement", "demo-feedback", "feedback-ux", "rename-typing", "canvas-stack", "workspace-ux", "workspace-unavailable", "portal-terminal", "terminal-grid", "terminal-scrolling", "terminal-reported-status", "arrangement", "layouts", "notes", "notes-lifetime", "notes-configuration", "conversation", "conversation-interrupt", "conversation-administrator", "conversation-workspace-refresh", "conversation-process", "conversation-ux", "terminal-agent", "terminal-agent-create", "conversation-scroll", "conversation-stop", "conversation-voice", "conversation-content", "avatar", "portal-avatar"])
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--quit", action="store_true")
     parser.add_argument("--review", action="store_true")
