@@ -355,6 +355,25 @@ mod linux {
     }
 
     #[test]
+    fn quit_and_keep_succeeds_when_core_never_connected_and_stop_reports_why() {
+        let client = Client::open("invalid-for-core-start".into(), "/tmp".into());
+        assert!(wait(client.end(Lifecycle::QuitAndKeep)).is_ok());
+        assert!(wait(client.end(Lifecycle::QuitAndKeep)).is_ok());
+        let stop = wait(client.end(Lifecycle::StopSession));
+        assert!(
+            matches!(&stop, Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "quitting"),
+            "{stop:?}"
+        );
+        let fresh = Client::open("invalid-for-core-start".into(), "/tmp".into());
+        let refused = wait(fresh.end(Lifecycle::StopSession));
+        assert!(
+            matches!(&refused, Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "invalid_session"),
+            "{refused:?}"
+        );
+        assert!(wait(fresh.end(Lifecycle::QuitAndKeep)).is_ok());
+    }
+
+    #[test]
     fn quit_and_keep_releases_the_owner_and_leaves_every_program_running() {
         let session = format!("voyager-quit-keep-{}", std::process::id());
         let mut core = Core::connect(&session).unwrap();

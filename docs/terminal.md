@@ -106,6 +106,10 @@ These definitions describe what each user action does.
   terminal, for example with `setsid`, may survive, because Core cannot see it;
   stop-session does not claim otherwise. The app then exits.
 
+When Core never connected, quit-and-keep has no connection to release and
+succeeds, so the app can always close. Stop-session reports the connection
+error instead.
+
 The owner keeps the first operation's result. The same operation again returns
 that result without another effect. Quit-and-keep after a failed stop-session
 runs and releases the connection without stopping. Quit-and-keep after a

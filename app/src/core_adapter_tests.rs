@@ -189,6 +189,84 @@ fn quit_fences_cloned_viewer_input_without_closing_output_or_control() {
     assert_eq!(output, [42]);
 }
 
+fn lifecycle_core(control: mpsc::SyncSender<Frame>, replies: Replies) -> Core {
+    let (input, _) = mpsc::sync_channel(1);
+    let child = Command::new(env::current_exe().unwrap())
+        .arg("--list")
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    let activity = Arc::new(Mutex::new(Activity::default()));
+    activity.lock().unwrap().bind(["t1"]);
+    Core {
+        child,
+        identity: "bound-core".into(),
+        control,
+        input,
+        replies,
+        streams: Arc::default(),
+        attaches: Default::default(),
+        link: Arc::default(),
+        input_open: Arc::new(Mutex::new(true)),
+        sequence: 1,
+        activity,
+        activity_supported: false,
+    }
+}
+
+#[test]
+fn quit_and_keep_fences_input_and_activity_and_sends_nothing_to_core() {
+    let (control, requests) = mpsc::sync_channel::<Frame>(2);
+    let mut core = lifecycle_core(control, Replies::default());
+    let result = core.end(false);
+    assert!(result.is_ok(), "{result:?}");
+    assert!(requests.try_recv().is_err());
+    assert!(!*core.input_open.lock().unwrap());
+    assert_eq!(
+        core.activity.lock().unwrap().get("t1").reason.as_deref(),
+        Some("Voyager is quitting")
+    );
+    assert!(core.child.try_wait().unwrap().is_some());
+}
+
+#[test]
+fn stop_session_refuses_a_changed_core_without_sending_server_stop() {
+    let (control, requests) = mpsc::sync_channel::<Frame>(2);
+    let replies = Replies::default();
+    let responses = replies.clone();
+    let worker = thread::spawn(move || {
+        let request = requests.recv().unwrap();
+        let value: Value = serde_json::from_slice(&request.payload).unwrap();
+        assert_eq!(value["method"], "server.status");
+        let id = value["id"].as_u64().unwrap();
+        let status = json!({"core":{"id":"another-core","name":"Core"},"version":"0","pid":1,
+            "uptime_ms":0,"holders":[],"live":0,"finished":0});
+        responses
+            .lock()
+            .unwrap()
+            .remove(&id)
+            .unwrap()
+            .send(json!({"jsonrpc":"2.0","id":id,"result":status}))
+            .unwrap();
+        let later = requests.recv_timeout(Duration::from_millis(300)).ok()?;
+        let value: Value = serde_json::from_slice(&later.payload).unwrap();
+        responses
+            .lock()
+            .unwrap()
+            .remove(&value["id"].as_u64().unwrap());
+        Some(value["method"].clone())
+    });
+    let mut core = lifecycle_core(control, replies);
+    let result = core.end(true);
+    let later = worker.join().unwrap();
+    assert!(
+        matches!(&result, Err(Error::Rejected { kind, .. }) if kind == "changed_core"),
+        "{result:?}"
+    );
+    assert_eq!(later, None, "a request followed the identity refusal");
+    core.close().unwrap();
+}
+
 #[test]
 fn protocol_envelopes_preserve_refusals_and_uncertainty() {
     let valid = json!({"jsonrpc":"2.0","id":2,"result":{"value":null},"extra":true});

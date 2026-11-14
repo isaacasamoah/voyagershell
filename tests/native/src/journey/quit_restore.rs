@@ -80,10 +80,10 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let pressed = Instant::now();
         native.close()?;
         let quit_millis = pressed.elapsed().as_millis();
-        let core_after = answering_core(native)?;
-        let shell_after = terminal.program(native)?;
-        let roster_after = native.live_terminals()?;
-        let saved_after = saved_now(native)?;
+        let core_after = answering_core(native).ok().flatten();
+        let shell_after = terminal.program(native).ok();
+        let roster_after = native.live_terminals().ok();
+        let saved_after = saved_now(native).ok().flatten();
         let verdict = Verdict::new()
             .expect(
                 "Core is the same process after Quit",
@@ -91,11 +91,13 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             )
             .expect(
                 "the shell is the same live program after Quit",
-                shell_after.same && shell_after.state.as_deref() == Some("live"),
+                shell_after
+                    .as_ref()
+                    .is_some_and(|shell| shell.same && shell.state.as_deref() == Some("live")),
             )
             .expect(
                 "Core lists the same live terminals after Quit",
-                roster_after == roster,
+                roster_after.as_ref() == Some(&roster),
             )
             .expect(
                 "the layout document and its version are unchanged by Quit",
