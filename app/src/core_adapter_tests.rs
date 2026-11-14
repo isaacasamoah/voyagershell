@@ -1,4 +1,5 @@
 use super::*;
+use crate::core_shapes::HelloResult;
 
 #[test]
 fn reported_activity_frames_credit_close_and_control_are_separate() {
@@ -70,6 +71,8 @@ fn quit_fences_cloned_viewer_input_without_closing_output_or_control() {
     let responses = replies.clone();
     let attached: AttachResult = serde_json::from_value(json!({
         "channel": 7,
+        "resize_notifications": false,
+        "automatic_input": false,
         "terminal": {
             "address": "t1",
             "argv": [],
@@ -270,7 +273,7 @@ fn dispatched_request_never_treats_malformed_or_lost_reply_as_refusal() {
 
 #[test]
 fn hello_requires_consumed_capabilities_not_exact_version_or_extra_fields() {
-    let mut hello = json!({"jsonrpc":"2.0","id":1,"result":{"framed":true,"generation":1,"version":"future-compatible","core":{"id":"stable","name":"test"},"methods":Core::REQUIRED_METHODS,"features":["framed","attach","shell","future"],"extra":true}});
+    let mut hello = json!({"jsonrpc":"2.0","id":1,"result":{"framed":true,"generation":1,"version":"0.2.0","core":{"id":"stable","name":"test"},"methods":Core::REQUIRED_METHODS,"features":["framed","attach","shell","future"],"extra":true}});
     hello["result"]["methods"]
         .as_array_mut()
         .unwrap()
@@ -284,6 +287,63 @@ fn hello_requires_consumed_capabilities_not_exact_version_or_extra_fields() {
     hello["result"]["features"] = json!(["framed", "attach", "shell"]);
     hello["result"]["methods"] = json!(["hello"]);
     assert!(Core::validate_hello(hello).is_err());
+}
+
+#[test]
+fn hello_from_a_core_older_than_the_minimum_returns_the_typed_mismatch() {
+    let reply = |version: &str| json!({"jsonrpc":"2.0","id":1,"result":{"framed":true,"generation":1,"version":version,"core":{"id":"old","name":"test"},"methods":Core::REQUIRED_METHODS,"features":["framed","attach","shell"]}});
+    let hello = |version: &str| -> HelloResult {
+        serde_json::from_value(reply(version)["result"].clone()).unwrap()
+    };
+    for (version, expected) in [
+        ("0.1.17", Err(Incompatible::Release("0.1.17".into()))),
+        ("0.1.9", Err(Incompatible::Release("0.1.9".into()))),
+        ("unknown", Err(Incompatible::Release("unknown".into()))),
+        (
+            "0.1.18-rc.1",
+            Err(Incompatible::Release("0.1.18-rc.1".into())),
+        ),
+        ("0.1.18+build.5", Ok(())),
+        ("0.1.18", Ok(())),
+        ("0.1.21", Ok(())),
+        ("0.2.0-dev", Ok(())),
+    ] {
+        assert_eq!(Core::compatible(&hello(version)), expected, "{version}");
+    }
+    let refused = Core::validate_hello(reply("0.1.17"));
+    assert!(
+        matches!(&refused, Err(Error::Rejected { kind, message }) if kind == "unsupported_core" && message.contains("0.1.17") && message.contains("0.1.18")),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn replies_with_fields_a_newer_core_adds_still_parse() {
+    let terminal = json!({"address":"t1","labels":{},"argv":["sh"],"cwd":"/","state":"live","created_ms":1,"screen":"","cols":80,"rows":24,"added_by_a_later_core":{"nested":true}});
+    let parsed: Terminal = Core::decode("terminal.get", terminal.clone()).unwrap();
+    assert_eq!(parsed.address, "t1");
+    let attached: AttachResult = Core::decode(
+        "terminal.attach",
+        json!({"channel":3,"terminal":terminal,"resize_notifications":true,"automatic_input":false,"future":1}),
+    )
+    .unwrap();
+    assert_eq!(attached.channel, 3);
+}
+
+#[test]
+fn generated_types_never_close_an_object_to_new_fields() {
+    let schema = include_str!("../core-schema.json");
+    assert!(!schema.contains("\"additionalProperties\": false"));
+}
+
+#[test]
+fn generated_types_name_the_minimum_core_release() {
+    let schema: Value = serde_json::from_str(include_str!("../core-schema.json")).unwrap();
+    let (major, minor, patch) = MINIMUM_CORE;
+    assert_eq!(
+        schema["description"],
+        format!("Herdr Core {major}.{minor}.{patch} messages")
+    );
 }
 
 #[test]

@@ -2,9 +2,9 @@ use crate::{
     activity::Activity,
     core_shapes::{
         AttachParams, AttachResult, DocGetParams, DocGetResult, DocSetParams, DocSetResult,
-        GetParams, HelloParams, HelloResult, InterruptParams, InterruptResult, KillParams,
-        ListParams, ReadParams, ReadResult, RunParams, SendParams, SendResult, StatusParams,
-        StatusResult, StopParams, StopResult, SubscribeParams, SubscribeResult, Terminal,
+        GetParams, InterruptParams, InterruptResult, KillParams, ListParams, ReadParams,
+        ReadResult, RunParams, SendParams, SendResult, StatusParams, StatusResult, StopParams,
+        StopResult, SubscribeParams, SubscribeResult, Terminal,
     },
     wire::Frame,
 };
@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use std::{
     collections::{HashMap, VecDeque},
     env,
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufReader, Write},
     process::{Child, Command, Stdio},
     sync::{
         Arc, Mutex, OnceLock,
@@ -23,6 +23,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "core_hello.rs"]
+mod hello;
+pub use hello::{Incompatible, MINIMUM_CORE};
 #[path = "core_pending.rs"]
 mod pending;
 pub(crate) use pending::Pending;
@@ -36,8 +39,8 @@ use viewer::Lease;
 pub use viewer::{Viewer, WeakViewer};
 
 #[derive(Deserialize)]
-struct TerminalList {
-    terminals: Vec<Terminal>,
+pub(crate) struct TerminalList {
+    pub(crate) terminals: Vec<Terminal>,
 }
 
 const VIEW_LIMIT: usize = 1024 * 1024;
@@ -206,40 +209,7 @@ impl Core {
                 .take()
                 .ok_or_else(|| Error::Uncertain("Core output pipe missing".into()))?,
         );
-        let handshake = (|| -> Result<(String, bool), Error> {
-            let params = Self::hello_params();
-            let mut hello = serde_json::to_vec(
-                &json!({"jsonrpc":"2.0","id":1,"method":"hello","params":params}),
-            )
-            .map_err(|e| Error::Rejected {
-                kind: "invalid".into(),
-                message: e.to_string(),
-            })?;
-            hello.push(b'\n');
-            input.write_all(&hello)?;
-            input.flush()?;
-            let mut line = Vec::new();
-            output
-                .by_ref()
-                .take(1024 * 1024 + 1)
-                .read_until(b'\n', &mut line)?;
-            if line.is_empty() || line.len() > 1024 * 1024 {
-                return Err(Error::Uncertain(
-                    "Core handshake missing or oversized".into(),
-                ));
-            }
-            let result: Value =
-                serde_json::from_slice(&line).map_err(|e| Error::Uncertain(e.to_string()))?;
-            let supported = result
-                .pointer("/result/methods")
-                .and_then(Value::as_array)
-                .is_some_and(|methods| {
-                    methods
-                        .iter()
-                        .any(|method| method.as_str() == Some("events.subscribe"))
-                });
-            Self::validate_hello(result).map(|identity| (identity, supported))
-        })();
+        let handshake = Self::handshake(&mut input, &mut output);
         let (identity, activity_supported) = match handshake {
             Ok(identity) => identity,
             Err(error) => {
@@ -455,14 +425,6 @@ impl Core {
         Activity::inspect(serde_json::to_value(terminal).unwrap_or(Value::Null))
     }
 
-    fn hello_params() -> HelloParams {
-        HelloParams {
-            framed: true,
-            generation: Some(1),
-            ..Default::default()
-        }
-    }
-
     fn call<P: Serialize, R: DeserializeOwned>(
         &mut self,
         method: &'static str,
@@ -581,6 +543,7 @@ impl Core {
                 display: Default::default(),
                 history: 0,
                 observe: false,
+                resize_notifications: false,
                 resumed: false,
                 rows: terminal.rows,
                 terminal: terminal.address.clone(),
@@ -618,14 +581,17 @@ impl Core {
     }
 
     pub fn terminal_list(&mut self) -> Result<Vec<Terminal>, Error> {
-        let result: TerminalList = self.call(
+        Ok(self.begin_terminal_list()?.wait()?.terminals)
+    }
+
+    pub(crate) fn begin_terminal_list(&mut self) -> Result<Pending<TerminalList>, Error> {
+        self.begin(
             "terminal.list",
             ListParams {
                 all: true,
                 ..Default::default()
             },
-        )?;
-        Ok(result.terminals)
+        )
     }
 
     pub fn terminal_read(&mut self, terminal: &str, lines: u32) -> Result<ReadResult, Error> {
@@ -857,44 +823,6 @@ impl Core {
             }
             _ => Err(malformed()),
         }
-    }
-
-    const REQUIRED_METHODS: &'static [&'static str] = &[
-        "hello",
-        "doc.get",
-        "doc.set",
-        "terminal.get",
-        "terminal.run",
-        "terminal.attach",
-        "terminal.list",
-        "terminal.read",
-        "terminal.send",
-        "terminal.interrupt",
-        "terminal.kill",
-        "server.status",
-        "server.stop",
-    ];
-
-    fn validate_hello(response: Value) -> Result<String, Error> {
-        let result = Self::response(response, 1)?;
-        let hello: HelloResult = Self::decode("hello", result)?;
-        if hello.generation != 1
-            || !hello.framed
-            || hello.core.id.is_empty()
-            || !Self::REQUIRED_METHODS
-                .iter()
-                .all(|required| hello.methods.iter().any(|actual| actual == required))
-            || !["framed", "attach", "shell"]
-                .iter()
-                .all(|required| hello.features.iter().any(|actual| actual == required))
-        {
-            return Err(Error::Rejected {
-                kind: "unsupported_core".into(),
-                message: "Core does not provide the required protocol generation and capabilities"
-                    .into(),
-            });
-        }
-        Ok(hello.core.id)
     }
 
     pub fn viewer(&self, attached: &AttachResult) -> Result<Viewer, Error> {
