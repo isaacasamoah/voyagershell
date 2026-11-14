@@ -1,4 +1,5 @@
 use super::{INITIAL_NOTES, manifest, state_schema};
+pub use crate::content_type::NOTES_TYPE;
 use std::path::Path;
 use voyager_contract::content::{
     Actions, Availability, Backend, Catalog, DataDescription, Description, NativeHost, NativeView,
@@ -49,7 +50,7 @@ const IMPLEMENTATIONS: &[Implementation] = &[
         state: None,
     },
     Implementation {
-        type_id: "notes",
+        type_id: NOTES_TYPE,
         name: "Notes",
         module: "voyager_content_view",
         component: "Notes",
@@ -140,7 +141,7 @@ pub fn describe(packages: &Path, type_id: &str) -> Result<Description, String> {
     let kind = implementation(type_id)?;
     let mut input_schema: serde_json::Value =
         serde_json::from_str(kind.input).map_err(|error| error.to_string())?;
-    let configuration = (kind.type_id == "notes")
+    let configuration = (kind.type_id == NOTES_TYPE)
         .then(|| configuration(packages))
         .transpose()?
         .flatten();

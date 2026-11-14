@@ -1,6 +1,7 @@
 use crate::{
     client::{CallError, Client},
     core::{Core, Error},
+    core_state::TerminalState,
     panels,
 };
 use async_channel::{Receiver, Sender};
@@ -207,8 +208,8 @@ impl Closing {
                     .iter()
                     .find(|terminal| terminal.address == address.0)
             });
-            let live = terminal.filter(|terminal| terminal.state == "live");
-            let note = content.type_id == "notes";
+            let live = terminal.filter(|terminal| terminal.is_live());
+            let note = content.type_id == crate::content_type::NOTES_TYPE;
             if note {
                 self.notes.push(content.id.clone());
             }
@@ -484,7 +485,7 @@ pub(crate) fn execute(client: &Client, confirmed: Confirmed) -> Result<(), Error
                 if target.terminal_id == *address
                     && target.pid == Some(pid)
                     && observed.terminal_id == *address
-                    && observed.state == "finished" => {}
+                    && TerminalState::parse(&observed.state) == TerminalState::Finished => {}
             _ => {
                 return Err(Error::Uncertain(
                     "Program exit is not confirmed; no stop was repeated".into(),

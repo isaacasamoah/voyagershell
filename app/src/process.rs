@@ -1,6 +1,7 @@
 use crate::{
     core::{Core, Error, MAX_INPUT_BYTES, Pending},
     core_shapes::{InterruptResult, SendResult, Terminal},
+    core_state::TerminalState,
     scope,
 };
 use std::sync::Arc;
@@ -55,28 +56,37 @@ fn info(content: &ContentId, terminal: Terminal, layout: &Layout) -> ProcessInfo
                 .collect()
         })
         .unwrap_or_default();
+    let live = terminal.is_live();
     ProcessInfo {
         content_id: content.clone(),
         terminal_id: CoreTerminalId(terminal.address),
         pid: terminal.pid,
         cwd: terminal.cwd,
         state: terminal.state.clone(),
-        foreground: terminal.foreground.map(|process| process.name).or_else(|| {
-            (terminal.state == "live")
-                .then(|| terminal.argv.first().cloned())
-                .flatten()
-        }),
+        foreground: terminal
+            .foreground
+            .map(|process| process.name)
+            .or_else(|| live.then(|| terminal.argv.first().cloned()).flatten()),
         agent_name,
         placement_names,
         reported_activity,
     }
 }
 
+fn is_live(state: &str) -> bool {
+    TerminalState::parse(state) == TerminalState::Live
+}
+
+pub(crate) fn ended(state: &str) -> bool {
+    TerminalState::parse(state) == TerminalState::Finished
+}
+
 fn stop_result(target: ProcessInfo, observed: ProcessInfo) -> Result<ProcessOutput, Error> {
+    let observed_state = TerminalState::parse(&observed.state);
     if observed.terminal_id != target.terminal_id
-        || !matches!(observed.state.as_str(), "live" | "finished")
+        || observed_state.is_unknown()
         || observed.pid.is_some_and(|pid| Some(pid) != target.pid)
-        || observed.state == "live" && observed.pid.is_none()
+        || observed_state == TerminalState::Live && observed.pid.is_none()
     {
         return Err(Error::Uncertain(
             "Core stop returned an unexpected terminal, process identity or state; do not repeat"
@@ -212,7 +222,7 @@ pub(crate) fn start(
                 }))
             }
             ProcessAction::Send { pid, text, .. } => {
-                if target.state != "live" || *pid == 0 || target.pid != Some(*pid) {
+                if !is_live(&target.state) || *pid == 0 || target.pid != Some(*pid) {
                     return Err(refused(
                         "The inspected running process identity has changed or ended; nothing was submitted",
                     ));
@@ -223,7 +233,7 @@ pub(crate) fn start(
                 )))
             }
             ProcessAction::Interrupt { pid, .. } => {
-                if target.state != "live" || *pid == 0 || target.pid != Some(*pid) {
+                if !is_live(&target.state) || *pid == 0 || target.pid != Some(*pid) {
                     return Err(refused(
                         "The inspected running process identity has changed or ended; no interrupt was sent",
                     ));
@@ -234,7 +244,7 @@ pub(crate) fn start(
                 )))
             }
             ProcessAction::Stop { pid, .. } => {
-                if target.state != "live" || *pid == 0 || target.pid != Some(*pid) {
+                if !is_live(&target.state) || *pid == 0 || target.pid != Some(*pid) {
                     return Err(refused(
                         "The inspected running process identity has changed or ended; no stop was sent",
                     ));

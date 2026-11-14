@@ -309,7 +309,7 @@ mod tests {
             .unwrap();
         model
             .apply(Action::CreateContent {
-                type_id: "notes".into(),
+                type_id: crate::content_type::NOTES_TYPE.into(),
                 destination: ContentDestination::Panel {
                     owner,
                     insertion: PanelInsertion::Empty,
