@@ -18,6 +18,7 @@ impl Target {
     pub const AVATAR: Self = Self::single(Role::Avatar);
     pub const SIDEBAR_TOGGLE: Self = Self::single(Role::SidebarToggle);
     pub const CREATE_VOYAGE: Self = Self::single(Role::CreateVoyage);
+    pub const RECENT_VOYAGES: Self = Self::single(Role::RecentVoyages);
 
     const fn single(role: Role) -> Self {
         Self {
@@ -43,6 +44,22 @@ impl Target {
 
     pub fn create_fleet(voyage: &VoyageId) -> Self {
         Self::keyed(Role::CreateFleet, &voyage.0)
+    }
+
+    pub fn close_voyage(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::CloseVoyage, &voyage.0)
+    }
+
+    pub fn reopen_voyage(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::ReopenVoyage, &voyage.0)
+    }
+
+    pub fn voyage_close_cancel(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::VoyageCloseCancel, &voyage.0)
+    }
+
+    pub fn voyage_close_confirm(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::VoyageCloseConfirm, &voyage.0)
     }
 
     pub fn worker(launch: &str) -> Self {

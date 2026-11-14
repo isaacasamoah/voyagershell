@@ -1,7 +1,7 @@
 use crate::inspection::Target;
 use crate::native::Seen;
-use voyager_contract::Context;
 use voyager_contract::inspection::{Rect, Role};
+use voyager_contract::{Context, Layout};
 
 pub fn avatar_bounds(seen: &Seen) -> Option<Rect> {
     Some(Target::AVATAR.find(seen.frame)?.bounds)
@@ -43,6 +43,17 @@ fn within(inner: &Rect, outer: &Rect) -> bool {
 
 fn overlaps(a: &Rect, b: &Rect) -> bool {
     a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
+pub fn without_runtime(layout: &Layout) -> Layout {
+    let mut layout = layout.clone();
+    for content in &mut layout.contents {
+        content.backend = None;
+        content.launch = None;
+        content.start_pending = None;
+        content.shell_intent = None;
+    }
+    layout
 }
 
 #[cfg(test)]

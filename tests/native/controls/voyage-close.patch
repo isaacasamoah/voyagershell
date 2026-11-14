@@ -1,0 +1,13 @@
+diff --git a/app/src/voyage_close.rs b/app/src/voyage_close.rs
+index 9d36171..c117342 100644
+--- a/app/src/voyage_close.rs
++++ b/app/src/voyage_close.rs
+@@ -424,7 +424,7 @@ pub(crate) fn execute(client: &Client, confirmed: Confirmed) -> Result<(), Error
+             Err(CallError::Unconfirmed(message)) => return Err(Error::Uncertain(message)),
+         }
+     }
+-    for entry in &plan.entries {
++    for entry in plan.entries.iter().take(1) {
+         let (Some(address), Some(pid)) = (&entry.terminal, entry.pid) else {
+             continue;
+         };

@@ -363,6 +363,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/scrolling.rs"),
     ),
     (
+        "src/journey/voyage_close.rs",
+        include_bytes!("journey/voyage_close.rs"),
+    ),
+    (
         "src/journey/workspace.rs",
         include_bytes!("journey/workspace.rs"),
     ),

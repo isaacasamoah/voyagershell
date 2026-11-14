@@ -119,7 +119,10 @@ Core and binds that Core's identity. The verifier never starts a Core.
 `Native::live_terminals` returns the sorted addresses of the terminals that
 Core reports live. `Terminal::program` returns the state, PID and `argv` that
 Core reports for a terminal, and whether the bound shell is still the same
-process. A journey judges these values as expectations.
+process. A journey judges these values as expectations. `Native::context_click`
+aims at a control the way `click` does and presses the secondary button,
+which the X11 adapter sends as button 3. A journey names the intent, not the
+button number.
 
 ### Negative controls
 
@@ -148,7 +151,10 @@ name is the typed text`, and the observed name is `NATIVE FLEET`. The
 `quit-restore` patch makes a relaunch clear the backend of a terminal that is
 still live, so the app starts a second shell while the first keeps running.
 `relaunch-reattaches` then fails on the expectation `Core lists the same live
-terminals after the relaunch`, with two live addresses observed.
+terminals after the relaunch`, with two live addresses observed. The
+`voyage-close` patch makes a confirmed close stop only the first program of
+the Voyage. `close-voyage-confirm` then fails on the expectation `every
+program of the closed Voyage stopped`, with one of its shells observed live.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
