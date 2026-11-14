@@ -7,7 +7,13 @@ use std::ops::Range;
 pub(super) const KEY_CONTEXT: &str = "Terminal";
 
 pub(crate) fn key_bindings() -> Vec<KeyBinding> {
-    Vec::new()
+    let context = Some(KEY_CONTEXT);
+    vec![
+        KeyBinding::new("tab", gpui::NoAction, context),
+        KeyBinding::new("shift-tab", gpui::NoAction, context),
+        KeyBinding::new("ctrl-tab", gpui_shell::root::Tab, context),
+        KeyBinding::new("ctrl-shift-tab", gpui_shell::root::TabPrev, context),
+    ]
 }
 
 pub(super) fn workspace_shortcut(key: &gpui::Keystroke) -> bool {
