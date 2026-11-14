@@ -369,10 +369,10 @@ Invariants:
   the engine retires. A retired engine refuses every later render, event, task
   and promise continuation at its entry, without running script.
 - Budgets and the share stop a call only when QuickJS polls its interrupt
-  handler. It polls between bytecode operations and inside regular-expression
-  matching. Other long native operations, such as a large string or JSON call,
-  run to their end before they can be stopped. The time they took still counts
-  toward the share for later calls.
+  handler. It polls in bytecode, inside regular-expression matching and in some
+  native loops. A long native operation that does not poll, such as a large
+  string or JSON call, runs to its end before it can be stopped. The time it
+  took still counts toward the share for later calls.
 - A Note whose current engine is retired draws a placeholder with the
   retirement message inside its own frame. The window and other Vessels keep
   drawing. The next source edit loads into a new engine, which is the recovery
@@ -409,16 +409,18 @@ Known gaps, outside these limits:
   the share, but a Vessel can still schedule many wakeups.
 - `cx.open_url` stays ungated. GPUI Shell treats it as equal to a `Link`, which
   needs no grant.
-- A render, task or promise continuation that runs out of memory and frees its
-  garbage while unwinding reports a thrown `null` and counts no strike. The E1
-  verifier saw a continuation pass a 16 MiB limit with no strike. The budgets
-  and the share still stop repeated growth.
+- A render or task that runs out of memory and frees its garbage while
+  unwinding reports a thrown `null` and counts no strike. The budgets and the
+  share still stop repeated growth.
+- Running out of memory inside a promise continuation counts no strike,
+  whatever the heap still holds. The second E1 verifier observed no strike at a
+  strike limit of 1.
 - The placeholder appears at the Note's next render. Nothing notifies the Note
   when its engine retires inside a timer or task.
-- No journey opens the header's worktrees dialog, which uses the same gated
-  calls as the voyage-close dialog.
-- Calls that spend their time inside native operations other than
-  regular-expression matching escape refusal. The E1 verifier ran 12 such
+- No native journey opens the header's worktrees dialog, which uses the same
+  gated calls as the voyage-close dialog.
+- Long native operations that do not poll the interrupt handler, such as large
+  string or JSON calls, escape refusal. The E1 verifier ran 12 such
   module loads in 961 ms under a 30 ms budget and a 60 ms share, and none was
   refused.
 - A script that catches its own out-of-memory error counts no strike.
