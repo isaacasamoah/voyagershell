@@ -1,10 +1,11 @@
-use super::{GLANCE, Native};
+use super::{Defect, GLANCE, Native};
 use crate::inspection::{Target, Unseen, clear_of, contains, region};
 use crate::system::{PATIENCE, poll};
 use crate::x11::{Chord, Geometry};
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{Result, ensure};
 use serde::Serialize;
 use serde_json::json;
+use voyager_contract::inspection::Frame;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -69,10 +70,8 @@ impl Native {
     fn spot(&self, target: &Target) -> Result<Aim> {
         let mut covered = false;
         let spotted = self.wait_for(&target.to_string(), PATIENCE, |frame| {
-            if target.ambiguous(frame) {
-                return Some(Err(anyhow!(
-                    "The frame draws {target} more than once, so there is no single control to aim at"
-                )));
+            if let Err(error) = single(target, frame) {
+                return Some(Err(error));
             }
             let found = region(frame, &target.find(frame)?.bounds);
             let avatar = (*target != Target::AVATAR)
@@ -147,4 +146,14 @@ impl Native {
         );
         Ok(())
     }
+}
+
+pub(super) fn single(target: &Target, frame: &Frame) -> Result<()> {
+    if target.ambiguous(frame) {
+        return Err(Defect(format!(
+            "the product draws {target} more than once, so there is no single control to aim at"
+        ))
+        .into());
+    }
+    Ok(())
 }

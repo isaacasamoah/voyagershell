@@ -984,6 +984,29 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_control_drawn_twice_is_a_product_failure() -> Result<()> {
+        let mut native = native()?;
+        let mut twice = frame(true)?;
+        let toggle: voyager_contract::inspection::Element = serde_json::from_value(json!({
+            "role": "sidebar-toggle",
+            "key": "",
+            "bounds": {"x": 1.0, "y": 1.0, "width": 10.0, "height": 10.0}
+        }))?;
+        twice.ambiguous = vec![toggle.clone(), toggle];
+        let error = input::single(&Target::SIDEBAR_TOGGLE, &twice)
+            .expect_err("A control drawn twice had a single place to aim at");
+        ensure!(
+            matches!(native.diagnose(&error), Cause::Product(detail) if detail.contains("more than once")),
+            "A control drawn twice was blamed on the fixture"
+        );
+        ensure!(
+            input::single(&Target::SIDEBAR_TOGGLE, &frame(true)?).is_ok(),
+            "A frame without the control counted as drawing it twice"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn an_outcome_seen_while_the_workspace_prepares_does_not_count() -> Result<()> {
         let (preparing, prepared) = (frame(false)?, frame(true)?);
         let seen = |frame: Option<&Frame>, outcome: Option<u8>| glance(frame, |_| outcome);

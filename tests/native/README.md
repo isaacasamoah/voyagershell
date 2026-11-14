@@ -246,7 +246,8 @@ activates the avatar and never reaches the control. After the pointer moves,
 the driver reads the frame again and aims again if the element no longer
 contains the pointer. It records each miss in `actions.jsonl` as a `re-aim`
 event with both aims, and it waits 80 ms before the next attempt. A frame that
-lists the target under `ambiguous` ends the run as a fixture error. A frame drawn for another window size is ignored. The
+lists the target under `ambiguous` ends the run as a product failure, because
+the product drew one control twice. A frame drawn for another window size is ignored. The
 frame is polled every 10 ms. When the deadline passes, the journey ends
 `failed`, blamed on the product, and the error names the missing role and key.
 The app marks `terminal` only once the terminal view is attached, so the
