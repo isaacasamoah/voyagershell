@@ -187,6 +187,7 @@ export class CreationPicker {
             .child(
               `${this.expanded ? "⌄" : "›"} Hidden ${entity === "Portal" ? "Portals" : "Vessels"} (${this.hidden.length})`,
             )
+            .child(Marker.new("hidden-panels"))
             .on_click((_event, cx) => {
               this.expanded = !this.expanded;
               cx.notify();
@@ -200,6 +201,7 @@ export class CreationPicker {
               `Reopen ${panel.name}${this.hidden.filter((item) => item.name === panel.name).length > 1 ? ` in ${panel.path}` : ""}`,
             )
               .tooltip(panel.path)
+              .child(Marker.new("reopen-panel", panel.id))
               .child(
                 div()
                   .flex()

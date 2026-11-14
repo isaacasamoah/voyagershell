@@ -3,6 +3,8 @@ import { Button } from "gpui-base";
 import {
   Composer,
   ComposerState,
+  ComposerMarker,
+  Marker,
   MeasureHeight,
   FollowScroll,
 } from "voyager_native";
@@ -86,6 +88,7 @@ export class Chat {
       .p(3)
       .rounded(5)
       .text_color(this.open ? colors.accent : colors.muted)
+      .child(Marker.new("chat-toggle"))
       .on_click((_event, cx) => this.toggle(cx))
       .child(svg("chat.svg").w(18).h(16));
   }
@@ -161,15 +164,22 @@ export class Chat {
               .line_height(1.8)
               .text_color(colors.foreground)
               .child(message.text),
-          ),
+          )
+          .child(Marker.new("chat-message", message.id, message.text)),
       );
     }
     const phase = this.state?.phase || "idle";
     const active = phase === "starting" || phase === "working";
-    if (active)
+    if (active) {
+      const thinking = "Thinking…";
       messages.child(
-        div().text_size(10).text_color(colors.muted).child("Thinking…"),
+        div()
+          .text_size(10)
+          .text_color(colors.muted)
+          .child(thinking)
+          .child(Marker.new("chat-status", "", thinking)),
       );
+    }
     const error = this.error || this.state?.error;
     if (this.state?.limited)
       messages.child(
@@ -182,7 +192,11 @@ export class Chat {
       );
     if (error)
       messages.child(
-        div().text_size(11).text_color(colors.foreground).child(error),
+        div()
+          .text_size(11)
+          .text_color(colors.foreground)
+          .child(error)
+          .child(Marker.new("chat-error", "", error)),
       );
     if (this.state && this.state.omitted !== "0")
       messages.child(
@@ -192,20 +206,29 @@ export class Chat {
           .child("Showing recent messages"),
       );
     panel.child(
-      FollowScroll.new(
-        "voyager-chat-messages",
-        `${this.state?.version || "0"}:${this.heights.messages || 0}:${this.heights.sidebar || 0}`,
-      )
+      div()
+        .flex()
+        .flex_col()
         .flex_1()
         .min_h(0)
         .child(
-          MeasureHeight.new("chat-message-content", (height, cx) =>
-            this.measure("messages", height, cx),
+          FollowScroll.new(
+            "voyager-chat-messages",
+            `${this.state?.version || "0"}:${this.heights.messages || 0}:${this.heights.sidebar || 0}`,
           )
-            .flex_shrink_0()
-            .child(messages),
-        ),
+            .flex_1()
+            .min_h(0)
+            .child(
+              MeasureHeight.new("chat-message-content", (height, cx) =>
+                this.measure("messages", height, cx),
+              )
+                .flex_shrink_0()
+                .child(messages),
+            ),
+        )
+        .child(Marker.new("chat-messages")),
     );
+    const sendLabel = active ? "Interrupt" : "Send";
     return panel.child(
       div()
         .flex()
@@ -220,10 +243,11 @@ export class Chat {
         .border_color("#ffffff14")
         .rounded(8)
         .child(Composer.new(this.input).flex_1().min_w(0))
+        .child(ComposerMarker.new(this.input))
         .child(
           Button.new("chat-send")
-            .accessibility_label(active ? "Interrupt" : "Send")
-            .tooltip(active ? "Interrupt" : "Send")
+            .accessibility_label(sendLabel)
+            .tooltip(sendLabel)
             .w(24)
             .h(24)
             .p(0)
@@ -231,7 +255,8 @@ export class Chat {
             .text_size(15)
             .text_color(colors.muted)
             .on_click((_event, cx) => this.submit(cx, active))
-            .child(active ? "■" : "↑"),
+            .child(active ? "■" : "↑")
+            .child(Marker.new("chat-send", "", sendLabel)),
         ),
     );
   }

@@ -13,6 +13,14 @@ use std::{
 };
 use voyager_contract::{Context as Scope, avatar_animation::Trigger};
 
+fn focused_dock(geometry: &Geometry, window: &Window) -> Option<Scope> {
+    geometry
+        .targets
+        .iter()
+        .find(|target| !target.fallback && target.focus.is_focused(window))
+        .map(|target| target.scope.clone())
+}
+
 fn workspace_landing(bounds: Bounds<Pixels>) -> (Point<Pixels>, f32) {
     (
         point(bounds.center().x - px(47.), bounds.origin.y + px(47.)),
@@ -390,7 +398,8 @@ impl Render for AvatarView {
             cx,
         );
         let avatar = self.avatar.read(cx);
-        crate::inspect::stage(&avatar.scope, window, cx);
+        let dock_focus = focused_dock(&self.targets.borrow(), window);
+        crate::inspect::stage(&avatar.scope, dock_focus, window, cx);
         if self.diagnostics_enabled && self.diagnostic_count < 24 {
             let signature = (
                 avatar.scope.clone(),
@@ -627,6 +636,79 @@ impl Render for AvatarView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Probe {
+        geometry: Geometry,
+    }
+
+    impl Render for Probe {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+        }
+    }
+
+    #[test]
+    fn the_focused_dock_is_the_non_fallback_target_that_holds_focus() {
+        let target = |scope: Scope, fallback, cx: &mut Context<Probe>| super::super::Target {
+            scope,
+            seen: true,
+            diagnosed: false,
+            fallback,
+            bounds: Bounds::default(),
+            focus: cx.focus_handle(),
+        };
+        let voyage = Scope::Voyage {
+            id: voyager_contract::VoyageId("v".into()),
+        };
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let record = Rc::clone(&seen);
+        let scopes = voyage.clone();
+        gpui_platform::headless()
+            .with_quit_mode(gpui::QuitMode::Explicit)
+            .run(move |cx| {
+                let window = cx
+                    .open_window(gpui::WindowOptions::default(), |_, cx| {
+                        cx.new(|cx| Probe {
+                            geometry: Geometry {
+                                targets: vec![
+                                    target(Scope::Workspace, true, cx),
+                                    target(scopes.clone(), false, cx),
+                                    target(Scope::Workspace, false, cx),
+                                ],
+                                ..Geometry::default()
+                            },
+                        })
+                    })
+                    .unwrap();
+                cx.spawn(async move |cx| {
+                    window
+                        .update(cx, |probe, window, cx| {
+                            let handles: Vec<_> = probe
+                                .geometry
+                                .targets
+                                .iter()
+                                .map(|target| target.focus.clone())
+                                .collect();
+                            let mut record = record.borrow_mut();
+                            record.push(focused_dock(&probe.geometry, window));
+                            for handle in &handles {
+                                window.focus(handle, cx);
+                                record.push(focused_dock(&probe.geometry, window));
+                            }
+                            window.blur(cx);
+                            record.push(focused_dock(&probe.geometry, window));
+                        })
+                        .unwrap();
+                    cx.update(|cx| cx.quit());
+                })
+                .detach();
+            });
+        assert_eq!(
+            *seen.borrow(),
+            [None, None, Some(voyage), Some(Scope::Workspace), None],
+            "nothing, the fallback, the Voyage, the Workspace dock, then blur"
+        );
+    }
 
     #[test]
     fn compact_container_docks_move_the_dot_without_changing_full_size_or_fallback() {

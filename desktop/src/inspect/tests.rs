@@ -1,8 +1,8 @@
 use super::{Inspection, Mark, Marker, Shown, avatar, install, register, stage, write};
 use gpui::{
     AnyWindowHandle, AppContext as _, AsyncApp, Bounds, Context as ViewContext, Entity,
-    IntoElement, ParentElement as _, Pixels, Render, Styled as _, Window, WindowBounds,
-    WindowOptions, canvas, div, point, px, size,
+    FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
+    Styled as _, Window, WindowBounds, WindowOptions, canvas, div, point, px, size,
 };
 use gpui_base::input::InputState;
 use gpui_shell::{ComponentRegistry, HostModule, ScriptView, ShellRuntime, policy::Policy};
@@ -26,8 +26,8 @@ use voyager_contract::{
 const SCRIPT: &str = r#"
 import { View, div } from 'gpui-kit';
 import { Popover } from 'gpui-base';
-import { Marker, Prepared } from 'voyager_native';
-import { Measure, collapsed, menu, marked, duplicate, prepared, title } from 'layout_probe';
+import { Marker, Prepared, ComposerMarker, ComposerState } from 'voyager_native';
+import { Measure, collapsed, menu, marked, duplicate, prepared, title, composer } from 'layout_probe';
 function control(element, role, key, label) {
   element.child(Measure.new(`${role}:${key}`, {}));
   if (marked())
@@ -35,6 +35,10 @@ function control(element, role, key, label) {
   return element;
 }
 export default class extends View {
+  constructor() {
+    super();
+    this.draft = ComposerState.new('Message Voyager');
+  }
   render() {
     const main = div().flex().flex_col().flex_1().min_w(0)
       .child(div().flex().h(45)
@@ -55,6 +59,7 @@ export default class extends View {
     if (duplicate()) main.child(control(div().w(10).h(10), 'fleet-name', 'fleet-1'));
     const row = div().flex().size_full();
     if (marked()) row.child(Prepared.new(prepared()));
+    if (marked() && composer()) main.child(div().w(80).h(32).child(ComposerMarker.new(this.draft)));
     if (!collapsed())
       row.child(div().w(260).h_full().flex_shrink_0()
         .child(control(div().h(38), 'voyage-name', 'voyage-1')));
@@ -70,6 +75,8 @@ struct Probe {
     marked: Cell<bool>,
     duplicate: Cell<bool>,
     prepared: Cell<bool>,
+    composer: Cell<bool>,
+    editor_composer: Cell<bool>,
     title: RefCell<String>,
     editor_renders: Cell<u32>,
     prepaints: Cell<u32>,
@@ -78,6 +85,7 @@ struct Probe {
 }
 
 struct Root {
+    focus: FocusHandle,
     script: Entity<ScriptView>,
     editor: Option<Entity<Editor>>,
     probe: Rc<Probe>,
@@ -96,7 +104,11 @@ impl Render for Editor {
         div().size_full().child(Marker {
             id: "draft".into(),
             mark: Mark::Control {
-                role: Role::NameEditor,
+                role: if self.probe.editor_composer.get() {
+                    Role::ChatComposer
+                } else {
+                    Role::NameEditor
+                },
                 key: "fleet-1".into(),
                 shown: Shown::Draft(self.draft.downgrade()),
             },
@@ -106,9 +118,11 @@ impl Render for Editor {
 
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        stage(&dock(), window, cx);
+        let dock_focus = self.focus.is_focused(window).then(dock);
+        stage(&dock(), dock_focus, window, cx);
         div()
             .size_full()
+            .track_focus(&self.focus)
             .child(
                 self.script
                     .clone()
@@ -174,6 +188,20 @@ impl Scene {
             draft
         })
         .unwrap()
+    }
+
+    fn focus_dock(&self, focused: bool, cx: &mut AsyncApp) {
+        let root = self.root.clone();
+        cx.update_window(self.window, |_, window, cx| {
+            if focused {
+                let handle = root.read(cx).focus.clone();
+                window.focus(&handle, cx);
+            } else {
+                window.blur(cx);
+            }
+        })
+        .unwrap();
+        self.draw(cx);
     }
 
     fn retype(&self, draft: &Entity<InputState>, text: &str, cx: &mut AsyncApp) {
@@ -273,6 +301,7 @@ fn run<T: 'static>(
                 "voyager_native",
             )
             .unwrap();
+            crate::text::register(&mut registry).unwrap();
             register(&mut registry).unwrap();
             let registry = registry.freeze().unwrap();
             gpui_shell::init_with_components(cx, &registry);
@@ -293,6 +322,7 @@ fn run<T: 'static>(
                 .function("marked", flag(|probe| probe.marked.get()))
                 .function("duplicate", flag(|probe| probe.duplicate.get()))
                 .function("prepared", flag(|probe| probe.prepared.get()))
+                .function("composer", flag(|probe| probe.composer.get()))
                 .function("title", {
                     let probe = probe.clone();
                     move |_: &gpui_shell::HostArguments| Ok(probe.title.borrow().clone().into())
@@ -334,7 +364,8 @@ fn run<T: 'static>(
                     move |window, cx| {
                         install(path, window, cx);
                         let script = runtime.mount_application(&application, window, cx).unwrap();
-                        cx.new(|_| Root {
+                        cx.new(|cx| Root {
+                            focus: cx.focus_handle(),
                             script,
                             editor: None,
                             probe: view_probe,
@@ -556,6 +587,86 @@ fn a_frame_reports_preparation_and_the_text_a_control_shows() {
 }
 
 #[test]
+fn the_composer_marker_reports_the_chat_composer_and_follows_its_draft() {
+    let directory = scratch("composer");
+    let path = directory.join("frame.json");
+    let report = path.clone();
+    run(Some(path), true, async move |scene, cx| {
+        let composer = |frame: &Frame| {
+            frame
+                .elements
+                .iter()
+                .find(|element| element.role == Role::ChatComposer)
+                .cloned()
+        };
+        scene.probe.composer.set(true);
+        scene.redraw_script(cx);
+        let opened = scene
+            .frame(&report, cx, |frame| composer(frame).is_some())
+            .await;
+        let element = composer(&opened).unwrap();
+        assert_eq!(element.key, "");
+        assert_eq!(element.label.as_deref(), Some(""));
+        assert!(element.bounds.width > 0.);
+
+        scene.probe.composer.set(false);
+        scene.redraw_script(cx);
+        scene
+            .frame(&report, cx, |frame| composer(frame).is_none())
+            .await;
+        scene.probe.editor_composer.set(true);
+        let draft = scene.edit("hello", cx);
+        scene
+            .frame(&report, cx, |frame| {
+                frame.elements.iter().any(|element| {
+                    element.role == Role::ChatComposer && element.label.as_deref() == Some("hello")
+                })
+            })
+            .await;
+        let renders = scene.probe.editor_renders.get();
+        scene.retype(&draft, "again", cx);
+        scene
+            .frame(&report, cx, |frame| {
+                frame.elements.iter().any(|element| {
+                    element.role == Role::ChatComposer && element.label.as_deref() == Some("again")
+                })
+            })
+            .await;
+        assert_eq!(scene.probe.editor_renders.get(), renders);
+    });
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn the_frame_reports_the_dock_that_holds_keyboard_focus_and_drops_it_on_blur() {
+    let directory = scratch("dock-focus");
+    let path = directory.join("frame.json");
+    let report = path.clone();
+    run(Some(path), true, async move |scene, cx| {
+        let first = scene.frame(&report, cx, |_| true).await;
+        assert_eq!(first.dock_focus, None);
+        let raw = fs::read_to_string(&report).unwrap();
+        assert!(!raw.contains("dockFocus"), "{raw}");
+
+        scene.focus_dock(true, cx);
+        let focused = scene
+            .frame(&report, cx, |frame| frame.dock_focus.is_some())
+            .await;
+        assert_eq!(focused.dock_focus, Some(dock()));
+        let raw = fs::read_to_string(&report).unwrap();
+        assert!(raw.contains("\"dockFocus\""), "{raw}");
+
+        scene.focus_dock(false, cx);
+        let blurred = scene
+            .frame(&report, cx, |frame| frame.dock_focus.is_none())
+            .await;
+        assert!(blurred.sequence > focused.sequence);
+        assert_eq!(blurred.dock, dock());
+    });
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn rapid_changes_write_at_most_once_per_period() {
     let directory = scratch("rate");
     let path = directory.join("frame.json");
@@ -646,6 +757,7 @@ fn a_polling_reader_only_parses_whole_frames() {
             scale: 1.,
         },
         dock: dock(),
+        dock_focus: None,
         prepared: true,
         elements: (0..1500)
             .map(|index| Element {

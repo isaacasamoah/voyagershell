@@ -223,6 +223,7 @@ export function renderPanel(workspace, placement, scope, group) {
                       cx.stop_propagation(),
                     )
                     .child(svg("close.svg").size(12))
+                    .child(Marker.new("close-panel", placement.id))
                     .on_click((_event, cx) =>
                       workspace.run(
                         { operation: "remove-panel", id: placement.id },

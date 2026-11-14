@@ -1,4 +1,5 @@
 import { div } from "gpui-kit";
+import { Marker } from "voyager_native";
 import { invoke } from "./workspace.js";
 import { actionButton, dialogActions } from "./ui.js";
 import type { Context, NativeElement } from "gpui-kit";
@@ -129,7 +130,10 @@ export class VoyageClose {
       .gap(5);
     for (const entry of plan.entries)
       inventory.child(
-        div().text_size(12).child(`${entry.typeId} · ${entry.name}`),
+        div()
+          .text_size(12)
+          .child(`${entry.typeId} · ${entry.name}`)
+          .child(Marker.new("voyage-close-entry", entry.content)),
       );
     panel.child(inventory);
     if (
@@ -148,6 +152,7 @@ export class VoyageClose {
       actionButton("voyage-close-cancel", "Cancel Voyage close")
         .disabled(this.pending)
         .child(plan.phase === "incomplete" ? "Dismiss" : "Cancel")
+        .child(Marker.new("voyage-close-cancel", plan.voyage))
         .on_click((_event, cx) => this.act(false, cx)),
     );
     if (this.inspection)
@@ -161,6 +166,7 @@ export class VoyageClose {
         actionButton("voyage-close-confirm", "Confirm Voyage close")
           .disabled(this.pending)
           .child("Close Voyage")
+          .child(Marker.new("voyage-close-confirm", plan.voyage))
           .on_click((_event, cx) => this.act(true, cx)),
       );
     return panel.child(actions);

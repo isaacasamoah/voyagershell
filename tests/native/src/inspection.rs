@@ -211,6 +211,7 @@ mod tests {
                 scale,
             },
             dock: Dock::Workspace,
+            dock_focus: None,
             prepared: true,
             elements: vec![toggle()],
             ambiguous: Vec::new(),

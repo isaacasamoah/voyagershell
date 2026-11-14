@@ -38,6 +38,7 @@ mod tests {
         let mut registry =
             ComponentRegistry::new(COMPONENT_REGISTRY_API_VERSION, "voyager_native").unwrap();
         super::register(&mut registry).unwrap();
+        crate::inspect::register(&mut registry).unwrap();
         let runtime =
             ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
         runtime.set_editor_files(false);

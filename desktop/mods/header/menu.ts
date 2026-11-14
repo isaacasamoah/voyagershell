@@ -1,11 +1,13 @@
 import { Popover } from "gpui-base";
 import { menuSurface, menuButton } from "./ui.js";
+import { Marker } from "voyager_native";
 import type { Context, NativeElement } from "gpui-kit";
 
 export { menuSurface, menuButton } from "./ui.js";
 
 export type MenuItem = {
   label: string;
+  marker?: { role: Parameters<typeof Marker.new>[0]; key: string };
   choose: (version: string, cx: Context) => void;
 };
 
@@ -24,6 +26,9 @@ export class WorkspaceMenu {
       content.child(
         menuButton(`menu-${id}-${index}`, item.label)
           .child(item.label)
+          .children(
+            item.marker ? [Marker.new(item.marker.role, item.marker.key)] : [],
+          )
           .on_click((_event, cx) => {
             if (!opening || this.current !== opening) return;
             this.current = null;

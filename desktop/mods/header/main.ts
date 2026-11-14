@@ -1490,6 +1490,7 @@ export default class Workspace extends View {
       .slice(0, 10)
       .map((item) => ({
         label: `Reopen ${item.name}`,
+        marker: { role: "reopen-voyage", key: item.id },
         choose: (version, cx) =>
           this.run(
             { operation: "reopen-voyage", id: item.id },
@@ -1575,7 +1576,7 @@ export default class Workspace extends View {
       this.version,
       trigger,
       items.map((item) => ({
-        label: item.label,
+        ...item,
         choose: (version, cx) => {
           if (version !== this.version) {
             this.status = "The layout changed. Open the menu again.";
@@ -1916,78 +1917,6 @@ export default class Workspace extends View {
     );
   }
 
-  portalControls(voyage: Voyage): NativeElement {
-    const column = voyage.portalLayout;
-    if (!column) return div();
-    const controls = div().flex().items_center().gap(4).flex_shrink_0();
-    if (this.layout && this.compactPortalContext())
-      controls.child(
-        div()
-          .w(44)
-          .h(40)
-          .flex_shrink_0()
-          .child(
-            this.target(
-              "hidden-portal-avatar",
-              this.layout.context,
-              div(),
-              true,
-            ),
-          ),
-      );
-    const label = column.visible ? "Hide Portals" : "Show Portals";
-    const trigger = Button.new("toggle-portals")
-      .accessibility_label(label)
-      .tooltip(`${label} · Ctrl+Alt+P / ⌘⌥P`)
-      .w(32)
-      .h(26)
-      .p(3)
-      .text_size(11)
-      .child(column.visible ? "›" : "‹")
-      .on_click((_event, cx) => this.togglePortals(voyage, cx));
-    controls.child(
-      this.creationControl(
-        `portal-choices-${voyage.id}`,
-        {
-          kind: "panel",
-          owner: { kind: "portals", voyage: voyage.id },
-          insertion: { kind: "empty" },
-        },
-        trigger,
-        false,
-      ),
-    );
-    if (column.visible)
-      controls.child(
-        Button.new("portal-presentation")
-          .accessibility_label(
-            column.mode === "overlay" ? "Embed Portals" : "Overlay Portals",
-          )
-          .tooltip(
-            `${column.mode === "overlay" ? "Embed Portals" : "Overlay Portals"} · Ctrl+Alt+Shift+P / ⌘⌥⇧P`,
-          )
-          .w(26)
-          .h(26)
-          .p(4)
-          .child(
-            svg(column.mode === "overlay" ? "embed.svg" : "overlay.svg").size(
-              14,
-            ),
-          )
-          .on_click((_event, cx) =>
-            this.run(
-              {
-                operation: "set-portal-presentation",
-                voyage: voyage.id,
-                mode: column.mode === "overlay" ? "make-room" : "overlay",
-              },
-              cx,
-            ),
-          ),
-      );
-    return controls;
-  }
-
   portalColumn(
     underlay: NativeElement,
     panels: NativeElement,
@@ -2152,9 +2081,9 @@ export default class Workspace extends View {
                 .size_full()
                 .bg(colors.background)
                 .child(
-                  PortalArea.new(`portal-area-${voyage.id}`, {}).child(
-                    this.groupRegion(group),
-                  ),
+                  PortalArea.new(`portal-area-${voyage.id}`, {})
+                    .child(this.groupRegion(group))
+                    .child(Marker.new("portal-area", voyage.id)),
                 );
             }
           }

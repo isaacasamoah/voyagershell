@@ -30,6 +30,7 @@ next launch.
   "sequence": 12,
   "window": { "width": 1450.0, "height": 940.0, "scale": 2.0 },
   "dock": { "kind": "vessel", "id": "placement-2" },
+  "dockFocus": { "kind": "fleet", "id": "fleet-1" },
   "prepared": true,
   "elements": [
     {
@@ -75,6 +76,7 @@ next launch.
 | `sequence` | Starts at 1 and rises by one for each frame the app writes. The app writes only when the frame differs from the last one. |
 | `window` | Size of the workspace window's drawable area in logical pixels, and the factor that converts logical pixels to device pixels. |
 | `dock` | The avatar's dock context, in the same form as `Context` in the application contract. |
+| `dockFocus` | The context of the dock target that holds keyboard focus, in the same form as `dock`. A fallback target never counts. The field is absent while no dock target holds focus. It names where Shift+Enter would dock the avatar, not where it is docked. |
 | `prepared` | `true` when the header script has no workspace request in progress. While it is `false`, the header drops or defers a new workspace action. It is `false` until the script first draws. |
 | `elements` | The marked controls that the latest drawn frame contains, sorted by role and key. Each `role` and `key` pair appears once. |
 | `ambiguous` | Controls that share one `role` and `key` pair. They are left out of `elements`. |
@@ -85,11 +87,14 @@ Read a frame by these rules:
   control it is. `key` is the id of the Voyage, Fleet, placement or launch
   entry that the control acts on. A control that exists once has an empty key.
   A key is never a display label.
-- `label` is the text that the control shows. Only a name control and the
-  rename editor report one. A name control reports the text that the header
-  gives its title, and a narrow control can cut that text short when it draws
-  it. The rename editor reports its current draft, which is an empty string
-  after the user deletes the text. Every other control has no `label`.
+- `label` is the text that the control shows. A name control, the rename
+  editor and the chat controls whose drawn text is their state report one.
+  A name control reports the text that the header gives its title, and a
+  narrow control can cut that text short when it draws it. The rename editor
+  and `chat-composer` report their current draft, which is an empty string
+  after the user deletes the text. `chat-message`, `chat-status`, `chat-error`
+  and `chat-send` report the string that they draw. Every other control has no
+  `label`.
 - Wait for `prepared` before an input that starts a workspace action. The
   header answers an action that arrives earlier with "Workspace preparation is
   pending. This action was not sent."
@@ -130,11 +135,32 @@ union all come from that list.
 | `create-fleet` | Voyage id | The Create Fleet button after the Voyage's Fleet tabs | `renderFleets` in `navigation-view.ts` |
 | `name-editor` | Id of the Voyage, Fleet or placement being renamed | The rename editor that replaces a name control | `renderNameEditor` in `navigation-view.ts`, with `EditorMarker` |
 | `avatar` | Empty | The avatar in the workspace window | `AvatarView::render` |
+| `close-voyage` | Voyage id | The Close entry of the Voyage row's context menu | `renderSidebar` in `navigation-view.ts`, through `MenuItem.marker` |
+| `recent-voyages` | Empty | The Recent voyages button, drawn while a closed Voyage can be reopened and the sidebar is open | `renderSidebar` |
+| `reopen-voyage` | Voyage id | An entry of the Recent voyages list | `closedVoyageItems` in `main.ts`, drawn by `renderSidebar` |
+| `voyage-close-entry` | Content id | One row of the close dialog's inventory | `VoyageClose.render` in `voyage-close.ts` |
+| `voyage-close-cancel` | Voyage id | The Cancel or Dismiss button of the close dialog | `VoyageClose.render` |
+| `voyage-close-confirm` | Voyage id | The Close Voyage button of the close dialog | `VoyageClose.render` |
+| `toggle-portals` | Voyage id | The button that shows or hides the Portals | `portalControls` in `navigation-view.ts` |
+| `close-panel` | Placement id | The close button of a Vessel or Portal, which keeps its process running | `renderPanel` in `panel-view.ts` |
+| `hidden-panels` | Empty | The Hidden Vessels or Hidden Portals entry of the creation menu | `CreationPicker.render` in `creation.ts` |
+| `reopen-panel` | Placement id | A hidden Vessel or Portal that the creation menu lists after it expands | `CreationPicker.render` |
+| `workspace-dock` | Empty | The avatar's workspace dock, which wraps the brand | `renderSidebar` |
+| `portal-area` | Voyage id | The area that holds the Voyage's Portals while they are visible | `Workspace.render` in `main.ts` |
+| `go-there` | Empty | The Go there button of the context bar, drawn when the dock target is out of view | `renderContext` in `navigation-view.ts` |
+| `chat-toggle` | Empty | The button that opens and closes the chat | `Chat.toggleView` in `chat.ts` |
+| `chat-composer` | Empty | The chat's message editor. Its `label` is the current draft | `Chat.render`, with `ComposerMarker` |
+| `chat-send` | Empty | The Send button, or the Interrupt button while a reply is in progress. Its `label` is `Send` or `Interrupt` | `Chat.render` |
+| `chat-messages` | Empty | The chat's message viewport | `Chat.render` |
+| `chat-message` | Message id | One message. Its `label` is the message text | `Chat.render` |
+| `chat-status` | Empty | The Thinking line. Its `label` is the string that it draws | `Chat.render` |
+| `chat-error` | Empty | The chat's error line. Its `label` is the error text | `Chat.render` |
 
 A name control leaves the frame while its rename editor replaces it, and
 `name-editor` with the same key takes its place. The editor takes keyboard
 focus when it opens. Enter or a loss of focus saves the name, and Escape
-cancels the edit. A frame does not report focus. The sidebar button and the
+cancels the edit. A frame reports keyboard focus only for dock targets, through
+`dockFocus`. It does not say which other control holds focus. The sidebar button and the
 rail button share the `create-voyage` role, because the app draws only one of
 them at a time.
 
@@ -157,12 +183,16 @@ Portal title shows the program and the folder before the name, as in
 4. Run `npm run scripts:generate`.
 
 Put the marker in the helper that builds the control, so that every caller of
-the helper is marked. `content/ui.ts` cannot hold a marker, because the Notes
+the helper is marked. A context menu entry takes its marker through
+`MenuItem.marker`, which `WorkspaceMenu.render` draws inside the entry's
+button. `content/ui.ts` cannot hold a marker, because the Notes
 package loads it without `voyager_native`.
 
-`voyager_native` exports two more constructors for the same component.
+`voyager_native` exports three more constructors for the same component.
 `EditorMarker.new(id, state)` marks the rename editor and reports the draft
-that `state` holds. `Prepared.new(ready)` is drawn once, at the root of the
+that `state` holds. `ComposerMarker.new(state)` marks the chat composer. It
+takes a `ComposerState`, so the state kind fixes the role and a wrong pairing
+cannot be written. It reports the draft in the same way. `Prepared.new(ready)` is drawn once, at the root of the
 header, and reports whether the header has a workspace request in progress.
 
 ## Mechanism and invariants
@@ -215,6 +245,13 @@ never runs a foreground task inside a draw. Each frame is therefore a copy of
 what one completed draw left. If two draws finish before the publisher runs,
 the first draw is not written.
 
+**Dock focus is read in every draw.** `AvatarView::render` passes `inspect::stage`
+the scope of the non-fallback dock target whose focus handle is focused.
+GPUI redraws the window when focus moves or is cleared, and the avatar is an
+uncached overlay, so a Tab between dock targets changes `dockFocus` in the next
+frame. A focused control inside a target, such as a terminal, does not make the
+target focused.
+
 **The workspace window only.** `install` records the workspace window, and
 markers and `stage` ignore every other window. The avatar's floating window is
 not reported.
@@ -241,9 +278,19 @@ The workspace is not affected.
 | Rapid changes are written at most once in each period | `rapid_changes_write_at_most_once_per_period` |
 | The header marks each control by role and id, and a name's marker carries the text that the control draws | `inspection markers name each control by its role and id and report the text it shows` in `desktop/canvas-test.cjs` |
 | The header draws `Prepared` as false while a workspace request is in progress | `Home presents the retained out-of-view avatar without docking or starting content` in `desktop/terminal-test.cjs` |
+| Each header control is marked with its role, key and label, and a menu item's marker is kept and drawn | `inspection markers name each control by its role and id and report the text it shows`, `a context menu keeps the marker of each item and draws it inside the entry` and `the workspace context menu passes each item's marker to the menu` in `desktop/canvas-test.cjs` |
+| The chat marks its toggle, messages, composer, send control, status and error by what they draw | `chat marks its toggle, messages, composer, send control, status and error by what they draw` in `desktop/canvas-test.cjs` |
+| The close dialog marks its inventory and its two buttons | `Voyage confirmation inspects an invocation error without repeating shutdown` in `desktop/canvas-test.cjs` |
+| `ComposerMarker` reports `chat-composer` with the draft and follows a retype in a reused view | `the_composer_marker_reports_the_chat_composer_and_follows_its_draft` in `desktop/src/inspect/tests.rs` |
+| `dockFocus` is the non-fallback dock target that holds focus, a fallback target never counts, and blur clears it | `the_focused_dock_is_the_non_fallback_target_that_holds_focus` in `desktop/src/avatar/view.rs` |
+| A frame omits `dockFocus` until a dock holds focus, reports it while it does, and drops it on blur | `the_frame_reports_the_dock_that_holds_keyboard_focus_and_drops_it_on_blur` in `desktop/src/inspect/tests.rs` |
 | The example frame above is the shape that the app writes | `the_documented_frame_is_the_shape_the_app_writes` in `contract/src/inspection.rs` |
 
 The in-process tests draw a small script through the real `Marker` component
 on the headless platform. They do not run the workspace script against Core.
 A journey in the [native verification environment](../tests/native/README.md)
 is the check of the real controls.
+
+No in-process test draws `AvatarView`, so none fails when `AvatarView::render`
+stops passing the focused dock to `inspect::stage`. A journey that moves focus
+between dock targets and reads `dockFocus` is the check of that step.
