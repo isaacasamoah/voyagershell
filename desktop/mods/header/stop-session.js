@@ -2,7 +2,7 @@ import { div } from "gpui-kit";
 import { Marker } from "voyager_native";
 import { stop_session } from "voyager_workspace";
 import { actionButton, dialogActions } from "./ui.js";
-export class StopSession {
+class StopSession {
   constructor() {
     this.open = false;
   }
@@ -70,3 +70,4 @@ export class StopSession {
       );
   }
 }
+export const stopSession = new StopSession();

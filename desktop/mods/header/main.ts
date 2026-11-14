@@ -41,7 +41,6 @@ import {
 } from "./navigation-view.js";
 import { WorkspaceMenu } from "./menu.js";
 import { VoyageClose } from "./voyage-close.js";
-import { StopSession } from "./stop-session.js";
 import { WorktreeControls } from "./worktrees.js";
 import {
   activeGroups,
@@ -162,7 +161,6 @@ export default class Workspace extends View {
   declare chat: Chat;
   declare refreshRequested: boolean;
   closeVoyage = new VoyageClose();
-  stopSession = new StopSession();
   declare workspaceNotice: ReturnType<typeof workspace_notice>;
   declare automaticRefresh: boolean;
   declare focused: string | null;

@@ -700,29 +700,11 @@ impl Core {
         self.call("server.stop", StopParams(Default::default()))
     }
 
-    pub(crate) fn quit_and_keep(&mut self) -> Result<(), Error> {
-        self.fence()?;
-        self.release("Voyager quit and kept the Core session")
-    }
-
-    pub(crate) fn stop_session(&mut self) -> Result<(), Error> {
-        self.fence()?;
-        let actual = self.server_status()?;
-        if actual.core.id != self.identity {
-            return Err(Error::Rejected {
-                kind: "changed_core".into(),
-                message: "The connected Core identity changed; no session was stopped".into(),
-            });
-        }
-        if !self.server_stop()?.stopped {
-            return Err(Error::Uncertain(
-                "Core did not confirm session shutdown".into(),
-            ));
-        }
-        self.release("Voyager stopped the Core session")
-    }
-
-    fn fence(&mut self) -> Result<(), Error> {
+    pub(crate) fn end(
+        &mut self,
+        operation: crate::terminal_lifecycle::Lifecycle,
+    ) -> Result<(), Error> {
+        let stop = operation == crate::terminal_lifecycle::Lifecycle::StopSession;
         *self
             .input_open
             .lock()
@@ -731,11 +713,18 @@ impl Core {
             activity.fail("Voyager is quitting");
         }
         Self::activity_flow(&self.activity, &self.control, 0);
-        Ok(())
-    }
-
-    fn release(&mut self, reason: &str) -> Result<(), Error> {
-        let _ = self.link.set(reason.into());
+        if stop && self.server_status()?.core.id != self.identity {
+            return Err(Error::Rejected {
+                kind: "changed_core".into(),
+                message: "The connected Core identity changed; no session was stopped".into(),
+            });
+        }
+        if stop && !self.server_stop()?.stopped {
+            return Err(Error::Uncertain(
+                "Core did not confirm session shutdown".into(),
+            ));
+        }
+        let _ = self.link.set("Voyager ended its Core connection".into());
         if self.child.try_wait()?.is_none() {
             self.child.kill()?;
         }

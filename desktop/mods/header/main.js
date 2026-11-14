@@ -39,7 +39,6 @@ import {
 } from "./navigation-view.js";
 import { WorkspaceMenu } from "./menu.js";
 import { VoyageClose } from "./voyage-close.js";
-import { StopSession } from "./stop-session.js";
 import { WorktreeControls } from "./worktrees.js";
 import {
   activeGroups,
@@ -57,7 +56,6 @@ export default class Workspace extends View {
     super(...arguments);
     this.worktrees = new WorktreeControls();
     this.closeVoyage = new VoyageClose();
-    this.stopSession = new StopSession();
     this.processes = [];
     this.processRead = null;
     this.processError = "";

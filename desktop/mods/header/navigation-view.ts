@@ -16,6 +16,7 @@ import type {
 } from "../../../contract/generated/response";
 
 import { voyageColour } from "./voyage-colours.js";
+import { stopSession } from "./stop-session.js";
 
 export function renderNameEditor(
   workspace: Workspace,
@@ -159,7 +160,7 @@ export function renderSidebar(
           {
             label: "Stop session…",
             marker: { role: "stop-session", key: "" },
-            choose: () => workspace.stopSession.show(),
+            choose: () => stopSession.show(),
           },
         ]),
       ),

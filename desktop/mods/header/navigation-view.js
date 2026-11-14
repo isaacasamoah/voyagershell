@@ -5,6 +5,7 @@ import { Brand, dock_target_visible, speech_in_primary } from "voyager_avatar";
 import { Speech } from "voyager_conversation";
 import { projection } from "voyager_header";
 import { voyageColour } from "./voyage-colours.js";
+import { stopSession } from "./stop-session.js";
 export function renderNameEditor(workspace, state, id) {
   return div()
     .min_w(60)
@@ -134,7 +135,7 @@ export function renderSidebar(workspace, layout, voyage) {
           {
             label: "Stop session…",
             marker: { role: "stop-session", key: "" },
-            choose: () => workspace.stopSession.show(),
+            choose: () => stopSession.show(),
           },
         ]),
       ),

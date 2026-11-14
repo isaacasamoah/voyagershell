@@ -4,7 +4,7 @@ import { stop_session } from "voyager_workspace";
 import { actionButton, dialogActions } from "./ui.js";
 import type { NativeElement } from "gpui-kit";
 
-export class StopSession {
+class StopSession {
   private open = false;
 
   show(): void {
@@ -74,3 +74,5 @@ export class StopSession {
       );
   }
 }
+
+export const stopSession = new StopSession();

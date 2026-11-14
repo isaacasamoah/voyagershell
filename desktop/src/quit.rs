@@ -44,6 +44,16 @@ pub fn register(
     .detach();
 }
 
+pub fn stop(
+    stop_requests: &async_channel::Sender<()>,
+) -> impl Fn(&gpui_shell::HostArguments) -> gpui_shell::HostResult + 'static {
+    let stop_requests = stop_requests.clone();
+    move |_| {
+        let _ = stop_requests.try_send(());
+        Ok(gpui_shell::HostValue::Null)
+    }
+}
+
 impl Ending {
     fn run(&self, operation: Lifecycle, cx: &mut App) {
         match &*self.state.borrow() {

@@ -142,13 +142,10 @@ impl Lifecycle {
                 message: "Voyager already quit and kept the session; no session was stopped".into(),
             }),
             _ => {
-                let result =
-                    core.as_mut()
-                        .map_err(|error| error.clone())
-                        .and_then(|core| match self {
-                            Lifecycle::QuitAndKeep => core.quit_and_keep(),
-                            Lifecycle::StopSession => core.stop_session(),
-                        });
+                let result = core
+                    .as_mut()
+                    .map_err(|error| error.clone())
+                    .and_then(|core| core.end(self));
                 *ended = Some((self, result.clone()));
                 result
             }
