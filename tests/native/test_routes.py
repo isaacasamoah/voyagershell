@@ -237,7 +237,7 @@ class Routes(unittest.TestCase):
                     self.assertEqual(attempts, ["Quit"])
 
     def test_quit_pane_selection_excludes_the_overlay_from_the_vessel(self):
-        from proof_session_quit import pane_candidates
+        from proof_pane_maximize import pane_candidates
 
         vessel = {"x": 0, "y": 0, "width": 100, "height": 100}
         portal = {**vessel, "x": 60, "width": 40}
@@ -293,7 +293,7 @@ class Routes(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "stop acknowledgement"):
                 stop_existing_core("owned", environment)
 
-    def test_session_quit_requires_recorded_exits_and_socket_absence(self):
+    def test_exit_observation_requires_recorded_exits_and_socket_absence(self):
         from proof_process import exit_observation
 
         with tempfile.TemporaryDirectory() as directory:
@@ -343,7 +343,6 @@ class Routes(unittest.TestCase):
                     "conversation-voice",
                     "conversation-content",
                     "terminal-agent-create",
-                    "session-quit",
                     "terminal-reported-status",
                     "arrangement",
                 ):
@@ -429,7 +428,6 @@ class Routes(unittest.TestCase):
             ("--foundation", "split-resize"),
             ("--foundation", "pane-maximize"),
             ("--foundation", "workspace-ux"),
-            ("--foundation", "session-quit"),
             ("--foundation", "terminal-reported-status"),
             ("--native-mod-host", "--notes-case"),
             ("--native-avatar", "--reduced-motion"),
@@ -450,7 +448,6 @@ class Routes(unittest.TestCase):
             "split-resize",
             "pane-maximize",
             "workspace-ux",
-            "session-quit",
             "terminal-reported-status",
         ):
             result = self.run_cli(
@@ -474,7 +471,6 @@ class Routes(unittest.TestCase):
                     "split-resize",
                     "pane-maximize",
                     "workspace-ux",
-                    "session-quit",
                     "terminal-reported-status",
                 )
                 else "require compositor capture",
@@ -493,7 +489,6 @@ class Routes(unittest.TestCase):
                 "split-resize",
                 "pane-maximize",
                 "workspace-ux",
-                "session-quit",
                 "terminal-reported-status",
             ):
                 environment = dict(os.environ, HC_SOCKET="/tmp/not-a-test-session")

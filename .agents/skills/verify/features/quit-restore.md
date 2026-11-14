@@ -55,8 +55,9 @@ screen after its own relaunch and catches that build.
 The verifier never starts Core. Stopping Core stands in for a reboot. It does
 not test a real reboot, a lost socket or a Core that crashes. Warm window close
 (the window's close button) is not covered here. Bare Xvfb has no window
-manager, so its minimize cannot be seen. The Python `session-quit` journey
-keeps that check until Isaac decides its fate. Closing a Voyage is not
+manager, so its minimize cannot be seen. Isaac has decided that closing the
+window will behave like Quit, so today's warm close is being replaced and no
+journey checks it. Closing a Voyage is not
 covered here. It stays with the Python `voyage-close` journey until the
 native `voyage-close` journey lands. Linux evidence does not establish another platform. Quit is bound only
 to Ctrl+Q.
