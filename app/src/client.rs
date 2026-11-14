@@ -1,3 +1,4 @@
+pub use crate::terminal_lifecycle::Lifecycle;
 use crate::{
     activity::Activity,
     core::{Core, Error, Viewer, WeakViewer},
@@ -45,6 +46,7 @@ enum Message {
         reply: async_channel::Sender<()>,
     },
     Quit {
+        operation: Lifecycle,
         reply: async_channel::Sender<Result<(), Error>>,
     },
     Launches {
@@ -369,7 +371,7 @@ impl Client {
                 Option<Arc<voyager_contract::worktree::Response>>,
             )> = VecDeque::new();
             let mut workspace_listener: Option<async_channel::Sender<WorkspaceNotice>> = None;
-            let mut quit_result: Option<Result<(), Error>> = None;
+            let mut quit_result: Option<(Lifecycle, Result<(), Error>)> = None;
             let mut closing = crate::voyage_close::Closing::default();
             let mut renaming: Option<(
                 crate::voyage_close::SaveTicket,
@@ -536,13 +538,11 @@ impl Client {
                         let _ = reply.try_send(());
                         continue;
                     }
-                    Message::Quit { reply } => {
-                        let result = quit_result.get_or_insert_with(|| {
-                            core.as_mut().map_err(|error| error.clone())?.quit()
-                        });
+                    Message::Quit { operation, reply } => {
+                        let result = operation.end(&mut quit_result, &mut core);
                         created_contents.clear();
                         fresh = false;
-                        let _ = reply.try_send(result.clone());
+                        let _ = reply.try_send(result);
                         continue;
                     }
                     Message::Launches { reply } => {
@@ -2248,10 +2248,10 @@ impl Client {
         .await
     }
 
-    pub async fn quit(&self) -> Result<(), Error> {
+    pub async fn end(&self, operation: Lifecycle) -> Result<(), Error> {
         let (reply, receive) = async_channel::bounded(1);
         self.sender
-            .send(Message::Quit { reply })
+            .send(Message::Quit { operation, reply })
             .await
             .map_err(|_| Error::Uncertain("The workspace shutdown owner is unavailable".into()))?;
         receive.recv().await.map_err(|_| {

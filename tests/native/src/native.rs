@@ -293,9 +293,13 @@ impl Native {
             self.viewer.is_none(),
             "Core is stopped only while no viewer runs"
         );
-        let core = self.core.clone().context("Missing Core identity")?;
-        core.verify()?;
+        self.core()?.verify()?;
         self.system.rpc("server.stop", json!({}))?;
+        self.core_ended()
+    }
+
+    pub fn core_ended(&mut self) -> Result<Identity> {
+        let core = self.core.clone().context("Missing Core identity")?;
         until("dedicated Core socket removal", || {
             Ok((!self.system.socket().exists()).then_some(()))
         })?;
@@ -553,6 +557,20 @@ impl Native {
 
     pub fn close(&mut self) -> Result<()> {
         self.press(Key::Char('q').ctrl())?;
+        self.await_exit()
+    }
+
+    pub fn close_window(&mut self) -> Result<()> {
+        let x11 = self.x11()?;
+        let window = self.window;
+        self.system
+            .act(json!({"input":"close-window","window":window}), || {
+                x11.request_close(window)
+            })?;
+        self.await_exit()
+    }
+
+    pub fn await_exit(&mut self) -> Result<()> {
         let viewer = self.viewer.as_mut().context("Missing viewer")?;
         let status = until("owned viewer exit", || Ok(viewer.child.try_wait()?))?;
         self.viewer = None;

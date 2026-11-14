@@ -19,6 +19,9 @@ impl Target {
     pub const SIDEBAR_TOGGLE: Self = Self::single(Role::SidebarToggle);
     pub const CREATE_VOYAGE: Self = Self::single(Role::CreateVoyage);
     pub const RECENT_VOYAGES: Self = Self::single(Role::RecentVoyages);
+    pub const HOME: Self = Self::single(Role::HomeNavigation);
+    pub const STOP_SESSION: Self = Self::single(Role::StopSession);
+    pub const STOP_SESSION_CONFIRM: Self = Self::single(Role::StopSessionConfirm);
 
     const fn single(role: Role) -> Self {
         Self {

@@ -8,7 +8,11 @@ mod linux {
         task::{Context, Poll, Waker},
         time::{Duration, Instant},
     };
-    use voyager_app::{client::Client, core::Core, core_shapes::RunParams};
+    use voyager_app::{
+        client::{Client, Lifecycle},
+        core::Core,
+        core_shapes::RunParams,
+    };
     use voyager_contract::{Action, Axis, Request, Status, launch::Launch};
 
     fn wait<T>(future: impl Future<Output = T>) -> T {
@@ -55,6 +59,21 @@ mod linux {
             std::thread::sleep(Duration::from_millis(10));
         }
         absent(items)
+    }
+
+    fn connectors() -> Vec<u32> {
+        let mut children = Vec::new();
+        for task in std::fs::read_dir("/proc/self/task").unwrap() {
+            let listed =
+                std::fs::read_to_string(task.unwrap().path().join("children")).unwrap_or_default();
+            children.extend(
+                listed
+                    .split_whitespace()
+                    .map(|pid| pid.parse::<u32>().unwrap()),
+            );
+        }
+        children.sort();
+        children
     }
 
     fn call(client: &Client, version: u64, action: Action) -> voyager_contract::Response {
@@ -196,11 +215,18 @@ mod linux {
             );
             let layout = Arc::clone(&snapshot.layout);
             quit_attempted = true;
-            let result = wait(client.quit());
-            let duplicate = wait(client.quit());
+            let result = wait(client.end(Lifecycle::StopSession));
+            let duplicate = wait(client.end(Lifecycle::StopSession));
+            let kept_after_stop = wait(client.end(Lifecycle::QuitAndKeep));
             let ended = settled(&owned_ids);
-            observations["firstQuit"] = json!({"ok":result.is_ok(),"duplicateOk":duplicate.is_ok(),"ownedAbsent":ended,"socketAbsent":!socket.exists()});
-            assert!(result.is_ok() && duplicate.is_ok() && ended && !socket.exists());
+            observations["firstQuit"] = json!({"ok":result.is_ok(),"duplicateOk":duplicate.is_ok(),"keepAfterStopOk":kept_after_stop.is_ok(),"ownedAbsent":ended,"socketAbsent":!socket.exists()});
+            assert!(
+                result.is_ok()
+                    && duplicate.is_ok()
+                    && kept_after_stop.is_ok()
+                    && ended
+                    && !socket.exists()
+            );
             let after_quit = call(&client, 0, Action::Inspect);
             assert_eq!(after_quit.layout, layout);
             let rejected = client
@@ -326,5 +352,110 @@ mod linux {
                 .iter()
                 .all(|entry| entry["stop"].is_null() || entry["stop"] == true)
         );
+    }
+
+    #[test]
+    fn quit_and_keep_succeeds_when_core_never_connected_and_stop_reports_why() {
+        let client = Client::open("invalid-for-core-start".into(), "/tmp".into());
+        assert!(wait(client.end(Lifecycle::QuitAndKeep)).is_ok());
+        assert!(wait(client.end(Lifecycle::QuitAndKeep)).is_ok());
+        let stop = wait(client.end(Lifecycle::StopSession));
+        assert!(
+            matches!(&stop, Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "quitting"),
+            "{stop:?}"
+        );
+        let fresh = Client::open("invalid-for-core-start".into(), "/tmp".into());
+        let refused = wait(fresh.end(Lifecycle::StopSession));
+        assert!(
+            matches!(&refused, Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "invalid_session"),
+            "{refused:?}"
+        );
+        assert!(wait(fresh.end(Lifecycle::QuitAndKeep)).is_ok());
+    }
+
+    #[test]
+    fn quit_and_keep_releases_the_owner_and_leaves_every_program_running() {
+        let session = format!("voyager-quit-keep-{}", std::process::id());
+        let mut core = Core::connect(&session).unwrap();
+        let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let client = Client::open(session.clone(), "/tmp".into());
+            let snapshot = call(&client, 0, Action::Inspect);
+            let fleet = snapshot.layout.voyages[0].fleets[0].id.clone();
+            let after = snapshot.layout.voyages[0].fleets[0].vessels[0].id.clone();
+            let snapshot = call(
+                &client,
+                snapshot.version,
+                Action::CreateContent {
+                    type_id: "terminal".into(),
+                    destination: voyager_contract::ContentDestination::Panel {
+                        owner: voyager_contract::PanelOwner::Fleet { id: fleet },
+                        insertion: voyager_contract::PanelInsertion::Beside {
+                            id: after,
+                            side: voyager_contract::Side::Right,
+                        },
+                    },
+                    launch: Some(Launch::Program {
+                        argv: vec!["/bin/sleep".into(), "60".into()],
+                    }),
+                },
+            );
+            let id = snapshot.layout.contents.last().unwrap().id.clone();
+            let viewer = client
+                .terminal(id, client.request_id(), snapshot.version)
+                .unwrap();
+            let snapshot = call(&client, 0, Action::Inspect);
+            let address = snapshot
+                .layout
+                .contents
+                .last()
+                .unwrap()
+                .backend
+                .as_ref()
+                .unwrap()
+                .0
+                .clone();
+            let program = identity(core.terminal_get(&address).unwrap().pid.unwrap());
+            let before = core.server_status().unwrap();
+            let connected = connectors();
+            let server = identity(before.pid);
+            let first = wait(client.end(Lifecycle::QuitAndKeep));
+            let repeated = wait(client.end(Lifecycle::QuitAndKeep));
+            let stop = wait(client.end(Lifecycle::StopSession));
+            assert!(first.is_ok() && repeated.is_ok(), "{first:?} {repeated:?}");
+            assert!(
+                matches!(&stop, Err(voyager_app::core::Error::Rejected { kind, .. }) if kind == "quitting"),
+                "{stop:?}"
+            );
+            let released = connectors();
+            let status = core.server_status().unwrap();
+            assert_eq!(status.core.id, before.core.id);
+            assert_eq!(identity(status.pid), server);
+            assert_eq!(
+                released.len() + 1,
+                connected.len(),
+                "the owner's Core connection was not released: {connected:?} then {released:?}"
+            );
+            let terminal = core.terminal_get(&address).unwrap();
+            assert_eq!(terminal.state, "live");
+            assert_eq!(identity(terminal.pid.unwrap()), program);
+            let rejected = client
+                .call(Request {
+                    request_id: client.request_id(),
+                    expected_version: snapshot.version,
+                    action: Action::CreateFleet {
+                        voyage: snapshot.layout.voyages[0].id.clone(),
+                        name: "Late".into(),
+                    },
+                })
+                .unwrap();
+            assert_eq!(rejected.status, Status::Rejected);
+            drop(viewer);
+        }));
+        let stop = core.server_stop();
+        let close = core.close();
+        if let Err(failure) = checked {
+            std::panic::resume_unwind(failure);
+        }
+        assert!(stop.is_ok() && close.is_ok());
     }
 }

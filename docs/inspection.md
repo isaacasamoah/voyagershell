@@ -141,6 +141,9 @@ union all come from that list.
 | `voyage-close-entry` | Content id | One row of the close dialog's inventory | `VoyageClose.render` in `voyage-close.ts` |
 | `voyage-close-cancel` | Voyage id | The Cancel or Dismiss button of the close dialog | `VoyageClose.render` |
 | `voyage-close-confirm` | Voyage id | The Close Voyage button of the close dialog | `VoyageClose.render` |
+| `home-navigation` | Empty | The Home button, whose context menu holds Stop session | `renderSidebar` in `navigation-view.ts` |
+| `stop-session` | Empty | The Stop session entry of the Home button's context menu | `renderSidebar`, through `MenuItem.marker` |
+| `stop-session-confirm` | Empty | The Stop session button of the stop dialog | `StopSession.render` in `stop-session.ts` |
 | `toggle-portals` | Voyage id | The button that shows or hides the Portals | `portalControls` in `navigation-view.ts` |
 | `close-panel` | Placement id | The close button of a Vessel or Portal, which keeps its process running | `renderPanel` in `panel-view.ts` |
 | `hidden-panels` | Empty | The Hidden Vessels or Hidden Portals entry of the creation menu | `CreationPicker.render` in `creation.ts` |

@@ -145,11 +145,13 @@ and it never limits your own clicks. The [avatar guide](avatar.md) and the
 
 ## Step 7. Quit and restore
 
-Press **Ctrl+Q**. Closing the window does not quit. It leaves the avatar
-floating on the desktop.
+Press **Ctrl+Q**. Closing the window does the same. Both quit the app and keep
+its programs.
 
 In your second terminal, `hc ls` still lists both shells as live. Quitting the
-app leaves Core programs running.
+app leaves Core programs running. To end them as well, right-click **Home**,
+choose **Stop session…** and confirm. That stops Core and every program it
+started in the session.
 
 Start the app again with the same command from step 2. Both Fleets, the
 terminal history with `hello from Core`, the Portal and the docked avatar come

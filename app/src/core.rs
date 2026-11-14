@@ -700,7 +700,7 @@ impl Core {
         self.call("server.stop", StopParams(Default::default()))
     }
 
-    pub(crate) fn quit(&mut self) -> Result<(), Error> {
+    pub(crate) fn end(&mut self, stop: bool) -> Result<(), Error> {
         *self
             .input_open
             .lock()
@@ -709,19 +709,18 @@ impl Core {
             activity.fail("Voyager is quitting");
         }
         Self::activity_flow(&self.activity, &self.control, 0);
-        let actual = self.server_status()?;
-        if actual.core.id != self.identity {
+        if stop && self.server_status()?.core.id != self.identity {
             return Err(Error::Rejected {
                 kind: "changed_core".into(),
                 message: "The connected Core identity changed; no session was stopped".into(),
             });
         }
-        if !self.server_stop()?.stopped {
+        if stop && !self.server_stop()?.stopped {
             return Err(Error::Uncertain(
                 "Core did not confirm session shutdown".into(),
             ));
         }
-        let _ = self.link.set("Voyager stopped the Core session".into());
+        let _ = self.link.set("Voyager ended its Core connection".into());
         if self.child.try_wait()?.is_none() {
             self.child.kill()?;
         }
