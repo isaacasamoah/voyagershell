@@ -246,6 +246,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
             };
             gpui_shell::init_with_components(cx, &registry);
             cx.bind_keys([KeyBinding::new("ctrl-q", Quit, None)]);
+            cx.bind_keys(terminal::key_bindings());
             let runtime = match ShellRuntime::new_with_components(cx, registry) {
                 Ok(runtime) => runtime,
                 Err(error) => {

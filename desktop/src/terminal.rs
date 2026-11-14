@@ -8,6 +8,7 @@ mod background;
 mod font;
 #[path = "terminal_input.rs"]
 mod input;
+pub(crate) use input::key_bindings;
 #[path = "terminal_rows.rs"]
 mod row_paint;
 #[path = "terminal_scroll.rs"]
