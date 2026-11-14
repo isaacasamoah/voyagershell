@@ -18,6 +18,11 @@ impl Target {
     pub const AVATAR: Self = Self::single(Role::Avatar);
     pub const SIDEBAR_TOGGLE: Self = Self::single(Role::SidebarToggle);
     pub const CREATE_VOYAGE: Self = Self::single(Role::CreateVoyage);
+    pub const CHAT_TOGGLE: Self = Self::single(Role::ChatToggle);
+    pub const CHAT_COMPOSER: Self = Self::single(Role::ChatComposer);
+    pub const CHAT_SEND: Self = Self::single(Role::ChatSend);
+    pub const CHAT_STATUS: Self = Self::single(Role::ChatStatus);
+    pub const CHAT_ERROR: Self = Self::single(Role::ChatError);
 
     const fn single(role: Role) -> Self {
         Self {
