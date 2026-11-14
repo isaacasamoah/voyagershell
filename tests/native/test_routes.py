@@ -188,7 +188,6 @@ class Routes(unittest.TestCase):
     def test_uncertain_quit_is_not_submitted_again_by_cleanup(self):
         for name, flag, initial in (
             ("proof_terminal.py", "quit_attempted", False),
-            ("proof_canvas.py", "opened", True),
             ("proof_foundation_notes.py", "opened", True),
             ("proof_notes_lifetime.py", "opened", True),
             ("proof_workspace_ux.py", "opened", True),
@@ -337,7 +336,6 @@ class Routes(unittest.TestCase):
                 os.environ, {"XDG_RUNTIME_DIR": directory, "HC_SOCKET": ""}
             ):
                 for journey in (
-                    "canvas",
                     "notes-lifetime",
                     "notes-configuration",
                     "pane-maximize",

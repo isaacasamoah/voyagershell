@@ -1,9 +1,8 @@
 # Home and saved Fleet arrangements
 
-Home is an editable native overview in `mods/header/home.js` in the selected
-profile. Its package instructions are beside it. It receives the current typed
-workspace snapshot and can navigate to existing Voyages and Fleets. Home is a
-view of the workspace, not another content placement. Opening or editing it
+Home is one retained internal Voyage with one Fleet, kept outside the ordinary
+Voyage list. It uses the same panel layout and content controls as any Fleet and
+starts with an Agents Vessel. [Workspace](workspace.md) describes it. Opening it
 does not start a program or change explicit avatar context.
 
 A Fleet's layout menu saves its current split tree under a name and loads that

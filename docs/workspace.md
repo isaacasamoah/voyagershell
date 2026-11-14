@@ -163,7 +163,7 @@ selector style is introduced by this contract.
 renders the sidebar, Fleet tabs and context bar. `panels.ts` selects groups and
 visible members from the Rust projection. `canvas.ts` composes the saved outer
 tree and panel frames. Home uses the same panel factories and its retained global
-arrangement, rather than the former overview. These modules retain the existing
+arrangement. These modules retain the existing
 terminal, Notes, divider, avatar and conversation owners.
 
 Collapsing the sidebar keeps a 48-pixel rail and sends only `set-sidebar`, without
@@ -174,13 +174,11 @@ cancelling creates nothing. Fleet context menus expose saved arrangements.
 Authorized agents use the generated JSON actions, including `update-canvas`,
 through the same owner. The current Header exposes no raw layout JSON editor.
 
-The retained `layout-panel.ts` belongs to the earlier Workspace layout-editor
-trial. That editor used a native Textarea and revision-bound Apply/Reload, with
-draft retention after refusal and no automatic replay after uncertainty. Its
-recorded click-through failure remains historical evidence. It is not the current
-human layout workflow. The original avatar trial's Home pose and rectangular
-preview are also historical; current source has a circular primary landing
-preview. These source changes do not complete the full native UX checkpoint or
+The earlier Workspace layout-editor trial and the separate Home overview have
+been removed from source. Their recorded evidence remains historical, and
+existing profiles may still hold their seeded copies, which nothing loads. The
+original avatar trial's Home pose and rectangular preview are also historical;
+current source has a circular primary landing preview. These source changes do not complete the full native UX checkpoint or
 establish matched appearance, input behavior or performance.
 
 The pinned ShellRoot and Header bypass their content cache while native

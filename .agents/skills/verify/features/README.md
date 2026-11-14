@@ -16,7 +16,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Terminal I/O | python-only | none | python-only | python-only | - | terminal, terminal-grid, portal-terminal | linux |
 | Terminal scroll | covered | none | covered | covered | terminal-scrolling | terminal-scrolling | linux |
 | Selection | python-only | none | python-only | python-only | - | terminal-grid | linux |
-| Clipboard | python-only | none | none | python-only | - | terminal-grid, canvas, notes-lifetime | linux |
+| Clipboard | python-only | none | none | python-only | - | terminal-grid, notes-lifetime | linux |
 | Notes | python-only | none | python-only | python-only | - | notes, notes-lifetime | linux |
 | Avatar docking / drag | python-only | none | python-only | python-only | - | avatar, portal-avatar | linux |
 | Chat / conversation | python-only | none | python-only | python-only | - | conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content | linux |
@@ -24,7 +24,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Layouts / Home | python-only | none | python-only | python-only | - | layouts, workspace-ux | linux |
 | Worktrees | python-only | none | none | python-only | - | demo-feedback | linux |
 | Close Voyage / quit / restore | python-only | none | python-only | python-only | - | session-quit, voyage-close, workspace | linux |
-| Scripts live edit | python-only | python-only | python-only | python-only | - | canvas, canvas-stack | linux |
+| Scripts live edit | python-only | python-only | python-only | python-only | - | canvas-stack | linux |
 <!-- features:end -->
 
 Recipes: [terminal-scrolling.md](terminal-scrolling.md).

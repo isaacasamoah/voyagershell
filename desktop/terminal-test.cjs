@@ -1075,7 +1075,6 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "take_result",
     "take_animation_notice",
     "Status",
-    "homeOverview",
     "workspace_notice",
     "composeCanvas",
     "reported_activity",
@@ -1104,7 +1103,6 @@ test("Home presents the retained out-of-view avatar without docking or starting 
       return notice;
     },
     { new: (_id, text) => div().child(text) },
-    () => div(),
     () => ({ revision: ownerRevision, packageRevision, activityRevision }),
     new Function(
       "div",
