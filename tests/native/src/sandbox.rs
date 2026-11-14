@@ -258,6 +258,7 @@ pub fn sealed(observations: &[Observation]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scratch::Scratch;
     use crate::system::{Identity, stamp, until};
     use std::os::linux::net::SocketAddrExt;
     use std::os::unix::net::{SocketAddr, UnixListener};
@@ -268,18 +269,18 @@ mod tests {
         evidence: PathBuf,
         resources: Vec<Resource>,
         _listeners: [UnixListener; 2],
+        _scratch: Scratch,
     }
 
     impl Host {
         fn new(label: &str) -> Result<Self> {
-            let unique = format!("vv-{label}-{}-{}", std::process::id(), stamp());
-            let root = std::env::temp_dir().join(&unique);
-            let session = root.join("session");
-            fs::create_dir_all(&session)?;
-            let evidence = root.join("evidence");
+            let scratch = Scratch::new(label)?;
+            let session = scratch.path().join("session");
+            fs::create_dir(&session)?;
+            let evidence = scratch.path().join("evidence");
             prepare(&evidence)?;
             let bus = session.join("bus");
-            let name = format!("/tmp/{unique}");
+            let name = format!("/tmp/vv-{label}-{}-{}", std::process::id(), stamp());
             let listeners = [
                 UnixListener::bind(&bus)?,
                 UnixListener::bind_addr(&SocketAddr::from_abstract_name(&name)?)?,
@@ -295,6 +296,7 @@ mod tests {
                 evidence,
                 resources,
                 _listeners: listeners,
+                _scratch: scratch,
             })
         }
 

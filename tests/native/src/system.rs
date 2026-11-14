@@ -606,6 +606,7 @@ pub fn doctor(candidate: &Pinned, core: &Pinned) -> Result<Value> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::scratch::Scratch;
     use std::cell::Cell;
     use std::collections::BTreeSet;
 
@@ -670,10 +671,8 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    pub(crate) fn deaf(name: &str, trap: &str) -> Result<Owned> {
-        let evidence =
-            std::env::temp_dir().join(format!("vv-{name}-{}-{}", std::process::id(), stamp()));
-        fs::create_dir(&evidence)?;
+    pub(crate) fn deaf(scratch: &Scratch, trap: &str) -> Result<Owned> {
+        let evidence = scratch.path().to_owned();
         let ready = evidence.join("ready");
         let script = format!("trap '{trap}' TERM; : > \"$0\"; while :; do sleep 0.02; done");
         let system = System::with_env(evidence, "voyager-verify-test".into(), BTreeMap::new());
@@ -691,7 +690,8 @@ pub(crate) mod tests {
 
     #[test]
     fn a_child_that_lost_the_first_signal_exits_on_the_next_one() -> Result<()> {
-        let mut child = deaf("resignal", "trap - TERM")?;
+        let scratch = Scratch::new("resignal")?;
+        let mut child = deaf(&scratch, "trap - TERM")?;
         let start = Instant::now();
         let stopped = child.stop_within(Duration::from_secs(4))?;
         ensure!(
@@ -704,7 +704,8 @@ pub(crate) mod tests {
 
     #[test]
     fn a_child_that_ignores_every_signal_is_killed_at_the_deadline() -> Result<()> {
-        let mut child = deaf("ignore", "")?;
+        let scratch = Scratch::new("ignore")?;
+        let mut child = deaf(&scratch, "")?;
         let stopped = child.stop_within(Duration::from_millis(400))?;
         ensure!(
             matches!(&stopped, Stopped::Killed { signals: 1, stuck } if stuck.starts_with("state ")),
@@ -719,8 +720,8 @@ pub(crate) mod tests {
 
     #[test]
     fn assets_must_match_what_the_candidate_was_built_for() -> Result<()> {
-        let root =
-            std::env::temp_dir().join(format!("vv-assets-{}-{}", std::process::id(), stamp()));
+        let scratch = Scratch::new("assets")?;
+        let root = scratch.path();
         let (right, wrong) = (root.join("desktop/assets"), root.join("other/assets"));
         for folder in [&right, &wrong] {
             fs::create_dir_all(folder.join("stretch-frames"))?;
@@ -775,10 +776,12 @@ pub(crate) mod tests {
 
     #[test]
     fn failed_spawn_record_does_not_leave_a_child() -> Result<()> {
-        let evidence =
-            std::env::temp_dir().join(format!("vv-log-failure-{}-{}", std::process::id(), stamp()));
-        fs::create_dir(&evidence)?;
-        let system = System::with_env(evidence, "voyager-verify-test".into(), BTreeMap::new());
+        let scratch = Scratch::new("log-failure")?;
+        let system = System::with_env(
+            scratch.path().to_owned(),
+            "voyager-verify-test".into(),
+            BTreeMap::new(),
+        );
         fs::create_dir(system.evidence.join("actions.jsonl"))?;
         let before = children()?;
         let result = system.spawn(Path::new("/bin/sleep"), &["30"], &[], "spawn.log");
