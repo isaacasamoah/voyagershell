@@ -6,13 +6,16 @@ use anyhow::{Context, Result, ensure};
 use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Range;
 use std::time::Duration;
+use voyager_contract::inspection::Frame;
 use voyager_contract::{ContentId, CoreTerminalId, Layout, PlacementId};
 
-const EXPECTATION: Duration = Duration::from_secs(4);
-const LOOK: Duration = Duration::from_millis(10);
+pub const EXPECTATION: Duration = Duration::from_secs(4);
+pub const LOOK: Duration = Duration::from_millis(10);
 const WHEEL_CLICKS: usize = 6;
+const PIECE: usize = 16;
 const PADDING: f32 = 8.;
 const MASKED: [u8; 3] = [0, 0, 0];
 
@@ -87,6 +90,10 @@ impl Lines {
         self.0.is_empty()
     }
 
+    pub fn count(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn lowered(&self, to: &Self) -> Option<usize> {
         let first = self.0.first()?;
         let last = to.0.last()?.top.max(self.0.last()?.top);
@@ -124,6 +131,114 @@ fn background(rows: &[&[u8]]) -> Option<[u8; 4]> {
         .into_iter()
         .max_by_key(|(_, count)| *count)
         .map(|(pixel, _)| pixel)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct Patch {
+    pub area: Geometry,
+    pub ink: usize,
+}
+
+fn near(pixel: &[u8; 4], rgb: [u8; 3], tolerance: u8) -> bool {
+    let [blue, green, red, _] = *pixel;
+    red.abs_diff(rgb[0]) <= tolerance
+        && green.abs_diff(rgb[1]) <= tolerance
+        && blue.abs_diff(rgb[2]) <= tolerance
+}
+
+fn runs(length: usize, hit: impl Fn(usize) -> bool) -> Vec<Range<usize>> {
+    let mut found = Vec::new();
+    let mut start = None;
+    for index in 0..=length {
+        match (index < length && hit(index), start) {
+            (true, None) => start = Some(index),
+            (false, Some(first)) => {
+                found.push(first..index);
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
+pub fn boxes(look: &Pixels, rgb: [u8; 3], tolerance: u8) -> Vec<Patch> {
+    let rows: Vec<&[[u8; 4]]> = look.rows().map(|row| row.as_chunks::<4>().0).collect();
+    let coloured = |x: usize, y: usize| near(&rows[y][x], rgb, tolerance);
+    let width = usize::from(look.region.width);
+    let mut found = Vec::new();
+    for band in runs(rows.len(), |y| (0..width).any(|x| coloured(x, y))) {
+        for columns in runs(width, |x| band.clone().any(|y| coloured(x, y))) {
+            let holds = |y: &usize| columns.clone().any(|x| coloured(x, *y));
+            let (Some(top), Some(bottom)) =
+                (band.clone().find(holds), band.clone().rev().find(holds))
+            else {
+                continue;
+            };
+            let ink = (top..=bottom)
+                .flat_map(|y| columns.clone().map(move |x| (x, y)))
+                .filter(|(x, y)| !coloured(*x, *y))
+                .count();
+            found.push(Patch {
+                area: Geometry {
+                    x: look.region.x + columns.start as i16,
+                    y: look.region.y + top as i16,
+                    width: columns.len() as u16,
+                    height: (bottom - top + 1) as u16,
+                },
+                ink,
+            });
+        }
+    }
+    found
+}
+
+pub fn changed(before: &Pixels, after: &Pixels) -> Option<Geometry> {
+    if before.region != after.region {
+        return Some(after.region);
+    }
+    let mut edges: Option<(usize, usize, usize, usize)> = None;
+    for (y, (was, is)) in before.rows().zip(after.rows()).enumerate() {
+        if was == is {
+            continue;
+        }
+        let pixels = was.as_chunks::<4>().0.iter().zip(is.as_chunks::<4>().0);
+        let differs = |(was, is): (&[u8; 4], &[u8; 4])| was != is;
+        let (Some(left), Some(right)) = (
+            pixels.clone().position(differs),
+            pixels.clone().rposition(differs),
+        ) else {
+            continue;
+        };
+        edges = Some(match edges {
+            None => (left, y, right, y),
+            Some((first, top, last, _)) => (first.min(left), top, last.max(right), y),
+        });
+    }
+    edges.map(|(left, top, right, bottom)| Geometry {
+        x: before.region.x + left as i16,
+        y: before.region.y + top as i16,
+        width: (right - left + 1) as u16,
+        height: (bottom - top + 1) as u16,
+    })
+}
+
+pub fn repainted(
+    before: &Pixels,
+    after: &Pixels,
+    rgb: [u8; 3],
+    tolerance: u8,
+) -> BTreeSet<[u8; 3]> {
+    if before.region != after.region {
+        return BTreeSet::new();
+    }
+    before
+        .rows()
+        .zip(after.rows())
+        .flat_map(|(was, is)| was.as_chunks::<4>().0.iter().zip(is.as_chunks::<4>().0))
+        .filter(|(was, _)| near(was, rgb, tolerance))
+        .map(|(_, [blue, green, red, _])| [*red, *green, *blue])
+        .collect()
 }
 
 fn padding(area: Geometry, inset: u16) -> [Geometry; 4] {
@@ -243,6 +358,32 @@ impl Terminal {
         native.press(Key::Return)
     }
 
+    pub fn echoed(&self, native: &Native, text: &str) -> Result<()> {
+        let characters: Vec<char> = text.chars().collect();
+        let mut typed = String::new();
+        for piece in characters.chunks(PIECE) {
+            let piece: String = piece.iter().collect();
+            native.type_text(&piece)?;
+            typed.push_str(&piece);
+            let mut shown = String::new();
+            let echoed = poll(PATIENCE, LOOK, true, || {
+                let read = native
+                    .system
+                    .watch("terminal.read", json!({"terminal":self.address}))?;
+                shown = read["text"].as_str().unwrap_or_default().to_owned();
+                Ok(echoes(&shown, &typed).then_some(()))
+            })?;
+            if echoed.is_none() {
+                return Err(Defect(format!(
+                    "the shell of {} did not echo the typed text {typed:?}; its screen holds {shown:?}",
+                    self.target()
+                ))
+                .into());
+            }
+        }
+        Ok(())
+    }
+
     pub fn enter(&self, native: &Native, folder: &str) -> Result<()> {
         self.line(native, &format!("cd {folder}"))?;
         until(
@@ -276,8 +417,43 @@ impl Terminal {
         Ok(printed.is_some())
     }
 
+    pub fn foreground(&self, native: &Native) -> Result<String> {
+        until(
+            &format!("the foreground program of {}", self.target()),
+            || {
+                let reported = native
+                    .system
+                    .watch("terminal.get", json!({"terminal":self.address}))?;
+                Ok(foreground_name(&reported))
+            },
+        )
+    }
+
+    pub fn shown(
+        &self,
+        native: &Native,
+        name: &str,
+        awaited: impl Fn(&Pixels) -> bool,
+    ) -> Result<Pixels> {
+        let look = poll(PATIENCE, LOOK, true, || {
+            Ok(Some(self.look(native)?).filter(|look| awaited(look)))
+        })?
+        .ok_or_else(|| Unseen(format!("{name} in {}", self.target())))?;
+        native.keep(name, &look)?;
+        Ok(look)
+    }
+
     pub fn wheel(&self, native: &Native, direction: Wheel) -> Result<()> {
         native.wheel(&self.target(), direction, WHEEL_CLICKS)
+    }
+
+    pub fn origin(&self, native: &Native) -> Result<(i16, i16)> {
+        let target = self.target();
+        native.wait_for(&target.to_string(), PATIENCE, |frame| {
+            let area = region(frame, &target.find(frame)?.bounds);
+            let inset = inset(frame) as i16;
+            Some((area.x + inset, area.y + inset))
+        })
     }
 
     pub fn look(&self, native: &Native) -> Result<Pixels> {
@@ -289,7 +465,7 @@ impl Terminal {
                 Some((
                     region(frame, &terminal.bounds),
                     avatar.map(|avatar| region(frame, &avatar.bounds)),
-                    (PADDING * frame.window.scale).ceil() as u16,
+                    inset(frame),
                 ))
             })?;
         let mut pixels = native.x11()?.capture(native.window, terminal)?;
@@ -354,6 +530,23 @@ impl Terminal {
         );
         Ok(())
     }
+}
+
+fn echoes(shown: &str, typed: &str) -> bool {
+    let unspaced = |text: &str| -> String {
+        text.chars()
+            .filter(|character| !character.is_whitespace())
+            .collect()
+    };
+    unspaced(shown).ends_with(&unspaced(typed))
+}
+
+fn foreground_name(reported: &serde_json::Value) -> Option<String> {
+    reported["foreground"]["name"].as_str().map(str::to_owned)
+}
+
+fn inset(frame: &Frame) -> u16 {
+    (PADDING * frame.window.scale).ceil() as u16
 }
 
 fn placement_of<'a>(layout: &'a Layout, content: &ContentId) -> Option<&'a PlacementId> {
@@ -451,6 +644,121 @@ mod tests {
         assert_eq!(lines.0[0].top, 11);
     }
 
+    fn paint(look: &mut [u8], columns: Range<usize>, rows: Range<usize>, bgr: [u8; 3]) {
+        let stride = usize::from(WIDTH) * 4;
+        for row in rows {
+            for column in columns.clone() {
+                let at = row * stride + column * 4;
+                look[at..at + 3].copy_from_slice(&bgr);
+            }
+        }
+    }
+
+    fn painted(patches: &[(Range<usize>, Range<usize>, [u8; 3])]) -> Pixels {
+        let mut bgrx: Vec<u8> = (0..usize::from(WIDTH) * usize::from(HEIGHT))
+            .flat_map(|_| BACKGROUND)
+            .collect();
+        for (columns, rows, bgr) in patches {
+            paint(&mut bgrx, columns.clone(), rows.clone(), *bgr);
+        }
+        let region = Geometry {
+            x: 100,
+            y: 50,
+            width: WIDTH,
+            height: HEIGHT,
+        };
+        Pixels::new(region, bgrx)
+    }
+
+    const GREEN: [u8; 3] = [24, 160, 96];
+    const GREEN_BGR: [u8; 3] = [96, 160, 24];
+
+    #[test]
+    fn each_coloured_box_is_found_where_it_is_drawn_with_the_ink_inside_it() {
+        let look = painted(&[
+            (2..8, 4..7, GREEN_BGR),
+            (4..5, 5..6, [200, 200, 200]),
+            (3..6, 20..22, [97, 159, 25]),
+            (9..11, 20..22, GREEN_BGR),
+            (0..1, 28..29, [98, 160, 24]),
+        ]);
+        let found = boxes(&look, GREEN, 1);
+        let area = |x, y, width, height| Geometry {
+            x,
+            y,
+            width,
+            height,
+        };
+        assert_eq!(
+            found,
+            [
+                Patch {
+                    area: area(102, 54, 6, 3),
+                    ink: 1
+                },
+                Patch {
+                    area: area(103, 70, 3, 2),
+                    ink: 0
+                },
+                Patch {
+                    area: area(109, 70, 2, 2),
+                    ink: 0
+                },
+            ]
+        );
+        assert_eq!(boxes(&look, GREEN, 0).len(), 2);
+        assert!(boxes(&look, [1, 2, 3], 1).is_empty());
+    }
+
+    #[test]
+    fn the_changed_area_bounds_every_pixel_that_differs() {
+        let before = painted(&[(2..8, 4..7, GREEN_BGR)]);
+        assert_eq!(changed(&before, &before), None);
+        let after = painted(&[(2..8, 4..7, GREEN_BGR), (3..5, 10..12, [1, 2, 3])]);
+        assert_eq!(
+            changed(&before, &after),
+            Some(Geometry {
+                x: 103,
+                y: 60,
+                width: 2,
+                height: 2
+            })
+        );
+        let moved = painted(&[(3..9, 5..8, GREEN_BGR)]);
+        assert_eq!(
+            changed(&before, &moved),
+            Some(Geometry {
+                x: 102,
+                y: 54,
+                width: 7,
+                height: 4
+            })
+        );
+        let elsewhere = screen(&[]);
+        assert_eq!(changed(&before, &elsewhere), Some(elsewhere.region));
+    }
+
+    #[test]
+    fn the_colours_that_replace_a_colour_are_read_where_it_was_drawn() {
+        let before = painted(&[(2..8, 4..7, GREEN_BGR), (4..5, 5..6, [200, 200, 200])]);
+        assert_eq!(
+            repainted(&before, &before, GREEN, 1),
+            BTreeSet::from([GREEN])
+        );
+        let selected = painted(&[(2..8, 4..7, [105, 118, 57]), (4..5, 5..6, [9, 9, 9])]);
+        assert_eq!(
+            repainted(&before, &selected, GREEN, 1),
+            BTreeSet::from([[57, 118, 105]])
+        );
+        let partly = painted(&[(2..8, 4..7, GREEN_BGR), (2..5, 4..7, [105, 118, 57])]);
+        assert_eq!(
+            repainted(&before, &partly, GREEN, 1),
+            BTreeSet::from([GREEN, [57, 118, 105]])
+        );
+        assert!(repainted(&before, &screen(&[]), GREEN, 1).is_empty());
+        assert!(repainted(&before, &selected, [1, 2, 3], 1).is_empty());
+    }
+
     #[test]
     fn a_shell_that_died_is_a_product_failure() -> Result<()> {
         let mut native = native()?;
@@ -511,6 +819,32 @@ mod tests {
             "A Core that exited was not blamed on the product"
         );
         Ok(())
+    }
+
+    #[test]
+    fn typed_text_is_echoed_when_the_screen_ends_with_it_whatever_the_wrapping() {
+        let typed = "'/a/b' probe '/c d/e' keys";
+        assert!(echoes("bash-5.3$ '/a/b' probe '/c d/e' keys", typed));
+        assert!(echoes(
+            "COPY\n\nbash-5.3$ '/a/b' probe\n'/c d/e' keys",
+            typed
+        ));
+        assert!(echoes("bash-5.3$ '/a/b' probe '/c\nd/e' keys", typed));
+        assert!(!echoes("bash-5.3$ '/a/b' probe '/c d/e' key", typed));
+        assert!(!echoes("bash-5.3$ '/ab' probe '/c d/e' keys", typed));
+        assert!(!echoes(
+            "bash-5.3$ '/a/b' probe '/c d/e' keys\nbash: no",
+            typed
+        ));
+        assert!(!echoes("", typed));
+    }
+
+    #[test]
+    fn a_reply_without_a_foreground_names_no_program() {
+        let flooding = json!({"pid":238,"foreground":{"name":"timeout","pid":258}});
+        assert_eq!(foreground_name(&flooding).as_deref(), Some("timeout"));
+        assert_eq!(foreground_name(&json!({"pid":238})), None);
+        assert_eq!(foreground_name(&json!({"pid":238,"foreground":null})), None);
     }
 
     #[test]

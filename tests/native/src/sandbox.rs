@@ -1,6 +1,8 @@
+use crate::system::save;
 use anyhow::{Context, Result, ensure};
 use rustix::process::{Pid, Signal, kill_process};
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
@@ -13,6 +15,7 @@ pub const SECOND_PROJECT: &str = "/voyager/home/second-project";
 pub const RUNTIME: &str = "/voyager/runtime";
 pub const CORE: &str = "/voyager/bin/hc";
 pub const DISPLAY: &str = ":99";
+const SHELL_STARTUP: [&str; 4] = [".bashrc", ".bash_profile", ".profile", ".inputrc"];
 
 pub const ENVIRONMENT: &[(&str, &str)] = &[
     ("PATH", "/voyager/bin:/usr/bin"),
@@ -114,6 +117,28 @@ pub fn prepare(evidence: &Path) -> Result<()> {
         "# Verification fixture project\n",
     )?;
     fs::create_dir(evidence.join("home/second-project"))?;
+    Ok(())
+}
+
+pub fn plain_shell(containment: &Path, home: &Path, argv: Value) -> Result<()> {
+    let mut record: Vec<Value> = serde_json::from_slice(&fs::read(containment)?)
+        .context("The containment record is not a list")?;
+    let mut present = Vec::new();
+    for name in SHELL_STARTUP {
+        let path = home.join(name);
+        let found = path.symlink_metadata().is_ok();
+        record.push(json!({"kind":"startup-file","path":path,"present":found}));
+        if found {
+            present.push(path.display().to_string());
+        }
+    }
+    record.push(json!({"kind":"first-shell","argv":argv}));
+    save(containment, &record)?;
+    ensure!(
+        present.is_empty(),
+        "The fixture home holds shell startup files, so the shell is not plain: {}",
+        present.join(", ")
+    );
     Ok(())
 }
 
@@ -348,6 +373,38 @@ mod tests {
             let observed = observe(serde_json::from_slice(&resources)?)?;
             fs::write(home.join("observed.json"), serde_json::to_vec(&observed)?)?;
         }
+        Ok(())
+    }
+
+    #[test]
+    fn a_shell_startup_file_in_the_home_is_recorded_and_refused() -> Result<()> {
+        let host = Host::new("plain")?;
+        let home = host.evidence.join("home");
+        let containment = host.evidence.join("containment.json");
+        save(&containment, &observe(host.resources.clone())?)?;
+        let argv = json!(["/bin/bash"]);
+        plain_shell(&containment, &home, argv.clone())?;
+        let record: Vec<Value> = serde_json::from_slice(&fs::read(&containment)?)?;
+        let kinds: Vec<_> = record
+            .iter()
+            .map(|entry| entry["kind"].as_str().unwrap_or_default())
+            .collect();
+        assert_eq!(kinds[..3], ["path", "path", "abstract"]);
+        assert_eq!(kinds[3..7], ["startup-file"; 4]);
+        assert!(record[3..7].iter().all(|file| file["present"] == false));
+        assert_eq!(record[7], json!({"kind":"first-shell","argv":argv}));
+        fs::write(home.join(".inputrc"), "set bell-style none\n")?;
+        let refusal = plain_shell(&containment, &home, argv)
+            .expect_err("A home with a readline startup file counted as plain");
+        assert!(refusal.to_string().contains(".inputrc"), "{refusal}");
+        let record: Vec<Value> = serde_json::from_slice(&fs::read(&containment)?)?;
+        let inputrc = serde_json::to_value(home.join(".inputrc"))?;
+        assert!(
+            record
+                .iter()
+                .any(|entry| entry["path"] == inputrc && entry["present"] == true),
+            "The startup file that was found is not in the record: {record:?}"
+        );
         Ok(())
     }
 

@@ -62,7 +62,9 @@ tests/native/target/debug/voyager-verification run --journey terminal-scrolling 
 
 For Voyages, Fleets and Vessels, run `--journey workspace` the same way and
 read features/workspace.md. That journey needs the sidebar open and a window
-of at least 1180 by 1000 device pixels.
+of at least 1180 by 1000 device pixels. For typing, keys, output, selection
+and copy and paste in a terminal, run `--journey terminal-input` and read
+features/terminal-input.md.
 
 Exit 0 is a named runtime pass, 1 is observed failure, and 2 is inconclusive or
 unavailable. Unsupported journeys and actual-Codex requests are refused. There is

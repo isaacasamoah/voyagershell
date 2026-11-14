@@ -1,8 +1,8 @@
 use super::{Defect, GLANCE, Native};
 use crate::inspection::{Target, Unseen, clear_of, contains, region};
-use crate::system::{PATIENCE, poll};
-use crate::x11::{Chord, Geometry};
-use anyhow::{Result, ensure};
+use crate::system::{PATIENCE, System, poll};
+use crate::x11::{Chord, Clipboard, Exchange, Geometry, Reading, Window};
+use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 use serde_json::json;
 use voyager_contract::inspection::Frame;
@@ -29,6 +29,52 @@ impl Aim {
     fn still_under(&self, pointer: (i16, i16)) -> bool {
         contains(self.region, pointer)
             && !self.avatar.is_some_and(|avatar| contains(avatar, pointer))
+    }
+}
+
+const DRAG_STEPS: i32 = 4;
+
+fn along(from: (i16, i16), to: (i16, i16), step: i32) -> (i16, i16) {
+    let part = |from: i16, to: i16| {
+        (i32::from(from) + (i32::from(to) - i32::from(from)) * step / DRAG_STEPS) as i16
+    };
+    (part(from.0, to.0), part(from.1, to.1))
+}
+
+pub struct Clip<'a> {
+    system: &'a System,
+    owner: &'a Clipboard,
+    ledgered: &'a mut usize,
+}
+
+impl Clip<'_> {
+    pub fn window(&self) -> Window {
+        self.owner.window()
+    }
+
+    pub fn own(&self, text: &str) -> Result<()> {
+        self.system.act(json!({"clipboard":"own","text":text}), || {
+            self.owner.own(text)
+        })
+    }
+
+    pub fn read(&self) -> Result<Reading> {
+        self.system
+            .act(json!({"clipboard":"read"}), || self.owner.read())
+    }
+
+    pub fn owner(&self) -> Result<Option<Window>> {
+        self.owner.owner()
+    }
+
+    pub fn exchanges(&mut self) -> Result<Vec<Exchange>> {
+        let seen = self.owner.exchanges();
+        for exchange in seen.iter().skip(*self.ledgered) {
+            self.system
+                .record(json!({"event":"clipboard","seen":exchange}))?;
+            *self.ledgered += 1;
+        }
+        Ok(seen)
     }
 }
 
@@ -79,6 +125,56 @@ impl Native {
             },
         )?;
         self.pointer()
+    }
+
+    pub fn drag_between(&self, target: &Target, from: (i16, i16), to: (i16, i16)) -> Result<()> {
+        let held = self.spot(target)?;
+        ensure!(
+            held.still_under(from) && held.still_under(to),
+            "{target} does not hold the drag from {from:?} to {to:?} clear of the avatar"
+        );
+        let start = self.on_screen(target, Aim { at: from, ..held })?;
+        let end = self.on_screen(target, Aim { at: to, ..held })?;
+        let x11 = self.x11()?;
+        self.system.act(
+            json!({"input":"drag","button":1,"target":target,"from":from,"to":to,"steps":DRAG_STEPS,"aim":held}),
+            || {
+                x11.move_to(start.0, start.1)?;
+                x11.hold(1)?;
+                let moved = (1..=DRAG_STEPS).try_for_each(|step| {
+                    let (x, y) = along(start, end, step);
+                    x11.move_to(x, y)
+                });
+                x11.release(1)?;
+                moved
+            },
+        )?;
+        self.pointer()
+    }
+
+    pub fn clipboard(&mut self) -> Result<Clip<'_>> {
+        if self.clipboard.is_none() {
+            let display = self
+                .system
+                .env
+                .get("DISPLAY")
+                .context("Missing owned display")?;
+            self.clipboard = Some(Clipboard::connect(display)?);
+        }
+        Ok(Clip {
+            system: &self.system,
+            owner: self.clipboard.as_ref().context("Missing clipboard owner")?,
+            ledgered: &mut self.ledgered,
+        })
+    }
+
+    pub(super) fn release_clipboard(&mut self) -> Result<()> {
+        if self.clipboard.is_none() {
+            return Ok(());
+        }
+        let ledgered = self.clipboard()?.exchanges().map(drop);
+        let stopped = self.clipboard.take().map_or(Ok(()), Clipboard::stop);
+        ledgered.and(stopped)
     }
 
     pub fn wheel(&self, target: &Target, direction: Wheel, clicks: usize) -> Result<()> {
@@ -198,4 +294,20 @@ pub(super) fn single(target: &Target, frame: &Frame) -> Result<()> {
         .into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_drag_moves_in_equal_steps_and_ends_on_its_destination() {
+        let (from, to) = ((10, 300), (410, 290));
+        let steps: Vec<_> = (0..=DRAG_STEPS).map(|step| along(from, to, step)).collect();
+        assert_eq!(
+            steps,
+            [(10, 300), (110, 298), (210, 295), (310, 293), (410, 290)]
+        );
+        assert_eq!(along(to, from, DRAG_STEPS), from);
+    }
 }

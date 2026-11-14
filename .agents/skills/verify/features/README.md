@@ -15,10 +15,10 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Agent Vessels | python-only | none | python-only | python-only | - | arrangement, terminal-agent | linux |
 | Portals | python-only | none | python-only | python-only | - | placement, portal-terminal, portal-close | linux |
 | Split / resize / maximize | python-only | none | none | python-only | - | split-resize, pane-maximize, workspace-ux | linux |
-| Terminal I/O | python-only | none | python-only | python-only | - | terminal, terminal-grid, portal-terminal | linux |
+| Terminal I/O | covered | none | covered | covered | terminal-input | terminal-grid, portal-terminal | linux |
 | Terminal scroll | covered | none | covered | covered | terminal-scrolling | terminal-scrolling | linux |
-| Selection | python-only | none | python-only | python-only | - | terminal-grid | linux |
-| Clipboard | python-only | none | none | python-only | - | terminal-grid, notes-lifetime | linux |
+| Selection | covered | none | covered | covered | terminal-input | - | linux |
+| Clipboard | python-only | none | none | python-only | terminal-input | notes-lifetime | linux |
 | Notes | python-only | none | python-only | python-only | - | notes, notes-lifetime | linux |
 | Avatar docking / drag | python-only | none | python-only | python-only | - | avatar, portal-avatar | linux |
 | Chat / conversation | python-only | none | python-only | python-only | - | conversation, conversation-interrupt, conversation-administrator, conversation-workspace-refresh, conversation-process, conversation-ux, conversation-scroll, conversation-stop, conversation-content | linux |
@@ -29,13 +29,18 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Scripts live edit | python-only | python-only | python-only | python-only | - | canvas-stack | linux |
 <!-- features:end -->
 
-Recipes: [terminal-scrolling.md](terminal-scrolling.md) and
-[workspace.md](workspace.md).
+Recipes: [terminal-scrolling.md](terminal-scrolling.md),
+[workspace.md](workspace.md), [quit-restore.md](quit-restore.md) and
+[terminal-input.md](terminal-input.md).
 
-The table claims native coverage for four features. `terminal-scrolling`
+The table claims native coverage for six features. `terminal-scrolling`
 proves Terminal scroll. `workspace` proves Voyages, Fleets and Vessels, and
 only the actions that its recipe lists: create, switch and rename a Voyage or
-a Fleet, and split and rename a terminal Vessel. Fleet arrangement, agent
+a Fleet, and split and rename a terminal Vessel. `terminal-input` proves
+Terminal I/O and Selection, and only the checks that its recipe lists. It
+also drives copy and paste in a terminal, but the Clipboard feature stays
+`python-only` because copy and paste in the canvas and in Notes have no
+native journey. Fleet arrangement, agent
 Vessels, Notes, conversation, voice, actual Codex, the real compositor and
 performance journeys remain in the existing Python fixture and are not
 migrated or re-proved here. Preserve them. Add a mapped feature only with

@@ -301,12 +301,16 @@ it adds no idle polling or timer. Disconnect and completion return directly.
 This gives the event loop an opportunity to handle input and frames, but actual
 saturated-output responsiveness and latency still require native evidence.
 
-The extended maintained terminal-grid journey is prepared for native selection,
-copy/paste, continued hidden output, focused input in another Fleet, restored
-input to the same terminal, and actual split sizing. It has not run against the
-continuation source. The first corrective release remains pending independent
-source review. Performance, native agent behavior, additional terminal styles,
-complete lifecycle and platform acceptance remain open.
+The native `terminal-input` journey in `tests/native` covers typed commands,
+keys as bytes, keys under application cursor mode, output drawn without input,
+drag selection, copy to the X clipboard, paste with and without bracketed paste,
+and input to one split while another floods. Its recipe,
+`.agents/skills/verify/features/terminal-input.md`, lists what it does not
+cover.
+The retained Python terminal-grid journey still covers shell grid resize, split
+sizing, IBus/XIM composition and input during a hidden Fleet's output.
+Performance, native agent behavior, additional terminal styles, complete
+lifecycle and platform acceptance remain open.
 
 `app/core-schema.cjs` extracts the used hello, document, terminal and server
 message types from the reviewed Core 0.1.16 schema after checking its canonical

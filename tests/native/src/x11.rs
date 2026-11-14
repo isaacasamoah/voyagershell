@@ -1,3 +1,7 @@
+mod clipboard;
+
+pub use clipboard::{Clipboard, Exchange, Reading};
+
 use anyhow::{Context, Result, bail, ensure};
 use image::RgbaImage;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
@@ -11,8 +15,9 @@ use std::thread::sleep;
 use std::time::Duration;
 use x11rb::connection::Connection as _;
 use x11rb::protocol::xproto::{
-    AtomEnum, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, ConfigureWindowAux, ConnectionExt as _,
-    ImageFormat, InputFocus, KEY_PRESS_EVENT, KEY_RELEASE_EVENT, MOTION_NOTIFY_EVENT, MapState,
+    Atom, AtomEnum, BUTTON_PRESS_EVENT, BUTTON_RELEASE_EVENT, ConfigureWindowAux,
+    ConnectionExt as _, ImageFormat, InputFocus, KEY_PRESS_EVENT, KEY_RELEASE_EVENT,
+    MOTION_NOTIFY_EVENT, MapState,
 };
 use x11rb::protocol::xtest::ConnectionExt as _;
 use x11rb::rust_connection::{DefaultStream, PollMode, RustConnection, Stream};
@@ -27,6 +32,10 @@ const BACKSPACE: u32 = 0xff08;
 const TAB: u32 = 0xff09;
 const RETURN: u32 = 0xff0d;
 const ESCAPE: u32 = 0xff1b;
+const LEFT: u32 = 0xff51;
+const UP: u32 = 0xff52;
+const RIGHT: u32 = 0xff53;
+const DOWN: u32 = 0xff54;
 const F2: u32 = 0xffbf;
 const SHIFT: u32 = 0xffe1;
 const CONTROL: u32 = 0xffe3;
@@ -37,6 +46,10 @@ pub enum Key {
     Tab,
     Escape,
     BackSpace,
+    Left,
+    Up,
+    Right,
+    Down,
     F2,
     Char(char),
 }
@@ -69,9 +82,22 @@ impl Key {
             Key::Tab => Ok(TAB),
             Key::Escape => Ok(ESCAPE),
             Key::BackSpace => Ok(BACKSPACE),
+            Key::Left => Ok(LEFT),
+            Key::Up => Ok(UP),
+            Key::Right => Ok(RIGHT),
+            Key::Down => Ok(DOWN),
             Key::F2 => Ok(F2),
             Key::Char(character) if (' '..='~').contains(&character) => Ok(character as u32),
             Key::Char(character) => bail!("Unsupported key {character:?}"),
+        }
+    }
+}
+
+impl Chord {
+    pub fn shift(self) -> Self {
+        Self {
+            shift: true,
+            ..self
         }
     }
 }
@@ -172,24 +198,13 @@ pub struct Display {
 
 impl Display {
     pub fn connect(display: &str) -> Result<Self> {
-        let number = display
-            .strip_prefix(':')
-            .context("Display is not a local X11 display")?;
-        let socket = UnixStream::connect(format!("/tmp/.X11-unix/X{number}"))?;
-        let (stream, _) = DefaultStream::from_unix_stream(socket)?;
-        let connection = RustConnection::connect_to_stream(Bounded(stream), 0)?;
+        let connection = connect(display)?;
         connection.xtest_get_version(2, 2)?.reply()?;
         let root = connection.setup().roots[0].root;
-        let atom = |name: &str| -> Result<u32> {
-            Ok(connection
-                .intern_atom(false, name.as_bytes())?
-                .reply()?
-                .atom)
-        };
         let (pid, name, utf8) = (
-            atom("_NET_WM_PID")?,
-            atom("_NET_WM_NAME")?,
-            atom("UTF8_STRING")?,
+            atom(&connection, "_NET_WM_PID")?,
+            atom(&connection, "_NET_WM_NAME")?,
+            atom(&connection, "UTF8_STRING")?,
         );
         let keys = keymap(&connection)?;
         Ok(Self {
@@ -406,6 +421,22 @@ impl Display {
     }
 }
 
+fn connect(display: &str) -> Result<RustConnection<Bounded>> {
+    let number = display
+        .strip_prefix(':')
+        .context("Display is not a local X11 display")?;
+    let socket = UnixStream::connect(format!("/tmp/.X11-unix/X{number}"))?;
+    let (stream, _) = DefaultStream::from_unix_stream(socket)?;
+    Ok(RustConnection::connect_to_stream(Bounded(stream), 0)?)
+}
+
+fn atom(connection: &RustConnection<Bounded>, name: &str) -> Result<Atom> {
+    Ok(connection
+        .intern_atom(false, name.as_bytes())?
+        .reply()?
+        .atom)
+}
+
 fn keymap(connection: &RustConnection<Bounded>) -> Result<BTreeMap<u32, (u8, bool)>> {
     let setup = connection.setup();
     let (first, last) = (setup.min_keycode, setup.max_keycode);
@@ -523,6 +554,10 @@ mod tests {
     fn a_chord_is_recorded_by_its_modifier_and_key() {
         assert_eq!(Key::Char('q').ctrl().to_string(), "ctrl+q");
         assert_eq!(Key::Tab.shift().to_string(), "shift+Tab");
+        assert_eq!(Key::Char('c').ctrl().shift().to_string(), "ctrl+shift+c");
+        assert_eq!(Chord::from(Key::Up).to_string(), "Up");
+        let arrows = [Key::Left, Key::Up, Key::Right, Key::Down].map(|key| key.symbol().unwrap());
+        assert_eq!(arrows, [0xff51, 0xff52, 0xff53, 0xff54]);
         assert_eq!(Chord::from(Key::F2).to_string(), "F2");
         assert_eq!(Chord::from(Key::Return).to_string(), "Return");
         assert_eq!(

@@ -1,3 +1,4 @@
+mod input;
 mod layout;
 mod quit_restore;
 mod scrolling;
@@ -97,6 +98,7 @@ journeys! {
     Workspace => "workspace" in workspace, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     QuitRestore => "quit-restore" in quit_restore, sidebar: None, window: None;
     VoyageClose => "voyage-close" in voyage_close, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    TerminalInput => "terminal-input" in input, sidebar: None, window: None;
 }
 
 impl Journey {
