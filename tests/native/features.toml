@@ -28,14 +28,14 @@ debug = "covered"
 id = "fleet-arrangement"
 name = "Fleet arrangement"
 path = "Drag the Vessels of a Fleet into a new arrangement and keep it."
-sources = ["app/src/panels.rs", "desktop/src/arrangement.rs", "docs/arrangement.md"]
-journeys = []
+sources = ["app/src/panels.rs", "desktop/src/arrangement.rs", "docs/arrangement.md", "desktop/mods/header/panel-view.*"]
+journeys = ["arrangement"]
 platforms = ["linux"]
 python = ["layouts", "arrangement"]
-behavior = "python-only"
+behavior = "covered"
 performance = "none"
 visual = "python-only"
-debug = "python-only"
+debug = "covered"
 
 [[feature]]
 id = "vessels"
@@ -80,14 +80,14 @@ debug = "python-only"
 id = "split-resize-maximize"
 name = "Split / resize / maximize"
 path = "Split a pane, drag the divider to resize it and maximize one pane."
-sources = ["desktop/src/split.rs"]
-journeys = []
+sources = ["desktop/src/split.rs", "desktop/mods/header/panel-view.*", "desktop/mods/header/main.*", "app/src/panels.rs"]
+journeys = ["arrangement"]
 platforms = ["linux"]
-python = ["split-resize", "pane-maximize", "workspace-ux"]
-behavior = "python-only"
+python = ["workspace-ux"]
+behavior = "covered"
 performance = "none"
 visual = "none"
-debug = "python-only"
+debug = "covered"
 
 [[feature]]
 id = "terminal-io"

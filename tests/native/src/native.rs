@@ -481,17 +481,12 @@ impl Native {
         mut read: impl FnMut(&Seen) -> Option<T>,
         wanted: impl Fn(&T) -> bool,
     ) -> Result<T> {
-        let x11 = self.x11()?;
-        let path = self.inspection();
         let mut preparing = false;
         let held = settle(
             PATIENCE,
             GLANCE,
             || {
-                let window = x11.geometry(self.window)?;
-                let frame = inspection::read(&path)?.filter(|frame| drawn_for(frame, window));
-                let saved = self.document()?;
-                let seen = glance(frame.as_ref(), saved.as_ref(), &mut read);
+                let seen = self.look(&mut read)?;
                 preparing = matches!(seen, Glance::Preparing);
                 Ok(seen.ready())
             },
@@ -505,6 +500,13 @@ impl Native {
             };
             Unseen(format!("{expected}{prepared}")).into()
         })
+    }
+
+    fn look<T>(&self, read: impl FnOnce(&Seen) -> Option<T>) -> Result<Glance<T>> {
+        let window = self.x11()?.geometry(self.window)?;
+        let frame = inspection::read(&self.inspection())?.filter(|frame| drawn_for(frame, window));
+        let saved = self.document()?;
+        Ok(glance(frame.as_ref(), saved.as_ref(), read))
     }
 
     pub fn document(&self) -> Result<Option<(u64, Layout)>> {

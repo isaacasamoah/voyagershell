@@ -1,4 +1,4 @@
-use super::{Defect, GLANCE, Native};
+use super::{Defect, GLANCE, Native, Seen};
 use crate::inspection::{Target, Unseen, clear_of, contains, region};
 use crate::system::{PATIENCE, poll};
 use crate::x11::{Chord, Geometry};
@@ -32,7 +32,126 @@ impl Aim {
     }
 }
 
+const HELD_BUTTON: u8 = 1;
+const HELD_STEPS: i16 = 8;
+
+#[must_use]
+pub struct Held<'a> {
+    native: &'a Native,
+    at: (i16, i16),
+    released: bool,
+}
+
+impl Held<'_> {
+    pub fn toward(&mut self, to: (i16, i16)) -> Result<()> {
+        let x11 = self.native.x11()?;
+        let from = self.at;
+        self.native.system.act(
+            json!({"input":"held-move","button":HELD_BUTTON,"from":from,"to":to,"steps":HELD_STEPS}),
+            || {
+                for step in 1..=HELD_STEPS {
+                    let x = from.0 + (to.0 - from.0) * step / HELD_STEPS;
+                    let y = from.1 + (to.1 - from.1) * step / HELD_STEPS;
+                    x11.move_to(x, y)?;
+                    self.native.pointer()?;
+                }
+                Ok(())
+            },
+        )?;
+        self.at = to;
+        Ok(())
+    }
+
+    pub fn press(&self, chord: impl Into<Chord>) -> Result<()> {
+        self.native.press(chord)
+    }
+
+    pub fn until<T>(&self, expected: &str, mut read: impl FnMut(&Seen) -> Option<T>) -> Result<T> {
+        let x11 = self.native.x11()?;
+        let (x, y) = self.at;
+        let mut nudges = 0;
+        let found = poll(PATIENCE, GLANCE, true, || {
+            x11.move_to(x + 1, y)?;
+            x11.move_to(x, y)?;
+            nudges += 1;
+            Ok(self.native.look(&mut read)?.ready())
+        })?;
+        self.native.system.record(
+            json!({"event":"held-until","expected":expected,"nudges":nudges,"seen":found.is_some()}),
+        )?;
+        found.ok_or_else(|| Unseen(expected.into()).into())
+    }
+
+    pub fn release(mut self) -> Result<()> {
+        self.released = true;
+        let x11 = self.native.x11()?;
+        self.native.system.act(
+            json!({"input":"release","button":HELD_BUTTON,"at":self.at}),
+            || x11.release(HELD_BUTTON),
+        )
+    }
+}
+
+impl Drop for Held<'_> {
+    fn drop(&mut self) {
+        if !self.released
+            && let Ok(x11) = self.native.x11()
+        {
+            let released = x11.release(HELD_BUTTON);
+            let _ = self.native.system.record(
+                json!({"event":"release-on-drop","button":HELD_BUTTON,"error":released.err().map(|error| format!("{error:#}"))}),
+            );
+        }
+    }
+}
+
 impl Native {
+    pub fn hold(&self, target: &Target) -> Result<Held<'_>> {
+        let aim = self.reach(target)?;
+        let at = self.on_screen(target, aim)?;
+        let x11 = self.x11()?;
+        self.system.act(
+            json!({"input":"hold","button":HELD_BUTTON,"target":target,"aim":aim}),
+            || x11.hold(HELD_BUTTON),
+        )?;
+        Ok(Held {
+            native: self,
+            at,
+            released: false,
+        })
+    }
+
+    pub fn point_in(&self, target: &Target, across: f32, down: f32) -> Result<(i16, i16)> {
+        let at = self.wait_for(&target.to_string(), PATIENCE, |frame| {
+            let found = region(frame, &target.find(frame)?.bounds);
+            let x = found.x + (f32::from(found.width) * across).round() as i16;
+            let y = found.y + (f32::from(found.height) * down).round() as i16;
+            let avatar = Target::AVATAR
+                .find(frame)
+                .map(|avatar| region(frame, &avatar.bounds));
+            Some((x, y, avatar.is_some_and(|avatar| contains(avatar, (x, y)))))
+        })?;
+        ensure!(
+            !at.2,
+            "{target} at {across} across and {down} down is under the avatar"
+        );
+        let window = self.x11()?.geometry(self.window)?;
+        Ok((window.x + at.0, window.y + at.1))
+    }
+
+    pub fn resize_window(&self, width: u16, height: u16) -> Result<()> {
+        let x11 = self.x11()?;
+        self.system.act(
+            json!({"input":"resize","window":self.window,"size":[width,height]}),
+            || x11.resize(self.window, width, height),
+        )
+    }
+
+    pub fn window_size(&self) -> Result<(u16, u16)> {
+        let window = self.x11()?.geometry(self.window)?;
+        Ok((window.width, window.height))
+    }
+
     pub fn click(&self, target: &Target) -> Result<()> {
         self.clicks(target, 1)
     }

@@ -126,10 +126,11 @@ impl ComponentMaterializer for Split {
         })?;
         let native = request.with_window_app(|_, cx| Ok(host.read(cx).native.clone()))?;
         let complete = host.clone();
+        let divider = config.id.clone();
         let mut group = ResizablePanelGroup::new(format!("split-panels:{}", config.id))
             .axis(config.axis)
             .with_state(&native)
-            .with_handle_appearance(Rc::new(|handle, _, cx| {
+            .with_handle_appearance(Rc::new(move |handle, _, cx| {
                 let theme = gpui_base::Theme::global(cx);
                 let color = if handle.is_active() {
                     theme
@@ -151,6 +152,10 @@ impl ComponentMaterializer for Split {
                         .aria_orientation(orientation)
                         .size_full()
                         .bg(color)
+                        .child(crate::inspect::control(
+                            voyager_contract::inspection::Role::SplitDivider,
+                            divider.clone(),
+                        ))
                         .into_any_element(),
                 )
             }))

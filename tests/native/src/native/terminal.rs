@@ -276,6 +276,13 @@ impl Terminal {
         Ok(printed.is_some())
     }
 
+    pub fn screen(&self, native: &Native) -> Result<String> {
+        let read = native
+            .system
+            .watch("terminal.read", json!({"terminal":self.address}))?;
+        Ok(read["text"].as_str().unwrap_or_default().to_owned())
+    }
+
     pub fn wheel(&self, native: &Native, direction: Wheel) -> Result<()> {
         native.wheel(&self.target(), direction, WHEEL_CLICKS)
     }

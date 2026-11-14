@@ -76,6 +76,15 @@ impl Key {
     }
 }
 
+impl Chord {
+    pub fn shift(self) -> Self {
+        Self {
+            shift: true,
+            ..self
+        }
+    }
+}
+
 impl From<Key> for Chord {
     fn from(key: Key) -> Self {
         Self {

@@ -272,7 +272,6 @@ def prove(
             geometry,
             click,
             wait,
-            state,
             rpc,
             close,
             observe_exit,
@@ -294,48 +293,12 @@ def prove(
     )
 
 
-def arrangement_panes(fields, fleet, contents):
-    root = fleet["root"]
-    if root["kind"] == "leaf":
-        order = [root["placement"]]
-    else:
-        assert root["axis"] == "horizontal"
-        assert root["first"]["kind"] == root["second"]["kind"] == "leaf"
-        order = [root["first"]["placement"], root["second"]["placement"]]
-    positive = [item for item in fields if item["width"] > 0 and item["height"] > 0]
-    views = sorted(
-        [item for item in positive if item["role"] == "terminal"],
-        key=lambda item: item["x"],
-    )
-    titles = sorted(
-        [item for item in positive if item["role"] in ("button", "push button")],
-        key=lambda item: item["x"],
-    )
-    assert len(views) == len(titles) == len(order) == len(fleet["vessels"]), fields
-    mapped = {}
-    for placement, title, view in zip(order, titles, views, strict=True):
-        center = title["x"] + title["width"] / 2
-        assert view["x"] <= center < view["x"] + view["width"], (title, view)
-        assert title["y"] + title["height"] <= view["y"], (title, view)
-        vessel = next(item for item in fleet["vessels"] if item["id"] == placement)
-        content = next(item for item in contents if item["id"] == vessel["content"])
-        assert content["typeId"] == "terminal" and content["backend"], content
-        mapped[placement] = {
-            "title": title,
-            "terminal": view,
-            "content": content["id"],
-            "backend": content["backend"],
-        }
-    return mapped
-
-
 def arrangement(
     native,
     capture,
     geometry,
     click,
     wait,
-    state,
     rpc,
     close,
     observe_exit,
@@ -343,53 +306,13 @@ def arrangement(
     height,
     evidence,
 ):
-    owner = json.loads((evidence / "launch.json").read_text())["pid"]
-    mappings = []
-
-    def panes(document):
-        layout = document["value"]
-        fleet = next(
-            item
-            for voyage in layout["voyages"]
-            for item in voyage["fleets"]
-            if item["id"] == layout["selectedFleet"]
-        )
-        deadline = time.monotonic() + 5
-        while True:
-            fields = native("fields", owner, ["Terminal"], "window")["fields"]
-            (evidence / "arrangement-target-last.json").write_text(
-                json.dumps({"document": document, "fields": fields}, indent=2)
-            )
-            try:
-                mapped = arrangement_panes(fields, fleet, layout["contents"])
-                break
-            except AssertionError:
-                assert time.monotonic() < deadline, fields
-                time.sleep(0.05)
-        mappings.append({"document": document, "panes": mapped})
-        (evidence / "arrangement-targets.json").write_text(
-            json.dumps(mappings, indent=2)
-        )
-        return mapped
-
-    def point(item, left=False):
-        return (
-            (item["x"] + (min(2, item["width"] / 2) if left else item["width"] / 2))
-            / 2,
-            (item["y"] + item["height"] / 2) / 2,
-        )
-
-    def key(value):
-        native("key", value, True)
-        native("key", value, False)
-
     def move(x, y):
         bounds = geometry()
         native(
             "move", int(bounds["X"]) + round(x * 2), int(bounds["Y"]) + round(y * 2), 2
         )
 
-    def drag(source, target, cancel=False):
+    def drag(source, target):
         move(*source)
         native("button", True)
         try:
@@ -399,15 +322,6 @@ def arrangement(
                     source[1] + (target[1] - source[1]) * step / 15,
                 )
             capture("arrangement-preview")
-            if cancel:
-                screen = rpc("terminal.read", {"terminal": address})["text"]
-                (evidence / "arrangement-escape-pending.json").write_text(
-                    json.dumps({"address": address, "screen": screen}, indent=2)
-                )
-                assert not any(
-                    line.startswith("ESCSTATUS:") for line in screen.splitlines()
-                ), "Escape input check finished before cancellation"
-                key(65307)
         finally:
             native("button", False)
 
@@ -415,85 +329,6 @@ def arrangement(
     address = ready["value"]["contents"][0]["backend"]
     pid = rpc("terminal.get", {"terminal": address})["pid"]
     assert pid
-    initial_fleet = ready["value"]["voyages"][0]["fleets"][0]
-    initial_targets = panes(ready)
-    click(*point(initial_targets[initial_fleet["vessels"][0]["id"]]["terminal"]))
-    chord(native, "o")
-    split = wait(
-        lambda layout: (
-            len(layout["voyages"][0]["fleets"][0]["vessels"]) == 2
-            and all(content["backend"] for content in layout["contents"])
-        )
-    )
-    fleet = split["value"]["voyages"][0]["fleets"][0]
-    first = fleet["vessels"][0]["id"]
-    second = fleet["vessels"][1]["id"]
-    capture("arrangement-before")
-    targets = panes(split)
-    drag(point(targets[second]["title"]), point(targets[first]["terminal"], left=True))
-    moved = wait(
-        lambda layout: (
-            (root := layout["voyages"][0]["fleets"][0]["root"])["kind"] == "branch"
-            and root["axis"] == "horizontal"
-            and root["first"].get("placement") == second
-            and root["second"].get("placement") == first
-        )
-    )
-    assert moved["value"]["contents"] == split["value"]["contents"]
-    assert moved["value"]["context"] == split["value"]["context"]
-    assert rpc("terminal.get", {"terminal": address})["pid"] == pid
-    targets = panes(moved)
-    assert targets[first]["backend"] == address
-    click(*point(targets[first]["terminal"]))
-    for (
-        character
-    ) in "printf 'ESC%s\\n' WAIT; read -rsn1 -t 5 x; printf 'ESC%s:%s\\n' STATUS $?":
-        key(ord(character))
-    key(65293)
-    for _ in range(50):
-        if (
-            "ESCWAIT"
-            in rpc("terminal.read", {"terminal": address})["text"].splitlines()
-        ):
-            break
-        time.sleep(0.1)
-    else:
-        raise AssertionError("Terminal did not enter the Escape input check")
-    drag(
-        point(targets[second]["title"]), point(targets[first]["terminal"]), cancel=True
-    )
-    assert state() == moved
-    for _ in range(70):
-        if (
-            "ESCSTATUS:142"
-            in rpc("terminal.read", {"terminal": address})["text"].splitlines()
-        ):
-            break
-        time.sleep(0.1)
-    else:
-        raise AssertionError(
-            "Escape reached the terminal or the input check did not finish"
-        )
-    capture("arrangement-after-escape")
-    drag(point(targets[second]["title"]), point(targets[second]["terminal"]))
-    assert state() == moved
-    capture("arrangement-after-self-drop")
-    drag(point(targets[second]["title"]), (width + 10, height / 2))
-    assert state() == moved
-    capture("arrangement-after-outside-release")
-    click(*point(targets[first]["terminal"]))
-    for character in "printf 'ARRANGED\\n'":
-        key(ord(character))
-    key(65293)
-    for _ in range(50):
-        if (
-            "ARRANGED"
-            in rpc("terminal.read", {"terminal": address})["text"].splitlines()
-        ):
-            break
-        time.sleep(0.1)
-    else:
-        raise AssertionError("Moved terminal did not receive real input")
     chord(native, "t")
     added = wait(
         lambda layout: (
@@ -546,8 +381,6 @@ def arrangement(
     (evidence / "arrangement-observed.json").write_text(
         json.dumps(
             {
-                "before": split,
-                "moved": moved,
                 "fleets": reordered,
                 "voyages": reordered_voyages,
                 "address": address,
@@ -559,9 +392,6 @@ def arrangement(
     close()
     observe_exit()
     return [
-        "real-terminal-split",
-        "vessel-move-and-cancel",
-        "moved-terminal-input",
         "fleet-reorder",
         "voyage-reorder",
         "native-quit",
