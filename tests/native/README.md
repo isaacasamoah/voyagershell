@@ -148,10 +148,9 @@ ordinary shell history. `normal-history` then fails on the expectation
 `wheel up draws the live screen's lines lower, below earlier history`. The `workspace` patch upper-cases a
 submitted name. `rename-fleet-enter` then fails on the expectation `the saved
 name is the typed text`, and the observed name is `NATIVE FLEET`. The
-`quit-restore` patch makes a relaunch clear the backend of a terminal that is
-still live, so the app starts a second shell while the first keeps running.
-`relaunch-reattaches` then fails on the expectation `Core lists the same live
-terminals after the relaunch`, with two live addresses observed. The
+`quit-restore` patch routes Ctrl+Q to stop-session, so Quit calls Core's
+`server.stop`. `quit-and-keep` then fails on the expectation `Core is the same
+process after Quit`, with no Core answering after Quit. The
 `voyage-close` patch makes a confirmed close stop only the first program of
 the Voyage. `close-voyage-confirm` then fails on the expectation `every
 program of the closed Voyage stopped`, with one of its shells observed live.

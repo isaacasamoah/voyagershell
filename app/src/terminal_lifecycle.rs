@@ -1,4 +1,9 @@
-use crate::{core_shapes::Terminal, panels, workspace::Model};
+use crate::{
+    core::{Core, Error},
+    core_shapes::Terminal,
+    panels,
+    workspace::Model,
+};
 use voyager_contract::{ContentId, CoreTerminalId, Layout, launch::Launch};
 
 fn retained(layout: &Layout) -> Vec<(voyager_contract::PlacementId, ContentId)> {
@@ -115,6 +120,40 @@ pub(crate) fn close_exited(
         model.apply(voyager_contract::Action::RemovePanel { id: id.clone() })?;
     }
     Ok(!closing.is_empty())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Lifecycle {
+    QuitAndKeep,
+    StopSession,
+}
+
+impl Lifecycle {
+    pub(crate) fn end(
+        self,
+        ended: &mut Option<(Lifecycle, Result<(), Error>)>,
+        core: &mut Result<Core, Error>,
+    ) -> Result<(), Error> {
+        match (&*ended, self) {
+            (Some((done, result)), _) if *done == self => result.clone(),
+            (Some((Lifecycle::StopSession, Ok(()))), Lifecycle::QuitAndKeep) => Ok(()),
+            (Some((Lifecycle::QuitAndKeep, _)), Lifecycle::StopSession) => Err(Error::Rejected {
+                kind: "quitting".into(),
+                message: "Voyager already quit and kept the session; no session was stopped".into(),
+            }),
+            _ => {
+                let result =
+                    core.as_mut()
+                        .map_err(|error| error.clone())
+                        .and_then(|core| match self {
+                            Lifecycle::QuitAndKeep => core.quit_and_keep(),
+                            Lifecycle::StopSession => core.stop_session(),
+                        });
+                *ended = Some((self, result.clone()));
+                result
+            }
+        }
+    }
 }
 
 #[cfg(test)]

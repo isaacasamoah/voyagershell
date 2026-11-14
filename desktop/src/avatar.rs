@@ -857,16 +857,6 @@ impl Binding {
                 cx,
             )
         });
-        let weak = avatar.downgrade();
-        window.on_window_should_close(cx, move |window, cx| {
-            if std::env::var_os("VOYAGER_AVATAR_DIAGNOSTICS").is_some() {
-                eprintln!("Avatar float trigger: workspace-close");
-            }
-            let floated = weak
-                .update(cx, |avatar, cx| avatar.float(window, cx))
-                .unwrap_or(false);
-            !floated
-        });
         Self {
             avatar,
             view,

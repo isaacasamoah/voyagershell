@@ -119,6 +119,10 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         &package.join("voyage-close.js"),
         include_str!("../mods/header/voyage-close.js"),
     )?;
+    seed(
+        &package.join("stop-session.js"),
+        include_str!("../mods/header/stop-session.js"),
+    )?;
     seed(&theme, include_str!("../themes/voyager.json"))?;
     seed(
         &package.join("validate.js"),
@@ -275,6 +279,12 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                     typing_trace::record("workspace_window_id", id);
                 }
                 let quit_conversation = conversation.clone();
+                let quit_workspace = client.clone();
+                let (stop_session, stop_requests) = async_channel::bounded(1);
+                window.on_window_should_close(cx, |_, cx| {
+                    cx.dispatch_action(&Quit);
+                    false
+                });
                 speech::initialize(conversation.clone(), cx);
                 let avatar = avatar::Binding::new(client.clone(), animations, window, cx);
                 let avatar_view = avatar.view();
@@ -291,12 +301,19 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
                             conversation,
                             notes,
                             avatar,
+                            stop_session,
                         },
                         window,
                         cx,
                     )
                 });
-                quit::register(header.downgrade(), quit_conversation, cx);
+                quit::register(
+                    header.downgrade(),
+                    quit_workspace,
+                    quit_conversation,
+                    stop_requests,
+                    cx,
+                );
                 cx.new(|cx| {
                     ShellRoot::new(header.into(), window, cx).with_native_overlay(avatar_view)
                 })

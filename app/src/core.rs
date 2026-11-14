@@ -700,15 +700,13 @@ impl Core {
         self.call("server.stop", StopParams(Default::default()))
     }
 
-    pub(crate) fn quit(&mut self) -> Result<(), Error> {
-        *self
-            .input_open
-            .lock()
-            .map_err(|error| Error::Uncertain(error.to_string()))? = false;
-        if let Ok(mut activity) = self.activity.lock() {
-            activity.fail("Voyager is quitting");
-        }
-        Self::activity_flow(&self.activity, &self.control, 0);
+    pub(crate) fn quit_and_keep(&mut self) -> Result<(), Error> {
+        self.fence()?;
+        self.release("Voyager quit and kept the Core session")
+    }
+
+    pub(crate) fn stop_session(&mut self) -> Result<(), Error> {
+        self.fence()?;
         let actual = self.server_status()?;
         if actual.core.id != self.identity {
             return Err(Error::Rejected {
@@ -721,7 +719,23 @@ impl Core {
                 "Core did not confirm session shutdown".into(),
             ));
         }
-        let _ = self.link.set("Voyager stopped the Core session".into());
+        self.release("Voyager stopped the Core session")
+    }
+
+    fn fence(&mut self) -> Result<(), Error> {
+        *self
+            .input_open
+            .lock()
+            .map_err(|error| Error::Uncertain(error.to_string()))? = false;
+        if let Ok(mut activity) = self.activity.lock() {
+            activity.fail("Voyager is quitting");
+        }
+        Self::activity_flow(&self.activity, &self.control, 0);
+        Ok(())
+    }
+
+    fn release(&mut self, reason: &str) -> Result<(), Error> {
+        let _ = self.link.set(reason.into());
         if self.child.try_wait()?.is_none() {
             self.child.kill()?;
         }

@@ -153,7 +153,7 @@ fn quit_fences_cloned_viewer_input_without_closing_output_or_control() {
     let activity = core.activity.clone();
     let paused_metadata = activity.lock().unwrap();
     let closing = thread::spawn(move || {
-        let result = core.quit();
+        let result = core.stop_session();
         (core, result)
     });
     let deadline = Instant::now() + Duration::from_secs(5);

@@ -795,6 +795,7 @@ test("Chat stays below the primary dock before Home and Voyages, using one retai
     sidebar: true,
     chat,
     target: (_id, _scope, child) => child,
+    contextMenu: (_id, trigger) => trigger,
   });
   const layout = { voyages: [], context: { kind: "workspace" } };
   const measured = view.sidebarRegion(layout);

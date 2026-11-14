@@ -18,6 +18,7 @@ const entries = [
   "desktop/mods/header/process-icons.ts",
   "desktop/mods/header/worktrees.ts",
   "desktop/mods/header/voyage-close.ts",
+  "desktop/mods/header/stop-session.ts",
   "desktop/mods/header/processes.ts",
   "desktop/mods/header/menu.ts",
   "desktop/mods/header/panels.ts",

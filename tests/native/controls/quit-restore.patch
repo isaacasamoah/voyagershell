@@ -1,13 +1,12 @@
-diff --git a/app/src/terminal_lifecycle.rs b/app/src/terminal_lifecycle.rs
-index bb48ee8..dbb8138 100644
---- a/app/src/terminal_lifecycle.rs
-+++ b/app/src/terminal_lifecycle.rs
-@@ -75,7 +75,7 @@ fn prepare_selected(
-             .iter()
-             .find(|terminal| terminal.address == backend.0);
-         if observed.is_some_and(|terminal| {
--            terminal.state != "finished" || terminal.reason.as_deref() == Some("spawn_pending")
-+            terminal.reason.as_deref() == Some("spawn_pending")
-         }) {
-             continue;
-         }
+diff --git a/desktop/src/quit.rs b/desktop/src/quit.rs
+--- a/desktop/src/quit.rs
++++ b/desktop/src/quit.rs
+@@ -35,7 +35,7 @@ pub fn register(
+         state: Rc::new(RefCell::new(State::Ready)),
+     };
+     let quit = ending.clone();
+-    cx.on_action(move |_: &Quit, cx| quit.run(Lifecycle::QuitAndKeep, cx));
++    cx.on_action(move |_: &Quit, cx| quit.run(Lifecycle::StopSession, cx));
+     cx.spawn(async move |cx: &mut AsyncApp| {
+         while stop_requests.recv().await.is_ok() {
+             cx.update(|cx| ending.run(Lifecycle::StopSession, cx));

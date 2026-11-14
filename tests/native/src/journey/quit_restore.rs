@@ -1,20 +1,25 @@
 use super::layout::{avatar_on_dock, without_runtime};
 use super::{Cases, Verdict, cases};
+use crate::inspection::Target;
 use crate::native::{Native, Seen, Terminal, voyages};
-use crate::system::Identity;
+use crate::system::{Identity, until};
 use anyhow::Result;
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::time::Instant;
 use voyager_contract::inspection::{Frame, Role};
 use voyager_contract::{Context, Layout, Vessel};
 
 cases! {
-    QuitKeepsPrograms => "quit-keeps-programs",
+    QuitAndKeep => "quit-and-keep",
     RelaunchReattaches => "relaunch-reattaches",
+    QuitBusy => "quit-busy-keeps-output",
+    CloseWindow => "close-window-keeps",
     ColdRestart => "cold-restart-restores",
+    StopSession => "stop-session",
 }
 
-pub const CONTROL: Case = Case::RelaunchReattaches;
+pub const CONTROL: Case = Case::QuitAndKeep;
 
 #[derive(Clone, PartialEq, Serialize)]
 struct Saved {
@@ -65,14 +70,16 @@ impl Drawn {
 
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let terminal = Terminal::first(native)?;
-    let before = cases.make(native, Case::QuitKeepsPrograms, |native| {
+    let before = cases.make(native, Case::QuitAndKeep, |native| {
         terminal.line(native, "echo QUIT-$((6*7))")?;
         terminal.shows(native, "QUIT-42")?;
         let saved = at_rest(native)?;
         let roster = native.live_terminals()?;
         let core = native.core()?.clone();
         let shell = terminal.program(native)?;
+        let pressed = Instant::now();
         native.close()?;
+        let quit_millis = pressed.elapsed().as_millis();
         let core_after = answering_core(native)?;
         let shell_after = terminal.program(native)?;
         let roster_after = native.live_terminals()?;
@@ -100,7 +107,8 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed(
                 "version",
                 json!({"before":saved.version,"after":saved_after.as_ref().map(|saved| saved.version)}),
-            )?;
+            )?
+            .observed("quitMillis", quit_millis)?;
         Ok((
             verdict,
             Some(Before {
@@ -155,6 +163,91 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("drawn", &picture)?
             .observed("shell", &shell)
     })?;
+    cases.check(native, Case::QuitBusy, |native| {
+        terminal.line(
+            native,
+            "for i in $(seq 1 60); do echo BUSY-$i; sleep 0.1; done; echo BUSY-$((6*7))",
+        )?;
+        terminal.shows(native, "BUSY-3")?;
+        let roster = native.live_terminals()?;
+        native.close()?;
+        let mid = terminal.program(native)?;
+        let unfinished = !terminal.printed(native, "BUSY-42")?;
+        native.launch()?;
+        let finished = terminal.printed(native, "BUSY-42")?;
+        let roster_after = native.live_terminals()?;
+        let shell = terminal.program(native)?;
+        Verdict::new()
+            .expect(
+                "the shell is the same live program while the app is closed mid-output",
+                mid.same && mid.state.as_deref() == Some("live"),
+            )
+            .expect(
+                "the output is still running when the app has closed",
+                unfinished,
+            )
+            .expect(
+                "the output finishes in the same shell after the relaunch",
+                finished && shell.same,
+            )
+            .expect(
+                "Core lists the same live terminals after the relaunch",
+                roster_after == roster,
+            )
+            .observed("roster", json!({"before":roster,"after":roster_after}))?
+            .observed("shell", json!({"closed":mid,"relaunched":shell}))
+    })?;
+    cases.check(native, Case::CloseWindow, |native| {
+        terminal.line(native, "echo CLOSE-$((6*7))")?;
+        terminal.shows(native, "CLOSE-42")?;
+        let saved = at_rest(native)?;
+        let roster = native.live_terminals()?;
+        let core = native.core()?.clone();
+        native.close_window()?;
+        let core_after = answering_core(native)?;
+        let closed = terminal.program(native)?;
+        let roster_closed = native.live_terminals()?;
+        native.launch()?;
+        let picture = native.settle(
+            "the same Voyage drawn with its terminals after the window was closed",
+            |seen| Some(drawn(seen)),
+            |picture| picture.whole() && picture.bound(),
+        )?;
+        let reopened = saved_now(native)?;
+        terminal.line(native, "echo REOPENED-$((6*7))")?;
+        let typed = terminal.printed(native, "REOPENED-42")?;
+        let shell = terminal.program(native)?;
+        Verdict::new()
+            .expect(
+                "Core is the same process after the window is closed",
+                core_after.as_ref() == Some(&core),
+            )
+            .expect(
+                "the shell is the same live program after the window is closed",
+                closed.same && closed.state.as_deref() == Some("live"),
+            )
+            .expect(
+                "Core lists the same live terminals after the window is closed",
+                roster_closed == roster,
+            )
+            .expect(
+                "the relaunch draws the same Voyage from the same document and version",
+                picture.whole()
+                    && reopened.as_ref().map(|saved| saved.version) == Some(saved.version)
+                    && reopened
+                        .as_ref()
+                        .map(|saved| &saved.document.selected_voyage)
+                        == Some(&saved.document.selected_voyage),
+            )
+            .expect(
+                "text typed after the relaunch reaches the same shell",
+                typed && shell.same,
+            )
+            .observed("core", json!({"before":core,"after":core_after}))?
+            .observed("roster", json!({"before":roster,"after":roster_closed}))?
+            .observed("drawn", &picture)?
+            .observed("shell", &shell)
+    })?;
     cases.check(native, Case::ColdRestart, |native| {
         let saved = at_rest(native)?;
         native.close()?;
@@ -204,6 +297,47 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("oldBackends", &old)?
             .observed("drawn", &picture)?
             .observed("shells", &shells)
+    })?;
+    cases.check(native, Case::StopSession, |native| {
+        at_rest(native)?;
+        let programs = native
+            .live_terminals()?
+            .iter()
+            .map(|address| {
+                let reported = native
+                    .system
+                    .rpc("terminal.get", json!({"terminal":address}))?;
+                Identity::read(crate::native::pid(&reported)?)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        native.context_click(&Target::HOME)?;
+        native.click(&Target::STOP_SESSION)?;
+        native.observe("the stop session dialog", |seen| {
+            seen.shows(&Target::STOP_SESSION_CONFIRM).then_some(())
+        })?;
+        let core = native.core()?.clone();
+        native.click(&Target::STOP_SESSION_CONFIRM)?;
+        let exited = native.await_exit().is_ok();
+        let ended = native.core_ended().ok();
+        let finished = until("the session's programs exit", || {
+            Ok(programs
+                .iter()
+                .all(|program| program.verify().is_err())
+                .then_some(()))
+        })
+        .is_ok();
+        Verdict::new()
+            .expect("the app exits cleanly after Stop session", exited)
+            .expect(
+                "the session's Core stops and its socket is removed",
+                ended.as_ref() == Some(&core),
+            )
+            .expect(
+                "every program Core started in the session has ended",
+                !programs.is_empty() && finished,
+            )
+            .observed("core", json!({"before":core,"ended":ended}))?
+            .observed("programs", &programs)
     })
 }
 

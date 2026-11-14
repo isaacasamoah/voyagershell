@@ -3,11 +3,11 @@
 Herdr Core owns the shell process and canonical terminal state. Voyager stores a
 Core terminal address on a content instance, separate from its placement. Its
 single framed Core connection carries RPC, viewer data, input, focus and credit.
-Closing a viewer sends CLOSE; it does not stop the terminal. Current application
-Quit closes viewers and private assistant resources while Core programs remain
-running. Confirmed Close Voyage is the separate operation that saves Notes and
-stops that Voyage's verified programs. Earlier shutdown checkpoints below do not
-override this owner decision.
+Closing a viewer sends CLOSE; it does not stop the terminal. Quitting closes
+viewers and private assistant resources while Core programs remain running.
+Only an explicit stop-session stops the Core session. Confirmed Close Voyage is
+the separate operation that saves Notes and stops that Voyage's verified
+programs. See [lifecycle](#lifecycle).
 
 ## Wheel input
 
@@ -64,18 +64,67 @@ resize path. The real-Core canary sets 123 by 37 and verifies reattachment
 preserves it. This does not by itself prove that every legitimate window resize
 produces a clean Bash prompt. Native comparison owns that remaining observation.
 
-## Explicit session Quit
+## Lifecycle
 
-Ctrl+Q closes the application viewers and waits for its private conversation and
-audio resources to finish. It leaves Core programs running. Reopening attaches
-the retained placements to those same live programs. After a computer restart,
-confirmed-ended retained terminal placements open ordinary shells without
-automatically resuming agents.
+The workspace owner in `app/src/client.rs` has two named lifecycle
+operations, `Lifecycle::QuitAndKeep` and `Lifecycle::StopSession`. Both arrive
+as one owner message and end the owner's session hold. Only stop-session calls
+Core's `server.stop`.
 
-Close Voyage is a different application operation. It presents the current work
-for confirmation, saves Notes, verifies the selected programs and stops only
-that Voyage's programs. Hiding or closing a Vessel or Portal view preserves its
-backend. See [confirmed Voyage shutdown](workspace.md#confirmed-voyage-shutdown).
+These definitions describe what each user action does.
+
+- **Closing the window.** The workspace window's close request runs the same
+  native `Quit` action as Ctrl+Q, so it is quit-and-keep. `desktop/src/lib.rs`
+  registers the window's single should-close handler, which dispatches `Quit`
+  and refuses the immediate close; `desktop/src/quit.rs` then exits the app.
+  This replaces the earlier warm close, where the close button minimised the
+  workspace and floated the avatar. Clicking the avatar and the platform's
+  minimise still float it.
+- **Closing a Vessel or Portal.** The panel's close button hides the placement
+  and keeps its backend program running in Core. It never stops a program.
+  This is unchanged.
+- **A Vessel's or Portal's program exiting.** When a terminal program that this
+  owner saw live finishes with reason `exited`, the owner removes its placement
+  (`terminal_lifecycle::close_exited`). A program that ended while the app was
+  closed, for example after a computer restart, keeps its placement, and the
+  next launch opens a plain shell there (`terminal_lifecycle::prepare_reopen`).
+  Agents are not resumed. This is unchanged.
+- **Quitting the app.** Ctrl+Q and closing the window are quit-and-keep. The
+  owner closes terminal input admission, marks reported activity unavailable,
+  releases its own Core connection (the `hc connect` child) and waits up to
+  five seconds for it to exit. It sends nothing to Core. The private
+  conversation shuts down at the same time. Core, its programs and the saved
+  layout stay as they were, and the next launch reattaches to the same
+  programs. The layout is saved after every applied action, so quitting adds
+  no save.
+- **Stopping the session.** Stop session… in the Home button's context menu
+  opens a confirmation dialog, and only its Stop session button sends
+  stop-session. It has no key chord, so a stray key press cannot end
+  programs. The owner fences input as for quit, reads `server.status` and
+  compares Core's permanent identity, then sends `server.stop` once. Core ends
+  the programs it started in the session. A program that detached from its
+  terminal, for example with `setsid`, may survive, because Core cannot see it;
+  stop-session does not claim otherwise. The app then exits.
+
+The owner keeps the first operation's result. The same operation again returns
+that result without another effect. Quit-and-keep after a failed stop-session
+runs and releases the connection without stopping. Quit-and-keep after a
+completed stop-session returns success. Stop-session after quit-and-keep is
+refused with kind `quitting`, because the connection is already released. After
+either operation the owner refuses new workspace, process, content-update and
+terminal-open effects, and cached Inspect remains available.
+
+The Stop session entry and its dialog are a proposal for Isaac's review. The
+entry sits in the Home button's context menu because Home stands for the whole
+session and the header's commands already live in context menus. The dialog
+costs one extra click. It earns that click because a stop cannot be undone. It
+ends every program Core started in the session, and the dialog says that
+Ctrl+Q keeps them instead.
+
+The entry and dialog are in the header package, which seeds into a profile
+once. A profile seeded before this change keeps its old header and has no Stop
+session entry until the header package is updated by fingerprint, the
+compatibility step planned after this one.
 
 ## Program-reported activity
 
@@ -119,15 +168,14 @@ an event without that time clears it, even when its word is unchanged. Local
 observed-at time is not substituted for Core's source timestamp. See the pinned protocol in
 [Core's event documentation](https://github.com/herdrdev/herdr-core/blob/e07c2a1bedd62cf4787ee026ee23ee79c7d95491/schema/README.md#events).
 
-## Earlier session-Quit checkpoint
+## Stop-session transaction
 
-The source candidate routes Ctrl+Q through the existing application owners before
-calling GPUI quit. One request remains pending, and its final result is retained.
-Repeated Quit does not issue another stop. Errors remain visible in the native
-Header. This is source behavior awaiting the actual integrated native journey.
+`desktop/src/quit.rs` runs both lifecycle operations. One request remains
+pending, and its final result is retained. Repeating the same operation does
+not issue another stop. Errors remain visible in the native Header.
 
 The workspace queue stops accepting new workspace, process, content-update and
-terminal-open effects after its Quit message. Existing receipts retain their
+terminal-open effects after either lifecycle operation. Existing receipts retain their
 outcomes. Cached Inspect remains available. Other reads retain their existing
 identity/version checks and may refuse when Core or freshness is unavailable. Quit never
 connects to or starts another Core to diagnose or stop a failed initial startup.
@@ -161,8 +209,7 @@ so it does not perform this transaction. The existing native Quit action waits
 for both owners first. Forced process termination, platform logout and other
 OS-initiated termination paths are not accepted as equivalent verified Quit.
 
-Viewer close/minimize and floating-avatar restoration remain the unchanged
-controller behavior. They do not run this stop transaction. A later cold start
+Viewer close and minimise do not run this stop transaction. A later cold start
 loads the same saved spaces/content/backend bindings. It does not regain the
 in-memory permission for a saved agent launch or start a replacement. Ended
 programs remain ended. This adds no implicit draft save or agent-session restore.

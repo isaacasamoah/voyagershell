@@ -724,65 +724,6 @@ class Routes(unittest.TestCase):
                         "GATE TIMED OUT; DO NOT CONFIGURE OR UPDATE", result.stderr
                     )
 
-    def test_warm_restore_clicks_only_the_owned_floating_window(self):
-        proof = importlib.import_module("proof_avatar_window")
-        original = {"pid": 7, "window": "main"}
-        for pointer, remaining in (("floating", []), ("other", []), ("floating", ["floating"])):
-            native_calls = []
-            states = iter(("Iconic", "Normal"))
-
-            def execute(arguments, **_options):
-                if arguments[0] == "xprop":
-                    return next(states)
-                if arguments[1] == "getmouselocation":
-                    return "WINDOW=" + pointer
-                self.assertEqual(arguments, ("xdotool", "windowquit", "main"))
-                return ""
-
-            def wait_once(get, predicate, _label):
-                value = get()
-                self.assertTrue(predicate(value))
-                return value
-
-            with (
-                patch.object(proof, "floating_windows", side_effect=[["floating"], remaining]),
-                patch.object(proof.subprocess, "check_output", side_effect=execute),
-            ):
-                options = dict(
-                    original=original,
-                    native=lambda *args: native_calls.append(args),
-                    capture=lambda *_args: None,
-                    geometry=lambda *_args: {
-                        "X": "10",
-                        "Y": "20",
-                        "WIDTH": "240",
-                        "HEIGHT": "240",
-                    },
-                    env={},
-                    wait=wait_once,
-                    name="test",
-                )
-                if pointer == "other":
-                    with self.assertRaises(AssertionError):
-                        proof.warm_restore(**options)
-                    self.assertEqual(native_calls, [("move", 130, 140, 2)])
-                elif remaining:
-                    with self.assertRaises(AssertionError):
-                        proof.warm_restore(**options)
-                else:
-                    receipt = proof.warm_restore(**options)
-                    self.assertEqual(receipt["floatingAfterRestore"], [])
-                    self.assertEqual(receipt["boundsBefore"], receipt["boundsAfter"])
-                    self.assertEqual(receipt["restorePointer"]["WINDOW"], "floating")
-                    self.assertEqual(
-                        native_calls,
-                        [
-                            ("move", 130, 140, 2),
-                            ("button", True),
-                            ("button", False),
-                        ],
-                    )
-
     def test_notes_sibling_region_covers_both_editors_and_status(self):
         from PIL import Image
 
