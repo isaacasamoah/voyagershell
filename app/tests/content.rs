@@ -154,12 +154,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
     }
     let session = format!("voyager-config-{}", std::process::id());
     let socket = runtime.join("herdr-core").join(format!("{session}.sock"));
-    assert!(
-        !runtime
-            .join("herdr-core")
-            .join(format!("{session}.sock"))
-            .exists()
-    );
+    assert!(!socket.exists());
     let profile = runtime.join(format!("configuration-{}", std::process::id()));
     for (name, source) in [
         ("notes", include_str!("../../content/notes/mod.json")),
@@ -181,6 +176,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         profile.to_string_lossy().into_owned(),
         Owner::open(&profile).unwrap(),
     );
+    let mut quit = false;
     let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let call = |action, expected_version| {
             client
@@ -558,6 +554,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             .unwrap();
         assert!(matches!(&*opened, Response::NoteOpened { .. }));
         wait(client.quit()).unwrap();
+        quit = true;
         let mut after_quit = request;
         if let Request::Configure {
             request_id,
@@ -574,7 +571,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
         ));
         external.close().unwrap();
     }));
-    if socket.exists() {
+    if !quit {
         cleanup.server_stop().unwrap();
     }
     cleanup.close().unwrap();
