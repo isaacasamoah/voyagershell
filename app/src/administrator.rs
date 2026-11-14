@@ -698,7 +698,7 @@ fn process_text(status: &Status, output: Option<&ProcessOutput>, message: Option
         Some(ProcessOutput::Interrupt { outcome, .. }) => {
             format!("Interrupt submitted; Core reports {outcome}")
         }
-        Some(ProcessOutput::Stop { observed, .. }) => if observed.state == "finished" {
+        Some(ProcessOutput::Stop { observed, .. }) => if crate::process::ended(&observed.state) {
             "Program ended"
         } else {
             "Stop requested; Core still reports running"
@@ -846,7 +846,7 @@ mod tests {
             let created = call(
                 Action::CreateContent {
                     launch: None,
-                    type_id: "notes".into(),
+                    type_id: crate::content_type::NOTES_TYPE.into(),
                     destination: voyager_contract::ContentDestination::Panel {
                         owner: voyager_contract::PanelOwner::Fleet { id: fleet },
                         insertion: voyager_contract::PanelInsertion::Beside {
@@ -868,7 +868,7 @@ mod tests {
             let created = call(
                 Action::CreateContent {
                     launch: None,
-                    type_id: "notes".into(),
+                    type_id: crate::content_type::NOTES_TYPE.into(),
                     destination: voyager_contract::ContentDestination::Panel {
                         owner: voyager_contract::PanelOwner::Portals { voyage },
                         insertion: voyager_contract::PanelInsertion::Empty,

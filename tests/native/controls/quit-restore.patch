@@ -1,13 +1,13 @@
 diff --git a/app/src/terminal_lifecycle.rs b/app/src/terminal_lifecycle.rs
-index bb48ee8..dbb8138 100644
+index 1f35581..6fb09b4 100644
 --- a/app/src/terminal_lifecycle.rs
 +++ b/app/src/terminal_lifecycle.rs
-@@ -75,7 +75,7 @@ fn prepare_selected(
+@@ -74,7 +74,7 @@ fn prepare_selected(
+         let observed = terminals
              .iter()
              .find(|terminal| terminal.address == backend.0);
-         if observed.is_some_and(|terminal| {
--            terminal.state != "finished" || terminal.reason.as_deref() == Some("spawn_pending")
-+            terminal.reason.as_deref() == Some("spawn_pending")
-         }) {
+-        if observed.is_some_and(|terminal| !terminal.has_ended()) {
++        if observed.is_some_and(|terminal| terminal.start_unconfirmed()) {
              continue;
          }
+         content.backend = None;

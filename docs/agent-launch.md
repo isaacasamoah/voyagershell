@@ -95,6 +95,10 @@ cleanup, remaining status requirements and complete proof accounting are still
 required before acceptance. Linux source checks establish no other platform.
 
 
+## Agent program table
+
+`AGENT_PROGRAMS` in `app/src/launch.rs` is the one list of recognized agent programs. The launch wrapper below and `observation::conversation_name` both read it, and each keeps its own name normalisation. The Agents view's `AGENT_NAMES` in `desktop/mods/header/agents.ts` must list the same programs, and a unit test compares the two. A seeded profile keeps its own copy of `agents.js`, so a new program reaches an existing profile only through an update policy, which is not yet selected. A program named `cursor` now starts inside interactive Bash and returns to a Bash prompt when it exits.
+
 ## Returning from an agent
 
 The feedback candidate launches recognized agents inside an ordinary interactive Bash session. Recognition uses the selected command name before resolving installed symlinks, so a Claude launcher that points to `claude.exe` or another entry script still returns to Bash after exit. Resolved executable and model/effort/permission arguments are passed literally as separate positional arguments. Generic non-agent programs retain their direct launch path. This does not resume any previous agent conversation.

@@ -101,6 +101,24 @@ pub(crate) fn terminal_command(launch: &Launch, cwd: &str) -> Result<Vec<String>
     shell_command(launch, command(launch, cwd)?)
 }
 
+pub(crate) const AGENT_PROGRAMS: [&str; 11] = [
+    "codex",
+    "claude",
+    "claude-code",
+    "pi",
+    "opencode",
+    "cursor",
+    "cursor-agent",
+    "copilot",
+    "amp",
+    "gemini",
+    "grok",
+];
+
+pub(crate) fn is_agent_program(name: &str) -> bool {
+    AGENT_PROGRAMS.contains(&name)
+}
+
 fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, String> {
     let agent = match launch {
         Launch::Codex { .. } => true,
@@ -109,19 +127,7 @@ fn shell_command(launch: &Launch, args: Vec<String>) -> Result<Vec<String>, Stri
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or("");
-            matches!(
-                name.trim_end_matches(".exe"),
-                "codex"
-                    | "claude"
-                    | "claude-code"
-                    | "pi"
-                    | "opencode"
-                    | "cursor-agent"
-                    | "copilot"
-                    | "amp"
-                    | "gemini"
-                    | "grok"
-            )
+            is_agent_program(name.trim_end_matches(".exe"))
         }),
         Launch::Terminal => false,
     };
@@ -183,5 +189,54 @@ mod tests {
             ["-i", "-c", "\"$@\"; exec \"$BASH\" -i", "voyager-agent"]
         );
         assert_eq!(&args[5..], ["/vendor/cli.js", "literal; $(never-run)"]);
+    }
+
+    fn agents_view_programs() -> Vec<String> {
+        let source = include_str!("../../desktop/mods/header/agents.ts");
+        let block = source
+            .split("const AGENT_NAMES")
+            .nth(1)
+            .and_then(|rest| rest.split("};").next())
+            .expect("agents view declares AGENT_NAMES");
+        block
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .map(|(key, _)| key.trim().trim_matches('"').to_owned())
+            .filter(|key| !key.is_empty() && !key.contains(' ') && !key.contains('='))
+            .collect()
+    }
+
+    #[test]
+    fn every_agent_program_is_in_the_launch_list_and_the_agents_list() {
+        for program in AGENT_PROGRAMS {
+            let wrapped = shell_command(
+                &Launch::Program {
+                    argv: vec![program.into()],
+                },
+                vec![program.into()],
+            )
+            .unwrap();
+            assert_ne!(wrapped, [program], "{program} is launched through Bash");
+            let terminal: crate::core_shapes::Terminal =
+                serde_json::from_value(serde_json::json!({
+                    "address":"t1", "labels":{}, "argv":[program], "cwd":"/tmp",
+                    "state":"live", "created_ms":0, "screen":"exact", "cols":80, "rows":24,
+                    "title":"Review the canvas",
+                    "foreground":{"name":program, "cwd":"/tmp", "pid":17, "argv":[program]}
+                }))
+                .unwrap();
+            assert!(
+                crate::observation::conversation_name(&terminal).is_some(),
+                "{program} names its conversation"
+            );
+        }
+        let mut shown = agents_view_programs();
+        let mut table: Vec<String> = AGENT_PROGRAMS
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect();
+        shown.sort();
+        table.sort();
+        assert_eq!(shown, table, "the Agents view lists the same programs");
     }
 }

@@ -74,9 +74,7 @@ fn prepare_selected(
         let observed = terminals
             .iter()
             .find(|terminal| terminal.address == backend.0);
-        if observed.is_some_and(|terminal| {
-            terminal.state != "finished" || terminal.reason.as_deref() == Some("spawn_pending")
-        }) {
+        if observed.is_some_and(|terminal| !terminal.has_ended()) {
             continue;
         }
         content.backend = None;
@@ -102,11 +100,9 @@ pub(crate) fn close_exited(
                 .and_then(|content| content.backend.as_ref())
                 .filter(|backend| live.contains(backend))
                 .is_some_and(|backend| {
-                    terminals.iter().any(|terminal| {
-                        terminal.address == backend.0
-                            && terminal.state == "finished"
-                            && terminal.reason.as_deref() == Some("exited")
-                    })
+                    terminals
+                        .iter()
+                        .any(|terminal| terminal.address == backend.0 && terminal.has_exited())
                 })
         })
         .map(|(id, _)| id)
