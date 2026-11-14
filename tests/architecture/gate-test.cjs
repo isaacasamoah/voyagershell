@@ -1,9 +1,10 @@
 const assert = require("node:assert");
 const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
-const { test, after } = require("node:test");
+const { test, before, after, afterEach } = require("node:test");
 
 const ROOT = path.resolve(__dirname, "../..");
 const GATE = path.join(__dirname, "gate.cjs");
@@ -12,14 +13,61 @@ const ENV = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith("HC_")),
 );
 
-const temporary = [];
+const RUNS = "architecture-gate-test-";
+const ALIVE = "alive.sock";
+
+function abandoned(directory) {
+  return new Promise((resolve) => {
+    const probe = net.connect(path.join(directory, ALIVE));
+    probe.once("connect", () => {
+      probe.destroy();
+      resolve(false);
+    });
+    probe.once("error", (error) => resolve(error.code === "ECONNREFUSED"));
+  });
+}
+
+const RUN = fs.mkdtempSync(path.join(os.tmpdir(), RUNS));
+ENV.TMPDIR = RUN;
+const alive = net.createServer().listen(path.join(RUN, ALIVE));
+alive.unref();
 after(() => {
-  for (const directory of temporary)
+  alive.close();
+  fs.rmSync(RUN, { recursive: true, force: true });
+});
+
+before(async () => {
+  for (const entry of fs.readdirSync(os.tmpdir(), { withFileTypes: true })) {
+    const directory = path.join(os.tmpdir(), entry.name);
+    if (
+      !entry.name.startsWith(RUNS) ||
+      !entry.isDirectory() ||
+      directory === RUN ||
+      !(await abandoned(directory))
+    )
+      continue;
+    try {
+      for (const name of fs.readdirSync(directory))
+        if (name !== ALIVE)
+          fs.rmSync(path.join(directory, name), {
+            recursive: true,
+            force: true,
+          });
+      fs.rmSync(directory, { recursive: true, force: true });
+    } catch (error) {
+      console.error(`Skipped stale ${directory}: ${error.message}`);
+    }
+  }
+});
+
+const temporary = [];
+afterEach(() => {
+  for (const directory of temporary.splice(0))
     fs.rmSync(directory, { recursive: true, force: true });
 });
 
 function folder(prefix) {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const directory = fs.mkdtempSync(path.join(RUN, prefix));
   temporary.push(directory);
   return directory;
 }
