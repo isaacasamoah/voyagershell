@@ -21,11 +21,9 @@
   "files": [
     "mods/header/main.ts",
     "mods/header/canvas.ts",
-    "mods/header/layout-panel.ts",
     "mods/header/creation.ts",
     "../contract/generated/workspace.ts",
     "../contract/generated/conversation.ts",
-    "mods/header/home.ts",
     "mods/header/chat.ts",
     "../target/script-types/gpui-kit.d.ts"
   ]

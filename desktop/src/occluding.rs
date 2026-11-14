@@ -41,14 +41,6 @@ mod tests {
         let runtime =
             ShellRuntime::new_isolated_with_components(registry.freeze().unwrap()).unwrap();
         runtime.set_editor_files(false);
-        let editor = include_str!("../mods/header/layout-panel.js")
-            .split_once("return Occluding.new()")
-            .unwrap()
-            .1
-            .split_once(".child(")
-            .unwrap()
-            .0;
-        let editor = format!("Occluding.new(){editor}.child(div().child('Workspace layout'));");
         let mut importing = false;
         let creation = include_str!("../mods/header/creation.js")
             .lines()
@@ -81,11 +73,6 @@ const destination = {kind:'panel', owner:{kind:'fleet', id:'fleet'}, insertion:{
 picker.current = {id:'pane', version:'7', destination};
 picker.catalog = {settings:{default:'codex', entries:[{id:'codex', name:'Codex', launch:{kind:'codex', model:'gpt-6.1-sol', effort:'high', permissions:'yolo'}}]}, available:['codex'], errors:[], path:null};
 picker.render('pane', destination, '7', () => {}, div());"#,
-                true,
-            ),
-            (
-                "editor",
-                editor.as_str(),
                 true,
             ),
             (

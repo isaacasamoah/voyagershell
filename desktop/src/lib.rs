@@ -68,10 +68,6 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
         include_str!("../mods/header/canvas.js"),
     )?;
     seed(
-        &package.join("layout-panel.js"),
-        include_str!("../mods/header/layout-panel.js"),
-    )?;
-    seed(
         &package.join("creation.js"),
         include_str!("../mods/header/creation.js"),
     )?;
@@ -114,10 +110,6 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
     seed(
         &package.join("worktrees.js"),
         include_str!("../mods/header/worktrees.js"),
-    )?;
-    seed(
-        &package.join("home.js"),
-        include_str!("../mods/header/home.js"),
     )?;
     seed(
         &package.join("AGENTS.md"),
