@@ -3,8 +3,26 @@ import time
 from secrets import token_hex
 
 from proof_process import process_identity
-from proof_session_quit import pane_candidates
 from proof_workspace import chord
+
+
+def pane_candidates(items, bounds, excluded=None):
+    def contains(region, item):
+        x = item["x"] + item["width"] / 2
+        y = item["y"] + item["height"] / 2
+        return (
+            region["x"] <= x < region["x"] + region["width"]
+            and region["y"] <= y < region["y"] + region["height"]
+        )
+
+    return [
+        item
+        for item in items
+        if item["width"] > 0
+        and item["height"] > 0
+        and contains(bounds, item)
+        and (excluded is None or not contains(excluded, item))
+    ]
 
 
 def pane_extent(panes):

@@ -627,15 +627,6 @@ session, evidence and desktop environment to leave a review app open. This mode
 captures the window and closes its input helper. It retains the app and its
 processes, records no passed journey, and marks `reviewOnly` in its receipt.
 
-`--foundation --journey session-quit` uses a fresh dedicated session and profile.
-It checks warm close/restore, normal Ctrl+Q detach, and deliberate reopening of
-that same profile and Core session. The journey verifies the original Core and
-shell PID/start identities, retained layout and fresh terminal output after
-reopening. On the successful path it explicitly exits its fixture shell, verifies
-no live fixture terminals remain, and stops only the dedicated Core. A failed or
-uncertain journey records its last observations without replaying an effect.
-It does not exercise private-provider conversation or voice.
-
 The `notes-configuration` native journey still checks the former heading and
 cold-Quit behavior. Its runtime acceptance is pending an update for the current
 Notes and detach requirements. Passing route checks only confirms routing and

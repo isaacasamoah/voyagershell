@@ -193,8 +193,8 @@ behind `--legacy-reproduction`.
   to `+` and expects its identity and its context to survive a new Fleet.
 - Close, quit and restore. `placement` reopens the saved workspace and
   expects the same document. The native `quit-restore` journey covers Quit,
-  a warm relaunch and a cold restart. Closing a Voyage and warm window close
-  stay with the Python `voyage-close` and `session-quit` journeys.
+  a warm relaunch and a cold restart. Closing a Voyage stays with the Python
+  `voyage-close` journey.
 
 These deleted checks are out of date.
 
