@@ -148,7 +148,10 @@ name is the typed text`, and the observed name is `NATIVE FLEET`. The
 `quit-restore` patch makes a relaunch clear the backend of a terminal that is
 still live, so the app starts a second shell while the first keeps running.
 `relaunch-reattaches` then fails on the expectation `Core lists the same live
-terminals after the relaunch`, with two live addresses observed.
+terminals after the relaunch`, with two live addresses observed. The
+`portals` patch hides the Portal column whenever a Fleet is selected.
+`portal-across-fleets` then fails on the expectation `the Portal column stays
+shown on every Fleet`.
 
 `--fault kill:SECONDS` and `--fault stop:SECONDS` remain the controls for a
 candidate that crashes or hangs. They work with every journey, before and
@@ -271,7 +274,10 @@ its bounds to device pixels with `window.scale` and the window's origin on the
 screen. The driver aims at the centre of the element. If the avatar's reported
 bounds cover that centre, the driver aims at the centre of the largest part of
 the element that the avatar leaves clear, because a click on the avatar
-activates the avatar and never reaches the control. After the pointer moves,
+activates the avatar and never reaches the control. A Portal column drawn over
+a control (`portal-area`) is an obstacle in the same way, unless the control
+lies inside that column. The driver first takes the part of the element that
+each column leaves clear, then the part that the avatar leaves clear. After the pointer moves,
 the driver reads the frame again and aims again if the element no longer
 contains the pointer. It records each miss in `actions.jsonl` as a `re-aim`
 event with both aims, and it waits 80 ms before the next attempt. A frame that
@@ -346,7 +352,7 @@ where the button is released (`moving` and `released` in
 `desktop/src/avatar.rs`). The button is released even when the move fails.
 
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
-`Chord` adds a modifier to a key. `Terminal` in `src/native/terminal.rs` binds
+`Chord` adds Ctrl, Shift or Alt to a key. `Terminal` in `src/native/terminal.rs` binds
 one terminal Vessel by its placement. It owns the terminal's Core address and
 shell identity, its captures and its wheel input, so a journey without a
 terminal does not wait for one. `Terminal::first` reads the layout document

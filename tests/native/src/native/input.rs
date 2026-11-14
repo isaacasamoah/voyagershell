@@ -1,11 +1,11 @@
 use super::{Defect, GLANCE, Native};
-use crate::inspection::{Target, Unseen, clear_of, contains, region};
+use crate::inspection::{Target, Unseen, clear_of, contains, inside, region};
 use crate::system::{PATIENCE, poll};
 use crate::x11::{Chord, Geometry};
 use anyhow::{Result, ensure};
 use serde::Serialize;
 use serde_json::json;
-use voyager_contract::inspection::Frame;
+use voyager_contract::inspection::{Frame, Role};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -109,7 +109,14 @@ impl Native {
                 .then(|| Target::AVATAR.find(frame))
                 .flatten()
                 .map(|avatar| region(frame, &avatar.bounds));
-            let at = clear_of(found, avatar);
+            let columns = frame
+                .elements
+                .iter()
+                .filter(|element| element.role == Role::PortalArea)
+                .map(|element| region(frame, &element.bounds))
+                .filter(|area| !inside(found, *area));
+            let obstacles: Vec<Geometry> = columns.chain(avatar).collect();
+            let at = clear_of(found, &obstacles);
             covered = at.is_none();
             Some(Ok(Aim {
                 region: found,

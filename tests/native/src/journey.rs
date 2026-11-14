@@ -1,4 +1,5 @@
 mod layout;
+mod portals;
 mod quit_restore;
 mod scrolling;
 mod workspace;
@@ -95,6 +96,7 @@ journeys! {
     TerminalScrolling => "terminal-scrolling" in scrolling, sidebar: None, window: None;
     Workspace => "workspace" in workspace, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     QuitRestore => "quit-restore" in quit_restore, sidebar: None, window: None;
+    Portals => "portals" in portals, sidebar: Some(Sidebar::Open), window: Some((1800, 1000));
 }
 
 impl Journey {

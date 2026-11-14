@@ -41,6 +41,25 @@ impl Target {
         Self::keyed(Role::SplitRight, &placement.0)
     }
 
+    pub const GO_THERE: Self = Self::single(Role::GoThere);
+    pub const HIDDEN_PANELS: Self = Self::single(Role::HiddenPanels);
+
+    pub fn toggle_portals(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::TogglePortals, &voyage.0)
+    }
+
+    pub fn portal_area(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::PortalArea, &voyage.0)
+    }
+
+    pub fn close_panel(placement: &PlacementId) -> Self {
+        Self::keyed(Role::ClosePanel, &placement.0)
+    }
+
+    pub fn reopen_panel(placement: &PlacementId) -> Self {
+        Self::keyed(Role::ReopenPanel, &placement.0)
+    }
+
     pub fn create_fleet(voyage: &VoyageId) -> Self {
         Self::keyed(Role::CreateFleet, &voyage.0)
     }
@@ -147,10 +166,26 @@ pub fn contains(region: Geometry, point: (i16, i16)) -> bool {
     inside(point.0, region.x, region.width) && inside(point.1, region.y, region.height)
 }
 
-pub fn clear_of(target: Geometry, obstacle: Option<Geometry>) -> Option<(i16, i16)> {
-    let Some(obstacle) = obstacle.filter(|obstacle| contains(*obstacle, centre(target))) else {
-        return Some(centre(target));
-    };
+pub fn inside(inner: Geometry, outer: Geometry) -> bool {
+    i32::from(inner.x) >= i32::from(outer.x)
+        && i32::from(inner.y) >= i32::from(outer.y)
+        && i32::from(inner.x) + i32::from(inner.width)
+            <= i32::from(outer.x) + i32::from(outer.width)
+        && i32::from(inner.y) + i32::from(inner.height)
+            <= i32::from(outer.y) + i32::from(outer.height)
+}
+
+pub fn clear_of(target: Geometry, obstacles: &[Geometry]) -> Option<(i16, i16)> {
+    obstacles
+        .iter()
+        .try_fold(target, |clear, obstacle| uncovered(clear, *obstacle))
+        .map(centre)
+}
+
+fn uncovered(target: Geometry, obstacle: Geometry) -> Option<Geometry> {
+    if !contains(obstacle, centre(target)) {
+        return Some(target);
+    }
     let edges = |region: Geometry| {
         let (left, top) = (i32::from(region.x), i32::from(region.y));
         (
@@ -179,7 +214,6 @@ pub fn clear_of(target: Geometry, obstacle: Option<Geometry>) -> Option<(i16, i1
     .into_iter()
     .flatten()
     .max_by_key(|side| u32::from(side.width) * u32::from(side.height))
-    .map(centre)
 }
 
 #[cfg(test)]
@@ -275,17 +309,30 @@ mod tests {
     #[test]
     fn the_aim_point_is_the_centre_unless_the_avatar_covers_it() {
         let vessel = area(100, 100, 400, 300);
-        assert_eq!(clear_of(vessel, None), Some((300, 250)));
+        assert_eq!(clear_of(vessel, &[]), Some((300, 250)));
         assert_eq!(
-            clear_of(vessel, Some(area(110, 110, 94, 94))),
+            clear_of(vessel, &[area(110, 110, 94, 94)]),
             Some((300, 250))
         );
         let docked = area(280, 203, 94, 94);
-        let aim = clear_of(vessel, Some(docked)).expect("a clear side");
+        let aim = clear_of(vessel, &[docked]).expect("a clear side");
         assert_eq!(aim, (190, 250));
         assert!(contains(vessel, aim) && !contains(docked, aim));
-        assert_eq!(clear_of(area(300, 220, 24, 24), Some(docked)), None);
+        assert_eq!(clear_of(area(300, 220, 24, 24), &[docked]), None);
         assert!(!contains(vessel, (500, 250)) && contains(vessel, (499, 399)));
+    }
+
+    #[test]
+    fn an_aim_dodges_a_portal_column_and_then_the_avatar() {
+        let vessel = area(100, 100, 400, 300);
+        let column = area(250, 100, 250, 300);
+        let avatar = area(150, 220, 60, 60);
+        let aim = clear_of(vessel, &[column, avatar]).expect("a clear part");
+        assert!(contains(vessel, aim));
+        assert!(!contains(column, aim) && !contains(avatar, aim), "{aim:?}");
+        assert_eq!(clear_of(vessel, &[area(100, 100, 400, 300)]), None);
+        assert!(inside(area(300, 150, 50, 50), column));
+        assert!(!inside(vessel, column));
     }
 
     #[test]
