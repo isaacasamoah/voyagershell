@@ -258,8 +258,10 @@ same machine load within minutes of each other. Every run is an ordinary `run`
 in its own folder under `runs/`. A run that does not pass is run once more. A
 journey that fails and then passes is a flake. One that fails twice is red.
 
-The blame is the one the run wrote. A red journey with product blame is red.
-A red journey with fixture or unknown blame, or a run that wrote no
+The blame is the one the run wrote. When a journey is red in more than one
+round, its blame is chosen across all red rounds in a fixed order, product, then
+fixture, then unknown, so the order of the rounds never changes it. A red
+journey with product blame is red. A red journey with fixture or unknown blame, or a run that wrote no
 `checks.json`, makes the battery `inconclusive`. The per-case status is the
 worst status seen in the final attempts.
 
@@ -269,7 +271,15 @@ more than the threshold above the base is a `regression`. With `--history`, the
 head's median is also compared with the median of the last ten head medians in
 that file, and the battery appends this head's medians to it when the result is
 `green` or `flaky`. A journey needs at least two timed runs on each side to be
-judged. Otherwise its timing is `unmeasured`.
+judged. Otherwise its timing is `unmeasured`. When timing was not compared, for example because the base was red
+or the head was, the journey's `timing_note` says why, the summary lists it in
+`unmeasured`, and `battery.md` repeats it. A green verdict then means only that
+the head passed.
+
+A journey flagged as a regression is rerun on both sides for 5 more interleaved
+rounds, and the verdict uses all of its rounds. `rerun` in `battery.json` names
+these journeys. The default stays at 3 rounds, so only a flagged journey pays
+for the extra rounds.
 
 `battery.json` is the summary a watcher reads. Its `result` is `green`, `flaky`,
 `red` or `inconclusive`. `flakes`, `regressions`, `red` and `inconclusive` name
@@ -282,7 +292,7 @@ Limits.
 
 - Wall time includes the sandbox and display start, which every run pays equally. That fixed cost dilutes a slowdown.
 - The comparison against history spans time, so machine load at different hours is a confounder. Only the comparison against the base shares load.
-- Three rounds make a median of three. One slow run cannot move it, and two can.
+- Three rounds make a median of three. One slow run cannot move it, and two can. The rerun of a flagged journey is what protects against this.
 - Observed on this machine, equal builds differed by at most 5 percent in every journey over three rounds, and a 400 ms sleep in the scroll path made terminal-scrolling 39 percent slower. A planted 60 ms sleep made it 5 percent slower and was not flagged. In one battery, two slow runs in three moved a journey's head median 12 percent with no code change.
 - A deterministic failure costs a second run before it is called red.
 - Linux X11 only.

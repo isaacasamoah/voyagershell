@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 const HISTORY_HEADS: usize = 10;
 const MINIMUM_TIMED_RUNS: usize = 2;
+const RERUN_ROUNDS: usize = 5;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -38,6 +39,14 @@ pub enum Blame {
 }
 
 impl Blame {
+    fn precedence(attempt: &Attempt) -> u8 {
+        match attempt.blame {
+            Some(Self::Product) => 0,
+            Some(Self::Fixture) => 1,
+            _ => 2,
+        }
+    }
+
     fn parse(text: Option<&str>) -> Self {
         match text {
             Some("product") => Self::Product,
@@ -162,6 +171,7 @@ struct JourneyReport {
     base: SideReport,
     head: SideReport,
     against_base: Timing,
+    timing_note: Option<String>,
     base_change: Option<f64>,
     history_reference_seconds: Option<f64>,
     against_history: Timing,
@@ -182,6 +192,8 @@ struct Summary {
     regressions: Vec<String>,
     red: Vec<String>,
     inconclusive: Vec<String>,
+    unmeasured: Vec<String>,
+    rerun: Vec<String>,
     wall_seconds: f64,
     limits: Vec<&'static str>,
 }
@@ -220,7 +232,7 @@ fn side_report(all: &[Attempt], journey: Journey, side: Side) -> Option<SideRepo
     let mut slots = Vec::new();
     let mut finals: Vec<&Attempt> = Vec::new();
     let mut seconds = Vec::new();
-    let mut worst: Option<&Attempt> = None;
+    let mut reds: Vec<&Attempt> = Vec::new();
     for round in rounds {
         let attempts: Vec<&Attempt> = mine
             .iter()
@@ -235,7 +247,7 @@ fn side_report(all: &[Attempt], journey: Journey, side: Side) -> Option<SideRepo
         } else if slot == Slot::Flake {
             seconds.push(last.seconds);
         } else {
-            worst = Some(last);
+            reds.push(last);
         }
         slots.push(slot);
     }
@@ -246,11 +258,15 @@ fn side_report(all: &[Attempt], journey: Journey, side: Side) -> Option<SideRepo
     } else {
         Slot::Green
     };
-    let failing = worst.or_else(|| {
-        mine.iter()
-            .copied()
-            .find(|attempt| attempt.ended != Ended::Passed)
-    });
+    let failing = reds
+        .iter()
+        .copied()
+        .min_by_key(|a| Blame::precedence(a))
+        .or_else(|| {
+            mine.iter()
+                .copied()
+                .find(|attempt| attempt.ended != Ended::Passed)
+        });
     let median_seconds = median(&seconds);
     let spread = median_seconds.filter(|m| *m > 0.0).and_then(|m| {
         let low = seconds.iter().copied().fold(f64::INFINITY, f64::min);
@@ -268,6 +284,31 @@ fn side_report(all: &[Attempt], journey: Journey, side: Side) -> Option<SideRepo
         median_seconds,
         spread,
     })
+}
+
+fn timing_gap(base: &SideReport, head: &SideReport) -> String {
+    let red = |side: &SideReport| side.slots.iter().filter(|slot| **slot == Slot::Red).count();
+    if head.result == Slot::Red {
+        format!(
+            "Head failed in {} of {} rounds, so its timing was not compared with base.",
+            red(head),
+            head.slots.len()
+        )
+    } else if base.result == Slot::Red {
+        format!(
+            "The timing comparison with base did not run. Base failed in {} of {} rounds ({:?} blame, check {}), so it has too few timed runs.",
+            red(base),
+            base.slots.len(),
+            base.blame.unwrap_or(Blame::Unknown),
+            base.check.as_deref().unwrap_or("unknown")
+        )
+    } else {
+        format!(
+            "The timing comparison with base did not run. It needs {MINIMUM_TIMED_RUNS} timed runs on each side and has {} on base and {} on head.",
+            base.seconds.len(),
+            head.seconds.len()
+        )
+    }
 }
 
 struct Judged {
@@ -294,6 +335,7 @@ fn judge(
         } else {
             Timing::Unmeasured
         };
+        let timing_note = (!timed).then(|| timing_gap(&base, &head));
         let reference = history_reference(history, *journey);
         let against_history =
             if head.seconds.len() >= MINIMUM_TIMED_RUNS && head.result != Slot::Red {
@@ -324,11 +366,57 @@ fn judge(
             base,
             head,
             against_base,
+            timing_note,
             against_history,
             verdict,
         });
     }
     Ok(Judged { reports })
+}
+
+type Runner<'a> = dyn FnMut(usize, Journey, Side) -> Result<Vec<Attempt>> + 'a;
+
+fn regressed(judged: &Judged) -> Vec<Journey> {
+    judged
+        .reports
+        .iter()
+        .filter(|report| report.verdict == "regression")
+        .map(|report| report.journey)
+        .collect()
+}
+
+fn collect(
+    runner: &mut Runner,
+    journeys: &[Journey],
+    runs: usize,
+    threshold: f64,
+    history: &[Value],
+) -> Result<(Vec<Attempt>, Judged, Vec<Journey>)> {
+    let mut all: Vec<Attempt> = Vec::new();
+    for (round, journey, side) in schedule(journeys, runs) {
+        all.extend(runner(round, journey, side)?);
+    }
+    let mut judged = judge(&all, journeys, threshold, history)?;
+    let flagged = regressed(&judged);
+    if !flagged.is_empty() {
+        for (round, journey, side) in schedule(&flagged, RERUN_ROUNDS) {
+            all.extend(runner(runs + round, journey, side)?);
+        }
+        judged = judge(&all, journeys, threshold, history)?;
+    }
+    Ok((all, judged, flagged))
+}
+
+fn unmeasured(reports: &[JourneyReport]) -> Vec<String> {
+    reports
+        .iter()
+        .filter_map(|report| {
+            report
+                .timing_note
+                .as_ref()
+                .map(|note| format!("{}: {note}", report.journey.name()))
+        })
+        .collect()
 }
 
 fn names(reports: &[JourneyReport], verdict: &str) -> Vec<String> {
@@ -604,6 +692,9 @@ fn markdown(summary: &Summary) -> String {
             change(report.base_change),
             change(report.history_change),
         );
+        if let Some(note) = &report.timing_note {
+            text += &format!("|  | timing not compared | {note} |  |  |  |  |  |\n");
+        }
         if let Some(check) = &report.head.check {
             text += &format!(
                 "|  | head failure | {:?} blame | check {} | {} |  |  |  |\n",
@@ -618,7 +709,7 @@ fn markdown(summary: &Summary) -> String {
             );
         }
     }
-    text += "\nA flake is a run that failed once and passed on its rerun. Wall time is the whole `run` command, including the sandbox and display start. Read `battery.json` for every run.\n";
+    text += "\nA flake is a run that failed once and passed on its rerun. Wall time is the whole `run` command, including the sandbox and display start. A journey flagged as a regression is rerun for 5 more interleaved rounds and judged on all of its rounds. Read `battery.json` for every run.\n";
     text
 }
 
@@ -637,8 +728,8 @@ pub fn run(args: &[String]) -> Result<i32> {
         None => Vec::new(),
     };
     let started = Instant::now();
-    let mut all: Vec<Attempt> = Vec::new();
-    for (round, journey, side) in schedule(&options.journeys, options.runs) {
+    let mut runner = |round: usize, journey: Journey, side: Side| -> Result<Vec<Attempt>> {
+        let mut made = Vec::new();
         let mut number = 1;
         loop {
             let done = attempt(&options, &verifier, journey, side, round, number)?;
@@ -650,14 +741,20 @@ pub fn run(args: &[String]) -> Result<i32> {
                 done.ended,
                 done.seconds
             );
-            all.push(done);
+            made.push(done);
             if passed || number == 2 {
-                break;
+                return Ok(made);
             }
             number += 1;
         }
-    }
-    let judged = judge(&all, &options.journeys, options.threshold, &history)?;
+    };
+    let (_, judged, rerun) = collect(
+        &mut runner,
+        &options.journeys,
+        options.runs,
+        options.threshold,
+        &history,
+    )?;
     let summary = Summary {
         schema: 1,
         result: overall(&judged.reports),
@@ -669,6 +766,11 @@ pub fn run(args: &[String]) -> Result<i32> {
         regressions: names(&judged.reports, "regression"),
         red: names(&judged.reports, "red"),
         inconclusive: names(&judged.reports, "inconclusive"),
+        unmeasured: unmeasured(&judged.reports),
+        rerun: rerun
+            .iter()
+            .map(|journey| journey.name().to_owned())
+            .collect(),
         journeys: judged.reports,
         wall_seconds: started.elapsed().as_secs_f64(),
         limits: vec![
@@ -868,6 +970,123 @@ mod tests {
         .expect("a judgement");
         assert_eq!(drifted.reports[0].against_history, Timing::Regression);
         assert_eq!(drifted.reports[0].verdict, "regression");
+    }
+
+    fn passes(journey: Journey, side: Side, round: usize, seconds: f64) -> Vec<Attempt> {
+        vec![run_of(journey, side, round, 1, Ended::Passed, seconds)]
+    }
+
+    fn red_round(side: Side, round: usize, blame: Blame) -> Vec<Attempt> {
+        (1..=2)
+            .map(|number| {
+                let mut failed = run_of(J, side, round, number, Ended::Failed, 5.0);
+                failed.blame = Some(blame);
+                failed.check = Some(format!("{blame:?}").to_lowercase());
+                failed
+            })
+            .collect()
+    }
+
+    #[test]
+    fn product_blame_wins_in_either_round_order() {
+        for order in [
+            [Blame::Product, Blame::Fixture],
+            [Blame::Fixture, Blame::Product],
+        ] {
+            let mut all = both(J, &[20.0, 21.0], &[]);
+            all.extend(red_round(Side::Head, 0, order[0]));
+            all.extend(red_round(Side::Head, 1, order[1]));
+            let judged = judge(&all, &[J], 0.15, &[]).expect("a judgement");
+            assert_eq!(judged.reports[0].head.blame, Some(Blame::Product));
+            assert_eq!(judged.reports[0].head.check.as_deref(), Some("product"));
+            assert_eq!(judged.reports[0].verdict, "red");
+        }
+    }
+
+    #[test]
+    fn fixture_blame_outranks_unknown_in_either_round_order() {
+        for order in [
+            [Blame::Unknown, Blame::Fixture],
+            [Blame::Fixture, Blame::Unknown],
+        ] {
+            let mut all = both(J, &[20.0, 21.0], &[]);
+            all.extend(red_round(Side::Head, 0, order[0]));
+            all.extend(red_round(Side::Head, 1, order[1]));
+            let judged = judge(&all, &[J], 0.15, &[]).expect("a judgement");
+            assert_eq!(judged.reports[0].head.blame, Some(Blame::Fixture));
+            assert_eq!(judged.reports[0].verdict, "inconclusive");
+        }
+    }
+
+    #[test]
+    fn a_red_base_with_a_green_head_says_timing_did_not_run() {
+        let mut all = both(J, &[], &[20.0, 21.0]);
+        all.extend(red_round(Side::Base, 0, Blame::Product));
+        all.extend(red_round(Side::Base, 1, Blame::Product));
+        let judged = judge(&all, &[J], 0.15, &[]).expect("a judgement");
+        let report = &judged.reports[0];
+        assert_eq!(report.verdict, "green");
+        assert_eq!(report.against_base, Timing::Unmeasured);
+        let note = report.timing_note.as_deref().expect("a note");
+        assert!(note.contains("did not run") && note.contains("Base failed in 2 of 2"));
+        let listed = unmeasured(&judged.reports);
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].starts_with("terminal-scrolling: The timing comparison"));
+    }
+
+    fn noisy_then_quiet(round: usize, journey: Journey, side: Side) -> Vec<Attempt> {
+        let seconds = match (side, round) {
+            (Side::Head, 0..=2) => 26.0,
+            _ => 20.0,
+        };
+        passes(journey, side, round, seconds)
+    }
+
+    #[test]
+    fn a_noisy_regression_is_rerun_and_cleared_on_all_rounds() {
+        let mut calls = Vec::new();
+        let mut runner = |round: usize, journey: Journey, side: Side| {
+            calls.push((round, side));
+            Ok(noisy_then_quiet(round, journey, side))
+        };
+        let (_, judged, flagged) = collect(&mut runner, &[J], 3, 0.15, &[]).expect("collected");
+        assert_eq!(flagged, vec![J]);
+        assert_eq!(calls.len(), 6 + 2 * RERUN_ROUNDS);
+        assert_eq!(calls.last().map(|call| call.0), Some(7));
+        assert_eq!(judged.reports[0].head.seconds.len(), 8);
+        assert_eq!(judged.reports[0].verdict, "green");
+    }
+
+    #[test]
+    fn a_real_regression_survives_the_rerun_and_other_journeys_are_not_rerun() {
+        let mut other_runs = 0;
+        let mut runner = |round: usize, journey: Journey, side: Side| {
+            if journey == Journey::Workspace {
+                other_runs += 1;
+                return Ok(passes(journey, side, round, 20.0));
+            }
+            let seconds = if side == Side::Head { 28.0 } else { 20.0 };
+            Ok(passes(journey, side, round, seconds))
+        };
+        let (_, judged, flagged) =
+            collect(&mut runner, &[J, Journey::Workspace], 3, 0.15, &[]).expect("collected");
+        assert_eq!(flagged, vec![J]);
+        assert_eq!(other_runs, 6);
+        assert_eq!(judged.reports[0].verdict, "regression");
+        assert_eq!(judged.reports[1].verdict, "green");
+    }
+
+    #[test]
+    fn a_green_battery_is_never_rerun() {
+        let mut calls = 0;
+        let mut runner = |round: usize, journey: Journey, side: Side| {
+            calls += 1;
+            Ok(passes(journey, side, round, 20.0))
+        };
+        let (_, judged, flagged) = collect(&mut runner, &[J], 3, 0.15, &[]).expect("collected");
+        assert!(flagged.is_empty());
+        assert_eq!(calls, 6);
+        assert_eq!(judged.reports[0].verdict, "green");
     }
 
     #[test]
