@@ -2,7 +2,7 @@ mod clipboard;
 mod compositor;
 mod requests;
 
-pub use clipboard::{Clipboard, Exchange, Reading};
+pub use clipboard::{Clipboard, Exchange, Reading, Selection};
 pub use compositor::Compositor;
 pub use requests::{Observed, Request, Requests};
 

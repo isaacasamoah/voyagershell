@@ -1,5 +1,6 @@
 use super::layout::{born, split_right};
 use super::{Cases, Verdict, cases};
+use crate::inspection::{centre, contains};
 use crate::native::{
     Defect, EXPECTATION, LOOK, Lines, Native, Patch, Terminal, boxes, changed, pid, quote,
     repainted, state, vessels,
@@ -7,7 +8,7 @@ use crate::native::{
 use crate::probe::{BLOCKS, READY, SIGNALS, WAITING};
 use crate::sandbox;
 use crate::system::{Identity, PATIENCE, TimedOut, poll, settle, until};
-use crate::x11::{Chord, Exchange, Geometry, Key, Pixels, Reading};
+use crate::x11::{Chord, Exchange, Geometry, Key, Pixels, Reading, Selection as Owned};
 use anyhow::{Context as _, Result, ensure};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -23,6 +24,7 @@ cases! {
     CopyToClipboard => "copy-puts-the-selection-on-the-clipboard",
     PasteSendsText => "paste-sends-another-clients-text",
     InputDuringFlood => "input-reaches-one-terminal-while-another-floods",
+    ClicksSendNoBytes => "clicks-send-no-bytes-to-a-program-that-asked-for-none",
 }
 
 pub const CONTROL: Case = Case::CopyToClipboard;
@@ -34,6 +36,8 @@ const INTERRUPT: u8 = 0x03;
 const COPY: [u8; 3] = [24, 160, 96];
 const COPIED: &str = "COPYβ界";
 const CANARY: &str = "VERIFIER-CANARY";
+const PRIMARY_CANARY: &str = "VERIFIER-PRIMARY-CANARY";
+const COPIED_CELLS: u16 = 7;
 const SENTINEL: &str = "VERIFIER-SENTINEL";
 const PASTED: &str = "PASTEβ界\nline2";
 const TEXT_TARGET: &str = "UTF8_STRING";
@@ -163,6 +167,17 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     ensure!(
         canary == Reading::Text(CANARY.into()),
         "The verifier's clipboard owner returned {canary:?} for its own canary"
+    );
+    clipboard.own_in(Owned::Primary, PRIMARY_CANARY)?;
+    let primary = clipboard.read_in(Owned::Primary)?;
+    ensure!(
+        primary == Reading::Text(PRIMARY_CANARY.into()),
+        "The verifier's clipboard owner returned {primary:?} for its own PRIMARY canary"
+    );
+    clipboard.disown_in(Owned::Primary)?;
+    ensure!(
+        clipboard.owner_in(Owned::Primary)?.is_none(),
+        "The verifier still owns PRIMARY after it gave PRIMARY up"
     );
 
     cases.check(native, Case::TypedCommandRuns, |native| {
@@ -320,6 +335,16 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             return Ok((verdict, None));
         };
         let area = source.area;
+        let [first, last, past] = [0, COPIED_CELLS - 1, COPIED_CELLS]
+            .map(|column| terminal.cell(native, column, 0));
+        let (first, last, past) = (first?, last?, past?);
+        ensure!(
+            first.x.abs_diff(area.x) <= 2
+                && first.height.abs_diff(area.height) <= 2
+                && contains(area, centre(last))
+                && !contains(area, centre(past)),
+            "The verifier's cell grid puts the first cell at {first:?}, the last of {COPIED_CELLS} cells at {last:?} and the cell after at {past:?}, but the terminal drew the text in {area:?}"
+        );
         let row = area.y + (area.height / 2) as i16;
         native.drag_between(
             &terminal.target(),
@@ -345,7 +370,11 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 }),
             )
             .observed("colours after the drag", &colours)?
-            .observed("changed", altered)?;
+            .observed("changed", altered)?
+            .observed(
+                "PRIMARY after the drag",
+                native.clipboard()?.read_in(Owned::Primary)?,
+            )?;
         let selection = Selection {
             plain,
             source: *source,
@@ -368,9 +397,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         let owner = native.clipboard()?.owner()?;
         let read = native.clipboard()?.read()?;
         let exchanges = native.clipboard()?.exchanges()?;
-        let lost = exchanges[held..]
-            .iter()
-            .any(|exchange| matches!(exchange, Exchange::Cleared { .. }));
+        let lost = exchanges[held..].iter().any(|exchange| {
+            matches!(
+                exchange,
+                Exchange::Cleared {
+                    selection: Some(Owned::Clipboard),
+                    ..
+                }
+            )
+        });
         let after = terminal.settled(native, "copy-after", |look| {
             repainted(&selection.plain, look, COPY, TOLERANCE) == selection.colours
         })?;
@@ -474,6 +509,28 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .observed("other terminal's lines after", &drawn)?
             .observed("foreground after Ctrl+C", terminal.foreground(native)?)?
             .observed("first shell", &shell)
+    })?;
+
+    cases.check(native, Case::ClicksSendNoBytes, |native| {
+        let probe = Probe::new(native, "clicks", "keys")?;
+        probe.type_command(native, &terminal)?;
+        probe.ready(native, &terminal)?;
+        native.clipboard()?.own_in(Owned::Primary, PASTED)?;
+        let held = native.clipboard()?.exchanges()?.len();
+        terminal.click_cell(native, 3, 0)?;
+        native.middle_click(&terminal.target())?;
+        native.type_text("x")?;
+        let received = probe.received(b"x")?;
+        let ended = probe.end(native)?;
+        let exchanges = native.clipboard()?.exchanges()?;
+        Verdict::new()
+            .expect(
+                "after a click at a cell and a middle click, the program had received only the x typed after them",
+                received == b"x",
+            )
+            .expect(ENDED, ended)
+            .observed("received", escaped(&received))?
+            .observed("exchanges", &exchanges[held..])
     })
 }
 

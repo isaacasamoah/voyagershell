@@ -4,7 +4,7 @@ This is the Rust slice of the maintained native fixture. It runs the journeys in
 its journey registry on an owned Linux X11 display. The journeys are
 `terminal-scrolling`, `workspace`, which covers Voyages, Fleets and Vessels,
 `quit-restore` and `terminal-input`, which covers typing, keys, output,
-selection and copy and paste in a terminal.
+selection, copy and paste and clicks in a terminal.
 The app changes only to mark controls for inspection.
 Invoke `voyager-verification` directly. New verification extends this environment,
 including its shared actions and evidence contract. A single command wrapping
@@ -127,8 +127,9 @@ Core reports live. `Terminal::program` returns the state, PID and `argv` that
 Core reports for a terminal, and whether the bound shell is still the same
 process. A journey judges these values as expectations. `Native::context_click`
 aims at a control the way `click` does and presses the secondary button,
-which the X11 adapter sends as button 3. A journey names the intent, not the
-button number.
+which the X11 adapter sends as button 3. `Native::middle_click` does the same
+with the middle button, which the adapter sends as button 2. A journey names
+the intent, not the button number.
 
 A journey may pause Core while the candidate runs, to prove what the app does
 when Core gives no answer. `Native::with_core_paused` checks the bound Core's
@@ -932,6 +933,27 @@ driver refuses a point that is outside the control or under the avatar. It
 presses at the first point, moves to the second in 4 equal steps and releases,
 and it releases the button even when a move fails.
 
+`Native::click_at` clicks one point inside a control, in device pixels relative
+to the window. It refuses a point that is outside the control or under the
+avatar, as `drag_between` does, and it moves to the point and presses once.
+`Terminal::cell` gives the rectangle of one terminal cell in the same pixels
+and `Terminal::click_cell` clicks the centre of that cell. `column` and `row`
+count from 0. The app does not publish its cell size, so the verifier derives
+it. It reads `cols` and `rows` from Core's `terminal.get` for the bound
+terminal and takes the terminal element's area from the latest frame. It
+removes the padding, which is 8 logical pixels times `window.scale`, from each
+edge. A cell is the inner width divided by `cols` and the inner height
+divided by `rows`, each rounded down, and the first cell starts inside the
+padding. A cell outside the grid is refused as a fixture error, never as a
+product failure. The derivation is exact when the app's cell is a whole
+number of device pixels, which holds at scale 2 with the app's font. At a
+fractional scale the width can come out short of the app's by less than one
+pixel for each column, so a cell far from the left edge is not reliable
+there. `drag-selects-text` checks the derivation on every run against the
+text that the terminal drew. Cell 0 must start where the drawn box starts,
+and a text of seven cells must end between cell 6 and cell 7. A mismatch
+ends the run `inconclusive`, blamed on the fixture.
+
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
 `Chord` adds Ctrl, Shift or Alt to a key. `Terminal` in `src/native/terminal.rs` binds
 one terminal Vessel by its placement. It owns the terminal's Core address and
@@ -1027,14 +1049,27 @@ copy and a paste inside the app prove nothing about X.
 
 Only the owner's thread waits on that connection, for events and for replies.
 The journey's thread sends it a command through a channel and wakes it with a
-ClientMessage to the owner's window. `own` takes CLIPBOARD and confirms the
-owner with `GetSelectionOwner`. The thread answers `TARGETS`, listing
-`TARGETS` and `UTF8_STRING`, and it answers `UTF8_STRING`. It refuses any
-other target with the property None. `read` converts CLIPBOARD to
-`UTF8_STRING` and gives the owner of the clipboard 4 s. It returns the text,
-`refused` or `unanswered`. `owner` returns the window that owns CLIPBOARD.
-The thread records each request that it served or refused, with the name of
-the target, the requestor and the time, and each `SelectionClear`.
+ClientMessage to the owner's window. Each command names a `Selection`, which
+is CLIPBOARD or PRIMARY, and the two are independent. `own` takes the
+selection and confirms the owner with `GetSelectionOwner`. `disown` gives it
+up, after it checks that the verifier owns it, and confirms that nobody owns
+it. The X server sends the verifier's own `SelectionClear` for the PRIMARY it
+gave up, so a `disown` appears in the record as a `cleared` exchange. The
+thread answers `TARGETS`, listing `TARGETS` and `UTF8_STRING`, and it
+answers `UTF8_STRING`, only for a selection that it owns. It refuses any
+other target, and any other selection, with the property None. `read`
+converts the selection to `UTF8_STRING` and gives its owner 4 s. It returns
+the text, `refused` or `unanswered`. A selection that nobody owns answers at
+once with `refused`, so a read of PRIMARY from a candidate that never takes
+PRIMARY returns `refused`. `owner` returns the window that owns the selection.
+`Clip::own`, `read` and `owner` act on CLIPBOARD, so the journeys that
+predate PRIMARY did not change. `Clip::own_in`, `read_in`, `owner_in` and
+`disown_in` take the `Selection`.
+The thread records each request that it served or refused, with the selection,
+the name of the target, the requestor and the time, and each `SelectionClear`
+with its selection. The selection is empty for an atom that is neither
+CLIPBOARD nor PRIMARY. The `own`, `read` and `disown` commands appear in
+`actions.jsonl` with the selection too.
 `Native::clipboard` writes that record to `actions.jsonl` as `clipboard`
 events when a journey reads it and again at cleanup. Every wait has a
 deadline. The owner's connection gives the display 5 s to answer, as the
@@ -1045,8 +1080,11 @@ Cleanup stops the clipboard owner first, before the viewer, Core and the
 display. It sends the thread a stop command, wakes it, joins it and then drops
 the connection. The first connection is still open then, so the display does
 not lose its last client. A thread that failed is a cleanup error. Before its
-first case, `terminal-input` owns a canary text and reads it back. A canary
-that does not come back ends the run `inconclusive`, blamed on the fixture.
+first case, `terminal-input` owns a canary text and reads it back, then does
+the same for PRIMARY and gives PRIMARY up. A canary that does not come back,
+or a PRIMARY that the verifier still owns afterwards, ends the run
+`inconclusive`, blamed on the fixture. Giving PRIMARY up leaves a read of
+PRIMARY after a drag to show only what the candidate took.
 
 `--window WIDTHxHEIGHT` resizes the candidate's window in device pixels, and
 `--sidebar open|collapsed` sets the sidebar with its own toggle. Both apply

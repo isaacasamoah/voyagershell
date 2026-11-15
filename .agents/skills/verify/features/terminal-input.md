@@ -25,10 +25,11 @@ is owned by desktop/src/terminal.rs, terminal_screen.rs, terminal_view.rs and
 terminal_input.rs in the selected candidate. The journey needs no sidebar
 state and no window size.
 
-Before its first case the journey checks two things about the fixture. The
-fixture home must hold no shell startup file, and the verifier's clipboard
-owner must return its own canary. Either failure ends the run `inconclusive`,
-blamed on the fixture.
+Before its first case the journey checks three things about the fixture. The
+fixture home must hold no shell startup file, the verifier's clipboard owner
+must return its own canary, and it must return its own PRIMARY canary and
+then give PRIMARY up. Any failure ends the run `inconclusive`, blamed on the
+fixture.
 
 - `typed-command-runs` types `printf 'TYPED-%s\n' $((6*7))`. Core's screen
   must hold `TYPED-42`, which only a command that ran can print, and the
@@ -50,7 +51,13 @@ blamed on the fixture.
 - `drag-selects-text` prints `COPYβ界` on a truecolor background and drags
   from one pixel inside the left edge of that box to one pixel inside its
   right edge. Every pixel that had the background colour must take one other
-  colour, and nothing outside the row may change.
+  colour, and nothing outside the row may change. It also reads PRIMARY and
+  records the result as `PRIMARY after the drag`. No expectation judges that
+  value, because the app does not copy to PRIMARY. Before the drag the case
+  checks the verifier's own cell grid against the drawn text. The first cell
+  must start where the box starts, and the seventh cell must lie inside the
+  box and the eighth outside it. A mismatch ends the run `inconclusive`,
+  blamed on the fixture.
 - `copy-puts-the-selection-on-the-clipboard` gives CLIPBOARD to the verifier
   with the text `VERIFIER-SENTINEL` and presses Ctrl+Shift+C. The verifier's
   clipboard client must lose CLIPBOARD and then read exactly `COPYβ界` from
@@ -67,6 +74,12 @@ blamed on the fixture.
   `DURING-42` and its terminal must draw it while Core still reports `yes` or
   `timeout` in the first terminal's foreground. Ctrl+C in the first terminal
   must end the flood and leave its shell the same program.
+- `clicks-send-no-bytes-to-a-program-that-asked-for-none` runs the `keys`
+  probe while the verifier owns PRIMARY, clicks cell 3 of row 0 with
+  `click_cell`, middle-clicks the terminal and types `x`. The probe must have
+  received exactly `x`, so neither click sent it a byte. The case does not
+  prove that either click reached the app. It does not judge what the app does
+  with PRIMARY, and `exchanges` lists any request for it.
 
 Inspect `observations.json` for the bytes each probe received, and the
 `clipboard` events in `actions.jsonl` for each request that the verifier
@@ -117,7 +130,9 @@ journey claims it.
 - A shell with a line editor such as ble.sh, or with any startup file.
 - A paste over 64 KiB, a copy with no selection, and a selection of more than
   one row, by word or by line.
-- PRIMARY and middle-click paste, which the app does not offer.
+- PRIMARY and middle-click paste, which the app does not offer. The verifier
+  can own and read PRIMARY and can middle-click, and no case judges the app's
+  use of either.
 - Mouse reports to programs, other than the wheel that `terminal-scrolling`
   covers.
 - Input methods. Preedit and commit need an input method in the sandbox.

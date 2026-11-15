@@ -1,13 +1,14 @@
 use super::{Defect, GLANCE, Native, Seen};
 use crate::inspection::{Target, Unseen, clear_of, contains, inside, region};
 use crate::system::{PATIENCE, System, poll};
-use crate::x11::{Chord, Clipboard, Exchange, Geometry, Reading, Window};
+use crate::x11::{Chord, Clipboard, Exchange, Geometry, Reading, Selection, Window};
 use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 use serde_json::json;
 use voyager_contract::inspection::{Frame, Role};
 
 const PRIMARY: u8 = 1;
+const MIDDLE: u8 = 2;
 const SECONDARY: u8 = 3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -126,18 +127,40 @@ impl Clip<'_> {
     }
 
     pub fn own(&self, text: &str) -> Result<()> {
-        self.system.act(json!({"clipboard":"own","text":text}), || {
-            self.owner.own(text)
-        })
+        self.own_in(Selection::Clipboard, text)
     }
 
     pub fn read(&self) -> Result<Reading> {
-        self.system
-            .act(json!({"clipboard":"read"}), || self.owner.read())
+        self.read_in(Selection::Clipboard)
     }
 
     pub fn owner(&self) -> Result<Option<Window>> {
-        self.owner.owner()
+        self.owner_in(Selection::Clipboard)
+    }
+
+    pub fn own_in(&self, selection: Selection, text: &str) -> Result<()> {
+        self.system.act(
+            json!({"clipboard":"own","selection":selection,"text":text}),
+            || self.owner.own(selection, text),
+        )
+    }
+
+    pub fn disown_in(&self, selection: Selection) -> Result<()> {
+        self.system
+            .act(json!({"clipboard":"disown","selection":selection}), || {
+                self.owner.disown(selection)
+            })
+    }
+
+    pub fn read_in(&self, selection: Selection) -> Result<Reading> {
+        self.system
+            .act(json!({"clipboard":"read","selection":selection}), || {
+                self.owner.read(selection)
+            })
+    }
+
+    pub fn owner_in(&self, selection: Selection) -> Result<Option<Window>> {
+        self.owner.owner(selection)
     }
 
     pub fn exchanges(&mut self) -> Result<Vec<Exchange>> {
@@ -208,6 +231,28 @@ impl Native {
 
     pub fn context_click(&self, target: &Target) -> Result<()> {
         self.press_button(target, SECONDARY, 1)
+    }
+
+    pub fn middle_click(&self, target: &Target) -> Result<()> {
+        self.press_button(target, MIDDLE, 1)
+    }
+
+    pub fn click_at(&self, target: &Target, at: (i16, i16)) -> Result<()> {
+        let held = self.spot(target)?;
+        ensure!(
+            held.still_under(at),
+            "{target} does not hold the click at {at:?} clear of the avatar"
+        );
+        let point = self.on_screen(target, Aim { at, ..held })?;
+        let x11 = self.x11()?;
+        self.system.act(
+            json!({"input":"click","button":PRIMARY,"count":1,"target":target,"at":at,"aim":held}),
+            || {
+                x11.move_to(point.0, point.1)?;
+                x11.click(PRIMARY)
+            },
+        )?;
+        self.pointer()
     }
 
     fn clicks(&self, target: &Target, count: u8) -> Result<()> {
@@ -448,6 +493,11 @@ pub(super) fn single(target: &Target, frame: &Frame) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_buttons_are_the_x11_numbers() {
+        assert_eq!((PRIMARY, MIDDLE, SECONDARY), (1, 2, 3));
+    }
 
     #[test]
     fn a_drag_moves_in_equal_steps_and_ends_on_its_destination() {

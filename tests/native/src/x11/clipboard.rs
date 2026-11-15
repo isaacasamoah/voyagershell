@@ -20,6 +20,13 @@ use x11rb::{COPY_DEPTH_FROM_PARENT, COPY_FROM_PARENT, CURRENT_TIME, NONE};
 
 const TRANSFER: Duration = Duration::from_secs(4);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Selection {
+    Clipboard,
+    Primary,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Reading {
@@ -32,30 +39,35 @@ pub enum Reading {
 #[serde(tag = "exchange", rename_all = "kebab-case")]
 pub enum Exchange {
     Served {
+        selection: Selection,
         target: String,
         requestor: Window,
         at: u128,
     },
     Refused {
+        selection: Option<Selection>,
         target: String,
         requestor: Window,
         at: u128,
     },
     Cleared {
+        selection: Option<Selection>,
         at: u128,
     },
 }
 
 enum Command {
-    Own(String, Sender<Result<()>>),
-    Read(Sender<Result<Reading>>),
-    Owner(Sender<Result<Window>>),
+    Own(Selection, String, Sender<Result<()>>),
+    Disown(Selection, Sender<Result<()>>),
+    Read(Selection, Sender<Result<Reading>>),
+    Owner(Selection, Sender<Result<Window>>),
     Stop,
 }
 
 #[derive(Clone, Copy)]
 struct Atoms {
     clipboard: Atom,
+    primary: Atom,
     targets: Atom,
     utf8: Atom,
     transfer: Atom,
@@ -68,7 +80,42 @@ enum Content<'a> {
     Text(&'a [u8]),
 }
 
+#[derive(Default)]
+struct Texts {
+    clipboard: Option<String>,
+    primary: Option<String>,
+}
+
+impl Texts {
+    fn slot(&mut self, selection: Selection) -> &mut Option<String> {
+        match selection {
+            Selection::Clipboard => &mut self.clipboard,
+            Selection::Primary => &mut self.primary,
+        }
+    }
+
+    fn held(&self, selection: Selection) -> Option<&str> {
+        match selection {
+            Selection::Clipboard => self.clipboard.as_deref(),
+            Selection::Primary => self.primary.as_deref(),
+        }
+    }
+}
+
 impl Atoms {
+    fn atom(&self, selection: Selection) -> Atom {
+        match selection {
+            Selection::Clipboard => self.clipboard,
+            Selection::Primary => self.primary,
+        }
+    }
+
+    fn selection(&self, atom: Atom) -> Option<Selection> {
+        [Selection::Clipboard, Selection::Primary]
+            .into_iter()
+            .find(|selection| self.atom(*selection) == atom)
+    }
+
     fn content<'a>(&self, target: Atom, text: &'a str) -> Option<Content<'a>> {
         if target == self.targets {
             Some(Content::Targets([self.targets, self.utf8]))
@@ -110,6 +157,7 @@ impl Clipboard {
             .check()?;
         let atoms = Atoms {
             clipboard: atom(&connection, "CLIPBOARD")?,
+            primary: AtomEnum::PRIMARY.into(),
             targets: atom(&connection, "TARGETS")?,
             utf8: atom(&connection, "UTF8_STRING")?,
             transfer: atom(&connection, "VOYAGER_VERIFICATION_TRANSFER")?,
@@ -121,7 +169,7 @@ impl Clipboard {
             connection: Arc::clone(&connection),
             window,
             atoms,
-            text: None,
+            texts: Texts::default(),
             reading: None,
             exchanges: Arc::clone(&exchanges),
         };
@@ -140,20 +188,28 @@ impl Clipboard {
         self.window
     }
 
-    pub fn own(&self, text: &str) -> Result<()> {
-        self.ask(|reply| Command::Own(text.to_owned(), reply), ANSWER * 2)?
+    pub fn own(&self, selection: Selection, text: &str) -> Result<()> {
+        self.ask(
+            |reply| Command::Own(selection, text.to_owned(), reply),
+            ANSWER * 2,
+        )?
+        .context("The verifier's clipboard owner did not answer")
+    }
+
+    pub fn disown(&self, selection: Selection) -> Result<()> {
+        self.ask(|reply| Command::Disown(selection, reply), ANSWER * 2)?
             .context("The verifier's clipboard owner did not answer")
     }
 
-    pub fn read(&self) -> Result<Reading> {
+    pub fn read(&self, selection: Selection) -> Result<Reading> {
         Ok(self
-            .ask(Command::Read, TRANSFER)?
+            .ask(|reply| Command::Read(selection, reply), TRANSFER)?
             .unwrap_or(Reading::Unanswered))
     }
 
-    pub fn owner(&self) -> Result<Option<Window>> {
+    pub fn owner(&self, selection: Selection) -> Result<Option<Window>> {
         let owner = self
-            .ask(Command::Owner, ANSWER * 2)?
+            .ask(|reply| Command::Owner(selection, reply), ANSWER * 2)?
             .context("The verifier's clipboard owner did not answer")?;
         Ok(Some(owner).filter(|owner| *owner != NONE))
     }
@@ -206,7 +262,7 @@ struct Owner {
     connection: Arc<RustConnection<Bounded>>,
     window: Window,
     atoms: Atoms,
-    text: Option<String>,
+    texts: Texts,
     reading: Option<Sender<Result<Reading>>>,
     exchanges: Arc<Mutex<Vec<Exchange>>>,
 }
@@ -216,9 +272,15 @@ impl Owner {
         loop {
             match self.connection.wait_for_event() {
                 Ok(Event::SelectionRequest(request)) => self.answer(request)?,
-                Ok(Event::SelectionClear(_)) => {
-                    self.text = None;
-                    self.record(Exchange::Cleared { at: stamp() });
+                Ok(Event::SelectionClear(cleared)) => {
+                    let selection = self.atoms.selection(cleared.selection);
+                    if let Some(selection) = selection {
+                        *self.texts.slot(selection) = None;
+                    }
+                    self.record(Exchange::Cleared {
+                        selection,
+                        at: stamp(),
+                    });
                 }
                 Ok(Event::SelectionNotify(notice)) => self.received(notice.property),
                 Ok(_) => {}
@@ -228,9 +290,16 @@ impl Owner {
             }
             loop {
                 match commands.try_recv() {
-                    Ok(Command::Own(text, reply)) => drop(reply.send(self.own(text))),
-                    Ok(Command::Read(reply)) => self.read(reply),
-                    Ok(Command::Owner(reply)) => drop(reply.send(self.owner())),
+                    Ok(Command::Own(selection, text, reply)) => {
+                        drop(reply.send(self.own(selection, text)));
+                    }
+                    Ok(Command::Disown(selection, reply)) => {
+                        drop(reply.send(self.disown(selection)));
+                    }
+                    Ok(Command::Read(selection, reply)) => self.read(selection, reply),
+                    Ok(Command::Owner(selection, reply)) => {
+                        drop(reply.send(self.owner(selection)));
+                    }
                     Ok(Command::Stop) | Err(TryRecvError::Disconnected) => return Ok(()),
                     Err(TryRecvError::Empty) => break,
                 }
@@ -238,31 +307,49 @@ impl Owner {
         }
     }
 
-    fn own(&mut self, text: String) -> Result<()> {
-        self.text = Some(text);
-        self.connection
-            .set_selection_owner(self.window, self.atoms.clipboard, CURRENT_TIME)?;
+    fn own(&mut self, selection: Selection, text: String) -> Result<()> {
+        *self.texts.slot(selection) = Some(text);
+        self.connection.set_selection_owner(
+            self.window,
+            self.atoms.atom(selection),
+            CURRENT_TIME,
+        )?;
         ensure!(
-            self.owner()? == self.window,
-            "Another client kept the clipboard"
+            self.owner(selection)? == self.window,
+            "Another client kept the {selection:?} selection"
         );
         Ok(())
     }
 
-    fn owner(&self) -> Result<Window> {
+    fn disown(&mut self, selection: Selection) -> Result<()> {
+        ensure!(
+            self.owner(selection)? == self.window,
+            "The verifier does not own the {selection:?} selection"
+        );
+        *self.texts.slot(selection) = None;
+        self.connection
+            .set_selection_owner(NONE, self.atoms.atom(selection), CURRENT_TIME)?;
+        ensure!(
+            self.owner(selection)? == NONE,
+            "Another client took the {selection:?} selection while the verifier gave it up"
+        );
+        Ok(())
+    }
+
+    fn owner(&self, selection: Selection) -> Result<Window> {
         Ok(self
             .connection
-            .get_selection_owner(self.atoms.clipboard)?
+            .get_selection_owner(self.atoms.atom(selection))?
             .reply()?
             .owner)
     }
 
-    fn read(&mut self, reply: Sender<Result<Reading>>) {
+    fn read(&mut self, selection: Selection, reply: Sender<Result<Reading>>) {
         let asked = self
             .connection
             .convert_selection(
                 self.window,
-                self.atoms.clipboard,
+                self.atoms.atom(selection),
                 self.atoms.utf8,
                 self.atoms.transfer,
                 CURRENT_TIME,
@@ -304,10 +391,9 @@ impl Owner {
         } else {
             request.property
         };
-        let content = self
-            .text
-            .as_deref()
-            .filter(|_| request.selection == self.atoms.clipboard)
+        let selection = self.atoms.selection(request.selection);
+        let content = selection
+            .and_then(|selection| self.texts.held(selection))
             .and_then(|text| self.atoms.content(request.target, text));
         match content {
             Some(Content::Targets(targets)) => {
@@ -344,18 +430,19 @@ impl Owner {
             .send_event(false, request.requestor, EventMask::NO_EVENT, notice)?;
         self.connection.flush()?;
         let (target, requestor, at) = (self.name(request.target), request.requestor, stamp());
-        self.record(if served {
-            Exchange::Served {
+        self.record(match selection {
+            Some(selection) if served => Exchange::Served {
+                selection,
                 target,
                 requestor,
                 at,
-            }
-        } else {
-            Exchange::Refused {
+            },
+            _ => Exchange::Refused {
+                selection,
                 target,
                 requestor,
                 at,
-            }
+            },
         });
         Ok(())
     }
@@ -387,6 +474,7 @@ mod tests {
     fn the_clipboard_owner_offers_only_its_targets_and_utf8_text() {
         let atoms = Atoms {
             clipboard: 1,
+            primary: 6,
             targets: 2,
             utf8: 3,
             transfer: 4,
@@ -407,6 +495,38 @@ mod tests {
     }
 
     #[test]
+    fn each_selection_is_its_own_atom_and_only_the_two_are_served() {
+        let atoms = Atoms {
+            clipboard: 1,
+            primary: 6,
+            targets: 2,
+            utf8: 3,
+            transfer: 4,
+            wake: 5,
+        };
+        assert_eq!(atoms.atom(Selection::Clipboard), 1);
+        assert_eq!(atoms.atom(Selection::Primary), 6);
+        assert_eq!(atoms.selection(1), Some(Selection::Clipboard));
+        assert_eq!(atoms.selection(6), Some(Selection::Primary));
+        let secondary: Atom = AtomEnum::SECONDARY.into();
+        for other in [secondary, atoms.utf8, atoms.transfer, NONE] {
+            assert_eq!(atoms.selection(other), None, "atom {other}");
+        }
+    }
+
+    #[test]
+    fn a_text_is_held_for_one_selection_only() {
+        let mut texts = Texts::default();
+        *texts.slot(Selection::Primary) = Some("p".into());
+        assert_eq!(texts.held(Selection::Primary), Some("p"));
+        assert_eq!(texts.held(Selection::Clipboard), None);
+        *texts.slot(Selection::Clipboard) = Some("c".into());
+        *texts.slot(Selection::Primary) = None;
+        assert_eq!(texts.held(Selection::Clipboard), Some("c"));
+        assert_eq!(texts.held(Selection::Primary), None);
+    }
+
+    #[test]
     fn a_clipboard_reading_and_exchange_are_recorded_by_kind() {
         assert_eq!(
             serde_json::to_value(Reading::Text("β".into())).unwrap(),
@@ -418,12 +538,21 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(Exchange::Refused {
+                selection: Some(Selection::Clipboard),
                 target: "STRING".into(),
                 requestor: 7,
                 at: 9,
             })
             .unwrap(),
-            serde_json::json!({"exchange":"refused","target":"STRING","requestor":7,"at":9})
+            serde_json::json!({"exchange":"refused","selection":"clipboard","target":"STRING","requestor":7,"at":9})
+        );
+        assert_eq!(
+            serde_json::to_value(Exchange::Cleared {
+                selection: Some(Selection::Primary),
+                at: 3,
+            })
+            .unwrap(),
+            serde_json::json!({"exchange":"cleared","selection":"primary","at":3})
         );
     }
 }
