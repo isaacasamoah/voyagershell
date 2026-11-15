@@ -361,6 +361,11 @@ impl Display {
         Ok(self.connection.query_pointer(self.root)?.reply()?.child)
     }
 
+    pub fn pointer_at(&self) -> Result<(i16, i16)> {
+        let pointer = self.connection.query_pointer(self.root)?.reply()?;
+        Ok((pointer.root_x, pointer.root_y))
+    }
+
     pub fn move_to(&self, x: i16, y: i16) -> Result<()> {
         self.fake(MOTION_NOTIFY_EVENT, 0, x, y)
     }

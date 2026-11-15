@@ -245,13 +245,22 @@ impl Native {
         );
         let point = self.on_screen(target, Aim { at, ..held })?;
         let x11 = self.x11()?;
+        let mut seen = None;
         self.system.act(
             json!({"input":"click","button":PRIMARY,"count":1,"target":target,"at":at,"aim":held}),
             || {
                 x11.move_to(point.0, point.1)?;
+                let reported = x11.pointer_at()?;
+                seen = Some(reported);
+                ensure!(
+                    reported == point,
+                    "the display reports the pointer at {reported:?} after a move to {point:?}"
+                );
                 x11.click(PRIMARY)
             },
         )?;
+        self.system
+            .record(json!({"event":"pointer-at","target":target,"expected":point,"seen":seen}))?;
         self.pointer()
     }
 

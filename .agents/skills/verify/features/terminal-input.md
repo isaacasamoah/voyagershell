@@ -133,6 +133,10 @@ journey claims it.
 - PRIMARY and middle-click paste, which the app does not offer. The verifier
   can own and read PRIMARY and can middle-click, and no case judges the app's
   use of either.
+- Selecting one cell by pointer. The app selects the cell to the left of the
+  pointer, which
+  [Select the terminal cell under the pointer, not the one to its left](https://github.com/isaacasamoah/voyagershell/issues/196)
+  tracks. No case judges the cell that a drag selects.
 - Mouse reports to programs, other than the wheel that `terminal-scrolling`
   covers.
 - Input methods. Preedit and commit need an input method in the sandbox.

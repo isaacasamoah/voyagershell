@@ -935,7 +935,10 @@ and it releases the button even when a move fails.
 
 `Native::click_at` clicks one point inside a control, in device pixels relative
 to the window. It refuses a point that is outside the control or under the
-avatar, as `drag_between` does, and it moves to the point and presses once.
+avatar, as `drag_between` does. It moves to the point, asks the display where
+the pointer is and presses once only if the display reports the point. The
+display's answer is recorded as a `pointer-at` event in `actions.jsonl`, with
+the expected and the seen point, and a different answer is a fixture error.
 `Terminal::cell` gives the rectangle of one terminal cell in the same pixels
 and `Terminal::click_cell` clicks the centre of that cell. `column` and `row`
 count from 0. The app does not publish its cell size, so the verifier derives
@@ -949,10 +952,22 @@ product failure. The derivation is exact when the app's cell is a whole
 number of device pixels, which holds at scale 2 with the app's font. At a
 fractional scale the width can come out short of the app's by less than one
 pixel for each column, so a cell far from the left edge is not reliable
-there. `drag-selects-text` checks the derivation on every run against the
-text that the terminal drew. Cell 0 must start where the drawn box starts,
-and a text of seven cells must end between cell 6 and cell 7. A mismatch
-ends the run `inconclusive`, blamed on the fixture.
+there. Two observations support `click_cell`, and neither goes through the
+app's selection. The display reports the pointer at the cell's centre, which
+`pointer-at` records. And `drag-selects-text` checks the derivation on every
+run against the text that the terminal drew. Cell 0 must start where the
+drawn box starts, and a text of seven cells must end between cell 6 and
+cell 7. A mismatch ends the run `inconclusive`, blamed on the fixture.
+
+The app's own pointer-to-cell mapping does not agree with where it draws the
+cells. A drag inside cell 3 of a drawn line highlights and copies cell 2, and
+the same shift appears for cells 5 and 9. This is tracked as
+[Select the terminal cell under the pointer, not the one to its left](https://github.com/isaacasamoah/voyagershell/issues/196).
+Until it is fixed, a one-character selection through `click_cell` copies the
+neighbour on the left, so no committed case judges a selection by cell. The
+run that showed it stays in the evidence of the pull request that added
+`click_cell`. Do not read a selection from the app as a check of
+`click_cell`. A click-to-move case has the same exposure.
 
 Keys are typed. `Key` in `src/x11.rs` is the one list of named keys, and a
 `Chord` adds Ctrl, Shift or Alt to a key. `Terminal` in `src/native/terminal.rs` binds
