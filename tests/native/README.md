@@ -30,6 +30,7 @@ The environment is not yet accepted as a complete implementation of that design.
 | ETC/ORTH/DRY checks | Required independent review criteria; not an automatic architecture score. |
 | Versioned request/result contract and independent receipt conformance | Planned. Pilot receipts are evidence, not a certified acceptance validator. |
 | Voyages, Fleets and Vessels | Implemented by the `workspace` journey. Its recipe lists the checks that it does not drive. |
+| Seeded, live-edited and shared run profile, and a second identified build | Implemented by the `profile` journey. Checks the theme background only. See Profile fixtures below. |
 | Terminal typing, keys, output, selection, copy and paste | Implemented by the `terminal-input` journey. Its recipe lists the checks that it does not drive. |
 | Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
 | Compositor/drag/IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
@@ -118,7 +119,8 @@ A journey may stop Core between launches, in place of a reboot.
 `Native::stop_core` refuses while a candidate runs. It checks the bound Core's
 identity, sends `server.stop`, and waits until the socket is gone and the
 process has exited. The next `launch` lets the app's `hc connect` start a new
-Core and binds that Core's identity. The verifier never starts a Core.
+Core and binds that Core's identity. The verifier starts a Core only to seed a
+Core document, as `--core-document` below describes.
 `Native::live_terminals` returns the sorted addresses of the terminals that
 Core reports live. `Terminal::program` returns the state, PID and `argv` that
 Core reports for a terminal, and whether the bound shell is still the same
@@ -140,6 +142,98 @@ repeats within the usual deadline until the expected state is drawn. It never
 sleeps for a fixed time, and a gesture the app never answers fails on its
 deadline. `Native::resize_window` resizes the owned window, and
 `Terminal::screen` reads Core's text for a terminal once.
+
+### Profile fixtures, live edits and a second build
+
+A run's profile is `profile/` in the evidence directory. The app seeds a file
+only when it is missing, so a fixture file wins over the shipped one.
+
+`--profile-fixture DIR` copies `DIR` into `profile/` before the sandbox
+starts. The copy keeps nested folders and refuses a link or any entry that is
+not a file or a folder. A missing or unreadable `DIR` ends `run` before any
+evidence exists, with `Verification unavailable: Profile fixture ... `, which is
+verifier blame. An empty `DIR` gives an empty profile, the same as no flag. The
+fixture is host input and stays outside the sandbox; the sandbox sees only the
+copy.
+
+The copy is checked against the fixture, and `seeded.json` in the evidence
+directory records each file's hash before the sandbox starts. Before the app
+launches, the run checks the profile against that record again. A seeded file
+that differs then is verifier blame, because the fixture did not arrive. After
+the app starts, `Native::seeded_intact(relative)` tells a journey whether the
+file is still what the fixture wrote. A journey states that as an expectation,
+so a product that overwrites or deletes a seeded file is product blame. A
+fixture that seeded no such file is verifier blame.
+
+`Native::edit_profile_file(relative, bytes)` replaces a file in `profile/`
+while the app runs. It writes a staging file and renames it over the target, as
+an editor does, and records a `profile-edit` event with the file's hash in
+`actions.jsonl`. `relative` must be a relative path of plain names. An empty
+path, `..`, an absolute path, or a path through a link is refused, so an edit
+cannot leave the profile. The refusal is an error in the journey, which the
+driver blames on the verifier.
+
+`--second-binary PATH --second-sha256 HASH` names a second candidate build. The
+two flags go together; a path without a hash is refused before anything starts.
+The second build is pinned and bound read-only like the first. It must be a
+different file from `--binary`. A build reads its assets from the path compiled
+into it, so the run checks the second build's assets the way it checks the
+first. A second build from another checkout needs `--second-assets PATH`, the
+`desktop/assets` folder of that checkout, which the sandbox binds at its own
+path. Without it the second build uses `--assets`, and a build that was
+compiled for another path is refused before the run starts.
+`Native::relaunch_with_second` needs the first build to have quit, switches the
+candidate and launches it against the same profile, Core and session. It ends
+the run with verifier blame when Core is not the same process after the launch,
+when the second build did not launch, or when the profile folder changed between
+the first build's exit and the relaunch, which only the verifier ran. The verifier
+records the folder as the first build exits. Whatever the product did to the
+profile before that, including deleting it, is the product's, and a case blames it
+by checking the files. The `profile` journey checks that the edited theme file
+survives the first build's quit.
+Without `--second-binary` it is an error. `identity.json` lists `builds`, one
+entry for each build that launched with its path and hash. `checks.json` names
+the build under test in `binary` and `sha256`, the second build in `second`, and
+repeats `builds`. A build whose hash changes during the run makes the run
+inconclusive.
+
+`--core-document NAME=FILE` seeds a Core document before the app starts. The
+verifier starts Core in the sandbox, writes the JSON in `FILE` with `doc.set` at
+version 0, reads it back, and only then launches the app, which connects to that
+Core. A document Core does not keep, and a seed attempted after the app launched, are
+verifier blame. `actions.jsonl` records a `core-seed` event with its time, and
+`launch.json` records `coreSeededAt` beside `startedAt`.
+`Native::seeded_document(name)` returns the version and value that were seeded
+and `Native::core_document(name)` reads the current one. A layout a newer build
+wrote is seeded the same way, under the name `voyager-layout-v2`.
+
+The `profile` journey uses all four. Give it a fixture whose
+`themes/voyager.json` sets a background colour and a Core document named
+`voyager-verifier-probe`. Use the checked-in
+`tests/native/fixtures/profile-theme` and
+`tests/native/fixtures/core-document/verifier-probe.json`. Run it with a second
+build:
+
+```sh
+tests/native/target/debug/voyager-verification run --journey profile --binary "$candidate" --sha256 "$expected" --second-binary "$other" --second-sha256 "$other_hash" --profile-fixture tests/native/fixtures/profile-theme --core-document voyager-verifier-probe=tests/native/fixtures/core-document/verifier-probe.json --hc-sha256 "$core" --assets "$PWD/desktop/assets" --evidence "$run_parent/profile"
+```
+
+`seeded-theme-drawn` checks that the app left the seeded theme file alone and
+that the window draws the seeded background,
+`live-edit-recolours` rewrites the theme and checks that the same viewer
+process draws the new colour, and `second-build-keeps-voyage` quits, relaunches
+with the second build and checks that the same Voyage is selected and the edited
+colour is drawn, and `seeded-core-document-kept` checks that Core still holds the
+seeded document at its seeded version after both builds. A colour is drawn when at least 5 percent of the window's pixels
+are within 2 of it per channel. The journey checks the background token only.
+The `profile` patch makes the app ignore the profile's theme file at start, so
+`seeded-theme-drawn` fails.
+
+To add a case that uses the capability, put the files in a fixture folder, add
+the case after launch, edit with `edit_profile_file`, and read the result with
+`Native::watch`, which polls a closure until it returns a value or patience
+runs out and returns `None` without an error. Record a missing result as a
+failed expectation, so it blames the product.
 
 ### Stand-in provider
 
@@ -750,7 +844,7 @@ from the previous reply, so the ledger shows inputs and changes.
 `inspection-N.json` holds the last frame of each launch. `observations.json` holds the observed cases. Screenshots have unique names.
 `doctor.json`, `launch.json`, `identity.json`, native/display logs and `checks.json`
 retain candidate and environment identities. `identity.json` names the bound
-Core and lists each Core that the journey stopped, in order. A case that ends
+Core, each build that launched and each Core that the journey stopped, in order. `profile-edit` events in `actions.jsonl` record each live profile edit. A case that ends
 with the candidate closed records an `unkept` event in place of its window
 capture. `sandbox.json` records the session
 name and the complete bubblewrap command. `containment.json` holds the canary

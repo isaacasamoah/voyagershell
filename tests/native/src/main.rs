@@ -6,6 +6,7 @@ mod journey;
 mod lifecycle;
 mod native;
 mod probe;
+mod profile;
 mod proof;
 mod provider;
 mod sandbox;
@@ -20,7 +21,7 @@ use lifecycle::{Event, Phase, Run};
 use native::{Cause, Fault, Native, Surface};
 use sandbox::{Observation, Resource, Sandbox};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread::sleep;
@@ -47,7 +48,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features, journeys\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--provider-script FILE]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, probe, features, journeys\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--profile-fixture DIR] [--second-binary PATH --second-sha256 HASH [--second-assets PATH]] [--core-document NAME=JSON_FILE] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--provider-script FILE]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
             Journey::names().join("|")
         );
         return Ok(0);
@@ -107,6 +108,11 @@ fn entry() -> Result<i32> {
         "--window",
         "--sidebar",
         "--provider-script",
+        "--profile-fixture",
+        "--second-binary",
+        "--second-sha256",
+        "--second-assets",
+        "--core-document",
     ];
     ensure!(args.len().is_multiple_of(2), "Every option needs a value");
     for pair in args.as_chunks::<2>().0 {
@@ -131,6 +137,24 @@ fn entry() -> Result<i32> {
     let candidate =
         Pinned::check(Path::new(&get("--binary")?), &get("--sha256")?).context("Candidate")?;
     let hc = Pinned::check(&system::installed("hc")?, &get("--hc-sha256")?).context("Core")?;
+    let second = match (get("--second-binary").ok(), get("--second-sha256").ok()) {
+        (Some(path), Some(hash)) => {
+            Some(Pinned::check(Path::new(&path), &hash).context("Second candidate")?)
+        }
+        (None, None) => None,
+        _ => bail!("--second-binary and --second-sha256 go together"),
+    };
+    ensure!(
+        second.is_some() || get("--second-assets").is_err(),
+        "--second-assets needs --second-binary"
+    );
+    let fixture = get("--profile-fixture")
+        .ok()
+        .map(|path| {
+            std::fs::canonicalize(&path)
+                .with_context(|| format!("Profile fixture {path} is not readable"))
+        })
+        .transpose()?;
     let assets = get("--assets")
         .ok()
         .map(std::fs::canonicalize)
@@ -141,6 +165,41 @@ fn entry() -> Result<i32> {
         assets.as_deref().context("Missing --assets")?,
     )
     .context("Candidate assets")?;
+    let second_assets = match get("--second-assets") {
+        Ok(path) => Some(std::fs::canonicalize(path).context("Second candidate assets")?),
+        Err(_) => None,
+    };
+    if let Some(second) = &second {
+        ensure!(
+            second.path != candidate.path,
+            "--second-binary is the same file as --binary"
+        );
+        system::check_assets(
+            &second.path,
+            second_assets
+                .as_deref()
+                .or(assets.as_deref())
+                .context("Missing --assets")?,
+        )
+        .context(
+            "Second candidate assets; give --second-assets for a build from another checkout",
+        )?;
+    }
+    let documents = match get("--core-document") {
+        Ok(text) => {
+            let (name, path) = text
+                .split_once('=')
+                .context("--core-document takes NAME=JSON_FILE")?;
+            ensure!(!name.is_empty(), "--core-document needs a document name");
+            let value: Value = serde_json::from_slice(
+                &std::fs::read(path)
+                    .with_context(|| format!("Core document file {path} is not readable"))?,
+            )
+            .with_context(|| format!("Core document file {path} is not JSON"))?;
+            vec![(name.to_owned(), value)]
+        }
+        Err(_) => Vec::new(),
+    };
     let mut readiness = system::doctor(&candidate, &hc)?;
     readiness["verificationSource"] = json!(source);
     readiness["verifierSha256"] = json!(system::digest(&verifier)?);
@@ -151,7 +210,9 @@ fn entry() -> Result<i32> {
             verifier: &verifier,
             candidate: &candidate.path,
             core: &hc.path,
+            second: second.as_ref().map(|pinned| pinned.path.as_path()),
             assets: assets.as_deref(),
+            second_assets: second_assets.as_deref(),
             evidence,
         }
         .command(inner)
@@ -185,13 +246,17 @@ fn entry() -> Result<i32> {
     .with_context(|| format!("The {} journey cannot run as asked", journey.name()))?;
     let evidence = PathBuf::from(get("--evidence")?);
     sandbox::prepare(&evidence)?;
+    if let Some(fixture) = &fixture {
+        let seeded = profile::copy_fixture(fixture, &evidence.join("profile"))?;
+        system::save(evidence.join(profile::MANIFEST), &seeded)?;
+    }
     system::save(evidence.join("doctor.json"), &readiness)?;
     let session = format!(
         "voyager-verify-{}-{:08x}",
         std::process::id(),
         system::stamp() as u32
     );
-    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
+    let plan = json!({"journey":journey,"surface":surface,"candidate":candidate,"second":second,"documents":documents,"hc":{"path":sandbox::CORE,"sha256":hc.sha256},"evidence":evidence,"session":session,"host":host,"fault":get("--fault").ok().map(|text| Fault::parse(&text)).transpose()?,"coreDelay":get("--core-delay").ok().map(|text| core_relay::CoreDelay::parse(&text)).transpose()?,"providerScript":get("--provider-script").ok().map(|path| fs::read_to_string(&path).context("Provider script file").and_then(|text| provider::Script::parse(&text))).transpose()?});
     let command = confine(
         Some(&evidence),
         &[
@@ -229,6 +294,8 @@ fn entry() -> Result<i32> {
 struct Plan {
     journey: Journey,
     candidate: Pinned,
+    second: Option<Pinned>,
+    documents: Vec<(String, Value)>,
     hc: Pinned,
     evidence: PathBuf,
     session: String,
@@ -297,8 +364,11 @@ fn drive(plan: Plan) -> Result<i32> {
         system.delay_core(delay);
     }
     let mut outcomes = Outcomes::new(plan.journey, system.evidence.join("observations.json"));
-    let mut native = Native::new(system, plan.candidate, plan.hc, plan.surface);
+    let tested = plan.candidate.clone();
+    let second = plan.second.clone();
+    let mut native = Native::new(system, plan.candidate, plan.second, plan.hc, plan.surface);
     native.script = plan.provider_script;
+    native.seed_documents(plan.documents);
     let mut gate = Run::default();
     let result = journey(
         &mut native,
@@ -364,7 +434,12 @@ fn drive(plan: Plan) -> Result<i32> {
     } else {
         Event::CleanupFailed
     })?;
-    let identity_changed = native.candidate.verify().is_err() || native.hc.verify().is_err();
+    let identity_changed = [Some(&tested), second.as_ref()]
+        .into_iter()
+        .flatten()
+        .chain(native.builds())
+        .any(|build| build.verify().is_err())
+        || native.hc.verify().is_err();
     if identity_changed {
         gate.step(Event::Unavailable)?;
     }
@@ -392,7 +467,7 @@ fn drive(plan: Plan) -> Result<i32> {
             &json!({"runtimeResult":verdict,"firstFailingCheck":first_failure,"snapshotGaps":snapshot_gaps,"files":{"candidateLog":"../native.log","displayLog":"../display.log","actions":"../actions.jsonl","observations":"../observations.json","processes":"processes.json","coreDocument":"core-doc.json","coreTerminals":"core-terminals.json","coreLogs":"core/","inspection":"inspection.json","captures":"captures/","finalScreen":"final-screen.png","ledgerTail":"actions-tail.jsonl"}}),
         )?;
     }
-    let report = json!({"schema":3,"journey":plan.journey,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"coreDelay":plan.core_delay,"providerScript":native.script,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":native.candidate.path,"sha256":native.candidate.sha256,"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
+    let report = json!({"schema":3,"journey":plan.journey,"runtimeResult":verdict,"lifecycle":gate,"error":error,"firstFailingCheck":first_failure,"bundle":bundled.then_some("bundle"),"fault":plan.fault,"coreDelay":plan.core_delay,"providerScript":native.script,"layout":plan.surface,"recordingError":recording_error,"cleanupErrors":cleanup_errors,"evidenceRetained":evidence_retained,"binary":tested.path,"sha256":tested.sha256,"second":second,"builds":native.builds(),"hcSha256":native.hc.sha256,"verificationSource":built_source(),"verifierSha256":system::digest(&std::env::current_exe()?)?,"session":native.system.session,"qualityResult":"independent ETC/ORTH/DRY review required","limits":system::LIMITS});
     system::save(native.system.evidence.join("checks.json"), &report)?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     match verdict {
@@ -422,6 +497,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/portals.rs"),
     ),
     (
+        "src/journey/profile.rs",
+        include_bytes!("journey/profile.rs"),
+    ),
+    (
         "src/journey/quit_restore.rs",
         include_bytes!("journey/quit_restore.rs"),
     ),
@@ -449,6 +528,7 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("native/terminal.rs"),
     ),
     ("src/probe.rs", include_bytes!("probe.rs")),
+    ("src/profile.rs", include_bytes!("profile.rs")),
     ("src/proof.rs", include_bytes!("proof.rs")),
     ("src/provider.rs", include_bytes!("provider.rs")),
     ("src/sandbox.rs", include_bytes!("sandbox.rs")),
