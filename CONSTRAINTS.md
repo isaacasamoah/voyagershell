@@ -39,7 +39,7 @@ behavior and minimal effective tests, use a native GitHub PR stack with separate
 reviewable slices. Do not use Graphite. Verify current GitHub stack support and
 the repository's merge rules before creating the stack.
 
-For each vertical slice receives a fresh-context review
+Each vertical slice receives a fresh-context review
 using the code-review skill. It may have one corrective product build after that
 review, followed by re-review. If Required issues remain, stop and report them.
 Do not start a dependent slice or another corrective build. Finishing a task needs

@@ -180,7 +180,7 @@ def prove(
         current = document()["value"]
         assert current["canvas"] == (prior["canvas"] if invalid else proposed)
         for key in (
-            "contents",
+            "vessels",
             "voyages",
             "context",
             "selectedVoyage",

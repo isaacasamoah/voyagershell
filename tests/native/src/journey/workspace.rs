@@ -12,7 +12,7 @@ use serde::Serialize;
 use std::path::Path;
 use voyager_contract::inspection::{Rect, Role};
 use voyager_contract::{
-    Axis, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split, Placement, Voyage,
+    Axis, Context, Fleet, FleetId, Layout, Placement, PlacementId, RenameTarget, Split, Voyage,
     VoyageId,
 };
 

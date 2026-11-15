@@ -68,7 +68,7 @@ import type {
 import type { Action, RenameTarget } from "../../contract/generated/request";
 import type {
   Vessel,
-  Context as Scope,
+  Context as DockContext,
   Fleet,
   Layout,
   Response,
@@ -81,7 +81,7 @@ import type { TerminalResponse } from "../../contract/generated/terminalResponse
 
 const CONTEXT_REFRESH_MS = 3000;
 
-type ContentScope = Extract<Scope, { kind: "vessel" | "portal" }>;
+type VesselContext = Extract<DockContext, { kind: "vessel" | "portal" }>;
 
 type Editing = {
   target: RenameTarget;
@@ -861,7 +861,7 @@ export default class Canvas extends View {
 
   target(
     id: string,
-    scope: Scope,
+    scope: DockContext,
     child: NativeElement,
     fallback = false,
   ): NativeElement {
@@ -1792,7 +1792,7 @@ export default class Canvas extends View {
 
   content(
     placement: Placement,
-    scope: ContentScope,
+    scope: VesselContext,
     group: PanelGroup,
   ): NativeElement {
     return renderPanel(this, placement, scope, group);

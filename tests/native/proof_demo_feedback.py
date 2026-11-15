@@ -105,7 +105,7 @@ def prove(
         repo.mkdir()
         git("init", "-q")
         git("-c", "user.name=Voyager trial", "-c", "user.email=trial@example.invalid", "commit", "--allow-empty", "-qm", "Initial")
-        wait(document, lambda value: value and value.get("contents") and value["vessels"][0].get("backend"), "initial shell")
+        wait(document, lambda value: value and value.get("vessels") and value["vessels"][0].get("backend"), "initial shell")
         observed["accessibilityBefore"] = native("accessibility-state")["enabled"]
         native("accessibility-state", False)
         native("accessibility-state", True)

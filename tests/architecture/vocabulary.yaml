@@ -554,28 +554,70 @@ rules:
     old: '\b[Hh]eader\b'
     new: 'canvas'
     skip: ['app/src/wire.rs', 'app/src/voice_wire.rs', 'app/tests/wire.rs', 'tests/native/proof_resources.py', 'tests/native/test_frames.py']
-    ban: '\b[Hh]eaders?\b'
+    ban: '\b[Hh][Ee][Aa][Dd][Ee][Rr][Ss]?\b'
   - id: vessel-package-prose
     stage: 5
     old: '\b([Cc])ontent package(s?)\b'
     new: 'Vessel package$2'
     files: ['**/*.md']
-    skip: ['AGENTS.md']
-    ban: false
+    group: content-words
   - id: vessel-type-prose
     stage: 5
     old: '\b([Cc])ontent type(s?)\b'
     new: 'Vessel type$2'
     files: ['**/*.md']
-    skip: ['AGENTS.md']
-    ban: false
+    group: content-words
   - id: vessel-instance-prose
     stage: 5
     old: '\b[Cc]ontent instance(s?)\b'
     new: 'Vessel$1'
     files: ['**/*.md']
-    skip: ['AGENTS.md']
+    group: content-words
+  - id: theme-declarations
+    stage: 2
+    group: theme-module
+    old: '\bHEADER\b'
+    new: 'THEME'
+    files: ['desktop/src/script_types.rs', 'desktop/src/host.rs', 'desktop/src/lib.rs']
+    code: true
+  - id: vessel-struct-definition
+    stage: 3
+    group: vessel-ids
+    old: '\b(struct|enum) Content\b'
+    new: '$&'
+    files: ['**/*.rs']
+    skip: ['tests/native/src/x11/**']
+  - id: mod-word-prose
+    stage: 5
+    group: package-nickname
+    old: '(?<!Herdr )(?<!Herdr worktree )(?<!native-)\b[Mm]ods?\b(?![.\w-]*\.rs)'
+    new: '$&'
+    files: ['**/*.md']
+  - id: mod-word-source
+    stage: 5
+    group: package-nickname
+    old: '\bmods?\b|\bmod[A-Z]\w*|[a-z]Mods?\b'
+    new: '$&'
+    files: ['**/*.ts', '**/*.js', '**/*.cjs', '**/*.json', '**/*.toml', '**/*.yaml', '**/*.yml', '**/*.sh', '**/*.html']
+    skip: ['tests/architecture/observe*.cjs', 'tests/architecture/rust.cjs']
+  - id: dock-context-alias
+    stage: 3
+    group: scope-aliases
+    old: '\bContext as Scope\b'
+    new: 'Context as DockContext'
+    files: ['desktop/canvas/*.ts']
+  - id: dock-context-type
+    stage: 3
+    old: '\bScope\b'
+    new: 'DockContext'
+    files: ['desktop/canvas/chat.ts', 'desktop/canvas/main.ts', 'desktop/canvas/navigation-view.ts']
     ban: false
+  - id: vessel-context-type
+    stage: 3
+    group: scope-aliases
+    old: '\bContentScope\b'
+    new: 'VesselContext'
+    files: ['desktop/canvas/*.ts']
   - id: realm-term
     stage: 5
     group: legacy-names

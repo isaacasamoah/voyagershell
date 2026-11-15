@@ -508,6 +508,73 @@ test("an old word in new source fails the vocabulary rule", () => {
   expectFailure(run(directory), "NEW one-vocabulary: vessel-ids has");
 });
 
+const PLANTS = [
+  [
+    "desktop/src/lib.rs",
+    `const ${["HEA", "DER"].join("")}: u32 = 1;`,
+    "canvas-package",
+  ],
+  [
+    "README.md",
+    `The Notes ${["m", "od"].join("")} is a package.`,
+    "package-nickname",
+  ],
+  [
+    "docs/content.md",
+    `A ${["content", "type"].join(" ")} is a thing.`,
+    "content-words",
+  ],
+  [
+    "AGENTS.md",
+    `A ${["content", "package"].join(" ")} is a thing.`,
+    "content-words",
+  ],
+  [
+    "contract/src/lib.rs",
+    `pub ${["struct", "Content"].join(" ")} { pub id: u32 }`,
+    "vessel-ids",
+  ],
+  [
+    "desktop/canvas/chat.ts",
+    `import type { ${["Context", "as", "Scope"].join(" ")} } from "x";`,
+    "scope-aliases",
+  ],
+];
+
+for (const [file, line, group] of PLANTS) {
+  test(`a planted line in ${file} fails ${group}`, () => {
+    const directory = scratch();
+    edit(directory, file, (text) => `${text}\n${line}\n`);
+    expectFailure(run(directory), `NEW one-vocabulary: ${group} has`);
+  });
+}
+
+test("a link into another repository passes the vocabulary rule and the codemod leaves it", () => {
+  const link = `[Herdr](https://github.com/herdrdev/herdr-app/blob/x/defaults/${["mo", "ds"].join("")}/worktree/main.js)`;
+  const directory = scratch();
+  edit(directory, "docs/workspace.md", (text) => `${text}\n${link}\n`);
+  const result = run(directory);
+  assert.strictEqual(result.status, 0, result.stdout + result.stderr);
+  execFileSync("git", ["add", "-A"], { cwd: directory });
+  for (const stage of ["2", "5"])
+    spawnSync(
+      "node",
+      [
+        path.join(__dirname, "vocabulary.cjs"),
+        "--repository",
+        directory,
+        "--apply",
+        stage,
+      ],
+      { encoding: "utf8", env: ENV },
+    );
+  assert.ok(
+    fs
+      .readFileSync(path.join(directory, "docs/workspace.md"), "utf8")
+      .includes(link),
+  );
+});
+
 test("the codemod rewrites a planted old word with the table", () => {
   const directory = scratch();
   const planted = path.join(directory, "app/src/planted.rs");

@@ -12,7 +12,7 @@ import type {
   Layout,
   Fleet,
   Voyage,
-  Context as Scope,
+  Context as DockContext,
 } from "../../contract/generated/response";
 
 import { voyageColour } from "./voyage-colours.js";
@@ -210,7 +210,7 @@ export function renderSidebar(
   for (const id of shown) {
     const item = voyages.find((entry) => entry.id === id)!;
     const index = layout.voyages.findIndex((entry) => entry.id === id);
-    const scope: Scope = { kind: "voyage", id: item.id };
+    const scope: DockContext = { kind: "voyage", id: item.id };
     const docked =
       layout.context.kind === "voyage" && layout.context.id === item.id;
     const worktree =

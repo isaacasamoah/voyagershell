@@ -201,7 +201,7 @@ fn load(
 ) -> Result<Entity<ShellRoot>> {
     let readable = current.clone();
     let module = HostModule::new(crate::script_types::THEME_MODULE)
-        .declarations(crate::script_types::HEADER)
+        .declarations(crate::script_types::THEME)
         .function("projection", move |_| {
             let value = readable.borrow();
             let value = value

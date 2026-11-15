@@ -129,7 +129,7 @@ def prove(
         document = wait(
             lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
             lambda record: (
-                bool((record.get("value") or {}).get("contents"))
+                bool((record.get("value") or {}).get("vessels"))
                 and bool(record["value"]["vessels"][0].get("backend"))
             ),
             "the initial bound terminal",

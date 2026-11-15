@@ -345,7 +345,7 @@ fn native_registry(viewers: terminal::Viewers) -> Result<gpui_shell::FrozenCompo
 pub fn declarations() -> Result<String> {
     let mut declarations = gpui_shell::type_declarations(&native_registry(Default::default())?);
     for (name, body) in [
-        (script_types::THEME_MODULE, script_types::HEADER),
+        (script_types::THEME_MODULE, script_types::THEME),
         (script_types::AVATAR_MODULE, script_types::AVATAR),
         (script_types::WORKSPACE_MODULE, script_types::WORKSPACE),
         (

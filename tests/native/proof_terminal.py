@@ -153,7 +153,7 @@ def terminal(
         document = wait_for(
             lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
             lambda value: (
-                bool((value.get("value") or {}).get("contents", []))
+                bool((value.get("value") or {}).get("vessels", []))
                 and bool(value["value"]["vessels"][0].get("backend"))
             ),
             "bound terminal",

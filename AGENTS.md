@@ -6,12 +6,12 @@ Prepare the pinned native SDK with `python3 desktop/prepare-sdk.py` before nativ
 Cargo or Node checks. The reviewed overlay patch belongs in `desktop/patches/`;
 the prepared user-cache checkout and generated `.cargo/config.toml` are local
 build inputs. Preserve one coherent SDK graph and installed dependency
-checkouts. The selected retained-rendering baseline is canonical development
-work, not completed foundation acceptance.
+checkouts. Develop on the selected retained-rendering baseline. Do not describe
+it as completed foundation acceptance.
 
 VoyagerShell is a configurable workspace built on Herdr Core. Herdr Core owns terminals, screens and processes. Voyager owns workspace presentation, explicit context and its application policy. Do not introduce a second process supervisor or recreate native agent session recovery.
 
-This is an application for extensible content, not only a terminal manager. A terminal or coding agent is one content type. A content package may instead provide a document, graph, dashboard, game or another supported view, with an optional backend run by Core. Starting a program does not establish that its interface can be embedded or understood by an agent.
+This is an application for extensible content, not only a terminal manager. A terminal or coding agent is one Vessel type. A Vessel package may instead provide a document, graph, dashboard, game or another supported view, with an optional backend run by Core. Starting a program does not establish that its interface can be embedded or understood by an agent.
 
 - Inspect the branch and dirty state before editing. Preserve unrelated work and running sessions.
 - Work in small, complete, user-visible increments. Verify the intended interaction and one relevant failure.
@@ -30,7 +30,7 @@ The native candidate's application queue is `app/src/client.rs`. Placement and e
 
 The retained Electron reference in `experiments/electron-reference/` composes its application in `main.cjs`. Its `workspace.cjs`, `portal-library.cjs`, `portal-host.cjs` and `core.cjs` remain reference owners, not the native product's implementation locations.
 
-A Voyage is a space containing Fleets. A Fleet is a tab containing Vessel placements. A Portal is a persistent placement across a Voyage. The same content type and instance interface serves both placements. Keep content identity, placement and any backend terminal address separate. The native candidate retains Portal content across Fleet changes. Portal placement and presentation must belong to the shared canvas definition and Rust owner, with overlay as the default and make-room also supported. Native evidence is still required for the current composition.
+A Voyage is a space containing Fleets. A Fleet is a tab containing Vessel placements. A Portal is a persistent placement across a Voyage. The same Vessel type and instance interface serves both placements. Keep content identity, placement and any backend terminal address separate. The native candidate retains Portal content across Fleet changes. Portal placement and presentation must belong to the shared canvas definition and Rust owner, with overlay as the default and make-room also supported. Native evidence is still required for the current composition.
 
 The avatar represents its user's authority while its dock selects context. Workspace, Voyage, Fleet, Vessel and Portal context must remain explicit and separate from keyboard focus, visual selection and delegated assignment. Fleet membership and Core parentage do not grant instruction rights. Do not claim the prototype enforces delegated ranks where it does not.
 
@@ -38,11 +38,11 @@ Use one typed application contract for UI, content and agent callers as each cap
 
 ## Content and provider boundaries
 
-Make content types clear to agents. Describe supported renderers, per-instance configuration and state, named actions, expected revisions and lifecycle. Provide concise agent instructions and generated operation details. Inspect the same state and invoke the same actions through the application owner from a view or an authorized agent. A schema describes data; it does not grant authority.
+Make Vessel types clear to agents. Describe supported renderers, per-instance configuration and state, named actions, expected revisions and lifecycle. Provide concise agent instructions and generated operation details. Inspect the same state and invoke the same actions through the application owner from a view or an authorized agent. A schema describes data; it does not grant authority.
 
 Preserve live authoring and reversible uninstall. A valid edit updates the existing instance; a broken edit must expose its error and retain the usable version where supported. Hiding, moving, switching Fleets or uninstalling a view must not stop its backend. Explicit stop targets only the verified selected Core program. Keep personal source edits and instance data when considering updates. Shipped packages currently seed once; an update or migration policy must be selected and proved rather than assumed.
 
-The native private conversation lives in `app/src/conversation_client.rs`, its provider contract in `app/src/provider.rs`, and Codex conversion in `app/src/codex.rs` and `app/src/codex_protocol.rs`. The preserved Electron counterpart is `experiments/electron-reference/companion.cjs`. The private conversation is separate from terminal agents and content instances. The provider adapter handles native conversation and available voice capabilities. Application code owns scope, tools and policy. Keep user-visible conversation/results separate from private reasoning, credentials and account/audio-session data. Do not block application actions on provider work.
+The native private conversation lives in `app/src/conversation_client.rs`, its provider contract in `app/src/provider.rs`, and Codex conversion in `app/src/codex.rs` and `app/src/codex_protocol.rs`. The preserved Electron counterpart is `experiments/electron-reference/companion.cjs`. The private conversation is separate from terminal agents and Vessels. The provider adapter handles native conversation and available voice capabilities. Application code owns scope, tools and policy. Keep user-visible conversation/results separate from private reasoning, credentials and account/audio-session data. Do not block application actions on provider work.
 
 Voyager's private administrator inspects, arranges, delegates and verifies. Working Vessels make project code, prose, configuration, skill and extension-source changes. Ordinary application actions and structured content-data updates remain administrator operations. Useful provider-native inspection complements the existing workspace/process/content tools; the exact native tool/write profile remains a design decision. Automatic per-Vessel conversation/transcript discovery is deferred. Current support is Codex-specific; additional providers and capability-driven voice controls require real integration proof.
 

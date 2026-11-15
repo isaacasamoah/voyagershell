@@ -166,7 +166,7 @@ def prove(
         document = wait(
             lambda: rpc("doc.get", {"name": "voyager-layout-v2"}),
             lambda item: (
-                bool(item.get("value", {}).get("contents"))
+                bool(item.get("value", {}).get("vessels"))
                 and bool(item["value"]["vessels"][0].get("backend"))
             ),
             "bound terminal",

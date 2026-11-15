@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use voyager_contract::inspection::Role;
 use voyager_contract::{
-    VesselId, Fleet, FleetId, Layout, PlacementId, RenameTarget, Voyage, VoyageId,
+    Fleet, FleetId, Layout, PlacementId, RenameTarget, VesselId, Voyage, VoyageId,
 };
 
 cases! {
@@ -404,9 +404,7 @@ fn open_dialog(native: &Native, voyage: &VoyageId) -> Result<()> {
 fn rested(native: &Native, second: &Second) -> Result<(u64, Layout)> {
     native.settle(
         "the second Voyage's programs bound and the workspace at rest",
-        |seen| {
-            bound(seen.document, &second.vessels).then(|| (seen.version, seen.document.clone()))
-        },
+        |seen| bound(seen.document, &second.vessels).then(|| (seen.version, seen.document.clone())),
         |_| true,
     )
 }

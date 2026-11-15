@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 use std::time::Duration;
 use voyager_contract::inspection::Frame;
-use voyager_contract::{VesselId, CoreTerminalId, Layout, PlacementId};
+use voyager_contract::{CoreTerminalId, Layout, PlacementId, VesselId};
 
 pub const EXPECTATION: Duration = Duration::from_secs(4);
 pub const LOOK: Duration = Duration::from_millis(10);

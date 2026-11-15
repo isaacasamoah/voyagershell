@@ -429,8 +429,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         Verdict::new()
             .expect(
                 "the closed Portal stays in its Voyage with the same content and backend",
-                members(&layout, &home).contains(&portal)
-                    && layout.vessels == before_close.vessels,
+                members(&layout, &home).contains(&portal) && layout.vessels == before_close.vessels,
             )
             .expect(
                 "the column is hidden and empty",

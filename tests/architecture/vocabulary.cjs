@@ -42,6 +42,20 @@ function load(file = TABLE) {
   };
 }
 
+const FOREIGN = /https?:\/\/[^\s)>\]"'`]+|[\w./-]*herdr-app[\w./-]*/g;
+
+function shield(text) {
+  const held = [];
+  const masked = text.replace(FOREIGN, (match) => {
+    held.push(match);
+    return `\u0000${held.length - 1}\u0000`;
+  });
+  return {
+    masked,
+    restore: (value) => value.replace(/\u0000(\d+)\u0000/g, (_, i) => held[i]),
+  };
+}
+
 function isText(table, name) {
   return table.kinds.has(path.extname(name).slice(1));
 }
@@ -50,7 +64,7 @@ function scan(table, names, read) {
   const found = new Map();
   for (const name of names) {
     if (table.skipped(name) || !isText(table, name)) continue;
-    const lines = read(name).split("\n");
+    const lines = shield(read(name)).masked.split("\n");
     for (const rule of table.rules) {
       if (!rule.banned || !rule.applies(name)) continue;
       lines.forEach((text, index) => {
@@ -124,7 +138,8 @@ function segments(name, text) {
 }
 
 function rewrite(table, stage, name, text) {
-  let next = text;
+  const guarded = shield(text);
+  let next = guarded.masked;
   for (const rule of table.rules) {
     if (rule.stage !== stage || !rule.applies(name)) continue;
     next = rule.code
@@ -135,7 +150,7 @@ function rewrite(table, stage, name, text) {
           .join("")
       : next.replace(rule.pattern, rule.new);
   }
-  return next;
+  return guarded.restore(next);
 }
 
 function apply(table, stage, repository) {

@@ -1,7 +1,7 @@
 pub const THEME_MODULE: &str = "voyager_theme";
 pub const WORKSPACE_MODULE: &str = "voyager_workspace";
 
-pub const HEADER: &str = r#"
+pub const THEME: &str = r#"
 export function projection(): {
     background: import("gpui-kit").Color;
     foreground: import("gpui-kit").Color;

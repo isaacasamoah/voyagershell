@@ -4,7 +4,7 @@ use crate::native::Seen;
 use serde::Serialize;
 use voyager_contract::inspection::{Element, Rect, Role};
 use voyager_contract::{
-    Axis, Context, Fleet, FleetId, Layout, PlacementId, RenameTarget, Split, Placement, Voyage,
+    Axis, Context, Fleet, FleetId, Layout, Placement, PlacementId, RenameTarget, Split, Voyage,
     VoyageId,
 };
 
@@ -242,7 +242,9 @@ impl Model {
         let named = tabs.iter().map(|tab| (&tab.id.0, &tab.name));
         compare_labels("Fleet tab", named, &drawn_tabs, found);
         let shown = tabs.iter().find(|tab| tab.id == self.fleet);
-        let vessels = shown.map(|tab| tab.placements.as_slice()).unwrap_or_default();
+        let vessels = shown
+            .map(|tab| tab.placements.as_slice())
+            .unwrap_or_default();
         let titles = drawn(Role::VesselName);
         let terminals = drawn(Role::Terminal);
         for placed in vessels {
