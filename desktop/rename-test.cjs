@@ -81,11 +81,15 @@ function fixture() {
   const view = new Canvas();
   view.startContext = () => {};
   view.init(null, cx);
-  async function reply(status = "applied", fresh = true) {
-    request({ status, fresh, version: "1", layout });
+  async function reply(status = "applied", fresh = true, message = null) {
+    request({ status, fresh, version: "1", layout, message });
     await tasks[tasks.length - 1];
   }
-  return { view, cx, target, calls, reply, layout };
+  async function unanswered(status, message) {
+    request({ requestId: "canvas-generation", status, message });
+    await tasks[tasks.length - 1];
+  }
+  return { view, cx, target, calls, reply, unanswered, layout };
 }
 
 test("chat retains its named native composer and submit event", () => {
@@ -181,7 +185,7 @@ test("a pending selection preserves rename and clears later navigation on refusa
   view.editing.state.text = "Changed";
   view.editing.state.events.submit(null, cx);
   view.run({ operation: "select-fleet", id: "fleet-2" }, cx);
-  await reply("rejected", false);
+  await reply("refused", false);
   view.run({ operation: "inspect" }, cx);
   await reply();
   assert.equal(
@@ -208,6 +212,76 @@ test("an unconfirmed name is not replayed on blur or Enter", async () => {
   editing.state.events.submit(null, cx);
   assert.equal(calls.at(-1).name, "A distinct edit");
   await reply();
+});
+
+test("a refusal the owner answered shows its reason", async () => {
+  const { view, cx, target, reply } = fixture();
+  await reply();
+  view.editName(target, "Original", cx);
+  view.editing.state.text = "Changed";
+  view.editing.state.events.submit(null, cx);
+  await reply(
+    "refused",
+    true,
+    "invalid_workspace: A name must contain 1 to 128 bytes",
+  );
+  assert.equal(
+    view.status,
+    "Refused. invalid_workspace: A name must contain 1 to 128 bytes",
+  );
+  assert.equal(view.fresh, true);
+});
+
+test("a request refused before the owner took it shows its reason and may be sent again", async () => {
+  const { view, cx, target, calls, reply, unanswered } = fixture();
+  await reply();
+  view.editName(target, "Original", cx);
+  const editing = view.editing;
+  editing.state.text = "Changed";
+  editing.state.events.submit(null, cx);
+  await unanswered(
+    "refused",
+    "Workspace busy or unavailable; nothing was queued",
+  );
+  assert.equal(
+    view.status,
+    "Refused. Workspace busy or unavailable; nothing was queued",
+  );
+  assert.equal(view.fresh, true, "A known refusal made the canvas stale");
+  editing.state.events.submit(null, cx);
+  assert.equal(calls.length, 3, "A refused edit could not be sent again");
+  assert.equal(calls.at(-1).name, "Changed");
+  await reply();
+  assert.equal(view.editing, null);
+});
+
+test("a request the owner never answered shows as uncertain and is not sent again", async () => {
+  const { view, cx, target, calls, reply, unanswered } = fixture();
+  await reply();
+  view.editName(target, "Original", cx);
+  const editing = view.editing;
+  editing.state.text = "Changed";
+  editing.state.events.submit(null, cx);
+  await unanswered(
+    "uncertain",
+    "Workspace result unconfirmed; do not repeat the request",
+  );
+  assert.equal(
+    view.status,
+    "Uncertain. Workspace result unconfirmed; do not repeat the request",
+  );
+  assert.equal(view.fresh, false);
+  editing.state.events.blur(null, cx);
+  editing.state.events.submit(null, cx);
+  assert.equal(calls.length, 2, "An uncertain edit was sent again");
+  assert.equal(
+    view.status,
+    "Name change not confirmed. Refresh before a new edit.",
+  );
+  view.run({ operation: "inspect" }, cx);
+  await reply();
+  editing.state.events.submit(null, cx);
+  assert.equal(calls.length, 3, "An unchanged uncertain edit was repeated");
 });
 
 test("an edit back to the old label after refresh is a new intent", async () => {

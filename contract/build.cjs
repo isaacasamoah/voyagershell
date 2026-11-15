@@ -81,10 +81,10 @@ async function generate(mode, avatar) {
     `import { call, request_id, terminal_open } from "voyager_workspace";
 import { request as validateRequest, response as validateResponse, terminalRequest as validateTerminalRequest, terminalResponse as validateTerminalResponse } from "./validate.js";
 import type { Request } from "./request";
-import type { Response } from "./response";
+import type { Reply } from "./response";
 import type { TerminalRequest } from "./terminalRequest";
 import type { TerminalResponse } from "./terminalResponse";
-export async function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response> {
+export async function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Reply> {
   const request: Request = { requestId: request_id(), expectedVersion, action };
   if (!validateRequest(request)) throw Error("Invalid workspace request");
   const response: unknown = JSON.parse(await call(JSON.stringify(request)));
@@ -112,7 +112,7 @@ export async function openTerminal(vesselId: string, expectedVersion: string): P
     { parser: "babel" },
   );
   files["workspace.d.ts"] =
-    'import type { Request } from "./request";\nimport type { Response } from "./response";\nimport type { TerminalResponse } from "./terminalResponse";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response>;\nexport function openTerminal(vesselId: string, expectedVersion: string): Promise<TerminalResponse>;\n';
+    'import type { Request } from "./request";\nimport type { Reply } from "./response";\nimport type { TerminalResponse } from "./terminalResponse";\nexport function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Reply>;\nexport function openTerminal(vesselId: string, expectedVersion: string): Promise<TerminalResponse>;\n';
   files["conversation.ts"] =
     `import { call, request_id, snapshot } from "voyager_conversation";
 import { conversationRequest, conversationReply, conversationSnapshot } from "./validate.js";

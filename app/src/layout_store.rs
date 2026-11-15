@@ -5,7 +5,7 @@ use serde_json::Value;
 use voyager_contract::layout_document::{
     BACKUP, DOCUMENT, Kept, LEGACY_DOCUMENT, READER_LEVEL, Reading, import_legacy, read, write,
 };
-use voyager_contract::{Action, Layout, Response, Status};
+use voyager_contract::{Action, Layout, Outcome, Response};
 
 fn rejected(message: String) -> Error {
     Error::Rejected {
@@ -83,7 +83,7 @@ pub(crate) fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Er
 }
 
 pub(crate) fn carry_notice(notice: &mut Option<String>, action: &Action, response: &mut Response) {
-    if response.status == Status::Applied && !matches!(action, Action::Inspect) {
+    if response.status == Outcome::Applied && !matches!(action, Action::Inspect) {
         *notice = None;
     } else if response.message.is_none() {
         response.message.clone_from(notice);
@@ -113,7 +113,7 @@ mod tests {
 
     const NOTICE: &str = "copy kept";
 
-    fn response(status: Status, message: Option<&str>) -> Response {
+    fn response(status: Outcome, message: Option<&str>) -> Response {
         Response {
             request_id: "r".into(),
             status,
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn an_inspect_response_carries_the_notice_and_leaves_it_held() {
         let mut notice = held();
-        let mut reply = response(Status::Applied, None);
+        let mut reply = response(Outcome::Applied, None);
         carry_notice(&mut notice, &Action::Inspect, &mut reply);
         assert_eq!(reply.message.as_deref(), Some(NOTICE));
         assert_eq!(notice, held());
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn a_refused_or_unconfirmed_response_without_a_message_carries_the_notice() {
-        for status in [Status::Rejected, Status::Uncertain] {
+        for status in [Outcome::Refused, Outcome::Uncertain] {
             let mut notice = held();
             let mut reply = response(status, None);
             carry_notice(&mut notice, &Action::Home, &mut reply);
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn a_message_of_the_responses_own_is_never_replaced() {
         let mut notice = held();
-        let mut reply = response(Status::Rejected, Some("refused"));
+        let mut reply = response(Outcome::Refused, Some("refused"));
         carry_notice(&mut notice, &Action::Home, &mut reply);
         assert_eq!(reply.message.as_deref(), Some("refused"));
         assert_eq!(notice, held());
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn an_applied_change_clears_the_notice_and_does_not_carry_it() {
         let mut notice = held();
-        let mut reply = response(Status::Applied, None);
+        let mut reply = response(Outcome::Applied, None);
         carry_notice(&mut notice, &Action::Home, &mut reply);
         assert_eq!(reply.message, None);
         assert_eq!(notice, None);

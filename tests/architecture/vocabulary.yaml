@@ -740,13 +740,13 @@ contexts:
     name: Application queue and front door
     summary: 'Takes every request from a view, a Vessel or an agent, orders the effects and reports each outcome.'
     guide: docs/workspace.md
-    owns: [app/src/client.rs, app/src/front_door.rs, app/src/layout_store.rs, app/src/process.rs, app/src/launch.rs, app/src/activity.rs, app/src/diagnostics.rs, app/src/observation.rs, app/src/lib.rs, app/src/terminal_lifecycle.rs, app/src/tests.rs, app/tests/exit_events.rs, app/tests/front_door.rs, app/tests/launch.rs, app/tests/quit.rs, app/tests/selected_stop.rs, contract/src/activity.rs, contract/src/launch.rs, contract/src/observation.rs]
+    owns: [app/src/client.rs, app/src/client_reply.rs, app/src/front_door.rs, app/src/layout_store.rs, app/src/process.rs, app/src/launch.rs, app/src/activity.rs, app/src/diagnostics.rs, app/src/observation.rs, app/src/lib.rs, app/src/terminal_lifecycle.rs, app/src/tests.rs, app/tests/exit_events.rs, app/tests/front_door.rs, app/tests/launch.rs, app/tests/quit.rs, app/tests/selected_stop.rs, contract/src/activity.rs, contract/src/launch.rs, contract/src/observation.rs]
     uses: [Placement, Vessel, Context, Core terminal, Program]
   - id: placement
     name: Placement
     summary: 'Decides where each Vessel sits and which Context a request carries.'
     guide: docs/workspace.md
-    owns: [app/src/workspace.rs, app/src/scope.rs, app/src/context.rs, app/src/panels.rs, app/src/canvas.rs, app/src/voyage_close.rs, app/src/worktrees.rs, contract/src/lib.rs, contract/src/layout_document.rs, contract/tests/layout_compat.rs, contract/tests/layout_document.rs, contract/src/panels.rs, contract/src/canvas.rs, contract/src/context.rs, contract/src/voyage_close.rs, contract/src/worktree.rs, app/tests/canvas.rs, app/tests/maximize.rs, app/tests/shared_panels.rs, app/tests/voyage_close.rs, contract/src/bin/export.rs, contract/tests/panels.rs, contract/generated/workspace.ts]
+    owns: [app/src/workspace.rs, app/src/scope.rs, app/src/context.rs, app/src/panels.rs, app/src/canvas.rs, app/src/voyage_close.rs, app/src/worktrees.rs, contract/src/lib.rs, contract/src/layout_document.rs, contract/tests/layout_compat.rs, contract/tests/layout_document.rs, contract/tests/reply.rs, contract/src/panels.rs, contract/src/canvas.rs, contract/src/context.rs, contract/src/voyage_close.rs, contract/src/worktree.rs, app/tests/canvas.rs, app/tests/maximize.rs, app/tests/shared_panels.rs, app/tests/voyage_close.rs, contract/src/bin/export.rs, contract/tests/panels.rs, contract/generated/workspace.ts]
     uses: [Vessel]
   - id: content
     name: Content

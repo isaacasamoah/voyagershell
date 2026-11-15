@@ -42,6 +42,7 @@ edges:
   - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_app::workspace', from_owner: core-adapter, to_owner: placement}
   - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_contract', from_owner: core-adapter, to_owner: placement}
   - {from: 'rs:voyager_app::client::core_calls', to: 'rs:voyager_contract::observation', from_owner: core-adapter, to_owner: application-queue}
+  - {from: 'rs:voyager_app::client::reply', to: 'rs:voyager_contract', from_owner: application-queue, to_owner: placement}
   - {from: 'rs:voyager_app::codex', to: 'rs:voyager_app::content', from_owner: conversation-provider, to_owner: content}
   - {from: 'rs:voyager_app::content', to: 'rs:voyager_app::scope', from_owner: content, to_owner: placement}
   - {from: 'rs:voyager_app::content', to: 'rs:voyager_contract', from_owner: content, to_owner: placement}

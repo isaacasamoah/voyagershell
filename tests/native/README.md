@@ -130,6 +130,54 @@ aims at a control the way `click` does and presses the secondary button,
 which the X11 adapter sends as button 3. A journey names the intent, not the
 button number.
 
+A journey may pause Core while the candidate runs, to prove what the app does
+when Core gives no answer. `Native::with_core_paused` checks the bound Core's
+identity, sends it SIGSTOP, runs the journey's closure and sends SIGCONT, also
+when the closure fails. `actions.jsonl` gets a `Core-paused` and a
+`Core-resumed` event. Core does no work while it is paused, so a request that
+the app sends then is held, and Core runs it after it resumes. That differs
+from the Core reply relay below, which lets Core do the work on time and holds
+only the reply. The closure gets the driver without the right to change it.
+It must read only the drawn frame, with `Native::drawn_label` or
+`Native::screen_status`, because a driver request to a paused Core fails after
+five seconds. `Native::drawn_label` waits for a control to draw a label that
+the journey accepts. Its `after` argument is added to the usual deadline, for a
+label that the app draws only once a deadline of its own has passed.
+
+The `outcomes` journey proves that a refusal shows its reason and that an
+uncertain result shows as uncertain and is not sent again. It declares
+`terminal.kill=21000` for its last case and refuses a run that holds that
+reply for 20 seconds or less.
+
+- `refused-shows-reason` renames a Fleet to 129 bytes. It passes when the
+  status line starts with `Refused.` and holds the owner's reason, and the
+  Fleet keeps its saved name.
+- `tool-refusal-carries-reason` plays a scripted rename to an empty name
+  through the stand-in provider. It passes when the tool result holds
+  `"status":"refused"` with the same reason.
+- `uncertain-not-replayed` pauses Core and submits a Fleet rename. It passes
+  when the status line shows the owner's uncertain answer, a second Enter on
+  the same name is declined, Core's layout document is one version on with the
+  typed name after Core resumes, and it is still at that version after Refresh.
+- `close-refused-says-why` plays a scripted rename behind the open close
+  dialog and then confirms. It passes when the dialog's message starts with
+  `Refused.` and holds the owner's reason, the Voyage stays open and every
+  program still runs.
+- `close-uncertain-not-retried` confirms a Voyage close while the relay holds
+  Core's reply to the program stop past Core's deadline. It passes when the
+  dialog's message starts with `Uncertain.`, and after the reply is released
+  the Voyage is still open and the dialog offers no second confirmation.
+
+Limits. `uncertain-not-replayed` reads what Core holds after it resumes and
+not which requests the app sent while Core was paused. The last case does not
+prove that no second stop was sent, because a second stop's reply would be held
+past the end of the case. The journey never reaches a reply that the app's
+owner did not answer, because the owner answers at Core's 20-second deadline
+and the caller waits 22 seconds. Two cases wait for that deadline, so a run
+takes about a minute. The journey reads labels, so it does not judge the one
+frame that the canvas fails to draw when a notice arrives while it is idle. The
+`close-uncertain` capture shows that frame's `Render failed` banner.
+
 A held gesture keeps the primary button down across steps. `Native::hold`
 presses at a control's aim point and returns a `Held`. `Held::toward` moves in
 eight steps to a point that `Native::point_in` gives as fractions of a
@@ -457,7 +505,8 @@ journey's finding about the app, not a defect of the relay.
 A journey can declare the delay that it runs under. `Journey::core_delay` in
 `src/journey.rs` names it, `voyager-verification journeys` prints it as
 `coreDelay`, and `run` uses it when no `--core-delay` is given. A `--core-delay`
-on the command line replaces it. Only `slow-save` declares one, `doc.set=1500`.
+on the command line replaces it. `slow-save` declares `doc.set=1500` and `outcomes` declares
+`terminal.kill=21000`.
 
 The `slow-save` journey proves what the app answers while Core's reply to a
 layout save is held. It opens the chat and starts a turn, so the stand-in can
@@ -600,6 +649,10 @@ the text, so only a read taken while the reply streams catches it. The `terminal
 nothing. `copy-puts-the-selection-on-the-clipboard` then fails on the
 expectation `another X client reads exactly COPYβ界 from the clipboard`, and
 the observed text is the verifier's own `VERIFIER-SENTINEL`.
+
+The `outcomes` patch makes the canvas drop the reason from a refusal.
+`refused-shows-reason` then fails on the expectation `the status line says
+Refused and gives the owner's reason`, and the observed status is `Refused.`.
 
 The `slow-save` patch makes the app's owner wait for Core's reply to a layout
 save before it takes the next request. `inspect-answered-during-held-save` then

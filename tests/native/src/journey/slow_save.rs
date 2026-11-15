@@ -121,7 +121,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "the rename was refused because the layout changed, and Core reported no conflict",
                 text.as_ref().is_some_and(|text| {
-                    text["status"] == "rejected"
+                    text["status"] == "refused"
                         && text["message"]
                             .as_str()
                             .is_some_and(|message| message.contains("Layout changed"))

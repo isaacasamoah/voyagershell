@@ -147,7 +147,7 @@ fn wait<T>(future: impl std::future::Future<Output = T>) -> T {
 fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
     use std::sync::Arc;
     use voyager_app::{client::Client, content::Access, core::Core};
-    use voyager_contract::{Action, Context, Status, content::NotesConfiguration};
+    use voyager_contract::{Action, Context, Outcome, content::NotesConfiguration};
     let runtime = std::path::PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR").unwrap());
     for key in ["HC_SOCKET", "HC_SESSION", "HC_TERMINAL_ID"] {
         assert!(std::env::var_os(key).is_none(), "Clear ambient {key}");
@@ -213,7 +213,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
                 },
                 workspace.version,
             );
-            assert_eq!(workspace.status, Status::Applied);
+            assert_eq!(workspace.status, Outcome::Applied);
             ids.push(workspace.layout.vessels.last().unwrap().id.clone());
         }
         let binding = wait(client.bind_content(ids[0].clone())).unwrap();
@@ -533,7 +533,7 @@ fn configuration_uses_the_live_core_workspace_and_notifies_both_views() {
             },
             repaired.version,
         );
-        assert_eq!(docked.status, Status::Applied);
+        assert_eq!(docked.status, Outcome::Applied);
         assert!(wait(changes.recv()).unwrap() > counter);
         let refreshed = client
             .content(Access::View(binding.clone()), inspect())

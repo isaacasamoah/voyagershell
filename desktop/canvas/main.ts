@@ -22,10 +22,11 @@ import {
   reported_activity,
   refresh_activity,
 } from "voyager_workspace";
-import { NameState, Name, ArrangementCapture, Status } from "voyager_native";
+import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding, Marker, Prepared } from "voyager_native";
 import { Chat } from "./chat.js";
+import { errorMessage, outcome, statusLine } from "./status.js";
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import type { ProcessInfo } from "../../contract/generated/processResponse";
@@ -71,6 +72,7 @@ import type {
   Context as DockContext,
   Fleet,
   Layout,
+  Reply,
   Response,
   PlacementOwner as Owner,
   Voyage,
@@ -117,10 +119,6 @@ type PresentationAction = Extract<
   { operation: "remove-placement" | "set-portal-presentation" }
 >;
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 export default class Canvas extends View {
   declare creation: CreationPicker | undefined;
   declare menus: WorkspaceMenu;
@@ -144,7 +142,7 @@ export default class Canvas extends View {
   declare pendingPresentation: {
     action: PresentationAction;
     target: string;
-    done?: (result: Response | null, cx: AsyncContext) => void;
+    done?: (result: Reply | null, cx: AsyncContext) => void;
   } | null;
   declare fresh: boolean;
   declare focus: FocusHandle;
@@ -526,7 +524,7 @@ export default class Canvas extends View {
     this.pendingPresentation = null;
     if (!ready) {
       this.status =
-        "The waiting panel action was not sent because workspace preparation failed.";
+        `${this.status} The waiting panel action was not sent.`.trim();
     } else if (this.presentationTarget(pending.action) !== pending.target) {
       this.status = "The panel changed. Its waiting action was not sent.";
     } else {
@@ -537,7 +535,7 @@ export default class Canvas extends View {
   run(
     action: Action,
     cx: UIContext,
-    done?: (result: Response | null, cx: AsyncContext) => void,
+    done?: (result: Reply | null, cx: AsyncContext) => void,
     expectedVersion: string = this.version,
     prepareContents = true,
   ) {
@@ -632,7 +630,7 @@ export default class Canvas extends View {
       this.layout?.vessels?.map((item) => item.id) || [],
     );
     cx.spawn(async (task) => {
-      let result: Response | null = null;
+      let result: Reply | null = null;
       let accepted = false;
       let prepared = false;
       try {
@@ -778,11 +776,16 @@ export default class Canvas extends View {
     }
   }
 
-  acceptSnapshot(result: Response, task: AsyncContext) {
+  acceptSnapshot(result: Reply, task: AsyncContext) {
     this.drag = null;
+    if (!("layout" in result)) {
+      this.status = outcome(result);
+      if (result.status === "uncertain") this.fresh = false;
+      this.splitReset += 1;
+      return false;
+    }
     if (BigInt(result.version) < BigInt(this.version)) {
-      if (result.status !== "applied")
-        this.status = result.message || result.status;
+      if (result.status !== "applied") this.status = outcome(result);
       return false;
     }
     if (this.menus) this.menus.current = null;
@@ -836,7 +839,7 @@ export default class Canvas extends View {
       task.spawn((cx) => this.readContext(cx));
     }
     this.fresh = result.fresh;
-    this.status = result.message || "";
+    this.status = outcome(result);
     const retain = (target: RenameTarget, name: string) => {
       const key = JSON.stringify(target);
       const retained = this.names.get(key);
@@ -1633,19 +1636,10 @@ export default class Canvas extends View {
   }
 
   statusView(): NativeElement {
-    const text = this.status || this.worktrees?.status || "";
-    const view = div()
-      .flex()
-      .flex_col()
-      .px(12)
-      .py(6)
-      .child(
-        Status.new("workspace-status", text)
-          .text_size(11)
-          .text_color("#ffcad3"),
-      )
-      .child(this.action("Refresh", { operation: "inspect" }));
-    return text ? view.child(Marker.new("workspace-status", "", text)) : view;
+    return statusLine(
+      this.status || this.worktrees?.status || "",
+      this.action("Refresh", { operation: "inspect" }),
+    );
   }
 
   openSplit(

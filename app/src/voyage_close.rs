@@ -7,7 +7,10 @@ use crate::{
 use async_channel::{Receiver, Sender};
 use voyager_contract::administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest};
 use voyager_contract::voyage_close::{Entry, Phase, Plan};
-use voyager_contract::{Action, Context, CoreTerminalId, Layout, Status, VesselId, VoyageId};
+use voyager_contract::{
+    Action, Context, CoreTerminalId, Layout, Outcome, Status, Unanswered, Unapplied, VesselId,
+    VoyageId,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SaveTicket(String);
@@ -389,8 +392,8 @@ impl Closing {
                 Err(Error::Uncertain(message)) => {
                     format!("Shutdown is unconfirmed. Inspect before another close: {message}")
                 }
-                Err(error) => {
-                    format!("Voyage remains open. Inspect before another close: {error:?}")
+                Err(Error::Rejected { kind, message }) => {
+                    format!("Voyage remains open. Inspect before another close: {kind}: {message}")
                 }
             });
         }
@@ -425,80 +428,198 @@ pub(crate) fn execute(client: &Client, confirmed: Confirmed) -> Result<(), Error
             Err(CallError::Unconfirmed(message)) => return Err(Error::Uncertain(message)),
         }
     }
+    let mut stopped = 0;
     for entry in &plan.entries {
         let (Some(address), Some(pid)) = (&entry.terminal, entry.pid) else {
             continue;
         };
-        let current = client
-            .call(voyager_contract::Request {
+        stop(client, &plan, &target, entry, address, pid)
+            .map_err(|error| once_stopped(stopped, error))?;
+        stopped += 1;
+    }
+    Ok(())
+}
+
+fn stop(
+    client: &Client,
+    plan: &Plan,
+    target: &Target,
+    entry: &Entry,
+    address: &CoreTerminalId,
+    pid: u32,
+) -> Result<(), Error> {
+    let current = client.inspect().map_err(uninspected)?;
+    if current.status != Outcome::Applied || !current.fresh {
+        return Err(refused("Workspace could not be inspected before shutdown"));
+    }
+    target.check(&current.layout)?;
+    let result = client
+        .process(
+            Context::Voyage {
+                id: plan.voyage.clone(),
+            },
+            ProcessRequest {
                 request_id: client.request_id(),
-                expected_version: 0,
-                action: Action::Inspect,
-            })
-            .map_err(|error| Error::Uncertain(error.to_string()))?;
-        if current.status != Status::Applied || !current.fresh {
-            return Err(refused("Workspace could not be inspected before shutdown"));
-        }
-        target.check(&current.layout)?;
-        let result = client
-            .process(
-                Context::Voyage {
-                    id: plan.voyage.clone(),
-                },
-                ProcessRequest {
-                    request_id: client.request_id(),
-                    input: ProcessInput {
-                        expected_version: current.version,
-                        action: ProcessAction::Stop {
-                            terminal_id: address.clone(),
-                            vessel_id: entry.vessel.clone(),
-                            pid,
-                        },
+                input: ProcessInput {
+                    expected_version: current.version,
+                    action: ProcessAction::Stop {
+                        terminal_id: address.clone(),
+                        vessel_id: entry.vessel.clone(),
+                        pid,
                     },
                 },
-            )
-            .map_err(|error| match error {
-                CallError::Rejected(message) => refused(&message),
-                CallError::Unconfirmed(message) => Error::Uncertain(message),
-            })?;
-        match result.status {
-            Status::Applied => (),
-            Status::Rejected => {
-                return Err(refused(
-                    result
-                        .message
-                        .as_deref()
-                        .unwrap_or("Program stop was refused"),
-                ));
-            }
-            Status::Uncertain => {
-                return Err(Error::Uncertain(
-                    result
-                        .message
-                        .clone()
-                        .unwrap_or_else(|| "Program stop was not confirmed".into()),
-                ));
-            }
+            },
+        )
+        .map_err(|error| match error {
+            CallError::Rejected(message) => refused(&message),
+            CallError::Unconfirmed(message) => Error::Uncertain(message),
+        })?;
+    match result.status {
+        Status::Applied => (),
+        Status::Rejected => {
+            return Err(refused(
+                result
+                    .message
+                    .as_deref()
+                    .unwrap_or("Program stop was refused"),
+            ));
         }
-        match &result.output {
-            Some(ProcessOutput::Stop { target, observed })
-                if target.terminal_id == *address
-                    && target.pid == Some(pid)
-                    && observed.terminal_id == *address
-                    && TerminalState::parse(&observed.state) == TerminalState::Finished => {}
-            _ => {
-                return Err(Error::Uncertain(
-                    "Program exit is not confirmed; no stop was repeated".into(),
-                ));
-            }
+        Status::Uncertain => {
+            return Err(Error::Uncertain(
+                result
+                    .message
+                    .clone()
+                    .unwrap_or_else(|| "Program stop was not confirmed".into()),
+            ));
+        }
+    }
+    match &result.output {
+        Some(ProcessOutput::Stop { target, observed })
+            if target.terminal_id == *address
+                && target.pid == Some(pid)
+                && observed.terminal_id == *address
+                && TerminalState::parse(&observed.state) == TerminalState::Finished => {}
+        _ => {
+            return Err(Error::Uncertain(
+                "Program exit is not confirmed; no stop was repeated".into(),
+            ));
         }
     }
     Ok(())
+}
+
+fn once_stopped(stopped: usize, error: Error) -> Error {
+    match error {
+        Error::Rejected { kind, message } if stopped > 0 => Error::Uncertain(format!(
+            "{kind}: {message}. {stopped} of this Voyage's programs had already stopped"
+        )),
+        other => other,
+    }
+}
+
+fn uninspected(unanswered: Unanswered) -> Error {
+    match unanswered.status {
+        Unapplied::Refused => refused(&unanswered.message),
+        Unapplied::Uncertain => Error::Uncertain(unanswered.message),
+    }
 }
 
 pub(crate) fn refused(message: &str) -> Error {
     Error::Rejected {
         kind: "voyage_close".into(),
         message: message.into(),
+    }
+}
+
+#[cfg(test)]
+impl Confirmed {
+    pub(crate) fn stopping(voyage: voyager_contract::Voyage, entries: Vec<Entry>) -> Self {
+        Self {
+            plan: Plan {
+                id: "plan".into(),
+                voyage: voyage.id.clone(),
+                name: voyage.name.clone(),
+                version: 1,
+                phase: Phase::Saving,
+                entries,
+                uncommitted_changes: None,
+                message: None,
+            },
+            target: Target {
+                voyage,
+                vessels: Vec::new(),
+            },
+            saves: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn closing() -> Closing {
+        Closing {
+            plan: Some(Plan {
+                id: "plan".into(),
+                voyage: VoyageId("voyage".into()),
+                name: "Demo".into(),
+                version: 1,
+                phase: Phase::Saving,
+                entries: Vec::new(),
+                uncommitted_changes: None,
+                message: None,
+            }),
+            ..Closing::default()
+        }
+    }
+
+    #[test]
+    fn an_inspect_that_was_never_queued_refuses_the_close_and_a_silent_one_leaves_it_uncertain() {
+        let never_queued = uninspected(Unanswered::refused(
+            "inspect".into(),
+            "Workspace busy or unavailable; nothing was queued".into(),
+        ));
+        assert!(matches!(
+            never_queued,
+            Error::Rejected { kind, message }
+                if kind == "voyage_close" && message.ends_with("nothing was queued")
+        ));
+        let silent = uninspected(Unanswered::uncertain(
+            "inspect".into(),
+            "Workspace result unconfirmed; do not repeat the request".into(),
+        ));
+        assert!(matches!(
+            silent,
+            Error::Uncertain(message) if message.starts_with("Workspace result unconfirmed")
+        ));
+    }
+
+    #[test]
+    fn a_refused_close_gives_its_reason_and_an_unconfirmed_one_says_so() {
+        let mut declined = closing();
+        declined.finish(Err(refused(
+            "Workspace could not be inspected before shutdown",
+        )));
+        let plan = declined.plan.unwrap();
+        assert_eq!(plan.phase, Phase::Incomplete);
+        assert_eq!(
+            plan.message.as_deref(),
+            Some(
+                "Voyage remains open. Inspect before another close: voyage_close: Workspace could not be inspected before shutdown"
+            )
+        );
+        let mut unconfirmed = closing();
+        unconfirmed.finish(Err(Error::Uncertain(
+            "Core result unconfirmed; no request was repeated".into(),
+        )));
+        let plan = unconfirmed.plan.unwrap();
+        assert_eq!(plan.phase, Phase::Incomplete);
+        assert_eq!(
+            plan.message.as_deref(),
+            Some(
+                "Shutdown is unconfirmed. Inspect before another close: Core result unconfirmed; no request was repeated"
+            )
+        );
     }
 }

@@ -471,6 +471,31 @@ pub enum Status {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Outcome {
+    Applied,
+    Refused,
+    Uncertain,
+}
+
+impl From<Outcome> for Status {
+    fn from(outcome: Outcome) -> Self {
+        match outcome {
+            Outcome::Applied => Self::Applied,
+            Outcome::Refused => Self::Rejected,
+            Outcome::Uncertain => Self::Uncertain,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Unapplied {
+    Refused,
+    Uncertain,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TerminalRequest {
     pub request_id: String,
@@ -501,7 +526,7 @@ pub enum TerminalReason {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Response {
     pub request_id: String,
-    pub status: Status,
+    pub status: Outcome,
     #[serde(with = "decimal")]
     #[schemars(with = "String")]
     pub version: u64,
@@ -512,6 +537,48 @@ pub struct Response {
     pub message: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub close_plan: Option<voyage_close::Plan>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Unanswered {
+    pub request_id: String,
+    pub status: Unapplied,
+    pub message: String,
+}
+
+impl Unanswered {
+    pub fn refused(request_id: String, message: String) -> Self {
+        Self {
+            request_id,
+            status: Unapplied::Refused,
+            message,
+        }
+    }
+
+    pub fn uncertain(request_id: String, message: String) -> Self {
+        Self {
+            request_id,
+            status: Unapplied::Uncertain,
+            message,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
+#[serde(untagged)]
+pub enum Reply {
+    Answered(Box<Response>),
+    Unanswered(Unanswered),
+}
+
+impl From<Result<Response, Unanswered>> for Reply {
+    fn from(result: Result<Response, Unanswered>) -> Self {
+        match result {
+            Ok(response) => Self::Answered(Box::new(response)),
+            Err(unanswered) => Self::Unanswered(unanswered),
+        }
+    }
 }
 
 mod decimal {

@@ -24,7 +24,7 @@ use std::{
 use view::AvatarView;
 use voyager_app::client::Client;
 use voyager_contract::avatar_animation::Trigger;
-use voyager_contract::{Action, Context as Scope, Request, Response, Status};
+use voyager_contract::{Action, Context as Scope, Outcome, Reply, Request};
 
 struct Changed;
 
@@ -48,7 +48,7 @@ pub struct Avatar {
     position: Option<Position>,
     position_task: Option<Task<()>>,
     position_io: Arc<Mutex<Option<crate::platform::WindowPosition>>>,
-    result: Rc<RefCell<Option<Result<Response, String>>>>,
+    result: Rc<RefCell<Option<Result<Reply, String>>>>,
     animation_directory: PathBuf,
     animation_reload: Option<Task<()>>,
     animation_notice: Rc<RefCell<Option<String>>>,
@@ -62,7 +62,7 @@ pub struct Binding {
     view: Entity<AvatarView>,
     targets: Rc<RefCell<Geometry>>,
     animation_notice: Rc<RefCell<Option<String>>>,
-    result: Rc<RefCell<Option<Result<Response, String>>>>,
+    result: Rc<RefCell<Option<Result<Reply, String>>>>,
     window_epoch: Rc<Cell<u64>>,
     primary_speech: Rc<Cell<bool>>,
 }
@@ -677,11 +677,11 @@ impl Avatar {
                         avatar.version = response.version;
                         avatar.scope = response.layout.context.clone();
                     }
-                    if response.status == Status::Applied {
+                    if response.status == Outcome::Applied {
                         avatar.applied_dock(&response.request_id, epoch, cx);
                     }
                 }
-                *avatar.result.borrow_mut() = Some(result);
+                *avatar.result.borrow_mut() = Some(Ok(Reply::from(result)));
                 cx.emit(Changed);
                 cx.notify();
             });
@@ -1122,7 +1122,7 @@ impl Binding {
             })
             .function("take_result", move |_| match result.borrow_mut().take() {
                 None => Ok(HostValue::Null),
-                Some(Ok(response)) => serde_json::to_string(&response)
+                Some(Ok(reply)) => serde_json::to_string(&reply)
                     .map(HostValue::from)
                     .map_err(|error| HostError::new(error.to_string())),
                 Some(Err(error)) => Err(HostError::new(error)),

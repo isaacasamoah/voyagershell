@@ -1,6 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "additionalProperties": false,
+  "anyOf": [
+    {
+      "$ref": "#/definitions/Response"
+    },
+    {
+      "$ref": "#/definitions/Unanswered"
+    }
+  ],
   "definitions": {
     "Arrangement": {
       "additionalProperties": false,
@@ -575,6 +582,14 @@
         }
       ]
     },
+    "Outcome": {
+      "enum": [
+        "applied",
+        "refused",
+        "uncertain"
+      ],
+      "type": "string"
+    },
     "Permissions": {
       "enum": [
         "yolo",
@@ -761,6 +776,61 @@
       ],
       "type": "string"
     },
+    "Response": {
+      "additionalProperties": false,
+      "properties": {
+        "closePlan": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Plan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdVessels": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "createdWorkspace": {
+          "type": "boolean"
+        },
+        "fresh": {
+          "type": "boolean"
+        },
+        "layout": {
+          "$ref": "#/definitions/Layout"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/Outcome"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "requestId",
+        "status",
+        "version",
+        "layout",
+        "fresh",
+        "createdWorkspace",
+        "createdVessels"
+      ],
+      "type": "object"
+    },
     "Size": {
       "oneOf": [
         {
@@ -869,10 +939,29 @@
       "minimum": 1,
       "type": "integer"
     },
-    "Status": {
+    "Unanswered": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/Unapplied"
+        }
+      },
+      "required": [
+        "requestId",
+        "status",
+        "message"
+      ],
+      "type": "object"
+    },
+    "Unapplied": {
       "enum": [
-        "applied",
-        "rejected",
+        "refused",
         "uncertain"
       ],
       "type": "string"
@@ -1007,57 +1096,5 @@
       "type": "string"
     }
   },
-  "properties": {
-    "closePlan": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/Plan"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "createdVessels": {
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "createdWorkspace": {
-      "type": "boolean"
-    },
-    "fresh": {
-      "type": "boolean"
-    },
-    "layout": {
-      "$ref": "#/definitions/Layout"
-    },
-    "message": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "requestId": {
-      "type": "string"
-    },
-    "status": {
-      "$ref": "#/definitions/Status"
-    },
-    "version": {
-      "type": "string"
-    }
-  },
-  "required": [
-    "requestId",
-    "status",
-    "version",
-    "layout",
-    "fresh",
-    "createdWorkspace",
-    "createdVessels"
-  ],
-  "title": "Response",
-  "type": "object"
+  "title": "Reply"
 }

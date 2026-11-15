@@ -196,10 +196,10 @@ test("an unsent Close waits once and refuses changed placement identity", async 
 });
 
 test("refused uncertain and failed preparation never submit a waiting presentation action", async () => {
-  for (const [open, outcome] of [
-    ["applied", "rejected"],
-    ["applied", "uncertain"],
-    [{ status: "uncertain" }, "applied"],
+  for (const [open, outcome, shown] of [
+    ["applied", "refused", /^Refused\. .* not sent\.$/],
+    ["applied", "uncertain", /^Uncertain\. .* not sent\.$/],
+    [{ status: "uncertain" }, "applied", /not sent\.$/],
   ]) {
     const { view, cx, pending, actions } = fixture(open, outcome, true);
     view.run({ operation: "inspect" }, cx);
@@ -207,7 +207,7 @@ test("refused uncertain and failed preparation never submit a waiting presentati
     await pending[0];
     assert.equal(actions.includes("remove-placement"), false);
     assert.equal(view.pendingPresentation, null);
-    assert.match(view.status, /not sent/);
+    assert.match(view.status, shown);
   }
 });
 
@@ -498,7 +498,7 @@ test("maximizing another terminal transfers unchanged native focus to that retai
   for (const [eligible, status] of [
     [true, "applied"],
     [false, "applied"],
-    [true, "rejected"],
+    [true, "refused"],
   ]) {
     const { view, cx, pending, layout } = fixture("applied", status);
     const fleet = layout.voyages[0].fleets[0];
@@ -604,16 +604,21 @@ test("a known refusal reconciles revision and permits another visible Portal", a
   );
 });
 
-test("an applied viewer survives an unconfirmed workspace refresh", async () => {
-  const { view, task, cx, pending, count } = fixture("applied", "uncertain");
-  await assert.rejects(view.prepare(task), /refresh is unconfirmed/);
-  assert.ok(
-    view.terminals.has("content"),
-    "Confirmed attachment lost its view",
-  );
-  view.run({ operation: "inspect" }, cx);
-  await pending.at(-1);
-  assert.equal(count(), 1, "An unconfirmed read caused attachment replay");
+test("an applied viewer survives a workspace refresh that is refused or uncertain", async () => {
+  for (const [refresh, told] of [
+    ["uncertain", /Uncertain\. The result was not confirmed\./],
+    ["refused", /Refused\. Nothing changed\./],
+  ]) {
+    const { view, task, cx, pending, count } = fixture("applied", refresh);
+    await assert.rejects(view.prepare(task), told);
+    assert.ok(
+      view.terminals.has("content"),
+      "Confirmed attachment lost its view",
+    );
+    view.run({ operation: "inspect" }, cx);
+    await pending.at(-1);
+    assert.equal(count(), 1, `A ${refresh} read caused attachment replay`);
+  }
 });
 
 test("an unrelated action keeps the refusal visible without retry", async () => {
@@ -731,14 +736,17 @@ test("pending shortcut intents run only after success and stop after failed prep
 
 test("refused and uncertain workspace outcomes discard unsent shortcuts", async () => {
   const modifiers = { control: true, shift: true, alt: false, platform: false };
-  for (const outcome of ["rejected", "uncertain"]) {
+  for (const outcome of ["refused", "uncertain"]) {
     const { view, cx, pending, count } = fixture("applied", outcome);
+    const ran = [];
+    view.openSplit = (_group, _id, side) => ran.push(side);
     view.run({ operation: "inspect" }, cx);
     view.shortcut({ key: "o", modifiers }, cx);
     await pending[0];
     assert.equal(view.busy, false);
     assert.equal(count(), 0);
     assert.deepEqual(view.pendingShortcuts, []);
+    assert.deepEqual(ran, [], `The shortcut ran after a ${outcome} request`);
   }
 });
 
@@ -831,7 +839,7 @@ test("new content does not start an older unbound placement", async () => {
 });
 
 test("navigation waits for a layout save and is cleared on refusal or uncertainty", async () => {
-  for (const status of ["applied", "rejected", "uncertain"]) {
+  for (const status of ["applied", "refused", "uncertain"]) {
     const { view, cx, pending, layout, actions } = fixture("applied", status);
     layout.vessels = [];
     view.savingLayout = true;
@@ -1029,8 +1037,11 @@ test("a non-Error open rejection remains uncertain and is not replayed", async (
 });
 
 test("Home presents the retained out-of-view avatar without docking or starting content", async () => {
-  const { reportedActivity: validateReportedActivity } =
-    await import("../contract/generated/validate.js");
+  const {
+    reportedActivity: validateReportedActivity,
+    response: validateResponse,
+  } = await import("../contract/generated/validate.js");
+  let dockResult = null;
   let activityRevision;
   let activityReads = 0;
   const source = workspaceSource("VOYAGER_WORKSPACE_SOURCE", "return class");
@@ -1080,6 +1091,7 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "Layer",
     "Target",
     "take_result",
+    "validateResponse",
     "take_animation_notice",
     "Status",
     "workspace_notice",
@@ -1106,7 +1118,12 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     component,
     layer,
     target,
-    () => null,
+    () => {
+      const raw = dockResult;
+      dockResult = null;
+      return raw;
+    },
+    validateResponse,
     () => {
       const notice = animationNotice;
       animationNotice = null;
@@ -1445,6 +1462,31 @@ test("Home presents the retained out-of-view avatar without docking or starting 
     "A completed action already consumed this layout",
   );
   assert.equal(view.refreshRequested, false);
+  const docked = { version: view.version, layout: view.layout };
+  dockResult = JSON.stringify({
+    requestId: "dock",
+    status: "refused",
+    message: "Workspace busy or unavailable; nothing was queued",
+  });
+  view.render({});
+  assert.equal(
+    view.status,
+    "Refused. Workspace busy or unavailable; nothing was queued",
+  );
+  assert.equal(view.fresh, true);
+  dockResult = JSON.stringify({
+    requestId: "dock",
+    status: "uncertain",
+    message: "Workspace result unconfirmed; do not repeat the request",
+  });
+  view.render({});
+  assert.equal(
+    view.status,
+    "Uncertain. Workspace result unconfirmed; do not repeat the request",
+  );
+  assert.equal(view.fresh, false);
+  assert.equal(view.dockReceipt, "");
+  assert.deepEqual({ version: view.version, layout: view.layout }, docked);
 });
 
 test("canvas-only Inspect retains a prior refused opening without retrying it", async () => {
@@ -1493,7 +1535,42 @@ test("a delayed request cannot rewind a newer native dock snapshot", async () =>
     task,
   );
   assert.equal(view.version, "8");
-  assert.equal(view.status, "Unconfirmed request");
+  assert.equal(view.status, "Uncertain. Unconfirmed request");
+});
+
+test("a reply the owner never answered keeps the snapshot and only an uncertain one makes it stale", async () => {
+  const { view, cx, task, pending } = fixture("applied");
+  view.run({ operation: "inspect" }, cx);
+  await pending.at(-1);
+  const { version, layout, splitReset } = view;
+  const refused = {
+    requestId: "dock",
+    status: "refused",
+    message: "Workspace busy or unavailable; nothing was queued",
+  };
+  assert.equal(view.acceptSnapshot(refused, task), false);
+  assert.equal(view.status, `Refused. ${refused.message}`);
+  assert.equal(view.fresh, true);
+  assert.equal(
+    view.splitReset,
+    splitReset + 1,
+    "A dragged divider kept its place",
+  );
+  const uncertain = {
+    requestId: "dock",
+    status: "uncertain",
+    message: "Workspace result unconfirmed; do not repeat the request",
+  };
+  assert.equal(view.acceptSnapshot(uncertain, task), false);
+  assert.equal(view.status, `Uncertain. ${uncertain.message}`);
+  assert.equal(view.fresh, false);
+  assert.equal(
+    view.splitReset,
+    splitReset + 2,
+    "A dragged divider kept its place",
+  );
+  assert.equal(view.version, version);
+  assert.equal(view.layout, layout);
 });
 
 test("resize dispatch keeps the captured revision and restores a busy preview without sending", async () => {

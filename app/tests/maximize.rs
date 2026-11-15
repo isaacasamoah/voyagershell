@@ -1,5 +1,5 @@
 use voyager_app::{client::Client, core::Core};
-use voyager_contract::{Action, Context, PlacementId, Request, Status};
+use voyager_contract::{Action, Context, Outcome, PlacementId, Request};
 
 #[test]
 fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
@@ -40,7 +40,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
                 },
             ))
             .unwrap();
-        assert_eq!(split.status, Status::Applied);
+        assert_eq!(split.status, Outcome::Applied);
         let second = split.layout.voyages[0].fleets[0].placements[1].id.clone();
         let zoom = client
             .call(request(
@@ -51,7 +51,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
                 },
             ))
             .unwrap();
-        assert_eq!(zoom.status, Status::Applied);
+        assert_eq!(zoom.status, Outcome::Applied);
         let wrong = client
             .scoped_call(
                 Context::Vessel { id: second.clone() },
@@ -64,7 +64,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
                 ),
             )
             .unwrap();
-        assert_eq!(wrong.status, Status::Rejected);
+        assert_eq!(wrong.status, Outcome::Refused);
         assert_eq!(
             wrong.message.as_deref(),
             Some("invalid_workspace: Panel cannot change maximization")
@@ -84,7 +84,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
                 },
             ))
             .unwrap();
-        assert_eq!(stale.status, Status::Rejected);
+        assert_eq!(stale.status, Outcome::Refused);
         let mut external = Core::connect(&session).unwrap();
         let stored = external.document_get("voyager-layout-v2").unwrap();
         assert_eq!(stored.version, zoom.version);
@@ -99,7 +99,7 @@ fn maximize_cas_scope_and_invalid_stored_selection_use_the_core_owner() {
             .unwrap();
         external.close().unwrap();
         let refused = client.call(request(zoom.version, Action::Inspect)).unwrap();
-        assert_eq!(refused.status, Status::Rejected);
+        assert_eq!(refused.status, Outcome::Refused);
         assert!(!refused.fresh);
         assert_eq!(refused.layout, zoom.layout);
     });

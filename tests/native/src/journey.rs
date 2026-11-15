@@ -5,6 +5,7 @@ mod layout;
 mod layout_compat;
 mod layout_corrupt;
 mod layout_refused;
+mod outcomes;
 mod portals;
 mod profile;
 mod profile_updates;
@@ -117,6 +118,7 @@ journeys! {
     LayoutRefused => "layout-refused" in layout_refused, sidebar: None, window: None;
     LayoutCorrupt => "layout-corrupt" in layout_corrupt, sidebar: None, window: None;
     SlowSave => "slow-save" in slow_save, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    Outcomes => "outcomes" in outcomes, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
 }
 
 impl Journey {
@@ -135,7 +137,11 @@ impl Journey {
     }
 
     pub fn core_delay(self) -> Option<&'static str> {
-        matches!(self, Self::SlowSave).then_some(slow_save::HOLD)
+        match self {
+            Self::SlowSave => Some(slow_save::HOLD),
+            Self::Outcomes => Some(outcomes::HOLD),
+            _ => None,
+        }
     }
 
     pub fn control_patch(self) -> String {

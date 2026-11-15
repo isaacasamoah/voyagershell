@@ -11,7 +11,7 @@ mod linux {
         core::{Core, Error},
     };
     use voyager_contract::{
-        Action, Context, CoreTerminalId, Request, Response, Status,
+        Action, Context, CoreTerminalId, Outcome, Request, Response, Status,
         administrator::{ProcessAction, ProcessInput, ProcessRequest},
         content::{Notes, Request as Content, Response as ContentResponse, Version},
         layout_document::DOCUMENT,
@@ -44,7 +44,7 @@ mod linux {
                 action: Action::Inspect,
             },
         );
-        assert_eq!(inspected.status, Status::Applied);
+        assert_eq!(inspected.status, Outcome::Applied);
         inspected
     }
 
@@ -88,13 +88,13 @@ mod linux {
             let snapshot = inspect(client);
             let request = create_fleet(client, &snapshot, "Once");
             let first = send(client, &request);
-            assert_eq!(first.status, Status::Applied);
+            assert_eq!(first.status, Outcome::Applied);
             assert_eq!(fleets(&first, "Once"), 1);
             let saved = core.document_get(DOCUMENT).unwrap().version;
             assert_eq!(saved, first.version);
 
             let repeat = send(client, &request);
-            assert_eq!(repeat.status, Status::Applied);
+            assert_eq!(repeat.status, Outcome::Applied);
             assert_eq!(repeat.request_id, request.request_id);
             assert_eq!(fleets(&repeat, "Once"), 1);
             assert_eq!(core.document_get(DOCUMENT).unwrap().version, saved);
@@ -105,7 +105,7 @@ mod linux {
                 name: "Twice".into(),
             };
             let refused = send(client, &changed);
-            assert_eq!(refused.status, Status::Rejected);
+            assert_eq!(refused.status, Outcome::Refused);
             assert_eq!(
                 refused.message.as_deref(),
                 Some("Changed request identity; nothing was repeated")
@@ -113,7 +113,7 @@ mod linux {
             let scoped = client
                 .scoped_call(Context::Workspace, request.clone())
                 .unwrap();
-            assert_eq!(scoped.status, Status::Rejected);
+            assert_eq!(scoped.status, Outcome::Refused);
             assert_eq!(
                 scoped.message.as_deref(),
                 Some("Changed request identity; nothing was repeated")
@@ -143,7 +143,7 @@ mod linux {
                 let mut request = create_fleet(client, &snapshot, "Never");
                 request.request_id = id.into();
                 let refused = send(client, &request);
-                assert_eq!(refused.status, Status::Rejected);
+                assert_eq!(refused.status, Outcome::Refused);
                 assert_eq!(refused.message.as_deref(), Some("Invalid request identity"));
                 let vessel = snapshot.layout.vessels[0].id.clone();
                 assert!(matches!(
@@ -162,11 +162,11 @@ mod linux {
             let snapshot = inspect(client);
             let settled = create_fleet(client, &snapshot, "Before");
             let before = send(client, &settled);
-            assert_eq!(before.status, Status::Applied);
+            assert_eq!(before.status, Outcome::Applied);
             assert!(wait(client.end(Lifecycle::QuitAndKeep)).is_ok());
 
             let late = send(client, &create_fleet(client, &before, "Late"));
-            assert_eq!(late.status, Status::Rejected);
+            assert_eq!(late.status, Outcome::Refused);
             assert_eq!(
                 late.message.as_deref(),
                 Some("Voyager is quitting; no workspace effect was dispatched")
@@ -243,7 +243,7 @@ mod linux {
             ));
 
             let repeat = send(client, &settled);
-            assert_eq!(repeat.status, Status::Applied);
+            assert_eq!(repeat.status, Outcome::Applied);
             let after = inspect(client);
             assert!(!after.fresh);
             assert_eq!(fleets(&after, "Before"), 1);

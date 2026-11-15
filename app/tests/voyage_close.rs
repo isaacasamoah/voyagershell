@@ -11,7 +11,7 @@ use voyager_app::{
     voyage_close::SaveRequest,
 };
 use voyager_contract::{
-    Action, ContentDestination, Context, PlacementInsertion, PlacementOwner, Request, Status,
+    Action, ContentDestination, Context, Outcome, PlacementInsertion, PlacementOwner, Request,
 };
 
 fn call(client: &Client, version: u64, action: Action) -> voyager_contract::Response {
@@ -58,7 +58,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
     let saves = client.close_save_requests().unwrap();
     let result = std::panic::catch_unwind(|| {
         let mut snapshot = call(&client, 0, Action::Inspect);
-        assert_eq!(snapshot.status, Status::Applied);
+        assert_eq!(snapshot.status, Outcome::Applied);
         let original = snapshot.layout.voyages[0].clone();
         let first = original.fleets[0].placements[0].clone();
         let viewer = client
@@ -117,7 +117,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
                 launch: None,
             },
         );
-        assert_eq!(snapshot.status, Status::Applied, "{:?}", snapshot.message);
+        assert_eq!(snapshot.status, Outcome::Applied, "{:?}", snapshot.message);
         let note = snapshot.layout.voyages[0].fleets[0]
             .placements
             .last()
@@ -160,10 +160,10 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
             result
         };
         let refused = rename(snapshot.version, "Review", true);
-        assert_eq!(refused.status, Status::Rejected);
+        assert_eq!(refused.status, Outcome::Refused);
         assert!(directory.join("notes/Title.md").exists());
         snapshot = rename(snapshot.version, "Review.md", false);
-        assert_eq!(snapshot.status, Status::Applied, "{:?}", snapshot.message);
+        assert_eq!(snapshot.status, Outcome::Applied, "{:?}", snapshot.message);
         assert_eq!(
             snapshot.layout.voyages[0].fleets[0]
                 .placements
@@ -199,11 +199,11 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
             },
         };
         let denied = client.scoped_call(Context::Workspace, request).unwrap();
-        assert_eq!(denied.status, Status::Rejected);
+        assert_eq!(denied.status, Outcome::Refused);
         assert!(saves.try_recv().is_err());
         assert_eq!(
             call(&client, plan.version, Action::Home).status,
-            Status::Applied
+            Outcome::Applied
         );
         let cancelled = call(
             &client,
@@ -213,7 +213,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
                 plan: plan.id,
             },
         );
-        assert_eq!(cancelled.status, Status::Applied);
+        assert_eq!(cancelled.status, Outcome::Applied);
         let mut core = Core::connect(&session).unwrap();
         assert_eq!(core.terminal_get(&owned.0).unwrap().state, "live");
         let prepared = prepare();
@@ -234,7 +234,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
             .send_blocking(Err(CallError::Rejected("Save conflict".into())))
             .unwrap();
         let refused = worker.join().unwrap();
-        assert_eq!(refused.status, Status::Rejected);
+        assert_eq!(refused.status, Outcome::Refused);
         assert!(!refused.layout.voyages[0].closed);
         assert_eq!(core.terminal_get(&owned.0).unwrap().state, "live");
         assert!(matches!(
@@ -291,20 +291,20 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
                 id: first.id.clone(),
             },
         );
-        assert_eq!(frozen.status, Status::Rejected);
+        assert_eq!(frozen.status, Outcome::Refused);
         assert_eq!(
             call(&client, prepared.version, Action::Home).status,
-            Status::Applied
+            Outcome::Applied
         );
         reply.send_blocking(Ok(())).unwrap();
         let closed = worker.join().unwrap();
-        assert_eq!(closed.status, Status::Applied, "{:?}", closed.message);
+        assert_eq!(closed.status, Outcome::Applied, "{:?}", closed.message);
         assert!(closed.layout.voyages[0].closed);
         assert!(!closed.layout.voyages[1].closed);
         assert_eq!(core.terminal_get(&owned.0).unwrap().state, "finished");
         let survivor = core.terminal_get(&independent.0).unwrap();
         assert_eq!(survivor.state, "live");
-        assert_eq!(client.call(duplicate).unwrap().status, Status::Applied);
+        assert_eq!(client.call(duplicate).unwrap().status, Outcome::Applied);
         let reopened = call(
             &client,
             closed.version,
@@ -312,7 +312,7 @@ fn confirmed_voyage_shutdown_saves_first_and_preserves_other_voyages() {
                 id: original.id.clone(),
             },
         );
-        assert_eq!(reopened.status, Status::Applied);
+        assert_eq!(reopened.status, Outcome::Applied);
         assert!(reopened.created_vessels.contains(&first.vessel));
         let new_viewer = client
             .terminal(first.vessel.clone(), client.request_id(), reopened.version)

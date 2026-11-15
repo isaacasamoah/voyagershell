@@ -141,6 +141,7 @@ union all come from that list.
 | `voyage-close-entry` | Vessel id | One row of the close dialog's inventory | `VoyageClose.render` in `voyage-close.ts` |
 | `voyage-close-cancel` | Voyage id | The Cancel or Dismiss button of the close dialog | `VoyageClose.render` |
 | `voyage-close-confirm` | Voyage id | The Close Voyage button of the close dialog | `VoyageClose.render` |
+| `voyage-close-status` | Voyage id | The message line of the Voyage close dialog, drawn only while it has text. Its `label` is the text | `VoyageClose.render` |
 | `home-navigation` | Empty | The Home button, whose context menu holds Stop session | `renderSidebar` in `navigation-view.ts` |
 | `stop-session` | Empty | The Stop session entry of the Home button's context menu | `renderSidebar`, through `MenuItem.marker` |
 | `stop-session-confirm` | Empty | The Stop session button of the stop dialog | `StopSession.render` in `stop-session.ts` |
@@ -158,7 +159,8 @@ union all come from that list.
 | `chat-message` | Message id | One message. Its `label` is the message text | `Chat.render` |
 | `chat-status` | Empty | The Thinking line. Its `label` is the string that it draws | `Chat.render` |
 | `chat-error` | Empty | The chat's error line. Its `label` is the error text | `Chat.render` |
-| `workspace-status` | Empty | The workspace status line, drawn only while it has text, and in the view shown when no workspace can be opened. Its `label` is the text, which includes the notice that the stored layout was unreadable | `Workspace.statusView` in `main.ts` |
+| `workspace-status` | Empty | The workspace status line, drawn only while it has text, and in the view shown when no workspace can be opened. Its `label` is the text, which includes the notice that the stored layout was unreadable | `statusLine` in `status.ts` |
+| `workspace-refresh` | Empty | The Refresh button beside the workspace status line | `statusLine` in `status.ts` |
 | `split-divider` | The split's id, a JSON array `[session, owner, path]` | The resize handle of one branch of a Fleet's split tree | The handle appearance in `desktop/src/split.rs`, with `inspect::control` |
 | `maximize-panel` | Placement id | The maximize or restore button of a Vessel or Portal | `renderPanel` in `panel-view.ts` |
 | `move-preview` | Placement id of the destination | The highlighted half of the destination while a Vessel is dragged. Its bounds give the side | `renderPanel` |

@@ -19,6 +19,7 @@ const entries = [
   "desktop/canvas/worktrees.ts",
   "desktop/canvas/voyage-close.ts",
   "desktop/canvas/stop-session.ts",
+  "desktop/canvas/status.ts",
   "desktop/canvas/processes.ts",
   "desktop/canvas/menu.ts",
   "desktop/canvas/panels.ts",

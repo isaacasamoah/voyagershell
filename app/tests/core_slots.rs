@@ -13,7 +13,7 @@ use voyager_app::{
     core::{Core, Viewer},
 };
 use voyager_contract::{
-    Action, Context, Request, Response, Status, VesselId,
+    Action, Context, Outcome, Request, Response, VesselId,
     administrator::{
         ProcessAction, ProcessInfo, ProcessInput, ProcessOutput, ProcessRequest, ProcessResponse,
     },
@@ -77,7 +77,7 @@ fn send(client: &Client, loaded: (&VesselId, &ProcessInfo, u64), text: String) -
 fn eight_admitted_effects(session: &str) -> Loaded {
     let client = Client::open(session.to_owned(), "/tmp".into());
     let initial = inspect(&client);
-    assert_eq!(initial.status, Status::Applied, "{initial:?}");
+    assert_eq!(initial.status, Outcome::Applied, "{initial:?}");
     let content = initial.layout.vessels[0].id.clone();
     let viewer = client
         .terminal(content.clone(), client.request_id(), initial.version)
@@ -175,7 +175,7 @@ fn owner_calls_keep_their_slot_beside_eight_process_effects_and_one_observation(
         assert!(loaded.version > 0);
         for round in 0..6 {
             let before = inspect(client);
-            assert_eq!(before.status, Status::Applied, "{before:?}");
+            assert_eq!(before.status, Outcome::Applied, "{before:?}");
             assert!(before.fresh, "{before:?}");
             let version = before.version;
             let mut observation =
@@ -211,7 +211,7 @@ fn owner_calls_keep_their_slot_beside_eight_process_effects_and_one_observation(
                 response.message,
                 observed.is_ok()
             );
-            if response.status != Status::Applied {
+            if response.status != Outcome::Applied {
                 refusals.push((round, label, response.message.clone()));
             }
             thread::sleep(Duration::from_millis(30));

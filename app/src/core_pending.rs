@@ -14,6 +14,7 @@ use std::{
 pub(super) type Replies = Arc<Mutex<HashMap<u64, SyncSender<Value>>>>;
 
 const PENDING_LIMIT: usize = 11;
+pub(crate) const DEADLINE: Duration = Duration::from_secs(20);
 
 pub(crate) struct Pending<R> {
     id: u64,
@@ -58,7 +59,7 @@ impl<R: DeserializeOwned> Pending<R> {
     }
 
     pub(crate) fn wait(self) -> Result<R, Error> {
-        let remaining = Duration::from_secs(20).saturating_sub(self.dispatched.elapsed());
+        let remaining = DEADLINE.saturating_sub(self.dispatched.elapsed());
         let response = self.receiver.recv_timeout(remaining).or_else(|_| {
             if let Ok(mut replies) = self.replies.lock() {
                 replies.remove(&self.id);

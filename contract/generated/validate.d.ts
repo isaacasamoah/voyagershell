@@ -14,7 +14,7 @@ export function processResponse(data: unknown): data is import("./processRespons
 export function processTool(data: unknown): data is import("./processTool").ProcessInput;
 export function reportedActivity(data: unknown): data is import("./reportedActivity").Projection;
 export function request(data: unknown): data is import("./request").Request;
-export function response(data: unknown): data is import("./response").Response;
+export function response(data: unknown): data is import("./response").Reply;
 export function terminalRequest(data: unknown): data is import("./terminalRequest").TerminalRequest;
 export function terminalResponse(data: unknown): data is import("./terminalResponse").TerminalResponse;
 export function voiceState(data: unknown): data is import("./voiceState").State;

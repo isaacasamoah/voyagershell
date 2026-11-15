@@ -1944,7 +1944,30 @@ test("Notes keeps file actions together and preview leaves its draft unchanged",
   assert.equal(calls.at(-1), "new");
 });
 
-test("Voyage confirmation inspects an invocation error without repeating shutdown", async () => {
+function statusModule() {
+  const exports = {};
+  new Function(
+    "exports",
+    "require",
+    ts.transpileModule(
+      fs.readFileSync(`${__dirname}/canvas/status.ts`, "utf8"),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          target: ts.ScriptTarget.ES2022,
+        },
+      },
+    ).outputText,
+  )(exports, (name) => {
+    if (name === "gpui-kit") return { div: element };
+    if (name === "voyager_native")
+      return { Marker: MarkerStub, Status: { new: element } };
+    throw Error(name);
+  });
+  return exports;
+}
+
+function voyageClose(confirm, inspect) {
   const buttons = new Map();
   const Button = {
     new(id) {
@@ -1954,7 +1977,7 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
     },
   };
   const exports = {};
-  let closed = 0;
+  const closed = { count: 0 };
   const calls = [];
   const plan = {
     id: "plan",
@@ -1985,12 +2008,13 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
       if (name === "gpui-kit") return { div: element };
       if (name === "voyager_native") return { Marker: MarkerStub };
       if (name === "./ui.js") return uiModule(element, Button);
+      if (name === "./status.js") return statusModule();
       if (name === "./workspace.js")
         return {
           invoke: async (action, version) => {
             calls.push({ action, version });
-            if (action.operation === "confirm-voyage-close")
-              throw Error("Queue unavailable");
+            if (action.operation === "confirm-voyage-close") return confirm();
+            if (action.operation === "inspect" && inspect) return inspect();
             return {
               status: "applied",
               fresh: true,
@@ -2004,7 +2028,7 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
       open_dialog() {},
       refresh() {},
       close_dialog() {
-        closed++;
+        closed.count++;
       },
     },
   );
@@ -2022,9 +2046,23 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
       .get(id)
       .calls.find(([name]) => name === "on_click")[1](null, cx);
   };
+  const settle = () => Promise.all(tasks.splice(0));
+  const confirmations = () =>
+    calls.filter(({ action }) => action.operation === "confirm-voyage-close")
+      .length;
   controls.observe(plan);
+  return { controls, click, settle, calls, confirmations, closed, plan };
+}
+
+test("Voyage confirmation inspects an invocation error without repeating shutdown", async () => {
+  const { controls, click, settle, calls, confirmations, closed } = voyageClose(
+    () => {
+      throw Error("Queue unavailable");
+    },
+  );
   assert.deepEqual(deepMarkers(controls.render()), [
     ["voyage-close-entry", "content-1"],
+    ["voyage-close-status", "voyage", "Confirm"],
     ["voyage-close-cancel", "voyage"],
     ["voyage-close-confirm", "voyage"],
   ]);
@@ -2034,19 +2072,145 @@ test("Voyage confirmation inspects an invocation error without repeating shutdow
   );
   click("voyage-close-confirm");
   click("voyage-close-confirm");
-  await Promise.all(tasks.splice(0));
+  await settle();
   assert.equal(calls.length, 1);
   click("voyage-close-inspect");
-  await Promise.all(tasks.splice(0));
+  await settle();
   assert.equal(calls.at(-1).action.operation, "inspect");
   assert.equal(calls.at(-1).version, "0");
   click("voyage-close-cancel");
-  await Promise.all(tasks.splice(0));
+  await settle();
   assert.equal(calls.at(-1).action.operation, "cancel-voyage-close");
+  assert.equal(confirmations(), 1);
+  assert.equal(closed.count, 1);
+});
+
+test("a refused Voyage confirmation says why and stays ready to confirm", async () => {
+  const { controls, click, settle, confirmations } = voyageClose(() => ({
+    requestId: "request",
+    status: "refused",
+    message: "Workspace busy or unavailable; nothing was queued",
+  }));
+  click("voyage-close-confirm");
+  await settle();
+  assert.deepEqual(deepMarkers(controls.render()), [
+    ["voyage-close-entry", "content-1"],
+    [
+      "voyage-close-status",
+      "voyage",
+      "Refused. Workspace busy or unavailable; nothing was queued",
+    ],
+    ["voyage-close-cancel", "voyage"],
+    ["voyage-close-confirm", "voyage"],
+  ]);
+  click("voyage-close-confirm");
+  await settle();
   assert.equal(
-    calls.filter(({ action }) => action.operation === "confirm-voyage-close")
-      .length,
-    1,
+    confirmations(),
+    2,
+    "A refused confirmation could not be sent again",
   );
-  assert.equal(closed, 1);
+});
+
+test("a refused Voyage close keeps its word while the same plan is observed again", async () => {
+  const unfinished = {
+    id: "plan",
+    voyage: "voyage",
+    name: "Demo",
+    version: "7",
+    phase: "incomplete",
+    entries: [{ vessel: "content-1", typeId: "terminal", name: "bash" }],
+    message: "Voyage remains open. Inspect before another close: busy: Core",
+  };
+  const { controls, click, settle } = voyageClose(() => ({
+    requestId: "request",
+    status: "refused",
+    version: "7",
+    fresh: true,
+    layout: {},
+    message: unfinished.message,
+    closePlan: unfinished,
+  }));
+  click("voyage-close-confirm");
+  await settle();
+  const drawn = () => JSON.stringify(controls.render().calls);
+  assert.match(drawn(), /Refused\. Voyage remains open\./);
+  controls.observe({ ...unfinished });
+  assert.match(drawn(), /Refused\. Voyage remains open\./);
+  controls.observe({ ...unfinished, message: "Shutdown is unconfirmed." });
+  assert.doesNotMatch(drawn(), /Refused\./);
+  assert.match(drawn(), /Shutdown is unconfirmed\./);
+});
+
+test("an uncertain Voyage confirmation the owner never answered offers Inspect and no second confirmation", async () => {
+  const { controls, click, settle, calls, confirmations } = voyageClose(() => ({
+    requestId: "request",
+    status: "uncertain",
+    message: "Workspace result unconfirmed; do not repeat the request",
+  }));
+  click("voyage-close-confirm");
+  await settle();
+  assert.deepEqual(deepMarkers(controls.render()), [
+    ["voyage-close-entry", "content-1"],
+    [
+      "voyage-close-status",
+      "voyage",
+      "Uncertain. Workspace result unconfirmed; do not repeat the request. Inspect the Voyage before another request.",
+    ],
+    ["voyage-close-cancel", "voyage"],
+  ]);
+  click("voyage-close-inspect");
+  await settle();
+  assert.equal(calls.at(-1).action.operation, "inspect");
+  assert.equal(confirmations(), 1, "An uncertain confirmation was sent again");
+  assert.deepEqual(
+    deepMarkers(controls.render()),
+    [
+      ["voyage-close-entry", "content-1"],
+      ["voyage-close-status", "voyage", "Confirm"],
+      ["voyage-close-cancel", "voyage"],
+      ["voyage-close-confirm", "voyage"],
+    ],
+    "A fresh Inspect of a ready plan left the uncertain result beside Close Voyage",
+  );
+});
+
+test("a Voyage close inspection that is refused or uncertain says which", async () => {
+  for (const [reply, shown] of [
+    [
+      {
+        requestId: "request",
+        status: "refused",
+        message: "Workspace busy or unavailable; nothing was queued",
+      },
+      "Refused. Workspace busy or unavailable; nothing was queued",
+    ],
+    [
+      {
+        requestId: "request",
+        status: "uncertain",
+        version: "7",
+        fresh: false,
+        layout: {},
+        message: "Core result unconfirmed; no request was repeated",
+      },
+      "Uncertain. Core result unconfirmed; no request was repeated",
+    ],
+  ]) {
+    const { controls, click, settle } = voyageClose(
+      () => {
+        throw Error("Queue unavailable");
+      },
+      () => reply,
+    );
+    click("voyage-close-confirm");
+    await settle();
+    click("voyage-close-inspect");
+    await settle();
+    assert.deepEqual(deepMarkers(controls.render()), [
+      ["voyage-close-entry", "content-1"],
+      ["voyage-close-status", "voyage", shown],
+      ["voyage-close-cancel", "voyage"],
+    ]);
+  }
 });

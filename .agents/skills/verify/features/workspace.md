@@ -180,7 +180,7 @@ Two checks are not driven.
 
 - The refusal of a stale layout version is not driven here, because the
   verifier never writes to Core. `app/tests/maximize.rs` asserts
-  `Status::Rejected` for a stale expected version.
+  `Outcome::Refused` for a stale expected version.
 - A rename during a pending selection is not driven, because the old check
   patched the profile's script to delay the selection.
 

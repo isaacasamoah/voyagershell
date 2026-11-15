@@ -1,0 +1,24 @@
+diff --git a/desktop/canvas/status.js b/desktop/canvas/status.js
+--- a/desktop/canvas/status.js
++++ b/desktop/canvas/status.js
+@@ -5,7 +5,7 @@
+ }
+ export function outcome(reply) {
+   if (reply.status === "refused")
+-    return `Refused. ${reply.message || "Nothing changed."}`;
++    return "Refused.";
+   if (reply.status === "uncertain")
+     return `Uncertain. ${reply.message || "The result was not confirmed."}`;
+   return reply.message || "";
+diff --git a/desktop/canvas/status.ts b/desktop/canvas/status.ts
+--- a/desktop/canvas/status.ts
++++ b/desktop/canvas/status.ts
+@@ -9,7 +9,7 @@
+ 
+ export function outcome(reply: Reply): string {
+   if (reply.status === "refused")
+-    return `Refused. ${reply.message || "Nothing changed."}`;
++    return "Refused.";
+   if (reply.status === "uncertain")
+     return `Uncertain. ${reply.message || "The result was not confirmed."}`;
+   return reply.message || "";

@@ -5,7 +5,7 @@ use std::{
 };
 use voyager_app::{client::Client, core::Core};
 use voyager_contract::{
-    Action, Context, Layout, PlacementId, Request, Split, Status, VesselId,
+    Action, Context, Layout, Outcome, PlacementId, Request, Split, Status, Unapplied, VesselId,
     administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest},
 };
 
@@ -173,7 +173,7 @@ fn observations_in_flight_never_crowd_out_a_workspace_save() {
                     action: Action::Inspect,
                 })
                 .unwrap();
-            assert_eq!(inspected.status, Status::Applied, "{inspected:?}");
+            assert_eq!(inspected.status, Outcome::Applied, "{inspected:?}");
             let mut sent = 0;
             for _ in 0..100_000 {
                 let mut observation =
@@ -197,11 +197,11 @@ fn observations_in_flight_never_crowd_out_a_workspace_save() {
                     },
                 });
                 match attempt {
-                    Err(message) if message.contains("unavailable") => continue,
+                    Err(unanswered) if unanswered.status == Unapplied::Refused => continue,
                     other => break other.unwrap(),
                 }
             };
-            assert_eq!(created.status, Status::Applied, "{created:?}");
+            assert_eq!(created.status, Outcome::Applied, "{created:?}");
         }
     }));
     let mut cleanup = Core::connect(&session).unwrap();
