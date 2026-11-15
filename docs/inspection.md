@@ -138,7 +138,7 @@ union all come from that list.
 | `close-voyage` | Voyage id | The Close entry of the Voyage row's context menu | `renderSidebar` in `navigation-view.ts`, through `MenuItem.marker` |
 | `recent-voyages` | Empty | The Recent voyages button, drawn while a closed Voyage can be reopened and the sidebar is open | `renderSidebar` |
 | `reopen-voyage` | Voyage id | An entry of the Recent voyages list | `closedVoyageItems` in `main.ts`, drawn by `renderSidebar` |
-| `voyage-close-entry` | Content id | One row of the close dialog's inventory | `VoyageClose.render` in `voyage-close.ts` |
+| `voyage-close-entry` | Vessel id | One row of the close dialog's inventory | `VoyageClose.render` in `voyage-close.ts` |
 | `voyage-close-cancel` | Voyage id | The Cancel or Dismiss button of the close dialog | `VoyageClose.render` |
 | `voyage-close-confirm` | Voyage id | The Close Voyage button of the close dialog | `VoyageClose.render` |
 | `home-navigation` | Empty | The Home button, whose context menu holds Stop session | `renderSidebar` in `navigation-view.ts` |

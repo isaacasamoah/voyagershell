@@ -31,6 +31,7 @@ npm ci --ignore-scripts
 npm run format:check
 npm test
 npm run contract:check
+npm run vocabulary:check
 cargo fmt --all --check
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings

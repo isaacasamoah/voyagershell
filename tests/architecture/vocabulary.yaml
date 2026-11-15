@@ -1,8 +1,11 @@
 settings:
-  kinds: [rs, ts, js, cjs, json, md, toml, yaml, yml, py, patch, txt, html, sh]
+  own:
+    - github.com/isaacasamoah/voyagershell
+    - raw.githubusercontent.com/isaacasamoah/voyagershell
   skip:
     - 'experiments/**'
     - 'tests/architecture/vocabulary.*'
+    - 'docs/glossary.md'
     - 'desktop/patches/**'
     - '**/Cargo.lock'
     - '**/package-lock.json'
@@ -16,8 +19,8 @@ settings:
 exceptions:
   - text: '--native-mod-host'
     reason: 'Legacy reproduction route flag. The retained Python route keeps its name until its journeys are retired.'
-  - text: 'proof_native_mod_host.py'
-    reason: 'Legacy reproduction driver. It keeps its name until it is retired.'
+  - text: 'proof_native_mod_host'
+    reason: 'Legacy reproduction driver and its module name. It keeps its name until it is retired.'
   - text: 'Herdr worktree mod'
     reason: 'Herdr App calls its own scripts mods. This names that upstream feature.'
 
@@ -27,6 +30,7 @@ moves:
   - {stage: 2, from: desktop/canvas/canvas.js, to: desktop/canvas/regions.js}
   - {stage: 2, from: desktop/canvas/mod.json, to: desktop/canvas/canvas.json}
   - {stage: 2, from: content/notes/mod.json, to: content/notes/vessel.json}
+  - {stage: 6, from: app/src/content_type.rs, to: app/src/vessel_type.rs}
 
 rules:
   - id: canvas-package-path
@@ -117,6 +121,7 @@ rules:
     new: 'canvas'
     files: ['desktop/src/host.rs', 'desktop/src/quit.rs', 'desktop/src/lib.rs']
     code: true
+    ban: false
   - id: canvas-host-render-counter
     stage: 2
     old: '"header_renders"'
@@ -272,6 +277,18 @@ rules:
     stage: 3
     old: '\[(["''])content\1\]'
     new: '[$1vessel$1]'
+    files: ['tests/**/*.py']
+    ban: false
+  - id: stored-key-contents-get
+    stage: 3
+    old: '\.get\((["''])contents\1'
+    new: '.get($1vessels$1'
+    files: ['tests/**/*.py']
+    ban: false
+  - id: stored-key-content-get
+    stage: 3
+    old: '\.get\((["''])content\1'
+    new: '.get($1vessel$1'
     files: ['tests/**/*.py']
     ban: false
   - id: vessel-struct-qualified
@@ -549,20 +566,6 @@ rules:
     old: '\bpanel header\b'
     new: 'panel title bar'
     ban: false
-  - id: canvas-sentence-start
-    stage: 5
-    old: '(^|[.!?|#]\s+)Header\b'
-    new: '$1Canvas'
-    flags: 'gm'
-    skip: ['app/src/wire.rs', 'app/src/voice_wire.rs', 'app/tests/wire.rs']
-    ban: false
-  - id: canvas-noun
-    stage: 5
-    group: canvas-package
-    old: '\b[Hh]eader\b'
-    new: 'canvas'
-    skip: ['app/src/wire.rs', 'app/src/voice_wire.rs', 'app/tests/wire.rs', 'tests/native/proof_resources.py', 'tests/native/test_frames.py']
-    ban: '\b[Hh][Ee][Aa][Dd][Ee][Rr][Ss]?\b'
   - id: vessel-package-prose
     stage: 5
     old: '\b([Cc])ontent package(s?)\b'
@@ -578,6 +581,36 @@ rules:
     old: '\b[Cc]ontent instance(s?)\b'
     new: 'Vessel$1'
     group: content-words
+  - id: vessel-id-prose
+    stage: 6
+    old: '\b[Cc]ontent ID\b'
+    new: 'Vessel ID'
+    ban: false
+  - id: canvas-constants
+    stage: 6
+    group: canvas-package
+    old: '\b(LEGACY_DIV_)HEADER\b|\bHEADER(_REFRESH)\b'
+    new: '$1CANVAS$2'
+  - id: canvas-snake-identifiers
+    stage: 6
+    group: canvas-package
+    old: '\b(original_)header\b|\bheader(_sha256|_renders)\b'
+    new: '$1canvas$2'
+  - id: canvas-camel-identifiers
+    stage: 6
+    group: canvas-package
+    old: '\bheader(Sha256|Restored|Height)\b'
+    new: 'canvas$1'
+  - id: canvas-pascal-identifiers
+    stage: 6
+    group: canvas-package
+    old: '\bHeader(Bar|Host)\b'
+    new: 'Canvas$1'
+  - id: canvas-the-header-prose
+    stage: 6
+    group: canvas-package
+    old: '\b([Tt]he) header((?:\x27s)? (?:draws?|drawn|renders?|regions?|colou?rs?|height|buttons?|layout)\b)'
+    new: '$1 canvas$2'
   - id: theme-declarations
     stage: 2
     group: theme-module
@@ -592,19 +625,6 @@ rules:
     new: '$&'
     files: ['**/*.rs']
     skip: ['tests/native/src/x11/**']
-  - id: mod-word-prose
-    stage: 5
-    group: package-nickname
-    old: '\b[Mm]ods?\b(?![.\w-]*\.rs)'
-    new: '$&'
-    files: ['**/*.md']
-  - id: mod-word-source
-    stage: 5
-    group: package-nickname
-    old: '\bmods?\b|\bmod[A-Z]\w*|[a-z]Mods?\b'
-    new: '$&'
-    files: ['**/*.ts', '**/*.js', '**/*.cjs', '**/*.json', '**/*.toml', '**/*.yaml', '**/*.yml', '**/*.sh', '**/*.html']
-    skip: ['tests/architecture/observe*.cjs', 'tests/architecture/rust.cjs']
   - id: dock-context-alias
     stage: 3
     group: scope-aliases
@@ -623,12 +643,6 @@ rules:
     old: '\bContentScope\b'
     new: 'VesselContext'
     files: ['desktop/canvas/*.ts']
-  - id: realm-term
-    stage: 5
-    group: legacy-names
-    old: '\brealms?\b'
-    new: '$&'
-    ban: '\brealms?\b'
   - id: placement-destination-prose
     stage: 5
     old: '\bpanel destination\b'
@@ -649,3 +663,228 @@ rules:
     flags: 'gm'
     files: ['desktop/canvas/main.ts']
     ban: false
+
+retired:
+  - id: retired-header-package
+    group: canvas-package
+    words: header package
+    swap: canvas package
+    stage: 6
+    term: Canvas
+  - id: retired-header-script
+    group: canvas-package
+    words: header script
+    swap: canvas script
+    stage: 6
+    term: Canvas
+  - id: retired-header-mod
+    group: canvas-package
+    words: header mod
+    swap: canvas package
+    stage: 6
+    term: Canvas
+  - id: retired-content-type
+    group: content-words
+    words: content type
+    swap: vessel type
+    stage: 6
+    term: Vessel type
+    allow:
+      - '\b[Cc]ontent-[Tt]ype\b'
+      - '(?<!\b(?:const|static|let|fn)\s+)\bCONTENT_TYPE\b'
+  - id: retired-content-package
+    group: content-words
+    words: content package
+    swap: vessel package
+    stage: 6
+    term: Vessel package
+  - id: retired-content-instance
+    group: content-words
+    words: content instance
+    term: Vessel
+  - id: retired-mod
+    group: package-nickname
+    words: mod
+    term: Vessel package
+    allow:
+      - '\b(?:pub(?:\([^)]*\))?\s+)?mod\s+[a-z_][a-z0-9_]*\s*[;{]'
+      - {pattern: '\b(?:Mods|set_mods)\b', files: ['desktop/src/terminal.rs']}
+      - '\bmod\.rs\b'
+    skip: ['tests/architecture/observe*.cjs', 'tests/architecture/rust.cjs']
+  - id: retired-realm
+    group: legacy-names
+    words: realm
+    term: Voyage
+  - id: retired-content-id
+    group: vessel-ids
+    words: content id
+    swap: vessel id
+    stage: 6
+    term: Vessel
+
+contexts:
+  - id: core-adapter
+    name: Core adapter
+    summary: 'Connects the application to Herdr Core. Core owns terminals, screens and processes.'
+    guide: docs/terminal.md
+    owns: [app/src/core.rs, app/src/core_endpoint.rs, app/src/core_hello.rs, app/src/core_pending.rs, app/src/core_reader.rs, app/src/core_state.rs, app/src/core_viewer.rs, app/src/client_core.rs, app/src/wire.rs]
+    uses: []
+  - id: application-queue
+    name: Application queue and front door
+    summary: 'Takes every request from a view, a Vessel or an agent, orders the effects and reports each outcome.'
+    guide: docs/workspace.md
+    owns: [app/src/client.rs, app/src/process.rs, app/src/launch.rs, app/src/activity.rs, app/src/diagnostics.rs, app/src/observation.rs]
+    uses: [Placement, Vessel, Context, Core terminal, Program]
+  - id: placement
+    name: Placement
+    summary: 'Decides where each Vessel sits and which Context a request carries.'
+    guide: docs/workspace.md
+    owns: [app/src/workspace.rs, app/src/scope.rs, app/src/context.rs, app/src/panels.rs, app/src/canvas.rs, app/src/voyage_close.rs, app/src/worktrees.rs, contract/src/lib.rs, contract/src/panels.rs, contract/src/canvas.rs, contract/src/context.rs, contract/src/voyage_close.rs, contract/src/worktree.rs]
+    uses: [Vessel]
+  - id: content
+    name: Content
+    summary: 'Owns Vessel types, Vessel packages, Vessel data and the link from a Vessel to its backend.'
+    guide: docs/content.md
+    owns: [app/src/content.rs, app/src/content/, app/src/vessel_type.rs, contract/src/content.rs, content/]
+    uses: [Placement, Core terminal]
+  - id: conversation-provider
+    name: Conversation and provider
+    summary: 'Runs the private Conversation with the Administrator through a Provider. The application keeps scope, tools and policy.'
+    guide: docs/conversation.md
+    owns: [app/src/administrator.rs, app/src/conversation.rs, app/src/conversation_client.rs, app/src/conversation_audio.rs, app/src/provider.rs, app/src/codex.rs, app/src/codex_protocol.rs, app/src/voice.rs, app/src/voice_host.rs, app/src/voice_session.rs, app/src/voice_transcript.rs, app/src/voice_wire.rs, contract/src/administrator.rs, contract/src/conversation.rs, contract/src/voice.rs]
+    uses: [Context, Operation, Vessel, Placement]
+  - id: desktop-presentation
+    name: Desktop presentation
+    summary: 'Draws the Canvas and the Avatar and binds the native window to the application owners.'
+    guide: docs/terminal.md
+    owns: [desktop/src/, desktop/canvas/]
+    uses: [Placement, Portal, Vessel, Context, Operation, Core terminal, Region]
+  - id: verification
+    name: Verification
+    summary: 'Drives the real app on an owned display and keeps the architecture checks.'
+    guide: tests/native/README.md
+    owns: [tests/native/, tests/architecture/]
+    uses: [Voyage, Fleet, Vessel, Placement, Portal, Canvas]
+
+terms:
+  - term: Core
+    context: core-adapter
+    meaning: 'Herdr Core, the external process that owns terminals, screens and processes. Voyager never supervises a process itself.'
+    code: [CoreTerminalId]
+  - term: Core session
+    context: core-adapter
+    meaning: 'One named Core session. Stop session ends every program that Core started in it.'
+  - term: Core terminal
+    context: core-adapter
+    meaning: 'A terminal that Core runs, addressed by a CoreTerminalId.'
+    code: [CoreTerminalId]
+  - term: Program
+    context: core-adapter
+    meaning: 'What Core runs in a Core terminal, such as a shell or a coding agent.'
+    code: [AGENT_PROGRAMS]
+  - term: Queue
+    context: application-queue
+    meaning: 'The one ordered owner of application effects. A caller sends a request and the queue decides its outcome.'
+  - term: Operation
+    context: application-queue
+    meaning: 'A named request in the typed application contract. A view, a Vessel or an agent sends the same Operation.'
+    code: [Action]
+  - term: Refusal
+    context: application-queue
+    meaning: 'A known outcome. The application declined the Operation and nothing changed.'
+  - term: Uncertain effect
+    context: application-queue
+    meaning: 'An outcome the application could not confirm. Never replay it and never restore it automatically.'
+  - term: Voyage
+    context: placement
+    meaning: 'A space for one project. It holds Fleets and a Portal column.'
+    code: [VoyageId]
+  - term: Fleet
+    context: placement
+    meaning: 'A tab in a Voyage. It holds a split tree of Placements.'
+    code: [FleetId]
+  - term: Placement
+    context: placement
+    meaning: 'Where one Vessel sits, in a Fleet or as a Portal. It has a PlacementId, a Vessel, a name and a hidden flag.'
+    code: [PlacementId]
+  - term: Portal
+    context: placement
+    meaning: 'A Placement that stays on screen across every Fleet of its Voyage. Its mode is overlay, which is the default, or make-room.'
+    code: [PortalLayout, PortalMode]
+  - term: Arrangement
+    context: placement
+    meaning: 'A named, saved split tree of Placements.'
+    code: [Arrangement]
+  - term: Layout
+    context: placement
+    meaning: 'The whole stored workspace document. It holds the Voyages, Fleets, Placements, Vessels, Arrangements, Context and Canvas regions.'
+    code: [Layout]
+  - term: Context
+    context: placement
+    meaning: 'What the avatar acts on: the workspace, a Voyage, a Fleet, a Vessel or a Portal. Docking sets it. It stays separate from keyboard focus, visual selection and delegated assignment.'
+    code: [Context]
+  - term: Overwatch
+    context: placement
+    meaning: 'The name users see for the workspace Context, which covers every Voyage.'
+  - term: Region
+    context: placement
+    meaning: 'A node of the Canvas region tree, such as the sidebar, the Fleet strip, the active Fleet, the Portals or the context bar.'
+    code: [Region]
+  - term: Vessel
+    context: content
+    meaning: 'One piece of content with its own identity, configuration, state and revision, of one Vessel type. A Placement puts it on screen.'
+    code: [VesselId]
+  - term: Vessel type
+    context: content
+    meaning: 'The kind of a Vessel, keyed by type_id. The built-in types are terminal, notes and agents.'
+    code: [NOTES_TYPE]
+  - term: Vessel package
+    context: content
+    meaning: 'The source folder under vessels/ in the profile that provides one scripted Vessel type. Its manifest is vessel.json.'
+  - term: Backend
+    context: content
+    meaning: 'The Core terminal that runs behind a Vessel. Hiding, moving or uninstalling the Vessel leaves it running.'
+    code: [Backend]
+  - term: Description
+    context: content
+    meaning: 'The catalogue entry that tells a caller the renderers, configuration, state, named actions and allowed Placements of a Vessel type.'
+    code: [Description]
+  - term: Administrator
+    context: conversation-provider
+    meaning: 'Voyager''s private agent. It inspects, arranges, delegates and verifies through Operations. Working Vessels change project code.'
+  - term: Conversation
+    context: conversation-provider
+    meaning: 'The private exchange between the user and the Administrator. It is separate from terminal agents and Vessels.'
+  - term: Provider
+    context: conversation-provider
+    meaning: 'The adapter that serves the Conversation model and any voice. Codex is the supported Provider.'
+    code: [Provider]
+  - term: Canvas
+    context: desktop-presentation
+    meaning: 'The whole window surface and the script package in desktop/canvas that draws it.'
+    code: [CanvasHost]
+  - term: Panel
+    context: desktop-presentation
+    meaning: 'The drawn frame of one Placement, with its title bar. It names a drawing, never a stored or wire object.'
+    code: [panelFrame]
+  - term: Avatar
+    context: desktop-presentation
+    meaning: 'The Voyager assistant figure. It holds its user''s authority, and docking it selects the Context.'
+  - term: Dock
+    context: desktop-presentation
+    meaning: 'To place the Avatar on a Vessel, a Portal, a Fleet, a Voyage or Overwatch. It never moves keyboard focus.'
+  - term: Profile
+    context: desktop-presentation
+    meaning: 'The user''s data directory, passed as --profile. It holds canvas, vessels, data, themes and the avatar pack.'
+  - term: Journey
+    context: verification
+    meaning: 'A Rust test in tests/native that drives the real app on an owned display and writes evidence.'
+  - term: Fixture
+    context: verification
+    meaning: 'The owned display, isolated Core, profile and cleanup that every Journey shares.'
+  - term: Control
+    context: verification
+    meaning: 'A patch that breaks the app on purpose to show that a Journey fails.'
+  - term: Evidence
+    context: verification
+    meaning: 'The raw bundle a run writes. It names whether the product, the Fixture or an unknown cause failed.'

@@ -311,7 +311,7 @@ mod tests {
             .unwrap();
         model
             .apply(Action::CreateVessel {
-                type_id: crate::content_type::NOTES_TYPE.into(),
+                type_id: crate::vessel_type::NOTES_TYPE.into(),
                 destination: ContentDestination::Placement {
                     owner,
                     insertion: PlacementInsertion::Empty,

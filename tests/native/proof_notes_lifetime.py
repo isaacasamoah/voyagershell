@@ -59,7 +59,7 @@ def prove(
     original_clipboard = None
     canvas = profile / "canvas/main.js"
     package = profile / "vessels/notes/main.js"
-    original_header = original_source = None
+    original_canvas = original_source = None
     targets = []
     accessibility_before = None
     workspace = evidence / "notes-workspace"
@@ -248,7 +248,7 @@ def prove(
         native("accessibility-state", False)
         native("accessibility-state", True)
         record("initial-app", pid())
-        original_header, original_source = canvas.read_bytes(), package.read_bytes()
+        original_canvas, original_source = canvas.read_bytes(), package.read_bytes()
         assert (
             original_source
             == (
@@ -657,7 +657,7 @@ def prove(
             else profile / "vessels/.notes.removed/main.js"
         )
         for path, original in (
-            (canvas, original_header),
+            (canvas, original_canvas),
             (source_path, original_source),
         ):
             if original is not None:
@@ -688,8 +688,8 @@ def prove(
                 {
                     "errors": errors,
                     "owned": owned,
-                    "headerRestored": original_header is not None
-                    and canvas.read_bytes() == original_header,
+                    "canvasRestored": original_canvas is not None
+                    and canvas.read_bytes() == original_canvas,
                     "sourceRestored": original_source is not None
                     and (
                         package

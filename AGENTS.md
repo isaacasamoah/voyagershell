@@ -20,7 +20,7 @@ This is an application for extensible content, not only a terminal manager. A te
 - Keep changed source comment-free. Put mechanisms and invariants in the owning technical document.
 - Prefer explicit types and a small number of modules. Add a dependency only for a primitive required now.
 - Keep runtime profiles, transcripts, credentials, private task documents and evidence out of Git.
-- Preserve the selected vocabulary: a Voyage is a space, a Fleet is a tab, a Vessel is one piece of content of a Vessel type, and it is placed in a Fleet or as a Portal across a Voyage. Use these words in code, docs and UI.
+- Use the vocabulary in [docs/glossary.md](docs/glossary.md): a Voyage is a space, a Fleet is a tab, a Vessel is one piece of content of a Vessel type, and it is placed in a Fleet or as a Portal across a Voyage. [docs/context-map.md](docs/context-map.md) lists which context owns each word and file. Use these words in code, docs and UI. Edit `tests/architecture/vocabulary.yaml`, then run `npm run vocabulary:generate`. `npm run vocabulary:check` fails on a retired word.
 - The native candidate uses Rust application code and GPUI rendering. Electron remains the preserved UX reference. The native candidate is not an accepted replacement until equivalent UX and increasing-load performance are demonstrated.
 - Use Rust best practices for Rust changes and Rust review alongside general review. Preserve the project's toolchain and lint rules.
 

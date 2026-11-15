@@ -98,13 +98,13 @@ mod tests {
         let changes = owner.subscribe(&binding, Some(0));
         let original_data = fs::read(profile.join("data/stable-note.json")).unwrap();
         owner
-            .remove_package(crate::content_type::NOTES_TYPE)
+            .remove_package(crate::vessel_type::NOTES_TYPE)
             .unwrap();
         assert!(!view.is_active());
         assert_eq!(changes.try_recv().unwrap(), 1);
         assert!(
             owner
-                .require_available(crate::content_type::NOTES_TYPE)
+                .require_available(crate::vessel_type::NOTES_TYPE)
                 .is_err()
         );
         assert!(owner.require_available("terminal").is_ok());
@@ -122,7 +122,7 @@ mod tests {
         let notes = catalog
             .types
             .iter()
-            .find(|kind| kind.type_id == crate::content_type::NOTES_TYPE)
+            .find(|kind| kind.type_id == crate::vessel_type::NOTES_TYPE)
             .unwrap();
         assert_eq!(notes.availability, Availability::Removed);
         assert!(notes.state.is_none() && notes.actions.is_none());
@@ -132,7 +132,7 @@ mod tests {
         );
         let restored = owner.subscribe(&binding, Some(1));
         owner
-            .restore_package(crate::content_type::NOTES_TYPE)
+            .restore_package(crate::vessel_type::NOTES_TYPE)
             .unwrap();
         assert!(
             !view.is_active(),
@@ -154,7 +154,7 @@ mod tests {
         fs::remove_file(active.join("main.js")).unwrap();
         assert!(
             owner
-                .require_available(crate::content_type::NOTES_TYPE)
+                .require_available(crate::vessel_type::NOTES_TYPE)
                 .is_err()
         );
         seed_package(&active, &files).unwrap();
@@ -174,7 +174,7 @@ mod tests {
         assert!(serde_json::to_vec(&catalog).unwrap().len() <= crate::content::ENVELOPE_LIMIT);
         assert!(
             owner
-                .require_available(crate::content_type::NOTES_TYPE)
+                .require_available(crate::vessel_type::NOTES_TYPE)
                 .is_err()
         );
         assert!(owner.require_available("terminal").is_ok());
@@ -184,7 +184,7 @@ mod tests {
             catalog
                 .types
                 .iter()
-                .find(|kind| kind.type_id == crate::content_type::NOTES_TYPE)
+                .find(|kind| kind.type_id == crate::vessel_type::NOTES_TYPE)
                 .unwrap()
                 .availability,
             Availability::Unavailable { .. }
@@ -199,7 +199,7 @@ mod tests {
             b"invalid personal metadata"
         );
         owner
-            .remove_package(crate::content_type::NOTES_TYPE)
+            .remove_package(crate::vessel_type::NOTES_TYPE)
             .unwrap();
         fs::create_dir(&active).unwrap();
         assert!(super::move_package(&removed, &active).is_err());
@@ -207,7 +207,7 @@ mod tests {
         fs::write(active.join("main.js"), "new personal package").unwrap();
         assert!(
             owner
-                .restore_package(crate::content_type::NOTES_TYPE)
+                .restore_package(crate::vessel_type::NOTES_TYPE)
                 .is_err()
         );
         assert_eq!(

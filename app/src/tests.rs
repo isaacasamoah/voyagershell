@@ -247,7 +247,7 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
     );
     model.apply(vessel).unwrap();
     let notes = model.layout.vessels.last().unwrap().clone();
-    assert_eq!(notes.type_id, crate::content_type::NOTES_TYPE);
+    assert_eq!(notes.type_id, crate::vessel_type::NOTES_TYPE);
     assert!(notes.backend.is_none());
     model
         .apply(create(serde_json::json!({"kind":"placement","owner":{"kind":"portals","voyage":voyage},"insertion":{"kind":"empty"}})))
@@ -285,7 +285,7 @@ fn notes_type_uses_the_same_vessel_and_portal_placement_rules() {
             .layout
             .vessels
             .iter()
-            .filter(|content| content.type_id == crate::content_type::NOTES_TYPE)
+            .filter(|content| content.type_id == crate::vessel_type::NOTES_TYPE)
             .count(),
         2
     );

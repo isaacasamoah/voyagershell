@@ -209,7 +209,7 @@ impl Closing {
                     .find(|terminal| terminal.address == address.0)
             });
             let live = terminal.filter(|terminal| terminal.is_live());
-            let note = content.type_id == crate::content_type::NOTES_TYPE;
+            let note = content.type_id == crate::vessel_type::NOTES_TYPE;
             if note {
                 self.notes.push(content.id.clone());
             }

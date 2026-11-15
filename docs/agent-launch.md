@@ -46,7 +46,7 @@ private administrator's permission profile.
 
 The picker captures its destination and workspace revision when it opens.
 The Rust workspace owner validates the request and saves the concrete launch
-only on the newly created terminal content. An unrelated pending content ID
+only on the newly created terminal content. An unrelated pending Vessel ID
 cannot acquire a later picker selection. Notes rejects a program launch.
 The existing pending creation record retains that ID's accepted effective launch.
 An absent launch means Terminal. Fresh inspection advertises eligibility only

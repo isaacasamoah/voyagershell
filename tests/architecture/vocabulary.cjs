@@ -11,28 +11,28 @@ const PREFIX = "one-vocabulary: ";
 
 function load(file = TABLE) {
   const table = parse(fs.readFileSync(file, "utf8"));
-  const matchers = (list) => (list ?? []).map(glob);
-  const any = (list) => (name) => list.some((regex) => regex.test(name));
+  const files = (list) => any((list ?? []).map(glob));
   const rules = (table.rules ?? []).map((rule) => {
     for (const key of ["id", "stage", "old", "new"])
       if (rule[key] === undefined || rule[key] === null)
         throw Error(`Vocabulary rule needs ${key}: ${JSON.stringify(rule)}`);
-    const files = rule.files ? any(matchers(rule.files)) : () => true;
-    const skip = rule.skip ? any(matchers(rule.skip)) : () => false;
+    const include = rule.files ? files(rule.files) : () => true;
+    const skip = rule.skip ? files(rule.skip) : () => false;
     return {
       ...rule,
-      applies: (name) => files(name) && !skip(name),
+      applies: (name) => include(name) && !skip(name),
       pattern: new RegExp(rule.old, rule.flags ?? "g"),
       ban: new RegExp(rule.ban ?? rule.old),
       banned: rule.ban !== false,
     };
   });
+  const settings = table.settings ?? {};
+  const retired = (table.retired ?? []).map(retiredRule);
   const ids = new Set();
-  for (const rule of rules) {
+  for (const rule of [...rules, ...retired]) {
     if (ids.has(rule.id)) throw Error(`Duplicate vocabulary rule ${rule.id}`);
     ids.add(rule.id);
   }
-  const settings = table.settings ?? {};
   const exceptions = table.exceptions ?? [];
   for (const entry of exceptions)
     if (!entry.text || !entry.reason)
@@ -41,22 +41,32 @@ function load(file = TABLE) {
       );
   return {
     rules,
+    retired,
     moves: table.moves ?? [],
-    kinds: new Set(settings.kinds ?? []),
     foreign: new RegExp(
-      [FOREIGN.source, ...exceptions.map((entry) => escape(entry.text))].join(
-        "|",
-      ),
+      [
+        urlPattern(settings.own ?? []),
+        PATH_FOREIGN.source,
+        ...exceptions.map((entry) => escape(entry.text)),
+      ].join("|"),
       "g",
     ),
-    skipped: any(matchers(settings.skip)),
-    generated: any(matchers(settings.generated)),
+    skipped: files(settings.skip),
+    generated: files(settings.generated),
   };
 }
 
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const FOREIGN = /https?:\/\/[^\s)>\]"'`]+|[\w./-]*herdr-app[\w./-]*/g;
+const PATH_FOREIGN = /[\w./-]*herdr-app[\w./-]*/;
+const URL = /https?:\/\/[^\s)>\]"'`]+/;
+
+function urlPattern(own) {
+  const mine = own.map(escape).join("|");
+  return mine
+    ? `https?:\\/\\/(?!(?:www\\.)?(?:${mine})(?:[/#?]|$))[^\\s)>\\]"'\`]+`
+    : URL.source;
+}
 
 function shield(table, text) {
   const held = [];
@@ -70,25 +80,135 @@ function shield(table, text) {
   };
 }
 
-function isText(table, name) {
-  return table.kinds.has(path.extname(name).slice(1));
+const isText = (text) => !text.includes("\u0000");
+
+const PARTS = /[A-Z]+(?![a-z])|[A-Z]?[a-z]+/g;
+const JOINER =
+  /^[ \t_-]*(?:\r?\n[ \t]*(?:(?:\/\/[/!]?|#+|\*+|>+)[ \t]*)?[ \t_-]*)?$/;
+
+function retiredRule(entry) {
+  for (const key of ["id", "group", "words", "term"])
+    if (!entry[key])
+      throw Error(`Retired word needs ${key}: ${JSON.stringify(entry)}`);
+  const words = String(entry.words).toLowerCase().split(" ");
+  const swap = entry.swap ? String(entry.swap).split(" ") : null;
+  if (swap && swap.length !== words.length)
+    throw Error(`Retired swap needs ${words.length} words: ${entry.id}`);
+  return {
+    ...entry,
+    words,
+    swap,
+    allow: (entry.allow ?? []).map((item) => ({
+      pattern: new RegExp(item.pattern ?? item, "g"),
+      applies: item.files ? any(item.files.map(glob)) : () => true,
+    })),
+    skipped: any((entry.skip ?? []).map(glob)),
+  };
+}
+
+function any(matchers) {
+  return (name) => matchers.some((regex) => regex.test(name));
+}
+
+function tokens(text) {
+  const found = [];
+  for (const run of text.matchAll(/[A-Za-z]+/g))
+    for (const part of run[0].matchAll(PARTS))
+      found.push({
+        raw: part[0],
+        word: part[0].toLowerCase(),
+        start: run.index + part.index,
+        end: run.index + part.index + part[0].length,
+      });
+  return found;
+}
+
+function unallowed(rule, name, text) {
+  return rule.allow
+    .filter((item) => item.applies(name))
+    .reduce(
+      (kept, item) =>
+        kept.replace(item.pattern, (match) =>
+          match.replace(/[^\n]/g, "\u0001"),
+        ),
+      text,
+    );
+}
+
+function phrases(rule, name, text) {
+  const list = tokens(unallowed(rule, name, text));
+  const last = rule.words.length - 1;
+  const hits = [];
+  for (let at = 0; at + last < list.length; at += 1) {
+    const matched = rule.words.every((word, offset) => {
+      const token = list[at + offset];
+      if (
+        token.word !== word &&
+        !(offset === last && token.word === `${word}s`)
+      )
+        return false;
+      return (
+        offset === 0 ||
+        JOINER.test(text.slice(list[at + offset - 1].end, token.start))
+      );
+    });
+    if (matched) hits.push(list.slice(at, at + last + 1));
+  }
+  return hits;
+}
+
+function lineStarts(text) {
+  const starts = [0];
+  for (
+    let index = text.indexOf("\n");
+    index >= 0;
+    index = text.indexOf("\n", index + 1)
+  )
+    starts.push(index + 1);
+  return starts;
+}
+
+function lineOf(starts, position) {
+  let low = 0;
+  let high = starts.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if (starts[middle] <= position) low = middle;
+    else high = middle - 1;
+  }
+  return low;
 }
 
 function scan(table, names, read) {
   const found = new Map();
+  const seen = new Set();
+  const record = (key, file, line, text, rule) => {
+    const mark = `${key}\0${file}\0${line}`;
+    if (seen.has(mark)) return;
+    seen.add(mark);
+    if (!found.has(key)) found.set(key, []);
+    found.get(key).push({ file, line, text, rule });
+  };
   for (const name of names) {
-    if (table.skipped(name) || !isText(table, name)) continue;
-    const lines = shield(table, read(name)).masked.split("\n");
+    if (table.skipped(name)) continue;
+    const source = read(name);
+    if (!isText(source)) continue;
+    const { masked } = shield(table, source);
+    const lines = masked.split("\n");
     for (const rule of table.rules) {
       if (!rule.banned || !rule.applies(name)) continue;
       lines.forEach((text, index) => {
-        if (!rule.ban.test(text)) return;
-        const key = rule.group ?? rule.id;
-        if (!found.has(key)) found.set(key, []);
-        found
-          .get(key)
-          .push({ file: name, line: index + 1, text, rule: rule.id });
+        if (rule.ban.test(text))
+          record(rule.group ?? rule.id, name, index + 1, text, rule.id);
       });
+    }
+    const starts = lineStarts(masked);
+    for (const rule of table.retired) {
+      if (rule.skipped(name)) continue;
+      for (const hit of phrases(rule, name, masked)) {
+        const index = lineOf(starts, hit[0].start);
+        record(rule.group, name, index + 1, lines[index], rule.id);
+      }
     }
   }
   return found;
@@ -105,7 +225,14 @@ function tracked(repository) {
   })
     .split("\0")
     .filter(Boolean)
-    .filter((name) => fs.lstatSync(path.join(repository, name)).isFile());
+    .filter((name) => {
+      try {
+        return fs.lstatSync(path.join(repository, name)).isFile();
+      } catch (error) {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      }
+    });
 }
 
 function move(repository, from, to) {
@@ -151,6 +278,28 @@ function segments(name, text) {
   return parts;
 }
 
+function cased(raw, word) {
+  if (raw.length > 1 && raw === raw.toUpperCase()) return word.toUpperCase();
+  return raw[0] === raw[0].toUpperCase()
+    ? word[0].toUpperCase() + word.slice(1)
+    : word;
+}
+
+function swapRetired(table, stage, name, text) {
+  let next = text;
+  for (const rule of table.retired) {
+    if (rule.stage !== stage || !rule.swap || rule.skipped(name)) continue;
+    const hits = phrases(rule, name, next).reverse();
+    for (const hit of hits)
+      for (let offset = hit.length - 1; offset >= 0; offset -= 1) {
+        const token = hit[offset];
+        if (token.word !== rule.words[offset]) continue;
+        next = `${next.slice(0, token.start)}${cased(token.raw, rule.swap[offset])}${next.slice(token.end)}`;
+      }
+  }
+  return next;
+}
+
 function rewrite(table, stage, name, text) {
   const guarded = shield(table, text);
   let next = guarded.masked;
@@ -164,7 +313,7 @@ function rewrite(table, stage, name, text) {
           .join("")
       : next.replace(rule.pattern, rule.new);
   }
-  return guarded.restore(next);
+  return guarded.restore(swapRetired(table, stage, name, next));
 }
 
 function apply(table, stage, repository) {
@@ -173,10 +322,10 @@ function apply(table, stage, repository) {
     .filter((entry) => move(repository, entry.from, entry.to));
   const changed = [];
   for (const name of tracked(repository)) {
-    if (table.skipped(name) || table.generated(name) || !isText(table, name))
-      continue;
+    if (table.skipped(name) || table.generated(name)) continue;
     const file = path.join(repository, name);
     const text = fs.readFileSync(file, "utf8");
+    if (!isText(text)) continue;
     const next = rewrite(table, stage, name, text);
     if (next === text) continue;
     fs.writeFileSync(file, next);
@@ -237,6 +386,15 @@ function main(args) {
     process.stdout.write(report(found, table));
     return;
   }
+  const glossary = require("./glossary.cjs");
+  const raw = glossary.load(
+    option("--table") ? path.resolve(option("--table")) : TABLE,
+  );
+  if (args.includes("--generate")) {
+    glossary.generate(raw, repository);
+    process.stdout.write("glossary and context map written\n");
+    return;
+  }
   const names = tracked(repository);
   const found = scan(table, names, (name) =>
     fs.readFileSync(path.join(repository, name), "utf8"),
@@ -247,9 +405,23 @@ function main(args) {
     process.stdout.write(
       `${hit.file}:${hit.line}: ${hit.text.trim().slice(0, 160)}\n`,
     );
-  process.exitCode = found.size ? 1 : 0;
+  const problems = glossary.check(raw, repository, table.retired);
+  for (const problem of problems) process.stdout.write(`${problem}\n`);
+  process.stdout.write(found.size || problems.length ? "FAIL\n" : "PASS\n");
+  process.exitCode = found.size || problems.length ? 1 : 0;
 }
 
-if (require.main === module) main(process.argv.slice(2));
+module.exports = {
+  load,
+  scan,
+  scanSnapshot,
+  apply,
+  rewrite,
+  sync,
+  phrases,
+  tracked,
+  isText,
+  TABLE,
+};
 
-module.exports = { load, scan, scanSnapshot, apply, rewrite, sync, TABLE };
+if (require.main === module) main(process.argv.slice(2));

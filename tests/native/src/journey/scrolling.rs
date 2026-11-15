@@ -10,7 +10,7 @@ use std::fs;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use voyager_contract::RenameTarget;
 
-const HEADER_REFRESH: Duration = Duration::from_secs(3);
+const CANVAS_REFRESH: Duration = Duration::from_secs(3);
 
 cases! {
     NormalHistory => "normal-history",
@@ -235,7 +235,7 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .trim()
             .parse()
             .context("The ticking shell's entry time")?;
-        let next_refresh = UNIX_EPOCH + Duration::from_nanos(entered) + HEADER_REFRESH;
+        let next_refresh = UNIX_EPOCH + Duration::from_nanos(entered) + CANVAS_REFRESH;
         let margin = millis(next_refresh)? - millis(saved)?;
         Verdict::new()
             .expect(

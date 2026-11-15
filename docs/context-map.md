@@ -1,0 +1,150 @@
+# Context map
+
+Generated from `tests/architecture/vocabulary.yaml` by `npm run vocabulary:generate`. Edit the table, then regenerate.
+
+Each bounded context owns the files and the words listed here. A context
+defines its own words and may use the words of another context that it lists.
+The [glossary](glossary.md) defines every word.
+
+## Core adapter
+
+Connects the application to Herdr Core. Core owns terminals, screens and processes.
+
+Guide: [docs/terminal.md](terminal.md).
+
+Owns files:
+
+- `app/src/core.rs`
+- `app/src/core_endpoint.rs`
+- `app/src/core_hello.rs`
+- `app/src/core_pending.rs`
+- `app/src/core_reader.rs`
+- `app/src/core_state.rs`
+- `app/src/core_viewer.rs`
+- `app/src/client_core.rs`
+- `app/src/wire.rs`
+
+Owns words: Core, Core session, Core terminal, Program.
+
+Uses words: none.
+
+## Application queue and front door
+
+Takes every request from a view, a Vessel or an agent, orders the effects and reports each outcome.
+
+Guide: [docs/workspace.md](workspace.md).
+
+Owns files:
+
+- `app/src/client.rs`
+- `app/src/process.rs`
+- `app/src/launch.rs`
+- `app/src/activity.rs`
+- `app/src/diagnostics.rs`
+- `app/src/observation.rs`
+
+Owns words: Queue, Operation, Refusal, Uncertain effect.
+
+Uses words: Placement, Vessel, Context, Core terminal, Program.
+
+## Placement
+
+Decides where each Vessel sits and which Context a request carries.
+
+Guide: [docs/workspace.md](workspace.md).
+
+Owns files:
+
+- `app/src/workspace.rs`
+- `app/src/scope.rs`
+- `app/src/context.rs`
+- `app/src/panels.rs`
+- `app/src/canvas.rs`
+- `app/src/voyage_close.rs`
+- `app/src/worktrees.rs`
+- `contract/src/lib.rs`
+- `contract/src/panels.rs`
+- `contract/src/canvas.rs`
+- `contract/src/context.rs`
+- `contract/src/voyage_close.rs`
+- `contract/src/worktree.rs`
+
+Owns words: Voyage, Fleet, Placement, Portal, Arrangement, Layout, Context, Overwatch, Region.
+
+Uses words: Vessel.
+
+## Content
+
+Owns Vessel types, Vessel packages, Vessel data and the link from a Vessel to its backend.
+
+Guide: [docs/content.md](content.md).
+
+Owns files:
+
+- `app/src/content.rs`
+- `app/src/content/`
+- `app/src/vessel_type.rs`
+- `contract/src/content.rs`
+- `content/`
+
+Owns words: Vessel, Vessel type, Vessel package, Backend, Description.
+
+Uses words: Placement, Core terminal.
+
+## Conversation and provider
+
+Runs the private Conversation with the Administrator through a Provider. The application keeps scope, tools and policy.
+
+Guide: [docs/conversation.md](conversation.md).
+
+Owns files:
+
+- `app/src/administrator.rs`
+- `app/src/conversation.rs`
+- `app/src/conversation_client.rs`
+- `app/src/conversation_audio.rs`
+- `app/src/provider.rs`
+- `app/src/codex.rs`
+- `app/src/codex_protocol.rs`
+- `app/src/voice.rs`
+- `app/src/voice_host.rs`
+- `app/src/voice_session.rs`
+- `app/src/voice_transcript.rs`
+- `app/src/voice_wire.rs`
+- `contract/src/administrator.rs`
+- `contract/src/conversation.rs`
+- `contract/src/voice.rs`
+
+Owns words: Administrator, Conversation, Provider.
+
+Uses words: Context, Operation, Vessel, Placement.
+
+## Desktop presentation
+
+Draws the Canvas and the Avatar and binds the native window to the application owners.
+
+Guide: [docs/terminal.md](terminal.md).
+
+Owns files:
+
+- `desktop/src/`
+- `desktop/canvas/`
+
+Owns words: Canvas, Panel, Avatar, Dock, Profile.
+
+Uses words: Placement, Portal, Vessel, Context, Operation, Core terminal, Region.
+
+## Verification
+
+Drives the real app on an owned display and keeps the architecture checks.
+
+Guide: [tests/native/README.md](../tests/native/README.md).
+
+Owns files:
+
+- `tests/native/`
+- `tests/architecture/`
+
+Owns words: Journey, Fixture, Control, Evidence.
+
+Uses words: Voyage, Fleet, Vessel, Placement, Portal, Canvas.

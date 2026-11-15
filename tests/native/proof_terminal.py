@@ -12,11 +12,11 @@ from PIL import ImageChops
 from proof_workspace import core_rpc, named_button
 from proof_process import observe_core_exit
 
-LEGACY_DIV_HEADER = "7da0b1f9fde04137d20867e64b35fcc1eedb7a5b9be0ba4002031f78320e0909"
+LEGACY_DIV_CANVAS = "7da0b1f9fde04137d20867e64b35fcc1eedb7a5b9be0ba4002031f78320e0909"
 
 
-def div_control_point(label, fleets, viewport, header_sha256):
-    assert header_sha256 == LEGACY_DIV_HEADER, (
+def div_control_point(label, fleets, viewport, canvas_sha256):
+    assert canvas_sha256 == LEGACY_DIV_CANVAS, (
         "Measured Div controls require the inspected canvas source"
     )
     assert viewport == (2900, 1880), (
@@ -70,7 +70,7 @@ def terminal(
     def workspace_control(label):
         canvas = evidence / "profile/canvas/main.js"
         digest = hashlib.sha256(canvas.read_bytes()).hexdigest()
-        if digest != LEGACY_DIV_HEADER:
+        if digest != LEGACY_DIV_CANVAS:
             click(*named_button(native, evidence, label))
             return
         layout = rpc("doc.get", {"name": "voyager-layout-v2"})["value"]
@@ -92,7 +92,7 @@ def terminal(
                 route="pinned-div",
                 point=point,
                 viewport=viewport,
-                headerSha256=digest,
+                canvasSha256=digest,
                 fleets=[item["id"] for item in fleets],
                 capture=name,
                 reference=(

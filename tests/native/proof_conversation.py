@@ -1071,7 +1071,7 @@ def private_turn(
 
 def package_turn(*, native, pid, evidence, wait, type_text, operation, context, owned, focus=None):
     assert operation in ("remove", "restore") and context == {"kind": "workspace"}
-    prompt = f"Use voyager_workspace to inspect this workspace once, then perform exactly one {operation}-content-package action with typeId notes. Keep all content, data, canvas, context, programs and source files unchanged. Use no other tools or effects. Never repeat an uncertain action. Report the actual package outcome briefly."
+    prompt = f"Use voyager_workspace to inspect this workspace once, then perform exactly one {operation}-vessel-package action with typeId notes. Keep all content, data, canvas, context, programs and source files unchanged. Use no other tools or effects. Never repeat an uncertain action. Report the actual package outcome briefly."
     final, user = private_turn(
         native=native,
         pid=pid,
@@ -1091,7 +1091,7 @@ def package_turn(*, native, pid, evidence, wait, type_text, operation, context, 
     ]
     assert [message["tool"]["action"]["action"]["operation"] for message in tools] == [
         "inspect",
-        operation + "-content-package",
+        operation + "-vessel-package",
     ]
     assert len({message["id"] for message in tools}) == len(tools)
     assert len({message["tool"]["requestId"] for message in tools}) == len(tools)

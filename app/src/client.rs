@@ -1915,7 +1915,7 @@ impl Client {
                                             &request.action,
                                         )
                                         .map_err(rejected)?;
-                                        if type_id == crate::content_type::NOTES_TYPE
+                                        if type_id == crate::vessel_type::NOTES_TYPE
                                             && layout.vessels.iter().any(|item| {
                                                 item.type_id == *type_id
                                                     && closing.blocks_terminal(&item.id)
@@ -2012,7 +2012,7 @@ impl Client {
                                             }
                                         let created_notes = if let Some(owner) = content.as_mut() {
                                             crate::content::initialize_created(owner, &layout, &mut candidate.layout).map_err(Error::Uncertain)?
-                                        } else if candidate.layout.vessels.iter().any(|item| item.type_id == crate::content_type::NOTES_TYPE && !layout.vessels.iter().any(|old| old.id == item.id)) {
+                                        } else if candidate.layout.vessels.iter().any(|item| item.type_id == crate::vessel_type::NOTES_TYPE && !layout.vessels.iter().any(|old| old.id == item.id)) {
                                             return Err(rejected("Content owner unavailable; Notes was not created".into()));
                                         } else { false };
                                         let revision = save(core, &candidate.layout, version).map_err(|error| {
@@ -2656,7 +2656,7 @@ fn note_exit_target(
     if !layout
         .vessels
         .iter()
-        .any(|item| &item.id == content && item.type_id == crate::content_type::NOTES_TYPE)
+        .any(|item| &item.id == content && item.type_id == crate::vessel_type::NOTES_TYPE)
     {
         return Err("This view is not Notes".into());
     }
@@ -2726,7 +2726,7 @@ mod voice_scope_tests {
         assert!(note_exit_target(&model.layout, &shell).is_err());
         model
             .apply(Action::CreateVessel {
-                type_id: crate::content_type::NOTES_TYPE.into(),
+                type_id: crate::vessel_type::NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
                     insertion: voyager_contract::PlacementInsertion::Beside {
@@ -3854,7 +3854,7 @@ mod terminal_outcome_tests {
         model
             .apply(Action::CreateVessel {
                 launch: None,
-                type_id: crate::content_type::NOTES_TYPE.into(),
+                type_id: crate::vessel_type::NOTES_TYPE.into(),
                 destination: voyager_contract::ContentDestination::Placement {
                     owner: voyager_contract::PlacementOwner::Fleet { id: fleet.clone() },
                     insertion: voyager_contract::PlacementInsertion::Beside {

@@ -842,7 +842,7 @@ mod tests {
             let created = call(
                 Action::CreateVessel {
                     launch: None,
-                    type_id: crate::content_type::NOTES_TYPE.into(),
+                    type_id: crate::vessel_type::NOTES_TYPE.into(),
                     destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Fleet { id: fleet },
                         insertion: voyager_contract::PlacementInsertion::Beside {
@@ -864,7 +864,7 @@ mod tests {
             let created = call(
                 Action::CreateVessel {
                     launch: None,
-                    type_id: crate::content_type::NOTES_TYPE.into(),
+                    type_id: crate::vessel_type::NOTES_TYPE.into(),
                     destination: voyager_contract::ContentDestination::Placement {
                         owner: voyager_contract::PlacementOwner::Portals { voyage },
                         insertion: voyager_contract::PlacementInsertion::Empty,
