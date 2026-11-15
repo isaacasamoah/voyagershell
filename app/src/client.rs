@@ -3194,17 +3194,24 @@ fn attach_failure(error: Error, created: bool, address: &str) -> Error {
 
 fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Error> {
     let doc = core.document_get("voyager-layout-v1")?;
-    let version = doc.version;
-    let value = doc.value;
+    let (layout, missing) = open(doc.value, cwd)?;
+    Ok((layout, doc.version, missing))
+}
+
+pub(crate) fn open(value: serde_json::Value, cwd: &str) -> Result<(Layout, bool), Error> {
     if value.is_null() {
-        return Ok((Layout::default(), version, true));
+        return Ok((Layout::default(), true));
     }
     let layout: Layout = serde_json::from_value(value)
         .map_err(|e| rejected(format!("Stored workspace is invalid: {e}")))?;
+    prepared(layout, cwd).map(|layout| (layout, false))
+}
+
+pub(crate) fn prepared(layout: Layout, cwd: &str) -> Result<Layout, Error> {
     crate::canvas::validate(&layout.canvas).map_err(rejected)?;
     let mut layout = Model::prepare(layout, cwd).map_err(rejected)?;
     crate::content::rename::synchronize_labels(&mut layout);
-    Ok((layout, version, false))
+    Ok(layout)
 }
 
 fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {

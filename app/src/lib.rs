@@ -22,6 +22,10 @@ pub mod worktrees;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+#[path = "../../experiments/layout-rule/harness.rs"]
+mod layout_rule;
+
 pub mod wire;
 
 pub mod core_shapes {
