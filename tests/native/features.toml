@@ -296,3 +296,16 @@ behavior = "covered"
 performance = "none"
 visual = "none"
 debug = "covered"
+
+[[feature]]
+id = "outcomes"
+name = "Refused and uncertain results"
+path = "Ask for something the app declines and read why, or ask while Core gives no answer and see that the result is uncertain and is not sent again."
+sources = ["app/src/client_reply.rs", "desktop/canvas/status.ts", "desktop/canvas/voyage-close.ts", "contract/generated/workspace.ts"]
+journeys = ["outcomes"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "covered"

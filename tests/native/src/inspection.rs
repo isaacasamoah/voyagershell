@@ -25,6 +25,8 @@ impl Target {
     pub const CHAT_STATUS: Self = Self::single(Role::ChatStatus);
     pub const CHAT_ERROR: Self = Self::single(Role::ChatError);
     pub const HOME: Self = Self::single(Role::HomeNavigation);
+    pub const STATUS: Self = Self::single(Role::WorkspaceStatus);
+    pub const REFRESH: Self = Self::single(Role::WorkspaceRefresh);
     pub const STOP_SESSION: Self = Self::single(Role::StopSession);
     pub const STOP_SESSION_CONFIRM: Self = Self::single(Role::StopSessionConfirm);
 
@@ -107,6 +109,10 @@ impl Target {
 
     pub fn voyage_close_confirm(voyage: &VoyageId) -> Self {
         Self::keyed(Role::VoyageCloseConfirm, &voyage.0)
+    }
+
+    pub fn voyage_close_status(voyage: &VoyageId) -> Self {
+        Self::keyed(Role::VoyageCloseStatus, &voyage.0)
     }
 
     pub fn worker(launch: &str) -> Self {

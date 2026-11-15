@@ -723,15 +723,38 @@ impl Native {
     }
 
     pub fn screen_status(&self, expected: &str, wanted: impl Fn(&str) -> bool) -> Result<String> {
-        self.wait_for(expected, PATIENCE, |frame| {
-            frame
-                .elements
-                .iter()
-                .find(|element| element.role == Role::WorkspaceStatus)
+        self.drawn_label(&Target::STATUS, Duration::ZERO, expected, wanted)
+    }
+
+    pub fn drawn_label(
+        &self,
+        target: &Target,
+        after: Duration,
+        expected: &str,
+        wanted: impl Fn(&str) -> bool,
+    ) -> Result<String> {
+        self.wait_for(expected, after + PATIENCE, |frame| {
+            target
+                .find(frame)
                 .and_then(|element| element.label.as_deref())
                 .filter(|label| wanted(label))
                 .map(str::to_owned)
         })
+    }
+
+    pub fn with_core_paused<T>(&self, during: impl FnOnce(&Self) -> Result<T>) -> Result<T> {
+        let core = self.core()?;
+        core.verify()?;
+        let pid = rustix::process::Pid::from_raw(core.pid as i32).context("Core has no pid")?;
+        rustix::process::kill_process(pid, rustix::process::Signal::STOP)?;
+        let done = self
+            .system
+            .record(json!({"event":"Core-paused","pid":core.pid}))
+            .and_then(|()| during(self));
+        rustix::process::kill_process(pid, rustix::process::Signal::CONT)?;
+        self.system
+            .record(json!({"event":"Core-resumed","pid":core.pid}))?;
+        done
     }
 
     fn arrange(&self) -> Result<()> {
@@ -1275,6 +1298,53 @@ pub(crate) mod tests {
         rustix::process::kill_process(pid, rustix::process::Signal::STOP)?;
         until("a stopped candidate", || Ok(native.halted().then_some(())))?;
         Ok(native)
+    }
+
+    fn with_core() -> Result<(TestNative, Owned)> {
+        let mut native = native()?;
+        let core = native.system.spawn(
+            Path::new("/usr/bin/tail"),
+            &["-f", "/dev/null"],
+            &[],
+            "core.log",
+        )?;
+        native.core = Some(core.identity.clone());
+        Ok((native, core))
+    }
+
+    fn runs(pid: u32) -> Result<()> {
+        until("a running Core", || {
+            Ok(matches!(process_state(pid), Some(state) if state != 'T').then_some(()))
+        })
+    }
+
+    #[test]
+    fn core_is_stopped_inside_a_pause_and_runs_again_after_it() -> Result<()> {
+        let (native, core) = with_core()?;
+        let pid = core.identity.pid;
+        native.with_core_paused(|_| {
+            until("a stopped Core", || {
+                Ok((process_state(pid) == Some('T')).then_some(()))
+            })
+        })?;
+        runs(pid)?;
+        let actions = fs::read_to_string(native.system.evidence.join("actions.jsonl"))?;
+        ensure!(
+            actions.contains("Core-paused") && actions.contains("Core-resumed"),
+            "The pause was not recorded: {actions}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn core_runs_again_when_the_paused_step_fails() -> Result<()> {
+        let (native, core) = with_core()?;
+        let failed: Result<()> = native.with_core_paused(|_| anyhow::bail!("the step failed"));
+        ensure!(
+            failed.is_err_and(|error| error.to_string() == "the step failed"),
+            "The step's own error was not returned"
+        );
+        runs(core.identity.pid)
     }
 
     #[test]
