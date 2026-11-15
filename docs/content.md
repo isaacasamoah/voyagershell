@@ -185,9 +185,43 @@ background task. An admitted read may still finish after retirement. An admitted
 save must finish and keep its actual result. Actual repeated reload and pending
 host-task lifetime remain required native/resource observations.
 
+## First-party profile files
+
+`app/src/content/install.rs` owns the first-party files in a profile: the
+canvas package, the themes and the Notes package. The table of shipped files is
+`desktop/src/shipped.rs`. On every start the app compares each file with
+`installed.json` in the profile, which maps the file's path to the FNV-1a 64
+fingerprint of the bytes the app installed.
+
+- A file equal to the shipped version only gets its record.
+- A file equal to its record is untouched. The app replaces it with the new
+  version by a Linux `RENAME_EXCHANGE` swap and checks the swapped-out bytes. If
+  they are not what it judged untouched, it swaps back and keeps them.
+- A file that differs from its record is edited. It stays active and is never
+  moved or rewritten. When a new version ships for it, the app shows a notice
+  and writes the diff from the person's version to the new one to
+  `updates/<path with / as __>.diff`. The diff file is rewritten only when its
+  text changes and is removed when the update no longer applies.
+- A file with no record is judged by `app/src/content/pre-record-history.tsv`,
+  the fingerprints of every version that main shipped before records existed. A
+  match is untouched. No match is kept and flagged, and gets no record.
+- A file that the app no longer ships is deleted only when it equals its record.
+- A missing file is written, except in a Notes package that exists or was
+  removed. Such a package is never repaired.
+- A second start with nothing to change writes nothing.
+- An unreadable `installed.json` is treated as missing. A record path that is
+  not a plain relative path is ignored.
+
+The history is closed. A shipped file changed after records exist needs no entry,
+because every new install writes its record.
+
+Gap. A build older than the one that updated the profile replaces untouched files
+with its own, and an open build reloads files that another build writes. No
+edited file is lost either way.
+
 ## Personal-source compatibility
 
-Existing profile JavaScript is never overwritten. The original TitleState,
+Existing edited profile JavaScript is never overwritten. The original TitleState,
 BodyState, Title, Body and bound voyager_vessel methods remain available with
 their previous signatures. Old packages continue to own their legacy local
 controller and do not automatically gain retained native draft migration. Using

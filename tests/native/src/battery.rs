@@ -490,6 +490,16 @@ fn journey_inputs(
             args.push(other.assets.clone().into());
             Ok(args)
         }
+        Journey::ProfileUpdates => {
+            let updates = fixtures.join("profile-updates");
+            if !updates.is_dir() {
+                return Err(format!(
+                    "the committed profile fixture is missing under {}",
+                    fixtures.display()
+                ));
+            }
+            Ok(vec!["--profile-fixture".into(), updates.into()])
+        }
         _ => Ok(Vec::new()),
     }
 }
@@ -979,10 +989,28 @@ mod tests {
     #[test]
     fn journeys_without_inputs_get_none() {
         let base = build(Side::Base, "base");
-        for journey in Journey::ALL.iter().filter(|j| **j != Journey::Profile) {
+        for journey in Journey::ALL
+            .iter()
+            .filter(|j| !matches!(**j, Journey::Profile | Journey::ProfileUpdates))
+        {
             let args = journey_inputs(*journey, &base, Path::new("/nowhere")).unwrap();
             assert!(args.is_empty());
         }
+    }
+
+    #[test]
+    fn profile_updates_takes_its_fixture_and_is_not_run_without_it() {
+        let base = build(Side::Base, "base");
+        let root =
+            std::env::temp_dir().join(format!("voyager-battery-updates-{}", std::process::id()));
+        fs::create_dir_all(root.join("profile-updates")).unwrap();
+        let args = journey_inputs(Journey::ProfileUpdates, &base, &root).unwrap();
+        assert_eq!(args[0], "--profile-fixture");
+        assert!(Path::new(&args[1]).ends_with("profile-updates"));
+        fs::remove_dir_all(root).unwrap();
+        let reason =
+            journey_inputs(Journey::ProfileUpdates, &base, Path::new("/nowhere")).unwrap_err();
+        assert!(reason.contains("fixture is missing"));
     }
 
     const J: Journey = Journey::TerminalScrolling;

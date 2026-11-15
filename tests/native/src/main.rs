@@ -506,6 +506,10 @@ const SOURCES: &[(&str, &[u8])] = &[
         include_bytes!("journey/profile.rs"),
     ),
     (
+        "src/journey/profile_updates.rs",
+        include_bytes!("journey/profile_updates.rs"),
+    ),
+    (
         "src/journey/quit_restore.rs",
         include_bytes!("journey/quit_restore.rs"),
     ),

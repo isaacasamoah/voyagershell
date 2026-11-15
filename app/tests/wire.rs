@@ -120,21 +120,29 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
     use std::fs;
     use voyager_app::{
         client::Client,
-        content::{Owner, seed_package},
+        content::{
+            Owner,
+            install::{Absent, Shipped, install},
+        },
         core::Core,
     };
     use voyager_contract::{Action, Context, Request, Status};
     let session = format!("voyager-package-effects-{}", std::process::id());
     let profile = std::env::temp_dir().join(&session);
     let package = profile.join("vessels/notes");
-    seed_package(
-        &package,
+    install(
+        &profile,
         &[
-            ("main.js", "personal source"),
-            (
-                "vessel.json",
-                include_str!("../../content/notes/vessel.json"),
-            ),
+            Shipped {
+                path: "vessels/notes/main.js",
+                bytes: b"personal source",
+                absent: Absent::Write,
+            },
+            Shipped {
+                path: "vessels/notes/vessel.json",
+                bytes: include_bytes!("../../content/notes/vessel.json"),
+                absent: Absent::Write,
+            },
         ],
     )
     .unwrap();

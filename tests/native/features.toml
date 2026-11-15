@@ -246,6 +246,19 @@ visual = "none"
 debug = "covered"
 
 [[feature]]
+id = "profile-updates"
+name = "Profile updates"
+path = "Start a new build on an old profile and see untouched first-party files update, edited ones stay and an update notice with a diff."
+sources = ["app/src/content/install.rs", "app/src/content/install/diff.rs", "app/src/content/pre-record-history.tsv", "desktop/src/shipped.rs", "desktop/src/lib.rs", "desktop/src/host.rs"]
+journeys = ["profile-updates"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "covered"
+
+[[feature]]
 id = "scripts-live-edit"
 name = "Scripts live edit"
 path = "Edit a canvas script and see the change appear live."

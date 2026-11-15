@@ -4,6 +4,7 @@ mod input;
 mod layout;
 mod portals;
 mod profile;
+mod profile_updates;
 mod quit_restore;
 mod scrolling;
 mod voyage_close;
@@ -107,6 +108,7 @@ journeys! {
     Chat => "chat" in chat, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
     TerminalInput => "terminal-input" in input, sidebar: None, window: None;
     Profile => "profile" in profile, sidebar: None, window: None;
+    ProfileUpdates => "profile-updates" in profile_updates, sidebar: None, window: None;
 }
 
 impl Journey {

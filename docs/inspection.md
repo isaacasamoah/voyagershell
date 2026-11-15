@@ -161,6 +161,7 @@ union all come from that list.
 | `split-divider` | The split's id, a JSON array `[session, owner, path]` | The resize handle of one branch of a Fleet's split tree | The handle appearance in `desktop/src/split.rs`, with `inspect::control` |
 | `maximize-panel` | Placement id | The maximize or restore button of a Vessel or Portal | `renderPanel` in `panel-view.ts` |
 | `move-preview` | Placement id of the destination | The highlighted half of the destination while a Vessel is dragged. Its bounds give the side | `renderPanel` |
+| `profile-update` | Profile path of the file | One line of the notice that a newer first-party version of an edited or unrecorded profile file is available | `Updates::view` in `banner.rs` |
 
 A name control leaves the frame while its rename editor replaces it, and
 `name-editor` with the same key takes its place. The editor takes keyboard

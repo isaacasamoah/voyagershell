@@ -13,7 +13,7 @@ use anyhow::{Context as _, Result, bail};
 use gpui::prelude::FluentBuilder;
 use gpui::{
     App, Context, Entity, IntoElement, ParentElement, Render, StyleRefinement, Styled,
-    Subscription, Task, Window, div, px, rgb,
+    Subscription, Task, Window, div, rgb,
 };
 use gpui_base::{ColorTokens, ThemeAppearance};
 use gpui_shell::{
@@ -506,6 +506,7 @@ pub struct CanvasHost {
     theme_error: Option<String>,
     watch_error: Option<String>,
     quit_status: Option<String>,
+    profile_updates: crate::banner::Updates,
     accessibility: bool,
     _observers: Vec<Subscription>,
 }
@@ -521,6 +522,7 @@ pub struct Setup {
     pub conversation: voyager_app::conversation_client::Client,
     pub avatar: crate::avatar::Binding,
     pub stop_session: async_channel::Sender<()>,
+    pub profile_updates: Vec<voyager_app::content::install::Update>,
 }
 
 impl CanvasHost {
@@ -541,6 +543,7 @@ impl CanvasHost {
             conversation,
             avatar,
             stop_session,
+            profile_updates,
         } = setup;
         let workspace_binding = WorkspaceBinding {
             client,
@@ -785,6 +788,7 @@ impl CanvasHost {
             theme_error,
             watch_error,
             quit_status: None,
+            profile_updates: crate::banner::Updates::new(profile_updates),
             accessibility: window.is_a11y_active(),
             _observers: Vec::new(),
         }
@@ -819,22 +823,16 @@ impl Render for CanvasHost {
         .cloned()
         .collect::<Vec<_>>()
         .join("\n");
-        let error = (!errors.is_empty()).then_some(errors);
         div()
             .size_full()
             .bg(rgb(0x111316))
             .children(content)
-            .when_some(error, |view, error| {
-                view.child(
-                    div()
-                        .absolute()
-                        .bottom(px(8.))
-                        .left(px(12.))
-                        .bg(rgb(0x351e25))
-                        .text_color(rgb(0xffcad3))
-                        .p(px(8.))
-                        .child(error),
-                )
+            .children(self.profile_updates.view(cx.listener(|host, _, _, cx| {
+                host.profile_updates.dismiss();
+                cx.notify();
+            })))
+            .when(!errors.is_empty(), |view| {
+                view.child(crate::banner::errors(errors))
             })
     }
 }
