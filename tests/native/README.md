@@ -33,7 +33,8 @@ The environment is not yet accepted as a complete implementation of that design.
 | Seeded, live-edited and shared run profile, and a second identified build | Implemented by the `profile` journey. Checks the theme background only. See Profile fixtures below. |
 | Terminal typing, keys, output, selection, copy and paste | Implemented by the `terminal-input` journey. Its recipe lists the checks that it does not drive. |
 | Portal/content/authority/provider journeys | Existing Python coverage retained; Rust migration and parity incomplete. |
-| Compositor/drag/IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
+| Client decorations and window-manager requests (move, resize, minimise, maximise) | Implemented as `--decorations client` and the observer. No journey asserts on them yet. See Client decorations and window requests below. |
+| Window-manager behavior, IME/audio, other OS and performance | Not established by this pilot. Coordinate existing repair and input ownership. |
 | Configurable architecture YAML and typed Jev review | Separate later work. |
 
 A fixture failure preserves its run, enters diagnosis, receives a demonstrated
@@ -336,6 +337,48 @@ The journey does not use a second build. A record in the fixture stands for the
 older build, which is the only way a profile reaches a new build. It does not
 check that a build older than the profile's writer leaves the files alone. That is a
 known gap.
+
+### Client decorations and window requests
+
+`--decorations client` makes the owned display look composited, so the app takes
+the client-decoration path that GNOME forces on it. The default, `server`, changes
+nothing. A bare Xvfb has no window manager, so GPUI sees no compositor and keeps
+server decorations. `Compositor` in `src/x11/compositor.rs` holds a connection
+for the whole run. It owns the selections `_NET_WM_CM_S0` and
+`_NET_WM_CM_S<root window id>`, because GPUI names the selection from the root
+window id and not the screen number, and it adds `_GTK_FRAME_EXTENTS` to
+`_NET_SUPPORTED` on the root window. It starts before the app launches, because
+GPUI checks once at startup. Whether the app then draws a title bar is the
+app's choice. An app that asks for server decorations stays undecorated.
+
+`Requests` in `src/x11/requests.rs` is a third X client with one thread. It
+selects SubstructureNotify on the root window and records each ClientMessage that
+a client sends to the window manager as `_NET_WM_MOVERESIZE`, `WM_CHANGE_STATE`
+or `_NET_WM_STATE`. A move or resize keeps its pointer position, its direction
+(`code` and `name`, so a move is code 8 and `move`, and edges are `size-top-left`
+to `size-left`), the button and the source. A minimise is `change-state` with the
+`iconic` state. A maximise or restore is `net-wm-state` with the action and the
+two property names. Nothing in the verifier answers the requests, so no window
+moves. `Native::window_requests` returns the requests about the app's window and
+writes every new request to `actions.jsonl` as a `window-request` event, again at
+cleanup. A journey asserts on the returned list, for example that a drag of the
+top bar produced one `move` request.
+
+After each launch under `--decorations client`, the run records a `decorations`
+event with the window's `_MOTIF_WM_HINTS` and `_GTK_FRAME_EXTENTS`. The hints
+`[2, 0, 0, 0, 0]` mean that the app took client decorations and `[2, 0, 1, 0, 0]`
+mean that it kept server decorations. The record is an observation. The flag
+makes the client path available and the app must ask for it.
+Nothing asserts the hints yet, so a run whose compositor failed to start still passes until
+a journey checks them. That is a known gap.
+
+Before the app starts, a verifier-owned test client sends one move request for
+the observer's own window. The observer must see it with direction 8 within the
+polling patience, or the run ends `inconclusive` blamed on the fixture. That first
+`window-request` event in the ledger is this test move. It names the observer's
+window and never the app's. A run without `--decorations client` starts no
+observer and writes no `window-request` events. A thread that failed is a cleanup
+error.
 
 ### Stand-in provider
 
@@ -990,7 +1033,7 @@ Reconsider a code verifier when the next concrete property needs one.
 
 | Principle | Required review | Present ownership |
 | --- | --- | --- |
-| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `journey.rs` owns the journey registry and case verdicts; `journey/scrolling.rs`, `journey/workspace.rs`, `journey/quit_restore.rs` and `journey/input.rs` describe the journeys; `native.rs` handles the app window; `native/input.rs` owns pointer, key and clipboard input; `native/terminal.rs` owns a bound terminal and reads its captures; `x11.rs` owns the display connection and `x11/clipboard.rs` the verifier's clipboard owner; `inspection.rs` reads frames and names controls; `system.rs` owns process/recording/polling/Core primitives. |
+| Easy to change | A new journey reuses setup, identity, recording and cleanup. A platform change does not rewrite expected feature behavior. | `journey.rs` owns the journey registry and case verdicts; `journey/scrolling.rs`, `journey/workspace.rs`, `journey/quit_restore.rs` and `journey/input.rs` describe the journeys; `native.rs` handles the app window; `native/input.rs` owns pointer, key and clipboard input; `native/terminal.rs` owns a bound terminal and reads its captures; `x11.rs` owns the display connection, `x11/clipboard.rs` the verifier's clipboard owner, `x11/compositor.rs` the compositor that client decorations need and `x11/requests.rs` the window-request observer; `inspection.rs` reads frames and names controls; `system.rs` owns process/recording/polling/Core primitives. |
 | Orthogonality | Product code does not depend on the fixture; the reporting gate is independent of I/O. Core owns programs. | Standalone development crate; pure `lifecycle.rs`; platform dependencies remain outside the app. |
 | DRY | One owner defines each run rule and action. Repeated text alone is not evidence of duplicated knowledge. | One native command, journey list, event list, reporting gate, recorder, polling loop, input/capture adapter, locator and shutdown path for the migrated journeys. The frame and layout types are the app's own. |
 

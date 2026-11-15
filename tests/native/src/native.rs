@@ -12,7 +12,9 @@ use crate::system::{
     Identity, Owned, PATIENCE, Pinned, Stopped, System, TimedOut, digest, interrupted, poll, save,
     settle, stamp, until, until_cleanup,
 };
-use crate::x11::{Clipboard, Display, Geometry, Key, Pixels, Window};
+use crate::x11::{
+    Clipboard, Compositor, Display, Geometry, Key, Observed, Pixels, Requests, Window,
+};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -33,6 +35,15 @@ const GLANCE: Duration = Duration::from_millis(80);
 pub struct Surface {
     pub window: Option<(u16, u16)>,
     pub sidebar: Option<Sidebar>,
+    pub decorations: Decorations,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Decorations {
+    #[default]
+    Server,
+    Client,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -52,7 +63,11 @@ impl fmt::Display for Sidebar {
 }
 
 impl Surface {
-    pub fn parse(window: Option<&str>, sidebar: Option<&str>) -> Result<Self> {
+    pub fn parse(
+        window: Option<&str>,
+        sidebar: Option<&str>,
+        decorations: Option<&str>,
+    ) -> Result<Self> {
         let window = window
             .map(|text| -> Result<(u16, u16)> {
                 let (width, height) = text.split_once('x').context("Window is WIDTHxHEIGHT")?;
@@ -67,7 +82,16 @@ impl Surface {
                 _ => anyhow::bail!("Sidebar is open or collapsed"),
             })
             .transpose()?;
-        Ok(Self { window, sidebar })
+        let decorations = match decorations {
+            None | Some("server") => Decorations::Server,
+            Some("client") => Decorations::Client,
+            Some(_) => anyhow::bail!("Decorations are server or client"),
+        };
+        Ok(Self {
+            window,
+            sidebar,
+            decorations,
+        })
     }
 
     pub fn fitting(mut self, sidebar: Option<Sidebar>, least: Option<(u16, u16)>) -> Result<Self> {
@@ -182,6 +206,9 @@ pub struct Native {
     display: Option<Owned>,
     x11: Option<Display>,
     clipboard: Option<Clipboard>,
+    compositor: Option<Compositor>,
+    requests: Option<Requests>,
+    requests_ledgered: usize,
     ledgered: usize,
     viewer: Option<Owned>,
     core: Option<Identity>,
@@ -231,6 +258,9 @@ impl Native {
             display: None,
             x11: None,
             clipboard: None,
+            compositor: None,
+            requests: None,
+            requests_ledgered: 0,
             ledgered: 0,
             viewer: None,
             core: None,
@@ -274,6 +304,7 @@ impl Native {
         })?);
         self.system
             .execute("xrdb", &["-merge"], Some("Xft.dpi: 192\n"))?;
+        self.decorate()?;
         self.arrived()?;
         self.seed_core()?;
         self.start()?;
@@ -589,6 +620,9 @@ impl Native {
     fn present(&self) -> Result<()> {
         self.arrange()?;
         let x11 = self.x11()?;
+        if self.surface.decorations == Decorations::Client {
+            self.system.record(json!({"event":"decorations","window":self.window,"motifHints":x11.motif_hints(self.window)?,"frameExtents":x11.frame_extents(self.window)?}))?;
+        }
         self.system
             .act(json!({"input":"focus","window":self.window}), || {
                 x11.focus(self.window)
@@ -603,6 +637,52 @@ impl Native {
 
     fn title(&self) -> String {
         format!("Voyager — {}", self.system.session)
+    }
+
+    fn decorate(&mut self) -> Result<()> {
+        if self.surface.decorations != Decorations::Client {
+            return Ok(());
+        }
+        let display = self
+            .system
+            .env
+            .get("DISPLAY")
+            .context("Missing owned display")?
+            .clone();
+        let compositor = &mut self.compositor;
+        self.system
+            .act(json!({"display":"client-decorations"}), || {
+                *compositor = Some(Compositor::start(&display)?);
+                Ok(())
+            })?;
+        let requests = Requests::connect(&display)?;
+        let confirmed = requests.confirm();
+        self.requests = Some(requests);
+        confirmed?;
+        self.window_requests().map(drop)
+    }
+
+    pub fn window_requests(&mut self) -> Result<Vec<Observed>> {
+        let Some(requests) = &self.requests else {
+            return Ok(Vec::new());
+        };
+        let seen = requests.seen();
+        for request in seen.iter().skip(self.requests_ledgered) {
+            self.system
+                .record(json!({"event":"window-request","seen":request}))?;
+            self.requests_ledgered += 1;
+        }
+        Ok(seen
+            .into_iter()
+            .filter(|seen| seen.request.window() == self.window)
+            .collect())
+    }
+
+    fn release_requests(&mut self) -> Result<()> {
+        let ledgered = self.window_requests().map(drop);
+        let stopped = self.requests.take().map_or(Ok(()), Requests::stop);
+        self.compositor = None;
+        ledgered.and(stopped)
     }
 
     fn x11(&self) -> Result<&Display> {
@@ -935,6 +1015,9 @@ impl Native {
                 viewer.stop()
             };
             errors.extend(self.retired("viewer", stopped));
+        }
+        if let Err(error) = self.release_requests() {
+            errors.push(format!("window requests: {error:#}"));
         }
         if self.system.socket().exists() {
             let stopped = (|| -> Result<()> {
@@ -1464,7 +1547,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_journey_fixes_its_sidebar_and_refuses_the_other_one() -> Result<()> {
-        let unset = Surface::parse(None, None)?;
+        let unset = Surface::parse(None, None, None)?;
         ensure!(
             unset.fitting(None, None)?.sidebar.is_none(),
             "A sidebar was chosen without a requirement"
@@ -1473,7 +1556,7 @@ pub(crate) mod tests {
             unset.fitting(Some(Sidebar::Open), None)?.sidebar == Some(Sidebar::Open),
             "The required sidebar was not applied"
         );
-        let collapsed = Surface::parse(Some("1180x820"), Some("collapsed"))?;
+        let collapsed = Surface::parse(Some("1180x820"), Some("collapsed"), None)?;
         ensure!(
             collapsed.fitting(Some(Sidebar::Collapsed), None).is_ok(),
             "A matching sidebar was refused"
@@ -1491,7 +1574,7 @@ pub(crate) mod tests {
     #[test]
     fn a_journey_refuses_a_window_smaller_than_it_needs() -> Result<()> {
         let least = Some((1180, 1000));
-        let short = Surface::parse(Some("1180x820"), None)?;
+        let short = Surface::parse(Some("1180x820"), None, None)?;
         let refusal = short
             .fitting(None, least)
             .expect_err("A window that is too short was accepted");
@@ -1500,14 +1583,16 @@ pub(crate) mod tests {
             "The refusal does not name the smallest window: {refusal}"
         );
         ensure!(
-            Surface::parse(Some("1000x1200"), None)?
+            Surface::parse(Some("1000x1200"), None, None)?
                 .fitting(None, least)
                 .is_err(),
             "A window that is too narrow was accepted"
         );
         for fits in [None, Some("1180x1000"), Some("2000x1300")] {
             ensure!(
-                Surface::parse(fits, None)?.fitting(None, least).is_ok(),
+                Surface::parse(fits, None, None)?
+                    .fitting(None, least)
+                    .is_ok(),
                 "A window that fits was refused: {fits:?}"
             );
         }

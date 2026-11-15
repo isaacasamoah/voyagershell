@@ -49,7 +49,7 @@ fn entry() -> Result<i32> {
     let mut args: Vec<_> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--help") || args.is_empty() {
         println!(
-            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, battery, probe, features, journeys\nbattery --base PATH --base-assets PATH --head PATH --head-assets PATH --evidence NEW_ABSOLUTE_PATH [--runs N] [--threshold FRACTION] [--history FILE] [--journeys a,b] [--fixtures DIR] runs every journey on both builds, interleaved, reruns a failure once, compares wall time and writes battery.json and battery.md. A journey that needs a fixture or a second build gets the other side\'s build and the committed fixtures; one the battery cannot supply is listed as not run with its reason.\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--profile-fixture DIR] [--second-binary PATH --second-sha256 HASH [--second-assets PATH]] [--core-document NAME=JSON_FILE] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--provider-script FILE]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
+            "VoyagerShell Rust verification\nCommands: doctor, check-lifecycle, run, battery, probe, features, journeys\nbattery --base PATH --base-assets PATH --head PATH --head-assets PATH --evidence NEW_ABSOLUTE_PATH [--runs N] [--threshold FRACTION] [--history FILE] [--journeys a,b] [--fixtures DIR] runs every journey on both builds, interleaved, reruns a failure once, compares wall time and writes battery.json and battery.md. A journey that needs a fixture or a second build gets the other side\'s build and the committed fixtures; one the battery cannot supply is listed as not run with its reason.\nfeatures [--check | --write | --changed GIT_RANGE] validates the registry and prints, checks or writes the coverage table, or selects features by diff.\njourneys prints each native journey with its cases, its required sidebar, its smallest window and its negative control.\nrun --journey {} --binary PATH --sha256 HASH --hc-sha256 HASH --evidence NEW_ABSOLUTE_PATH [--assets PATH] [--profile-fixture DIR] [--second-binary PATH --second-sha256 HASH [--second-assets PATH]] [--core-document NAME=JSON_FILE] [--fault kill:SECONDS|stop:SECONDS] [--core-delay METHOD=MS[,METHOD=MS]] [--window WIDTHxHEIGHT] [--sidebar open|collapsed] [--decorations server|client] [--provider-script FILE]\ndoctor --binary PATH --sha256 HASH --hc-sha256 HASH [--assets PATH]\ncheck-lifecycle exhaustively explores the actual finite run gate.\n--decorations client makes the owned display look composited so the app takes client-side decorations, and records the move, resize, minimise and maximise requests that clients send to the window manager.\nEach run is confined to a private user, mount, PID and network namespace.\nOnly owned Linux X11 is supported. No real display or model calls.",
             Journey::names().join("|")
         );
         return Ok(0);
@@ -111,6 +111,7 @@ fn entry() -> Result<i32> {
         "--core-delay",
         "--window",
         "--sidebar",
+        "--decorations",
         "--provider-script",
         "--profile-fixture",
         "--second-binary",
@@ -245,6 +246,7 @@ fn entry() -> Result<i32> {
     let surface = Surface::parse(
         get("--window").ok().as_deref(),
         get("--sidebar").ok().as_deref(),
+        get("--decorations").ok().as_deref(),
     )?
     .fitting(journey.sidebar(), journey.window())
     .with_context(|| format!("The {} journey cannot run as asked", journey.name()))?;
@@ -545,6 +547,8 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/system.rs", include_bytes!("system.rs")),
     ("src/x11.rs", include_bytes!("x11.rs")),
     ("src/x11/clipboard.rs", include_bytes!("x11/clipboard.rs")),
+    ("src/x11/compositor.rs", include_bytes!("x11/compositor.rs")),
+    ("src/x11/requests.rs", include_bytes!("x11/requests.rs")),
     ("Cargo.toml", include_bytes!("../Cargo.toml")),
     ("Cargo.lock", include_bytes!("../Cargo.lock")),
 ];

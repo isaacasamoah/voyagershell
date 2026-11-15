@@ -1,6 +1,10 @@
 mod clipboard;
+mod compositor;
+mod requests;
 
 pub use clipboard::{Clipboard, Exchange, Reading};
+pub use compositor::Compositor;
+pub use requests::{Observed, Requests};
 
 use anyhow::{Context, Result, bail, ensure};
 use image::RgbaImage;
@@ -319,6 +323,26 @@ impl Display {
             .check()?;
         self.connection.flush()?;
         Ok(())
+    }
+
+    pub fn motif_hints(&self, window: Window) -> Result<Option<Vec<u32>>> {
+        let hints = atom(&self.connection, "_MOTIF_WM_HINTS")?;
+        Ok(self
+            .connection
+            .get_property(false, window, hints, hints, 0, 5)?
+            .reply()?
+            .value32()
+            .map(Iterator::collect))
+    }
+
+    pub fn frame_extents(&self, window: Window) -> Result<Option<Vec<u32>>> {
+        let extents = atom(&self.connection, "_GTK_FRAME_EXTENTS")?;
+        Ok(self
+            .connection
+            .get_property(false, window, extents, AtomEnum::CARDINAL, 0, 4)?
+            .reply()?
+            .value32()
+            .map(Iterator::collect))
     }
 
     pub fn focus(&self, window: Window) -> Result<()> {
