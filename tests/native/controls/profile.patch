@@ -1,0 +1,26 @@
+diff --git a/desktop/src/host.rs b/desktop/src/host.rs
+index e499564..b49b722 100644
+--- a/desktop/src/host.rs
++++ b/desktop/src/host.rs
+@@ -647,7 +647,7 @@ impl CanvasHost {
+                 let (theme_bytes, source_bytes) = cx
+                     .background_executor()
+                     .spawn(async move {
+-                        let theme = fs::read(theme_path).ok();
++                        let theme = Some(include_bytes!("../themes/voyager.json").to_vec());
+                         let source = source_path.map(|path| {
+                             source_snapshot(&path).map_err(|error| format!("{error:#}"))
+                         });
+diff --git a/desktop/src/lib.rs b/desktop/src/lib.rs
+index f7b9e71..7141137 100644
+--- a/desktop/src/lib.rs
++++ b/desktop/src/lib.rs
+@@ -207,7 +207,7 @@ pub fn run(profile: PathBuf, session: String, inspect: Option<PathBuf>) -> Resul
+     {
+         bail!("Canvas manifest requires a name, version 1 and main.js entry");
+     }
+-    let initial_theme = fs::read(&theme).context("Reading theme")?;
++    let initial_theme = include_bytes!("../themes/voyager.json").to_vec();
+     let initial_source = host::source_snapshot(&package).map_err(|error| format!("{error:#}"));
+     let assets = AppAssets::new(package.clone());
+     let launches_path = profile.join("launches.json");

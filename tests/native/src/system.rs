@@ -487,6 +487,7 @@ impl System {
                 "server.status"
                     | "hello"
                     | "doc.get"
+                    | "doc.set"
                     | "terminal.get"
                     | "terminal.list"
                     | "terminal.read"

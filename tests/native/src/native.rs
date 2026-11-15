@@ -5,6 +5,7 @@ pub use input::Wheel;
 pub use terminal::{EXPECTATION, LOOK, Lines, Patch, Program, Terminal, boxes, changed, repainted};
 
 use crate::inspection::{self, Target, Unseen, drawn_for};
+use crate::profile;
 use crate::provider::Script;
 use crate::sandbox;
 use crate::system::{
@@ -15,8 +16,10 @@ use crate::x11::{Clipboard, Display, Geometry, Key, Pixels, Window};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
@@ -152,9 +155,27 @@ fn placed(layout: &Layout) -> impl Iterator<Item = &Placement> {
     vessels(layout).chain(voyages(layout).flat_map(|voyage| &voyage.portals))
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Folder {
+    Absent,
+    At(u64, u64),
+}
+
+impl Folder {
+    fn of(path: &Path) -> Self {
+        fs::metadata(path).map_or(Self::Absent, |found| Self::At(found.dev(), found.ino()))
+    }
+}
+
 pub struct Native {
     pub system: System,
     pub candidate: Pinned,
+    second: Option<Pinned>,
+    builds: Vec<Pinned>,
+    documents: Vec<(String, Value)>,
+    seeded_documents: BTreeMap<String, (u64, Value)>,
+    quit_folder: Option<Folder>,
+    seeded_at: Option<u128>,
     pub hc: Pinned,
     pub script: Option<Script>,
     surface: Surface,
@@ -188,10 +209,22 @@ enum Injection {
 }
 
 impl Native {
-    pub fn new(system: System, candidate: Pinned, hc: Pinned, surface: Surface) -> Self {
+    pub fn new(
+        system: System,
+        candidate: Pinned,
+        second: Option<Pinned>,
+        hc: Pinned,
+        surface: Surface,
+    ) -> Self {
         Self {
             system,
             candidate,
+            second,
+            builds: Vec::new(),
+            documents: Vec::new(),
+            seeded_documents: BTreeMap::new(),
+            quit_folder: None,
+            seeded_at: None,
             hc,
             script: None,
             surface,
@@ -241,9 +274,86 @@ impl Native {
         })?);
         self.system
             .execute("xrdb", &["-merge"], Some("Xft.dpi: 192\n"))?;
+        self.arrived()?;
+        self.seed_core()?;
         self.start()?;
         self.bind_core()?;
         self.present()
+    }
+
+    pub fn seed_documents(&mut self, documents: Vec<(String, Value)>) {
+        self.documents = documents;
+    }
+
+    fn arrived(&self) -> Result<()> {
+        let seeded = profile::load(&self.system.evidence)?;
+        if seeded.is_empty() {
+            return Ok(());
+        }
+        let changed = profile::differing(&self.profile(), &seeded)?;
+        ensure!(
+            changed.is_empty(),
+            "The seeded profile files {changed:?} differ before the app starts; the fixture did not arrive"
+        );
+        Ok(())
+    }
+
+    fn seed_core(&mut self) -> Result<()> {
+        if self.documents.is_empty() {
+            return Ok(());
+        }
+        ensure!(
+            self.launches == 0 && self.viewer.is_none(),
+            "The Core document must be seeded before the app launches"
+        );
+        self.system
+            .execute(sandbox::CORE, &["server", "start"], None)?;
+        self.bind_core()?;
+        for (name, value) in std::mem::take(&mut self.documents) {
+            self.system
+                .rpc("doc.set", json!({"name":name,"value":value,"version":0}))?;
+            let kept = self.core_document(&name)?;
+            let kept = kept
+                .filter(|(_, found)| *found == value)
+                .with_context(|| format!("Core did not keep the seeded document {name}"))?;
+            self.seeded_documents.insert(name, (kept.0, value));
+        }
+        let at = stamp();
+        self.seeded_at = Some(at);
+        self.system
+            .record(json!({"event":"core-seed","at":at,"documents":self.seeded_documents.keys().collect::<Vec<_>>()}))?;
+        Ok(())
+    }
+
+    pub fn seeded_document(&self, name: &str) -> Result<&(u64, Value)> {
+        self.seeded_documents.get(name).with_context(|| {
+            format!("The run seeded no Core document {name}; give --core-document {name}=FILE")
+        })
+    }
+
+    pub fn core_document(&self, name: &str) -> Result<Option<(u64, Value)>> {
+        let reply = self.system.rpc("doc.get", json!({"name":name}))?;
+        if reply["value"].is_null() {
+            return Ok(None);
+        }
+        let version = reply["version"]
+            .as_u64()
+            .with_context(|| format!("The Core document {name} has no version"))?;
+        Ok(Some((version, reply["value"].clone())))
+    }
+
+    pub fn profile_holds(&self, relative: &str, bytes: &[u8]) -> bool {
+        fs::read(self.profile_path(relative)).is_ok_and(|found| found == bytes)
+    }
+
+    pub fn seeded_intact(&self, relative: &str) -> Result<bool> {
+        let seeded = profile::load(&self.system.evidence)?;
+        let hash = seeded.get(relative).with_context(|| {
+            format!(
+                "The profile fixture seeded no {relative}; give the run --profile-fixture with one"
+            )
+        })?;
+        Ok(digest(&self.profile_path(relative)).ok().as_ref() == Some(hash))
     }
 
     fn bind_core(&mut self) -> Result<()> {
@@ -264,6 +374,7 @@ impl Native {
         struct Identities<'a> {
             core: &'a Option<Identity>,
             core_id: &'a Value,
+            builds: &'a [Pinned],
             stopped_cores: &'a [Identity],
             #[serde(flatten)]
             first: &'a Option<Value>,
@@ -273,6 +384,7 @@ impl Native {
             &Identities {
                 core: &self.core,
                 core_id: &self.core_id,
+                builds: &self.builds,
                 stopped_cores: &self.stopped,
                 first: &self.first,
             },
@@ -290,6 +402,72 @@ impl Native {
             self.bind_core()?;
         }
         self.present()
+    }
+
+    pub fn window_look(&self) -> Result<Pixels> {
+        let x11 = self.x11()?;
+        let window = x11.geometry(self.window)?;
+        x11.capture(
+            self.window,
+            Geometry {
+                x: 0,
+                y: 0,
+                ..window
+            },
+        )
+    }
+
+    pub fn watch<T>(&self, mut read: impl FnMut(&Self) -> Result<Option<T>>) -> Result<Option<T>> {
+        poll(PATIENCE, GLANCE, true, || read(self))
+    }
+
+    pub fn profile_path(&self, relative: &str) -> PathBuf {
+        self.profile().join(relative)
+    }
+
+    pub fn builds(&self) -> &[Pinned] {
+        &self.builds
+    }
+
+    pub fn edit_profile_file(&self, relative: &str, bytes: &[u8]) -> Result<()> {
+        let target = profile::edit(&self.profile(), relative, bytes)?;
+        self.system
+            .record(json!({"event":"profile-edit","path":target,"sha256":digest(&target)?}))
+    }
+
+    pub fn relaunch_with_second(&mut self) -> Result<()> {
+        ensure!(
+            self.viewer.is_none(),
+            "The first build must quit before the second launches"
+        );
+        let second = self
+            .second
+            .take()
+            .context("The run was given no --second-binary")?;
+        let core = self
+            .core
+            .clone()
+            .context("The relaunch needs the run's Core, which is not running")?;
+        core.verify()?;
+        let core_id = self.core_id.clone();
+        let expected = second.path.clone();
+        self.candidate = second;
+        self.launch()?;
+        ensure!(
+            self.candidate.path == expected
+                && self.builds.len() >= 2
+                && self.builds.last().is_some_and(|last| last.path == expected),
+            "The relaunch did not switch to the second build"
+        );
+        ensure!(
+            self.core.as_ref() == Some(&core) && self.core_id == core_id,
+            "The relaunch did not reuse the run's Core"
+        );
+        Ok(())
+    }
+
+    fn profile(&self) -> PathBuf {
+        self.system.evidence.join("profile")
     }
 
     pub fn candidate(&self) -> Result<&Identity> {
@@ -354,7 +532,22 @@ impl Native {
         self.candidate.verify()?;
         self.hc.verify()?;
         self.launches += 1;
-        let profile = self.system.evidence.join("profile");
+        if self
+            .builds
+            .last()
+            .is_none_or(|last| last.path != self.candidate.path)
+        {
+            self.builds.push(self.candidate.clone());
+            self.identify()?;
+        }
+        let profile = self.profile();
+        if let Some(left) = self.quit_folder.take() {
+            ensure!(
+                Folder::of(&profile) == left,
+                "The profile folder changed after the first build exited, while only the verifier acted"
+            );
+        }
+        fs::create_dir_all(&profile)?;
         let inspection = self.inspection();
         let viewer = self.system.spawn(
             &self.candidate.path,
@@ -381,7 +574,7 @@ impl Native {
         self.verify()?;
         save(
             self.system.evidence.join("launch.json"),
-            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.surface}),
+            &json!({"viewer":self.viewer.as_ref().map(|v| &v.identity),"window":self.window,"session":self.system.session,"binary":self.candidate.path,"sha256":self.candidate.sha256,"hcSha256":self.hc.sha256,"coreSeededAt":self.seeded_at,"startedAt":stamp(),"display":self.system.env["DISPLAY"],"geometry":self.x11()?.geometry(self.window)?,"inspection":inspection,"layout":self.surface}),
         )
     }
 
@@ -591,6 +784,7 @@ impl Native {
         let viewer = self.viewer.as_mut().context("Missing viewer")?;
         let status = until("owned viewer exit", || Ok(viewer.child.try_wait()?))?;
         self.viewer = None;
+        self.quit_folder = Some(Folder::of(&self.profile()));
         if !status.success() {
             return Err(Defect(format!(
                 "the candidate did not quit cleanly: {}",
@@ -946,7 +1140,7 @@ pub(crate) mod tests {
         let sleep = fs::canonicalize("/bin/sleep")?;
         let pinned = Pinned::check(&sleep, &digest(&sleep)?)?;
         Ok(TestNative {
-            native: Native::new(system, pinned.clone(), pinned, Surface::default()),
+            native: Native::new(system, pinned.clone(), None, pinned, Surface::default()),
             _scratch: scratch,
         })
     }

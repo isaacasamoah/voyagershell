@@ -43,7 +43,9 @@ pub struct Sandbox<'a> {
     pub verifier: &'a Path,
     pub candidate: &'a Path,
     pub core: &'a Path,
+    pub second: Option<&'a Path>,
     pub assets: Option<&'a Path>,
+    pub second_assets: Option<&'a Path>,
     pub evidence: Option<&'a Path>,
 }
 
@@ -62,9 +64,15 @@ impl Sandbox<'_> {
         for relay in [PROVIDER, CORE_RELAY] {
             command.extend(["--ro-bind".into(), text(self.verifier)?, relay.into()]);
         }
-        for path in [Some(self.verifier), Some(self.candidate), self.assets]
-            .into_iter()
-            .flatten()
+        for path in [
+            Some(self.verifier),
+            Some(self.candidate),
+            self.second,
+            self.assets,
+            self.second_assets.filter(|path| Some(*path) != self.assets),
+        ]
+        .into_iter()
+        .flatten()
         {
             command.extend(["--ro-bind".into(), text(path)?, text(path)?]);
         }
@@ -341,7 +349,9 @@ mod tests {
                 verifier: &self.executable,
                 candidate: &self.executable,
                 core: &self.executable,
+                second: None,
                 assets: exposed,
+                second_assets: None,
                 evidence,
             }
             .command(inner)

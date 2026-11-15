@@ -233,6 +233,19 @@ visual = "none"
 debug = "covered"
 
 [[feature]]
+id = "profile-theme"
+name = "Profile theme"
+path = "Edit the theme file in the profile and see the window's colours change without a relaunch."
+sources = ["desktop/themes/voyager.json", "desktop/src/lib.rs", "desktop/src/host.rs"]
+journeys = ["profile"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "covered"
+
+[[feature]]
 id = "scripts-live-edit"
 name = "Scripts live edit"
 path = "Edit a canvas script and see the change appear live."
