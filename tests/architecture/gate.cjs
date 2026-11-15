@@ -5,6 +5,7 @@ const path = require("node:path");
 const { observe, lockReach } = require("./observe.cjs");
 const { parse } = require("./yaml.cjs");
 const vocabulary = require("./vocabulary.cjs");
+const literals = require("./literals.cjs");
 const ownersOf = require("./owners.cjs");
 
 const HERE = __dirname;
@@ -46,6 +47,33 @@ function topModule(id) {
 }
 
 const UNIT = { uses: topModule, imports: (id) => id };
+
+const SEPARATOR = { uses: "::" };
+
+function childCycles(edges, kind) {
+  const separator = SEPARATOR[kind];
+  if (!separator)
+    throw new Error(`No parent and child modules for edge kind ${kind}`);
+  const within = (inner, outer) => inner.startsWith(`${outer}${separator}`);
+  const childOf = (parent, id) => {
+    const rest = id.slice(parent.length + separator.length);
+    const end = rest.indexOf(separator);
+    return `${parent}${separator}${end < 0 ? rest : rest.slice(0, end)}`;
+  };
+  const down = new Set();
+  const up = new Set();
+  for (const edge of edges) {
+    if (edge.kind !== kind || edge.from === edge.to) continue;
+    if (within(edge.to, edge.from) && edge.from.split(separator).length > 1)
+      down.add(`${edge.from}\0${childOf(edge.from, edge.to)}`);
+    if (within(edge.from, edge.to) && edge.to.split(separator).length > 1)
+      up.add(`${edge.to}\0${childOf(edge.to, edge.from)}`);
+  }
+  return [...down]
+    .filter((pair) => up.has(pair))
+    .map((pair) => pair.split("\0"))
+    .sort((a, b) => a.join().localeCompare(b.join()));
+}
 
 function cycles(edges, kind) {
   const unit = UNIT[kind];
@@ -135,7 +163,10 @@ function violations(rule, facts) {
     }));
   }
   if (rule.check === "acyclic") {
-    return cycles(facts.edges, rule.kind).map((members) => ({
+    const found = rule.children
+      ? childCycles(facts.edges, rule.kind)
+      : cycles(facts.edges, rule.kind);
+    return found.map((members) => ({
       id: `${rule.id}: ${members.join(" <-> ")}`,
       at: null,
     }));
@@ -161,12 +192,12 @@ function violations(rule, facts) {
         limit: rule.limit,
       }));
   }
-  if (rule.check === "forbid_terms") {
+  if (rule.check === "forbid_terms" || rule.check === "forbid_literal") {
     return [...facts.terms.get(rule.id)].map(([id, hits]) => ({
       id: `${rule.id}: ${id}`,
       at: `${hits[0].file}:${hits[0].line}`,
       count: hits.length,
-      unit: "hits",
+      unit: rule.check === "forbid_literal" ? "literals" : "hits",
       limit: 0,
     }));
   }
@@ -201,17 +232,24 @@ function gate({
         vocabulary.load(path.join(path.dirname(rules), rule.table)),
       ]),
   );
+  const exact = ruleList
+    .filter((rule) => rule.check === "forbid_literal")
+    .map((rule) => literals.load(rule));
   const observation = observe(
     repository,
     tree,
     undefined,
     (snapshot) =>
-      new Map(
-        [...tables].map(([id, table]) => [
+      new Map([
+        ...[...tables].map(([id, table]) => [
           id,
           vocabulary.scanSnapshot(table, snapshot),
         ]),
-      ),
+        ...exact.map((table) => [
+          table.id,
+          literals.scanSnapshot(table, snapshot),
+        ]),
+      ]),
   );
   const contexts = parse(
     fs.readFileSync(path.join(path.dirname(rules), "vocabulary.yaml"), "utf8"),
@@ -293,18 +331,23 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const option = (name) =>
     args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
-  const result = gate({
-    repository: path.resolve(
-      option("--repository") ?? path.join(HERE, "../.."),
-    ),
-    revision: option("--rev"),
-    rules: option("--rules") && path.resolve(option("--rules")),
-    known: option("--known") && path.resolve(option("--known")),
-    intended: option("--intended") && path.resolve(option("--intended")),
-    write: args.includes("--write-intended"),
-  });
-  process.stdout.write(result.report);
-  process.exitCode = result.ok ? 0 : 1;
+  try {
+    const result = gate({
+      repository: path.resolve(
+        option("--repository") ?? path.join(HERE, "../.."),
+      ),
+      revision: option("--rev"),
+      rules: option("--rules") && path.resolve(option("--rules")),
+      known: option("--known") && path.resolve(option("--known")),
+      intended: option("--intended") && path.resolve(option("--intended")),
+      write: args.includes("--write-intended"),
+    });
+    process.stdout.write(result.report);
+    process.exitCode = result.ok ? 0 : 1;
+  } catch (error) {
+    process.stderr.write(`architecture gate: ${error.message}\n`);
+    process.exitCode = 2;
+  }
 }
 
 module.exports = { gate };

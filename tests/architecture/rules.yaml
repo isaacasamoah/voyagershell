@@ -18,6 +18,10 @@ rules:
   - id: no-module-cycles
     check: acyclic
     kind: uses
+  - id: no-child-cycles
+    check: acyclic
+    kind: uses
+    children: true
   - id: no-script-cycles
     check: acyclic
     kind: imports
@@ -29,6 +33,12 @@ rules:
   - id: one-vocabulary
     check: forbid_terms
     table: vocabulary.yaml
+  - id: notes-type-has-one-home
+    check: forbid_literal
+    literals: [notes]
+    owner: app/src/vessel_type.rs
+    roots: ['app/src/**', 'contract/src/**', 'desktop/src/**']
+    tests: skip
   - id: one-owner-per-module
     check: one_owner
   - id: intended-edges

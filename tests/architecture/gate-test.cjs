@@ -16,7 +16,7 @@ const {
 test("the current checkout passes with its known violations", () => {
   const result = run(scratch());
   assert.strictEqual(result.status, 0, result.out + result.err);
-  assert.match(result.out, /13 violations, 13 known\n.*PASS\n$/s);
+  assert.match(result.out, /32 violations, 32 known\n.*PASS\n$/s);
 });
 
 test("the report is identical across runs and checkout locations", () => {
@@ -389,5 +389,173 @@ test("the recorded canvas cycle that is not recorded fails", () => {
   expectFailure(
     run(scratch(), ["--known", without(/no-script-cycles/)]),
     "NEW no-script-cycles: ts:desktop/canvas/main.ts",
+  );
+});
+
+const CHILD_CYCLE =
+  "rs:voyager_app::content <-> rs:voyager_app::content::package";
+
+function ruled(directory, change) {
+  const file = path.join(directory, "tests/architecture/rules-planted.yaml");
+  fs.writeFileSync(
+    file,
+    change(
+      fs.readFileSync(
+        path.join(directory, "tests/architecture/rules.yaml"),
+        "utf8",
+      ),
+    ),
+  );
+  return file;
+}
+
+test("a parent and child that use each other fail when not recorded, as #151 did", () => {
+  expectFailure(
+    run(scratch(), ["--known", without(/client::core_calls/)]),
+    "NEW no-child-cycles: rs:voyager_app::client <-> rs:voyager_app::client::core_calls",
+  );
+});
+
+test("a child that starts using its parent fails", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/content/package.rs",
+    (text) => `${text}\nuse super::schema as _planted;\n`,
+  );
+  expectFailure(run(directory), `NEW no-child-cycles: ${CHILD_CYCLE}`);
+});
+
+test("a recorded child cycle that is gone fails as stale", () => {
+  const known = path.join(folder("architecture-known-"), "known.yaml");
+  fs.writeFileSync(
+    known,
+    `${fs.readFileSync(KNOWN, "utf8")}  - id: 'no-child-cycles: ${CHILD_CYCLE}'\n    owner: isaac\n    reason: planted\n`,
+  );
+  expectFailure(
+    run(scratch(), ["--known", known]),
+    `STALE no-child-cycles: ${CHILD_CYCLE}`,
+  );
+});
+
+test("child mode on an edge kind without parents is refused", () => {
+  const directory = scratch();
+  const rules = ruled(directory, (text) =>
+    text.replace(
+      "check: acyclic\n    kind: uses\n    children: true",
+      "check: acyclic\n    kind: imports\n    children: true",
+    ),
+  );
+  const result = run(directory, ["--rules", rules]);
+  assert.notStrictEqual(result.status, 0);
+  assert.match(result.err, /No parent and child modules for edge kind imports/);
+});
+
+const NOTES = 'NEW notes-type-has-one-home: "notes" in';
+
+test("the Notes type literal scattered across files fails, as at the base of #149", () => {
+  const directory = scratch();
+  for (const file of ["app/src/panels.rs", "app/src/context.rs"])
+    edit(
+      directory,
+      file,
+      (text) =>
+        `${text}\nfn planted_type() -> &'static str {\n    "notes"\n}\n`,
+    );
+  expectFailure(
+    run(directory),
+    `${NOTES} app/src/panels.rs has 1 literals, over the limit of 0`,
+    `${NOTES} app/src/context.rs has 1 literals, over the limit of 0`,
+  );
+});
+
+test("a recorded file that gains another Notes literal fails", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/content.rs",
+    (text) => `${text}\nfn planted_type() -> &'static str {\n    "notes"\n}\n`,
+  );
+  expectFailure(
+    run(directory),
+    'NEW notes-type-has-one-home: "notes" in app/src/content.rs has 3 literals, over its recorded limit of 2',
+  );
+});
+
+test("the Notes literal in its owner, in comments and inside longer strings passes", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/vessel_type.rs",
+    (text) => `${text}\npub const PLANTED: &str = "notes";\n`,
+  );
+  edit(
+    directory,
+    "app/src/panels.rs",
+    (text) =>
+      `${text}\n// "notes"\nfn planted_text() -> &'static str {\n    "notes.md"\n}\n`,
+  );
+  const result = run(directory);
+  assert.strictEqual(result.status, 0, result.out + result.err);
+});
+
+test("rule scope skips the Notes literal in test files and test modules", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/core_slot_tests.rs",
+    (text) => `${text}\nfn planted_type() -> &'static str {\n    "notes"\n}\n`,
+  );
+  edit(
+    directory,
+    "app/src/panels.rs",
+    (text) =>
+      `${text}\n#[cfg(test)]\nmod planted {\n    fn planted_type() -> &'static str {\n        "notes"\n    }\n}\n`,
+  );
+  const result = run(directory);
+  assert.strictEqual(result.status, 0, result.out + result.err);
+});
+
+test("rule scope that scans tests fails on the Notes literal in a test file", () => {
+  const directory = scratch();
+  const rules = ruled(directory, (text) =>
+    text.replace("tests: skip", "tests: scan"),
+  );
+  expectFailure(
+    run(directory, ["--rules", rules]),
+    `${NOTES} app/src/tests.rs has`,
+  );
+});
+
+test("a literal rule without a stated test scope is refused", () => {
+  const directory = scratch();
+  const rules = ruled(directory, (text) =>
+    text.replace("    tests: skip\n", ""),
+  );
+  const result = run(directory, ["--rules", rules]);
+  assert.notStrictEqual(result.status, 0);
+  assert.match(
+    result.err,
+    /notes-type-has-one-home: forbid_literal needs tests set to skip or scan/,
+  );
+});
+
+test("a missing rules file names the file and exits without a stack trace", () => {
+  const result = run(scratch(), ["--rules", "/nonexistent/rules.yaml"]);
+  assert.strictEqual(result.status, 2);
+  assert.match(result.err, /^architecture gate: .*\/nonexistent\/rules\.yaml/);
+  assert.doesNotMatch(result.err, /\n\s+at /);
+});
+
+test("the Notes literal in a nested module of a root fails", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "app/src/content/package.rs",
+    (text) => `${text}\nfn planted_type() -> &'static str {\n    "notes"\n}\n`,
+  );
+  expectFailure(
+    run(directory),
+    `${NOTES} app/src/content/package.rs has 1 literals, over the limit of 0`,
   );
 });
