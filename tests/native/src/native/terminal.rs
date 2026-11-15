@@ -94,6 +94,10 @@ impl Lines {
         self.0.len()
     }
 
+    pub fn ends_like(&self, other: &Self) -> bool {
+        matches!((self.0.last(), other.0.last()), (Some(mine), Some(theirs)) if mine.image == theirs.image)
+    }
+
     pub fn lowered(&self, to: &Self) -> Option<usize> {
         let first = self.0.first()?;
         let last = to.0.last()?.top.max(self.0.last()?.top);
@@ -633,6 +637,18 @@ mod tests {
         assert_eq!(live.lowered(&cut), None);
         assert!(!live.lowered_below_history(&cut));
         assert!(!live.lowered_below_history(&live));
+    }
+
+    #[test]
+    fn a_screen_ends_like_another_when_its_last_line_is_drawn_the_same_at_any_height() {
+        let prompt = Lines::of(&screen(&[(3, 90)]));
+        let finished = Lines::of(&screen(&[(3, 60), (11, 120), (19, 90)]));
+        assert!(finished.ends_like(&prompt));
+        let printing = Lines::of(&screen(&[(3, 60), (11, 90), (19, 120)]));
+        assert!(!printing.ends_like(&prompt));
+        let blank = Lines::of(&screen(&[]));
+        assert!(!blank.ends_like(&prompt));
+        assert!(!prompt.ends_like(&blank));
     }
 
     #[test]

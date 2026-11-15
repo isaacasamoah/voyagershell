@@ -716,7 +716,19 @@ the probe draws `SCROLL` lines from its position, so its lines must move by as
 many rows as its position changed. `reattached-history` first prints 60 short
 `REATTACH` lines, so the live screen holds only lines that the journey printed,
 and after the relaunch the live screen must draw the same lines at the same
-places. The checks do not claim a scroll distance for shell history or the cell
+places. A capture that holds still for 150 ms is not proof that the app drew
+what Core already holds. Under load the app can go longer than that without
+painting. The journey therefore keeps the shell's first prompt line as a
+reference. Before `normal-history` and `reattached-history` type their
+`printf`, each holds a capture whose last drawn line is that prompt. The live
+screen that each case keeps must differ from that capture and again end with
+the prompt, which the shell prints only after the last line of output. A
+screen that still shows the earlier commands, the half-typed command or only
+part of the output therefore never stands as the live screen. In `arrows` and
+`mouse`, the capture taken before the first wheel must draw exactly the
+probe's 30 `SCROLL` lines and the cursor on the row below them, so the shell
+with the probe command still being typed, or a probe screen drawn only in
+part, is never taken as the probe's screen. The checks do not claim a scroll distance for shell history or the cell
 that a wheel report names; both are gaps.
 
 `foreign-exit` types `hc run --no-parent` for `/usr/bin/true` into the placed

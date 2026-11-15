@@ -8,6 +8,7 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 pub const READY: [u8; 3] = [208, 32, 144];
+pub const SCROLL_LINES: usize = 30;
 pub const WAITING: [u8; 3] = [150, 110, 20];
 const END: u8 = 0x04;
 pub const SIGNALS: [&str; 3] = ["go", "back", "end"];
@@ -130,7 +131,7 @@ fn scroll(path: &Path, mode: Mode) -> Result<()> {
     let mut pending = Vec::new();
     loop {
         write!(stdout(), "\x1b[H\x1b[2J")?;
-        for line in position..position + 30 {
+        for line in position..position + SCROLL_LINES as i32 {
             write!(stdout(), "SCROLL {line:03}\r\n")?;
         }
         stdout().flush()?;

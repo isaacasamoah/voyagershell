@@ -1,6 +1,7 @@
 use super::{Case as _, Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Lines, Native, Terminal, Wheel, pid, quote, state, vessels};
+use crate::probe::SCROLL_LINES;
 use crate::system::{Identity, until};
 use crate::x11::{Key, Pixels};
 use anyhow::{Context, Result, ensure};
@@ -37,11 +38,14 @@ fn received(value: &Value, input: &str) -> Result<u64> {
 pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
     let terminal = Terminal::first(native)?;
     terminal.focus(native)?;
+    let start = terminal.settled(native, "prompt", |look| !Lines::of(look).is_empty())?;
+    let prompt = Lines::of(&start);
     cases.check(native, Case::NormalHistory, |native| {
-        let empty = terminal.look(native)?;
         terminal.line(native, "printf 'HISTORY-%03d\\n' {1..120}")?;
         terminal.shows(native, "HISTORY-120")?;
-        let live = terminal.settled(native, "history-live", |look| look != &empty)?;
+        let live = terminal.settled(native, "history-live", |look| {
+            look != &start && Lines::of(look).ends_like(&prompt)
+        })?;
         history(native, &terminal, "history", &live, Verdict::new())
     })?;
     let executable = std::env::current_exe()?;
@@ -63,7 +67,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         cases.check(native, case, |native| {
             let mode = case.name();
             let path = native.system.evidence.join(format!("{mode}-state.json"));
-            let prompt = terminal.look(native)?;
             terminal.line(
                 native,
                 &format!("{} probe {} {mode}", quote(&executable)?, quote(&path)?),
@@ -73,8 +76,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             })?;
             let initial = state(&path)?;
             let identity = Identity::read(pid(&initial)?)?;
-            let before =
-                terminal.settled(native, &format!("{mode}-before"), |look| look != &prompt)?;
+            let before = terminal.settled(native, &format!("{mode}-before"), |look| {
+                Lines::of(look).count() == SCROLL_LINES + 1
+            })?;
             let start = Lines::of(&before);
             terminal.wheel(native, Wheel::Up)?;
             let (up, upper) = terminal.settled_with(
@@ -134,9 +138,14 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         })?;
     }
     cases.check(native, Case::ReattachedHistory, |native| {
+        let ready = terminal.settled(native, "reattached-ready", |look| {
+            Lines::of(look).ends_like(&prompt)
+        })?;
         terminal.line(native, "printf 'REATTACH-%03d\\n' {1..60}")?;
         terminal.shows(native, "REATTACH-060")?;
-        let kept = terminal.settled(native, "reattached-before", |_| true)?;
+        let kept = terminal.settled(native, "reattached-before", |look| {
+            look != &ready && Lines::of(look).ends_like(&prompt)
+        })?;
         let drawn = Lines::of(&kept);
         native.close()?;
         terminal.same_program(native)?;
