@@ -1,6 +1,7 @@
 use super::{Case as _, Cases, Verdict, cases};
 use crate::inspection::Target;
 use crate::native::{Lines, Native, Terminal, Wheel, pid, quote, state, vessels};
+use crate::probe::SCROLL_LINES;
 use crate::system::{Identity, until};
 use crate::x11::{Key, Pixels};
 use anyhow::{Context, Result, ensure};
@@ -66,7 +67,6 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
         cases.check(native, case, |native| {
             let mode = case.name();
             let path = native.system.evidence.join(format!("{mode}-state.json"));
-            let prompt = terminal.look(native)?;
             terminal.line(
                 native,
                 &format!("{} probe {} {mode}", quote(&executable)?, quote(&path)?),
@@ -76,8 +76,9 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             })?;
             let initial = state(&path)?;
             let identity = Identity::read(pid(&initial)?)?;
-            let before =
-                terminal.settled(native, &format!("{mode}-before"), |look| look != &prompt)?;
+            let before = terminal.settled(native, &format!("{mode}-before"), |look| {
+                Lines::of(look).count() == SCROLL_LINES + 1
+            })?;
             let start = Lines::of(&before);
             terminal.wheel(native, Wheel::Up)?;
             let (up, upper) = terminal.settled_with(

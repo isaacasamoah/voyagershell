@@ -724,9 +724,11 @@ reference. Before `normal-history` and `reattached-history` type their
 screen that each case keeps must differ from that capture and again end with
 the prompt, which the shell prints only after the last line of output. A
 screen that still shows the earlier commands, the half-typed command or only
-part of the output therefore never stands as the live screen. The `arrows` and
-`mouse` captures taken before a wheel still accept any changed screen that
-holds still, which is a known gap. The checks do not claim a scroll distance for shell history or the cell
+part of the output therefore never stands as the live screen. In `arrows` and
+`mouse`, the capture taken before the first wheel must draw exactly the
+probe's 30 `SCROLL` lines and the cursor on the row below them, so the shell
+with the probe command still being typed, or a probe screen drawn only in
+part, is never taken as the probe's screen. The checks do not claim a scroll distance for shell history or the cell
 that a wheel report names; both are gaps.
 
 `foreign-exit` types `hc run --no-parent` for `/usr/bin/true` into the placed
