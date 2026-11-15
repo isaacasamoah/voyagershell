@@ -66,6 +66,11 @@ of at least 1180 by 1000 device pixels. For typing, keys, output, selection
 and copy and paste in a terminal, run `--journey terminal-input` and read
 features/terminal-input.md.
 
+After a merge, `voyager-verification battery` runs every journey on two builds,
+the new head and the previous main, interleaved. It reruns a failure once to
+separate a flake from red, compares median wall time against a threshold and
+writes `battery.json`. README.md, section Battery, gives the options.
+
 Exit 0 is a named runtime pass, 1 is observed failure, and 2 is inconclusive or
 unavailable. Unsupported journeys and actual-Codex requests are refused. There is
 no implicit legacy fallback. Existing Python drivers require --legacy-reproduction
