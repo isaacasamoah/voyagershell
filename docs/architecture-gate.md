@@ -58,6 +58,31 @@ Rule `notes-type-has-one-home` keeps the Notes type id in `NOTES_TYPE` in `app/s
 
 Add an entry under `known:` in `tests/architecture/known-violations.yaml` with the exact `id`, an `owner` and a `reason`. A size or literal entry also needs a numeric `limit`. A recorded entry is a debt. Adding one is a change the owner reviews.
 
+## Report a range
+
+`npm run architecture:delta -- <base> <head>` compares what the extractor observes at two revisions and prints what changed. It only reports. It exits 0 on any valid range and reads none of the rules. It needs the packages from `npm ci` and Node.js 24, and takes about a second.
+
+```
+npm run architecture:delta -- da16b3f 3c1e70e
+npm run architecture:delta -- da16b3f 3c1e70e --format table
+```
+
+Both revisions are read with the extractor and configuration of the working tree, so a difference is never caused by a changed extractor. A revision is anything Git resolves to a tree, such as a commit, a branch or a tag. Use `--repository <path>` for another checkout. `--format` is `table`, `json` or `both`, and `both` is the default. The JSON output has schema `architecture-delta/v0` and sorts every list, so two runs on one input print the same bytes.
+
+The table has these parts. A part with no change is left out.
+
+- `Edges` lists each added (`+`) and removed (`-`) edge as `from -> to (kind)`. An edge changes only when its endpoints or kind change, not when its evidence moves.
+- `Fan-in and fan-out` gives each touched module its added and removed users, which are the modules with an edge to it, and its added and removed dependencies, which are the modules it has an edge to. The JSON `modules` list names them.
+- `Host functions` lists each function added to or removed from a script host module, as `module.function`. A new host module adds all its functions.
+- `Agent tools` lists added and removed agent tools.
+- `Offered operations` lists added and removed `offers` and `exposes` edges, which are the places where code offers a tool or a host module to a caller. Operations in the typed application contract are not observed, so "offered operations" means only those two edge kinds.
+
+Revisions that observe the same facts, such as equal revisions or a commit that changes only prose, print `no structural change` and exit 0.
+
+A missing or unknown input prints one `architecture delta:` line that names it, followed by the usage line, and exits with code 2. Missing inputs are a missing base or head, an unknown revision, a path that is not a git repository, an unknown option and an unknown format.
+
 ## Test the gate
 
 `tests/architecture/gate-test.cjs` copies the checkout, plants a failure, and runs the gate on the copy. Each rule has a test that plants its mistake and expects the `NEW` line, and a test that removes the mistake and expects `PASS`. Run it with `node --test tests/architecture/gate-test.cjs`.
+
+`tests/architecture/delta-test.cjs` covers the report. Its unit tests give `compare` hand-built facts and check an added edge, a removed edge, an added host function, an agent tool and an offered operation. Its command tests commit two revisions of a small crate and run the command on them, so they do not need the repository history. Run it with `node --test tests/architecture/delta-test.cjs`.
