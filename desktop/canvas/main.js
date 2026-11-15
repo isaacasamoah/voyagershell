@@ -1425,20 +1425,19 @@ export default class Canvas extends View {
     );
   }
   statusView() {
-    return div()
+    const text = this.status || this.worktrees?.status || "";
+    const view = div()
       .flex()
       .flex_col()
       .px(12)
       .py(6)
       .child(
-        Status.new(
-          "workspace-status",
-          this.status || this.worktrees?.status || "",
-        )
+        Status.new("workspace-status", text)
           .text_size(11)
           .text_color("#ffcad3"),
       )
       .child(this.action("Refresh", { operation: "inspect" }));
+    return text ? view.child(Marker.new("workspace-status", "", text)) : view;
   }
   openSplit(group, id, side, cx) {
     if (this.busy || this.editing || this.layoutName) return;
@@ -1797,6 +1796,7 @@ export default class Canvas extends View {
         .flex_col()
         .p(24)
         .child(this.status || "Workspace canvas unavailable")
+        .child(Marker.new("workspace-status", "", this.status || ""))
         .child(this.action("Refresh", { operation: "inspect" }));
     const canvas = layout.canvas;
     const voyage = currentVoyage(layout);

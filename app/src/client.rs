@@ -21,6 +21,7 @@ use voyager_contract::{
 
 #[path = "client_core.rs"]
 mod core_calls;
+use crate::layout_store::{carry_notice, load, save};
 use core_calls::{Listing, Observer, changed_layout, commit, live, next_message};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -2062,6 +2063,9 @@ impl Client {
                         }
                     }
                 }
+                if let Ok(core) = core.as_mut() {
+                    carry_notice(&mut core.layout.notice, &request.action, &mut response);
+                }
                 response.version = version;
                 response.layout = crate::scope::project(&layout, scope.as_ref());
                 response.created_vessels =
@@ -3170,7 +3174,7 @@ fn open_terminal(
     core.viewer(&attached)
 }
 
-fn rejected(message: String) -> Error {
+pub(crate) fn rejected(message: String) -> Error {
     Error::Rejected {
         kind: "invalid_workspace".into(),
         message,
@@ -3190,27 +3194,6 @@ fn attach_failure(error: Error, created: bool, address: &str) -> Error {
         )),
         (false, error) => error,
     }
-}
-
-fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Error> {
-    let doc = core.document_get("voyager-layout-v2")?;
-    let version = doc.version;
-    let value = doc.value;
-    if value.is_null() {
-        return Ok((Layout::default(), version, true));
-    }
-    let layout: Layout = serde_json::from_value(value)
-        .map_err(|e| rejected(format!("Stored workspace is invalid: {e}")))?;
-    crate::canvas::validate(&layout.canvas).map_err(rejected)?;
-    let mut layout = Model::prepare(layout, cwd).map_err(rejected)?;
-    crate::content::rename::synchronize_labels(&mut layout);
-    Ok((layout, version, false))
-}
-
-fn save(core: &mut Core, layout: &Layout, version: u64) -> Result<u64, Error> {
-    Ok(core
-        .document_set("voyager-layout-v2", layout, version)?
-        .version)
 }
 
 fn select_note(

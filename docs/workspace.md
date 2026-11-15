@@ -638,3 +638,54 @@ establishes that these consumed operations work across that additive upgrade.
 It does not establish a general compatibility matrix. Generation, capability
 and minimum-release checks are the admission rule: a newer release is accepted,
 and one older than 0.1.18 is refused.
+
+## The stored layout across builds
+
+The whole `Layout` lives in the Core document `voyager-layout-v2`. A build
+reads it through `voyager_contract::layout_document` and saves it through
+`app/src/layout_store.rs`. The wire stays closed: no response schema carries a
+field a newer build added.
+
+**Reading.** The reader parses strictly first. A document that fails to parse is
+stripped of every field its entity's generated schema does not list, and parsed
+again. Each stripped field is kept with the id of the nearest enclosing entity
+(a Voyage, Fleet, Placement or Vessel) and its path inside it. A field with no
+such entity is kept against the document root and an array item without an id is
+matched by position.
+
+**Saving.** The save adds each kept field back to the entity with the same id.
+A field whose entity the build deleted is dropped with it. The save never
+replaces a field the build itself wrote.
+
+**The stamp.** A `minReader` number at the top of the document names the lowest
+reader level that may open it. This build reads level 1. A document stamped above
+the build's level is refused: the build copies the raw document to
+`voyager-layout-backup`, writes nothing else and reports the level it needs. A
+stamp above 1 on a document the build can read is kept and written back. A
+`minReader` that is not a whole number (`2.0`, `"2"`, `-1`, `null`) is a
+malformed stamp, not one from a newer build, so the document is unreadable and
+takes the path below. A build never writes a stamp of 1 or less.
+
+**Writer rule.** A change to the stored shape is safe for an older reader only
+when it adds an optional field or a new Vessel type id. Removing or renaming a
+field, narrowing a type, adding a variant of a tagged enum, or making an old
+field optional is not safe. Such a change raises `READER_LEVEL` in
+`contract/src/layout_document.rs`, commits the release schema of the level it
+replaces as `contract/tests/layout-release-<level>.schema.json` and stamps the
+documents the new build writes. The test `layout_compat` compares the current
+`Layout` schema with each committed release schema and fails on an unstamped
+breaking change.
+
+**Unreadable documents.** A document that does not parse after stripping is
+copied to `voyager-layout-backup`, and the workspace starts fresh. Every inspect
+response, and every refused or unconfirmed response with no message of its own,
+carries a message that names the backup, and the workspace status line draws it.
+The message stays until the workspace applies a change from any caller, which
+clears it. A restart also clears it. A document that parses
+but fails the workspace's own checks is copied to the backup and refused. The
+backup holds one document, so a later unreadable document replaces it.
+
+**Older documents.** `voyager-layout-v1` is the name before the Vessel and
+Placement vocabulary. A build that finds no v2 document and a v1 document renames
+the five changed stored keys, reads the result by the rules above and saves it as
+v2. It never writes v1.

@@ -9,6 +9,7 @@ mod core_endpoint;
 pub mod core_state;
 pub mod diagnostics;
 pub mod launch;
+mod layout_store;
 pub mod observation;
 mod panels;
 mod process;

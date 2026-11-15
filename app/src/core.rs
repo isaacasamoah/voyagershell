@@ -132,6 +132,12 @@ fn enqueue(
     })
 }
 
+#[derive(Default)]
+pub(crate) struct LayoutKeep {
+    pub(crate) kept: voyager_contract::layout_document::Kept,
+    pub(crate) notice: Option<String>,
+}
+
 pub struct Core {
     child: Child,
     identity: String,
@@ -145,6 +151,7 @@ pub struct Core {
     sequence: u64,
     activity: Arc<Mutex<Activity>>,
     activity_supported: bool,
+    pub(crate) layout: LayoutKeep,
 }
 
 impl Core {
@@ -304,6 +311,7 @@ impl Core {
             sequence: 1,
             activity,
             activity_supported,
+            layout: Default::default(),
         })
     }
 

@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use voyager_contract::layout_document::DOCUMENT;
 
 const HISTORY_HEADS: usize = 10;
 const MINIMUM_TIMED_RUNS: usize = 2;
@@ -478,10 +479,7 @@ fn journey_inputs(
                 ));
             }
             let mut args: Vec<OsString> = vec!["--profile-fixture".into(), theme.into()];
-            args.push("--core-document".into());
-            let mut named = OsString::from("voyager-verifier-probe=");
-            named.push(&document);
-            args.push(named);
+            args.extend(core_document("voyager-verifier-probe", &document));
             args.push("--second-binary".into());
             args.push(other.binary.clone().into());
             args.push("--second-sha256".into());
@@ -500,8 +498,28 @@ fn journey_inputs(
             }
             Ok(vec!["--profile-fixture".into(), updates.into()])
         }
+        Journey::LayoutCompat => layout_seed(fixtures, "newer-additions.json"),
+        Journey::LayoutRefused => layout_seed(fixtures, "newer-min-reader.json"),
+        Journey::LayoutCorrupt => layout_seed(fixtures, "corrupt.json"),
         _ => Ok(Vec::new()),
     }
+}
+
+fn core_document(name: &str, file: &Path) -> [OsString; 2] {
+    let mut named = OsString::from(format!("{name}="));
+    named.push(file);
+    ["--core-document".into(), named]
+}
+
+fn layout_seed(fixtures: &Path, file: &str) -> Result<Vec<OsString>, String> {
+    let seed = fixtures.join("layout-compat").join(file);
+    if !seed.is_file() {
+        return Err(format!(
+            "the committed layout fixture {file} is missing under {}",
+            fixtures.display()
+        ));
+    }
+    Ok(core_document(DOCUMENT, &seed).into())
 }
 
 fn split_runnable(options: &Options) -> (Vec<Journey>, Vec<String>) {
@@ -989,10 +1007,14 @@ mod tests {
     #[test]
     fn journeys_without_inputs_get_none() {
         let base = build(Side::Base, "base");
-        for journey in Journey::ALL
-            .iter()
-            .filter(|j| !matches!(**j, Journey::Profile | Journey::ProfileUpdates))
-        {
+        let seeded = [
+            Journey::Profile,
+            Journey::ProfileUpdates,
+            Journey::LayoutCompat,
+            Journey::LayoutRefused,
+            Journey::LayoutCorrupt,
+        ];
+        for journey in Journey::ALL.iter().filter(|j| !seeded.contains(j)) {
             let args = journey_inputs(*journey, &base, Path::new("/nowhere")).unwrap();
             assert!(args.is_empty());
         }
@@ -1011,6 +1033,46 @@ mod tests {
         let reason =
             journey_inputs(Journey::ProfileUpdates, &base, Path::new("/nowhere")).unwrap_err();
         assert!(reason.contains("fixture is missing"));
+    }
+
+    #[test]
+    fn each_layout_journey_is_seeded_with_the_committed_fixture_it_needs() {
+        use voyager_contract::layout_document::{Reading, read};
+        let base = build(Side::Base, "base");
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
+        for journey in [
+            Journey::LayoutCompat,
+            Journey::LayoutRefused,
+            Journey::LayoutCorrupt,
+        ] {
+            let args = journey_inputs(journey, &base, &fixtures).unwrap();
+            assert_eq!(args.len(), 2, "{}", journey.name());
+            assert_eq!(args[0], "--core-document");
+            let named = args[1].to_string_lossy().into_owned();
+            let (name, file) = named.split_once('=').unwrap();
+            assert_eq!(name, DOCUMENT);
+            let document: Value = serde_json::from_str(&fs::read_to_string(file).unwrap()).unwrap();
+            let reading = read(document);
+            let fits = match journey {
+                Journey::LayoutCompat => matches!(reading, Reading::Open { .. }),
+                Journey::LayoutRefused => matches!(reading, Reading::Newer { .. }),
+                _ => matches!(reading, Reading::Unreadable { .. }),
+            };
+            assert!(fits, "{} is seeded with {file}", journey.name());
+        }
+    }
+
+    #[test]
+    fn a_layout_journey_without_its_fixture_is_not_run_with_a_reason() {
+        let base = build(Side::Base, "base");
+        for journey in [
+            Journey::LayoutCompat,
+            Journey::LayoutRefused,
+            Journey::LayoutCorrupt,
+        ] {
+            let reason = journey_inputs(journey, &base, Path::new("/nowhere")).unwrap_err();
+            assert!(reason.contains("fixture"), "{reason}");
+        }
     }
 
     const J: Journey = Journey::TerminalScrolling;

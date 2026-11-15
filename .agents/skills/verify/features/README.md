@@ -29,6 +29,7 @@ tier. `python-only` means only the retained Python fixture does. `none` means no
 | Profile theme | covered | none | none | covered | profile | - | linux |
 | Profile updates | covered | none | none | covered | profile-updates | - | linux |
 | Scripts live edit | python-only | python-only | python-only | python-only | - | canvas-stack | linux |
+| Stored layout across builds | covered | none | none | covered | layout-compat, layout-refused, layout-corrupt | - | linux |
 <!-- features:end -->
 
 Recipes: [terminal-scrolling.md](terminal-scrolling.md),

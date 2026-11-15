@@ -500,6 +500,18 @@ const SOURCES: &[(&str, &[u8])] = &[
     ("src/journey/input.rs", include_bytes!("journey/input.rs")),
     ("src/journey/layout.rs", include_bytes!("journey/layout.rs")),
     (
+        "src/journey/layout_compat.rs",
+        include_bytes!("journey/layout_compat.rs"),
+    ),
+    (
+        "src/journey/layout_corrupt.rs",
+        include_bytes!("journey/layout_corrupt.rs"),
+    ),
+    (
+        "src/journey/layout_refused.rs",
+        include_bytes!("journey/layout_refused.rs"),
+    ),
+    (
         "src/journey/portals.rs",
         include_bytes!("journey/portals.rs"),
     ),

@@ -158,6 +158,7 @@ union all come from that list.
 | `chat-message` | Message id | One message. Its `label` is the message text | `Chat.render` |
 | `chat-status` | Empty | The Thinking line. Its `label` is the string that it draws | `Chat.render` |
 | `chat-error` | Empty | The chat's error line. Its `label` is the error text | `Chat.render` |
+| `workspace-status` | Empty | The workspace status line, drawn only while it has text, and in the view shown when no workspace can be opened. Its `label` is the text, which includes the notice that the stored layout was unreadable | `Workspace.statusView` in `main.ts` |
 | `split-divider` | The split's id, a JSON array `[session, owner, path]` | The resize handle of one branch of a Fleet's split tree | The handle appearance in `desktop/src/split.rs`, with `inspect::control` |
 | `maximize-panel` | Placement id | The maximize or restore button of a Vessel or Portal | `renderPanel` in `panel-view.ts` |
 | `move-preview` | Placement id of the destination | The highlighted half of the destination while a Vessel is dragged. Its bounds give the side | `renderPanel` |

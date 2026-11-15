@@ -270,3 +270,16 @@ behavior = "python-only"
 performance = "python-only"
 visual = "python-only"
 debug = "python-only"
+
+[[feature]]
+id = "layout-compat"
+name = "Stored layout across builds"
+path = "Open a layout a newer build wrote and keep what this build does not know, refuse a layout that needs a newer build without changing it, and back up an unreadable layout before starting fresh."
+sources = ["contract/src/layout_document.rs", "app/src/layout_store.rs"]
+journeys = ["layout-compat", "layout-refused", "layout-corrupt"]
+platforms = ["linux"]
+python = []
+behavior = "covered"
+performance = "none"
+visual = "none"
+debug = "covered"

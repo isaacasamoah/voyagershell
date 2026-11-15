@@ -1,0 +1,13 @@
+diff --git a/contract/src/layout_document.rs b/contract/src/layout_document.rs
+index caf8528..310a125 100644
+--- a/contract/src/layout_document.rs
++++ b/contract/src/layout_document.rs
+@@ -95,7 +95,7 @@ pub fn read_at(mut raw: Value, level: u64) -> Reading {
+ 
+ pub fn write(layout: &Layout, kept: &Kept) -> Result<Value, serde_json::Error> {
+     let mut value = serde_json::to_value(layout)?;
+-    for item in &kept.grafts {
++    for item in kept.grafts.iter().take(0) {
+         let base = match &item.anchor {
+             None => Some(&mut value),
+             Some(id) => find_id(&mut value, id),

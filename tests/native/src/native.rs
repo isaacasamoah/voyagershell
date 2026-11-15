@@ -15,7 +15,7 @@ use crate::system::{
 use crate::x11::{
     Clipboard, Compositor, Display, Geometry, Key, Observed, Pixels, Requests, Window,
 };
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -27,6 +27,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use voyager_contract::inspection::{Frame, Role};
+use voyager_contract::layout_document::{DOCUMENT, Reading, read};
 use voyager_contract::{Fleet, Layout, Placement, Voyage};
 
 const GLANCE: Duration = Duration::from_millis(80);
@@ -721,6 +722,18 @@ impl Native {
         .ok_or_else(|| Unseen(expected.into()).into())
     }
 
+    pub fn screen_status(&self, expected: &str, wanted: impl Fn(&str) -> bool) -> Result<String> {
+        self.wait_for(expected, PATIENCE, |frame| {
+            frame
+                .elements
+                .iter()
+                .find(|element| element.role == Role::WorkspaceStatus)
+                .and_then(|element| element.label.as_deref())
+                .filter(|label| wanted(label))
+                .map(str::to_owned)
+        })
+    }
+
     fn arrange(&self) -> Result<()> {
         let x11 = self.x11()?;
         let current = x11.geometry(self.window)?;
@@ -737,6 +750,13 @@ impl Native {
                 json!({"input":"resize","window":self.window,"size":[width,height]}),
                 || x11.resize(self.window, width, height),
             )?;
+        }
+        let unreadable = self
+            .seeded_documents
+            .get(DOCUMENT)
+            .is_some_and(|(_, value)| !matches!(read(value.clone()), Reading::Open { .. }));
+        if unreadable {
+            return Ok(());
         }
         let open = |frame: &Frame| {
             frame
@@ -802,15 +822,27 @@ impl Native {
     }
 
     pub fn document(&self) -> Result<Option<(u64, Layout)>> {
-        let reply = self
-            .system
-            .watch("doc.get", json!({"name":"voyager-layout-v2"}))?;
+        let reply = self.system.watch("doc.get", json!({"name":DOCUMENT}))?;
         if reply["value"].is_null() {
             return Ok(None);
         }
-        let layout = serde_json::from_value(reply["value"].clone()).context(
-            "The layout document is not the contract Layout this verifier was built with",
-        )?;
+        let layout = match read(reply["value"].clone()) {
+            Reading::Open { layout, .. } => *layout,
+            Reading::Newer { .. } => return Ok(None),
+            Reading::Unreadable { .. }
+                if self
+                    .seeded_documents
+                    .get(DOCUMENT)
+                    .is_some_and(|(_, seeded)| *seeded == reply["value"]) =>
+            {
+                return Ok(None);
+            }
+            Reading::Unreadable { message } => {
+                bail!(
+                    "The layout document is not the contract Layout this verifier was built with: {message}"
+                )
+            }
+        };
         let version = reply["version"]
             .as_u64()
             .context("The layout document has no version")?;
