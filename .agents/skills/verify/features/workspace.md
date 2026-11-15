@@ -180,13 +180,17 @@ the typed text`, and `firstFailingCheck.observed.rename.after` must read
 
 ## Gaps
 
-Two checks are not driven.
+Three checks are not driven.
 
 - The refusal of a stale layout version is not driven here, because the
   verifier never writes to Core. `app/tests/maximize.rs` asserts
   `Outcome::Refused` for a stale expected version.
 - A rename during a pending selection is not driven, because the old check
   patched the profile's script to delay the selection.
+- The empty top bar of the Home view and of a window with no Voyage is not driven.
+  The window cases drag the bar of a Voyage's Fleet strip and the sidebar's top
+  row. A Home bar without its drag area, or a real window manager that moves or
+  maximises the window, would pass them.
 
 The Python `workspace` and `placement` journeys are deleted. The native
 `portals` journey covers the Portal checks that `placement` kept: creating a
