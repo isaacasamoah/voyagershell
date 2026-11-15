@@ -707,8 +707,8 @@ pending and does not dispatch again. An identical completed request returns its
 retained result.
 
 The single framed Core connection routes replies by request ID. It admits at
-most twenty pending RPCs: at most eight admitted process effects, at most four
-process reads at two calls each, the one shared terminal list that observations
+most eighteen pending RPCs: at most eight admitted process effects, at most
+three process reads at two calls each, the one shared terminal list that observations
 wait on, the one workspace save or list in flight, the activity subscription
 and one ordinary owner call. Process admissions remain counted
 until the owner reconciles completion. The [front door](#the-front-door) ledger

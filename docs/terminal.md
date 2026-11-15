@@ -407,12 +407,21 @@ read work this way.
   list waits for the next list. Voyage renames and live bindings change only
   when the list began at the current version. A Vessel whose program the list
   shows exited closes either way, because an exit is final.
-- **Process List and Read**, from the administrator and the Agents list
-  (`app/src/process.rs`). List begins `terminal.list`. Read begins
-  `terminal.get` and `terminal.read` together. The request stays pending in the
-  front door's ledger, and the answer is recorded when the reply arrives. At
-  most four of these reads are pending at once, beside the eight process
-  effects.
+- **Process List and Read**, from the administrator, the Agents list and the
+  content chooser (`app/src/process.rs`). List begins `terminal.list`. Read
+  begins `terminal.get` and `terminal.read` together. The request stays
+  pending in the front door's ledger, and the answer is recorded when the
+  reply arrives. The answer names the workspace version it was dispatched at,
+  which is the version of the layout it was built from, even when an effect
+  lands before Core replies. Send, Interrupt and Stop name the version when
+  they finish. At most three reads are pending at once, beside the eight
+  process effects: one for each reader that waits for its answer before it
+  reads again. A caller waits 25 s, longer than Core's 20 s deadline, so a
+  read settles before its reader can send another. The administrator runs one
+  tool call at a time. The Agents list reads again only after its last read
+  returns. The content chooser reads once when it opens, and a canvas read at
+  the version of a pending one shares it. A fourth read is refused as busy and
+  nothing is sent to Core.
 - **A read that comes before an effect.** These are the `terminal.list` checks
   before a worktree removal, before a Voyage close, and before a Voyage or
   Fleet is created from a live directory. The request departs as a
@@ -426,8 +435,8 @@ read work this way.
   queues its snapshot itself, so a busy owner cannot let early events pass
   their 256 KiB limit.
 
-The connection allows twenty pending requests, and `app/src/core_pending.rs`
-adds them up: eight process effects, four process reads at two calls each, the
+The connection allows eighteen pending requests, and `app/src/core_pending.rs`
+adds them up: eight process effects, three process reads at two calls each, the
 observation list, one save or list in flight, the subscription and one ordinary
 owner call. So a save or an Inspect is never refused as busy behind reads or
 behind [delayed process effects](workspace.md). Calls whose reply

@@ -14,7 +14,10 @@ use std::{
 pub(super) type Replies = Arc<Mutex<HashMap<u64, SyncSender<Value>>>>;
 
 pub(crate) const PROCESS_EFFECTS: usize = 8;
-pub(crate) const PROCESS_READS: usize = 4;
+const ADMINISTRATOR_READS: usize = 1;
+const AGENTS_LIST_READS: usize = 1;
+const CHOOSER_READS: usize = 1;
+pub(crate) const PROCESS_READS: usize = ADMINISTRATOR_READS + AGENTS_LIST_READS + CHOOSER_READS;
 const CALLS_PER_READ: usize = 2;
 const OBSERVATION_LIST: usize = 1;
 const FLIGHT: usize = 1;
