@@ -41,6 +41,7 @@ pub const CONTROL: Case = Case::RenameFleetEnter;
 const FLEET_NAME: &str = "Native Fleet";
 const VOYAGE_NAME: &str = "Keyboard Voyage";
 const VESSEL_NAME: &str = "+";
+const FILLER_GAP: f32 = 10.0;
 const MODELLED: &str = "the saved and drawn workspace match the journey's model";
 
 #[derive(PartialEq)]
@@ -597,15 +598,28 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
 
     cases.check(native, Case::DragBarMovesWindow, |native| {
         on_bar(native, &start)?;
+        let unfilled = native.observe("the empty top bar and the create Fleet button", |seen| {
+            let filler = Target::window_drag("fleets").find(seen.frame)?.bounds;
+            let create = Target::create_fleet(&start.voyage).find(seen.frame)?.bounds;
+            Some(filler.x - (create.x + create.width))
+        })?;
         let seen = native.window_requests()?.len();
         native.drag_across(&Target::window_drag("fleets"), (60, 0))?;
         let sent = native.requests_after(seen, 1)?;
         native.keep_window("drag-move")?;
         Verdict::new()
             .expect(
+                "the empty top bar starts right after the create Fleet button",
+                (0.0..FILLER_GAP).contains(&unfilled),
+            )
+            .expect(
                 "a drag across the empty top bar sends a move request for the window",
                 !sent.is_empty() && sent.iter().all(moves),
             )
+            .observed(
+                "logical pixels between the create Fleet button and the empty top bar",
+                unfilled,
+            )?
             .observed("requests", &sent)
     })?;
 
