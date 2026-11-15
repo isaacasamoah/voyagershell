@@ -31,6 +31,7 @@ use voyager_contract::layout_document::{DOCUMENT, Reading, read};
 use voyager_contract::{Fleet, Layout, Placement, Voyage};
 
 const REQUEST_PATIENCE: Duration = Duration::from_secs(5);
+const REQUEST_QUIET: Duration = Duration::from_millis(750);
 
 const GLANCE: Duration = Duration::from_millis(80);
 
@@ -728,6 +729,11 @@ impl Native {
             }
             sleep(Duration::from_millis(50));
         }
+    }
+
+    pub fn requests_through_quiet(&mut self, seen: usize) -> Result<Vec<Observed>> {
+        sleep(REQUEST_QUIET);
+        Ok(self.window_requests()?.into_iter().skip(seen).collect())
     }
 
     fn release_requests(&mut self) -> Result<()> {

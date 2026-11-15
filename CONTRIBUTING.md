@@ -47,7 +47,7 @@ gone. A PR that adds an edge runs `npm run architecture:intended` and commits th
 change, so reviewers see the new dependency.
 
 `prepare-sdk.py` checks out the pinned upstream GPUI Kit revision in the user
-cache, applies the reviewed native-overlay and engine-limits patches in `desktop/patches/`
+cache, applies the reviewed native-overlay, engine-limits and window-drag patches in `desktop/patches/`
 and writes a local Cargo override for the shared SDK crates. Run it before
 native Cargo or Node checks. Later Cargo commands use that configuration
 normally. `python3 desktop/prepare-sdk.py --check` verifies the prepared source

@@ -34,6 +34,8 @@ cases! {
     TabDragDoesNotMoveWindow => "tab-drag-does-not-move-window",
     DoubleClickMaximises => "double-click-bar-maximises-window",
     SidebarDragMovesWindow => "sidebar-drag-moves-window",
+    VoyageDragDoesNotMoveWindow => "voyage-drag-does-not-move-window",
+    TerminalSelectionDoesNotMoveWindow => "terminal-selection-does-not-move-window",
 }
 
 pub const CONTROL: Case = Case::RenameFleetEnter;
@@ -633,9 +635,15 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
                 .observed("tabs", &before);
         };
         let first_tab = Target::name(&RenameTarget::Fleet { id: first.clone() });
+        let filler = Target::window_drag("fleets");
         let mut held = native.hold(&Target::name(&RenameTarget::Fleet { id: last.clone() }))?;
         held.toward(native.point_in(&first_tab, 0.25, 0.5)?)?;
         held.until("the insertion bar on the first Fleet tab", |seen| {
+            seen.shows(&Target::fleet_drop(first)).then_some(())
+        })?;
+        held.toward(native.point_in(&filler, 0.5, 0.5)?)?;
+        held.toward(native.point_in(&first_tab, 0.25, 0.5)?)?;
+        held.until("the insertion bar on the first Fleet tab again", |seen| {
             seen.shows(&Target::fleet_drop(first)).then_some(())
         })?;
         held.release()?;
@@ -645,16 +653,19 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             |order| *order != before,
         )?;
         native.keep_window("tab-drag")?;
-        let sent = native.window_requests()?;
+        let sent = native.requests_through_quiet(seen)?;
         Verdict::new()
             .expect(
-                "dragging the second Fleet tab onto the first puts it first",
+                "dragging the second Fleet tab across the empty top bar onto the first puts it first",
                 after.first() == Some(last) && after.last() == Some(first),
             )
-            .expect("the tab drag sends no window request", sent.len() == seen)
+            .expect(
+                "the tab drag, carried across the empty top bar, sends no window request",
+                sent.is_empty(),
+            )
             .observed("before", &before)?
             .observed("after", &after)?
-            .observed("requests", &sent[seen..])
+            .observed("requests", &sent)
     })?;
 
     cases.check(native, Case::DoubleClickMaximises, |native| {
@@ -686,6 +697,40 @@ pub fn drive(native: &mut Native, cases: &mut Cases<Case>) -> Result<()> {
             .expect(
                 "a drag across the sidebar's empty top row sends a move request for the window",
                 !sent.is_empty() && sent.iter().all(moves),
+            )
+            .observed("requests", &sent)
+    })?;
+
+    cases.check(native, Case::VoyageDragDoesNotMoveWindow, |native| {
+        on_bar(native, &start)?;
+        let seen = native.window_requests()?.len();
+        let mut held = native.hold(&Target::name(&RenameTarget::Voyage {
+            id: start.voyage.clone(),
+        }))?;
+        held.toward(native.point_in(&Target::window_drag("sidebar"), 0.5, 0.5)?)?;
+        held.release()?;
+        let sent = native.requests_through_quiet(seen)?;
+        native.keep_window("voyage-drag")?;
+        Verdict::new()
+            .expect(
+                "a Voyage drag carried across the sidebar's empty top row sends no window request",
+                sent.is_empty(),
+            )
+            .observed("requests", &sent)
+    })?;
+
+    cases.check(native, Case::TerminalSelectionDoesNotMoveWindow, |native| {
+        on_bar(native, &start)?;
+        let seen = native.window_requests()?.len();
+        let mut held = native.hold(&Target::terminal(&start.vessel.id))?;
+        held.toward(native.point_in(&Target::window_drag("fleets"), 0.5, 0.5)?)?;
+        held.release()?;
+        let sent = native.requests_through_quiet(seen)?;
+        native.keep_window("terminal-selection")?;
+        Verdict::new()
+            .expect(
+                "a terminal selection dragged up across the empty top bar sends no window request",
+                sent.is_empty(),
             )
             .observed("requests", &sent)
     })
