@@ -178,8 +178,24 @@ fn read(target: ProcessInfo, read: ReadResult) -> ProcessOutput {
     }
 }
 
+pub(crate) struct Completed {
+    pub(crate) read_at: Option<u64>,
+    pub(crate) result: Result<ProcessOutput, Error>,
+}
+
 impl Effect {
-    pub(crate) fn wait(self) -> Result<ProcessOutput, Error> {
+    pub(crate) fn wait(self, dispatched: u64) -> Completed {
+        let read_at = match &self {
+            Self::List(..) | Self::Read { .. } => Some(dispatched),
+            Self::Send(..) | Self::Interrupt(..) | Self::Stop(..) => None,
+        };
+        Completed {
+            read_at,
+            result: self.settle(),
+        }
+    }
+
+    fn settle(self) -> Result<ProcessOutput, Error> {
         match self {
             Self::List(visible, pending) => Ok(listed(&visible, pending.wait()?.terminals)),
             Self::Read {

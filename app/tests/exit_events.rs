@@ -333,3 +333,120 @@ fn observations_in_flight_never_crowd_out_a_workspace_save() {
     cleanup.server_stop().unwrap();
     checked.unwrap();
 }
+
+#[test]
+fn a_process_read_answered_after_an_effect_names_the_version_it_was_built_from() {
+    let suffix = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let session = format!("voyager-read-stamp-{}-{suffix}", std::process::id());
+    let client = Client::open(session.clone(), "/tmp".into());
+    let checked = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        let inspect = || {
+            client
+                .call(Request {
+                    request_id: client.request_id(),
+                    expected_version: 0,
+                    action: Action::Inspect,
+                })
+                .unwrap()
+        };
+        let initial = inspect();
+        let content = initial.layout.vessels[0].id.clone();
+        let _viewer = client
+            .terminal(content.clone(), client.request_id(), initial.version)
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let terminal = loop {
+            let bound = inspect();
+            let listed = client
+                .process(
+                    Context::Workspace,
+                    ProcessRequest {
+                        request_id: client.request_id(),
+                        input: ProcessInput {
+                            expected_version: bound.version,
+                            action: ProcessAction::List,
+                        },
+                    },
+                )
+                .unwrap();
+            if let Some(ProcessOutput::List { processes, .. }) = &listed.output
+                && let Some(found) = processes.iter().find(|item| item.vessel_id == content)
+            {
+                break found.terminal_id.clone();
+            }
+            assert!(Instant::now() < deadline, "The shell was never listed");
+            thread::sleep(Duration::from_millis(20));
+        };
+        let (mut answered, mut raced, mut stale) = (0, 0, Vec::new());
+        for round in 0..120u64 {
+            let issued = inspect().version;
+            let action = if round % 2 == 0 {
+                ProcessAction::List
+            } else {
+                ProcessAction::Read {
+                    vessel_id: content.clone(),
+                    terminal_id: terminal.clone(),
+                    lines: 20,
+                }
+            };
+            let reader = client.clone();
+            let read = thread::spawn(move || {
+                let response = reader
+                    .process(
+                        Context::Workspace,
+                        ProcessRequest {
+                            request_id: reader.request_id(),
+                            input: ProcessInput {
+                                expected_version: issued,
+                                action,
+                            },
+                        },
+                    )
+                    .unwrap();
+                (response, Instant::now())
+            });
+            thread::sleep(Duration::from_micros(200 + (round % 6) * 300));
+            let created = client.call(Request {
+                request_id: client.request_id(),
+                expected_version: issued,
+                action: Action::CreateVoyage {
+                    name: format!("round {round}"),
+                    cwd: "/tmp".into(),
+                },
+            });
+            let created_at = Instant::now();
+            let (response, read_at) = read.join().unwrap();
+            if response.status != Status::Applied {
+                continue;
+            }
+            answered += 1;
+            if created.is_ok_and(|created| created.status == Outcome::Applied)
+                && created_at < read_at
+            {
+                raced += 1;
+            }
+            if response.version != issued {
+                stale.push((round, issued, response.version));
+            }
+            if raced >= 20 {
+                break;
+            }
+        }
+        eprintln!("answered_reads={answered} raced_by_an_effect={raced} stamped_newer={stale:?}");
+        assert!(
+            stale.is_empty(),
+            "{} of {answered} applied process reads named a newer version than the layout they were built from: {stale:?}",
+            stale.len()
+        );
+        assert!(
+            raced > 0,
+            "No workspace effect landed while a process read waited on Core, so the stamp was not tested"
+        );
+    }));
+    let mut cleanup = Core::connect(&session).unwrap();
+    cleanup.server_stop().unwrap();
+    checked.unwrap();
+}

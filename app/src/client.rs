@@ -136,7 +136,7 @@ enum Message {
     },
     ProcessDone {
         request_id: String,
-        result: Result<voyager_contract::administrator::ProcessOutput, Error>,
+        completed: crate::process::Completed,
         reply: SyncSender<Arc<ProcessResponse>>,
     },
     Workspace {
@@ -1341,10 +1341,10 @@ impl Client {
                                 door.open(ticket);
                                 let sender = process_sender.clone();
                                 thread::spawn(move || {
-                                    let result = effect.wait();
+                                    let completed = effect.wait(version);
                                     let _ = sender.send_blocking(Message::ProcessDone {
                                         request_id: request.request_id,
-                                        result,
+                                        completed,
                                         reply,
                                     });
                                 });
@@ -1364,14 +1364,14 @@ impl Client {
                     }
                     Message::ProcessDone {
                         request_id,
-                        result,
+                        completed,
                         reply,
                     } => {
                         let outcome = process_response(
                             request_id.clone(),
-                            version,
+                            completed.read_at.unwrap_or(version),
                             &mut fresh,
-                            result.into(),
+                            completed.result.into(),
                         );
                         door.settle(&request_id, Receipt::Process(Arc::clone(&outcome)));
                         let _ = reply.send(outcome);
