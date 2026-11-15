@@ -96,6 +96,7 @@ roles! {
     ChatMessage => "chat-message",
     ChatStatus => "chat-status",
     ChatError => "chat-error",
+    WorkspaceStatus => "workspace-status",
     SplitDivider => "split-divider",
     MaximizePanel => "maximize-panel",
     MovePreview => "move-preview",

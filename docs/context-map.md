@@ -42,6 +42,7 @@ Guide: [docs/workspace.md](workspace.md).
 Owns files:
 
 - `app/src/client.rs`
+- `app/src/layout_store.rs`
 - `app/src/process.rs`
 - `app/src/launch.rs`
 - `app/src/activity.rs`
@@ -78,6 +79,9 @@ Owns files:
 - `app/src/voyage_close.rs`
 - `app/src/worktrees.rs`
 - `contract/src/lib.rs`
+- `contract/src/layout_document.rs`
+- `contract/tests/layout_compat.rs`
+- `contract/tests/layout_document.rs`
 - `contract/src/panels.rs`
 - `contract/src/canvas.rs`
 - `contract/src/context.rs`

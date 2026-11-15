@@ -1,0 +1,143 @@
+{
+ "arrangements": [],
+ "canvas": {
+  "density": "compact",
+  "portalMode": "overlay",
+  "root": {
+   "children": [
+    {
+     "kind": "block",
+     "region": "sidebar",
+     "size": {
+      "kind": "fixed",
+      "pixels": 224
+     }
+    },
+    {
+     "children": [
+      {
+       "kind": "block",
+       "region": "fleet-strip",
+       "size": {
+        "kind": "fixed",
+        "pixels": 40
+       }
+      },
+      {
+       "children": [
+        {
+         "kind": "block",
+         "region": "active-fleet",
+         "size": {
+          "kind": "fill"
+         }
+        },
+        {
+         "kind": "block",
+         "region": "portals",
+         "size": {
+          "kind": "fixed",
+          "pixels": 340
+         }
+        }
+       ],
+       "kind": "row",
+       "size": {
+        "kind": "fill"
+       }
+      },
+      {
+       "kind": "block",
+       "region": "context-bar",
+       "size": {
+        "kind": "content"
+       }
+      }
+     ],
+     "kind": "column",
+     "size": {
+      "kind": "fill"
+     }
+    }
+   ],
+   "kind": "row",
+   "size": {
+    "kind": "fill"
+   }
+  },
+  "sidebarCollapsed": false
+ },
+ "context": {
+  "id": "fleet-1",
+  "kind": "fleet"
+ },
+ "navigation": {
+  "lastFleet": "fleet-1"
+ },
+ "nextId": "100",
+ "selectedFleet": "fleet-1",
+ "selectedVoyage": "voyage-1",
+ "vessels": [
+  {
+   "backend": null,
+   "badge": {
+    "colour": "red"
+   },
+   "cwd": "/tmp",
+   "id": "vessel-1",
+   "typeId": "terminal"
+  },
+  {
+   "backend": null,
+   "configuration": {
+    "repo": "."
+   },
+   "cwd": "/tmp",
+   "id": "vessel-2",
+   "packageVersion": "1.2.0",
+   "typeId": "git-graph"
+  }
+ ],
+ "view": "fleet",
+ "voyages": [
+  {
+   "closedOrder": "0",
+   "cwd": "/tmp",
+   "fleets": [
+    {
+     "id": "fleet-1",
+     "name": "First",
+     "pinned": true,
+     "placements": [
+      {
+       "id": "placement-1",
+       "name": "Shell",
+       "vessel": "vessel-1"
+      },
+      {
+       "id": "placement-2",
+       "name": "Graph",
+       "vessel": "vessel-2"
+      }
+     ],
+     "root": {
+      "axis": "horizontal",
+      "first": {
+       "kind": "leaf",
+       "placement": "placement-1"
+      },
+      "kind": "branch",
+      "second": {
+       "kind": "leaf",
+       "placement": "placement-2"
+      },
+      "share": 5000
+     }
+    }
+   ],
+   "id": "voyage-1",
+   "name": "Written by main",
+   "portals": []
+  }
+ ]
+}

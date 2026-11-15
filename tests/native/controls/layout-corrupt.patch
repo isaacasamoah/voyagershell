@@ -1,0 +1,12 @@
+diff --git a/app/src/layout_store.rs b/app/src/layout_store.rs
+index ea17058..fc8084c 100644
+--- a/app/src/layout_store.rs
++++ b/app/src/layout_store.rs
+@@ -68,7 +68,6 @@ pub(crate) fn load(core: &mut Core, cwd: &str) -> Result<(Layout, u64, bool), Er
+             )))
+         }
+         Reading::Unreadable { message } => {
+-            back_up(core, source)?;
+             core.layout = LayoutKeep {
+                 kept: Kept::default(),
+                 notice: Some(format!(

@@ -2,6 +2,9 @@ mod arrangement;
 mod chat;
 mod input;
 mod layout;
+mod layout_compat;
+mod layout_corrupt;
+mod layout_refused;
 mod portals;
 mod profile;
 mod profile_updates;
@@ -109,6 +112,9 @@ journeys! {
     TerminalInput => "terminal-input" in input, sidebar: None, window: None;
     Profile => "profile" in profile, sidebar: None, window: None;
     ProfileUpdates => "profile-updates" in profile_updates, sidebar: None, window: None;
+    LayoutCompat => "layout-compat" in layout_compat, sidebar: Some(Sidebar::Open), window: Some((1180, 1000));
+    LayoutRefused => "layout-refused" in layout_refused, sidebar: None, window: None;
+    LayoutCorrupt => "layout-corrupt" in layout_corrupt, sidebar: None, window: None;
 }
 
 impl Journey {

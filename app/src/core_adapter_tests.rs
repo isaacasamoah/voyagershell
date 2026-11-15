@@ -141,6 +141,7 @@ fn quit_fences_cloned_viewer_input_without_closing_output_or_control() {
         sequence: 1,
         activity: Arc::default(),
         activity_supported: false,
+        layout: Default::default(),
     };
     assert!(matches!(
         core.terminal_get("expected"),
@@ -214,6 +215,7 @@ fn lifecycle_core(control: mpsc::SyncSender<Frame>, replies: Replies) -> Core {
         sequence: 1,
         activity,
         activity_supported: false,
+        layout: Default::default(),
     }
 }
 
@@ -338,6 +340,7 @@ fn dispatched_request_never_treats_malformed_or_lost_reply_as_refusal() {
             sequence: 1,
             activity: Arc::default(),
             activity_supported: false,
+            layout: Default::default(),
         };
         let result = core.rpc("doc.set", json!({}));
         worker.join().unwrap();

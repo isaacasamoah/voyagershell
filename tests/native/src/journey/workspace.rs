@@ -51,7 +51,7 @@ struct Created<Id> {
     shell: Terminal,
 }
 
-enum Open {
+pub(super) enum Open {
     DoubleClick,
     ClickThenF2,
 }
@@ -62,14 +62,14 @@ enum Outcome {
     Kept,
 }
 
-enum Finish<'a> {
+pub(super) enum Finish<'a> {
     Enter,
     Blur(&'a Target),
     Escape,
 }
 
 #[derive(Serialize)]
-struct Renamed {
+pub(super) struct Renamed {
     #[serde(skip)]
     subject: RenameTarget,
     before: String,
@@ -604,7 +604,7 @@ fn modelled(native: &Native, model: &Model, verdict: Verdict) -> Result<Verdict>
         .observed("differences from the model", &differences)
 }
 
-fn rename(
+pub(super) fn rename(
     native: &Native,
     subject: &RenameTarget,
     open: Open,

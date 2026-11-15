@@ -1,0 +1,86 @@
+{
+ "arrangements": [],
+ "canvas": {
+  "portalMode": "overlay",
+  "root": {
+   "children": [
+    {
+     "kind": "block",
+     "region": "sidebar",
+     "size": {
+      "kind": "fixed",
+      "pixels": 224
+     }
+    },
+    {
+     "children": [
+      {
+       "kind": "block",
+       "region": "fleet-strip",
+       "size": {
+        "kind": "fixed",
+        "pixels": 40
+       }
+      },
+      {
+       "children": [
+        {
+         "kind": "block",
+         "region": "active-fleet",
+         "size": {
+          "kind": "fill"
+         }
+        },
+        {
+         "kind": "block",
+         "region": "portals",
+         "size": {
+          "kind": "fixed",
+          "pixels": 340
+         }
+        }
+       ],
+       "kind": "row",
+       "size": {
+        "kind": "fill"
+       }
+      },
+      {
+       "kind": "block",
+       "region": "context-bar",
+       "size": {
+        "kind": "content"
+       }
+      }
+     ],
+     "kind": "column",
+     "size": {
+      "kind": "fill"
+     }
+    }
+   ],
+   "kind": "row",
+   "size": {
+    "kind": "fill"
+   }
+  },
+  "sidebarCollapsed": false
+ },
+ "context": {
+  "id": "fleet-1",
+  "kind": "fleet"
+ },
+ "nextId": "100",
+ "selectedFleet": "fleet-1",
+ "selectedVoyage": "voyage-1",
+ "vessels": [
+  {
+   "backend": null,
+   "cwd": "/tmp",
+   "id": "vessel-1",
+   "typeId": "terminal"
+  }
+ ],
+ "view": "fleet",
+ "voyages": 3
+}

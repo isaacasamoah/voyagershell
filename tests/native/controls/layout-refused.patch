@@ -1,0 +1,13 @@
+diff --git a/contract/src/layout_document.rs b/contract/src/layout_document.rs
+index caf8528..6464892 100644
+--- a/contract/src/layout_document.rs
++++ b/contract/src/layout_document.rs
+@@ -61,7 +61,7 @@ pub fn read_at(mut raw: Value, level: u64) -> Reading {
+             }
+         },
+     };
+-    if let Some(stamp) = min_reader.filter(|stamp| *stamp > level) {
++    if let Some(stamp) = min_reader.filter(|stamp| *stamp > level + 100) {
+         return Reading::Newer { min_reader: stamp };
+     }
+     let min_reader = min_reader.filter(|stamp| *stamp > 1);
