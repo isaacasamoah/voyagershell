@@ -11,7 +11,9 @@
     "format:check": "prettier --check contract/build.cjs 'tests/architecture/*.cjs' app/core-schema.cjs 'desktop/*.{cjs,json}' 'desktop/canvas/**/*.{ts,js,json}' 'desktop/themes/*.json' 'content/**/*.{ts,js,json}'",
     "typecheck": "node desktop/typecheck.cjs --check",
     "scripts:generate": "node desktop/typecheck.cjs --write",
-    "architecture:check": "node tests/architecture/gate.cjs"
+    "architecture:check": "node tests/architecture/gate.cjs",
+    "vocabulary:check": "node tests/architecture/vocabulary.cjs",
+    "vocabulary:generate": "node tests/architecture/vocabulary.cjs --generate"
   },
   "devDependencies": {
     "ajv": "8.20.0",

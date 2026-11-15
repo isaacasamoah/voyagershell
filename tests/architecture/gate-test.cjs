@@ -554,25 +554,44 @@ for (const [file, line, group] of PLANTS) {
   });
 }
 
+function codemod(directory, stage) {
+  const result = spawnSync(
+    "node",
+    [
+      path.join(__dirname, "vocabulary.cjs"),
+      "--repository",
+      directory,
+      "--apply",
+      stage,
+    ],
+    { encoding: "utf8", env: ENV },
+  );
+  return { status: result.status, out: result.stdout, err: result.stderr };
+}
+
+function vocabularyCheck(directory, extra = []) {
+  execFileSync("git", ["add", "-A"], { cwd: directory });
+  const result = spawnSync(
+    "node",
+    [
+      path.join(__dirname, "vocabulary.cjs"),
+      "--repository",
+      directory,
+      ...extra,
+    ],
+    { encoding: "utf8", env: ENV },
+  );
+  return { status: result.status, out: result.stdout, err: result.stderr };
+}
+
 test("a link into another repository passes the vocabulary rule and the codemod leaves it", () => {
   const link = `[Herdr](https://github.com/herdrdev/herdr-app/blob/x/defaults/${["mo", "ds"].join("")}/worktree/main.js)`;
   const directory = scratch();
   edit(directory, "docs/workspace.md", (text) => `${text}\n${link}\n`);
   const result = run(directory);
-  assert.strictEqual(result.status, 0, result.stdout + result.stderr);
+  assert.strictEqual(result.status, 0, result.out + result.err);
   execFileSync("git", ["add", "-A"], { cwd: directory });
-  for (const stage of ["2", "5"])
-    spawnSync(
-      "node",
-      [
-        path.join(__dirname, "vocabulary.cjs"),
-        "--repository",
-        directory,
-        "--apply",
-        stage,
-      ],
-      { encoding: "utf8", env: ENV },
-    );
+  for (const stage of ["2", "5"]) codemod(directory, stage);
   assert.ok(
     fs
       .readFileSync(path.join(directory, "docs/workspace.md"), "utf8")
@@ -585,20 +604,294 @@ test("the codemod rewrites a planted old word with the table", () => {
   const planted = path.join(directory, "app/src/planted.rs");
   fs.writeFileSync(planted, `pub struct ${OLD_WORD}(pub String);\n`);
   execFileSync("git", ["add", "-A"], { cwd: directory });
-  const result = spawnSync(
-    "node",
-    [
-      path.join(__dirname, "vocabulary.cjs"),
-      "--repository",
-      directory,
-      "--apply",
-      "3",
-    ],
-    { encoding: "utf8", env: ENV },
-  );
-  assert.strictEqual(result.status, 0, result.stdout + result.stderr);
+  const result = codemod(directory, "3");
+  assert.strictEqual(result.status, 0, result.out + result.err);
   assert.strictEqual(
     fs.readFileSync(planted, "utf8"),
     "pub struct VesselId(pub String);\n",
+  );
+});
+
+const join = (...parts) => parts.join("");
+const OLD_UI = join("hea", "der");
+const OLD_PKG = join("m", "od");
+const OLD_URL = `https://github.com/isaacasamoah/voyagershell/blob/main/desktop/${OLD_PKG}s/${OLD_UI}/main.ts`;
+
+const FORMS = [
+  [
+    "an upper-case identifier",
+    "tests/native/src/journey/scrolling.rs",
+    `const ${OLD_UI.toUpperCase()}_REFRESH: u32 = 3;`,
+    "canvas-package",
+  ],
+  [
+    "a snake-case identifier",
+    "desktop/src/lib.rs",
+    `const ${OLD_UI}_renders: u32 = 1;`,
+    "canvas-package",
+  ],
+  [
+    "a camel-case identifier",
+    "desktop/canvas/main.ts",
+    `const ${OLD_UI}Height = 1;`,
+    "canvas-package",
+  ],
+  [
+    "a pascal-case identifier",
+    "desktop/src/lib.rs",
+    `struct ${join("Hea", "der")}Bar;`,
+    "canvas-package",
+  ],
+  [
+    "a plural in prose",
+    "docs/workspace.md",
+    `The ${OLD_UI}s are drawn.`,
+    "canvas-package",
+  ],
+  [
+    "a snake-case module",
+    "app/src/lib.rs",
+    `use crate::${join("content", "_type")}::X;`,
+    "content-words",
+  ],
+  [
+    "a camel-case phrase",
+    "desktop/canvas/main.ts",
+    `const ${join("content", "Type")} = 1;`,
+    "content-words",
+  ],
+  [
+    "a title-case phrase",
+    "docs/content.md",
+    `A ${join("Content", " Type")} is a thing.`,
+    "content-words",
+  ],
+  [
+    "an upper-case phrase",
+    "docs/content.md",
+    `A ${join("CONTENT", " TYPE")} is a thing.`,
+    "content-words",
+  ],
+  [
+    "a hyphenated phrase",
+    "tests/native/proof_conversation.py",
+    `op = "x-${join("content", "-package")}"`,
+    "content-words",
+  ],
+  [
+    "a phrase split across lines",
+    "docs/content.md",
+    `A ${join("content", "")}\n${join("type", " is a thing.")}`,
+    "content-words",
+  ],
+  [
+    "a phrase split across comment lines",
+    "app/src/lib.rs",
+    `// the ${join("content", "")}\n// ${join("package", " is")}`,
+    "content-words",
+  ],
+  [
+    "an identifier id form",
+    "docs/content.md",
+    `The ${join("content", " ID")} is stable.`,
+    "vessel-ids",
+  ],
+  [
+    "a path in this repository's own URL",
+    "docs/content.md",
+    `See ${OLD_URL}.`,
+    "canvas-package",
+  ],
+  [
+    "a word in an svg",
+    "desktop/canvas/home.svg",
+    `<text>${OLD_UI}</text>`,
+    "canvas-package",
+  ],
+  [
+    "a word in a file with no extension",
+    "LICENSE",
+    `${OLD_UI} of the license`,
+    "canvas-package",
+  ],
+  [
+    "a nickname identifier",
+    "tests/native/proof_workspace.py",
+    `${OLD_PKG}_host = 1`,
+    "package-nickname",
+  ],
+  [
+    "a nickname camel-case identifier",
+    "desktop/canvas/main.ts",
+    `const notes${join("M", "od")} = 1;`,
+    "package-nickname",
+  ],
+  [
+    "a legacy name identifier",
+    "desktop/canvas/main.ts",
+    `const ${join("real", "m")}Id = 1;`,
+    "legacy-names",
+  ],
+];
+
+const vocabulary = require("./vocabulary.cjs");
+const TABLE = vocabulary.load();
+const groups = (file, text) =>
+  new Set(vocabulary.scan(TABLE, [file], () => text).keys());
+
+for (const [form, file, line, group] of FORMS)
+  test(`the vocabulary scan names ${form} in ${file}`, () => {
+    assert.ok(groups(file, `${line}\n`).has(group), `${group} missing`);
+  });
+
+const ALLOWED = [
+  ["a Rust module declaration", "app/src/lib.rs", `pub ${OLD_PKG} planted;`],
+  [
+    "a Rust module declaration quoted in prose",
+    "docs/content.md",
+    `Declare it with \`${OLD_PKG} planted;\` in the library.`,
+  ],
+  [
+    "a nested Rust module",
+    "app/src/lib.rs",
+    `#[cfg(test)]\n${OLD_PKG} planted {\n}`,
+  ],
+  [
+    "the English word content",
+    "docs/content.md",
+    "The content of a note stays when its type changes.",
+  ],
+  ["words that contain the old word", "docs/content.md", "A modal model."],
+  [
+    "a named exception",
+    "README.md",
+    `Run it with --native-${OLD_PKG}-host for the legacy route.`,
+  ],
+  [
+    "the wire frame word",
+    "app/src/wire.rs",
+    `const FRAME_${OLD_UI.toUpperCase()}: usize = 4;`,
+  ],
+  [
+    "another repository's URL",
+    "docs/content.md",
+    `See https://github.com/herdrdev/herdr-app/blob/x/defaults/${OLD_PKG}s/${OLD_UI}/main.js.`,
+  ],
+  [
+    "this repository's current path",
+    "docs/content.md",
+    "See https://github.com/isaacasamoah/voyagershell/blob/main/desktop/canvas/main.ts.",
+  ],
+];
+
+for (const [form, file, line] of ALLOWED)
+  test(`the vocabulary scan passes ${form} in ${file}`, () => {
+    assert.deepStrictEqual([...groups(file, `${line}\n`)], []);
+  });
+
+test("the gate names a planted retired form end to end", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "docs/content.md",
+    (text) => `${text}\nA ${join("Content", " Type")} is a thing.\n`,
+  );
+  const result = run(directory);
+  expectFailure(result, "NEW one-vocabulary: content-words has");
+  assert.doesNotMatch(result.out, /NaN/);
+});
+
+test("the codemod swaps an identifier form and keeps its case", () => {
+  const directory = scratch();
+  const planted = path.join(directory, "desktop/src/planted.rs");
+  fs.writeFileSync(
+    planted,
+    `const ${OLD_UI.toUpperCase()}_REFRESH: u32 = 1;\nfn ${OLD_UI}_renders() {}\nstruct ${join("Hea", "der")}Bar;\n`,
+  );
+  execFileSync("git", ["add", "-A"], { cwd: directory });
+  const result = codemod(directory, "6");
+  assert.strictEqual(result.status, 0, result.out + result.err);
+  assert.strictEqual(
+    fs.readFileSync(planted, "utf8"),
+    "const CANVAS_REFRESH: u32 = 1;\nfn canvas_renders() {}\nstruct CanvasBar;\n",
+  );
+});
+
+test("the codemod rewrites a Python get of an old stored key", () => {
+  const directory = scratch();
+  const planted = path.join(directory, "tests/native/planted.py");
+  fs.writeFileSync(
+    planted,
+    'a = layout.get("contents")\nb = p.get("content")\n',
+  );
+  execFileSync("git", ["add", "-A"], { cwd: directory });
+  assert.strictEqual(codemod(directory, "3").status, 0);
+  assert.strictEqual(
+    fs.readFileSync(planted, "utf8"),
+    'a = layout.get("vessels")\nb = p.get("vessel")\n',
+  );
+});
+
+test("the vocabulary check passes on the current checkout", () => {
+  const result = vocabularyCheck(scratch());
+  assert.strictEqual(result.status, 0, result.out + result.err);
+  assert.match(result.out, /PASS\n$/);
+});
+
+test("the vocabulary check names a stale glossary", () => {
+  const directory = scratch();
+  edit(directory, "docs/glossary.md", (text) => `${text}\nextra\n`);
+  const result = vocabularyCheck(directory);
+  assert.strictEqual(result.status, 1);
+  assert.match(
+    result.out,
+    /docs\/glossary.md is stale, run npm run vocabulary:generate/,
+  );
+});
+
+test("the vocabulary check names a word with two owners or no meaning", () => {
+  const directory = scratch();
+  edit(
+    directory,
+    "tests/architecture/vocabulary.yaml",
+    (text) =>
+      `${text.replace("  - term: Fleet\n", "  - term: Voyage\n    context: placement\n    meaning: 'Again.'\n  - term: Fleet\n")}`,
+  );
+  const result = vocabularyCheck(directory, [
+    "--table",
+    path.join(directory, "tests/architecture/vocabulary.yaml"),
+  ]);
+  assert.strictEqual(result.status, 1);
+  assert.match(result.out, /term Voyage is defined twice/);
+});
+
+test("the vocabulary check names a retired word in a definition", () => {
+  const directory = scratch();
+  edit(directory, "tests/architecture/vocabulary.yaml", (text) =>
+    text.replace("A tab in a Voyage.", `A ${OLD_UI} in a Voyage.`),
+  );
+  const result = vocabularyCheck(directory, [
+    "--table",
+    path.join(directory, "tests/architecture/vocabulary.yaml"),
+  ]);
+  assert.strictEqual(result.status, 1);
+  assert.ok(
+    result.out.includes(`term Fleet uses the retired word "${OLD_UI}"`),
+  );
+});
+
+test("the vocabulary check names a context that owns a missing file", () => {
+  const directory = scratch();
+  edit(directory, "tests/architecture/vocabulary.yaml", (text) =>
+    text.replace("app/src/core.rs,", "app/src/gone.rs,"),
+  );
+  const result = vocabularyCheck(directory, [
+    "--table",
+    path.join(directory, "tests/architecture/vocabulary.yaml"),
+  ]);
+  assert.strictEqual(result.status, 1);
+  assert.match(
+    result.out,
+    /context core-adapter owns app\/src\/gone.rs, which has no file/,
   );
 });
