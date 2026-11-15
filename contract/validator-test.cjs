@@ -225,3 +225,28 @@ test("process schema keeps integer bounds and excludes caller authority", async 
     false,
   );
 });
+
+test("a workspace reply says applied, refused or uncertain, with or without the owner's answer", async () => {
+  const { response } = await import("./generated/validate.js");
+  const examples = require("./tests/replies.json");
+  assert.deepEqual(Object.keys(examples), [
+    "applied",
+    "refused",
+    "uncertain",
+    "unansweredRefused",
+    "unansweredUncertain",
+  ]);
+  for (const [name, reply] of Object.entries(examples))
+    assert.equal(response(reply), true, name);
+  assert.equal(response({ ...examples.refused, status: "rejected" }), false);
+  const { layout: _layout, ...withoutLayout } = examples.applied;
+  assert.equal(response(withoutLayout), false);
+  const unanswered = examples.unansweredRefused;
+  assert.equal(response({ ...unanswered, status: "applied" }), false);
+  assert.equal(response({ ...unanswered, status: "rejected" }), false);
+  assert.equal(response({ ...unanswered, kind: "busy" }), false);
+  const { message: _message, ...withoutReason } = unanswered;
+  assert.equal(response(withoutReason), false);
+  const { requestId: _requestId, ...withoutRequest } = unanswered;
+  assert.equal(response(withoutRequest), false);
+});

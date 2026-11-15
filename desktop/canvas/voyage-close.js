@@ -1,12 +1,14 @@
 import { div } from "gpui-kit";
 import { Marker } from "voyager_native";
 import { invoke } from "./workspace.js";
+import { outcome } from "./status.js";
 import { actionButton, dialogActions } from "./ui.js";
 export class VoyageClose {
   constructor() {
     this.current = null;
     this.pending = false;
     this.message = "";
+    this.answer = "";
     this.inspection = false;
   }
   observe(plan) {
@@ -18,9 +20,14 @@ export class VoyageClose {
     }
     this.inspection = false;
     const opening = this.current?.id !== plan.id;
+    const unchanged =
+      !opening &&
+      this.current?.phase === plan.phase &&
+      this.current.message === plan.message;
     this.current = plan;
     this.pending = plan.phase === "saving";
-    this.message = plan.message || "";
+    if (!unchanged) this.answer = "";
+    this.message = this.answer || plan.message || "";
     if (opening)
       window.open_dialog(() => this.render() || div(), {
         escape_dismissable: false,
@@ -47,10 +54,14 @@ export class VoyageClose {
         if (result.status === "applied") this.observe(result.closePlan);
         else {
           this.pending = false;
-          this.current = result.closePlan || plan;
-          this.message =
-            result.message ||
-            "Shutdown was not confirmed. Inspect the Voyage before trying again.";
+          const answered = "layout" in result;
+          if (answered && result.closePlan) this.current = result.closePlan;
+          this.message = outcome(result);
+          this.answer = answered ? this.message : "";
+          if (!answered && result.status === "uncertain") {
+            this.inspection = true;
+            this.message += ". Inspect the Voyage before another request.";
+          }
         }
       } catch (error) {
         if (this.current?.id !== plan.id) return;
@@ -68,11 +79,12 @@ export class VoyageClose {
     cx.spawn(async (task) => {
       try {
         const result = await invoke({ operation: "inspect" }, "0");
-        if (result.status === "applied" && result.fresh)
+        if (result.status === "applied" && result.fresh) {
+          this.answer = "";
           this.observe(result.closePlan);
-        else {
+        } else {
           this.inspection = true;
-          this.message = result.message || "Shutdown could not be inspected.";
+          this.message = outcome(result) || "Shutdown could not be inspected.";
         }
       } catch (error) {
         this.inspection = true;
@@ -140,7 +152,13 @@ export class VoyageClose {
             `${plan.uncommittedChanges} uncommitted ${plan.uncommittedChanges === 1 ? "change" : "changes"}. Files and the branch will remain on disk.`,
           ),
       );
-    if (this.message) panel.child(div().text_size(11).child(this.message));
+    if (this.message)
+      panel.child(
+        div()
+          .text_size(11)
+          .child(this.message)
+          .child(Marker.new("voyage-close-status", plan.voyage, this.message)),
+      );
     const actions = dialogActions().child(
       actionButton("voyage-close-cancel", "Cancel Voyage close")
         .disabled(this.pending)

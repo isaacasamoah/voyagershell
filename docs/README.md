@@ -223,8 +223,8 @@ from step 4. Open each file as you read and find the named function.
 6. `Core::document_set` in [`app/src/core.rs`](../app/src/core.rs) saves the
    whole `Layout` as the Core document `voyager-layout-v2` (see [the stored layout across builds](workspace.md#the-stored-layout-across-builds)). Only after Core
    accepts the save does the owner adopt the new layout.
-7. The response carries a `Status` of `Applied`, `Rejected` or `Uncertain`.
-   Rejected means nothing changed. Uncertain means the effect may have happened,
+7. The response carries an `Outcome` of `Applied`, `Refused` or `Uncertain`.
+   Refused means nothing changed. Uncertain means the effect may have happened,
    and the app never repeats it automatically.
 8. The script adopts the new layout and calls `openTerminal`. `open_terminal` in
    `app/src/client.rs` saves a start marker to Core before it starts the

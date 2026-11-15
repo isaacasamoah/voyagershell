@@ -1,3 +1,4 @@
+export type Reply = Response | Unanswered;
 export type Phase = "ready" | "saving" | "incomplete" | "closed";
 export type PlacementOwner =
   | {
@@ -95,7 +96,8 @@ export type Launch =
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 export type Permissions = "yolo" | "workspace-write" | "read-only";
 export type WorkspaceView = "home" | "fleet";
-export type Status = "applied" | "rejected" | "uncertain";
+export type Outcome = "applied" | "refused" | "uncertain";
+export type Unapplied = "refused" | "uncertain";
 
 export interface Response {
   closePlan?: Plan | null;
@@ -105,7 +107,7 @@ export interface Response {
   layout: Layout;
   message?: string | null;
   requestId: string;
-  status: Status;
+  status: Outcome;
   version: string;
 }
 export interface Plan {
@@ -192,4 +194,9 @@ export interface Vessel {
   shellIntent?: string | null;
   startPending?: string | null;
   typeId: string;
+}
+export interface Unanswered {
+  message: string;
+  requestId: string;
+  status: Unapplied;
 }

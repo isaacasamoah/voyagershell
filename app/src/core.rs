@@ -28,6 +28,7 @@ mod hello;
 pub use hello::{Incompatible, MINIMUM_CORE};
 #[path = "core_pending.rs"]
 mod pending;
+pub(crate) use pending::DEADLINE;
 pub(crate) use pending::Pending;
 #[path = "core_reader.rs"]
 mod reader;

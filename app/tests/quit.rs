@@ -13,7 +13,7 @@ mod linux {
         core::Core,
         core_shapes::RunParams,
     };
-    use voyager_contract::{Action, Axis, Request, Status, launch::Launch};
+    use voyager_contract::{Action, Axis, Outcome, Request, launch::Launch};
 
     fn wait<T>(future: impl Future<Output = T>) -> T {
         let mut future = Box::pin(future);
@@ -84,7 +84,7 @@ mod linux {
                 action,
             })
             .unwrap();
-        assert_eq!(value.status, Status::Applied);
+        assert_eq!(value.status, Outcome::Applied);
         value
     }
 
@@ -241,7 +241,7 @@ mod linux {
                     },
                 })
                 .unwrap();
-            assert_eq!(rejected.status, Status::Rejected);
+            assert_eq!(rejected.status, Outcome::Refused);
             assert!(rejected.message.unwrap().contains("quitting"));
             let retained = snapshot.layout.vessels.last().unwrap();
             let refused =
@@ -452,7 +452,7 @@ mod linux {
                     },
                 })
                 .unwrap();
-            assert_eq!(rejected.status, Status::Rejected);
+            assert_eq!(rejected.status, Outcome::Refused);
             drop(viewer);
         }));
         let stop = core.server_stop();

@@ -21,9 +21,14 @@ use voyager_contract::{
 
 #[path = "client_core.rs"]
 mod core_calls;
+#[path = "client_reply.rs"]
+mod reply;
 use crate::front_door::{Admission, Envelope, FrontDoor, Kind, Outcome, WAITING};
 use crate::layout_store::{begin_save, carry_notice, load, save};
 use core_calls::{Listing, Observer, changed_layout, commit, live, next_message, post};
+
+pub(crate) const WORKSPACE_WAIT: Duration = Duration::from_secs(22);
+const _: () = assert!(crate::core::DEADLINE.as_secs() < WORKSPACE_WAIT.as_secs());
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WorkspaceNotice {
@@ -176,7 +181,7 @@ impl ContentReply {
 
 #[derive(Clone)]
 struct Settled {
-    status: Status,
+    status: voyager_contract::Outcome,
     message: Option<String>,
     created_workspace: bool,
     close_plan: Option<voyager_contract::voyage_close::Plan>,
@@ -584,7 +589,7 @@ impl Client {
                             Ok(())
                         });
                         let status = Outcome::from(result.clone()).status();
-                        if status == Status::Uncertain {
+                        if status == voyager_contract::Outcome::Uncertain {
                             fresh = false;
                         }
                         closing.finish(result);
@@ -1576,7 +1581,7 @@ impl Client {
                 let inspecting = matches!(request.action, Action::Inspect);
                 let mut response = Response {
                     request_id: request.request_id.clone(),
-                    status: Status::Rejected,
+                    status: voyager_contract::Outcome::Refused,
                     version,
                     layout: crate::scope::project(&layout, scope.as_ref()),
                     fresh,
@@ -1604,7 +1609,7 @@ impl Client {
                             continue;
                         }
                         Admission::Pending(message) => {
-                            response.status = Status::Uncertain;
+                            response.status = voyager_contract::Outcome::Uncertain;
                             response.message = Some(message);
                             let _ = reply.send(response);
                             continue;
@@ -1616,7 +1621,7 @@ impl Client {
                         }
                     }
                     if door.quitting() {
-                        response.status = Status::Applied;
+                        response.status = voyager_contract::Outcome::Applied;
                         response.fresh = false;
                         let _ = reply.send(response);
                         continue;
@@ -2019,7 +2024,7 @@ impl Client {
                 };
                 let deferred = matches!(step, Ok(Step::Deferred));
                 match Outcome::from(step) {
-                    Outcome::Applied(_) => response.status = Status::Applied,
+                    Outcome::Applied(_) => response.status = voyager_contract::Outcome::Applied,
                     Outcome::Refused { kind, message } => {
                         if inspecting || kind == "conflict" {
                             fresh = false;
@@ -2028,7 +2033,7 @@ impl Client {
                     }
                     Outcome::Uncertain(message) => {
                         fresh = false;
-                        response.status = Status::Uncertain;
+                        response.status = voyager_contract::Outcome::Uncertain;
                         response.message = Some(message);
                     }
                 }
@@ -2070,7 +2075,7 @@ impl Client {
                     }
                 }
                 let prepare_dock = matches!(request.action, Action::Dock { .. })
-                    && response.status == Status::Applied
+                    && response.status == voyager_contract::Outcome::Applied
                     && fresh;
                 let receipt = Receipt::Workspace(Settled {
                     status: response.status.clone(),
@@ -2433,7 +2438,7 @@ impl Client {
             return Err(CallError::Rejected("Notes view is not active".into()));
         }
         let observed = self.queue_inspection()?.wait()?;
-        if observed.status != Status::Applied || !observed.fresh {
+        if observed.status != voyager_contract::Outcome::Applied || !observed.fresh {
             return Err(CallError::Rejected(
                 "Inspect the workspace before closing Notes".into(),
             ));
@@ -2499,14 +2504,8 @@ impl Client {
             .map_err(|_| "Workspace observation was not confirmed".to_owned())?
     }
 
-    pub fn call(&self, request: Request) -> Result<Response, String> {
-        self.bound_call(None, request).map_err(|error| match error {
-            CallError::Rejected(message) | CallError::Unconfirmed(message) => message,
-        })
-    }
-
     pub fn scoped_call(&self, scope: Context, request: Request) -> Result<Response, CallError> {
-        self.bound_call(Some(scope), request)
+        self.queue_workspace(Some(scope), request)?.wait()
     }
 
     pub fn worktree(
@@ -2554,10 +2553,6 @@ impl Client {
         })
     }
 
-    fn bound_call(&self, scope: Option<Context>, request: Request) -> Result<Response, CallError> {
-        self.queue_workspace(scope, request)?.wait()
-    }
-
     pub(crate) fn queue_inspection(&self) -> Result<PendingCall, CallError> {
         self.queue_workspace(
             None,
@@ -2578,7 +2573,7 @@ impl Client {
         let timeout = if matches!(request.action, Action::ConfirmVoyageClose { .. }) {
             Duration::from_secs(120)
         } else {
-            Duration::from_secs(20)
+            WORKSPACE_WAIT
         };
         self.sender
             .try_send(Message::Workspace {
@@ -3394,6 +3389,7 @@ fn configure(
 #[cfg(test)]
 mod terminal_outcome_tests {
     use super::*;
+    use voyager_contract::Outcome;
 
     #[test]
     fn worktree_creation_opens_one_voyage_and_reopens_its_identity() {
@@ -3440,7 +3436,7 @@ mod terminal_outcome_tests {
                     .unwrap()
             };
             let initial = inspect();
-            assert_eq!(initial.status, Status::Applied);
+            assert_eq!(initial.status, Outcome::Applied);
             let source = initial.layout.voyages[0].id.clone();
             let refused = client
                 .worktree(
@@ -3560,7 +3556,7 @@ mod terminal_outcome_tests {
                 action,
             };
             let initial = client.call(request(0, Action::Inspect)).unwrap();
-            assert_eq!(initial.status, Status::Applied, "{:?}", initial.message);
+            assert_eq!(initial.status, Outcome::Applied, "{:?}", initial.message);
             let panel = initial.layout.voyages[0].fleets[0].placements[0].clone();
             let _viewer = client
                 .terminal(panel.vessel.clone(), client.request_id(), initial.version)
@@ -3575,7 +3571,7 @@ mod terminal_outcome_tests {
                     },
                 ))
                 .unwrap();
-            assert_eq!(created.status, Status::Applied);
+            assert_eq!(created.status, Outcome::Applied);
             let target = created.layout.voyages[0].fleets[1].clone();
             let _other_viewer = client
                 .terminal(
@@ -3627,7 +3623,7 @@ mod terminal_outcome_tests {
                     },
                 ))
                 .unwrap();
-            assert_eq!(closed.status, Status::Applied);
+            assert_eq!(closed.status, Outcome::Applied);
             let action = Action::ReopenPlacement {
                 id: panel.id.clone(),
                 destination: ContentDestination::Placement {
@@ -3646,13 +3642,13 @@ mod terminal_outcome_tests {
             let stale = client
                 .call(request(closed.version, action.clone()))
                 .unwrap();
-            assert_eq!(stale.status, Status::Rejected);
+            assert_eq!(stale.status, Outcome::Refused);
             assert_eq!(stale.version, external.version);
             assert_eq!(stale.layout, closed.layout);
             let inspected = client.call(request(0, Action::Inspect)).unwrap();
             let reopen = request(inspected.version, action.clone());
             let opened = client.call(reopen.clone()).unwrap();
-            assert_eq!(opened.status, Status::Applied);
+            assert_eq!(opened.status, Outcome::Applied);
             assert_eq!(client.call(reopen).unwrap(), opened);
             assert_eq!(opened.layout.vessels, bound.layout.vessels);
             assert!(opened.layout.voyages[0].fleets[0].placements.is_empty());
@@ -3676,7 +3672,7 @@ mod terminal_outcome_tests {
                 thread::sleep(Duration::from_millis(10));
             }
             let refused = client.call(request(closed.version, action)).unwrap();
-            assert_eq!(refused.status, Status::Rejected);
+            assert_eq!(refused.status, Outcome::Refused);
             assert_eq!(refused.layout, closed.layout);
             assert_eq!(refused.version, closed.version);
             assert_eq!(core.terminal_list().unwrap().len(), 2);

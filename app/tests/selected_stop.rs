@@ -2,7 +2,7 @@ use serde_json::json;
 use std::{panic, time::SystemTime};
 use voyager_app::{client::Client, core::Core};
 use voyager_contract::{
-    Action, Context, Request, Status,
+    Action, Context, Outcome, Request, Status,
     administrator::{ProcessAction, ProcessInput, ProcessOutput, ProcessRequest},
 };
 
@@ -241,7 +241,7 @@ fn delayed_process_send_does_not_hold_workspace_inspection() {
                 },
             })
             .unwrap();
-        assert_eq!(dock.status, Status::Applied);
+        assert_eq!(dock.status, Outcome::Applied);
         let sent = sending.join().unwrap();
         assert_eq!(*client.process(Context::Workspace, request).unwrap(), *sent);
         assert!(

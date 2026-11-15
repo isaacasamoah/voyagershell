@@ -245,7 +245,7 @@ impl Owner {
                         | crate::client::CallError::Unconfirmed(message) => message,
                     })
                     .and_then(|snapshot| {
-                        if snapshot.status != Status::Applied || !snapshot.fresh {
+                        if snapshot.status != WorkspaceOutcome::Applied || !snapshot.fresh {
                             return Err(
                                 "Native voice could not inspect its accepted workspace focus"
                                     .into(),
@@ -316,6 +316,7 @@ const VOICE_INSTRUCTIONS: &str = "You are Voyager, the human's concise private v
 mod tests {
     use super::*;
     use crate::core::Core;
+    use voyager_contract::{Action as WorkspaceAction, Request as WorkspaceRequest};
 
     #[test]
     fn a_known_stop_refusal_settles_only_after_closed_and_confirmed_helper_exit() {
@@ -467,7 +468,7 @@ mod tests {
                     },
                 })
                 .unwrap();
-            assert_eq!(later.status, Status::Applied);
+            assert_eq!(later.status, WorkspaceOutcome::Applied);
             let CapturedScope::Turn {
                 generation,
                 turn,
@@ -503,7 +504,7 @@ mod tests {
                     .as_deref(),
                 Some("private-thread")
             );
-            assert_eq!(completed.outcome.status, Status::Applied);
+            assert_eq!(completed.outcome.status, voyager_contract::Status::Applied);
             assert_eq!(inspect().version, later.version);
             let effect = json!({"id":"effect-callback","method":"item/tool/call","params":{"threadId":"private-thread","turnId":"native-turn","callId":"fleet-effect","tool":"voyager_workspace","arguments":{"expectedVersion":later.version.to_string(),"action":{"operation":"create-fleet","voyage":initial.layout.voyages[0].id,"name":"Voice context"}}}});
             owner.event(effect.clone()).unwrap();

@@ -3,7 +3,7 @@ use crate::provider::{ToolCall, ToolDefinition, ToolReply, ToolResult};
 use serde_json::{Value, json};
 use std::{sync::mpsc, thread};
 use voyager_contract::{
-    Action, Request, Status,
+    Action, Outcome, Request, Status,
     administrator::{
         ProcessAction, ProcessInput, ProcessOutput, ProcessRequest, ToolAction, WorkspaceInput,
     },
@@ -385,9 +385,9 @@ impl Tools {
                                 json!({"requestId":response.request_id,"status":response.status,"version":response.version.to_string(),"fresh":response.fresh,"message":format!("{text}. Layout omitted because it exceeds the tool response bound. Inspect a narrower focus for details.")}).to_string()
                             };
                             EffectResult {
-                                value: result(response.status == Status::Applied, output),
+                                value: result(response.status == Outcome::Applied, output),
                                 text,
-                                status: response.status,
+                                status: response.status.into(),
                                 version: Some(response.version.to_string()),
                             }
                         }
@@ -704,9 +704,9 @@ fn process_text(status: &Status, output: Option<&ProcessOutput>, message: Option
     }
 }
 
-fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> String {
+fn outcome_text(action: &Action, status: &Outcome, message: Option<&str>) -> String {
     match status {
-        Status::Applied => match action {
+        Outcome::Applied => match action {
             Action::Inspect => "Workspace inspected",
             Action::SetPlacementMaximized {
                 maximized: true, ..
@@ -747,11 +747,11 @@ fn outcome_text(action: &Action, status: &Status, message: Option<&str>) -> Stri
             Action::StartNewShell { .. } => "New shell authorized",
         }
         .into(),
-        Status::Rejected => format!(
+        Outcome::Refused => format!(
             "Workspace request refused: {}",
             message.unwrap_or("The requested change was not applied")
         ),
-        Status::Uncertain => format!(
+        Outcome::Uncertain => format!(
             "Workspace result unconfirmed; do not repeat. {}",
             message.unwrap_or("The result was not confirmed")
         ),
@@ -853,7 +853,7 @@ mod tests {
                 },
                 initial.version,
             );
-            assert_eq!(created.status, Status::Applied);
+            assert_eq!(created.status, Outcome::Applied);
             let a = created.layout.vessels.last().unwrap().id.clone();
             let placement = created.layout.voyages[0].fleets[0]
                 .placements

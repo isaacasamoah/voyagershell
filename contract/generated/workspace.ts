@@ -1,10 +1,10 @@
 import { call, request_id, terminal_open } from "voyager_workspace";
 import { request as validateRequest, response as validateResponse, terminalRequest as validateTerminalRequest, terminalResponse as validateTerminalResponse } from "./validate.js";
 import type { Request } from "./request";
-import type { Response } from "./response";
+import type { Reply } from "./response";
 import type { TerminalRequest } from "./terminalRequest";
 import type { TerminalResponse } from "./terminalResponse";
-export async function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Response> {
+export async function invoke(action: Request["action"], expectedVersion: Request["expectedVersion"]): Promise<Reply> {
   const request: Request = { requestId: request_id(), expectedVersion, action };
   if (!validateRequest(request)) throw Error("Invalid workspace request");
   const response: unknown = JSON.parse(await call(JSON.stringify(request)));

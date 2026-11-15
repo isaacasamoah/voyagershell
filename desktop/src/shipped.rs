@@ -42,6 +42,10 @@ const FILES: &[(&str, &[u8])] = &[
         include_bytes!("../canvas/activity.js").as_slice(),
     ),
     (
+        "canvas/status.js",
+        include_bytes!("../canvas/status.js").as_slice(),
+    ),
+    (
         "canvas/voyage-colours.js",
         include_bytes!("../canvas/voyage-colours.js").as_slice(),
     ),

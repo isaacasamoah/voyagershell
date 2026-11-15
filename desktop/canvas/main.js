@@ -22,10 +22,11 @@ import {
   reported_activity,
   refresh_activity,
 } from "voyager_workspace";
-import { NameState, Name, ArrangementCapture, Status } from "voyager_native";
+import { NameState, Name, ArrangementCapture } from "voyager_native";
 import { TerminalState, Split as NativeSplit, Column } from "voyager_native";
 import { Occluding, Marker, Prepared } from "voyager_native";
 import { Chat } from "./chat.js";
+import { errorMessage, outcome, statusLine } from "./status.js";
 import { composeRegions } from "./regions.js";
 import { inspectProcesses } from "./processes.js";
 import { CreationPicker } from "./creation.js";
@@ -48,9 +49,6 @@ import {
   hiddenPanels,
 } from "./panels.js";
 const CONTEXT_REFRESH_MS = 3000;
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
 export default class Canvas extends View {
   constructor() {
     super(...arguments);
@@ -383,7 +381,7 @@ export default class Canvas extends View {
     this.pendingPresentation = null;
     if (!ready) {
       this.status =
-        "The waiting panel action was not sent because workspace preparation failed.";
+        `${this.status} The waiting panel action was not sent.`.trim();
     } else if (this.presentationTarget(pending.action) !== pending.target) {
       this.status = "The panel changed. Its waiting action was not sent.";
     } else {
@@ -634,9 +632,14 @@ export default class Canvas extends View {
   }
   acceptSnapshot(result, task) {
     this.drag = null;
+    if (!("layout" in result)) {
+      this.status = outcome(result);
+      if (result.status === "uncertain") this.fresh = false;
+      this.splitReset += 1;
+      return false;
+    }
     if (BigInt(result.version) < BigInt(this.version)) {
-      if (result.status !== "applied")
-        this.status = result.message || result.status;
+      if (result.status !== "applied") this.status = outcome(result);
       return false;
     }
     if (this.menus) this.menus.current = null;
@@ -690,7 +693,7 @@ export default class Canvas extends View {
       task.spawn((cx) => this.readContext(cx));
     }
     this.fresh = result.fresh;
-    this.status = result.message || "";
+    this.status = outcome(result);
     const retain = (target, name) => {
       const key = JSON.stringify(target);
       const retained = this.names.get(key);
@@ -1425,19 +1428,10 @@ export default class Canvas extends View {
     );
   }
   statusView() {
-    const text = this.status || this.worktrees?.status || "";
-    const view = div()
-      .flex()
-      .flex_col()
-      .px(12)
-      .py(6)
-      .child(
-        Status.new("workspace-status", text)
-          .text_size(11)
-          .text_color("#ffcad3"),
-      )
-      .child(this.action("Refresh", { operation: "inspect" }));
-    return text ? view.child(Marker.new("workspace-status", "", text)) : view;
+    return statusLine(
+      this.status || this.worktrees?.status || "",
+      this.action("Refresh", { operation: "inspect" }),
+    );
   }
   openSplit(group, id, side, cx) {
     if (this.busy || this.editing || this.layoutName) return;

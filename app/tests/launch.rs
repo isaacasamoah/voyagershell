@@ -123,7 +123,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
         client::Client,
         core::{Core, Error},
     };
-    use voyager_contract::{Request, Status};
+    use voyager_contract::{Outcome, Request};
     let session = format!("voyager-launch-bound-{}", std::process::id());
     let socket = std::path::PathBuf::from(
         std::env::var_os("XDG_RUNTIME_DIR").expect("private XDG runtime is required"),
@@ -153,13 +153,13 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
             action,
         };
         let created = client.call(request.clone()).unwrap();
-        assert_eq!(created.status, Status::Applied);
+        assert_eq!(created.status, Outcome::Applied);
         let mut changed = request.clone();
         if let Action::CreateVessel { launch, .. } = &mut changed.action {
             *launch = Some(voyager_contract::launch::Launch::Terminal);
         }
         let changed = client.call(changed).unwrap();
-        assert_eq!(changed.status, Status::Rejected);
+        assert_eq!(changed.status, Outcome::Refused);
         assert!(
             changed
                 .message
@@ -236,7 +236,7 @@ fn refused_worker_keeps_its_choice_and_reopening_grants_no_start() {
         assert!(
             matches!(retry, Err(Error::Rejected { kind, message }) if kind == "spawn_failed" && message.contains("/no-voyager-worker-here"))
         );
-        assert_eq!(client.call(request).unwrap().status, Status::Applied);
+        assert_eq!(client.call(request).unwrap().status, Outcome::Applied);
         assert_eq!(inspected.layout.vessels.len(), 3);
         let reopened = Client::open(session.clone(), "/tmp".into());
         let snapshot = reopened

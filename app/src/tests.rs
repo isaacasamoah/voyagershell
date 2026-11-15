@@ -720,7 +720,7 @@ fn absent_target_cannot_change_layout() {
 #[test]
 fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     use crate::{client::Client, core::Core};
-    use voyager_contract::{Request, Status};
+    use voyager_contract::{Outcome, Request};
     let session = format!("voyager-p1-test-{}", std::process::id());
     let client = Client::open(session.clone(), "/tmp".into());
     let call = |action, expected_version| {
@@ -739,7 +739,7 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     };
     let initial = client.call(initial_request.clone()).unwrap();
     let initial_replay = client.call(initial_request).unwrap();
-    assert_eq!(initial.status, Status::Applied);
+    assert_eq!(initial.status, Outcome::Applied);
     assert!(initial.created_workspace);
     assert!(initial_replay.created_workspace);
     let voyage = initial.layout.voyages[0].id.clone();
@@ -822,8 +822,8 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
     let retained_outcome = client.call(request).unwrap();
     let stopped = cleanup.server_stop();
     cleanup.close().unwrap();
-    assert_eq!(saved.status, Status::Applied);
-    assert_eq!(resized.status, Status::Applied);
+    assert_eq!(saved.status, Outcome::Applied);
+    assert_eq!(resized.status, Outcome::Applied);
     assert_eq!(resized, repeated_resize);
     assert_eq!(refreshed.layout.vessels, divided.layout.vessels);
     assert_eq!(refreshed.layout.context, divided.layout.context);
@@ -832,14 +832,14 @@ fn real_core_saves_and_refuses_stale_or_changed_request_identity() {
         3500
     );
     assert_eq!(saved, duplicate);
-    assert_eq!(refused_identity.status, Status::Rejected);
-    assert_eq!(stale.status, Status::Rejected);
+    assert_eq!(refused_identity.status, Outcome::Refused);
+    assert_eq!(stale.status, Outcome::Refused);
     assert_eq!(final_state.layout.voyages[0].fleets.len(), 2);
-    assert_eq!(external_conflict.status, Status::Rejected);
+    assert_eq!(external_conflict.status, Outcome::Refused);
     assert!(!external_conflict.fresh);
     assert!(refreshed.fresh);
     assert!(refreshed.version > final_state.version);
-    assert_eq!(retained_outcome.status, Status::Applied);
+    assert_eq!(retained_outcome.status, Outcome::Applied);
     assert!(std::sync::Arc::ptr_eq(
         &refreshed.layout,
         &retained_outcome.layout
@@ -901,7 +901,7 @@ fn a_voyage_portal_retains_its_identity_while_fleets_change() {
 #[test]
 fn administrator_scope_refuses_another_voyage_without_changing_it() {
     use crate::{client::Client, core::Core};
-    use voyager_contract::{Request, Status};
+    use voyager_contract::{Outcome, Request};
     let session = format!("voyager-c2-scope-test-{}", std::process::id());
     let client = Client::open(session.clone(), "/tmp".into());
     let call = |action, expected_version| {
@@ -953,7 +953,7 @@ fn administrator_scope_refuses_another_voyage_without_changing_it() {
     cleanup.server_stop().unwrap();
     cleanup.close().unwrap();
     assert_eq!(inspect.layout.voyages.len(), 1);
-    assert_eq!(refused.status, Status::Rejected);
+    assert_eq!(refused.status, Outcome::Refused);
     assert_eq!(observed.layout.voyages[1].fleets.len(), 1);
 }
 
@@ -1344,7 +1344,7 @@ fn process_owner_binds_scope_identity_receipts_and_ended_reads() {
 #[test]
 fn scoped_creation_eligibility_is_consumed_and_never_replayed() {
     use crate::{client::Client, core::Core};
-    use voyager_contract::{Request, Status};
+    use voyager_contract::{Outcome, Request};
     let session = format!("voyager-created-eligibility-{}", std::process::id());
     let client = Client::open(session.clone(), "/tmp".into());
     let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -1368,7 +1368,7 @@ fn scoped_creation_eligibility_is_consumed_and_never_replayed() {
         let created = client
             .scoped_call(Context::Voyage { id: voyage.clone() }, request.clone())
             .unwrap();
-        assert_eq!(created.status, Status::Applied);
+        assert_eq!(created.status, Outcome::Applied);
         let new = created
             .layout
             .vessels

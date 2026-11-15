@@ -52,6 +52,52 @@ Later steps of an admitted effect use the same gate. Those are the worktree
 removal preflight, the worktree completion, and the Core terminal list that
 closes Vessels whose programs ended. That list result carries the Core caller.
 
+### What the caller is told
+
+A workspace request ends in one of three ways, and the reply's `status` says
+which.
+
+- `applied`. The change was made, or the read was answered.
+- `refused`. The application declined the request and nothing changed. The
+  `message` gives the reason.
+- `uncertain`. The effect may have happened and was not confirmed. The caller
+  inspects before any other change and never sends the request again.
+
+The owner's answer is a `Response`. It carries the status, the message and the
+layout the owner holds, whatever the status. A request that the owner never
+answered gets an `Unanswered` reply instead. That reply has the request id, the
+status and the message, and no layout. It is `refused` when the queue was full,
+so nothing was queued. It is `uncertain` when the owner took the request and
+gave no answer within 22 seconds, or within 120 seconds for a confirmed Voyage
+close. That wait is longer than Core's 20-second deadline, so the owner's
+answer to a Core timeout reaches the caller before the caller gives up. It is
+shorter than the conversation's 25-second wait, so a chat message that needs an
+inspect still gets the conversation owner's answer. The build fails if either
+order changes.
+
+`Client::call` in `app/src/client_reply.rs` returns
+`Result<Response, Unanswered>`. The canvas bridge and the avatar's dock write
+either one as the `Reply` of `contract/src/lib.rs`. The generated `invoke`
+returns that `Reply` once the generated validator accepts it. An outcome is
+never thrown as a bare string. Something that still throws, such as a reply the
+validator rejects, is treated as uncertain.
+
+The canvas writes `Refused.` or `Uncertain.` before the message, in the status
+line and in the Voyage close dialog. After an uncertain result it marks its
+layout stale and drops every action that waited behind the request. It declines
+to send an unchanged name again until a Refresh.
+
+The process, terminal, worktree, content and conversation replies still say
+`rejected` for a refusal. The administrator's tool record converts a workspace
+status with `From<Outcome> for Status`.
+
+An edited canvas script from an earlier build keeps running beside the updated
+`workspace.js` and `validate.js`. It treats `refused` like any reply that is not
+`applied` and shows the message without the word. For a reply the owner never
+answered it shows a type error in place of the reason and marks its layout
+stale, and its close dialog leaves Confirm enabled after an uncertain
+confirmation. It sends nothing by itself in either case.
+
 ### A save in flight
 
 A workspace change that only edits the layout sends its `doc.set` to Core and
@@ -586,7 +632,9 @@ Core owns shutdown signals. Voyager submits its existing Stop action for each
 captured terminal address/PID and requires an observed finished state. A request
 receipt does not establish exit. Notes failure stops nothing; a later partial
 failure reports the actual result and never restarts work or repeats an uncertain
-stop. The application saves closed state only after successful acknowledgements.
+stop. A close is refused only while no program has stopped. Once one has, a
+later refusal ends the close as uncertain and says how many programs had
+stopped, because a refusal means that nothing changed. The application saves closed state only after successful acknowledgements.
 Uncertain storage marks the projection non-fresh until inspection.
 
 A private snapshot checks the target Voyage and its content identities. Target

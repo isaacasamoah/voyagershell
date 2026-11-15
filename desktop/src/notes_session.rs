@@ -635,7 +635,7 @@ impl Session {
             let _ = this.update(cx, |session, cx| {
                 session.release_flush(None, cx);
                 match result {
-                    Ok(response) if response.status == voyager_contract::Status::Applied => {
+                    Ok(response) if response.status == voyager_contract::Outcome::Applied => {
                         session.exited = true;
                         session.suspend(cx);
                     }

@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::VecDeque;
 use voyager_contract::administrator::{ProcessAction, ProcessRequest};
 use voyager_contract::{
-    Action, Context, CoreTerminalId, Request, Status, TerminalRequest, VesselId, VoyageId,
+    Action, Context, CoreTerminalId, Request, TerminalRequest, VesselId, VoyageId,
 };
 
 const IDENTITY_LIMIT: usize = 128;
@@ -251,11 +251,11 @@ pub(crate) enum Outcome<T> {
 }
 
 impl<T> Outcome<T> {
-    pub(crate) fn status(&self) -> Status {
+    pub(crate) fn status(&self) -> voyager_contract::Outcome {
         match self {
-            Self::Applied(_) => Status::Applied,
-            Self::Refused { .. } => Status::Rejected,
-            Self::Uncertain(_) => Status::Uncertain,
+            Self::Applied(_) => voyager_contract::Outcome::Applied,
+            Self::Refused { .. } => voyager_contract::Outcome::Refused,
+            Self::Uncertain(_) => voyager_contract::Outcome::Uncertain,
         }
     }
 }
@@ -782,9 +782,12 @@ mod tests {
         })
         .into();
         let uncertain: Outcome<()> = Err(Error::Uncertain("lost".into())).into();
-        assert_eq!(refused.status(), Status::Rejected);
-        assert_eq!(uncertain.status(), Status::Uncertain);
-        assert_eq!(Outcome::from(Ok(1)).status(), Status::Applied);
+        assert_eq!(refused.status(), voyager_contract::Outcome::Refused);
+        assert_eq!(uncertain.status(), voyager_contract::Outcome::Uncertain);
+        assert_eq!(
+            Outcome::from(Ok(1)).status(),
+            voyager_contract::Outcome::Applied
+        );
     }
 
     #[test]

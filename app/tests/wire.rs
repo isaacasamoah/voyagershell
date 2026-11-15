@@ -21,7 +21,7 @@ fn ready<T>(future: impl std::future::Future<Output = T>) -> T {
 #[test]
 fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
     use voyager_app::{client::Client, core::Core};
-    use voyager_contract::{Action, RenameTarget, Request, Status};
+    use voyager_contract::{Action, Outcome, RenameTarget, Request};
     let session = format!("voyager-workspace-changes-{}", std::process::id());
     let client = Client::open(session.clone(), "/tmp".into());
     let checked = std::panic::catch_unwind(|| {
@@ -48,13 +48,13 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
             },
         };
         let applied = client.call(request.clone()).unwrap();
-        assert_eq!(applied.status, Status::Applied);
+        assert_eq!(applied.status, Outcome::Applied);
         let applied_notice = first.recv_blocking().unwrap();
         assert_eq!(applied_notice.revision, applied.version);
         assert_ne!(applied_notice, observed);
         let quiet = ready(client.workspace_changes(Some(applied_notice))).unwrap();
         assert!(first.is_closed());
-        assert_eq!(client.call(request).unwrap().status, Status::Applied);
+        assert_eq!(client.call(request).unwrap().status, Outcome::Applied);
         assert!(matches!(
             quiet.try_recv(),
             Err(async_channel::TryRecvError::Empty)
@@ -69,7 +69,7 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
                 },
             })
             .unwrap();
-        assert_eq!(refused.status, Status::Rejected);
+        assert_eq!(refused.status, Outcome::Refused);
         assert!(matches!(
             quiet.try_recv(),
             Err(async_channel::TryRecvError::Empty)
@@ -94,7 +94,7 @@ fn workspace_changes_follow_owner_effects_without_chat_or_replays() {
                 },
             })
             .unwrap();
-        assert_eq!(partial.status, Status::Rejected);
+        assert_eq!(partial.status, Outcome::Refused);
         assert_eq!(
             partial.message.as_deref(),
             Some("invalid_workspace: Content owner unavailable; Notes was not created")
@@ -126,7 +126,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
         },
         core::Core,
     };
-    use voyager_contract::{Action, Context, Request, Status};
+    use voyager_contract::{Action, Context, Outcome, Request};
     let session = format!("voyager-package-effects-{}", std::process::id());
     let profile = std::env::temp_dir().join(&session);
     let package = profile.join("vessels/notes");
@@ -179,7 +179,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                 }),
             )
             .unwrap();
-        assert_eq!(refused.status, Status::Rejected);
+        assert_eq!(refused.status, Outcome::Refused);
         assert!(package.exists());
         let remove = request(Action::RemoveVesselPackage {
             type_id: "notes".into(),
@@ -187,7 +187,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
         let removed = client
             .scoped_call(Context::Workspace, remove.clone())
             .unwrap();
-        assert_eq!(removed.status, Status::Applied);
+        assert_eq!(removed.status, Outcome::Applied);
         assert_eq!(removed.version, initial.version);
         assert!(!package.exists());
         let unavailable = client
@@ -205,7 +205,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                 }),
             )
             .unwrap();
-        assert_eq!(unavailable.status, Status::Rejected);
+        assert_eq!(unavailable.status, Outcome::Refused);
         assert_eq!(unavailable.layout, removed.layout);
         let restored = client
             .scoped_call(
@@ -215,7 +215,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                 }),
             )
             .unwrap();
-        assert_eq!(restored.status, Status::Applied);
+        assert_eq!(restored.status, Outcome::Applied);
         assert_eq!(restored.version, initial.version);
         assert_eq!(
             fs::read(package.join("main.js")).unwrap(),
@@ -236,7 +236,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                 .scoped_call(Context::Workspace, remove)
                 .unwrap()
                 .status,
-            Status::Applied
+            Outcome::Applied
         );
         assert!(
             package.exists(),
@@ -259,7 +259,7 @@ fn package_effects_keep_document_identity_and_publish_coalesced_notices() {
                 }),
             )
             .unwrap();
-        assert_eq!(stale.status, Status::Rejected);
+        assert_eq!(stale.status, Outcome::Refused);
         assert_eq!(stale.version, bumped.version);
         assert!(package.exists());
     });
@@ -472,7 +472,7 @@ fn workspace_terminal_binding_is_persisted_before_attach() {
         client::Client,
         core::{Core, Error},
     };
-    use voyager_contract::{Action, Request, Status};
+    use voyager_contract::{Action, Outcome, Request};
     let session = format!("voyager-terminal-binding-test-{}", std::process::id());
     let client = Client::open(session.clone(), "/tmp".into());
     let inspect = || {
@@ -508,7 +508,7 @@ fn workspace_terminal_binding_is_persisted_before_attach() {
     assert!(matches!(altered, Err(Error::Rejected { .. })));
     assert!(matches!(stale, Err(Error::Rejected { .. })));
     assert!(stopped.is_ok());
-    assert_eq!(refreshed.status, Status::Applied);
+    assert_eq!(refreshed.status, Outcome::Applied);
     assert!(refreshed.version > initial.version);
     assert_eq!(refreshed.layout.vessels[0].id, content);
     assert!(refreshed.layout.vessels[0].backend.is_some());

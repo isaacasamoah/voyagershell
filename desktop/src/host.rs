@@ -395,8 +395,8 @@ fn load(
             Ok(async move {
                 let request: Request = serde_json::from_str(&request)
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
-                let result = client.call(request).map_err(gpui_shell::HostError::new)?;
-                let encoded = serde_json::to_string(&result)
+                let reply = voyager_contract::Reply::from(client.call(request));
+                let encoded = serde_json::to_string(&reply)
                     .map_err(|error| gpui_shell::HostError::new(error.to_string()))?;
                 Ok(HostValue::from(encoded))
             })
