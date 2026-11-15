@@ -1,0 +1,92 @@
+contract	rule	corrupt-policy	scenario	open	new-data-kept-after-older-save	unexpected-changes	main-doc-after	backup
+B1	direct	refuse	field on Fleet	opened	1/1	none	rewritten	none
+B1	direct	refuse	field on Layout	opened	1/1	none	rewritten	none
+B1	direct	refuse	field on Vessel	opened	1/1	none	rewritten	none
+B1	direct	refuse	field on Content	opened	1/1	none	rewritten	none
+B1	direct	refuse	new Vessel type	opened	2/2	none	rewritten	none
+B1	direct	refuse	new Vessel type with a new Content field	opened	2/2	none	rewritten	none
+B1	direct	refuse	new Context kind	refused: Stored workspace is invalid: unknown variant `agent`, expected one of 	n/a	n/a	untouched	none
+B1	direct	refuse	new Split kind	refused: Stored workspace is invalid: unknown variant `tabs`, expected `leaf` o	n/a	n/a	untouched	none
+B1	direct	refuse	corrupt wrong type	refused: Stored workspace is invalid: invalid type: integer `3`, expected a seq	n/a	n/a	untouched	none
+B1	direct	refuse	truncated object	refused: Stored workspace is invalid: missing field `fleets`	n/a	n/a	untouched	none
+B1	direct	refuse	truncated text	refused: Stored workspace is invalid: invalid type: string "{\"canvas\":{\"port	n/a	n/a	untouched	none
+B1	direct	refuse	corrupt known variant	refused: Stored workspace is invalid: missing field `placement`	n/a	n/a	untouched	none
+B1	direct	refuse	misspelled optional field	opened	0/0	none	rewritten	none
+B1	A format	refuse	field on Fleet	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	refuse	field on Layout	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	refuse	field on Vessel	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	refuse	field on Content	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	refuse	new Vessel type	opened	2/2	none	rewritten	none
+B1	A format	refuse	new Vessel type with a new Content field	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	refuse	new Context kind	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	refuse	new Split kind	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	refuse	corrupt wrong type	refused: Stored workspace is invalid: invalid type: integer `3`, expected a seq	n/a	n/a	untouched	exact copy
+B1	A format	refuse	truncated object	refused: Stored workspace is invalid: missing field `fleets`; kept a backup in 	n/a	n/a	untouched	exact copy
+B1	A format	refuse	truncated text	refused: Stored workspace is invalid: invalid type: string "{\"canvas\":{\"port	n/a	n/a	untouched	exact copy
+B1	A format	refuse	corrupt known variant	refused: Stored workspace is invalid: missing field `placement`; kept a backup 	n/a	n/a	untouched	exact copy
+B1	A format	refuse	misspelled optional field	opened	0/0	none	rewritten	none
+B1	A format	fresh	field on Fleet	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	fresh	field on Layout	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	fresh	field on Vessel	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	fresh	field on Content	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	fresh	new Vessel type	opened	2/2	none	rewritten	none
+B1	A format	fresh	new Vessel type with a new Content field	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	fresh	new Context kind	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	fresh	new Split kind	refused: written by a newer build (format 2)	n/a	n/a	untouched	none
+B1	A format	fresh	corrupt wrong type	fresh: Stored workspace is invalid: invalid type: integer `3`, expected a seq	0/0	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	A format	fresh	truncated object	fresh: Stored workspace is invalid: missing field `fleets`; started fresh, ba	0/0	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	A format	fresh	truncated text	fresh: Stored workspace is invalid: invalid type: string "{\"canvas\":{\"port	0/0		rewritten	exact copy
+B1	A format	fresh	corrupt known variant	fresh: Stored workspace is invalid: missing field `placement`; started fresh,	0/0	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	A format	fresh	misspelled optional field	opened	0/0	none	rewritten	none
+B1	B2 boundary graft	refuse	field on Fleet	opened	1/1	none	rewritten	none
+B1	B2 boundary graft	refuse	field on Layout	opened	1/1	none	rewritten	none
+B1	B2 boundary graft	refuse	field on Vessel	opened	1/1	none	rewritten	none
+B1	B2 boundary graft	refuse	field on Content	opened	1/1	none	rewritten	none
+B1	B2 boundary graft	refuse	new Vessel type	opened	2/2	none	rewritten	none
+B1	B2 boundary graft	refuse	new Vessel type with a new Content field	opened	2/2	none	rewritten	none
+B1	B2 boundary graft	refuse	new Context kind	refused: Stored workspace is invalid: unknown variant `agent`, expected one of 	n/a	n/a	untouched	exact copy
+B1	B2 boundary graft	refuse	new Split kind	refused: Stored workspace is invalid: unknown variant `tabs`, expected `leaf` o	n/a	n/a	untouched	exact copy
+B1	B2 boundary graft	refuse	corrupt wrong type	refused: Stored workspace is invalid: invalid type: integer `3`, expected a seq	n/a	n/a	untouched	exact copy
+B1	B2 boundary graft	refuse	truncated object	refused: Stored workspace is invalid: missing field `fleets`; kept a backup in 	n/a	n/a	untouched	exact copy
+B1	B2 boundary graft	refuse	truncated text	refused: Stored workspace is invalid: invalid type: string "{\"canvas\":{\"port	n/a	n/a	untouched	exact copy
+B1	B2 boundary graft	refuse	corrupt known variant	refused: Stored workspace is invalid: missing field `placement`; kept a backup 	n/a	n/a	untouched	exact copy
+B1	B2 boundary graft	refuse	misspelled optional field	opened	0/0	none	rewritten	none
+B1	B2 boundary graft	fresh	field on Fleet	opened	1/1	none	rewritten	none
+B1	B2 boundary graft	fresh	field on Layout	opened	1/1	none	rewritten	none
+B1	B2 boundary graft	fresh	field on Vessel	opened	1/1	none	rewritten	none
+B1	B2 boundary graft	fresh	field on Content	opened	1/1	none	rewritten	none
+B1	B2 boundary graft	fresh	new Vessel type	opened	2/2	none	rewritten	none
+B1	B2 boundary graft	fresh	new Vessel type with a new Content field	opened	2/2	none	rewritten	none
+B1	B2 boundary graft	fresh	new Context kind	fresh: Stored workspace is invalid: unknown variant `agent`, expected one of 	0/1	/contents /context/id /context/kind /home/fleets/0/id	rewritten	exact copy
+B1	B2 boundary graft	fresh	new Split kind	fresh: Stored workspace is invalid: unknown variant `tabs`, expected `leaf` o	0/1	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	B2 boundary graft	fresh	corrupt wrong type	fresh: Stored workspace is invalid: invalid type: integer `3`, expected a seq	0/0	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	B2 boundary graft	fresh	truncated object	fresh: Stored workspace is invalid: missing field `fleets`; started fresh, ba	0/0	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	B2 boundary graft	fresh	truncated text	fresh: Stored workspace is invalid: invalid type: string "{\"canvas\":{\"port	0/0		rewritten	exact copy
+B1	B2 boundary graft	fresh	corrupt known variant	fresh: Stored workspace is invalid: missing field `placement`; started fresh,	0/0	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	B2 boundary graft	fresh	misspelled optional field	opened	0/0	none	rewritten	none
+B1	C graft + minReader	refuse	field on Fleet	opened	1/1	none	rewritten	none
+B1	C graft + minReader	refuse	field on Layout	opened	1/1	none	rewritten	none
+B1	C graft + minReader	refuse	field on Vessel	opened	1/1	none	rewritten	none
+B1	C graft + minReader	refuse	field on Content	opened	1/1	none	rewritten	none
+B1	C graft + minReader	refuse	new Vessel type	opened	2/2	none	rewritten	none
+B1	C graft + minReader	refuse	new Vessel type with a new Content field	opened	2/2	none	rewritten	none
+B1	C graft + minReader	refuse	new Context kind	refused: written by a newer build (minReader 2)	n/a	n/a	untouched	none
+B1	C graft + minReader	refuse	new Split kind	refused: written by a newer build (minReader 2)	n/a	n/a	untouched	none
+B1	C graft + minReader	refuse	corrupt wrong type	refused: Stored workspace is invalid: invalid type: integer `3`, expected a seq	n/a	n/a	untouched	exact copy
+B1	C graft + minReader	refuse	truncated object	refused: Stored workspace is invalid: missing field `fleets`; kept a backup in 	n/a	n/a	untouched	exact copy
+B1	C graft + minReader	refuse	truncated text	refused: Stored workspace is invalid: invalid type: string "{\"canvas\":{\"port	n/a	n/a	untouched	exact copy
+B1	C graft + minReader	refuse	corrupt known variant	refused: Stored workspace is invalid: missing field `placement`; kept a backup 	n/a	n/a	untouched	exact copy
+B1	C graft + minReader	refuse	misspelled optional field	opened	0/0	none	rewritten	none
+B1	C graft + minReader	fresh	field on Fleet	opened	1/1	none	rewritten	none
+B1	C graft + minReader	fresh	field on Layout	opened	1/1	none	rewritten	none
+B1	C graft + minReader	fresh	field on Vessel	opened	1/1	none	rewritten	none
+B1	C graft + minReader	fresh	field on Content	opened	1/1	none	rewritten	none
+B1	C graft + minReader	fresh	new Vessel type	opened	2/2	none	rewritten	none
+B1	C graft + minReader	fresh	new Vessel type with a new Content field	opened	2/2	none	rewritten	none
+B1	C graft + minReader	fresh	new Context kind	refused: written by a newer build (minReader 2)	n/a	n/a	untouched	none
+B1	C graft + minReader	fresh	new Split kind	refused: written by a newer build (minReader 2)	n/a	n/a	untouched	none
+B1	C graft + minReader	fresh	corrupt wrong type	fresh: Stored workspace is invalid: invalid type: integer `3`, expected a seq	0/0	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	C graft + minReader	fresh	truncated object	fresh: Stored workspace is invalid: missing field `fleets`; started fresh, ba	0/0	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	C graft + minReader	fresh	truncated text	fresh: Stored workspace is invalid: invalid type: string "{\"canvas\":{\"port	0/0		rewritten	exact copy
+B1	C graft + minReader	fresh	corrupt known variant	fresh: Stored workspace is invalid: missing field `placement`; started fresh,	0/0	/contents /home/fleets/0/id /home/fleets/0/root/placement /home/fleets/0/vessels/0/content	rewritten	exact copy
+B1	C graft + minReader	fresh	misspelled optional field	opened	0/0	none	rewritten	none

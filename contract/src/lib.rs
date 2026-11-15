@@ -128,7 +128,7 @@ pub enum Split {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct Content {
     pub id: ContentId,
     pub type_id: String,
@@ -142,10 +142,11 @@ pub struct Content {
     pub launch: Option<launch::Launch>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell_intent: Option<String>,
+    #[serde(flatten, default)]
+    pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct Vessel {
     pub id: PlacementId,
     pub content: ContentId,
@@ -158,6 +159,8 @@ pub struct Vessel {
     pub name_origin: NameOrigin,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+    #[serde(flatten, default)]
+    pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -184,7 +187,6 @@ pub enum RenameTarget {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct Fleet {
     pub id: FleetId,
     pub name: String,
@@ -198,10 +200,11 @@ pub struct Fleet {
         skip_serializing_if = "Option::is_none"
     )]
     pub maximized_placement: Option<PlacementId>,
+    #[serde(flatten, default)]
+    pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct Voyage {
     pub id: VoyageId,
     pub name: String,
@@ -228,6 +231,8 @@ pub struct Voyage {
     pub portal_layout: Option<PortalLayout>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+    #[serde(flatten, default)]
+    pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
@@ -264,7 +269,7 @@ pub enum WorkspaceView {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct Layout {
     pub voyages: Vec<Voyage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -282,6 +287,8 @@ pub struct Layout {
     #[serde(with = "decimal")]
     #[schemars(with = "String")]
     pub next_id: u64,
+    #[serde(flatten, default)]
+    pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]

@@ -14,7 +14,7 @@ impl Model {
         if self.layout.home.is_none() {
             let id = VoyageId(self.id("home-voyage")?);
             let panel = self.placement(cwd.into(), "agents".into(), "Agents 1".into(), None)?;
-            let fleet = Fleet {
+            let fleet = Fleet { rest: Default::default(),
                 id: FleetId(self.id("home-fleet")?),
                 name: "Home".into(),
                 closed: false,
@@ -24,7 +24,7 @@ impl Model {
                 vessels: vec![panel],
                 maximized_placement: None,
             };
-            self.layout.home = Some(Voyage {
+            self.layout.home = Some(Voyage { rest: Default::default(),
                 id,
                 name: "Home".into(),
                 name_origin: voyager_contract::NameOrigin::Deliberate,
@@ -73,7 +73,7 @@ impl Model {
     ) -> Result<Vessel, String> {
         let content = ContentId(self.id("content")?);
         let placement = PlacementId(self.id("placement")?);
-        self.layout.contents.push(Content {
+        self.layout.contents.push(Content { rest: Default::default(),
             id: content.clone(),
             type_id,
             cwd,
@@ -83,7 +83,7 @@ impl Model {
             launch,
             shell_intent: None,
         });
-        Ok(Vessel {
+        Ok(Vessel { rest: Default::default(),
             id: placement,
             content,
             name,
@@ -94,7 +94,7 @@ impl Model {
 
     fn fleet(&mut self, name: String, cwd: String) -> Result<Fleet, String> {
         let placement = self.placement(cwd, "terminal".into(), "Terminal 1".into(), None)?;
-        Ok(Fleet {
+        Ok(Fleet { rest: Default::default(),
             id: FleetId(self.id("fleet")?),
             name,
             closed: false,
@@ -167,7 +167,7 @@ impl Model {
                 self.layout.selected_voyage = Some(id.clone());
                 self.layout.selected_fleet = Some(fleet.id.clone());
                 self.layout.view = WorkspaceView::Fleet;
-                self.layout.voyages.push(Voyage {
+                self.layout.voyages.push(Voyage { rest: Default::default(),
                     id,
                     name,
                     name_origin: voyager_contract::NameOrigin::Deliberate,
@@ -251,7 +251,7 @@ impl Model {
                 }
                 let panel_name = panels::default_name(&[], &type_id);
                 let panel = self.placement(cwd, type_id, panel_name, launch)?;
-                let fleet = Fleet {
+                let fleet = Fleet { rest: Default::default(),
                     id: FleetId(self.id("fleet")?),
                     name,
                     closed: false,

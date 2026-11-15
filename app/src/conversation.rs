@@ -280,7 +280,7 @@ mod tests {
             focus(&model.layout, 44).unwrap().cwd.as_deref(),
             Some("/alpha")
         );
-        model.layout.voyages[0].portals.push(Vessel {
+        model.layout.voyages[0].portals.push(Vessel { rest: Default::default(),
             id: voyager_contract::PlacementId("portal".into()),
             content: placement.content,
             name: "Portal test".into(),

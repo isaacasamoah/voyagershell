@@ -17,7 +17,7 @@ pub enum PanelInsertion {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct PortalLayout {
     pub root: Option<Split>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -26,6 +26,8 @@ pub struct PortalLayout {
     pub mode: PortalMode,
     #[schemars(range(min = 1, max = 4096), transform = width_schema)]
     pub width: u16,
+    #[serde(flatten, default)]
+    pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for PortalLayout {
@@ -36,6 +38,7 @@ impl Default for PortalLayout {
             visible: false,
             mode: PortalMode::Overlay,
             width: 340,
+            rest: Default::default(),
         }
     }
 }
@@ -78,7 +81,6 @@ impl<'de> Deserialize<'de> for SavedLayout {
 impl<'de> Deserialize<'de> for Vessel {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
         struct Stored {
             id: PlacementId,
             content: ContentId,
@@ -88,6 +90,8 @@ impl<'de> Deserialize<'de> for Vessel {
             name_origin: crate::NameOrigin,
             #[serde(default)]
             hidden: bool,
+            #[serde(flatten, default)]
+            rest: serde_json::Map<String, serde_json::Value>,
         }
         let stored = Stored::deserialize(deserializer)?;
         Ok(Self {
@@ -96,6 +100,7 @@ impl<'de> Deserialize<'de> for Vessel {
             name: stored.name.unwrap_or_default(),
             name_origin: stored.name_origin,
             hidden: stored.hidden,
+            rest: stored.rest,
         })
     }
 }

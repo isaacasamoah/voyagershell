@@ -28,7 +28,7 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
             }
             break;
         }
-        let mut selected = Voyage {
+        let mut selected = Voyage { rest: Default::default(),
             id: voyage.id.clone(),
             name: voyage.name.clone(),
             name_origin: voyage.name_origin,
@@ -47,7 +47,7 @@ pub(crate) fn project(layout: &Arc<Layout>, scope: Option<&Context>) -> Arc<Layo
             if let Context::Vessel { id } = scope
                 && let Some(vessel) = fleet.vessels.iter().find(|vessel| &vessel.id == id)
             {
-                selected.fleets.push(Fleet {
+                selected.fleets.push(Fleet { rest: Default::default(),
                     id: fleet.id.clone(),
                     name: fleet.name.clone(),
                     closed: fleet.closed,
